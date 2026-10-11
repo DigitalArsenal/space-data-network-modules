@@ -24,6 +24,7 @@ import {
 import {
   decodeLicensingChallengeMessage,
   encodeLicensingProof,
+  validateLicensingGrant,
 } from "space-data-module-sdk/licensing";
 import { getWasmWallet } from "space-data-module-sdk/utils/wasm-crypto";
 import { ChainProofT } from "spacedatastandards.org/lib/js/EPM/ChainProof.js";
@@ -164,7 +165,8 @@ function verifySecp256k1Der(message, signature, publicKey) {
   }
 }
 
-function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = null) {
+// `clock` is the host's clock.now: the key server reads time only through it.
+function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = null, clock = Date.now) {
   return (operation, params) => {
     if (operation.startsWith("crypto.ed25519.")) {
       return handleEd25519HostOperation(wallet, operation, params);
@@ -177,7 +179,7 @@ function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = n
       );
     }
     if (operation === "clock.now") {
-      return Date.now();
+      return clock();
     }
     if (operation === "random.bytes") {
       return randomBytes(params?.length ?? 32);
@@ -968,9 +970,15 @@ async function createSession(wallet) {
 }
 
 // What the wallet signs at sign-in (hd-wallet signModuleDeliveryKey): the
-// account key authorises the session key for an origin until an expiry.
-function signModuleDeliveryKey(account, session, { origin = LEASE_ORIGIN } = {}) {
-  const expires = Math.floor(Date.now() / 1000) + 24 * 3600;
+// account key authorises the session key for an origin until an expiry. The
+// console signs for its 24-hour session (SpaceAware-UI SESSION_KEY_PROOF_SECONDS).
+const CONSOLE_PROOF_SECONDS = 24 * 3600;
+function signModuleDeliveryKey(
+  account,
+  session,
+  { origin = LEASE_ORIGIN, signedAtMs = Date.now(), lifetimeSeconds = CONSOLE_PROOF_SECONDS } = {},
+) {
+  const expires = Math.floor(signedAtMs / 1000) + lifetimeSeconds;
   const statement = Buffer.from(
     "sdn-module-delivery-key/1\n" +
       `ed25519:${toHex(session.signingPublicKey)}\n` +
@@ -1072,12 +1080,21 @@ function buildRequesterEpm(
   return builder.asUint8Array().slice();
 }
 
-function buildLeaseChallengeRequest({ reqId, moduleId, moduleVersion, requesterXpub, session, epm }) {
+function buildLeaseChallengeRequest({
+  reqId,
+  moduleId,
+  moduleVersion,
+  requesterXpub,
+  session,
+  epm,
+  requesterPeerId,
+  requestedAtMs,
+}) {
   const builder = new flatbuffers.Builder(1024);
   const reqIdOffset = builder.createString(reqId);
   const moduleIdOffset = builder.createString(moduleId);
   const moduleVersionOffset = builder.createString(moduleVersion);
-  const peerIdOffset = builder.createString("requester.orbpro.test");
+  const peerIdOffset = builder.createString(requesterPeerId);
   const xpubOffset = requesterXpub ? builder.createString(requesterXpub) : 0;
   const signingOffset = LCH.createRequesterSigningPubkeyVector(builder, session.signingPublicKey);
   const ephemeralOffset = LCH.createRequesterEphemeralPubkeyVector(
@@ -1100,7 +1117,7 @@ function buildLeaseChallengeRequest({ reqId, moduleId, moduleVersion, requesterX
     ephemeralOffset,
     domainOffset,
     BigInt(LEASE_TIMEOUT_MS),
-    BigInt(Date.now()),
+    BigInt(requestedAtMs),
     0,
     0n,
     providerOffset,
@@ -1122,12 +1139,33 @@ function handleServerMessage(serverHarness, fileIdentifier, payload) {
 // The requester's two round trips (challenge, then proof), as sdn-js runs them.
 // Returns { challengeError } when the challenge is refused, else
 // { statusCode, grantBytes } from the proof step.
-function requestLease(serverHarness, wallet, { moduleId, moduleVersion, requesterXpub, session, epm }) {
+function requestLease(
+  serverHarness,
+  wallet,
+  {
+    moduleId,
+    moduleVersion,
+    requesterXpub,
+    session,
+    epm,
+    requesterPeerId = "requester.orbpro.test",
+    nowMs = Date.now(),
+  },
+) {
   const reqId = `lease-${randomBytes(6).toString("hex")}`;
   const challengeResponse = handleServerMessage(
     serverHarness,
     "$LCH",
-    buildLeaseChallengeRequest({ reqId, moduleId, moduleVersion, requesterXpub, session, epm }),
+    buildLeaseChallengeRequest({
+      reqId,
+      moduleId,
+      moduleVersion,
+      requesterXpub,
+      session,
+      epm,
+      requesterPeerId,
+      requestedAtMs: nowMs,
+    }),
   );
   assert.equal(challengeResponse.statusCode, 0);
   const challenge = decodeLicensingChallengeMessage(challengeResponse.outputs[0].payload);
@@ -1138,7 +1176,7 @@ function requestLease(serverHarness, wallet, { moduleId, moduleVersion, requeste
     reqId,
     moduleId,
     moduleVersion,
-    requesterPeerId: "requester.orbpro.test",
+    requesterPeerId,
     requesterXpub,
     requesterDomain: LEASE_DOMAIN,
     requestedTimeoutMs: LEASE_TIMEOUT_MS,
@@ -1148,7 +1186,7 @@ function requestLease(serverHarness, wallet, { moduleId, moduleVersion, requeste
     providerPeerId: challenge.providerPeerId,
     signature: wallet.curves.ed25519.sign(challenge.rawBytes, session.seed),
     requesterSigningPublicKey: session.signingPublicKey,
-    timestampMs: Date.now(),
+    timestampMs: nowMs,
   });
   const grantResponse = handleServerMessage(serverHarness, "$LPF", proof);
   return {
@@ -1159,21 +1197,21 @@ function requestLease(serverHarness, wallet, { moduleId, moduleVersion, requeste
 
 // A signed-in account: fresh wallet account, session, the account's proof for
 // that session, and the EPM the session re-sends.
-async function signIn(wallet, epmOptions = {}) {
+async function signIn(wallet, epmOptions = {}, proofOptions = {}) {
   const account = createWalletAccount(wallet);
   const session = await createSession(wallet);
-  const proof = signModuleDeliveryKey(account, session);
+  const proof = signModuleDeliveryKey(account, session, proofOptions);
   const epm = buildRequesterEpm(wallet, { signerSeed: session.seed, proof, ...epmOptions });
   return { account, session, proof, epm };
 }
 
-async function startLeaseServer(t) {
+async function startLeaseServer(t, { clock = Date.now } = {}) {
   const contentStore = new Map();
   const runtimeConfig = makeRuntimeConfig();
   const wallet = await getWasmWallet();
   const serverHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet, clock),
   });
   t.after(() => {
     serverHarness.destroy();
@@ -1364,4 +1402,217 @@ test("an explicit allowed_xpubs list grants only its accounts; adding \"*\" open
   });
   assert.equal(anyAccount.statusCode, 0);
   assert.equal(decodeGrantResponse(anyAccount.grantBytes).REQUESTER_XPUB(), fresh.account.xpub);
+});
+
+// ---------------------------------------------------------------------------
+// Per-account grant quotas (src/cpp/include/grant_quota.h). A lease goes to
+// any account that proves its key, so a script holding one account could ask
+// without end. The key server counts the grants of each PROVEN account, per
+// module and overall, in a rolling hour and per UTC day, and refuses past them
+// with an $LGR denial whose DENIAL_REASON is "rate_limited". The host's
+// clock.now is the key server's only clock, so these tests set it.
+// ---------------------------------------------------------------------------
+
+const GRANTS_PER_MODULE_PER_HOUR = 30; // grant_quota.h kGrantsPerModulePerHour
+const GRANTS_PER_MODULE_PER_UTC_DAY = 300; // kGrantsPerModulePerUtcDay
+const GRANTS_PER_ACCOUNT_PER_HOUR = 500; // kGrantsPerAccountPerHour
+const GRANTS_PER_ACCOUNT_PER_UTC_DAY = 3000; // kGrantsPerAccountPerUtcDay
+const RATE_LIMITED = "rate_limited"; // kGrantRateLimitedReason
+const PROOF_SKEW_SECONDS = 5 * 60; // epm_key_proof.cpp kMaxValiditySeconds - 24 h
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+function hostClock(startMs) {
+  const clock = () => clock.ms;
+  clock.ms = startMs;
+  return clock;
+}
+
+// A session of `account` (a new account unless given) whose proof the wallet
+// signs now, as the console does at sign-in.
+async function signInAt(wallet, clock, { account = createWalletAccount(wallet), lifetimeSeconds } = {}) {
+  const session = await createSession(wallet);
+  const proof = signModuleDeliveryKey(account, session, { signedAtMs: clock.ms, lifetimeSeconds });
+  return { account, session, proof };
+}
+
+// One grant request at the clock's time, with the EPM sdn-js signs per request.
+function leaseAt(serverHarness, wallet, clock, user, module, { requesterPeerId } = {}) {
+  const epm = buildRequesterEpm(wallet, {
+    signerSeed: user.session.seed,
+    proof: user.proof,
+    timestampSeconds: Math.floor(clock.ms / 1000),
+  });
+  return requestLease(serverHarness, wallet, {
+    ...module,
+    requesterXpub: user.account.xpub,
+    session: user.session,
+    epm,
+    requesterPeerId,
+    nowMs: clock.ms,
+  });
+}
+
+// "granted", the denial reason, or how the request failed before a grant.
+function outcome(result) {
+  if (result.challengeError !== undefined) return `challenge:${result.challengeError}`;
+  if (result.statusCode !== 0) return `status:${result.statusCode}`;
+  const grant = decodeGrantResponse(result.grantBytes);
+  return grant.MESSAGE_TYPE() === licensingGrantMessageType.Granted ? "granted" : grant.DENIAL_REASON();
+}
+
+function publishQuotaModules(serverHarness, count, prefix) {
+  return Array.from({ length: count }, (_, i) =>
+    publishLeaseModule(serverHarness, {
+      moduleId: `${prefix}.${String(i).padStart(2, "0")}`,
+      allowedXpubs: ["*"],
+      plaintext: textEncoder.encode(`${prefix} ${i}`),
+    }),
+  );
+}
+
+test("an account past its hourly burst for one module is refused rate_limited, and other accounts are not", async (t) => {
+  const clock = hostClock(Date.UTC(2026, 9, 12, 9, 0, 0));
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const [module] = publishQuotaModules(serverHarness, 1, "orbpro.quota.burst");
+  const user = await signInAt(wallet, clock);
+
+  for (let i = 1; i < GRANTS_PER_MODULE_PER_HOUR; i += 1) {
+    assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted", `grant ${i}`);
+  }
+  // Requests that name the account without proving it spend none of its quota.
+  const impostor = await signInAt(wallet, clock);
+  for (let i = 0; i < 3; i += 1) {
+    const result = leaseAt(serverHarness, wallet, clock, { ...impostor, account: user.account }, module);
+    assert.equal(result.statusCode, KEY_SERVER_UNAUTHORIZED);
+  }
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted");
+
+  // One more is refused with an $LGR denial carrying the stable reason, which
+  // the requester's SDK raises as the error the console shows.
+  const refused = leaseAt(serverHarness, wallet, clock, user, module);
+  assert.equal(refused.statusCode, 0);
+  const denial = decodeGrantResponse(refused.grantBytes);
+  assert.equal(denial.MESSAGE_TYPE(), licensingGrantMessageType.Denied);
+  assert.equal(denial.GRANT_STATUS(), "denied");
+  assert.equal(denial.DENIAL_REASON(), RATE_LIMITED);
+  assert.equal(denial.MODULE_ID(), module.moduleId);
+  assert.equal(denial.REQUESTER_XPUB(), user.account.xpub);
+  assert.equal(denial.wrappedContentKeyPayloadLength(), 0);
+  assert.throws(() => validateLicensingGrant(decodeLicensingGrant(refused.grantBytes)), {
+    message: RATE_LIMITED,
+  });
+
+  // The count follows the proven account: a new session under another peer id
+  // is refused the same way.
+  const resignedIn = await signInAt(wallet, clock, { account: user.account });
+  assert.equal(
+    outcome(leaseAt(serverHarness, wallet, clock, resignedIn, module, { requesterPeerId: "another.peer.test" })),
+    RATE_LIMITED,
+  );
+  // Another account is granted the same module.
+  const other = await signInAt(wallet, clock);
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, other, module)), "granted");
+  // The window rolls: an hour on, the account is granted again.
+  clock.ms += HOUR_MS;
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted");
+});
+
+test("an account past its hourly burst across modules is refused rate_limited on a module it never asked for", async (t) => {
+  const clock = hostClock(Date.UTC(2026, 9, 12, 9, 0, 0));
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const modules = publishQuotaModules(
+    serverHarness,
+    Math.ceil(GRANTS_PER_ACCOUNT_PER_HOUR / GRANTS_PER_MODULE_PER_HOUR) + 1,
+    "orbpro.quota.account-hour",
+  );
+  const user = await signInAt(wallet, clock);
+
+  let granted = 0;
+  for (const module of modules.slice(0, -1)) {
+    for (let i = 0; i < GRANTS_PER_MODULE_PER_HOUR && granted < GRANTS_PER_ACCOUNT_PER_HOUR; i += 1) {
+      assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted");
+      granted += 1;
+    }
+  }
+  assert.equal(granted, GRANTS_PER_ACCOUNT_PER_HOUR);
+  const untouched = modules.at(-1);
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, untouched)), RATE_LIMITED);
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, await signInAt(wallet, clock), untouched)), "granted");
+});
+
+test("daily caps hold after the hourly window clears and reset at the next UTC day", async (t) => {
+  const dayStart = Date.UTC(2026, 9, 12, 0, 1, 0);
+  const clock = hostClock(dayStart);
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const [module] = publishQuotaModules(serverHarness, 1, "orbpro.quota.module-day");
+  const modules = publishQuotaModules(
+    serverHarness,
+    Math.ceil(GRANTS_PER_ACCOUNT_PER_HOUR / GRANTS_PER_MODULE_PER_HOUR),
+    "orbpro.quota.account-day",
+  );
+  const user = await signInAt(wallet, clock);
+  const busy = await signInAt(wallet, clock);
+
+  // One module, one account: a full hourly burst every hour up to the daily cap.
+  const hours = GRANTS_PER_MODULE_PER_UTC_DAY / GRANTS_PER_MODULE_PER_HOUR;
+  for (let hour = 0; hour < hours; hour += 1) {
+    clock.ms = dayStart + hour * HOUR_MS;
+    for (let i = 0; i < GRANTS_PER_MODULE_PER_HOUR; i += 1) {
+      assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted");
+    }
+  }
+  clock.ms = dayStart + hours * HOUR_MS;
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), RATE_LIMITED);
+
+  // All modules, one account: a full account burst every hour up to the daily cap.
+  const accountHours = GRANTS_PER_ACCOUNT_PER_UTC_DAY / GRANTS_PER_ACCOUNT_PER_HOUR;
+  for (let hour = 0; hour < accountHours; hour += 1) {
+    clock.ms = dayStart + hour * HOUR_MS;
+    let granted = 0;
+    for (const each of modules) {
+      for (let i = 0; i < GRANTS_PER_MODULE_PER_HOUR && granted < GRANTS_PER_ACCOUNT_PER_HOUR; i += 1) {
+        assert.equal(outcome(leaseAt(serverHarness, wallet, clock, busy, each)), "granted");
+        granted += 1;
+      }
+    }
+  }
+  clock.ms = dayStart + accountHours * HOUR_MS;
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, busy, modules[0])), RATE_LIMITED);
+
+  // The next UTC day both are granted again (signed in again: the console's
+  // lease lasts a day).
+  clock.ms = Date.UTC(2026, 9, 13, 0, 1, 0);
+  const nextDay = await signInAt(wallet, clock, { account: user.account });
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, nextDay, module)), "granted");
+  const busyNextDay = await signInAt(wallet, clock, { account: busy.account });
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, busyNextDay, modules[0])), "granted");
+});
+
+test("a lease proof that outlives the console's 24-hour session is refused", async (t) => {
+  const clock = hostClock(Date.UTC(2026, 9, 12, 9, 0, 0));
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const [module] = publishQuotaModules(serverHarness, 1, "orbpro.quota.proof-lifetime");
+  const leaseFor = async (lifetimeSeconds) =>
+    leaseAt(serverHarness, wallet, clock, await signInAt(wallet, clock, { lifetimeSeconds }), module);
+
+  assert.equal(outcome(await leaseFor(CONSOLE_PROOF_SECONDS)), "granted");
+  assert.equal(outcome(await leaseFor(CONSOLE_PROOF_SECONDS + PROOF_SKEW_SECONDS)), "granted");
+  assert.equal((await leaseFor(CONSOLE_PROOF_SECONDS + PROOF_SKEW_SECONDS + 1)).statusCode, KEY_SERVER_UNAUTHORIZED);
+  assert.equal((await leaseFor(31 * 24 * 3600)).statusCode, KEY_SERVER_UNAUTHORIZED);
+});
+
+test("an honest console session, 25 modules when it opens and again on each reload, is granted every one", async (t) => {
+  const opened = Date.UTC(2026, 9, 12, 9, 0, 0);
+  const clock = hostClock(opened);
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const modules = publishQuotaModules(serverHarness, 25, "orbpro.quota.console");
+  const user = await signInAt(wallet, clock);
+
+  for (let load = 0; load < 4; load += 1) {
+    clock.ms = opened + load * 5 * MINUTE_MS;
+    for (const module of modules) {
+      assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted", `${module.moduleId} load ${load}`);
+    }
+  }
 });
