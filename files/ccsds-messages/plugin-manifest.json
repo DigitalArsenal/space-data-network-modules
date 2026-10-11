@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.files.ccsds-messages",
   "name": "CCSDS Message Reader",
   "version": "0.2.0",
-  "description": "Reads and writes the ten CCSDS navigation data messages this stack round-trips, each as keyword-value notation (KVN) and as NDM/XML: the Orbit Mean-Elements (OMM), Orbit Ephemeris (OEM), Orbit Parameter (OPM) and Orbit Comprehensive (OCM) Messages of 502.0-B-3, the Conjunction Data Message (CDM, 508.0-B-1), the Re-entry Data Message (RDM, 508.1-B-1), the Attitude Ephemeris (AEM), Attitude Parameter (APM) and Attitude Comprehensive (ACM) Messages of 504.0-B-2 and the Tracking Data Message (TDM, 503.0-B-2 Cor.1). Each is projected onto its SDS record ($OMM, $OEM, $OPM, $OCM, $CDM, $RDM, $AEM, $APM, $ACM, $TDM) with the file-level facts (syntax, version, originator, comment area, time system, frame, the SHA-256 of the bytes read) carried out separately as $NCD. Every keyword of a message is bound to a member of the generated SDS record, so a keyword the record has no field for is reported rather than dropped; NDM/XML written here validates against the NDM/XML 4.0.0 schemas, and a document read back is the record it was written from. Epochs stay the text the file wrote and no unit is converted except where a record states other units than the message (the CDM's metres are the record's kilometres, shifted on the digits); no time arithmetic is done, so a record that holds states only in a compact form (an OEM or AEM with a step size and no epochs) is refused with compact-form-needs-time-math rather than guessed at. A malformed message is a named status, never a trap and never a NaN. Pure compute \u2014 no capabilities, no host calls, no filesystem.",
+  "description": "Reads and writes the ten CCSDS navigation data messages this stack round-trips, each as keyword-value notation (KVN) and as NDM/XML: the Orbit Mean-Elements (OMM), Orbit Ephemeris (OEM), Orbit Parameter (OPM) and Orbit Comprehensive (OCM) Messages of 502.0-B-3, the Conjunction Data Message (CDM, 508.0-B-1), the Re-entry Data Message (RDM, 508.1-B-1), the Attitude Ephemeris (AEM), Attitude Parameter (APM) and Attitude Comprehensive (ACM) Messages of 504.0-B-2 and the Tracking Data Message (TDM, 503.0-B-2 Cor.1). Each is projected onto its SDS record ($OMM, $OEM, $OPM, $OCM, $CDM, $RDM, $AEM, $APM, $ACM, $TDM) with the file-level facts (syntax, version, originator, comment area, time system, frame, the SHA-256 of the bytes read) carried out separately as $NCD. Every keyword of a message is bound to a member of the generated SDS record, so nothing is dropped: a keyword with no place in the message, a keyword stated twice and a mandatory keyword left out are refused by name and line (unknown-keyword, unknown-structure, duplicate-keyword, missing-keyword) and a record that lacks what the message must state is not written (the AEM and TDM name what their record cannot carry in their port descriptions); NDM/XML written here validates against the NDM/XML 4.0.0 schemas, and a document read back is the record it was written from. Epochs stay the text the file wrote and no unit is converted except where a record states other units than the message (the CDM's metres are the record's kilometres, shifted on the digits); no time arithmetic is done, so a record that holds states only in a compact form (an OEM or AEM with a step size and no epochs) is refused with compact-form-needs-time-math rather than guessed at. A malformed message is a named status, never a trap and never a NaN. Pure compute \u2014 no capabilities, no host calls, no filesystem.",
   "tagline": "The ten CCSDS navigation data messages in keyword-value notation and NDM/XML, to and from their SDS records, with an $NCD descriptor.",
   "pluginFamily": "parser",
   "capabilities": [],
@@ -428,7 +428,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Mean-Elements Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OMM_KVN or CCSDS_OMM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Mean-Elements Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OMM_KVN or CCSDS_OMM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory). META_START and META_STOP around the metadata are read when a producer states them (502.0-B-3 delimits only the OEM and OCM metadata); a start without its stop, or a stop without its start, is unknown-structure. They are never written.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -522,7 +522,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OMM record to write, size-prefixed or not.",
+          "description": "SDS $OMM record to write, size-prefixed or not. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-omm-record",
@@ -616,7 +616,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Ephemeris Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OEM_KVN or CCSDS_OEM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Ephemeris Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OEM_KVN or CCSDS_OEM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory). One COVARIANCE_START ... COVARIANCE_STOP holds all the covariance matrices of a segment, each beginning at its EPOCH; one block per matrix is read as well.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -710,7 +710,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OEM record to write, size-prefixed or not. A block that holds its states only in the compact EPHEMERIS_DATA form (START_TIME and STEP_SIZE) is refused with compact-form-needs-time-math: spelling its epochs is time arithmetic this module does not do.",
+          "description": "SDS $OEM record to write, size-prefixed or not. A block that holds its states only in the compact EPHEMERIS_DATA form (START_TIME and STEP_SIZE) is refused with compact-form-needs-time-math: spelling its epochs is time arithmetic this module does not do. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-record",
@@ -804,7 +804,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Parameter Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OPM_KVN or CCSDS_OPM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Parameter Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OPM_KVN or CCSDS_OPM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory). META_START and META_STOP around the metadata are read when a producer states them (502.0-B-3 delimits only the OEM and OCM metadata); a start without its stop, or a stop without its start, is unknown-structure. They are never written.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -898,7 +898,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OPM record to write, size-prefixed or not.",
+          "description": "SDS $OPM record to write, size-prefixed or not. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-opm-record",
@@ -992,7 +992,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 508.0-B-1 Conjunction Data Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_CDM_KVN or CCSDS_CDM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 508.0-B-1 Conjunction Data Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_CDM_KVN or CCSDS_CDM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory).",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -1086,7 +1086,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $CDM record to write, size-prefixed or not. A covariance of any size but 21, 28, 36 or 45 cells is refused. A record with no covariance is written without one; the message requires it, none is invented.",
+          "description": "SDS $CDM record to write, size-prefixed or not. A covariance of any size but 21, 28, 36 or 45 cells is refused. A record with no covariance (fewer than the 21 position/velocity cells) is refused; the message requires it, none is invented. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-cdm-record",
@@ -1180,7 +1180,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 504.0-B-2 Attitude Parameter Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_APM_KVN or CCSDS_APM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 504.0-B-2 Attitude Parameter Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_APM_KVN or CCSDS_APM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory).",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -1274,7 +1274,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $APM record to write, size-prefixed or not.",
+          "description": "SDS $APM record to write, size-prefixed or not. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-apm-record",
@@ -1368,7 +1368,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 504.0-B-2 Attitude Comprehensive Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_ACM_KVN or CCSDS_ACM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 504.0-B-2 Attitude Comprehensive Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_ACM_KVN or CCSDS_ACM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory).",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -1462,7 +1462,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $ACM record to write, size-prefixed or not. A block whose VALUES are not a whole number of lines, or whose width disagrees with NUMBER_STATES, is refused.",
+          "description": "SDS $ACM record to write, size-prefixed or not. A block whose VALUES are not a whole number of lines, or whose width disagrees with NUMBER_STATES, is refused. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-acm-record",
@@ -1556,7 +1556,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 508.1-B-1 Re-entry Data Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_RDM_KVN or CCSDS_RDM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 508.1-B-1 Re-entry Data Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_RDM_KVN or CCSDS_RDM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory).",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -1650,7 +1650,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $RDM record to write, size-prefixed or not.",
+          "description": "SDS $RDM record to write, size-prefixed or not. Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-rdm-record",
@@ -1744,7 +1744,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Comprehensive Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OCM_KVN or CCSDS_OCM_XML and must name the syntax the bytes are in.",
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Comprehensive Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OCM_KVN or CCSDS_OCM_XML and must name the syntax the bytes are in. Refused by name, with the keyword and the line: wrong-message-type, bad-kvn or bad-xml, bad-value, bad-version, multiple-messages (one message per file), unknown-keyword and unknown-structure (something with no place in the message), duplicate-keyword, and missing-keyword (a keyword the standard makes mandatory).",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-message",
@@ -1838,7 +1838,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OCM record to write, size-prefixed or not. The blocks in TRAJECTORY_BLOCKS and COVARIANCE_BLOCKS are written; when there are none, the single-trajectory and single-covariance fields are written as one block each (the time tag of a lone state is 0.0 from EPOCH_TZERO; several states need STATE_EPOCHS or a STATE_STEP_SIZE).",
+          "description": "SDS $OCM record to write, size-prefixed or not. The blocks in TRAJECTORY_BLOCKS and COVARIANCE_BLOCKS are written; when there are none, the single-trajectory and single-covariance fields are written as one block each (the time tag of a lone state is 0.0 from EPOCH_TZERO; several states need STATE_EPOCHS or a STATE_STEP_SIZE). Refused with bad-record, naming the keyword, when the record lacks what the message must state.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ocm-record",

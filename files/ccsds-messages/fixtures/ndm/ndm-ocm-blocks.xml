@@ -36,6 +36,7 @@
           <CENTER_NAME>EARTH</CENTER_NAME>
           <TRAJ_REF_FRAME>EME2000</TRAJ_REF_FRAME>
           <TRAJ_TYPE>CARTPV</TRAJ_TYPE>
+          <TRAJ_UNITS>[km, km, km, km/s, km/s, km/s]</TRAJ_UNITS>
           <trajLine>2026-10-11T14:28:25.1172 2854.5 -2916.2 -5360.7 5.90 4.86 0.52</trajLine>
           <trajLine>2026-10-11T14:38:25.1172 2860.1 -2900.0 -5300.1 5.88 4.80 0.55</trajLine>
         </traj>
@@ -68,6 +69,7 @@
           <COV_REF_FRAME>RTN</COV_REF_FRAME>
           <COV_TYPE>CARTPV</COV_TYPE>
           <COV_ORDERING>LTM</COV_ORDERING>
+          <COV_UNITS>[km, km, km, km/s, km/s, km/s]</COV_UNITS>
           <covLine>0.0 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 17.0 18.0 19.0 20.0 21.0</covLine>
         </cov>
         <man>
@@ -79,7 +81,7 @@
           <DC_TYPE>CONTINUOUS</DC_TYPE>
           <DC_MIN_CYCLES>0</DC_MIN_CYCLES>
           <MAN_COMPOSITION>TIME_RELATIVE, DV_X, DV_Y, DV_Z</MAN_COMPOSITION>
-          <MAN_UNITS>s, km/s, km/s, km/s</MAN_UNITS>
+          <MAN_UNITS>[s, km/s, km/s, km/s]</MAN_UNITS>
           <manLine>0.0 0.001 0.0 0.0</manLine>
           <manLine>60.0 0.001 0.0 0.0</manLine>
         </man>

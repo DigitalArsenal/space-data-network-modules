@@ -150,8 +150,11 @@ inline std::shared_ptr<Message> build() {
     msg->root = "omm";
     msg->version_key = "CCSDS_OMM_VERS";
     msg->version = "3.0";
-    msg->take_version = [](Obj* o, const std::string& t, std::string* e) {
-        return Conv<double>::take(static_cast<M*>(o)->CCSDS_OMM_VERS, t, e);
+    /* The version a file declares is the descriptor's (FORMAT_VERSION); the record holds the
+     * version of the Blue Book this module reads and writes, so that what is written reads back
+     * as the record it came from. */
+    msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string* e) {
+        return Conv<double>::take(static_cast<M*>(o)->CCSDS_OMM_VERS, v, e);
     };
 
     auto header = section("header", nav_same(), {

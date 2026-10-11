@@ -48,12 +48,21 @@ using MN = ManeuverT;
 using PT = PerturbationsT;
 using OD = OrbitDeterminationT;
 
-/* A comma-separated list in the message, a list of strings in the record. */
-template <class C, std::vector<std::string> C::*P>
+/* The text of a bracketed list without its brackets: `[km, km/s]` is `km, km/s`. */
+inline std::string unbracket(const std::string& text) {
+    const std::string t = trim(text);
+    if (t.size() >= 2 && t.front() == '[' && t.back() == ']') return trim(t.substr(1, t.size() - 2));
+    return t;
+}
+
+/* A comma-separated list in the message, a list of strings in the record. `Bracketed`: the
+ * message encloses the list in square brackets (MAN_UNITS) and the record holds the items. */
+template <class C, std::vector<std::string> C::*P, bool Bracketed = false>
 inline Leaf csv_leaf(const char* name, const char* units, bool required) {
     return custom_leaf<C>(
         name, units, required,
-        [](C& o, const std::string& t, std::string*) {
+        [](C& o, const std::string& raw, std::string*) {
+            const std::string t = Bracketed ? unbracket(raw) : raw;
             std::vector<std::string>& v = o.*P;
             v.clear();
             size_t b = 0;
@@ -74,7 +83,7 @@ inline Leaf csv_leaf(const char* name, const char* units, bool required) {
                 if (i) s += ", ";
                 s += v[i];
             }
-            out->push_back(s);
+            out->push_back(Bracketed ? "[" + s + "]" : s);
         });
 }
 
@@ -263,11 +272,12 @@ inline void mirror_covariance(M& m) {
         frames::set(*m.COV_REF_FRAME, b.COV_REF_FRAME);
     }
     m.COV_UNITS.clear();
+    const std::string units = unbracket(b.COV_UNITS);
     size_t at = 0;
-    while (at <= b.COV_UNITS.size() && !b.COV_UNITS.empty()) {
-        size_t e = b.COV_UNITS.find(',', at);
-        if (e == std::string::npos) e = b.COV_UNITS.size();
-        const std::string u = trim(b.COV_UNITS.substr(at, e - at));
+    while (at <= units.size() && !units.empty()) {
+        size_t e = units.find(',', at);
+        if (e == std::string::npos) e = units.size();
+        const std::string u = trim(units.substr(at, e - at));
         if (!u.empty()) m.COV_UNITS.push_back(u);
         at = e + 1;
     }
@@ -279,7 +289,11 @@ inline void synthesize_covariance(M& m) {
     b->COV_TYPE = m.COV_TYPE.empty() ? std::string("CARTPV") : m.COV_TYPE;
     b->COV_ORDERING = m.COV_ORDERING;
     if (m.COV_REF_FRAME) b->COV_REF_FRAME = frames::name_of(*m.COV_REF_FRAME);
-    for (size_t i = 0; i < m.COV_UNITS.size(); ++i) b->COV_UNITS += (i ? ", " : "") + m.COV_UNITS[i];
+    if (!m.COV_UNITS.empty()) {
+        b->COV_UNITS = "[";
+        for (size_t i = 0; i < m.COV_UNITS.size(); ++i) b->COV_UNITS += (i ? ", " : "") + m.COV_UNITS[i];
+        b->COV_UNITS += "]";
+    }
     std::string line = "0.0";
     for (double d : m.COVARIANCE_DATA) line += " " + format_double(d);
     b->LINES.push_back(line);
@@ -292,10 +306,10 @@ inline std::shared_ptr<Message> build() {
     msg->root = "ocm";
     msg->version_key = "CCSDS_OCM_VERS";
     msg->version = "3.0";
-    msg->take_version = [](Obj* o, const std::string& t, std::string*) {
+    msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string*) {
         M& m = *static_cast<M*>(o);
         if (!m.HEADER) m.HEADER = std::make_unique<H>();
-        m.HEADER->CCSDS_OCM_VERS = t;
+        m.HEADER->CCSDS_OCM_VERS = v;
         return true;
     };
     msg->after_read = [](Obj* o) {
@@ -529,7 +543,7 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF(MN, DC_PA_START_ANGLE, "deg", false),
         NDM_LEAF(MN, DC_PA_STOP_ANGLE, "deg", false),
         csv_leaf<MN, &MN::MAN_COMPOSITION>("MAN_COMPOSITION", nullptr, true),
-        csv_leaf<MN, &MN::MAN_UNITS>("MAN_UNITS", nullptr, false),
+        csv_leaf<MN, &MN::MAN_UNITS, true>("MAN_UNITS", nullptr, false),
         lines_leaf<MN, &MN::DATA>("manLine"),
     }, repeated("MAN_START", "MAN_STOP"));
 

@@ -28,8 +28,8 @@ inline std::shared_ptr<Message> build() {
     msg->root = "opm";
     msg->version_key = "CCSDS_OPM_VERS";
     msg->version = "3.0";
-    msg->take_version = [](Obj* o, const std::string& t, std::string*) {
-        static_cast<M*>(o)->CCSDS_OPM_VERS = t;
+    msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string*) {
+        static_cast<M*>(o)->CCSDS_OPM_VERS = v;
         return true;
     };
 

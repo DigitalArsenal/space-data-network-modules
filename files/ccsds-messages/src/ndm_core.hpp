@@ -286,6 +286,7 @@ struct Node {
     bool bare = false;   /* leaf is a bare KVN text line (no KEYWORD =)           */
     bool head = false;   /* KVN states this leaf before the group's COMMENT lines  */
     int line = 0;        /* source line, KVN reader only */
+    std::string raw;     /* KVN: the value as written, when it carried a [units] suffix */
 
     static Node leaf(const std::string& name, const std::string& text,
                      const std::string& units = std::string()) {
@@ -597,6 +598,7 @@ struct Leaf {
     bool matrix = false;        /* a member of the section's lower-triangle matrix */
     bool bare = false;          /* a bare KVN text line (OCM/ACM data lines) */
     bool repeatable = false;    /* may be stated again in the same section (COMMENT, lists of strings) */
+    bool verbatim = false;      /* text: a [bracketed] tail is part of the value, not units */
     bool relocated = false;     /* read here but written elsewhere: declare it */
     /* Units a message may annotate this keyword with besides `units`, and how many
      * places the decimal point moves to reach `units` (km for m: +3). */
@@ -719,6 +721,7 @@ inline Leaf make_leaf(const char* name, const char* units, bool required) {
         return Conv<M>::same(static_cast<const C*>(o)->*P, defaults.*P);
     };
     l.repeatable = std::is_same_v<M, std::vector<std::string>>;
+    l.verbatim = std::is_same_v<M, std::string> || std::is_same_v<M, std::vector<std::string>>;
     return l;
 }
 
@@ -971,6 +974,8 @@ inline void fill_leaf(const Section& s, const Leaf& leaf, const Node& kid, Obj* 
     std::string err;
     bool ok = true;
     std::string text = kid.text;
+    /* KVN states units as a [suffix] on a number; on a text keyword the same characters are the text. */
+    if (!kid.units.empty() && !kid.raw.empty() && leaf.verbatim && !leaf.units) text = kid.raw;
     if (!kid.units.empty() && !leaf.unit_shifts.empty() && (!leaf.units || kid.units != leaf.units)) {
         for (const auto& shift : leaf.unit_shifts) {
             if (kid.units == shift.first) text = shift_decimal(text, shift.second);

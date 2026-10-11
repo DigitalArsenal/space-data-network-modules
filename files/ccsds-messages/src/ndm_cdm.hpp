@@ -220,8 +220,8 @@ inline std::shared_ptr<Message> build() {
     msg->root = "cdm";
     msg->version_key = "CCSDS_CDM_VERS";
     msg->version = "1.0";
-    msg->take_version = [](Obj* o, const std::string& t, std::string* e) {
-        return Conv<double>::take(static_cast<M*>(o)->CCSDS_CDM_VERS, t, e);
+    msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string* e) {
+        return Conv<double>::take(static_cast<M*>(o)->CCSDS_CDM_VERS, v, e);
     };
     msg->check_record = [](const Obj* o) {
         const M& m = *static_cast<const M*>(o);
@@ -357,9 +357,9 @@ inline std::shared_ptr<Message> build() {
     std::vector<Item> covariance_items;
     covariance_items.push_back(Item(read_only(NDM_COMMENT(O, COMMENT, false))));
     add_covariance_cells(&covariance_items);
-    SectionOptions covariance_options;
-    covariance_options.present = [](const Obj* o) { return static_cast<const O*>(o)->COVARIANCE.size() >= 21; };
-    auto covariance = section("covarianceMatrix", nav_same(), covariance_items, covariance_options);
+    /* The 21 position/velocity cells are mandatory (508.0-B-1 table 3-5); the drag, solar
+     * radiation pressure and thrust rows follow when the record holds them. */
+    auto covariance = section("covarianceMatrix", nav_same(), covariance_items);
 
     auto data = section("data", nav_same(), {
         read_only(NDM_COMMENT(O, COMMENT, false)),

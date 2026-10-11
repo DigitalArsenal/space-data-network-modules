@@ -48,6 +48,7 @@ struct Line {
     std::string value;  /* Key */
     std::string units;  /* Key */
     std::string raw;    /* the trimmed line */
+    std::string text;   /* Key: the value as written, units suffix included */
 };
 
 inline bool is_keyword_text(const std::string& s) {
@@ -58,13 +59,20 @@ inline bool is_keyword_text(const std::string& s) {
     return true;
 }
 
-/* `3.0 [km]` -> value `3.0`, units `km`. */
+/* `3.0 [km]` -> value `3.0`, units `km`. A value that is only a bracketed list
+ * (`[km, km, km/s]`, the OCM's TRAJ_UNITS, COV_UNITS and MAN_UNITS) is the value. */
 inline void split_units(const std::string& raw, std::string* value, std::string* units) {
     const std::string v = trim(raw);
     if (!v.empty() && v.back() == ']') {
         const size_t open = v.rfind('[');
         if (open != std::string::npos) {
-            *value = trim(v.substr(0, open));
+            const std::string head = trim(v.substr(0, open));
+            if (head.empty()) {
+                *value = v;
+                units->clear();
+                return;
+            }
+            *value = head;
             *units = trim(v.substr(open + 1, v.size() - open - 2));
             return;
         }
@@ -98,6 +106,7 @@ inline std::vector<Line> lex(const char* data, size_t length) {
             if (eq != std::string::npos && is_keyword_text(head)) {
                 l.type = LineType::Key;
                 l.key = head;
+                l.text = trim(text.substr(eq + 1));
                 split_units(text.substr(eq + 1), &l.value, &l.units);
             } else if (eq == std::string::npos && is_keyword_text(text)) {
                 l.type = LineType::Marker;
@@ -388,6 +397,7 @@ inline void parse_section(Reader& R, const Section& s, Node& n, const std::strin
             if (const Leaf* leaf = own_leaf(s, l.key)) {
                 Node k = Node::leaf(l.key, l.value, l.units);
                 k.line = l.no;
+                if (!l.units.empty()) k.raw = l.text;
                 if (leaf->user_defined && is_user_defined_key(l.key)) {
                     k.name = "USER_DEFINED";
                     k.param = l.key.substr(13);

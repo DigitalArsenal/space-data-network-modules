@@ -21,6 +21,48 @@ exercises:
 The books' keyword corpus is what the format specification says; the module
 reads every keyword the specification defines, not only these.
 
+## `ndm/` and the NDM/XML twins
+
+**Synthetic.** `ndm/ndm-*.kvn` are messages in the layout of the Blue Books for the
+OMM, OEM, OPM and OCM (502.0-B-3), the CDM (508.0-B-1), the RDM (508.1-B-1) and the
+APM and ACM (504.0-B-2), with invented objects, agencies, times and numbers (the
+covariance, state and CDM numbers are made up; none is a measurement). The Blue
+Books state no terms for reproducing their annex examples, so none is kept in this
+tree. Between them they hold every kind of block, repetition and choice a message
+can state: SGP4 and SGP4-XP mean elements (BTERM and AGOM in place of BSTAR and
+MEAN_MOTION_DDOT), two OEM segments with two covariance matrices in one
+COVARIANCE_START block, two OPM maneuvers, an OCM with trajectory, physical,
+covariance, maneuver, perturbation, determination and user-defined blocks, a CDM
+with a 45-cell and a 21-cell covariance, an APM with every attitude block, an ACM
+with every block and two sensors, and an RDM prediction.
+
+Each message has an NDM/XML twin, written by the module itself
+(`make-ndm-xml.mjs`, after `npm run build`) and kept only because an independent
+validator accepted it: `tests/ndm_xsd.test.mjs` runs `xmllint` against the NDM/XML
+4.0.0 schemas. The AEM and TDM figures have twins too (`*.xml` beside the `.txt`),
+except Figure E-16: its `CREATION_DATE` has no seconds, which the schema's time
+pattern does not accept, and the module states an epoch exactly as the file wrote
+it, so a twin of it would not validate.
+
+The schemas (`ndmxml-4.0.0-*.xsd`, SANA registry) are not redistributed. The test
+reads them from `$SDN_MODULES_PRIVATE_FIXTURES/files/ccsds-messages/fixtures/xsd/`
+(`tests/lib/privateFixtures.mjs`) and skips, saying so, without them.
+
+## `real/`
+
+**Real messages, redistributable.** Byte-for-byte copies of fixtures already in this
+repository, kept here so the codec is measured on what producers actually write:
+
+| File | What | Terms |
+| --- | --- | --- |
+| `tracss-04208.ocm`, `tracss-39417.ocm`, `tracss-60094.ocm` | OCMs from the TraCSS "Dataset for Conjunction Assessment Verification" (The Aerospace Corporation / NOAA Office of Space Commerce), trimmed to nine or ten ephemeris nodes by `analysis/conjunction-assessment/tests/fixtures/aerospace-real-window/` (`tests/ndm_real_data.test.mjs` reads and writes all 42 files there the same way when this tree is whole) | CC0 1.0 |
+| `nasa-iss.oem` | NASA's public ISS OEM (`ISS_OEM/ISS.OEM_J2K_EPH.txt`, retrieved 2026-07-13), trimmed to its first twelve hours by `analysis/od/tests/data/supgp-reference/iss/` | U.S. Government work, public domain |
+
+What they show that the synthetic messages cannot: TraCSS states its version as
+`CCSDS_OCM_VERS = 502.0-B-3` and `TRAJ_BASIS = OPERATIONAL`, which the standard's
+enumeration does not have; the module reads both, keeps the second as it is, and so the
+NDM/XML it writes for them fails the schema on that one element (and only that one).
+
 ## Corpus statistics
 
 Counted from the annex regions of the books (when this module was written, 2026-08-30):

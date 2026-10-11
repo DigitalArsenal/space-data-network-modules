@@ -19,16 +19,15 @@
 // one file, a record that cannot be written without time arithmetic.
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "flatbuffers";
 import createFlatc from "flatc-wasm/module";
-import { NCD } from "spacedatastandards.org/lib/js/NCD/NCD.js";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+
+import { FORMAT, KVN_FORMAT, PORT, XML_FORMAT, descriptorOf, ncdFrame, ncdInput, ok, out, read, recordInput, sha256, split, write } from "./lib/ndm_frames.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.join(here, "..");
@@ -39,59 +38,10 @@ const FIXTURES = path.join(packageRoot, "fixtures");
 const built = fs.existsSync(WASM_PATH);
 const skip = !built && "run `npm run build` first";
 
-// ncdContainerFormat (NCD.fbs): the CCSDS_<M>_KVN and CCSDS_<M>_XML members.
-const FORMAT = {
-  OEM: [7, 8], AEM: [9, 10], TDM: [11, 12], OMM: [13, 14], OPM: [15, 16],
-  OCM: [17, 18], CDM: [19, 20], APM: [21, 22], ACM: [23, 24], RDM: [25, 26],
-};
-const PORT = {
-  OMM: "elements", OEM: "ephemeris", OPM: "state", OCM: "orbit", CDM: "conjunction",
-  APM: "attitude_state", ACM: "attitude_data", RDM: "reentry", AEM: "attitude", TDM: "tracking",
-};
-const KVN_FORMAT = (type) => FORMAT[type][0];
-const XML_FORMAT = (type) => FORMAT[type][1];
-
-const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 // flatc prints a double with as few as three significant digits; the record holds all seventeen,
 // and the exact digits are asserted on the text the module writes (the exact-digits test below).
 const near = (actual, expected, message) =>
   assert.ok(Math.abs(actual - expected) <= 5e-3 * Math.abs(expected), `${message ?? ""} ${actual} is not ${expected}`);
-
-function ncdFrame(bytes, format, { declare = true } = {}) {
-  const b = new flatbuffers.Builder(512);
-  const sha = bytes && declare ? b.createString(sha256(bytes)) : 0;
-  NCD.startNCD(b);
-  if (format !== undefined) NCD.addFormat(b, format);
-  if (bytes && declare) {
-    NCD.addSourceByteLength(b, BigInt(bytes.length));
-    NCD.addSourceSha256(b, sha);
-  }
-  NCD.finishSizePrefixedNCDBuffer(b, NCD.endNCD(b));
-  const d = b.asUint8Array();
-  if (!bytes) return d;
-  const f = new Uint8Array(d.length + bytes.length);
-  f.set(d);
-  f.set(bytes, d.length);
-  return f;
-}
-const ncdInput = (portId, f) => ({ portId, typeRef: { schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "aligned-binary", requiredAlignment: 8, byteLength: f.byteLength }, payload: f });
-const recordInput = (type, p) => ({ portId: PORT[type], typeRef: { schemaName: `${type}.fbs`, fileIdentifier: `$${type}`, rootTypeName: type, wireFormat: "aligned-binary", requiredAlignment: 8, byteLength: p.byteLength }, payload: p });
-const out = (response, port) => {
-  const f = response.outputs.find((o) => o.portId === port);
-  assert.ok(f, `no output on ${port}; got ${response.outputs.map((o) => o.portId)}`);
-  return f.payload;
-};
-function split(frame) {
-  const n = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(0, true);
-  const bb = new flatbuffers.ByteBuffer(frame.subarray(0, 4 + n));
-  bb.setPosition(4);
-  return { descriptor: NCD.getRootAsNCD(bb), body: frame.subarray(4 + n) };
-}
-function descriptorOf(payload) {
-  const bb = new flatbuffers.ByteBuffer(payload);
-  bb.setPosition(4);
-  return NCD.getRootAsNCD(bb);
-}
 
 async function harness(t) {
   const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(WASM_PATH), manifest: MANIFEST, surface: "direct" });
@@ -285,12 +235,6 @@ const MESSAGES = [
     check: (j) => { assert.equal(j.SEGMENTS.length, 2); } },
 ];
 
-const read = (type, bytes, format) => ({ methodId: `read_${type.toLowerCase()}`, inputs: [ncdInput("message", ncdFrame(bytes, format))] });
-const write = (type, record, format) => ({
-  methodId: `write_${type.toLowerCase()}`,
-  inputs: format === undefined ? [recordInput(type, record)] : [recordInput(type, record), { ...ncdInput("descriptor", ncdFrame(undefined, format)) }],
-});
-const ok = (r) => { assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`); return r; };
 
 for (const m of MESSAGES) {
   const { type } = m;
@@ -485,6 +429,18 @@ test("a record that lacks what the message must state is not written, and says w
   // An epoch is not a guess: no EPOCH, no message.
   const noEpoch = await h.invoke(write("OMM", await build("OMM", { ...json, EPOCH: "" })));
   assert.match(noEpoch.errorMessage, /EPOCH/);
+
+  // A CDM states its covariance: a record without one is refused, and so is a message without one.
+  const cdmKvn = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-cdm-full-covariance.kvn"), "utf8");
+  const cdm = await decode("CDM", out(ok(await h.invoke(read("CDM", Buffer.from(cdmKvn), undefined))), PORT.CDM));
+  const noCovariance = await h.invoke(write("CDM", await build("CDM", { ...cdm, OBJECT1: { ...cdm.OBJECT1, COVARIANCE: [] } })));
+  assert.notEqual(noCovariance.statusCode, 0);
+  assert.match(noCovariance.errorMessage, /does not state CR_R, which CDM must/);
+  const cdmWithout = cdmKvn.split("\n").filter((l) => !/^C[RTN](DOT)?_[RTN](DOT)? = /.test(l)).join("\n");
+  assert.notEqual(cdmWithout, cdmKvn);
+  const refusedCdm = await h.invoke(read("CDM", Buffer.from(cdmWithout), undefined));
+  assert.equal(refusedCdm.errorCode, "missing-keyword");
+  assert.match(refusedCdm.errorMessage, /CR_R is mandatory in CDM/);
 });
 
 test("OMM and OPM metadata is read with or without META_START and META_STOP, and written without them", { skip }, async (t) => {
@@ -543,6 +499,49 @@ test("XML that an indenting writer or a PDF wrapped reads as the lines and value
   assert.equal(j.OBJECT_NAME, "EXAMPLESAT 1", "a wrapped value is one line");
   assert.ok(j.COMMENT.split("\n").includes("mean") && j.COMMENT.split("\n").includes("elements"), "a wrapped comment is its lines, without their indentation");
   void record;
+});
+
+test("the version a file spells is the descriptor's; the record and what is written state the Blue Book's", { skip }, async (t) => {
+  // TraCSS writes `CCSDS_OCM_VERS = 502.0-B-3`, older producers 2.0: both are read, the descriptor keeps what the
+  // file said, and the record (so the message written from it) holds the version this module implements.
+  const h = await harness(t);
+  const kvn = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.kvn"), "utf8");
+  const xml = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.xml"), "utf8");
+  const reference = out(ok(await h.invoke(read("OMM", Buffer.from(kvn), undefined))), PORT.OMM);
+  for (const spelling of ["2.0", "502.0-B-3", "3"]) {
+    for (const [text, bytes] of [["KVN", kvn.replace("CCSDS_OMM_VERS = 3.0", `CCSDS_OMM_VERS = ${spelling}`)], ["XML", xml.replace('version="3.0"', `version="${spelling}"`)]]) {
+      assert.notEqual(bytes, text === "KVN" ? kvn : xml);
+      const r = ok(await h.invoke(read("OMM", Buffer.from(bytes), undefined)));
+      assert.equal(descriptorOf(out(r, "descriptor")).FORMAT_VERSION(), spelling, `${text}: the descriptor says what the file said`);
+      assert.deepEqual(Buffer.from(out(r, PORT.OMM)), Buffer.from(reference), `${text}: the record states the module's version whatever the file spelled`);
+    }
+  }
+  const j = await decode("OMM", reference);
+  assert.equal(j.CCSDS_OMM_VERS, 3);
+  const written = Buffer.from(split(out(ok(await h.invoke(write("OMM", reference))), "message")).body).toString("utf8");
+  assert.match(written, /^CCSDS_OMM_VERS = 3\.0\n/);
+});
+
+test("a text keyword keeps a bracketed tail, a number keeps its units, and an OCM units list is its brackets", { skip }, async (t) => {
+  const h = await harness(t);
+  const kvn = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.kvn"), "utf8");
+  const named = kvn.replace("OBJECT_NAME = EXAMPLESAT 1", "OBJECT_NAME = EXAMPLESAT 1 [A]");
+  const r = ok(await h.invoke(read("OMM", Buffer.from(named), undefined)));
+  assert.equal((await decode("OMM", out(r, PORT.OMM))).OBJECT_NAME, "EXAMPLESAT 1 [A]", "the bracket belongs to a name");
+  const written = Buffer.from(split(out(ok(await h.invoke(write("OMM", out(r, PORT.OMM)))), "message")).body).toString("utf8");
+  assert.match(written, /^OBJECT_NAME = EXAMPLESAT 1 \[A\]$/m);
+  assert.match(written, /^INCLINATION = 3\.8536 \[deg\]$/m, "a number states its units");
+
+  const ocm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-ocm-blocks.kvn"), "utf8");
+  const record = out(ok(await h.invoke(read("OCM", Buffer.from(ocm), undefined))), PORT.OCM);
+  const j = await decode("OCM", record);
+  assert.equal(j.TRAJECTORY_BLOCKS[0].TRAJ_UNITS, "[km, km, km, km/s, km/s, km/s]");
+  assert.deepEqual(j.COV_UNITS, ["km", "km", "km", "km/s", "km/s", "km/s"], "the single-covariance fields hold the items");
+  assert.deepEqual(j.MANEUVER_DATA[0].MAN_UNITS, ["s", "km/s", "km/s", "km/s"]);
+  const text = Buffer.from(split(out(ok(await h.invoke(write("OCM", record))), "message")).body).toString("utf8");
+  assert.match(text, /^TRAJ_UNITS = \[km, km, km, km\/s, km\/s, km\/s\]$/m);
+  assert.match(text, /^COV_UNITS = \[km, km, km, km\/s, km\/s, km\/s\]$/m);
+  assert.match(text, /^MAN_UNITS = \[s, km\/s, km\/s, km\/s\]$/m);
 });
 
 test("an OEM whose states are in the compact form is refused when written: its epochs need time arithmetic", { skip }, async (t) => {

@@ -77,8 +77,8 @@ inline std::shared_ptr<Message> build() {
     msg->root = "oem";
     msg->version_key = "CCSDS_OEM_VERS";
     msg->version = "3.0";
-    msg->take_version = [](Obj* o, const std::string& t, std::string* e) {
-        return Conv<double>::take(static_cast<M*>(o)->CCSDS_OEM_VERS, t, e);
+    msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string* e) {
+        return Conv<double>::take(static_cast<M*>(o)->CCSDS_OEM_VERS, v, e);
     };
     msg->check_record = [](const Obj* o) {
         const M& m = *static_cast<const M*>(o);
