@@ -27,13 +27,15 @@ export const forceClass = (c) => (c.drag ? 'drag' : c.srp ? 'srp' : c.degree > 0
 // HPOP's own Orekit tolerance (orekit_reference.test.mjs), rounded up: a
 // limit says how far apart two correct codes can be given that tool's
 // stated differences, not how close HPOP happened to land. Measured
-// 2026-10-09 (HPOP against the tool; the tool against Orekit):
+// 2026-10-11 with propagator/hpop 1.3.0 (HPOP against the tool; the tool
+// against Orekit), HPOP at the suite's request, where its own integration
+// error is most of its difference from Orekit and Tudat in LEO:
 //   Orekit ....... HPOP's Orekit tolerances (1 mm; 5 cm; 10 cm; 10 cm)
 //   GMAT ......... epochs carried as a double MJD (samples within ~0.15 us
 //                  of the hour: 1 mm LEO, 4.5 mm MOLNIYA perigee), its FK5
 //                  Earth orientation and the 0.13 mas/day drift of its ICRF
 //                  tie: point mass <= 4.2 mm (4.5 mm); field, Sun, Moon and
-//                  radiation pressure <= 2.7 cm (2.2 cm); drag is
+//                  radiation pressure <= 2.9 cm (2.2 cm); drag is
 //                  Jacchia-Roberts on both sides, whose Sun hour angle
 //                  and declination GMAT takes in MJ2000Eq axes and HPOP
 //                  on the true equator of date: LEO400 <= 1.4 m (with
@@ -41,18 +43,18 @@ export const forceClass = (c) => (c.drag ? 'drag' : c.srp ? 'srp' : c.degree > 0
 //   Tudat ........ a TT clock given to a TDB-based code (ephemerides and
 //                  Earth rotation read 0.75 ms off), fixed steps, and with
 //                  drag an ellipsoidal Earth whose mean radius (6371.0 km)
-//                  is then also its shadow: point mass <= 0.05 mm (0.6 mm);
-//                  field, Sun, Moon <= 1.1 cm (1.7 mm); radiation pressure
-//                  <= 1.1 cm (1.0 mm); drag <= 6.0 cm (5.4 cm)
+//                  is then also its shadow: point mass <= 0.32 mm (0.6 mm);
+//                  field, Sun, Moon <= 2.0 cm (1.7 mm); radiation pressure
+//                  <= 2.0 cm (1.0 mm); drag <= 6.5 cm (5.4 cm)
 //   Tudat WASM ... the same setup as Tudat, so the same limits
 //   Nyx .......... Earth orientation from JPL's earth_latest_high_prec.bpc,
 //                  whose pole is 4.8-6.5 mas from the IERS 2010 pole with
 //                  the Orekit file's EOP rows (measured), and pck08's Sun
 //                  radius for the shadow: point mass <= 0.6 mm (0.6 mm);
 //                  field (J2 alone as much as 20x20), Sun, Moon, radiation
-//                  pressure <= 10.4 cm (10.4 cm); its NRLMSISE-00 drag leaves
+//                  pressure <= 9.3 cm (10.4 cm); its NRLMSISE-00 drag leaves
 //                  LEO400 12.1 m from Orekit after a day (2.8e-4 of the 44 km
-//                  drag effect; SSO700 2 cm), a difference not isolated here
+//                  drag effect; SSO700 1.4 cm), a difference not isolated here
 export const TOLERANCE_M = {
   orekit: { pointMass: 1e-3, gravity: 0.05, srp: 0.1, drag: 0.1 },
   gmat: { pointMass: 0.01, gravity: 0.05, srp: 0.1, drag: 1.5 },

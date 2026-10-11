@@ -1,6 +1,6 @@
 {
  "about": "Largest 3D position difference (m) over 24 h, hourly samples; HPOP (browser harness) against each tool, and tool against tool. tests/xval-summary.mjs.",
- "hpopWasmSha256": "0d1f626464ff42e444c265bce1a13ae84b5d7bb809bdeb83fdb92a26b591397f",
+ "hpopWasmSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
  "tools": {
   "orekit": "Orekit 13.1 (CS GROUP, Apache-2.0), DormandPrince853 (steps <= 10 s), GCRF; NRLMSISE-00 on mean local solar time",
   "gmat": "GMAT R2022a (NASA GSFC, Apache-2.0; GmatConsole, Build Date: Jan 11 2023  15:45:41), PrinceDormand78 at 1e-13 (steps <= 60 s); state in ICRF axes at the epoch, samples from the MJ2000Eq integration axes by the epoch's fixed rotation; Earth orientation IAU 1976/1980 (FK5) with the pole and UT1-UTC of ../orekit/eop-2026-08.json; Sun and Moon from DE440 via SPICE; drag Jacchia-Roberts",
@@ -13,23 +13,23 @@
    "case": "LEO400 F0-point-mass",
    "hpop": {
     "orekit": {
-     "worst": 0.00020228345276374787,
+     "worst": 0.00047886697576809815,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.0011682736487865647,
-     "worstAt": 10800
+     "worst": 0.0011672752846149605,
+     "worstAt": 3600
     },
     "tudatpy": {
-     "worst": 0.00004836066469655956,
+     "worst": 0.0003249448610904906,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.00004197767423253629,
+     "worst": 0.0003185593064503875,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.000022666333322958098,
+     "worst": 0.0002991906106740288,
      "worstAt": 86400
     }
    },
@@ -80,24 +80,24 @@
    "case": "LEO400 F1-J2",
    "hpop": {
     "orekit": {
-     "worst": 0.009105723176823854,
+     "worst": 0.018058775679633234,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.00838916067614802,
-     "worstAt": 82800
+     "worst": 0.01722665450815829,
+     "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.009033935654615766,
+     "worst": 0.017985397386870758,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.009027220421099835,
+     "worst": 0.017978691563656415,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.026150524536578935,
-     "worstAt": 36000
+     "worst": 0.02724012270086933,
+     "worstAt": 32400
     }
    },
    "pairs": {
@@ -147,24 +147,24 @@
    "case": "LEO400 F3-field20x20",
    "hpop": {
     "orekit": {
-     "worst": 0.009102390887840579,
+     "worst": 0.01811274186927014,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.016087619509672878,
-     "worstAt": 21600
+     "worst": 0.019867523993029955,
+     "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.010800421360755152,
+     "worst": 0.019820263210393544,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.010804618498842358,
+     "worst": 0.019824486381884013,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.02638169728897066,
-     "worstAt": 36000
+     "worst": 0.027485317634979235,
+     "worstAt": 32400
     }
    },
    "pairs": {
@@ -214,24 +214,24 @@
    "case": "LEO400 F4-field-sun-moon",
    "hpop": {
     "orekit": {
-     "worst": 0.009146385035997264,
+     "worst": 0.018169850405994347,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.008427845894103746,
-     "worstAt": 68400
+     "worst": 0.01427182405702879,
+     "worstAt": 82800
     },
     "tudatpy": {
-     "worst": 0.010854848813032426,
+     "worst": 0.01988782591215143,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.010864507794540167,
+     "worst": 0.0198975150248143,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.02639561621456708,
-     "worstAt": 36000
+     "worst": 0.02747970852993019,
+     "worstAt": 32400
     }
    },
    "pairs": {
@@ -281,24 +281,24 @@
    "case": "LEO400 F5-field-sun-moon-srp",
    "hpop": {
     "orekit": {
-     "worst": 0.009750009601568176,
+     "worst": 0.018690958701176583,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.01925186601409584,
-     "worstAt": 64800
+     "worst": 0.02421894853660387,
+     "worstAt": 82800
     },
     "tudatpy": {
-     "worst": 0.01074477905995525,
+     "worst": 0.019689539601242194,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.01074388696334081,
+     "worst": 0.019688603167782825,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.026713303168115682,
-     "worstAt": 36000
+     "worst": 0.027770126212442542,
+     "worstAt": 32400
     }
    },
    "pairs": {
@@ -348,24 +348,24 @@
    "case": "LEO400 F6-field-sun-moon-srp-drag",
    "hpop": {
     "orekit": {
-     "worst": 0.01262084993451199,
+     "worst": 0.021726644142353,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 1.3683585280685497,
+     "worst": 1.377397454679543,
      "worstAt": 86400,
      "atmosphere": "JACCHIA_ROBERTS"
     },
     "tudatpy": {
-     "worst": 0.026774665040991373,
+     "worst": 0.03354762512311234,
      "worstAt": 79200
     },
     "tudat-wasm": {
-     "worst": 0.02677227440347986,
+     "worst": 0.033545220734626395,
      "worstAt": 79200
     },
     "nyx": {
-     "worst": 12.088388849639548,
+     "worst": 12.079222258194635,
      "worstAt": 86400
     }
    },
@@ -400,23 +400,23 @@
    "case": "SSO700 F0-point-mass",
    "hpop": {
     "orekit": {
-     "worst": 0.0002161436290550531,
+     "worst": 0.00048135129855163424,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.0008563031545766752,
-     "worstAt": 10800
+     "worst": 0.0008548349646048497,
+     "worstAt": 3600
     },
     "tudatpy": {
-     "worst": 0.00003726022698283423,
+     "worst": 0.0003024655304645861,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.000030237258194566322,
+     "worst": 0.0002954433095590759,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.00009137559240798439,
+     "worst": 0.00035658295992547096,
      "worstAt": 86400
     }
    },
@@ -467,23 +467,23 @@
    "case": "SSO700 F1-J2",
    "hpop": {
     "orekit": {
-     "worst": 0.006953284965932799,
+     "worst": 0.014499386758272082,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.018588880338202746,
+     "worst": 0.02613993279726617,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.006713105422521662,
+     "worst": 0.014258944593488797,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.006718581626377672,
+     "worst": 0.014264409540164145,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.030771001330480295,
+     "worst": 0.03831313460831214,
      "worstAt": 86400
     }
    },
@@ -534,23 +534,23 @@
    "case": "SSO700 F3-field20x20",
    "hpop": {
     "orekit": {
-     "worst": 0.006796011317422793,
+     "worst": 0.014480437941190192,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.012743077830464127,
+     "worst": 0.019481549487194914,
      "worstAt": 82800
     },
     "tudatpy": {
-     "worst": 0.00607447250450773,
+     "worst": 0.013759166558010716,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.006088522590291637,
+     "worst": 0.013773223730571724,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.031350026306928284,
+     "worst": 0.03903142288344639,
      "worstAt": 86400
     }
    },
@@ -601,23 +601,23 @@
    "case": "SSO700 F4-field-sun-moon",
    "hpop": {
     "orekit": {
-     "worst": 0.006807342627524902,
+     "worst": 0.014633392214634597,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.021608996352898643,
+     "worst": 0.029441668798876677,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.006096754248448137,
+     "worst": 0.013923050333746608,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.006094561021270979,
+     "worst": 0.013920833843374216,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.031367977543126604,
+     "worst": 0.0391909574926474,
      "worstAt": 86400
     }
    },
@@ -668,23 +668,23 @@
    "case": "SSO700 F5-field-sun-moon-srp",
    "hpop": {
     "orekit": {
-     "worst": 0.00654782023339662,
+     "worst": 0.0140172003556535,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.00814415907683231,
-     "worstAt": 82800
+     "worst": 0.006272195336807692,
+     "worstAt": 64800
     },
     "tudatpy": {
-     "worst": 0.005972637201395793,
+     "worst": 0.013442517116883875,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.005983972606590942,
+     "worst": 0.0134538377246133,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.03079941284472932,
+     "worst": 0.038266030180712195,
      "worstAt": 86400
     }
    },
@@ -735,25 +735,25 @@
    "case": "SSO700 F6-field-sun-moon-srp-drag",
    "hpop": {
     "orekit": {
-     "worst": 0.006781508909685169,
+     "worst": 0.014225133171,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.17414552988129414,
+     "worst": 0.16660137960822552,
      "worstAt": 86400,
      "atmosphere": "JACCHIA_ROBERTS"
     },
     "tudatpy": {
-     "worst": 0.06022126032779045,
+     "worst": 0.06529391864992339,
      "worstAt": 75600
     },
     "tudat-wasm": {
-     "worst": 0.06021728425367811,
+     "worst": 0.06528995306124566,
      "worstAt": 75600
     },
     "nyx": {
-     "worst": 0.014662289842753326,
-     "worstAt": 86400
+     "worst": 0.013530128062927077,
+     "worstAt": 43200
     }
    },
    "pairs": {
@@ -787,23 +787,23 @@
    "case": "GPS F0-point-mass",
    "hpop": {
     "orekit": {
-     "worst": 0.00015685007295867815,
+     "worst": 0.00014281067709867386,
      "worstAt": 79200
     },
     "gmat": {
-     "worst": 0.000628510787873159,
-     "worstAt": 36000
+     "worst": 0.0006266259325319508,
+     "worstAt": 3600
     },
     "tudatpy": {
-     "worst": 0.000004482100488063831,
+     "worst": 0.000021247049187734948,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.000004482100488063831,
+     "worst": 0.000021247049187734948,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.0000029031125125996416,
+     "worst": 0.000013909420152133449,
      "worstAt": 86400
     }
    },
@@ -854,24 +854,24 @@
    "case": "GPS F1-J2",
    "hpop": {
     "orekit": {
-     "worst": 0.00047710235037776947,
+     "worst": 0.00019630307375735205,
      "worstAt": 79200
     },
     "gmat": {
-     "worst": 0.0007392424166635152,
-     "worstAt": 3600
+     "worst": 0.0007441835436892702,
+     "worstAt": 82800
     },
     "tudatpy": {
-     "worst": 0.00032544175882807063,
-     "worstAt": 79200
+     "worst": 0.000058038052470456625,
+     "worstAt": 28800
     },
     "tudat-wasm": {
-     "worst": 0.00032544175882807063,
-     "worstAt": 79200
+     "worst": 0.000058038052470456625,
+     "worstAt": 28800
     },
     "nyx": {
-     "worst": 0.0016116697270016909,
-     "worstAt": 32400
+     "worst": 0.00177574620323111,
+     "worstAt": 86400
     }
    },
    "pairs": {
@@ -921,24 +921,24 @@
    "case": "GPS F3-field20x20",
    "hpop": {
     "orekit": {
-     "worst": 0.0004729594345180591,
+     "worst": 0.00019432312411179939,
      "worstAt": 79200
     },
     "gmat": {
-     "worst": 0.0002766065871780529,
-     "worstAt": 82800
+     "worst": 0.000009876838033340056,
+     "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.00028024988178434876,
-     "worstAt": 79200
+     "worst": 0.00008279425742543776,
+     "worstAt": 54000
     },
     "tudat-wasm": {
-     "worst": 0.0002798911776964446,
-     "worstAt": 79200
+     "worst": 0.00008195409869799102,
+     "worstAt": 54000
     },
     "nyx": {
-     "worst": 0.001605917439521172,
-     "worstAt": 32400
+     "worst": 0.0017574555202149364,
+     "worstAt": 36000
     }
    },
    "pairs": {
@@ -988,24 +988,24 @@
    "case": "GPS F4-field-sun-moon",
    "hpop": {
     "orekit": {
-     "worst": 0.0004321218239062043,
+     "worst": 0.00015173508171742326,
      "worstAt": 79200
     },
     "gmat": {
-     "worst": 0.0031802776939944405,
-     "worstAt": 68400
+     "worst": 0.003416550304157607,
+     "worstAt": 72000
     },
     "tudatpy": {
-     "worst": 0.00017212284975742586,
-     "worstAt": 79200
+     "worst": 0.00014470584913877215,
+     "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.00017212284975742586,
-     "worstAt": 79200
+     "worst": 0.00014571278098473483,
+     "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.0016065168062441117,
-     "worstAt": 32400
+     "worst": 0.001757797467572177,
+     "worstAt": 86400
     }
    },
    "pairs": {
@@ -1055,24 +1055,24 @@
    "case": "GPS F5-field-sun-moon-srp",
    "hpop": {
     "orekit": {
-     "worst": 0.0004336448652956076,
+     "worst": 0.0001536345167763252,
      "worstAt": 79200
     },
     "gmat": {
-     "worst": 0.0006430929727207157,
-     "worstAt": 7200
+     "worst": 0.0006746408201593718,
+     "worstAt": 68400
     },
     "tudatpy": {
-     "worst": 0.0001708033790180981,
-     "worstAt": 79200
+     "worst": 0.00014418785106382146,
+     "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.0001711906156614544,
-     "worstAt": 79200
+     "worst": 0.00014320345256470663,
+     "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.0016065152686031102,
-     "worstAt": 32400
+     "worst": 0.001757151339474523,
+     "worstAt": 36000
     }
    },
    "pairs": {
@@ -1122,23 +1122,23 @@
    "case": "GEO F0-point-mass",
    "hpop": {
     "orekit": {
-     "worst": 0.00003549253736111622,
+     "worst": 0.00003511852276853352,
      "worstAt": 61200
     },
     "gmat": {
-     "worst": 0.00009450784235306918,
+     "worst": 0.00009452447550283007,
      "worstAt": 7200
     },
     "tudatpy": {
-     "worst": 9.68676029827797e-7,
-     "worstAt": 54000
+     "worst": 0.0000012128292587748,
+     "worstAt": 82800
     },
     "tudat-wasm": {
-     "worst": 0.000002026195187300196,
+     "worst": 0.000002783652660801733,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.0000013650807581849788,
+     "worst": 0.000002119204705859242,
      "worstAt": 82800
     }
    },
@@ -1189,24 +1189,24 @@
    "case": "GEO F1-J2",
    "hpop": {
     "orekit": {
-     "worst": 0.00004035954019398031,
-     "worstAt": 68400
+     "worst": 0.00003556394183239371,
+     "worstAt": 57600
     },
     "gmat": {
-     "worst": 0.000025695231217818076,
-     "worstAt": 72000
+     "worst": 0.000003611147842920529,
+     "worstAt": 64800
     },
     "tudatpy": {
-     "worst": 0.000028716827933795043,
-     "worstAt": 72000
+     "worst": 0.000007318926682688516,
+     "worstAt": 61200
     },
     "tudat-wasm": {
-     "worst": 0.000028694067846688435,
-     "worstAt": 72000
+     "worst": 0.000007318926682688516,
+     "worstAt": 61200
     },
     "nyx": {
-     "worst": 0.00011542469669782683,
-     "worstAt": 54000
+     "worst": 0.00011095906421023081,
+     "worstAt": 50400
     }
    },
    "pairs": {
@@ -1256,24 +1256,24 @@
    "case": "GEO F3-field20x20",
    "hpop": {
     "orekit": {
-     "worst": 0.00004472025877115997,
-     "worstAt": 68400
+     "worst": 0.000038927991769009035,
+     "worstAt": 57600
     },
     "gmat": {
-     "worst": 0.0008151249691401433,
-     "worstAt": 32400
+     "worst": 0.0008150491467071019,
+     "worstAt": 18000
     },
     "tudatpy": {
-     "worst": 0.00005239974284008012,
+     "worst": 0.000051893966348994896,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.00005239974284008012,
+     "worst": 0.000051893966348994896,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.00011497616779754895,
-     "worstAt": 57600
+     "worst": 0.00011052508521182473,
+     "worstAt": 50400
     }
    },
    "pairs": {
@@ -1323,24 +1323,24 @@
    "case": "GEO F4-field-sun-moon",
    "hpop": {
     "orekit": {
-     "worst": 0.00006967828993251888,
+     "worst": 0.00006584103236003712,
      "worstAt": 75600
     },
     "gmat": {
-     "worst": 0.0013535190758386364,
+     "worst": 0.0013452184186154377,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.00013960776787564846,
+     "worst": 0.0001393627023310731,
      "worstAt": 43200
     },
     "tudat-wasm": {
-     "worst": 0.00013960776787564846,
+     "worst": 0.0001393627023310731,
      "worstAt": 43200
     },
     "nyx": {
-     "worst": 0.00011516923670569736,
-     "worstAt": 54000
+     "worst": 0.00011090648109374595,
+     "worstAt": 50400
     }
    },
    "pairs": {
@@ -1390,24 +1390,24 @@
    "case": "GEO F5-field-sun-moon-srp",
    "hpop": {
     "orekit": {
-     "worst": 0.00006361323608224639,
+     "worst": 0.000059691523729345945,
      "worstAt": 75600
     },
     "gmat": {
-     "worst": 0.0013980203007475408,
+     "worst": 0.0013900845643502284,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.00014142282131914558,
+     "worst": 0.00014128353172059547,
      "worstAt": 43200
     },
     "tudat-wasm": {
-     "worst": 0.00014142282131914558,
+     "worst": 0.00014128353172059547,
      "worstAt": 43200
     },
     "nyx": {
-     "worst": 0.00011495186683674295,
-     "worstAt": 54000
+     "worst": 0.00011106984520680189,
+     "worstAt": 50400
     }
    },
    "pairs": {
@@ -1457,23 +1457,23 @@
    "case": "MOLNIYA F0-point-mass",
    "hpop": {
     "orekit": {
-     "worst": 0.0005696634794280434,
+     "worst": 0.0005787586695803604,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.004189590147989992,
+     "worst": 0.004183549335645194,
      "worstAt": 43200
     },
     "tudatpy": {
-     "worst": 0.000015873174039280897,
+     "worst": 0.000006847071084039676,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.000016769866253467925,
+     "worst": 0.000007742128627140756,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.000013384862841799075,
+     "worst": 0.00002247973361397899,
      "worstAt": 86400
     }
    },
@@ -1524,23 +1524,23 @@
    "case": "MOLNIYA F1-J2",
    "hpop": {
     "orekit": {
-     "worst": 0.005253461379864954,
+     "worst": 0.011014453544270473,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.026849214498188514,
+     "worst": 0.010581484593605356,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.005505055799001319,
+     "worst": 0.010762860140016798,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.0054926873329782955,
+     "worst": 0.010775229251840098,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.10929148976676498,
+     "worst": 0.0930237690708604,
      "worstAt": 86400
     }
    },
@@ -1591,23 +1591,23 @@
    "case": "MOLNIYA F3-field20x20",
    "hpop": {
     "orekit": {
-     "worst": 0.005140148587720236,
+     "worst": 0.010961059791787206,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.011544033255120168,
+     "worst": 0.00455712688742525,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.004873182695282382,
+     "worst": 0.011228069677049323,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.004879895573512641,
+     "worst": 0.011221355666995347,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.10893463382624756,
+     "worst": 0.09283361873353906,
      "worstAt": 86400
     }
    },
@@ -1658,23 +1658,23 @@
    "case": "MOLNIYA F4-field-sun-moon",
    "hpop": {
     "orekit": {
-     "worst": 0.005219962806852854,
+     "worst": 0.011034350307034351,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.019473930186661582,
+     "worst": 0.0032281643466446257,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.005103231639200462,
+     "worst": 0.011151007444946289,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.005097329582436459,
+     "worst": 0.011156910525963848,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.10886385826803187,
+     "worst": 0.09260965257268645,
      "worstAt": 86400
     }
    },
@@ -1725,23 +1725,23 @@
    "case": "MOLNIYA F5-field-sun-moon-srp",
    "hpop": {
     "orekit": {
-     "worst": 0.005805722803593961,
+     "worst": 0.01052694939119755,
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 0.024012414082488675,
+     "worst": 0.00768265965566157,
      "worstAt": 86400
     },
     "tudatpy": {
-     "worst": 0.005252188546265976,
+     "worst": 0.011080425192542789,
      "worstAt": 86400
     },
     "tudat-wasm": {
-     "worst": 0.005233917293595421,
+     "worst": 0.011098697432289036,
      "worstAt": 86400
     },
     "nyx": {
-     "worst": 0.10910857890465939,
+     "worst": 0.09277599718558795,
      "worstAt": 86400
     }
    },
