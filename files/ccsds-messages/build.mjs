@@ -26,7 +26,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 
 // SDS comes from the PUBLISHED package this repo pins, never a sibling
 // checkout (published-deps law, owner 2026-08-21).
-const { version: sdsVersion, headers } = await generateSdsHeaders();
+const { version: sdsVersion, families, headers } = await generateSdsHeaders();
 
 /*
  * $AEM 2.0.2 and $TDM 2.0.4 are what make this module possible at all: before
@@ -50,13 +50,15 @@ if (!headers.TDM.includes("TDMObservation") || !headers.TDM.includes("TDMSegment
       "uniform-grid read that published Figure E-17 disproves.",
   );
 }
-if (!headers.NCD || !headers.NCD.includes("CCSDS_AEM_KVN") ||
-    !headers.NCD.includes("CCSDS_TDM_KVN")) {
-  throw new Error(
-    `spacedatastandards.org@${sdsVersion} generated no CCSDS_AEM_KVN / CCSDS_TDM_KVN members. ` +
-      "This module's message ports are typed on $NCD and those are the format members they " +
-      "declare; bump the pinned spacedatastandards.org and re-run npm ci.",
-  );
+for (const format of ["OMM", "OEM", "OPM", "OCM", "CDM", "TDM", "AEM", "APM", "ACM", "RDM"]) {
+  if (!headers.NCD || !headers.NCD.includes(`CCSDS_${format}_KVN`) ||
+      !headers.NCD.includes(`CCSDS_${format}_XML`)) {
+    throw new Error(
+      `spacedatastandards.org@${sdsVersion} generated no CCSDS_${format}_KVN / CCSDS_${format}_XML ` +
+        "members. This module's message ports are typed on $NCD and those are the format " +
+        "members they declare; bump the pinned spacedatastandards.org and re-run npm ci.",
+    );
+  }
 }
 
 /*
@@ -98,12 +100,9 @@ function stripLocalIncludes(source) {
   // The concatenation supplies these; leaving the directives in makes the
   // build depend on an include path that does not exist inside the compiler.
   return source
-    .replace(/^#include "kvn\.hpp"\n/gm, "")
-    .replace(/^#include "aem\.hpp"\n/gm, "")
-    .replace(/^#include "tdm\.hpp"\n/gm, "")
-    .replace(/^#include "sha256\.hpp"\n/gm, "")
-    .replace(/^#include "aem_projection\.hpp"\n/gm, "")
-    .replace(/^#include "tdm_projection\.hpp"\n/gm, "")
+    .replace(/^#include "(kvn|aem|tdm|sha256|aem_projection|tdm_projection)\.hpp"\n/gm, "")
+    .replace(/^#include "ndm_[a-z0-9_]+\.hpp"\n/gm, "")
+    .replace(/^#include "pugi(xml|config)\.hpp"\n/gm, "")
     .replace(/^#include "generated\/sds\/[A-Z0-9_]+_generated\.h"\n/gm, "");
 }
 
@@ -121,17 +120,37 @@ function stripLocalIncludes(source) {
  * exactly what makes each of them standalone-includable by the native test
  * harness that measures them.
  */
+/*
+ * pugixml reads and writes the NDM/XML. It is built without exceptions (the
+ * guest is -fno-exceptions), without XPath, and without the STL stream API, so
+ * the module links no stream or filesystem code and imports only what the SDK
+ * browser harness provides.
+ */
+const pugixmlRoot = path.join(packageRoot, "third_party", "pugixml");
+const ndmOrder = [
+  "ndm_core", "ndm_xml", "ndm_kvn", "ndm_frames", "ndm_enums", "ndm_common",
+  "ndm_omm", "ndm_oem", "ndm_opm", "ndm_cdm",
+  "ndm_codec", "ndm_registry",
+];
+
 const pieces = [
-  stripSdsCrossIncludes(headers.RFM),
-  stripSdsCrossIncludes(headers.AEM),
-  stripSdsCrossIncludes(headers.TDM),
-  stripSdsCrossIncludes(headers.NCD),
+  "#define PUGIXML_NO_EXCEPTIONS\n#define PUGIXML_NO_XPATH\n#define PUGIXML_NO_STL\n",
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugiconfig.hpp"))),
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.hpp"))),
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.cpp"))),
+  // math.h may define these as macros; legacyCountryCode has a member named SING.
+  "#undef DOMAIN\n#undef SING\n#undef OVERFLOW\n#undef UNDERFLOW\n#undef TLOSS\n#undef PLOSS\n",
+  // The SDS object-API headers, each family after the families it includes.
+  ...families.map((family) => stripSdsCrossIncludes(headers[family])),
   stripLocalIncludes(await read(path.join(productsSrc, "sha256.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "kvn.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "aem.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "tdm.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "aem_projection.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "tdm_projection.hpp"))),
+  ...(await Promise.all(
+    ndmOrder.map(async (name) => stripLocalIncludes(await read(path.join(srcRoot, `${name}.hpp`)))),
+  )),
   stripLocalIncludes(await read(path.join(srcRoot, "ccsds_messages_module.cpp"))),
 ];
 
@@ -174,8 +193,11 @@ fsSync.writeFileSync(
     {
       spacedatastandards: sdsVersion,
       threadModel: "wasi-sequential",
-      records: { in: ["$NCD", "$AEM", "$TDM"], out: ["$AEM", "$TDM", "$NCD"] },
-      formats: ["CCSDS_AEM_KVN", "CCSDS_TDM_KVN"],
+      records: {
+        in: ["$NCD", "$OMM", "$AEM", "$TDM"],
+        out: ["$OMM", "$AEM", "$TDM", "$NCD"],
+      },
+      formats: ["CCSDS_OMM_KVN", "CCSDS_OMM_XML", "CCSDS_AEM_KVN", "CCSDS_TDM_KVN"],
     },
     null,
     2,

@@ -351,6 +351,758 @@
           ]
         }
       ]
+    },
+    {
+      "methodId": "read_omm",
+      "displayName": "Read CCSDS OMM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Mean-Elements Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OMM_KVN or CCSDS_OMM_XML and must name the syntax the bytes are in.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OMM record: the header, metadata and data groups of the message, flat. Carried: every keyword of CCSDS 502.0-B-3 Tables 4-1 to 4-3 and 5-1 to 5-2 (BTERM and AGOM in BSTAR and MEAN_MOTION_DDOT under MEAN_ELEMENT_THEORY = SGP4-XP), the 21 covariance cells in COVARIANCE with COV_REFERENCE_FRAME, and every USER_DEFINED parameter. Not carried, and not silent: COMMENT lines are joined into the one COMMENT field whatever section they came from, and EPHEMERIS_TYPE = 0 (the default theory) cannot be stated by the record.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-record",
+              "description": "SDS $OMM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the record cannot: which syntax it was, the version it declared, its originator and creation date, its header comment area, the time system and frame its metadata named, and the SHA-256 of the exact bytes that were read.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_omm",
+      "displayName": "Write CCSDS OMM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OMM record to write, size-prefixed or not.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-record",
+              "description": "SDS $OMM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $NCD whose FORMAT names the syntax to write, CCSDS_OMM_KVN (the default) or CCSDS_OMM_XML. FORMAT must be UNSPECIFIED or one of the two.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The OMM as a size-prefixed $NCD descriptor followed by the message's exact bytes, the same frame read_omm accepts: keyword-value notation, or NDM/XML valid against the NDM/XML 4.0.0 schemas. Header comments are the record's COMMENT field; keywords the record cannot state (EPHEMERIS_TYPE = 0) are left out.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the written message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "read_oem",
+      "displayName": "Read CCSDS OEM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Ephemeris Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OEM_KVN or CCSDS_OEM_XML and must name the syntax the bytes are in.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM record: one ephemerisDataBlock per segment, each with its metadata, its state vectors as EPHEMERIS_DATA_LINES (one table per state, with its own EPOCH, and the acceleration columns when the message has them) and its covariance matrices as COVARIANCE_MATRIX_LINES. The compact EPHEMERIS_DATA form is never produced. Not carried, and not silent: COMMENT lines of a segment's data group are joined into the block's one COMMENT field.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-record",
+              "description": "SDS $OEM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the record cannot: which syntax it was, the version it declared, its originator and creation date, its header comment area, the time system and frame its metadata named, and the SHA-256 of the exact bytes that were read.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_oem",
+      "displayName": "Write CCSDS OEM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM record to write, size-prefixed or not. A block that holds its states only in the compact EPHEMERIS_DATA form (START_TIME and STEP_SIZE) is refused with compact-form-needs-time-math: spelling its epochs is time arithmetic this module does not do.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-record",
+              "description": "SDS $OEM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $NCD whose FORMAT names the syntax to write, CCSDS_OEM_KVN (the default) or CCSDS_OEM_XML. FORMAT must be UNSPECIFIED or one of the two.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The OEM as a size-prefixed $NCD descriptor followed by the message's exact bytes, the same frame read_oem accepts: keyword-value notation, or NDM/XML valid against the NDM/XML 4.0.0 schemas. Header comments are the record's COMMENT field.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the written message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "read_opm",
+      "displayName": "Read CCSDS OPM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 502.0-B-3 Orbit Parameter Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_OPM_KVN or CCSDS_OPM_XML and must name the syntax the bytes are in.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "state",
+          "displayName": "state",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OPM record: the header, metadata, state vector, Keplerian elements, spacecraft parameters, covariance matrix (21 cells in COVARIANCE), every maneuver as an OPMManeuver, and every USER_DEFINED parameter. Not carried, and not silent: COMMENT lines of the data groups are joined into the one COMMENT field, except a maneuver's, which stay with it.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-record",
+              "description": "SDS $OPM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the record cannot: which syntax it was, the version it declared, its originator and creation date, its header comment area, the time system and frame its metadata named, and the SHA-256 of the exact bytes that were read.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_opm",
+      "displayName": "Write CCSDS OPM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "displayName": "state",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OPM record to write, size-prefixed or not.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-record",
+              "description": "SDS $OPM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $NCD whose FORMAT names the syntax to write, CCSDS_OPM_KVN (the default) or CCSDS_OPM_XML. FORMAT must be UNSPECIFIED or one of the two.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The OPM as a size-prefixed $NCD descriptor followed by the message's exact bytes, the same frame read_opm accepts: keyword-value notation, or NDM/XML valid against the NDM/XML 4.0.0 schemas. Header comments are the record's COMMENT field.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the written message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "read_cdm",
+      "displayName": "Read CCSDS CDM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact bytes in the same frame: [u32le n][$NCD][message]. The bytes are a CCSDS 508.0-B-1 Conjunction Data Message in keyword-value notation or in NDM/XML; which one is read from the bytes. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the trailing bytes whenever the caller declared either. FORMAT must be UNSPECIFIED, CCSDS_CDM_KVN or CCSDS_CDM_XML and must name the syntax the bytes are in.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "conjunction",
+          "displayName": "conjunction",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $CDM record: the header, the relative metadata and data, and the two segments as OBJECT1 and OBJECT2 (identity in OBJECT, operator contact in POC, covariance of 21, 28, 36 or 45 cells). The record holds kilometres where the message states metres (MISS_DISTANCE = 715 [m] reads as 0.715, exactly, by moving the decimal point); the first 21 covariance cells are km-based, the drag, solar radiation pressure and thrust cells as stated. Not carried, and not silent: a boolean parameter stated NO (SOLAR_RAD_PRESSURE, EARTH_TIDES, INTRACK_THRUST) is the record's default; COMMENT lines of the data groups are joined into the object's one COMMENT field.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cdm-record",
+              "description": "SDS $CDM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM"
+                },
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the record cannot: which syntax it was, the version it declared, its originator and creation date, its header comment area, the time system and frame its metadata named, and the SHA-256 of the exact bytes that were read.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_cdm",
+      "displayName": "Write CCSDS CDM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "conjunction",
+          "displayName": "conjunction",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $CDM record to write, size-prefixed or not. A covariance of any size but 21, 28, 36 or 45 cells is refused. A record with no covariance is written without one; the message requires it, none is invented.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cdm-record",
+              "description": "SDS $CDM record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM"
+                },
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $NCD whose FORMAT names the syntax to write, CCSDS_CDM_KVN (the default) or CCSDS_CDM_XML. FORMAT must be UNSPECIFIED or one of the two.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The CDM as a size-prefixed $NCD descriptor followed by the message's exact bytes, the same frame read_cdm accepts: keyword-value notation, or NDM/XML valid against the NDM/XML 4.0.0 schemas. Lengths are written in metres.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the written message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "schemasUsed": [
@@ -373,6 +1125,26 @@
       "schemaName": "RFM.fbs",
       "fileIdentifier": "$RFM",
       "rootTypeName": "RFM"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OPM.fbs",
+      "fileIdentifier": "$OPM",
+      "rootTypeName": "OPM"
+    },
+    {
+      "schemaName": "CDM.fbs",
+      "fileIdentifier": "$CDM",
+      "rootTypeName": "CDM"
     }
   ],
   "buildArtifacts": [

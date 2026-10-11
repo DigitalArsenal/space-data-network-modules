@@ -78,6 +78,7 @@
 #include "sha256.hpp"
 #include "aem_projection.hpp"
 #include "tdm_projection.hpp"
+#include "ndm_registry.hpp"
 
 namespace {
 
@@ -105,7 +106,8 @@ struct MessageFrame {
 };
 
 /* Returns 0 on success, or an invoke status; sets the plugin error itself. */
-int32_t decode_message_frame(const char* method, ncdContainerFormat expected, MessageFrame* out) {
+int32_t decode_message_frame(const char* method, ncdContainerFormat expected, MessageFrame* out,
+                             ncdContainerFormat also = ncdContainerFormat::UNSPECIFIED) {
     const int32_t index = plugin_find_input_index("message", 0);
     const plugin_input_frame_t* frame =
         index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
@@ -188,7 +190,8 @@ int32_t decode_message_frame(const char* method, ncdContainerFormat expected, Me
      * asked for the wrong method, not a file to reinterpret. UNSPECIFIED is the
      * caller saying it does not know, which is allowed. */
     const ncdContainerFormat declared_format = out->descriptor->FORMAT();
-    if (declared_format != ncdContainerFormat::UNSPECIFIED && declared_format != expected) {
+    if (declared_format != ncdContainerFormat::UNSPECIFIED && declared_format != expected &&
+        declared_format != also) {
         char message[256];
         std::snprintf(message, sizeof(message),
                       "%s reads %s, but the descriptor declares FORMAT %s.", method,
@@ -321,9 +324,157 @@ const plugin_input_frame_t* record_frame(const char* port, const char* method) {
     return frame;
 }
 
+/* ------------------------------------------------------------------------ */
+/* The NDM engine's methods                                                  */
+/* ------------------------------------------------------------------------ */
+
+const ndm::Node* find_node(const ndm::Node& n, const char* name, bool want_group) {
+    if (n.name == name && n.group == want_group) return &n;
+    for (const ndm::Node& k : n.kids) {
+        if (const ndm::Node* f = find_node(k, name, want_group)) return f;
+    }
+    return nullptr;
+}
+
+const ndm::Node* last_leaf(const ndm::Node& n, const char* name) {
+    const ndm::Node* found = nullptr;
+    if (!n.group && n.name == name) found = &n;
+    for (const ndm::Node& k : n.kids) {
+        if (const ndm::Node* f = last_leaf(k, name)) found = f;
+    }
+    return found;
+}
+
+/* The file-level facts of a message tree, as `fill_common_descriptor` states
+ * them for a keyword-value Document: only what the file said. */
+void fill_ndm_descriptor(const ndm::Node& tree, const std::string& version, const uint8_t* body,
+                         size_t body_length, const NCD* incoming, ncdContainerFormat format,
+                         NCDT* out) {
+    out->FORMAT = format;
+    out->FORMAT_VERSION = version;
+    if (const ndm::Node* header = find_node(tree, "header", true)) {
+        for (const ndm::Node& k : header->kids) {
+            if (k.group) continue;
+            if (k.name == "ORIGINATOR") out->ORIGINATOR = k.text;
+            else if (k.name == "CREATION_DATE") out->CREATION_DATE = k.text;
+            else if (k.name == "COMMENT") out->COMMENT_AREA.push_back(k.text);
+        }
+    }
+    if (const ndm::Node* t = find_node(tree, "TIME_SYSTEM", false)) out->NATIVE_TIME_SYSTEM = t->text;
+    if (const ndm::Node* t = find_node(tree, "START_TIME", false)) out->START_TIME = t->text;
+    if (const ndm::Node* t = last_leaf(tree, "STOP_TIME")) out->STOP_TIME = t->text;
+    if (const ndm::Node* t = find_node(tree, "REF_FRAME", false)) out->NATIVE_FRAME_NAME = t->text;
+    if (incoming) {
+        if (incoming->PRODUCER()) out->PRODUCER = incoming->PRODUCER()->str();
+        if (incoming->INTERNAL_FILE_NAME()) {
+            out->INTERNAL_FILE_NAME = incoming->INTERNAL_FILE_NAME()->str();
+        }
+        if (incoming->SOURCE_CID()) out->SOURCE_CID = incoming->SOURCE_CID()->str();
+    }
+    out->SOURCE_BYTE_LENGTH = static_cast<uint64_t>(body_length);
+    out->SOURCE_SHA256 = ephem::sha256_hex(body, body_length);
+}
+
+int32_t ndm_read(const char* method, const char* type, const char* port,
+                 ncdContainerFormat kvn_format, ncdContainerFormat xml_format) {
+    const ndm::registry::Entry* entry = ndm::registry::find(type);
+    if (!entry) {
+        plugin_set_error("unknown-message", type);
+        return 500;
+    }
+    MessageFrame frame;
+    const int32_t rc = decode_message_frame(method, kvn_format, &frame, xml_format);
+    if (rc != 0) return rc;
+
+    ndm::ReadOutcome read;
+    if (!entry->read(frame.body, frame.body_length, &read)) {
+        plugin_set_error(read.code.c_str(), read.error.c_str());
+        return 422;
+    }
+    const ncdContainerFormat found = read.syntax == ndm::Syntax::Xml ? xml_format : kvn_format;
+    const ncdContainerFormat declared = frame.descriptor->FORMAT();
+    if (declared != ncdContainerFormat::UNSPECIFIED && declared != found) {
+        char message[256];
+        std::snprintf(message, sizeof(message), "%s found %s, but the descriptor declares FORMAT %s.",
+                      method, EnumNamencdContainerFormat(found), EnumNamencdContainerFormat(declared));
+        plugin_set_error("format-mismatch", message);
+        return 400;
+    }
+
+    const std::string schema = std::string(type) + ".fbs";
+    const std::string identifier = std::string("$") + type;
+    if (plugin_push_output_ex(port, schema.c_str(), identifier.c_str(),
+                              PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, type, 0, 8,
+                              read.record.data(), static_cast<uint32_t>(read.record.size())) < 0) {
+        return 500;
+    }
+    NCDT descriptor;
+    fill_ndm_descriptor(read.tree, read.version, frame.body, frame.body_length, frame.descriptor,
+                        found, &descriptor);
+    return push_descriptor(descriptor);
+}
+
+int32_t ndm_write(const char* method, const char* type, const char* port,
+                  ncdContainerFormat kvn_format, ncdContainerFormat xml_format) {
+    const ndm::registry::Entry* entry = ndm::registry::find(type);
+    if (!entry) {
+        plugin_set_error("unknown-message", type);
+        return 500;
+    }
+    const plugin_input_frame_t* frame = record_frame(port, method);
+    if (!frame) return 400;
+
+    /* The syntax is the one the caller's descriptor names; none names KVN. */
+    ndm::WriteOptions options;
+    ncdContainerFormat format = kvn_format;
+    const int32_t index = plugin_find_input_index("descriptor", 0);
+    const plugin_input_frame_t* df =
+        index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
+    if (df && df->payload && df->payload_length > 0) {
+        ::flatbuffers::Verifier verifier(df->payload, df->payload_length);
+        if (!::flatbuffers::BufferHasIdentifier(df->payload, NCDIdentifier(), true) ||
+            !VerifySizePrefixedNCDBuffer(verifier)) {
+            plugin_set_error("bad-ncd", "The descriptor is not a verifiable size-prefixed $NCD.");
+            return 400;
+        }
+        const ncdContainerFormat asked = GetSizePrefixedNCD(df->payload)->FORMAT();
+        if (asked == xml_format) {
+            options.syntax = ndm::Syntax::Xml;
+            format = xml_format;
+        } else if (asked != ncdContainerFormat::UNSPECIFIED && asked != kvn_format) {
+            char message[256];
+            std::snprintf(message, sizeof(message), "%s writes %s or %s, but the descriptor asks for %s.",
+                          method, EnumNamencdContainerFormat(kvn_format),
+                          EnumNamencdContainerFormat(xml_format), EnumNamencdContainerFormat(asked));
+            plugin_set_error("format-mismatch", message);
+            return 400;
+        }
+    }
+
+    std::string text, error;
+    ndm::Node tree;
+    if (!entry->write(frame->payload, frame->payload_length, options, &text, &error, &tree)) {
+        plugin_set_error("bad-record", error.c_str());
+        return 400;
+    }
+    NCDT descriptor;
+    fill_ndm_descriptor(tree, tree.text, reinterpret_cast<const uint8_t*>(text.data()), text.size(),
+                        nullptr, format, &descriptor);
+    return push_message_frame(descriptor, text);
+}
+
 }  // namespace
 
 extern "C" {
+
+#define NDM_METHODS(TYPE, LOWER, PORT, KVN_FORMAT, XML_FORMAT)                                    \
+    int read_##LOWER(void) { return ndm_read("read_" #LOWER, #TYPE, PORT, KVN_FORMAT, XML_FORMAT); } \
+    int write_##LOWER(void) { return ndm_write("write_" #LOWER, #TYPE, PORT, KVN_FORMAT, XML_FORMAT); }
+
+NDM_METHODS(OMM, omm, "elements", ncdContainerFormat::CCSDS_OMM_KVN, ncdContainerFormat::CCSDS_OMM_XML)
+NDM_METHODS(OEM, oem, "ephemeris", ncdContainerFormat::CCSDS_OEM_KVN, ncdContainerFormat::CCSDS_OEM_XML)
+NDM_METHODS(OPM, opm, "state", ncdContainerFormat::CCSDS_OPM_KVN, ncdContainerFormat::CCSDS_OPM_XML)
+NDM_METHODS(CDM, cdm, "conjunction", ncdContainerFormat::CCSDS_CDM_KVN, ncdContainerFormat::CCSDS_CDM_XML)
 
 int read_aem(void) {
     MessageFrame frame;
