@@ -118,11 +118,13 @@ export function fitOcm({ norad, name, epoch, x, lower }) {
   return Buffer.from(b.asUint8Array());
 }
 
-export function encodeMnv(fields = {}) {
+// A size-prefixed $MNV, or (plain) one FlatBuffer as analysis/maneuver-detection frames each of its events.
+export function encodeMnv(fields = {}, { plain = false } = {}) {
   const t = new MNV.MNVT();
   Object.assign(t, { ID: 'M1', SAT_NO: 25544, STATUS: MNV.maneuverStatus.DETECTED, EVENT_START_TIME: '2026-10-01T12:00:00.000Z', DELTA_VEL: 0.002, ALGORITHM: 'D1', TAGS: ['existing'], ...fields });
   const b = new flatbuffers.Builder(512);
-  MNV.MNV.finishSizePrefixedMNVBuffer(b, t.pack(b));
+  if (plain) MNV.MNV.finishMNVBuffer(b, t.pack(b));
+  else MNV.MNV.finishSizePrefixedMNVBuffer(b, t.pack(b));
   return Buffer.from(b.asUint8Array());
 }
 

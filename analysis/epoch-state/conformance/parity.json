@@ -1,35 +1,36 @@
 {
   "ok": true,
-  "fixture": "epoch-state: derive with ages, derive_omm, answer_propagation_requests",
+  "fixture": "epoch-state: derive with ages, omm_from_mpe, derive_omm, answer_propagation_requests",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "384bd9d23fd992b658a2478cb9ec35161ea0f2c7a120b51702953bf4fc4e9129",
-  "moduleSha256": "d696417badddb79e292e00fc0c9d3b60ab07d7478a08081d77ca6dabedea10cb",
+  "artifactSha256": "bcfeb823181f32a3deebb2399e09edcaddff21fecae44b983a6fc712f6bfae19",
+  "moduleSha256": "5cc2b4ce07330995191a7741c50ee69a40089a1cc8ada29ae06d5e3f8ffe4b88",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 5,
-      "durationMs": 1038
+      "runs": 6,
+      "durationMs": 973
     },
     {
       "lane": "wasmedge",
-      "runs": 5,
-      "durationMs": 1433
+      "runs": 6,
+      "durationMs": 1401
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 5,
-      "durationMs": 4720
+      "runs": 6,
+      "durationMs": 3523
     }
   ],
   "cases": [
     "derive-epoch-only",
     "derive-ages",
+    "omm-from-mpe",
     "derive-omm-ages",
     "derive-omm-refusals",
     "answer-propagation-requests"
   ],
-  "comparisons": 25,
+  "comparisons": 30,
   "failures": [],
   "runs": [
     {
@@ -54,6 +55,16 @@
     },
     {
       "lane": "browser",
+      "caseId": "omm-from-mpe",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6924cc57ab2eed7cdf6681b659061172e3b9921bb31c5d273a217d5171b264c3",
+      "stdoutLength": 2056
+    },
+    {
+      "lane": "browser",
       "caseId": "derive-omm-ages",
       "threadCount": 1,
       "exitClass": "ok",
@@ -104,6 +115,16 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "omm-from-mpe",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6924cc57ab2eed7cdf6681b659061172e3b9921bb31c5d273a217d5171b264c3",
+      "stdoutLength": 2056
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "derive-omm-ages",
       "threadCount": 1,
       "exitClass": "ok",
@@ -151,6 +172,16 @@
       "spawnCount": null,
       "stdoutSha256": "c1c4a4bd568faafadb936723befbd49e71f56b7058f8744c3cf97bfb410f5e7b",
       "stdoutLength": 12128
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "omm-from-mpe",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6924cc57ab2eed7cdf6681b659061172e3b9921bb31c5d273a217d5171b264c3",
+      "stdoutLength": 2056
     },
     {
       "lane": "docker-wasmedge",

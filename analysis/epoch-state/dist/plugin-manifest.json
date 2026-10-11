@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.epoch-state",
   "name": "SDN Epoch State",
   "version": "0.2.0",
-  "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE (derive) or $OMM (derive_omm) element set with SGP4 at zero elapsed time, or at the epoch plus the ages of the options frame, transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one $OEM per element set with its lineage and initial-condition uncertainty marked unknown. answer_propagation_requests plugs SGP4 into the propagator query port of analysis/maneuver-detection. Pure compute; output bytes depend only on input bytes.",
+  "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE (derive) or $OMM (derive_omm) element set with SGP4 at zero elapsed time, or at the epoch plus the ages of the options frame, transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one $OEM per element set with its lineage and initial-condition uncertainty marked unknown. omm_from_mpe converts the GP history archive's $MPE to $OMM. answer_propagation_requests plugs SGP4 into the propagator query port of analysis/maneuver-detection. Pure compute; output bytes depend only on input bytes.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -129,6 +129,88 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Derives one GCRF epoch state per $MPE element set (and, with options.ages, the states at the epoch plus each age). Refused element sets (theory other than SGP4, non-finite or invalid elements, SGP4 errors, round trip outside tolerance) are listed in the report and produce no OEM."
+    },
+    {
+      "methodId": "omm_from_mpe",
+      "displayName": "OMM From MPE",
+      "inputPorts": [
+        {
+          "portId": "mpe",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mpe-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE"
+                },
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Element sets to convert."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $OMM stream, one record per converted $MPE in input order: NORAD_CAT_ID or OBJECT_ID from the entity id, EPOCH as ISO 8601 UTC, the mean elements, B* and the theory as given. No ORIGINATOR or CREATION_DATE: the output depends only on the input."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The converted element sets. Absent when none could be converted."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts each $MPE element set (the GP history archive's record) to the $OMM that element-set consumers read. Records without an entity id or a valid epoch are listed in the report."
     },
     {
       "methodId": "derive_omm",

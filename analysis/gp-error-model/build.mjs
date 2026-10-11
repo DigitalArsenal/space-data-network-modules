@@ -35,7 +35,11 @@ await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
   sourceCode: ['#include "space_data_module_invoke.h"', '#define JSON_NOEXCEPTION 1', json, header, erfa.source, bodyModels, axisEngine,
-    sgp4Header, sgp4Source, '#undef pi', lambert, sha256, ...sources].join('\n\n'),
+    // The vendored SGP4 has internal linkage: analysis/od, analysis/epoch-state and this module each compile the same
+    // SGP4Funcs, and the flow compiler links their objects into one artifact, where equal external C++ symbols are
+    // duplicates. The standard headers SGP4.h includes come first, outside the namespace.
+    '#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace',
+    '#undef pi', lambert, sha256, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',

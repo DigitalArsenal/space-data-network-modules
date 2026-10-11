@@ -283,6 +283,14 @@ test('attribute_maneuvers names the source on every maneuver and keeps what the 
   assert.equal(reportOf(response).maneuvers, 2);
 });
 
+test('attribute_maneuvers reads the detector\'s frames, one plain FlatBuffer per event, as well as size-prefixed streams', async () => {
+  const response = await call('attribute_maneuvers', [mnvFrame('maneuvers', encodeMnv({ ID: 'P1' }, { plain: true })), mnvFrame('maneuvers', encodeMnv({ ID: 'P2' }, { plain: true })), json('recipe', recipeFor())]);
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const out = records(output(response, 'maneuvers')).map(unpackMnv);
+  assert.deepEqual(out.map((m) => m.ID), ['P1', 'P2']);
+  assert.ok(out.every((m) => m.TAGS.includes('source:celestrak-gp') && m.TAGS.includes('existing')));
+});
+
 test('a recipe that does not name the source is refused', async () => {
   const bad = recipeFor();
   delete bad.source.provider;

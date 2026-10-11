@@ -62,8 +62,13 @@ const sourceCode = [
   erfa.source,
   bodyModels,
   axisEngine,
+  // The vendored SGP4 has internal linkage here: analysis/od, analysis/gp-error-model and this module each
+  // compile the same SGP4Funcs, and the flow compiler links their objects into one artifact, where equal
+  // external C++ symbols are duplicates. The standard headers SGP4.h includes come first, outside the namespace.
+  "#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {",
   sgp4Header,
   sgp4Source,
+  "}  // namespace",
   "#undef pi",
   implementationSource,
 ].join("\n\n");

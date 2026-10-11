@@ -265,18 +265,31 @@ std::string reference_text(const Label& l) {
 
 // ── inputs ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// The size-prefixed records of every frame of a port, whole (prefix included), with their file identifiers.
+// The records of every frame of a port, each whole, with its file identifier. A frame is a stream of size-prefixed
+// records (zero-length prefixes are padding), or one plain FlatBuffer, which is how analysis/maneuver-detection
+// frames each $MNV.
 struct RawRecord {
   std::vector<uint8_t> bytes;
   std::string ident;
+  bool prefixed = true;
 };
-bool port_records(const char* port, std::vector<RawRecord>* out, std::string* error) {
+bool port_records(const char* port, const char* plain_ident, std::vector<RawRecord>* out, std::string* error) {
   for (uint32_t ordinal = 0;; ++ordinal) {
     const int32_t index = plugin_find_input_index(port, ordinal);
     if (index < 0) break;
     const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(index));
     const uint8_t* p = f ? f->payload : nullptr;
     const size_t n = p ? f->payload_length : 0;
+    if (plain_ident && n >= 8 && std::memcmp(p + 4, plain_ident, 4) == 0) {
+      // The file identifier of a plain FlatBuffer sits after its root offset; a size-prefixed stream has it after the prefix.
+      // The bytes stay as they are: a prefix put in front would shift the alignment its doubles were built for.
+      RawRecord r;
+      r.bytes.assign(p, p + n);
+      r.ident.assign(plain_ident, 4);
+      r.prefixed = false;
+      out->push_back(std::move(r));
+      continue;
+    }
     size_t at = 0;
     while (at < n) {
       if (n - at < 4) { *error = std::string("truncated size-prefixed record on port ") + port; return false; }
@@ -294,8 +307,15 @@ bool port_records(const char* port, std::vector<RawRecord>* out, std::string* er
   return true;
 }
 
+template <class Verify, class VerifyPrefixed>
+bool verified(const RawRecord& raw, Verify verify, VerifyPrefixed verify_prefixed) {
+  flatbuffers::Verifier verifier(raw.bytes.data(), raw.bytes.size());
+  return raw.prefixed ? verify_prefixed(verifier) : verify(verifier);
+}
+
 struct SetRec {
   std::vector<uint8_t> bytes;
+  bool prefixed = true;
   std::string key, name, object_id, epoch_text;
   uint32_t norad = 0;
   Instant epoch;
@@ -309,11 +329,14 @@ bool load_sets(const std::vector<RawRecord>& records, std::vector<SetRec>* sets,
   uint32_t order = 0;
   for (const RawRecord& raw : records) {
     ++order;
-    flatbuffers::Verifier verifier(raw.bytes.data(), raw.bytes.size());
-    if (raw.ident != "$OMM" || !VerifySizePrefixedOMMBuffer(verifier)) { *error = "invalid size-prefixed $OMM record on port elements"; return false; }
-    const OMM* omm = GetSizePrefixedOMM(raw.bytes.data());
+    if (raw.ident != "$OMM" || !verified(raw, [](flatbuffers::Verifier& v) { return VerifyOMMBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedOMMBuffer(v); })) {
+      *error = "invalid $OMM record on port elements";
+      return false;
+    }
+    const OMM* omm = raw.prefixed ? GetSizePrefixedOMM(raw.bytes.data()) : GetOMM(raw.bytes.data());
     SetRec s;
     s.bytes = raw.bytes;
+    s.prefixed = raw.prefixed;
     s.order = order;
     s.norad = omm->NORAD_CAT_ID();
     s.object_id = omm->OBJECT_ID() ? omm->OBJECT_ID()->str() : "";
@@ -413,9 +436,11 @@ CovAxes classify_axes(const std::string& cov_frame, const std::string& state_fra
 }
 
 bool read_oem_blocks(const RawRecord& raw, std::vector<Block>* blocks, std::string* error) {
-  flatbuffers::Verifier verifier(raw.bytes.data(), raw.bytes.size());
-  if (!VerifySizePrefixedOEMBuffer(verifier)) { *error = "invalid size-prefixed $OEM record"; return false; }
-  const OEM* oem = GetSizePrefixedOEM(raw.bytes.data());
+  if (!verified(raw, [](flatbuffers::Verifier& v) { return VerifyOEMBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedOEMBuffer(v); })) {
+    *error = "invalid $OEM record";
+    return false;
+  }
+  const OEM* oem = raw.prefixed ? GetSizePrefixedOEM(raw.bytes.data()) : GetOEM(raw.bytes.data());
   if (!oem->EPHEMERIS_DATA_BLOCK()) return true;
   for (const ephemerisDataBlock* b : *oem->EPHEMERIS_DATA_BLOCK()) {
     Block blk;
@@ -473,9 +498,11 @@ bool read_oem_blocks(const RawRecord& raw, std::vector<Block>* blocks, std::stri
 
 // A fit's $OCM: the state rows and, when present, the formal covariance at each (21 values, lower triangle).
 bool read_ocm_block(const RawRecord& raw, std::vector<Block>* blocks, std::string* error) {
-  flatbuffers::Verifier verifier(raw.bytes.data(), raw.bytes.size());
-  if (!VerifySizePrefixedOCMBuffer(verifier)) { *error = "invalid size-prefixed $OCM record"; return false; }
-  const OCM* ocm = GetSizePrefixedOCM(raw.bytes.data());
+  if (!verified(raw, [](flatbuffers::Verifier& v) { return VerifyOCMBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedOCMBuffer(v); })) {
+    *error = "invalid $OCM record";
+    return false;
+  }
+  const OCM* ocm = raw.prefixed ? GetSizePrefixedOCM(raw.bytes.data()) : GetOCM(raw.bytes.data());
   Block blk;
   blk.is_ocm = true;
   const Metadata* meta = ocm->METADATA();
@@ -944,7 +971,7 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
 // The element set as published, with the covariance of one of the product's rows (in RTN axes) and the label in COMMENT.
 std::vector<uint8_t> build_omm(const Recipe& r, const SetRec& s, const Product* p, size_t row, const std::array<double, 21>* rtn,
                                const std::string& why) {
-  std::unique_ptr<OMMT> omm(GetSizePrefixedOMM(s.bytes.data())->UnPack());
+  std::unique_ptr<OMMT> omm((s.prefixed ? GetSizePrefixedOMM(s.bytes.data()) : GetOMM(s.bytes.data()))->UnPack());
   omm->ORIGINATOR = r.a.originator;
   std::string note = "SDN covariance: ";
   if (p && rtn) {
@@ -971,10 +998,10 @@ extern "C" int attach_covariance() {
   if (!error.empty()) return fail("invalid-recipe", error);
 
   std::vector<RawRecord> raw_sets, raw_states, raw_operator, raw_fits;
-  if (!port_records("elements", &raw_sets, &error)) return fail("invalid-elements", error);
-  if (!port_records("states", &raw_states, &error)) return fail("invalid-states", error);
-  if (!port_records("operator", &raw_operator, &error)) return fail("invalid-operator", error);
-  if (!port_records("fit", &raw_fits, &error)) return fail("invalid-fit", error);
+  if (!port_records("elements", "$OMM", &raw_sets, &error)) return fail("invalid-elements", error);
+  if (!port_records("states", "$OEM", &raw_states, &error)) return fail("invalid-states", error);
+  if (!port_records("operator", "$OEM", &raw_operator, &error)) return fail("invalid-operator", error);
+  if (!port_records("fit", "$OCM", &raw_fits, &error)) return fail("invalid-fit", error);
 
   Json refused = Json::array();
   std::vector<SetRec> sets;
@@ -1110,7 +1137,7 @@ extern "C" int attribute_maneuvers() {
   std::string error = read_attribution(recipe, &a);
   if (!error.empty()) return fail("invalid-recipe", error);
   std::vector<RawRecord> raw;
-  if (!port_records("maneuvers", &raw, &error)) return fail("invalid-maneuvers", error);
+  if (!port_records("maneuvers", "$MNV", &raw, &error)) return fail("invalid-maneuvers", error);
   std::vector<std::string> tags = {"originator:" + a.originator, "source:" + a.id, "provider:" + a.provider, "licence:" + a.licence_class};
   if (!a.licence_id.empty()) tags.push_back("licence-id:" + a.licence_id);
   if (a.lineage != a.id) tags.push_back("lineage:" + a.lineage);
@@ -1118,9 +1145,9 @@ extern "C" int attribute_maneuvers() {
   if (!producer.empty()) tags.push_back("producer:" + producer);
   std::vector<uint8_t> stream;
   for (const RawRecord& rec : raw) {
-    flatbuffers::Verifier verifier(rec.bytes.data(), rec.bytes.size());
-    if (rec.ident != "$MNV" || !VerifySizePrefixedMNVBuffer(verifier)) return fail("invalid-maneuvers", "maneuvers carries $MNV records.");
-    std::unique_ptr<MNVT> mnv(GetSizePrefixedMNV(rec.bytes.data())->UnPack());
+    if (rec.ident != "$MNV" || !verified(rec, [](flatbuffers::Verifier& v) { return VerifyMNVBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedMNVBuffer(v); }))
+      return fail("invalid-maneuvers", "maneuvers carries $MNV records.");
+    std::unique_ptr<MNVT> mnv((rec.prefixed ? GetSizePrefixedMNV(rec.bytes.data()) : GetMNV(rec.bytes.data()))->UnPack());
     for (const std::string& tag : tags)
       if (!contains(mnv->TAGS, tag)) mnv->TAGS.push_back(tag);
     flatbuffers::FlatBufferBuilder fbb(1024);

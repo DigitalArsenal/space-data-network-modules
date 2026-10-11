@@ -1,4 +1,4 @@
-// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of derive (with ages), derive_omm and
+// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of derive (with ages), omm_from_mpe, derive_omm and
 // answer_propagation_requests: identical request bytes must give byte-identical outputs in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
 import assert from "node:assert/strict";
@@ -22,6 +22,7 @@ const xp = (_, i) => (i === 1 - at ? { MEAN_ELEMENT_THEORY: meanElementSource.SG
 const cases = [
   { id: "derive-epoch-only", request: { methodId: "derive", inputs: [{ portId: "elements", payload: mpe, typeRef: mpeType(mpe.byteLength) }] } },
   { id: "derive-ages", request: { methodId: "derive", inputs: [{ portId: "elements", payload: mpe, typeRef: mpeType(mpe.byteLength) }, jsonFrame("options", { ages: [0, 0.5, 1, 3] })] } },
+  { id: "omm-from-mpe", request: { methodId: "omm_from_mpe", inputs: [{ portId: "mpe", payload: mpe, typeRef: mpeType(mpe.byteLength) }] } },
   { id: "derive-omm-ages", request: { methodId: "derive_omm", inputs: [{ portId: "omm", payload: ommStream(FIXTURE.cases), typeRef: ommType }, jsonFrame("options", { ages: [0, 0.5, 1, 3] })] } },
   { id: "derive-omm-refusals", request: { methodId: "derive_omm", inputs: [{ portId: "omm", payload: ommStream([FIXTURE.cases[1], FIXTURE.cases[1], FIXTURE.cases[1]],
     (_, i) => [{ MEAN_ELEMENT_THEORY: meanElementSource.SGP4XP }, { OBJECT_ID: "", NORAD_CAT_ID: 0, OBJECT_NAME: "" }, {}][i]), typeRef: ommType }] } },
@@ -32,7 +33,7 @@ const cases = [
 ];
 
 const plan = await normalizeParityFixture({
-  name: "epoch-state: derive with ages, derive_omm, answer_propagation_requests",
+  name: "epoch-state: derive with ages, omm_from_mpe, derive_omm, answer_propagation_requests",
   cases: cases.map((c) => ({ ...c, request: { ...c.request,
     inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString("hex") })) } })),
 });

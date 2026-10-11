@@ -27,6 +27,9 @@
 // one row per age, SGP4 propagated forward from the element set's epoch
 // (default [0], the epoch state alone).
 //
+// omm_from_mpe: the $OMM of each $MPE element set (what the GP history archive stores), so an archive can feed
+// anything that reads $OMM; the fields map one to one, the identity as derive_omm names it.
+//
 // answer_propagation_requests: SGP4 answers the propagator query port of
 // analysis/maneuver-detection (its `propagation_requests`): per query, the
 // trajectory of one element set in TEME from the query's start to its stop,
@@ -860,6 +863,87 @@ int derive_omm(void) {
     return finish_derive(totals, ages);
 }
 
+
+int omm_from_mpe(void) {
+    char batch_message[256];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+    const int32_t input_index = plugin_find_input_index("mpe", 0);
+    const plugin_input_frame_t* frame =
+        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
+    if (!frame) {
+        plugin_set_error("missing-mpe-frame", "omm_from_mpe requires an $MPE stream frame on port \"mpe\".");
+        return 400;
+    }
+    std::vector<uint8_t> out;
+    std::vector<Failure> failures;
+    uint32_t index = 0, converted = 0;
+    std::string error;
+    const bool ok = for_each_record(
+        frame,
+        [](const std::vector<uint8_t>& record) {
+            ::flatbuffers::Verifier verifier(record.data(), record.size());
+            return VerifySizePrefixedMPEBuffer(verifier);
+        },
+        [&](const std::vector<uint8_t>& record) {
+            const MPE* mpe = GetSizePrefixedMPE(record.data());
+            const std::string entity_id = mpe->ENTITY_ID() ? mpe->ENTITY_ID()->str() : "";
+            UtcInstant instant;
+            std::string reason;
+            if (entity_id.empty()) reason = "missing-entity-id";
+            else if (!utc_instant_from_unix(mpe->EPOCH(), &instant)) reason = "invalid-epoch";
+            if (!reason.empty()) {
+                if (failures.size() < kMaxListedFailures) failures.push_back({index, entity_id, reason, 0});
+                ++index;
+                return;
+            }
+            OMMT omm;
+            omm.CCSDS_OMM_VERS = 3.0;
+            omm.COMMENT = "from $MPE ENTITY_ID=" + entity_id;
+            omm.EPOCH = instant.iso.substr(0, instant.iso.size() - 1);  // an $OMM EPOCH carries no zone letter
+            omm.MEAN_ELEMENT_THEORY = mpe->MEAN_ELEMENT_THEORY();
+            omm.MEAN_MOTION = mpe->MEAN_MOTION();
+            omm.ECCENTRICITY = mpe->ECCENTRICITY();
+            omm.INCLINATION = mpe->INCLINATION();
+            omm.RA_OF_ASC_NODE = mpe->RA_OF_ASC_NODE();
+            omm.ARG_OF_PERICENTER = mpe->ARG_OF_PERICENTER();
+            omm.MEAN_ANOMALY = mpe->MEAN_ANOMALY();
+            omm.BSTAR = mpe->BSTAR();
+            // "NORAD:<n>" names a numbered object; any other entity id is the object's own designator.
+            if (entity_id.rfind("NORAD:", 0) == 0) {
+                char* end = nullptr;
+                const unsigned long parsed = std::strtoul(entity_id.c_str() + 6, &end, 10);
+                if (end != nullptr && *end == '\0' && parsed > 0 && parsed <= 0xFFFFFFFFul) omm.NORAD_CAT_ID = static_cast<uint32_t>(parsed);
+                else omm.OBJECT_ID = entity_id;
+            } else {
+                omm.OBJECT_ID = entity_id;
+            }
+            ::flatbuffers::FlatBufferBuilder builder(512);
+            FinishSizePrefixedOMMBuffer(builder, CreateOMM(builder, &omm));
+            out.insert(out.end(), builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+            ++converted;
+            ++index;
+        },
+        &error);
+    if (!ok) {
+        plugin_set_error("malformed-stream", error.c_str());
+        return 400;
+    }
+    Json report = {{"records", index}, {"converted", converted}, {"failed", failures.size()}, {"failures", Json::array()}};
+    for (const Failure& f : failures) report["failures"].push_back({{"index", f.index}, {"entityId", f.entity_id}, {"reason", f.reason}});
+    const std::string text = report.dump();
+    if (!out.empty() && plugin_push_output_ex("omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OMM", 0, 0,
+                                              out.data(), static_cast<uint32_t>(out.size())) < 0) {
+        return 500;
+    }
+    if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+                              reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0) {
+        return 500;
+    }
+    return 0;
+}
 
 int answer_propagation_requests(void) {
     const int32_t request_index = plugin_find_input_index("requests", 0);

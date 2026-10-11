@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import * as flatbuffers from "flatbuffers";
+import { OMM } from "spacedatastandards.org/lib/js/OMM/main.js";
 import { meanElementSource } from "spacedatastandards.org/lib/js/MPE/main.js";
 import { OEM, CelestialFrame, RFMUnion, timingStandard } from "spacedatastandards.org/lib/js/OEM/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
@@ -276,4 +277,41 @@ test("answer_propagation_requests: the TEME trajectory of a set matches python-s
   assert.deepEqual(JSON.parse(new TextDecoder().decode(response.outputs.find((f) => f.portId === "options").payload)), options);
   const report = JSON.parse(new TextDecoder().decode(response.outputs.find((f) => f.portId === "report").payload));
   assert.deepEqual([report.queries, report.answered, report.refused], [2, 1, 1]);
+});
+
+test("omm_from_mpe: the archive's element sets become $OMM that derive_omm reads to the states derive gave", async (t) => {
+  const payload = mpeStream(FIXTURE.cases);
+  const converted = await invokeMethod(t, "omm_from_mpe", [{ portId: "mpe", payload, typeRef: mpeType(payload.byteLength) }]);
+  assert.equal(converted.statusCode, 0, converted.errorMessage);
+  const report = JSON.parse(new TextDecoder().decode(converted.outputs.find((f) => f.portId === "report").payload));
+  assert.deepEqual([report.records, report.converted, report.failed], [FIXTURE.cases.length, FIXTURE.cases.length, 0]);
+  const stream = Buffer.from(converted.outputs.find((f) => f.portId === "omm").payload);
+  // Each $OMM: the entity id is the NORAD number or the object's designator; the elements are the archive's.
+  let at = 0;
+  FIXTURE.cases.forEach((expected) => {
+    const size = stream.readUInt32LE(at);
+    const omm = OMM.getSizePrefixedRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(stream.subarray(at, at + 4 + size)))).unpack();
+    at += 4 + size;
+    assert.equal(omm.NORAD_CAT_ID, expected.entityId.startsWith("NORAD:") ? expected.satnum : 0);
+    assert.equal(omm.OBJECT_ID, expected.entityId.startsWith("NORAD:") ? null : expected.entityId);
+    assert.equal(omm.EPOCH, expected.epochIso.replace("Z", ""));
+    assert.equal(omm.MEAN_MOTION, expected.MEAN_MOTION);
+    assert.equal(omm.ECCENTRICITY, expected.ECCENTRICITY);
+    assert.equal(omm.BSTAR, expected.BSTAR);
+    assert.equal(omm.MEAN_ELEMENT_THEORY, meanElementSource.SGP4);
+    assert.equal(omm.ORIGINATOR, null);
+  });
+  assert.equal(at, stream.length);
+  // The states from the converted sets are the Vallado GCRF states derive gave from the archive's own records.
+  const states = await invokeMethod(t, "derive_omm", [{ portId: "omm", payload: stream, typeRef: ommType }]);
+  assert.equal(states.statusCode, 0, states.errorMessage);
+  const rows = decodeStates(states.outputs.find((f) => f.portId === "states").payload);
+  FIXTURE.cases.forEach((expected, i) => {
+    const [line] = rows[i].EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+    assert.ok(distance([line.X, line.Y, line.Z], expected.gcrfR) < 5e-8, `${expected.satnum} position`);
+  });
+  const refused = await invokeMethod(t, "omm_from_mpe", [{ portId: "mpe", payload: mpeStream([{ ...FIXTURE.cases[0], entityId: undefined }, FIXTURE.cases[1]]), typeRef: mpeType(mpeStream([{ ...FIXTURE.cases[0], entityId: undefined }, FIXTURE.cases[1]]).byteLength) }]);
+  const refusedReport = JSON.parse(new TextDecoder().decode(refused.outputs.find((f) => f.portId === "report").payload));
+  assert.deepEqual(refusedReport.failures.map(({ index, reason }) => [index, reason]), [[0, "missing-entity-id"]]);
+  assert.equal(refusedReport.converted, 1);
 });

@@ -40,6 +40,17 @@ input is a size-prefixed `$OMM` stream on `omm`. The object is the set's
 `OBJECT_NAME`. A set with none of the three, an invalid `EPOCH`, or a theory
 other than SGP4 is listed in the report and produces no `$OEM`.
 
+## `omm_from_mpe`
+
+The `$OMM` of each `$MPE` element set: what the GP history archive stores
+(`data-source/gp-archive-records`) as what element-set consumers read. The
+fields map one to one. `ENTITY_ID` `NORAD:<n>` is `NORAD_CAT_ID`; any other
+entity id is `OBJECT_ID`. `EPOCH` (Unix seconds) becomes ISO 8601 UTC, the mean
+elements, B* and the theory are kept. There is no `ORIGINATOR` or
+`CREATION_DATE`: the output depends only on the input, and the source's flow
+names the originator. A record with no entity id or epoch is listed in the
+report and not converted.
+
 ## Ages
 
 `derive` and `derive_omm` take an optional `options` frame, `{"ages": [days]}`
