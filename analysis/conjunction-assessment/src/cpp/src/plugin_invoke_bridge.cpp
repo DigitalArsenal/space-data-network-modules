@@ -693,7 +693,27 @@ bool utcSpan(timingStandard scale, double mid, double half, double &utc_mid, dou
     return error("unsupported-time-system", "A PPE interval holds a leap second; split it there.");
   return true;
 }
-bool polynomial(const PPE *p, Source &o) {
+// A source's identity for a named error: its object ID, NORAD number and handle.
+std::string sourceLabel(const CQRObjectSource *r) {
+  std::string label = text(r->OBJECT_ID());
+  if (r->NORAD_CATALOG_ID()) label += " (NORAD " + std::to_string(r->NORAD_CATALOG_ID()) + ")";
+  return label + " [handle " + std::to_string(r->SOURCE_HANDLE()) + "]";
+}
+// A trajectory's positions must lie between the Earth's polar radius and
+// 1e6 km of its centre: anything else is a failed propagation (an object
+// integrated into the Earth and flung out), which the grid and the motion
+// bounds must not take. Each record is checked where its Chebyshev series is
+// cheapest to sum: both ends (tau = -1, 1) and the middle (tau = 0).
+constexpr double TRAJECTORY_MIN_RADIUS_KM = 6356.752;   // WGS84 polar radius
+constexpr double TRAJECTORY_MAX_RADIUS_KM = 1e6;
+double chebyshevAt(const std::vector<double> &c, int tau) {
+  double sum = 0;
+  for (size_t k = 0; k < c.size(); ++k)
+    sum += c[k] * (tau == 1 ? 1.0 : tau == -1 ? (k % 2 ? -1.0 : 1.0) : (k % 2 ? 0.0 : (k % 4 ? -1.0 : 1.0)));
+  return sum;
+}
+bool polynomial(const PPE *p, Source &o, const std::string &object = std::string()) {
+  const std::string who = object.empty() ? std::string() : "Source " + object + ": ";
   if (!p || (p->TIME_SYSTEM() != timingStandard::UTC && p->TIME_SYSTEM() != timingStandard::TDB &&
              p->TIME_SYSTEM() != timingStandard::TT))
     return error("unsupported-time-system",
@@ -733,12 +753,23 @@ bool polynomial(const PPE *p, Source &o) {
     for (size_t k = 0; k < 6; ++k) {
       auto v = vectors[k];
       if (!v || v->size() != r->NUM_COEFFICIENTS())
-        return error("invalid-polynomial", "PPE coefficient length mismatch.");
+        return error("invalid-polynomial", who + "PPE coefficient length mismatch.");
       for (auto x : *v) {
         if (!isFinite(x))
           return error("invalid-polynomial",
-                       "PPE coefficients must be finite.");
+                       who + "PPE coefficients must be finite (record " + std::to_string(records.size()) + ").");
         rec.c[k].push_back(x);
+      }
+    }
+    for (int tau : {-1, 0, 1}) {
+      const double radius = std::sqrt(std::pow(chebyshevAt(rec.c[0], tau), 2) + std::pow(chebyshevAt(rec.c[1], tau), 2) +
+                                      std::pow(chebyshevAt(rec.c[2], tau), 2));
+      if (!(radius >= TRAJECTORY_MIN_RADIUS_KM && radius <= TRAJECTORY_MAX_RADIUS_KM)) {
+        char km[64];
+        std::snprintf(km, sizeof km, "%.6g km", radius);
+        return error("invalid-trajectory", who + "PPE record " + std::to_string(records.size()) + " places the object " + km +
+                     " from the Earth's centre at " + jd_to_iso(rec.mid + tau * rec.half / 86400.) +
+                     " UTC; a trajectory lies between 6356.752 km (the polar radius) and 1e6 km.");
       }
     }
     records.push_back(std::move(rec));
@@ -761,7 +792,7 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
   if (!hardBodyRadius(r, o))
     return false;
   if (trajectory) {
-    if (!polynomial(trajectory, o))
+    if (!polynomial(trajectory, o, sourceLabel(r)))
       return false;
     o.polynomial->name = text(r->OBJECT_NAME());
     o.polynomial->id = text(r->OBJECT_ID());
@@ -808,7 +839,7 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
         o.samples, text(r->OBJECT_NAME()), text(r->OBJECT_ID()),
         r->NORAD_CATALOG_ID());
   } else if (r->POLYNOMIAL_EPHEMERIS()) {
-    if (!polynomial(r->POLYNOMIAL_EPHEMERIS(), o))
+    if (!polynomial(r->POLYNOMIAL_EPHEMERIS(), o, sourceLabel(r)))
       return false;
     o.polynomial->name = text(r->OBJECT_NAME());
     o.polynomial->id = text(r->OBJECT_ID());

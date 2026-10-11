@@ -144,6 +144,40 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
   }
 });
 
+// A trajectory a propagator corrupted (positions beyond 1e6 km or inside the
+// Earth, or a non-finite coefficient) is refused by prepare_screening_index
+// with a named error that names the object; the module does not trap, and the
+// same instance prepares the intact trajectories afterwards.
+test('HPOP: a corrupt trajectory is refused by name, without trapping', async () => {
+  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  try {
+    const identity = HPOP.sources.map(({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }) => ({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }));
+    const frames = (edit) => HPOP.sources.map((s, i) => {
+      const records = s.POLYNOMIAL_EPHEMERIS.POSITION_RECORDS.slice(0, 6).map((r) => ({ ...r }));
+      if (i === 1) edit(records[3]);
+      const json = JSON.stringify({ DESCRIBE_RESULT: {
+        INSTANCE: { MODULE_ID: 'com.orbpro.hpop', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
+        SOURCES: [{ SOURCE_HANDLE: s.SOURCE_HANDLE, OBJECT_ID: s.OBJECT_ID, EPHEMERIS: { ...s.POLYNOMIAL_EPHEMERIS, POSITION_RECORDS: records } }] } });
+      return flatc.generateBinary(publishedSchema('PRW'), json.replace('123456789.25', 'nan'), { sizePrefix: true });
+    });
+    const scale = (k) => (r) => { for (const axis of ['POS_COEFF_X', 'POS_COEFF_Y', 'POS_COEFF_Z']) r[axis] = r[axis].map((c) => c * k); };
+    const named = new RegExp(`Source ${HPOP.sources[1].OBJECT_ID} \\(NORAD ${HPOP.sources[1].NORAD_CATALOG_ID}\\) \\[handle ${HPOP.sources[1].SOURCE_HANDLE}\\]: `);
+    for (const [label, edit, code] of [
+      ['beyond 1e6 km', scale(1e3), 'invalid-trajectory'],
+      ['inside the Earth', scale(0.5), 'invalid-trajectory'],
+      ['a non-finite coefficient', (r) => { r.POS_COEFF_Y = [123456789.25, ...r.POS_COEFF_Y.slice(1)]; }, 'invalid-polynomial'],
+    ]) {
+      const refused = await prepare(harness, INSTANCE(), identity, frames(edit));
+      assert.equal(refused.statusCode !== 0, true, label);
+      assert.equal(refused.errorCode, code, `${label}: ${refused.errorMessage}`);
+      assert.match(refused.errorMessage, named, label);
+    }
+    handleOf(await prepare(harness, INSTANCE(), identity, frames(() => {})));
+  } finally {
+    await harness.destroy?.();
+  }
+});
+
 // Sampled states in the SpaceAware console's shape (prepare_sample_screening_
 // index: TEME OEM compact grids, 60 s, cubic Hermite, one primary; 30 min
 // windows, 1000 km, 10 s coarse step). Two circular TEME orbits, ISS-like

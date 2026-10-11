@@ -77,10 +77,10 @@ try {
   if (o.propagator === 'hpop') {
     farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
       workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
-      profile: o['hpop-profile'], environment: o['hpop-environment'] });
+      profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start) });
   }
   // The next window exports while this one screens.
-  const exports = [];
+  const exports = [], hpopDropped = [];
   const exportWindow = (k) => {
     if (k < windows.length && !exports[k]) {
       const w = windows[k];
@@ -100,6 +100,7 @@ try {
         exportWindow(k + 1);
         exports[k] = null;
         const dropped = (k === 0 ? [...farm.excluded, ...out.dropped] : out.dropped).map((d) => ({ ...d, jd: d.jd ?? w.startJd }));
+        hpopDropped.push(...dropped);
         return { frames: out.frames, dropped };
       },
     } : undefined,
@@ -116,11 +117,16 @@ try {
     startJd: +o.start, durationDays: +o.days, windowHours, workers, wallMs, aotCompileMs, objects: result.objects, windows: result.windows,
     candidates: result.candidates, excluded: result.excluded, timings: t, algorithm: o.algorithm,
     uncertaintyModel: o['uncertainty-model'] ? path.basename(o['uncertainty-model']) : null,
+    ...(farm ? { hpop: { profile: farm.profile, farmWorkers: farm.workers, instances: farm.instances,
+      dropped: hpopDropped.map(({ norad, objectId, name, reason, jd }) => ({ norad, objectId, name, reason, jd })),
+      reentries: farm.reentries.map(({ norad, objectId, name, phase, jd }) => ({ norad, objectId, name, phase, jd })) } } : {}),
     events: [...summaries].sort((a, b) => a.missM - b.missM) }, null, 1) + '\n');
   console.log(`${o.propagator} on ${o.runtime}${wasmSource ? ' AOT' : ''} (CPU, ${workers} module threads): ${result.objects} objects, ${o.days} days in ` +
     `${result.windows.length} windows: ${result.candidates} candidates, ${result.events.length} conjunctions, ` +
     `${result.excluded.length} excluded, ${s(wallMs)} end to end (load ${s(t.loadMs)}, window prep/wait ${s(t.prepareMs)}, ` +
     `search ${s(t.gridMs)}, refine ${s(t.refineMs)}${wasmSource ? `; AOT compile ${s(aotCompileMs)} not counted` : ''})` +
+    (farm ? `; HPOP reentries: ${farm.reentries.filter((x) => x.phase === 'catch-up').length} before the screen, ` +
+      `${farm.reentries.filter((x) => x.phase === 'screen').length} during it` : '') +
     (o['uncertainty-model'] ? `; ${o.algorithm}: ${summaries.filter((e) => e.uncertainty === 'SYNTHESIZED_COVARIANCE').length} ` +
       `covariance probabilities, ${summaries.filter((e) => e.calibration === 'Calibrated').length} calibrated` : ''));
 } finally {

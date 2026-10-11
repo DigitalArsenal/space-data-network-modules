@@ -70,8 +70,9 @@ const prepare = (instance, startJd, seconds, handles) => call(instance.harness, 
   [new PRWPrepareRequestT(instance.identity, 0, handles, utc(startJd), seconds, 'conjunction-screening')]);
 
 // One window of every instance: [{ frames, dropped: [{handle, reason}] }].
-// An object HPOP cannot cover is found by preparing objects one at a time and
-// leaves the instance for the rest of the run.
+// An object HPOP cannot cover (an error, or its reentry) is found by
+// preparing objects one at a time and leaves the instance for the rest of the
+// run; the farm reads the reason.
 async function exportWindow({ startJd, seconds }) {
   const frames = [], dropped = [];
   for (const instance of instances) {

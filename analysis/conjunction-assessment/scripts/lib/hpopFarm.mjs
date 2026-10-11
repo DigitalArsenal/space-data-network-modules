@@ -96,7 +96,14 @@ async function epochStates(epochStateDir, omms) {
  * @param {Uint8Array[]} o.catalog  One $OMM per object.
  * @param {string} o.modulesRoot  The space-data-network-modules checkout.
  * @param {number} [o.workers]
- * @returns {Promise<{objects: object[], excluded: object[], window: Function, close: Function}>}
+ * @param {number} [o.screenStartJd]  UTC JD the screen starts (default: the first window's start).
+ * @returns {Promise<{objects: object[], excluded: object[], reentries: object[], window: Function, close: Function}>}
+ *
+ * HPOP ends a trajectory at reentry (100 km geodetic altitude) with the error
+ * `reentry` and its UTC epoch. An object that reenters before the screen
+ * starts is dropped, as SGP4 excludes a decayed element set. One that
+ * reenters during the screen keeps the windows before the one holding its
+ * reentry and is absent from that window on; `reentries` lists both kinds.
  */
 export async function createHpopFarm(o) {
   const profile = o.profile ?? 'full-force';
@@ -144,14 +151,27 @@ export async function createHpopFarm(o) {
   await Promise.all(adds);
   const ingestMs = performance.now() - t1;
   const byHandle = new Map(objects.map((x) => [x.handle, x]));
+  const reentries = [];
+  let screenStartJd = o.screenStartJd;
+  // The UTC Julian date of the epoch in a reentry error ("... at <ISO> UTC").
+  const reentryJd = (reason) => {
+    const m = /^reentry: .* at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?) UTC/.exec(reason);
+    return m ? unixSeconds(m[1]) / 86400 + 2440587.5 : null;
+  };
 
   return {
-    objects, excluded, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
+    objects, excluded, reentries, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
     /** Trajectories of every object over [startJd, startJd + days], UTC. */
     async window(startJd, days) {
+      screenStartJd ??= startJd;
       const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400 })));
       const frames = parts.flatMap((p) => p.frames);
-      const dropped = parts.flatMap((p) => p.dropped).map((d) => ({ ...byHandle.get(d.handle), reason: d.reason, jd: startJd }));
+      const dropped = [];
+      for (const d of parts.flatMap((p) => p.dropped)) {
+        const object = byHandle.get(d.handle), jd = reentryJd(d.reason);
+        if (jd !== null) reentries.push({ ...object, jd, phase: jd < screenStartJd ? 'catch-up' : 'screen', reason: d.reason });
+        if (jd === null || jd < screenStartJd) dropped.push({ ...object, reason: d.reason, jd: startJd });
+      }
       return { frames, dropped };
     },
     async close() { await Promise.all(workers.map((w) => w.terminate())); },

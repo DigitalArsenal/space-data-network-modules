@@ -64,9 +64,9 @@ if (o.propagator === 'hpop') {
   }
   farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
     workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
-    profile: o['hpop-profile'], environment: o['hpop-environment'] });
+    profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start) });
   farmInfo = { workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
-    epochStateExcluded: farm.excluded.length, windowExportMs: [] };
+    epochStateExcluded: farm.excluded.length, windowExportMs: [], reentries: farm.reentries };
   process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} HPOP instances\n`);
 }
 const pad = (n) => n + ((8 - (n % 8)) % 8);
