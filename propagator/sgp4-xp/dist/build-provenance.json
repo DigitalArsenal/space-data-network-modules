@@ -10,11 +10,11 @@
     "sha256": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
     "version": "Astro Standards v9.1, Sgp4Prop WebAssembly 9.1.1.0 (XP)"
   },
-  "adapterSha256": "726253d25da68324bce6bdd5cec8241bfdfe2964a95f5d54e559eb713ba07c50",
-  "shimSha256": "ed91414994efe28cb262a9d8fe216f3f5e8df151b100d045281bf3b7b5756051",
+  "adapterSha256": "179c8040df34759bee98e71e41043dec36a15eb99412e3d21e4bbbdff5a32d46",
+  "shimSha256": "a1d71f7e29c04a258a02ce11410a43d404f4aec8e5c0e80ab0f10eb2d79e00b3",
   "join": {
     "wasmMerge": "wasm-merge version 125",
     "wat2wasm": "1.0.39"
   },
-  "moduleSha256": "bce1ad54466bcb8d2b4dfa022e7eaeb4ac2b2d62a55a620949b238ba9efe5488"
+  "moduleSha256": "239c5b6c15fc0091709f4b4dc3554aec8e64304a80a7c0f06b747171d59452e3"
 }

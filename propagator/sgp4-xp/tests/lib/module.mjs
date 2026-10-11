@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 export const root = fileURLToPath(new URL('../..', import.meta.url));
-export const wasmPath = path.join(root, 'dist/isomorphic/module.wasm');
+export const wasmPath = process.env.SGP4_XP_WASM ?? path.join(root, 'dist/isomorphic/module.wasm');
 export const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'), 'utf8'));
 
 export async function loadModule() {

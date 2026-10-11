@@ -27,6 +27,13 @@
 #include "result_schema_idl.h"
 #include "sds_cid.hpp"
 
+// SGP4-XP element sets of every ephemeris, beside the SGP4 sets of the OD core: the fit engine of
+// propagator/sgp4-xp (the US Space Force Sgp4Prop joined to this node by build.mjs) and its SDS records.
+#include "OBD_generated.h"
+#include "OMM_generated.h"
+#include "engine.hpp"
+#include "records.hpp"
+
 namespace od {
 
 // ABI-matching declaration for the frozen fit-core entry point. Keeping this
@@ -181,8 +188,26 @@ struct NativeState {
   double vz = 0.0;
 };
 
+// The states of one logical object as its provider gave them, for the SGP4-XP fit: the same NativeStates the $OEM
+// handed to the OD core was built from, in the provider's own axes and time scale, converted to UTC here.
+struct XpInput {
+  std::vector<sgp4xp::Observed> states;
+  sgp4xp::Frame frame = sgp4xp::Frame::Teme;
+  std::string name;
+  std::string object_id;
+  uint32_t norad = 0;
+};
+
+// One parsed logical object: the $OEM for the OD core and the states for the SGP4-XP fit.
+struct ParsedObject {
+  od::BatchObject object;
+  XpInput xp;
+};
+
 struct PendingFitObject {
   od::BatchObject object;
+  XpInput xp;
+  Provider provider = Provider::Starlink;
   uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
   uint64_t request_id = 0;
   std::string identity;
@@ -621,7 +646,39 @@ std::vector<uint8_t> build_celestial_oem(
       static_cast<int>(states.size()));
 }
 
-std::vector<od::BatchObject> parse_starlink_meme(
+// The NativeStates of one object as SGP4-XP fit input. `velocities` is true for the providers that give them (MEME,
+// OEM); the others are positions only. An epoch that does not read as a time leaves the object without XP input.
+XpInput make_xp_input(const std::vector<NativeState>& states, sgp4xp::Frame frame,
+                      sgp4xp::TimeScale scale, bool velocities,
+                      const std::string& name, const std::string& object_id,
+                      uint32_t norad) {
+  XpInput input;
+  input.frame = frame;
+  input.name = name;
+  input.object_id = object_id;
+  input.norad = norad;
+  input.states.reserve(states.size());
+  for (const NativeState& state : states) {
+    sgp4xp::Observed observed;
+    if (!sgp4xp::utcOf(state.epoch, scale, &observed.t)) {
+      input.states.clear();
+      return input;
+    }
+    observed.r[0] = state.x;
+    observed.r[1] = state.y;
+    observed.r[2] = state.z;
+    if (velocities) {
+      observed.v[0] = state.vx;
+      observed.v[1] = state.vy;
+      observed.v[2] = state.vz;
+      observed.hasVelocity = true;
+    }
+    input.states.push_back(observed);
+  }
+  return input;
+}
+
+std::vector<ParsedObject> parse_starlink_meme(
     const std::string& content, const std::string& schema_name) {
   uint32_t norad = 0;
   std::string object_name = "STARLINK";
@@ -649,10 +706,12 @@ std::vector<od::BatchObject> parse_starlink_meme(
       object_name, "", norad, CelestialFrame::EME2000, timingStandard::UTC,
       states);
   if (oem.empty()) return {};
-  return {{std::move(oem)}};
+  XpInput xp = make_xp_input(states, sgp4xp::Frame::Eme2000, sgp4xp::TimeScale::Utc,
+                             true, object_name, "", norad);
+  return {{{std::move(oem)}, std::move(xp)}};
 }
 
-std::vector<od::BatchObject> parse_glonass_sp3(const std::string& content) {
+std::vector<ParsedObject> parse_glonass_sp3(const std::string& content) {
   struct Satellite {
     std::string id;
     std::vector<NativeState> states;
@@ -700,17 +759,21 @@ std::vector<od::BatchObject> parse_glonass_sp3(const std::string& content) {
       satellite->states.push_back(std::move(state));
     }
   });
-  std::vector<od::BatchObject> objects;
+  std::vector<ParsedObject> objects;
   for (const Satellite& satellite : satellites) {
     std::vector<uint8_t> oem = build_position_only_oem(
         "GLONASS " + satellite.id, "", 0, CustomFrame::ECEF,
         timingStandard::GPS, satellite.states);
-    if (!oem.empty()) objects.push_back({std::move(oem)});
+    if (oem.empty()) continue;
+    XpInput xp = make_xp_input(satellite.states, sgp4xp::Frame::Itrf,
+                               sgp4xp::TimeScale::Gps, false,
+                               "GLONASS " + satellite.id, "", 0);
+    objects.push_back({{std::move(oem)}, std::move(xp)});
   }
   return objects;
 }
 
-std::vector<od::BatchObject> parse_intelsat_ecf(const std::string& content) {
+std::vector<ParsedObject> parse_intelsat_ecf(const std::string& content) {
   std::string object_name = "INTELSAT";
   std::vector<NativeState> states;
   bool first_line = true;
@@ -754,10 +817,12 @@ std::vector<od::BatchObject> parse_intelsat_ecf(const std::string& content) {
   std::vector<uint8_t> oem = build_position_only_oem(
       object_name, "", 0, CustomFrame::ECEF, timingStandard::UTC, states);
   if (oem.empty()) return {};
-  return {{std::move(oem)}};
+  XpInput xp = make_xp_input(states, sgp4xp::Frame::Itrf, sgp4xp::TimeScale::Utc,
+                             false, object_name, "", 0);
+  return {{{std::move(oem)}, std::move(xp)}};
 }
 
-std::vector<od::BatchObject> parse_cpf(const std::string& content) {
+std::vector<ParsedObject> parse_cpf(const std::string& content) {
   std::string object_name = "CPF OBJECT";
   std::string object_id;
   uint32_t norad = 0;
@@ -794,17 +859,21 @@ std::vector<od::BatchObject> parse_cpf(const std::string& content) {
     states.push_back(std::move(state));
   });
   std::vector<uint8_t> oem;
+  sgp4xp::Frame xp_frame = sgp4xp::Frame::Itrf;
   if (frame_code == 2) {
     oem = build_position_only_oem(object_name, object_id, norad,
                                   CelestialFrame::EME2000,
                                   timingStandard::UTC, states);
+    xp_frame = sgp4xp::Frame::Eme2000;
   } else if (frame_code == 0) {
     oem = build_position_only_oem(object_name, object_id, norad,
                                   CustomFrame::ECEF, timingStandard::UTC,
                                   states);
   }
   if (oem.empty()) return {};
-  return {{std::move(oem)}};
+  XpInput xp = make_xp_input(states, xp_frame, sgp4xp::TimeScale::Utc, false,
+                             object_name, object_id, norad);
+  return {{{std::move(oem)}, std::move(xp)}};
 }
 
 bool kvn_value(const std::string& line, const char* key, std::string* value) {
@@ -821,7 +890,7 @@ bool kvn_value(const std::string& line, const char* key, std::string* value) {
   return true;
 }
 
-std::vector<od::BatchObject> parse_iss_oem(const std::string& content) {
+std::vector<ParsedObject> parse_iss_oem(const std::string& content) {
   std::string object_name = "ISS";
   std::string object_id = "1998-067A";
   std::vector<NativeState> states;
@@ -855,10 +924,12 @@ std::vector<od::BatchObject> parse_iss_oem(const std::string& content) {
       object_name, object_id, 25544, CelestialFrame::EME2000,
       timingStandard::UTC, states);
   if (oem.empty()) return {};
-  return {{std::move(oem)}};
+  XpInput xp = make_xp_input(states, sgp4xp::Frame::Eme2000, sgp4xp::TimeScale::Utc,
+                             true, object_name, object_id, 25544);
+  return {{{std::move(oem)}, std::move(xp)}};
 }
 
-std::vector<od::BatchObject> parse_native_response(
+std::vector<ParsedObject> parse_native_response(
     Provider provider, const Assembly& assembly) {
   const std::string content(assembly.bytes.begin(), assembly.bytes.end());
   switch (provider) {
@@ -1415,6 +1486,121 @@ void publish_pending_fit_state() {
   plugin_set_yielded(backlog > 0 ? 1 : 0);
 }
 
+// ---------------------------------------------------------------------------
+// SGP4-XP element sets beside the SGP4 sets of the OD core.
+//
+// Every ephemeris is also fitted with SGP4-XP, the US Space Force's perturbation
+// model with a fitted ballistic term (BTERM) and solar-radiation term (AGOM):
+// a day to fit (two thirds of an ephemeris shorter than a day and a half) and
+// up to a day to score it, window after window while the ephemeris lasts
+// (propagator/sgp4-xp, engine.hpp). Each fitted window is one $OMM
+// (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) and one
+// $OBD in the same record streams as the OD core's records, and names its
+// source: the OMM's ORIGINATOR is the organisation that produced the ephemeris
+// and the OBD's sensor is the provider node's plugin ID. An ephemeris too short
+// to hold a fit and three hours to score it gets no XP set; the OD core's sets
+// are unaffected either way.
+// ---------------------------------------------------------------------------
+constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 64,
+                                               240};
+constexpr const char* kXpProduct =
+    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.1.0 and the US "
+    "Space Force Sgp4Prop 9.1.1.0 (XP build)";
+constexpr uint32_t kUnknownNorad = 99999;  // the OD core's placeholder
+
+const char* provider_originator(Provider provider) {
+  switch (provider) {
+    case Provider::Starlink:
+      return "SpaceX";
+    case Provider::Glonass:
+      return "CODE (Astronomical Institute, University of Bern)";
+    case Provider::Intelsat:
+      return "Intelsat";
+    case Provider::Cpf:
+      return "ILRS (EDC, DGFI-TUM)";
+    case Provider::Iss:
+      return "NASA/JSC/FOD/TOPO";
+  }
+  return "UNKNOWN";
+}
+
+const char* provider_source(Provider provider) {
+  switch (provider) {
+    case Provider::Starlink:
+      return "org.sdn.flows.supplemental-omm.provider-starlink";
+    case Provider::Glonass:
+      return "org.sdn.flows.supplemental-omm.provider-glonass";
+    case Provider::Intelsat:
+      return "org.sdn.flows.supplemental-omm.provider-intelsat";
+    case Provider::Cpf:
+      return "org.sdn.flows.supplemental-omm.provider-cpf";
+    case Provider::Iss:
+      return "org.sdn.flows.supplemental-omm.provider-iss";
+  }
+  return "";
+}
+
+std::vector<uint8_t> size_prefixed_omm(const OMMT& omm) {
+  flatbuffers::FlatBufferBuilder builder(4096);
+  builder.FinishSizePrefixed(CreateOMM(builder, &omm), OMMIdentifier());
+  return std::vector<uint8_t>(builder.GetBufferPointer(),
+                              builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> size_prefixed_obd(const OBDT& obd) {
+  flatbuffers::FlatBufferBuilder builder(4096);
+  builder.FinishSizePrefixed(CreateOBD(builder, &obd), OBDIdentifier());
+  return std::vector<uint8_t>(builder.GetBufferPointer(),
+                              builder.GetBufferPointer() + builder.GetSize());
+}
+
+// Appends an $OMM and an $OBD for each fitted window to the record streams.
+// Returns the account that follows the object's completion message: empty when
+// the ephemeris is too short to hold a fit and its scoring (most short provider
+// responses), else the number of sets and of windows refused. `ok` is false only
+// when a stream would pass its size bound.
+std::string append_xp_records(std::vector<RecordStreamAccumulator>* streams,
+                              const PendingFitObject& pending, bool* ok) {
+  *ok = true;
+  if (pending.xp.states.empty()) return {};
+  const uint32_t norad =
+      pending.xp.norad != 0 ? pending.xp.norad : kUnknownNorad;
+  sgp4xp::SourceFit fitted;
+  std::string code;
+  std::string why;
+  if (!sgp4xp::fitSource(pending.xp.states, pending.xp.frame, norad,
+                         kXpWindowPolicy, &fitted, &code, &why)) {
+    if (code == "arc-too-short" || code == "too-few-states") return {};
+    return "; SGP4-XP refused: " + code + ": " + why;
+  }
+  sgp4xp::Provenance who;
+  who.originator = provider_originator(pending.provider);
+  who.source = provider_source(pending.provider);
+  who.name = pending.xp.name;
+  who.id = pending.xp.object_id;
+  who.norad = norad;
+  size_t appended = 0;
+  for (const sgp4xp::IntervalFit& window : fitted.windows) {
+    const std::unique_ptr<OMMT> omm = sgp4xp::ommOf(window, who, kXpProduct);
+    const std::unique_ptr<OBDT> obd = sgp4xp::obdOf(window, who, kXpProduct);
+    if (!append_record(streams, "omm", "OMM", "$OMM", size_prefixed_omm(*omm),
+                       pending.wire_format) ||
+        !append_record(streams, "obd", "OBD", "$OBD", size_prefixed_obd(*obd),
+                       pending.wire_format)) {
+      *ok = false;
+      return {};
+    }
+    ++appended;
+  }
+  std::string account = "; SGP4-XP: " + std::to_string(appended) +
+                        (appended == 1 ? " set" : " sets");
+  if (!fitted.refusals.empty()) {
+    account += ", " + std::to_string(fitted.refusals.size()) +
+               " refused (" + fitted.refusals.front() + ")";
+  }
+  return account;
+}
+
 }  // namespace
 
 extern "C" int fit(void) {
@@ -1438,7 +1624,7 @@ extern "C" int fit(void) {
       return 400;
     }
     if (!chunk.final) continue;
-    std::vector<od::BatchObject> parsed =
+    std::vector<ParsedObject> parsed =
         parse_native_response(provider, completed);
     if (parsed.empty()) {
       const std::string parse_error =
@@ -1457,9 +1643,11 @@ extern "C" int fit(void) {
       }
       continue;
     }
-    for (od::BatchObject& object : parsed) {
-      std::string identity = describe_batch_object(object);
-      g_pending_fit_objects.push_back({std::move(object),
+    for (ParsedObject& parsed_object : parsed) {
+      std::string identity = describe_batch_object(parsed_object.object);
+      g_pending_fit_objects.push_back({std::move(parsed_object.object),
+                                       std::move(parsed_object.xp),
+                                       provider,
                                        completed.wire_format,
                                        chunk.request_id,
                                        std::move(identity)});
@@ -1530,6 +1718,14 @@ extern "C" int fit(void) {
     publish_pending_fit_state();
     return 0;
   }
+  bool xp_ok = true;
+  const std::string xp_account = append_xp_records(&streams, pending, &xp_ok);
+  if (!xp_ok) {
+    plugin_set_error("od-output-too-large",
+                     "one fitted schema stream exceeds 128 MiB");
+    publish_pending_fit_state();
+    return 413;
+  }
   OutputRequestIdentity output_identity;
   if (!derive_output_request_identity(streams, &output_identity)) {
     plugin_set_error("od-output-identity",
@@ -1562,6 +1758,7 @@ extern "C" int fit(void) {
   }
   std::string message = "OD fit complete";
   if (!pending.identity.empty()) message += ": " + pending.identity;
+  message += xp_account;
   if (push_status(pending.wire_format, pending.request_id,
                   flatSqlNodeStatus_COMPLETE, affected_records,
                   result_bytes, "", message) < 0) {

@@ -34,8 +34,11 @@ of the exported functions and an HTML example. They are not redistributed here.
   18 SDS.
 - **Larger Work (3.G).** The module combines the Subject Software with software that
   is not governed by the Agreement (the SDN module code). The Subject Software in it,
-  `Sgp4Prop.xp.wasm`, is subject to the Agreement. It is joined to that code unchanged
-  by `wasm-merge`; see the README.
+  `Sgp4Prop.xp.wasm`, is subject to the Agreement. `wasm-merge` joins it to that code by
+  re-encoding its functions into the merged module (their numbering changes, their
+  behaviour does not); `tests/ussf_parity.test.mjs` requires the merged module's positions
+  and velocities to equal those of the library's own JavaScript runtime to the last bit.
+  The README describes the join.
 - **Warranty.** The software is provided "AS IS", without warranty of any kind
   (Agreement, introduction).
 - **Registration (3.E).** Requested, not obligatory, at astrodynamicStandards.org (the Agreement's spelling).

@@ -89,13 +89,10 @@ int readSets(std::vector<ElementSet>* sets) {
 // ---------------------------------------------------------------------------------------------------------------
 // $OEM in: the grid of `propagate` and the ephemerides of `fit`.
 // ---------------------------------------------------------------------------------------------------------------
+// An instant given on the time scale of an $OEM block, as UTC.
 bool timeOf(const std::string& text, timingStandard system, Instant* out) {
-  Instant stamp;
-  if (!parseInstant(text, &stamp)) return false;
-  double offset = 0;
-  if (!utcOffsetSeconds(system, stamp, &offset)) return false;
-  *out = addSeconds(stamp, offset);
-  return true;
+  TimeScale scale;
+  return timeScaleOf(system, &scale) && utcOf(text, scale, out);
 }
 
 struct Grid {
@@ -117,8 +114,9 @@ int readGrid(std::vector<Grid>* grids) {
       std::unique_ptr<OEMT> oem(root->UnPack());
       for (const auto& block : oem->EPHEMERIS_DATA_BLOCK) {
         Grid g;
+        { TimeScale scale; if (!timeScaleOf(block->TIME_SYSTEM, &scale)) { why = "The grid's TIME_SYSTEM must be UTC, GPS, TAI or TT."; return false; } }
         if (block->REFERENCE_FRAME && !frameOf(block->REFERENCE_FRAME.get(), &g.frame)) { why = "The grid's REFERENCE_FRAME is not one this module writes."; return false; }
-        if (g.frame == Frame::Itrf) { why = "The grid asks for Earth-fixed axes; this module writes TEME and GCRF."; return false; }
+        if (g.frame == Frame::Itrf) { why = "The grid asks for Earth-fixed axes; this module writes TEME, GCRF and EME2000."; return false; }
         if (!block->CENTER_NAME.empty() && upper(block->CENTER_NAME) != "EARTH") { why = "The grid's CENTER_NAME must be EARTH."; return false; }
         if (!block->EPHEMERIS_DATA_LINES.empty()) {
           g.explicitTimes = true;
@@ -177,8 +175,6 @@ int readEop(EopTable* table) {
 // ---------------------------------------------------------------------------------------------------------------
 // One ephemeris block as states in TEME.
 // ---------------------------------------------------------------------------------------------------------------
-constexpr double kEarthRotationRadPerS = 7.292115146706979e-5;
-
 struct Series {
   std::vector<Sample> samples;  // TEME, strictly in the block's order
   Frame frame = Frame::Teme;
@@ -187,9 +183,15 @@ struct Series {
 
 // false: `code` and `why` say why.
 bool blockSeries(const ephemerisDataBlockT& b, const EopTable& eop, Series* out, std::string* code, std::string* why) {
+  TimeScale scale;
+  if (!timeScaleOf(b.TIME_SYSTEM, &scale)) {
+    *code = "unsupported-time-system";
+    *why = "The block's TIME_SYSTEM must be UTC, GPS, TAI or TT.";
+    return false;
+  }
   if (!b.REFERENCE_FRAME || !frameOf(b.REFERENCE_FRAME.get(), &out->frame)) {
     *code = "unsupported-frame";
-    *why = "The block's REFERENCE_FRAME is missing or not one of TEME, GCRF (ICRF, J2000, EME2000) or an Earth-fixed frame (ITRF, ECEF).";
+    *why = "The block's REFERENCE_FRAME is missing or not one of TEME, GCRF (ICRF), J2000 (EME2000) or an Earth-fixed frame (ITRF, ECEF).";
     return false;
   }
   if (!b.CENTER_NAME.empty() && upper(b.CENTER_NAME) != "EARTH") {
@@ -197,8 +199,7 @@ bool blockSeries(const ephemerisDataBlockT& b, const EopTable& eop, Series* out,
     *why = "The block's CENTER_NAME must be EARTH.";
     return false;
   }
-  struct Raw { Instant t; double r[3]; double v[3]; bool hasV; };
-  std::vector<Raw> raw;
+  std::vector<Observed> raw;
   if (b.STEP_SIZE > 0 && !b.EPHEMERIS_DATA.empty()) {
     const size_t stride = b.STATE_VECTOR_SIZE == 0 ? 6 : b.STATE_VECTOR_SIZE;
     if (stride != 3 && stride != 6 && stride != 9) { *code = "bad-state-size"; *why = "STATE_VECTOR_SIZE must be 3, 6 or 9."; return false; }
@@ -207,52 +208,25 @@ bool blockSeries(const ephemerisDataBlockT& b, const EopTable& eop, Series* out,
     if (!timeOf(b.START_TIME, b.TIME_SYSTEM, &start)) { *code = "bad-epoch"; *why = "START_TIME is not an ISO 8601 time: " + b.START_TIME; return false; }
     const size_t n = b.EPHEMERIS_DATA.size() / stride;
     for (size_t i = 0; i < n; ++i) {
-      Raw s{};
+      Observed s;
       s.t = addSeconds(start, static_cast<double>(i) * b.STEP_SIZE);
       for (int k = 0; k < 3; ++k) s.r[k] = b.EPHEMERIS_DATA[i * stride + k];
-      if (stride >= 6) { for (int k = 0; k < 3; ++k) s.v[k] = b.EPHEMERIS_DATA[i * stride + 3 + k]; s.hasV = true; }
+      if (stride >= 6) { for (int k = 0; k < 3; ++k) s.v[k] = b.EPHEMERIS_DATA[i * stride + 3 + k]; s.hasVelocity = true; }
       raw.push_back(s);
     }
   } else {
     for (const auto& line : b.EPHEMERIS_DATA_LINES) {
-      Raw s{};
+      Observed s;
       if (!timeOf(line->EPOCH, b.TIME_SYSTEM, &s.t)) { *code = "bad-epoch"; *why = "An EPOCH is not an ISO 8601 time: " + line->EPOCH; return false; }
       s.r[0] = line->X; s.r[1] = line->Y; s.r[2] = line->Z;
       s.v[0] = line->X_DOT; s.v[1] = line->Y_DOT; s.v[2] = line->Z_DOT;
-      s.hasV = line->X_DOT != 0.0 || line->Y_DOT != 0.0 || line->Z_DOT != 0.0;
+      s.hasVelocity = line->X_DOT != 0.0 || line->Y_DOT != 0.0 || line->Z_DOT != 0.0;
       raw.push_back(s);
     }
   }
   if (raw.empty()) { *code = "no-states"; *why = "The block holds no states."; return false; }
   if (raw.size() > kMaxStates) { *code = "too-many-states"; *why = "The block holds more states than one request may."; return false; }
-  for (const Raw& s : raw) {
-    Sample sample;
-    sample.t = s.t;
-    if (!positionToTeme(out->frame, s.t, eop, s.r, sample.r)) { *code = "frame-failed"; *why = "No axes at " + formatInstant(s.t, 3) + " (outside ERFA's dates)."; return false; }
-    if (s.hasV) {
-      // Velocity: rotated with the position's axes (their rate is 1e-11 rad/s, 0.05 mm/s at low orbit; the
-      // Earth-fixed frame's own rotation is added).
-      double v[3] = {s.v[0], s.v[1], s.v[2]};
-      if (out->frame == Frame::Itrf) {
-        v[0] += -kEarthRotationRadPerS * s.r[1];
-        v[1] += kEarthRotationRadPerS * s.r[0];
-      }
-      if (out->frame != Frame::Teme) {
-        const fr::EarthOrientation orientation = eop.at(s.t);
-        fr::Epoch epoch;
-        if (!frameEpoch(s.t, orientation, &epoch)) { *code = "frame-failed"; *why = "No axes."; return false; }
-        fr::Vec3 vec{v[0], v[1], v[2]};
-        if (out->frame == Frame::Itrf) vec = fr::apply(fr::transpose(fr::gcrfToItrf(epoch, orientation)), vec);
-        const fr::Vec3 t = fr::apply(fr::gcrfToTeme(epoch), vec);
-        v[0] = t.x; v[1] = t.y; v[2] = t.z;
-      }
-      sample.v[0] = v[0]; sample.v[1] = v[1]; sample.v[2] = v[2];
-      sample.hasVelocity = true;
-      out->positionOnly = false;
-    }
-    out->samples.push_back(sample);
-  }
-  return true;
+  return toTeme(raw, out->frame, eop, &out->samples, &out->positionOnly, code, why);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -318,7 +292,7 @@ extern "C" int propagate(void) {
       block->OBJECT->OBJECT_ID = set.id;
       block->OBJECT->NORAD_CAT_ID = set.elements.norad;
       block->CENTER_NAME = "EARTH";
-      block->REFERENCE_FRAME = rfmOf(g.frame == Frame::Gcrf);
+      block->REFERENCE_FRAME = rfmOf(g.frame);
       block->TIME_SYSTEM = timingStandard::UTC;
       block->COMMENT = std::string("SGP4-XP element set of epoch ") + formatInstant(epochOf(set.elements)) + (set.elements.xp ? "" : " (SGP4)");
       for (size_t i = 0; i < times.size(); ++i) {
@@ -329,9 +303,9 @@ extern "C" int propagate(void) {
                             " (library error " + std::to_string(static_cast<int>(m[0])) + ").",
                         422);
         double r[3] = {m[2], m[3], m[4]}, v[3] = {m[5], m[6], m[7]};
-        if (g.frame == Frame::Gcrf) {
+        if (g.frame == Frame::Gcrf || g.frame == Frame::Eme2000) {
           double rg[3], vg[3];
-          if (!stateTemeToGcrf(times[i], r, v, rg, vg)) return refuse("frame-failed", "No GCRF axes at " + formatInstant(times[i]) + ".", 422);
+          if (!stateTemeToGcrf(times[i], r, v, rg, vg, g.frame == Frame::Eme2000)) return refuse("frame-failed", "No GCRF axes at " + formatInstant(times[i]) + ".", 422);
           std::memcpy(r, rg, sizeof r);
           std::memcpy(v, vg, sizeof v);
         }
@@ -352,136 +326,9 @@ extern "C" int propagate(void) {
   return 0;
 }
 
-namespace sgp4xp {
-
 // ---------------------------------------------------------------------------------------------------------------
 // fit
 // ---------------------------------------------------------------------------------------------------------------
-struct Provenance {
-  std::string originator, creation, name, id;
-  uint32_t norad = 0;
-};
-
-std::string statLine(const char* label, const Statistics& s) {
-  char b[256];
-  std::snprintf(b, sizeof b, "%s N=%zu RMS_KM=%s MAX_KM=%s RADIAL_RMS_KM=%s ALONG_TRACK_RMS_KM=%s CROSS_TRACK_RMS_KM=%s", label, s.count,
-                number(s.rms).c_str(), number(s.max).c_str(), number(s.radial).c_str(), number(s.along).c_str(), number(s.cross).c_str());
-  return b;
-}
-
-void addParameter(OMMT* omm, const std::string& name, const std::string& value) {
-  auto p = std::make_unique<OMMUserDefinedParameterT>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
-}
-
-std::unique_ptr<OMMT> ommOf(const FitResult& fit, const Provenance& who, const Instant& fitStart, const Instant& fitStop,
-                            const Instant& heldStop, bool haveHeld) {
-  auto omm = std::make_unique<OMMT>();
-  const Elements& e = fit.elements;
-  omm->CCSDS_OMM_VERS = 3.0;
-  omm->CREATION_DATE = who.creation.empty() ? formatInstant(fitStop, 3) : who.creation;
-  omm->ORIGINATOR = who.originator.empty() ? "UNKNOWN" : who.originator;
-  omm->OBJECT_NAME = who.name;
-  omm->OBJECT_ID = who.id;
-  omm->CENTER_NAME = "EARTH";
-  omm->REFERENCE_FRAME = rfmOf(false);
-  omm->TIME_SYSTEM = timingStandard::UTC;
-  omm->MEAN_ELEMENT_THEORY = meanElementSource::SGP4XP;
-  omm->EPOCH = formatInstant(epochOf(e));
-  omm->SEMI_MAJOR_AXIS = semiMajorAxisKm(e.meanMotion);
-  omm->MEAN_MOTION = e.meanMotion;
-  omm->ECCENTRICITY = e.eccentricity;
-  omm->INCLINATION = e.inclination;
-  omm->RA_OF_ASC_NODE = e.raan;
-  omm->ARG_OF_PERICENTER = e.argPerigee;
-  omm->MEAN_ANOMALY = e.meanAnomaly;
-  omm->GM = kMuKm3PerS2;
-  omm->CLASSIFICATION_TYPE = "U";
-  omm->NORAD_CAT_ID = who.norad;
-  omm->ELEMENT_SET_NO = 999;
-  omm->BSTAR = e.drag;              // BTERM, m^2/kg
-  omm->MEAN_MOTION_DOT = 0.0;
-  omm->MEAN_MOTION_DDOT = e.agom;   // AGOM, m^2/kg
-  omm->USER_DEFINED_EARTH_MODEL = "WGS-72";
-  std::string comment = std::string("SGP4-XP fit by ") + kProduct + " to the ephemeris of " + (who.originator.empty() ? "an unnamed source" : who.originator) +
-                        ". BTERM is BSTAR and AGOM is MEAN_MOTION_DDOT, in m**2/kg.\n";
-  comment += statLine("FIT", fit.fit) + "\n";
-  if (haveHeld && fit.heldOut.count > 0) comment += statLine("HELD_OUT", fit.heldOut);
-  omm->COMMENT = comment;
-  addParameter(omm.get(), "FIT_START", formatInstant(fitStart, 3));
-  addParameter(omm.get(), "FIT_STOP", formatInstant(fitStop, 3));
-  addParameter(omm.get(), "FIT_STATES", std::to_string(fit.fit.count));
-  addParameter(omm.get(), "FIT_RMS_KM", number(fit.fit.rms));
-  addParameter(omm.get(), "FIT_MAX_KM", number(fit.fit.max));
-  addParameter(omm.get(), "FIT_RADIAL_RMS_KM", number(fit.fit.radial));
-  addParameter(omm.get(), "FIT_ALONG_TRACK_RMS_KM", number(fit.fit.along));
-  addParameter(omm.get(), "FIT_CROSS_TRACK_RMS_KM", number(fit.fit.cross));
-  addParameter(omm.get(), "FIT_ITERATIONS", std::to_string(fit.iterations));
-  addParameter(omm.get(), "FIT_CONVERGED", fit.converged ? "true" : "false");
-  addParameter(omm.get(), "FIT_FIRST_PASS_RMS_KM", number(fit.firstPassRms));
-  if (haveHeld && fit.heldOut.count > 0) {
-    addParameter(omm.get(), "HELD_OUT_STOP", formatInstant(heldStop, 3));
-    addParameter(omm.get(), "HELD_OUT_STATES", std::to_string(fit.heldOut.count));
-    addParameter(omm.get(), "HELD_OUT_RMS_KM", number(fit.heldOut.rms));
-    addParameter(omm.get(), "HELD_OUT_MAX_KM", number(fit.heldOut.max));
-    for (const DayStatistics& d : fit.heldOutDays)
-      addParameter(omm.get(), "HELD_OUT_DAY" + std::to_string(d.day) + "_RMS_KM", number(d.statistics.rms));
-  }
-  addParameter(omm.get(), "LIBRARY", "US Space Force Sgp4Prop 9.1.1.0 XP");
-#ifdef SGP4XP_TRACE
-  addParameter(omm.get(), "TRACE", fit.trace);
-#endif
-  return omm;
-}
-
-std::unique_ptr<OBDT> obdOf(const FitResult& fit, const Provenance& who, const Instant& fitStart, const Instant& fitStop,
-                            const Instant& heldStop, bool haveHeld) {
-  auto obd = std::make_unique<OBDT>();
-  obd->ID = std::to_string(who.norad) + "-" + formatInstant(epochOf(fit.elements), 3) + "-SGP4XP";
-  obd->SAT_NO = who.norad;
-  obd->ORIG_OBJECT_ID = who.id;
-  obd->START_TIME = formatInstant(fitStart, 3);
-  obd->END_TIME = formatInstant(fitStop, 3);
-  obd->METHOD = odMethod::BATCH_LEAST_SQUARES;
-  obd->METHOD_SOURCE = std::string(kProduct) + ": Levenberg-Marquardt on TEME position residuals; fitted to " +
-                       (who.originator.empty() ? "an unnamed source" : who.originator);
-  obd->INITIAL_OD = false;
-  obd->LAST_OB_START = obd->START_TIME;
-  obd->LAST_OB_END = obd->END_TIME;
-  obd->TIME_SPAN = secondsBetween(fitStop, fitStart) / kSecondsPerDay;
-  obd->FIT_SPAN = obd->TIME_SPAN;
-  obd->EFFECTIVE_FROM = formatInstant(epochOf(fit.elements), 3);
-  obd->EFFECTIVE_UNTIL = formatInstant(haveHeld && fit.heldOut.count > 0 ? heldStop : fitStop, 3);
-  obd->WRMS = fit.fit.rms;                // km, 3D, every state weighted alike
-  obd->FIRST_PASS_WRMS = fit.firstPassRms;
-  obd->BEST_PASS_WRMS = fit.fit.rms;
-  if (haveHeld && fit.heldOut.count > 0 && !fit.heldOutDays.empty()) {
-    // km/day: the held-out error at its last day, per day after the end of the fit interval.
-    const DayStatistics& last = fit.heldOutDays.back();
-    obd->ERROR_GROWTH_RATE = last.statistics.rms / static_cast<double>(last.day);
-  }
-  obd->BALLISTIC_COEFF_EST = true;
-  obd->BALLISTIC_COEFF_MODEL = "SGP4-XP BTERM, m**2/kg";
-  obd->AGOM_EST = true;
-  obd->AGOM_MODEL = "SGP4-XP AGOM, m**2/kg";
-  obd->RMS_CONVERGENCE_CRITERIA = 1.0e-9;
-  obd->NUM_ITERATIONS = static_cast<uint16_t>(std::min(fit.iterations, 65535));
-  obd->NUM_ACCEPTED_OBS = static_cast<uint32_t>(fit.fit.count);
-  obd->NUM_REJECTED_OBS = 0;
-  auto contribution = std::make_unique<odSensorContributionT>();
-  contribution->SENSOR_ID = who.originator.empty() ? "ephemeris" : who.originator;
-  contribution->NUM_ACCEPTED = static_cast<uint32_t>(fit.fit.count);
-  contribution->WRMS = fit.fit.rms;
-  contribution->OB_TYPES.push_back("EPHEMERIS_POSITION");
-  obd->SENSORS.push_back(std::move(contribution));
-  obd->ACCEPTED_OB_TYPS.push_back("EPHEMERIS_POSITION");
-  return obd;
-}
-
-}  // namespace sgp4xp
-
 extern "C" int fit(void) {
   using namespace sgp4xp;
   plugin_reset_output_state();
@@ -506,35 +353,11 @@ extern "C" int fit(void) {
         std::string code;
         if (!blockSeries(*block, eop, &series, &code, &why)) { status = refuse(code.c_str(), where + ": " + why, 422); return false; }
 
-        // The declared fit interval, and the states held out after it.
-        std::vector<Sample> fitSamples, held;
+        // The declared fit interval (USEABLE_START_TIME to USEABLE_STOP_TIME; the whole block when it declares none),
+        // and the states after it that score the fit.
         Instant intervalStart = series.samples.front().t, intervalStop = series.samples.back().t;
-        bool declared = false;
-        if (!block->USEABLE_START_TIME.empty() || !block->USEABLE_STOP_TIME.empty()) {
-          declared = true;
-          if (!block->USEABLE_START_TIME.empty() && !timeOf(block->USEABLE_START_TIME, block->TIME_SYSTEM, &intervalStart)) { status = refuse("bad-epoch", where + ": USEABLE_START_TIME is not an ISO 8601 time.", 422); return false; }
-          if (!block->USEABLE_STOP_TIME.empty() && !timeOf(block->USEABLE_STOP_TIME, block->TIME_SYSTEM, &intervalStop)) { status = refuse("bad-epoch", where + ": USEABLE_STOP_TIME is not an ISO 8601 time.", 422); return false; }
-        }
-        for (const Sample& s : series.samples) {
-          if (secondsBetween(s.t, intervalStart) < -1e-6) continue;
-          if (secondsBetween(s.t, intervalStop) <= 1e-6) fitSamples.push_back(s);
-          else held.push_back(s);
-        }
-        if (fitSamples.size() < 10) { status = refuse("too-few-states", where + ": the fit interval holds fewer than 10 states.", 422); return false; }
-        const Instant fitStart = fitSamples.front().t, fitStop = fitSamples.back().t;
-        // No leap second inside the arc: minutes since epoch are counted in 86400-second days.
-        {
-          int64_t y0, m0, d0, y1, m1, d1;
-          civilFromDays(fitStart.day - kMjdOfUnixEpoch, &y0, &m0, &d0);
-          civilFromDays((held.empty() ? fitStop : held.back().t).day - kMjdOfUnixEpoch, &y1, &m1, &d1);
-          double dat0 = 0, dat1 = 0;
-          if (eraDat(static_cast<int>(y0), static_cast<int>(m0), static_cast<int>(d0), 0.0, &dat0) < 0 ||
-              eraDat(static_cast<int>(y1), static_cast<int>(m1), static_cast<int>(d1), 0.0, &dat1) < 0 || dat0 != dat1) {
-            status = refuse("leap-second-in-arc", where + ": a leap second falls inside the arc.", 422);
-            return false;
-          }
-        }
-        (void)declared;
+        if (!block->USEABLE_START_TIME.empty() && !timeOf(block->USEABLE_START_TIME, block->TIME_SYSTEM, &intervalStart)) { status = refuse("bad-epoch", where + ": USEABLE_START_TIME is not an ISO 8601 time.", 422); return false; }
+        if (!block->USEABLE_STOP_TIME.empty() && !timeOf(block->USEABLE_STOP_TIME, block->TIME_SYSTEM, &intervalStop)) { status = refuse("bad-epoch", where + ": USEABLE_STOP_TIME is not an ISO 8601 time.", 422); return false; }
 
         Provenance who;
         who.originator = oem->ORIGINATOR;
@@ -544,16 +367,18 @@ extern "C" int fit(void) {
           who.id = block->OBJECT->OBJECT_ID;
           who.norad = block->OBJECT->NORAD_CAT_ID;
         }
-        Fitter fitter(true);
-        const Instant heldStop = held.empty() ? fitStop : held.back().t;
-        FitResult result = fitter.run(fitSamples, held, who.norad);
-        if (!result.ok) { status = refuse(result.code, where + ": " + result.message, 422); return false; }
+        IntervalFit interval;
+        std::string fitCode;
+        if (!fitInterval(series.samples, intervalStart, intervalStop, series.samples.back().t, who.norad, 0, &interval, &fitCode, &why)) {
+          status = refuse(fitCode.c_str(), where + ": " + why, 422);
+          return false;
+        }
 
-        const auto omm = ommOf(result, who, fitStart, fitStop, heldStop, !held.empty());
+        const auto omm = ommOf(interval, who, kProduct);
         flatbuffers::FlatBufferBuilder a(4096);
         a.FinishSizePrefixed(CreateOMM(a, omm.get()), OMMIdentifier());
         if ((status = push("elements", "OMM.fbs", "$OMM", "OMM", a)) != 0) return false;
-        const auto obd = obdOf(result, who, fitStart, fitStop, heldStop, !held.empty());
+        const auto obd = obdOf(interval, who, kProduct);
         flatbuffers::FlatBufferBuilder b(4096);
         b.FinishSizePrefixed(CreateOBD(b, obd.get()), OBDIdentifier());
         if ((status = push("determination", "OBD.fbs", "$OBD", "OBD", b)) != 0) return false;

@@ -30,6 +30,10 @@ import {
 import { manifest } from "./manifest.mjs";
 import { resolveSupplementalSigning } from "../signing.mjs";
 import { compileUniversalAot } from "../universal-aot.mjs";
+// The SGP4-XP fit engine and the Space Force library join of propagator/sgp4-xp (see its README).
+import { composeEngineSource } from "../../../../propagator/sgp4-xp/engine-source.mjs";
+import { joinUssf, ussfNotice } from "../../../../propagator/sgp4-xp/join-ussf.mjs";
+import { exportNames } from "../../../../propagator/sgp4-xp/wasm-sections.mjs";
 
 const execFileAsync = promisify(execFile);
 const nodeRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -37,9 +41,16 @@ const modulesRoot = path.resolve(nodeRoot, "../../../..");
 const mainPackagesRoot = path.dirname(modulesRoot);
 const standardsRoot = path.join(mainPackagesRoot, "spacedatastandards.org");
 const flatbuffersRoot = path.join(mainPackagesRoot, "flatbuffers");
+// The flatc that matches the flatbuffers checkout (repos/main-packages/flatbuffers/build/flatc), or SUPPLEMENTAL_OD_FLATC.
+const flatcPath = process.env.SUPPLEMENTAL_OD_FLATC ?? path.join(flatbuffersRoot, "build/flatc");
 const buildRoot = path.join(nodeRoot, ".build");
 const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
-const distRoot = path.join(nodeRoot, "dist/isomorphic");
+// SUPPLEMENTAL_OD_VERIFY_OUT names a directory for a verification build: the signed node is written there and nothing
+// in this directory (publisher.json, plugin-manifest.json, dist/) changes. Tests build the node this way.
+const verificationRoot = process.env.SUPPLEMENTAL_OD_VERIFY_OUT
+  ? path.resolve(process.env.SUPPLEMENTAL_OD_VERIFY_OUT)
+  : null;
+const distRoot = verificationRoot ?? path.join(nodeRoot, "dist/isomorphic");
 const generatedFsbRoot = path.join(buildRoot, "FSB");
 const generatedFsoRoot = path.join(buildRoot, "FSO");
 const resultSchemaHeader = path.join(buildRoot, "result_schema_idl.h");
@@ -136,13 +147,15 @@ if (actualFitCoreObjectSha256 !== fitCoreObjectSha256) {
     `vendored OD fit core hash ${actualFitCoreObjectSha256} does not match ${fitCoreObjectSha256}`,
   );
 }
-await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+if (!verificationRoot) {
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
 await writeFile(
   resultSchemaHeader,
   resultSchemaHeaderSource(await flattenResultSchemaIdl()),
 );
 
-await run(path.join(flatbuffersRoot, "build/flatc"), [
+await run(flatcPath, [
   "--no-warnings",
   "--cpp",
   "--aligned",
@@ -150,14 +163,14 @@ await run(path.join(flatbuffersRoot, "build/flatc"), [
   generatedFsbRoot,
   path.join(standardsRoot, "schema/FSB/main.fbs"),
 ]);
-await run(path.join(flatbuffersRoot, "build/flatc"), [
+await run(flatcPath, [
   "--no-warnings",
   "--cpp",
   "-o",
   generatedFsbRoot,
   path.join(standardsRoot, "schema/FSB/main.fbs"),
 ]);
-await run(path.join(flatbuffersRoot, "build/flatc"), [
+await run(flatcPath, [
   "--no-warnings",
   "--cpp",
   "--filename-suffix",
@@ -207,6 +220,7 @@ try {
     path.join(modulesRoot, "licensing/core/src/cpp/generated/sds"),
     path.join(modulesRoot, "common"),
     path.join(nodeRoot, "vendor"),
+    path.join(modulesRoot, "propagator/sgp4-xp/src"),
   ].map((directory) => `-I${directory}`);
   const compileFlags = [
     ...toolchain.toolchainArgs,
@@ -228,6 +242,20 @@ try {
     objectPath,
   ]);
 
+  // The SGP4-XP fit engine: ERFA, foundation/frames and propagator/sgp4-xp's engine headers as one translation unit with
+  // no SDS record in it (this node's SDS pin is not that module's), compiled with the node's flags.
+  const engine = await composeEngineSource();
+  const engineSourcePath = path.join(buildRoot, "xp_engine.cpp");
+  const engineObjectPath = path.join(unsignedRoot, "xp_engine.o");
+  await writeFile(engineSourcePath, engine.source);
+  await run(toolchain.clangxx, [
+    ...compileFlags,
+    "-c",
+    engineSourcePath,
+    "-o",
+    engineObjectPath,
+  ]);
+
   const exportedSymbols = [
     "plugin_get_manifest_flatbuffer",
     "plugin_get_manifest_flatbuffer_size",
@@ -236,22 +264,38 @@ try {
     "plugin_free",
     "fit",
   ];
+  // The memory is exported only for the join below, which resolves the engine's imports of the Space Force library
+  // against it; the join removes the export again.
   await run(toolchain.clangxx, [
     ...toolchain.toolchainArgs,
     objectPath,
+    engineObjectPath,
     fitCoreObject,
     path.join(compilation.tempDir, "plugin-manifest-exports.o"),
     path.join(compilation.tempDir, "plugin-invoke-bridge.o"),
     "-O3",
     "-mexec-model=reactor",
     ...PTHREAD_FINAL_LINK_FLAGS,
+    "-Wl,--export-memory",
     "-Wl,--allow-undefined",
     ...exportedSymbols.map((symbol) => `-Wl,--export=${symbol}`),
     "-o",
     linkedPath,
   ]);
 
-  let wasmBytes = new Uint8Array(await readFile(linkedPath));
+  // The Space Force Sgp4Prop build joins the node here: its code is merged into the module, its memory becomes
+  // the second, and what is left imports what the node imported (WASI, the thread spawn, the shared memory).
+  const linkedExports = exportNames(new Uint8Array(await readFile(linkedPath)));
+  const joined = await joinUssf({
+    adapterPath: linkedPath,
+    workDir: unsignedRoot,
+    keepExports: new Set(linkedExports.map((e) => e.name).filter((name) => name !== "memory")),
+  });
+  let wasmBytes = appendWasmCustomSection(
+    joined.bytes,
+    "ussf-sgp4-notice",
+    new TextEncoder().encode(await ussfNotice()),
+  );
   wasmBytes = appendWasmCustomSection(
     wasmBytes,
     SDS_MANIFEST_SECTION_NAME,
@@ -301,19 +345,21 @@ try {
       2,
     )}\n`,
   );
-  await writeFile(
-    path.join(nodeRoot, "publisher.json"),
-    `${JSON.stringify(
-      {
-        algorithm: "ed25519",
-        keyId: signingKeyId,
-        publicKeyHex: signed.signature.publicKeyHex,
-        developmentOnly,
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  if (!verificationRoot) {
+    await writeFile(
+      path.join(nodeRoot, "publisher.json"),
+      `${JSON.stringify(
+        {
+          algorithm: "ed25519",
+          keyId: signingKeyId,
+          publicKeyHex: signed.signature.publicKeyHex,
+          developmentOnly,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
   process.stdout.write(
     `Built signed ${manifest.pluginId} ${sha256} (${signed.wasmBytes.byteLength} bytes)\n`,
   );

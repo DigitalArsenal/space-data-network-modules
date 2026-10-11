@@ -8,9 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "fit.hpp"
+#include "engine.hpp"
 #include "frames.hpp"
-#include "ussf.hpp"
 
 namespace sgp4xp {
 
@@ -23,7 +22,18 @@ inline std::string upper(std::string s) {
   return s;
 }
 
-// The axes an $RFM names, or false: TEME and the inertial and Earth-fixed members this module can rotate.
+// The axes an $RFM names, or false: TEME, the inertial and the Earth-fixed members this module can rotate. The union
+// member is read first; a frame given by name only (RFM.NAME, as some producers write it) is read by the name.
+inline bool frameByName(const std::string& name, Frame* out) {
+  const std::string n = upper(name);
+  if (n == "TEME" || n == "TEMEOFDATE") { *out = Frame::Teme; return true; }
+  if (n == "GCRF" || n == "ICRF" || n == "J2000A") { *out = Frame::Gcrf; return true; }
+  if (n == "J2000" || n == "EME2000") { *out = Frame::Eme2000; return true; }
+  if (n == "ITRF" || n == "ITRF2000" || n == "ITRF93" || n == "ITRF97" || n == "ECEF" || n == "EFG" || n == "FIXED_EARTH" ||
+      n == "WGS84" || n == "GTOD")
+    { *out = Frame::Itrf; return true; }
+  return false;
+}
 inline bool frameOf(const RFMT* rfm, Frame* out) {
   if (rfm == nullptr) return false;
   switch (rfm->REFERENCE_FRAME.type) {
@@ -31,9 +41,10 @@ inline bool frameOf(const RFMT* rfm, Frame* out) {
       const auto* w = reinterpret_cast<const CelestialFrameWrapperT*>(rfm->REFERENCE_FRAME.value);
       switch (w->frame) {
         case CelestialFrame::TEMEOFDATE: *out = Frame::Teme; return true;
-        case CelestialFrame::GCRF: case CelestialFrame::ICRF: case CelestialFrame::J2000:
-        case CelestialFrame::J2000A: case CelestialFrame::EME2000:
+        case CelestialFrame::GCRF: case CelestialFrame::ICRF: case CelestialFrame::J2000A:
           *out = Frame::Gcrf; return true;
+        case CelestialFrame::J2000: case CelestialFrame::EME2000:
+          *out = Frame::Eme2000; return true;
         case CelestialFrame::ITRF2000: case CelestialFrame::ITRF93: case CelestialFrame::ITRF97:
         case CelestialFrame::EFG: case CelestialFrame::FIXED_EARTH: case CelestialFrame::WGS84:
         case CelestialFrame::GTOD:
@@ -47,30 +58,27 @@ inline bool frameOf(const RFMT* rfm, Frame* out) {
       if (w->frame == CustomFrame::TEME) { *out = Frame::Teme; return true; }
       return false;
     }
+    case RFMUnion::NONE: return !rfm->NAME.empty() && frameByName(rfm->NAME, out);
     default: return false;
   }
 }
 
-inline std::unique_ptr<RFMT> rfmOf(bool gcrf) {
+inline std::unique_ptr<RFMT> rfmOf(Frame frame) {
   auto rfm = std::make_unique<RFMT>();
   CelestialFrameWrapperT wrapper;
-  wrapper.frame = gcrf ? CelestialFrame::GCRF : CelestialFrame::TEMEOFDATE;
+  wrapper.frame = frame == Frame::Gcrf ? CelestialFrame::GCRF : frame == Frame::Eme2000 ? CelestialFrame::EME2000 : CelestialFrame::TEMEOFDATE;
   rfm->REFERENCE_FRAME.Set(std::move(wrapper));
   return rfm;
 }
 
-// Seconds to add to a time stamp of `system` to get UTC (the UTC-based convention of the rest of this module),
-// at that stamp's UTC date. false for a time system this module does not convert.
-inline bool utcOffsetSeconds(timingStandard system, const Instant& stamp, double* seconds) {
-  if (system == timingStandard::UTC || system == timingStandard::GMST) { *seconds = 0.0; return true; }  // GMST is the unset default
-  int64_t y, m, d;
-  civilFromDays(stamp.day - kMjdOfUnixEpoch, &y, &m, &d);
-  double taiMinusUtc = 0.0;
-  if (eraDat(static_cast<int>(y), static_cast<int>(m), static_cast<int>(d), stamp.seconds / kSecondsPerDay, &taiMinusUtc) < 0) return false;
+// The time scale of an $OEM block's TIME_SYSTEM, for the scales this module converts to UTC (GMST is the unset default
+// of the enum and is read as UTC). false for any other.
+inline bool timeScaleOf(timingStandard system, TimeScale* out) {
   switch (system) {
-    case timingStandard::GPS: *seconds = 19.0 - taiMinusUtc; return true;
-    case timingStandard::TAI: *seconds = -taiMinusUtc; return true;
-    case timingStandard::TT: *seconds = -(taiMinusUtc + 32.184); return true;
+    case timingStandard::UTC: case timingStandard::GMST: *out = TimeScale::Utc; return true;
+    case timingStandard::GPS: *out = TimeScale::Gps; return true;
+    case timingStandard::TAI: *out = TimeScale::Tai; return true;
+    case timingStandard::TT: *out = TimeScale::Tt; return true;
     default: return false;
   }
 }
@@ -142,19 +150,8 @@ inline bool forEachRecord(const uint8_t* data, size_t length, const char* id,
 // ---------------------------------------------------------------------------------------------------------------
 // $OBD and the $OMM written by the fit.
 // ---------------------------------------------------------------------------------------------------------------
-inline std::string number(double v, int significant = 9) {
-  char b[48];
-  std::snprintf(b, sizeof b, "%.*g", significant, v);
-  return b;
-}
-
 inline std::vector<uint8_t> finish(flatbuffers::FlatBufferBuilder& fbb) {
   return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
-}
-
-inline double semiMajorAxisKm(double meanMotionRevPerDay) {
-  const double n = meanMotionRevPerDay * 2.0 * kPi / kSecondsPerDay;
-  return std::cbrt(kMuKm3PerS2 / (n * n));
 }
 
 }  // namespace sgp4xp

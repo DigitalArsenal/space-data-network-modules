@@ -23,44 +23,25 @@
 
 #include "ussf.hpp"
 
+// Tuning constants (build.mjs may override them for experiments).
+#ifndef SGP4XP_DRAG_MIN_SPAN_SECONDS
+#define SGP4XP_DRAG_MIN_SPAN_SECONDS 82800.0   // an arc shorter than this (about a day) leaves BTERM and AGOM at zero
+#endif
+#ifndef SGP4XP_PRIOR_WEIGHT_KM
+#define SGP4XP_PRIOR_WEIGHT_KM 0.001           // residual (km) of a prior one standard deviation from zero
+#endif
+#ifndef SGP4XP_PRIOR_SIGMA_BTERM
+#define SGP4XP_PRIOR_SIGMA_BTERM 0.05          // m^2/kg
+#endif
+#ifndef SGP4XP_PRIOR_SIGMA_AGOM
+#define SGP4XP_PRIOR_SIGMA_AGOM 0.1            // m^2/kg
+#endif
+#ifndef SGP4XP_MAX_FIT_STATES
+#define SGP4XP_MAX_FIT_STATES 480              // the optimisation uses at most this many states, evenly spaced
+#endif
+
 namespace sgp4xp {
 
-struct Sample {
-  Instant t;
-  double r[3] = {0, 0, 0};  // TEME, km
-  double v[3] = {0, 0, 0};  // TEME, km/s; meaningful when hasVelocity
-  bool hasVelocity = false;
-};
-
-struct Statistics {
-  size_t count = 0;
-  double rms = 0;     // 3D position, km
-  double max = 0;
-  double radial = 0;  // RMS of each component of the position error in the model's radial, along-track and
-  double along = 0;   // cross-track axes (km)
-  double cross = 0;
-};
-
-struct DayStatistics {
-  int day = 0;  // the day after the end of the fit interval, from 1
-  Statistics statistics;
-};
-
-struct FitResult {
-  bool ok = false;
-  const char* code = "";
-  std::string message;
-  Elements elements;
-  Statistics fit;
-  Statistics heldOut;
-  std::vector<DayStatistics> heldOutDays;
-  double firstPassRms = 0;  // before the first iteration, km
-  double rmsBeforeLattice = 0;
-  int iterations = 0;
-  bool converged = false;
-  size_t evaluations = 0;
-  std::string trace;  // debugging only (SGP4XP_TRACE)
-};
 
 namespace detail {
 
@@ -175,7 +156,7 @@ inline bool gibbs(const double r1[3], const double r2[3], const double r3[3], do
 class Fitter {
  public:
   // theory: xp = true fits BTERM and AGOM; xp = false fits SGP4's B*.
-  Fitter(bool xp = true) : xp_(xp) {}
+  Fitter(bool xp = true, size_t maxStates = 0) : xp_(xp), maxStates_(maxStates != 0 ? maxStates : SGP4XP_MAX_FIT_STATES) {}
 
   FitResult run(const std::vector<Sample>& fit, const std::vector<Sample>& held, uint32_t norad) {
     FitResult result;
@@ -196,8 +177,19 @@ class Fitter {
     start.drag = 0.0;
     start.agom = 0.0;
 
-    detail::Vector p = pack(start);
+    // The optimisation sees at most `maxStates` of the states (SGP4XP_MAX_FIT_STATES unless the caller sets it), evenly spaced and always the first and the
+    // last (a minute-cadence day is 1440 states, and the library does not make a propagation cheaper by being asked
+    // for the same orbit again); the statistics below are over every state.
+    std::vector<Sample> thinned;
+    const size_t stride = std::max<size_t>(1, (fit.size() + maxStates_ - 1) / maxStates_);
+    if (stride > 1) {
+      for (size_t i = 0; i < fit.size(); i += stride) thinned.push_back(fit[i]);
+      if ((fit.size() - 1) % stride != 0) thinned.push_back(fit.back());
+    }
+    const std::vector<Sample>& seen = stride > 1 ? thinned : fit;
+
     elements_ = start;
+    detail::Vector p = toU(start);
 
     // Stages: about two revolutions, then doubling to the whole interval.
     double window = std::min(span, std::max(2.0 * period, 1800.0));
@@ -205,7 +197,7 @@ class Fitter {
     bool converged = false;
     for (;;) {
       const bool last = window >= span;
-      setStage(fit, window);
+      setStage(seen, window);
       if (stage_.size() < 10) {
         if (last) return fail(result, "too-few-states", "The fit interval holds fewer than 10 states.");
         window = std::min(span, window * 2.0);
@@ -215,7 +207,7 @@ class Fitter {
       // The six elements through every stage; BTERM and AGOM join at the last, and only when the arc is long enough
       // (one day) for the drag to show: a shorter arc leaves them at zero.
       std::vector<size_t> active = {0, 1, 2, 3, 4, 5};
-      if (last && span >= 86400.0) { active.push_back(6); if (xp_) active.push_back(7); }
+      if (last && span >= SGP4XP_DRAG_MIN_SPAN_SECONDS) { active.push_back(6); if (xp_) active.push_back(7); }
       const bool ok = levenbergMarquardt(&p, active, last ? 60 : 20, &it, &converged);
       iterationsTotal += it;
       if (!ok && last) return fail(result, "fit-failed", "The fit did not find a bound orbit the library can propagate.");
@@ -227,11 +219,11 @@ class Fitter {
     result.converged = converged;
 
     // Residuals at the continuous optimum, then the lattice of the text.
-    setStage(fit, span + 1.0);
+    setStage(seen, span + 1.0);
     result.rmsBeforeLattice = rmsOf(p);
-    p = searchLattice(p);
-    elements_ = elementsOf(p);
-    result.elements = roundedToText(elements_);
+    clampU(&p);
+    result.elements = searchLattice(fromU(p));
+    elements_ = result.elements;
     result.elements.norad = norad;
     result.elements.xp = xp_;
     result.fit = statistics(result.elements, fit);
@@ -337,53 +329,48 @@ class Fitter {
   }
 
   // ---- parameters -------------------------------------------------------------------------------------------
-  // p = {n rev/day, e, i deg, raan deg, argp deg, M deg, drag, agom}
-  detail::Vector pack(const Elements& e) const {
-    return {e.meanMotion, e.eccentricity, e.inclination, e.raan, e.argPerigee, e.meanAnomaly, e.drag, e.agom};
+  // The fit's parameters are non-singular: u = {n rev/day, af = e cos(w+O), ag = e sin(w+O), chi = tan(i/2) sin O,
+  // psi = tan(i/2) cos O, lambda = M+w+O deg, BTERM, AGOM}. In (e, w) a circular orbit is a point where the step in e
+  // has no direction and a Gauss-Newton step that wants a different w is refused; the equinoctial pair is linear there.
+  detail::Vector toU(const Elements& e) const {
+    const double varpi = (e.argPerigee + e.raan) * kDegToRad;
+    const double t = std::tan(0.5 * e.inclination * kDegToRad);
+    const double node = e.raan * kDegToRad;
+    return {e.meanMotion, e.eccentricity * std::cos(varpi), e.eccentricity * std::sin(varpi), t * std::sin(node), t * std::cos(node),
+            wrapDegrees(e.meanAnomaly + e.argPerigee + e.raan), e.drag, e.agom};
   }
-  Elements elementsOf(const detail::Vector& p) const {
+  Elements fromU(const detail::Vector& u) const {
     Elements e = elements_;
     e.xp = xp_;
-    e.meanMotion = p[0];
-    e.eccentricity = p[1];
-    e.inclination = p[2];
-    e.raan = p[3];
-    e.argPerigee = p[4];
-    e.meanAnomaly = p[5];
-    e.drag = p[6];
-    e.agom = xp_ ? p[7] : 0.0;
+    e.meanMotion = u[0];
+    e.eccentricity = std::sqrt(u[1] * u[1] + u[2] * u[2]);
+    const double varpi = (u[1] == 0.0 && u[2] == 0.0) ? 0.0 : std::atan2(u[2], u[1]) * kRadToDeg;
+    const double t = std::sqrt(u[3] * u[3] + u[4] * u[4]);
+    e.inclination = 2.0 * std::atan(t) * kRadToDeg;
+    e.raan = t == 0.0 ? 0.0 : wrapDegrees(std::atan2(u[3], u[4]) * kRadToDeg);
+    e.argPerigee = wrapDegrees(varpi - e.raan);
+    e.meanAnomaly = wrapDegrees(u[5] - varpi);
+    e.drag = u[6];
+    e.agom = xp_ ? u[7] : 0.0;
     return e;
-  }
-  // The value a parameter has once written as text (angles unwrapped).
-  static double asText(size_t j, double v) {
-    switch (j) {
-      case 0: return decimals(v, 8);
-      case 1: return decimals(v, 7);
-      case 2: case 3: case 4: case 5: return decimals(v, 4);
-      default: return parseExponentField(exponentField(v));
-    }
   }
   static double stepOf(size_t j, double v) {
     switch (j) {
       case 0: return 1.0e-6;
-      case 1: return 2.0e-5;
-      case 2: case 3: case 4: case 5: return 0.02;
+      case 1: case 2: return 2.0e-5;
+      case 3: case 4: return 2.0e-4;
+      case 5: return 0.02;
       default: return std::max(2.0e-4, std::fabs(v) * 0.02);
     }
   }
-  static double quantumOf(size_t j) {
-    switch (j) {
-      case 0: return 1.0e-8;
-      case 1: return 1.0e-7;
-      default: return 1.0e-4;
-    }
-  }
-  void clampParams(detail::Vector* p) const {
-    (*p)[0] = std::max(0.05, std::min(20.0, (*p)[0]));
-    (*p)[1] = std::max(0.0, std::min(0.9, (*p)[1]));
-    (*p)[2] = std::max(0.0, std::min(180.0, (*p)[2]));
-    (*p)[6] = std::max(0.0, std::min(0.5, (*p)[6]));
-    (*p)[7] = std::max(0.0, std::min(0.5, (*p)[7]));
+  void clampU(detail::Vector* u) const {
+    (*u)[0] = std::max(0.05, std::min(20.0, (*u)[0]));
+    const double e = std::sqrt((*u)[1] * (*u)[1] + (*u)[2] * (*u)[2]);
+    if (e > 0.9) { (*u)[1] *= 0.9 / e; (*u)[2] *= 0.9 / e; }
+    const double t = std::sqrt((*u)[3] * (*u)[3] + (*u)[4] * (*u)[4]);
+    if (t > 50.0) { (*u)[3] *= 50.0 / t; (*u)[4] *= 50.0 / t; }
+    (*u)[6] = std::max(0.0, std::min(0.5, (*u)[6]));
+    (*u)[7] = std::max(0.0, std::min(0.5, (*u)[7]));
   }
 
   // ---- the objective -----------------------------------------------------------------------------------------
@@ -399,13 +386,11 @@ class Fitter {
     minutes_.resize(stage_.size());
   }
 
-  // Residuals (model - observed, km) of the element set `p` over the stage: 3 per state, then the two priors.
-  // false when the library refuses the set or any propagation.
-  bool residuals(const detail::Vector& pRaw, std::vector<double>* out) {
+  // Residuals (model - observed, km) of the element set `e`, rounded to the digits of the text, over the stage: 3 per
+  // state, then the two priors. false when the library refuses the set or any propagation.
+  bool residualsE(const Elements& raw, std::vector<double>* out) {
     ++evaluations_;
-    detail::Vector p = pRaw;
-    clampParams(&p);
-    Elements e = roundedToText(elementsOf(p));
+    const Elements e = roundedToText(raw);
     for (size_t i = 0; i < stage_.size(); ++i) minutes_[i] = minutesSinceEpoch(e, stage_[i].t);
     states_.resize(stage_.size() * 8);
     Satellite sat;
@@ -419,9 +404,14 @@ class Fitter {
       (*out)[3 * i + 2] = m[4] - stage_[i].r[2];
     }
     // Priors: a metre per standard deviation (BTERM 0.05, AGOM 0.1 m^2/kg) about zero.
-    (*out)[stage_.size() * 3 + 0] = 0.001 * p[6] / 0.05;
-    (*out)[stage_.size() * 3 + 1] = xp_ ? 0.001 * p[7] / 0.1 : 0.0;
+    (*out)[stage_.size() * 3 + 0] = SGP4XP_PRIOR_WEIGHT_KM * e.drag / SGP4XP_PRIOR_SIGMA_BTERM;
+    (*out)[stage_.size() * 3 + 1] = xp_ ? SGP4XP_PRIOR_WEIGHT_KM * e.agom / SGP4XP_PRIOR_SIGMA_AGOM : 0.0;
     return true;
+  }
+  bool residuals(const detail::Vector& uRaw, std::vector<double>* out) {
+    detail::Vector u = uRaw;
+    clampU(&u);
+    return residualsE(fromU(u), out);
   }
   static double sumSquares(const std::vector<double>& r) {
     double s = 0;
@@ -441,7 +431,7 @@ class Fitter {
     using detail::kParams;
     const size_t m = active.size();
     std::vector<double> r0, r1;
-    clampParams(p);
+    clampU(p);
     if (!residuals(*p, &r0)) return false;
     double cost = sumSquares(r0);
     if (lastPrefitRms_ == 0) lastPrefitRms_ = std::sqrt(cost / static_cast<double>(stage_.size()));
@@ -459,7 +449,7 @@ class Fitter {
         detail::Vector q = *p;
         q[j] = (*p)[j] + stepOf(j, (*p)[j]);
         if (j == 6 || j == 7) q[j] = std::min(q[j], 0.5);
-        const double denom = asText(j, q[j]) - asText(j, (*p)[j]);
+        const double denom = q[j] - (*p)[j];
         if (!(std::fabs(denom) > 0) || !residuals(q, &r1)) {
           usable[c] = false;
           for (size_t i = 0; i < rows; ++i) J[i][c] = 0;
@@ -484,13 +474,13 @@ class Fitter {
         if (!detail::solve(M, rhs, &delta, m)) { lambda *= 10; continue; }
         detail::Vector trial = *p;
         for (size_t a = 0; a < m; ++a) if (usable[a]) trial[active[a]] += delta[a];
-        clampParams(&trial);
+        clampU(&trial);
         if (!residuals(trial, &r1)) { lambda *= 10; continue; }
         const double c1 = sumSquares(r1);
         if (c1 < cost) {
           const double rel = (cost - c1) / std::max(cost, 1e-30);
 #ifdef SGP4XP_TRACE
-          { char tb[200]; std::snprintf(tb, sizeof tb, "[win=%zu it=%d rms=%.6g lam=%.3g n=%.8f e=%.7f i=%.4f o=%.4f w=%.4f ma=%.4f b=%.5g a=%.5g]", stage_.size(), it, std::sqrt(c1 / double(stage_.size())), lambda, trial[0], trial[1], trial[2], trial[3], trial[4], trial[5], trial[6], trial[7]); trace_ += tb; }
+          { char tb[200]; std::snprintf(tb, sizeof tb, "[win=%zu it=%d rms=%.6g lam=%.3g n=%.8f af=%.7f ag=%.7f chi=%.6f psi=%.6f lam=%.4f b=%.5g a=%.5g]", stage_.size(), it, std::sqrt(c1 / double(stage_.size())), lambda, trial[0], trial[1], trial[2], trial[3], trial[4], trial[5], trial[6], trial[7]); trace_ += tb; }
 #endif
           *p = trial;
           r0 = r1;
@@ -508,59 +498,49 @@ class Fitter {
     return true;
   }
 
-  // Coordinate and pair moves on the text's lattice: the rounded set whose residuals are least.
-  detail::Vector searchLattice(detail::Vector p) {
-    clampParams(&p);
-    for (size_t j = 0; j < 8; ++j) p[j] = asText(j, p[j]);
+  // Coordinate and pair moves on the text's lattice, in the classical elements the text carries: the rounded set whose
+  // residuals are least.
+  Elements searchLattice(const Elements& start) {
+    Elements best = roundedToText(start);
     std::vector<double> r;
-    if (!residuals(p, &r)) return p;
+    if (!residualsE(best, &r)) return best;
     double cost = sumSquares(r);
     int budget = 400;
     const double steps[] = {1, 2, 3, 5, 8, 13, 21, 34, 55};
+    auto tryMove = [&](Elements candidate) {
+      if (budget-- <= 0) return false;
+      candidate = roundedToText(candidate);
+      if (!residualsE(candidate, &r)) return false;
+      const double c = sumSquares(r);
+      if (c >= cost) return false;
+      cost = c;
+      best = candidate;
+      return true;
+    };
     bool improved = true;
     while (improved && budget > 0) {
       improved = false;
-      for (size_t j : {size_t{0}, size_t{1}, size_t{2}, size_t{3}, size_t{4}, size_t{5}}) {
-        for (double s : steps) {
-          for (double sign : {1.0, -1.0}) {
-            if (budget-- <= 0) return p;
-            detail::Vector q = p;
-            q[j] = asText(j, p[j] + sign * s * quantumOf(j));
-            if (!residuals(q, &r)) continue;
-            const double c = sumSquares(r);
-            if (c < cost) { cost = c; p = q; improved = true; }
-          }
-        }
-      }
-      // argument of perigee and mean anomaly together (their sum is what a near-circular orbit sees)
       for (double s : steps) {
         for (double sign : {1.0, -1.0}) {
-          if (budget-- <= 0) return p;
-          detail::Vector q = p;
-          q[4] = asText(4, p[4] + sign * s * 1.0e-4);
-          q[5] = asText(5, p[5] - sign * s * 1.0e-4);
-          if (!residuals(q, &r)) continue;
-          const double c = sumSquares(r);
-          if (c < cost) { cost = c; p = q; improved = true; }
-        }
-      }
-      // mean motion with the mean anomaly: a later epoch's phase is n*t + M
-      for (double s : steps) {
-        for (double sign : {1.0, -1.0}) {
-          if (budget-- <= 0) return p;
-          detail::Vector q = p;
-          q[0] = asText(0, p[0] + sign * s * 1.0e-8);
-          q[5] = asText(5, p[5] - sign * s * 1.0e-4);
-          if (!residuals(q, &r)) continue;
-          const double c = sumSquares(r);
-          if (c < cost) { cost = c; p = q; improved = true; }
+          Elements c;
+          c = best; c.meanMotion += sign * s * 1.0e-8; improved |= tryMove(c);
+          c = best; c.eccentricity = std::max(0.0, c.eccentricity + sign * s * 1.0e-7); improved |= tryMove(c);
+          c = best; c.inclination += sign * s * 1.0e-4; improved |= tryMove(c);
+          c = best; c.raan += sign * s * 1.0e-4; improved |= tryMove(c);
+          c = best; c.argPerigee += sign * s * 1.0e-4; improved |= tryMove(c);
+          c = best; c.meanAnomaly += sign * s * 1.0e-4; improved |= tryMove(c);
+          // argument of perigee and mean anomaly together (their sum is what a near-circular orbit sees)
+          c = best; c.argPerigee += sign * s * 1.0e-4; c.meanAnomaly -= sign * s * 1.0e-4; improved |= tryMove(c);
+          // mean motion with the mean anomaly: a later epoch's phase is n*t + M
+          c = best; c.meanMotion += sign * s * 1.0e-8; c.meanAnomaly -= sign * s * 1.0e-4; improved |= tryMove(c);
         }
       }
     }
-    return p;
+    return best;
   }
 
   bool xp_;
+  size_t maxStates_;
   Elements elements_;
   Instant elementsEpoch_;
   std::vector<Sample> stage_;

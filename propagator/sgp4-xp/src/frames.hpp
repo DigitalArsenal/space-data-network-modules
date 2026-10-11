@@ -1,8 +1,9 @@
 // propagator/sgp4-xp: the axes. The library works in TEME; ephemerides come in inertial and Earth-fixed axes.
 //
 // One chain, as propagator/sgp4 and analysis/epoch-state have it: foundation/frames' axis engine over the vendored
-// ERFA (IAU 2006/2000A precession-nutation, the equation of the equinoxes for TEME). GCRF, ICRF, J2000, J2000A and
-// EME2000 are the same axes here: the frame bias between J2000 and GCRF is 23 mas, 0.8 m at low Earth orbit.
+// ERFA (IAU 2006/2000A precession-nutation, the equation of the equinoxes for TEME). GCRF, ICRF and J2000A are
+// the same axes; J2000 and EME2000 are the mean equator and equinox of J2000, which differ from GCRF by the frame
+// bias (23 mas, 0.8 m at low Earth orbit), as analysis/gp-error-model takes them.
 // Earth-fixed axes (ITRF, WGS84, ECEF) rotate by the CIO-based IAU 2006/2000A chain with the Earth orientation
 // supplied; without it UT1 = UTC and the pole is at its mean position, which turns the whole orbit about the Earth's
 // axis by a constant angle and so cannot be told from a different node by a fit.
@@ -13,13 +14,11 @@
 #include <cstdint>
 #include <vector>
 
-#include "ussf.hpp"
+#include "engine.hpp"
 
 namespace sgp4xp {
 
 namespace fr = sdn::frames;
-
-enum class Frame : uint8_t { Teme, Gcrf, Itrf };
 
 // Earth orientation by MJD, linearly interpolated, held at the ends.
 struct EopRow {
@@ -84,15 +83,17 @@ inline bool positionToTeme(Frame frame, const Instant& t, const EopTable& eop, c
   if (!frameEpoch(t, orientation, &epoch)) return false;
   fr::Vec3 v{r[0], r[1], r[2]};
   if (frame == Frame::Itrf) v = fr::apply(fr::transpose(fr::gcrfToItrf(epoch, orientation)), v);
+  if (frame == Frame::Eme2000) v = fr::apply(fr::transpose(fr::gcrfToMj2000Eq(epoch)), v);
   const fr::Vec3 teme = fr::apply(fr::gcrfToTeme(epoch), v);
   out[0] = teme.x; out[1] = teme.y; out[2] = teme.z;
   return finite3(teme);
 }
 
-// A TEME state (km, km/s) in GCRF: R = gcrfToTeme at TT, its rate by a +/-600 s central difference (the shortest
-// nutation periods are days, so the difference is exact to double rounding), r_g = R' r_t, v_g = R' (v_t - Rdot r_g).
+// A TEME state (km, km/s) in GCRF (or in EME2000, the frame bias further): R = gcrfToTeme at TT, its rate by a +/-600 s
+// central difference (the shortest nutation periods are days, so the difference is exact to double rounding),
+// r_g = R' r_t, v_g = R' (v_t - Rdot r_g).
 inline bool stateTemeToGcrf(const Instant& t, const double rTeme[3], const double vTeme[3], double rGcrf[3],
-                            double vGcrf[3]) {
+                            double vGcrf[3], bool eme2000 = false) {
   constexpr double kHalfStepSeconds = 600.0;
   fr::EarthOrientation none;
   fr::Epoch epoch;
@@ -108,9 +109,15 @@ inline bool stateTemeToGcrf(const Instant& t, const double rTeme[3], const doubl
   const fr::Mat3 Rt = fr::transpose(R);
   const fr::Vec3 r = fr::apply(Rt, fr::Vec3{rTeme[0], rTeme[1], rTeme[2]});
   const fr::Vec3 v = fr::apply(Rt, fr::sub(fr::Vec3{vTeme[0], vTeme[1], vTeme[2]}, fr::apply(Rdot, r)));
-  rGcrf[0] = r.x; rGcrf[1] = r.y; rGcrf[2] = r.z;
-  vGcrf[0] = v.x; vGcrf[1] = v.y; vGcrf[2] = v.z;
-  return finite3(r) && finite3(v);
+  fr::Vec3 rr = r, vv = v;
+  if (eme2000) {
+    const fr::Mat3 bias = fr::gcrfToMj2000Eq(epoch);
+    rr = fr::apply(bias, r);
+    vv = fr::apply(bias, v);
+  }
+  rGcrf[0] = rr.x; rGcrf[1] = rr.y; rGcrf[2] = rr.z;
+  vGcrf[0] = vv.x; vGcrf[1] = vv.y; vGcrf[2] = vv.z;
+  return finite3(rr) && finite3(vv);
 }
 
 // Greenwich mean sidereal time (IAU 1982, UT1 = UTC) in radians, from a UTC Julian date: the rotation the propagator
