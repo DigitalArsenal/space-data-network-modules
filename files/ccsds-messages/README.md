@@ -36,14 +36,21 @@ space is `<`); a descriptor that names the other one is `format-mismatch`.
 **`write_<m>`** takes the record and an optional `descriptor` input whose `FORMAT` picks
 the syntax (KVN when it is absent) and gives the same frame back.
 
-**Refusals are named, never traps.** `wrong-message-type`, `bad-kvn`, `bad-xml`,
-`bad-value` (keyword, text and line), `bad-version`, `multiple-messages` (one message per
-file; an `<ndm>` wrapper holding one message of the kind asked for is read),
-`unknown-keyword` and `unknown-structure` (something in the message has no place in it),
-`duplicate-keyword`, `missing-keyword` (a keyword the standard makes mandatory), each
-naming the keyword and the line. A write is refused (`bad-record`) when the record lacks
-what the message must state, and when it holds states only in a compact form
+**Refusals are named, never traps.** `bad-encoding` (not UTF-8 text, or a control
+character), `wrong-message-type`, `bad-kvn`, `bad-xml`, `bad-value` (keyword, text and line),
+`multiple-messages` (one message per file; an `<ndm>` wrapper holding one message of the
+kind asked for is read), `unknown-keyword` and `unknown-structure` (something in the message
+has no place in it), `duplicate-keyword`, `missing-keyword` (a keyword the standard makes
+mandatory, or none of a set of alternatives), `conflicting-keyword` (alternatives the
+standard allows one of, stated together) and `inconsistent-message`, each naming the
+keyword and the line. A write is refused (`bad-record`) when the record lacks what the
+message must state or holds what the syntax cannot (a USER_DEFINED name that is not a KVN
+keyword, white space in a KVN data line), and when it holds states only in a compact form
 (`compact-form-needs-time-math`). Nothing is completed with a guess.
+
+**The version a file spells** (`2.0`, or TraCSS's `502.0-B-3`) is the descriptor's
+`FORMAT_VERSION`; the record, and so the message written from it, states the version of the
+Blue Book the module implements, which makes writing a fixed point for any source.
 
 ## How a message is bound to its record
 
@@ -92,7 +99,10 @@ so, without them). `tests/ndm_real_data.test.mjs` does the same for messages pro
 wrote: 42 OCMs of the TraCSS conjunction assessment verification dataset and NASA's public
 ISS OEM all read, write and read back as the same record, and their XML is valid except for
 the TraCSS value `TRAJ_BASIS = OPERATIONAL`, which the standard's enumeration does not have
-(the module keeps it as the file wrote it). `tests/parity.mjs` runs every method in
+(the module keeps it as the file wrote it). `tests/ndm_fuzz.test.mjs` mutates every fixture
+thousands of times and holds the engine, built with the address and undefined-behaviour
+sanitizers, to one rule: refused by name, or read, written in both syntaxes and read back as the
+very same record. `tests/parity.mjs` runs every method in
 browser, WasmEdge and Docker WasmEdge through the SDK parity harness: byte-identical
 outputs and exit classes (`conformance/parity.json`).
 
