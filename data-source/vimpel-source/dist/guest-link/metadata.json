@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "single-thread",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e76696d70656c2d736f75726365_",
+  "methodSymbols": {
+    "normalize_orbits": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e76696d70656c2d736f75726365_normalize_orbits",
+    "read_ephemeris": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e76696d70656c2d736f75726365_read_ephemeris",
+    "read_datefirst": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e76696d70656c2d736f75726365_read_datefirst"
+  }
+}

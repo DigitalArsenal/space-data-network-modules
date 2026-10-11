@@ -85,7 +85,7 @@ of E14's horizons.
 
 | | Modules |
 | --- | --- |
-| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration) |
+| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration) |
 | Cannot yet | `celestrak-supgp` (pull-only), `gps-source` (almanac elements, not SGP4), `oneweb-source` (the LTEF is not decoded): the reason and the task are in the file |
 | Describe or identify | `celestrak-request`, `ephemeris-source`, `catalog-source`, `spk-source` |
 
