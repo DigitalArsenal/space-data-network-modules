@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<acm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_ACM_VERS" version="2.0">
+  <header>
+    <COMMENT>Synthetic ACM in the layout of CCSDS 504.0-B-2 figures G-6 to G-9.</COMMENT>
+    <COMMENT>Supplemental data</COMMENT>
+    <CLASSIFICATION>UNCLASSIFIED</CLASSIFICATION>
+    <CREATION_DATE>2026-10-11T00:00:00</CREATION_DATE>
+    <ORIGINATOR>EXAMPLE-AGENCY</ORIGINATOR>
+    <MESSAGE_ID>A7015Z7</MESSAGE_ID>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>EXAMPLE LRO</OBJECT_NAME>
+        <INTERNATIONAL_DESIGNATOR>2009-031A</INTERNATIONAL_DESIGNATOR>
+        <CATALOG_NAME>SATCAT</CATALOG_NAME>
+        <OBJECT_DESIGNATOR>35315</OBJECT_DESIGNATOR>
+        <ORIGINATOR_POC>Ms. Rodgers</ORIGINATOR_POC>
+        <ORIGINATOR_EMAIL>rodgers@example.org</ORIGINATOR_EMAIL>
+        <CENTER_NAME>MOON</CENTER_NAME>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <EPOCH_TZERO>2026-10-11T00:00:00.0</EPOCH_TZERO>
+        <ACM_DATA_ELEMENTS>ATT, PHYS, COV, MAN, AD</ACM_DATA_ELEMENTS>
+        <START_TIME>2026-10-11T00:00:00.0</START_TIME>
+        <STOP_TIME>2026-10-11T00:10:00.0</STOP_TIME>
+        <TAIMUTC_AT_TZERO units="s">37.0</TAIMUTC_AT_TZERO>
+      </metadata>
+      <data>
+        <att>
+          <COMMENT>OBC Attitude and Bias during momentum management maneuver</COMMENT>
+          <ATT_ID>ATT_20261011</ATT_ID>
+          <ATT_BASIS>DETERMINED_OBC</ATT_BASIS>
+          <ATT_BASIS_ID>AD_1985</ATT_BASIS_ID>
+          <REF_FRAME_A>J2000</REF_FRAME_A>
+          <REF_FRAME_B>SC_BODY_1</REF_FRAME_B>
+          <NUMBER_STATES>7</NUMBER_STATES>
+          <ATT_TYPE>QUATERNION</ATT_TYPE>
+          <RATE_TYPE>GYRO_BIAS</RATE_TYPE>
+          <attLine>0.000000 0.1153 -0.1424 0.8704 0.4571 2.271e-06 -4.405e-06 -3.785e-06</attLine>
+          <attLine>2.000000 0.1153 -0.1424 0.8704 0.4571 2.271e-06 -4.405e-06 -3.785e-06</attLine>
+          <attLine>99.80183 0.1017 -0.1332 0.8806 0.4433 2.587e-06 8.769e-06 5.436e-06</attLine>
+          <attLine>599.80275 0.1152 -0.1423 0.8704 0.4571 2.48e-06 -4.35e-06 -3.779e-06</attLine>
+        </att>
+        <att>
+          <REF_FRAME_A>J2000</REF_FRAME_A>
+          <REF_FRAME_B>SC_BODY_1</REF_FRAME_B>
+          <NUMBER_STATES>3</NUMBER_STATES>
+          <ATT_TYPE>EULER_ANGLES</ATT_TYPE>
+          <EULER_ROT_SEQ>ZXZ</EULER_ROT_SEQ>
+          <attLine>0.0 10.5 20.25 -30.125</attLine>
+          <attLine>1.0 10.6 20.35 -30.225</attLine>
+        </att>
+        <phys>
+          <COMMENT>Spacecraft Physical Parameters</COMMENT>
+          <DRAG_COEFF>2.2</DRAG_COEFF>
+          <WET_MASS units="kg">1916.0</WET_MASS>
+          <CP_REF_FRAME>SC_BODY_1</CP_REF_FRAME>
+          <CP units="m">0.04 -0.78 -0.023</CP>
+          <INERTIA_REF_FRAME>SC_BODY_1</INERTIA_REF_FRAME>
+          <IXX units="kg*m**2">752.0</IXX>
+          <IYY units="kg*m**2">1305.0</IYY>
+          <IZZ units="kg*m**2">1490.0</IZZ>
+          <IXY units="kg*m**2">81.1</IXY>
+          <IXZ units="kg*m**2">-25.7</IXZ>
+          <IYZ units="kg*m**2">74.1</IYZ>
+        </phys>
+        <cov>
+          <COMMENT>Diagonal Covariance for LRO Onboard Kalman Filter</COMMENT>
+          <COV_BASIS>DETERMINED_OBC</COV_BASIS>
+          <COV_REF_FRAME>SC_BODY_1</COV_REF_FRAME>
+          <COV_TYPE>ANGLE_GYROBIAS</COV_TYPE>
+          <covLine>0.0 6.74e-11 8.1e-11 9.22e-11 1.11e-15 1.11e-15 1.12e-15</covLine>
+          <covLine>1.096694 6.74e-11 8.1e-11 9.22e-11 1.11e-15 1.11e-15 1.12e-15</covLine>
+          <covLine>59.896697 6.74e-11 8.1e-11 9.22e-11 1.11e-15 1.11e-15 1.12e-15</covLine>
+        </cov>
+        <man>
+          <COMMENT>Momentum management maneuver</COMMENT>
+          <MAN_PURPOSE>MOM_DESAT</MAN_PURPOSE>
+          <MAN_BEGIN_TIME units="s">100.0</MAN_BEGIN_TIME>
+          <MAN_DURATION units="s">450.0</MAN_DURATION>
+          <ACTUATOR_USED>ATT-THRUSTER</ACTUATOR_USED>
+          <TARGET_MOMENTUM units="N*m*s">1.3 -16.4 -11.35</TARGET_MOMENTUM>
+          <TARGET_MOM_FRAME>J2000</TARGET_MOM_FRAME>
+        </man>
+        <ad>
+          <COMMENT>LRO Onboard Filter, A Multiplicative Extended Kalman Filter</COMMENT>
+          <AD_METHOD>EKF</AD_METHOD>
+          <ATTITUDE_SOURCE>OBC</ATTITUDE_SOURCE>
+          <NUMBER_STATES>7</NUMBER_STATES>
+          <ATTITUDE_STATES>QUATERNION</ATTITUDE_STATES>
+          <COV_TYPE>ANGLE_GYROBIAS</COV_TYPE>
+          <REF_FRAME_A>EME2000</REF_FRAME_A>
+          <REF_FRAME_B>SC_BODY_1</REF_FRAME_B>
+          <RATE_STATES>GYRO_BIAS</RATE_STATES>
+          <SIGMA_U units="deg/s**1.5">0.0001</SIGMA_U>
+          <sensorData>
+            <SENSOR_NUMBER>2</SENSOR_NUMBER>
+            <SENSOR_USED>AST</SENSOR_USED>
+            <NUMBER_SENSOR_NOISE_COVARIANCE>3</NUMBER_SENSOR_NOISE_COVARIANCE>
+            <SENSOR_NOISE_STDDEV units="deg">0.003 0.003 0.01</SENSOR_NOISE_STDDEV>
+            <SENSOR_FREQUENCY units="Hz">5.0</SENSOR_FREQUENCY>
+          </sensorData>
+          <sensorData>
+            <SENSOR_NUMBER>7</SENSOR_NUMBER>
+            <SENSOR_USED>IMU</SENSOR_USED>
+          </sensorData>
+        </ad>
+        <user>
+          <USER_DEFINED parameter="CONSOLE_POC">MAXWELL RAFERTY</USER_DEFINED>
+        </user>
+      </data>
+    </segment>
+  </body>
+</acm>

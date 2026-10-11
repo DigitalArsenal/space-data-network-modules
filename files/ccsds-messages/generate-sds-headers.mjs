@@ -29,8 +29,28 @@ const standardsRoot = path.join(
 );
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
-// Families this module references directly, plus their transitive includes.
-export const SCHEMA_FAMILIES = ["RFM", "AEM", "TDM", "NCD"];
+// The records this module reads and writes: the ten CCSDS messages and the $NCD
+// descriptor that frames them. Their transitive includes (RFM, TIM, CAT, ...) are
+// generated with them, in dependency order, by schemaFamilies() below.
+export const ROOT_FAMILIES = [
+  "NCD", "OMM", "OEM", "OPM", "OCM", "CDM", "TDM", "AEM", "APM", "ACM", "RDM",
+];
+
+/** The roots and everything they include, each family after the families it includes. */
+export function schemaFamilies(roots = ROOT_FAMILIES) {
+  const ordered = [];
+  const visit = (family) => {
+    if (ordered.includes(family)) return;
+    const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`${family} schema not found in the installed spacedatastandards.org`);
+    }
+    for (const included of schemaIncludeFamilies(schemaPath)) visit(included);
+    ordered.push(family);
+  };
+  roots.forEach(visit);
+  return ordered;
+}
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
@@ -100,7 +120,8 @@ export async function generateSdsHeaders() {
   }
 
   const emitted = {};
-  for (const family of SCHEMA_FAMILIES) {
+  const families = schemaFamilies();
+  for (const family of families) {
     const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     if (!fs.existsSync(schemaPath)) {
       throw new Error(`${family} schema not found in spacedatastandards.org@${version}`);
@@ -129,14 +150,14 @@ export async function generateSdsHeaders() {
     fs.writeFileSync(path.join(outDir, `${family}_generated.h`), header);
     emitted[family] = header;
   }
-  return { version, headers: emitted, outDir };
+  return { version, families, headers: emitted, outDir };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   generateSdsHeaders()
     .then(({ version }) => {
       console.log(
-        `Generated SDS headers ${SCHEMA_FAMILIES.join(", ")} from spacedatastandards.org@${version}`,
+        `Generated SDS headers ${schemaFamilies().join(", ")} from spacedatastandards.org@${version}`,
       );
     })
     .catch((error) => {

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<omm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_OMM_VERS" version="3.0">
+  <header>
+    <CREATION_DATE>2026-10-11T14:07:31</CREATION_DATE>
+    <ORIGINATOR>SDN-TEST</ORIGINATOR>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>EXAMPLESAT 2</OBJECT_NAME>
+        <OBJECT_ID>2024-100B</OBJECT_ID>
+        <CENTER_NAME>EARTH</CENTER_NAME>
+        <REF_FRAME>TEME</REF_FRAME>
+        <REF_FRAME_EPOCH>2026-10-11T12:00:00.000</REF_FRAME_EPOCH>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <MEAN_ELEMENT_THEORY>SGP4-XP</MEAN_ELEMENT_THEORY>
+      </metadata>
+      <data>
+        <meanElements>
+          <EPOCH>2026-10-11T12:00:00.000000</EPOCH>
+          <SEMI_MAJOR_AXIS units="km">7000.5</SEMI_MAJOR_AXIS>
+          <ECCENTRICITY>0.0012</ECCENTRICITY>
+          <INCLINATION units="deg">97.4</INCLINATION>
+          <RA_OF_ASC_NODE units="deg">10.5</RA_OF_ASC_NODE>
+          <ARG_OF_PERICENTER units="deg">20.5</ARG_OF_PERICENTER>
+          <MEAN_ANOMALY units="deg">30.5</MEAN_ANOMALY>
+          <GM units="km**3/s**2">398600.8</GM>
+        </meanElements>
+        <tleParameters>
+          <CLASSIFICATION_TYPE>U</CLASSIFICATION_TYPE>
+          <NORAD_CAT_ID>100000</NORAD_CAT_ID>
+          <ELEMENT_SET_NO>999</ELEMENT_SET_NO>
+          <REV_AT_EPOCH>12</REV_AT_EPOCH>
+          <BTERM units="m**2/kg">0.02</BTERM>
+          <MEAN_MOTION_DOT units="rev/day**2">0.0</MEAN_MOTION_DOT>
+          <AGOM units="m**2/kg">0.011</AGOM>
+        </tleParameters>
+      </data>
+    </segment>
+  </body>
+</omm>

@@ -1,10 +1,134 @@
 # files/ccsds-messages
 
-CCSDS **AEM** (Attitude Ephemeris Message) and **TDM** (Tracking Data Message)
-readers, writers and SDS record projections, measured against example messages in
-the layouts of the published Blue Book examples.
+The ten CCSDS navigation data messages, each read from and written to keyword-value
+notation (KVN) and NDM/XML, to and from its SDS record. One space data module: bytes in,
+bytes out, no capabilities, one `dist/isomorphic/module.wasm` that imports nothing the SDK
+browser harness does not provide.
 
-## The shape, and why it is this shape
+| Message | Standard | Record | Port | Methods |
+| --- | --- | --- | --- | --- |
+| OMM Orbit Mean-Elements | 502.0-B-3 | `$OMM` | `elements` | `read_omm`, `write_omm` |
+| OEM Orbit Ephemeris | 502.0-B-3 | `$OEM` | `ephemeris` | `read_oem`, `write_oem` |
+| OPM Orbit Parameter | 502.0-B-3 | `$OPM` | `state` | `read_opm`, `write_opm` |
+| OCM Orbit Comprehensive | 502.0-B-3 | `$OCM` | `orbit` | `read_ocm`, `write_ocm` |
+| CDM Conjunction Data | 508.0-B-1 | `$CDM` | `conjunction` | `read_cdm`, `write_cdm` |
+| RDM Re-entry Data | 508.1-B-1 | `$RDM` | `reentry` | `read_rdm`, `write_rdm` |
+| AEM Attitude Ephemeris | 504.0-B-2 | `$AEM` | `attitude` | `read_aem`, `write_aem` |
+| APM Attitude Parameter | 504.0-B-2 | `$APM` | `attitude_state` | `read_apm`, `write_apm` |
+| ACM Attitude Comprehensive | 504.0-B-2 | `$ACM` | `attitude_data` | `read_acm`, `write_acm` |
+| TDM Tracking Data | 503.0-B-2 Cor.1 | `$TDM` | `tracking` | `read_tdm`, `write_tdm` |
+
+Built against spacedatastandards.org **1.245.0**: `$OMM` 2.0.4, `$OEM` 1.1.5, `$OPM` 0.0.3,
+`$OCM` 2.1.7, `$CDM` 2.0.3, `$APM` 0.0.3, `$ACM` 0.0.4, `$RDM` 0.0.4, `$AEM` 2.0.2, `$TDM` 2.0.4,
+`$NCD` 0.0.2.
+
+## The contract
+
+**The frame.** `$NCD` describes a file and does not carry it, and the SDK refuses a port
+that accepts any FlatBuffer, so a message travels as one frame on the `message` port:
+`[u32le n][$NCD, n bytes][the message's exact bytes]`. When the descriptor declares
+`SOURCE_BYTE_LENGTH` or `SOURCE_SHA256` they are checked against the bytes behind it
+(`descriptor-length-mismatch`, `descriptor-hash-mismatch`).
+
+**`read_<m>`** takes the frame and gives the record on the message's port and a
+`descriptor` (`$NCD`): the syntax read (`FORMAT`, one of `CCSDS_<M>_KVN` and
+`CCSDS_<M>_XML`), the version the file declared, originator, creation date, header
+comments, the time system and frame its metadata named, and the SHA-256 of the bytes
+read. The syntax is read from the bytes (XML if the first character that is not white
+space is `<`); a descriptor that names the other one is `format-mismatch`.
+
+**`write_<m>`** takes the record and an optional `descriptor` input whose `FORMAT` picks
+the syntax (KVN when it is absent) and gives the same frame back.
+
+**Refusals are named, never traps.** `bad-encoding` (not UTF-8 text, or a control
+character), `wrong-message-type`, `bad-kvn`, `bad-xml`, `bad-value` (keyword, text and line),
+`multiple-messages` (one message per file; an `<ndm>` wrapper holding one message of the
+kind asked for is read), `unknown-keyword` and `unknown-structure` (something in the message
+has no place in it), `duplicate-keyword`, `missing-keyword` (a keyword the standard makes
+mandatory, or none of a set of alternatives), `conflicting-keyword` (alternatives the
+standard allows one of, stated together) and `inconsistent-message`, each naming the
+keyword and the line. A write is refused (`bad-record`) when the record lacks what the
+message must state or holds what the syntax cannot (a USER_DEFINED name that is not a KVN
+keyword, white space in a KVN data line), and when it holds states only in a compact form
+(`compact-form-needs-time-math`). Nothing is completed with a guess.
+
+**The version a file spells** (`2.0`, or TraCSS's `502.0-B-3`) is the descriptor's
+`FORMAT_VERSION`; the record, and so the message written from it, states the version of the
+Blue Book the module implements, which makes writing a fixed point for any source.
+
+## How a message is bound to its record
+
+KVN has no hierarchy and NDM/XML has one; the two are the same message. Both are read into
+one syntax-neutral tree shaped like the XML, and a **Spec** per message (`src/ndm_<m>.hpp`:
+sections and keywords, each keyword bound by member pointer to a field of the generated
+object API, `src/generated/sds/`) fills the record from the tree and the tree from the
+record. KVN is placed by the Spec (a keyword belongs to the open section or to the first
+flat child that has it; markers open the blocks that have them; the rest is data lines),
+NDM/XML is read and written by pugixml 1.15 (MIT, `third_party/pugixml/`).
+
+- **Nothing is dropped.** The record has a field for everything the Blue Books define; a
+  keyword with no place, a keyword stated twice and a mandatory keyword left out are
+  refused rather than read into a record that differs from the message.
+- **Layouts are the books'.** META_START/META_STOP delimit the OEM and OCM metadata only;
+  an OMM or OPM is read with or without them and written without. An OEM segment has one
+  COVARIANCE_START ... COVARIANCE_STOP around all its matrices. A comment XML wrapped is
+  its lines, a wrapped value is one line, so the XML and the KVN of one message are one
+  record.
+- **Text is kept.** Epochs are the text the file wrote; no time arithmetic is done.
+  Numbers are written as the shortest decimal that reads back to the same double, so 17
+  significant digits survive KVN, the record and XML. The one unit change, the CDM's metres
+  against the record's kilometres, moves the decimal point on the digits.
+- **What a record holds once.** Records keep one `COMMENT` field per section; the comments
+  of a message are joined in it and written in the header. A zero that is a field's default
+  cannot be told from an absent keyword (`EPHEMERIS_TYPE = 0` is left out); optional reals
+  the schema defaults to NaN carry "not stated", so a stated zero survives.
+- **OCM.** The trajectory, covariance and maneuver blocks are the record's lists; the first
+  trajectory and covariance block are also its single-trajectory fields (`STATE_DATA`,
+  `COVARIANCE_DATA` ...) that `analysis/od` and the VCM adapter read, and a record that
+  states only those is written as one block.
+- **XML.** Written without namespaces, `xsi:noNamespaceSchemaLocation` the NDM/XML 4.0.0
+  master schema, in the order of the schema; read with or without namespace prefixes.
+
+## Measured
+
+`tests/ndm_engine.test.mjs` builds the engine natively and round-trips every fixture
+through KVN and XML (the record the same bytes each way, writing a fixed point).
+`tests/ndm_module.test.mjs` invokes the compiled module through the SDK browser harness:
+every method on every message, KVN and XML twin one record, the record decoded with
+flatc against the SDS schema, the descriptor's facts, the refusals above.
+`tests/ndm_xsd.test.mjs` validates every NDM/XML twin and the XML the module writes now
+against the NDM/XML 4.0.0 schemas with `xmllint` (they are CCSDS's and not redistributed:
+`$SDN_MODULES_PRIVATE_FIXTURES/files/ccsds-messages/fixtures/xsd/`; the test skips, saying
+so, without them). `tests/ndm_real_data.test.mjs` does the same for messages producers
+wrote: 42 OCMs of the TraCSS conjunction assessment verification dataset and NASA's public
+ISS OEM all read, write and read back as the same record, and their XML is valid except for
+the TraCSS value `TRAJ_BASIS = OPERATIONAL`, which the standard's enumeration does not have
+(the module keeps it as the file wrote it). `tests/ndm_fuzz.test.mjs` mutates every fixture
+thousands of times and holds the engine, built with the address and undefined-behaviour
+sanitizers, to one rule: refused by name, or read, written in both syntaxes and read back as the
+very same record. `tests/parity.mjs` runs every method in
+browser, WasmEdge and Docker WasmEdge through the SDK parity harness: byte-identical
+outputs and exit classes (`conformance/parity.json`).
+
+Fixtures are synthetic (`fixtures/PROVENANCE.md`): the books state no terms for
+reproducing their annex examples. Against the books' own annex examples, extracted from the
+PDFs and kept on the maintainer's machine, 50 of the 66 messages read, write as KVN and XML,
+read back to the same record and, in XML, validate against the schemas as printed. Of the
+other 16, six are cut short or run together by the extraction, one is an NDM holding two OMMs
+(refused: one message per file), three TDM examples state epochs without seconds (which the
+schema's time pattern rejects and the module does not complete: an epoch is the file's
+text), and six are slips in the books themselves, which the module refuses by name: four
+OCM figures that omit keywords the standard marks mandatory (`TRAJ_TYPE`, `TIME_SYSTEM`,
+`CENTER_NAME`, `DC_TYPE`, `COV_ORDERING`), an ACM figure that spells `SENSOR_USED_`, and an
+AEM figure whose XML is not well-formed. With those slips corrected, they pass too.
+
+## AEM and TDM: the keyword-document layers
+
+AEM and TDM keep the layers below; their NDM/XML is read and written over the same
+keyword documents (`src/ndm_adm_xml.hpp`), so a keyword their record cannot hold is
+declared in the port description rather than refused.
+
+### The shape, and why it is this shape
 
 The acceptance is *"every KVN keyword round-trips exactly"*. That property
 belongs to the **document**, not to any record it is projected into — the
