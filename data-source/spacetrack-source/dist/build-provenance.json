@@ -1,0 +1,23 @@
+{
+  "spacedatastandards": "1.245.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "MET",
+    "OMM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT"
+  ],
+  "commonHeaders": [
+    "alpha5.hpp",
+    "civil_time.hpp",
+    "flat_json_records.hpp"
+  ],
+  "sources": [
+    "src/spacetrack_source.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "11876910f71b51e1805cd9a80b7aaad168d6039594753c2053a06669c62ec33a"
+}

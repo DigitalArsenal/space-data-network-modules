@@ -1,0 +1,196 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
+  "name": "Space-Track Source",
+  "version": "0.1.0",
+  "description": "Parse Space-Track GP and GP-history JSON (omm-gp-json, Alpha-5 catalog numbers read) into canonical SDS OMM records and SATCAT JSON into CAT records. Retrieval, credentials, the request rate and storage belong to the SDN host flow.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "parse_gp",
+      "displayName": "Read Space-Track GP or GP history as OMM",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_satcat",
+      "displayName": "Read Space-Track SATCAT as CAT",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "Canonical size-prefixed CAT records in input order, one per cataloged object."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical size-prefixed CAT records in input order, one per cataloged object."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "spacetrack-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method reads one complete bounded provider response in input order and writes canonical records and one report; the host parallelizes independent responses and this parser creates no threads."
+  }
+}
