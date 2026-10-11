@@ -64,6 +64,11 @@ const cases = [
   { id: 'pair-statistics', request: { methodId: 'pair_statistics', inputs: [json('pairs', { pairs: [
     { id: 'a', predicted: { position: [7000e3, 0, 0], velocity: [0, 7500, 0], covariance: [100, 0, 10000, 0, 0, 25], covarianceAxes: 'RTN' },
       truth: { position: [7000e3 - 10, 200, -5], velocity: [0, 7500, 0], covariance: [1, 0, 1, 0, 0, 1], covarianceAxes: 'RTN' } }] })] } },
+  { id: 'pair-statistics-samples', request: { methodId: 'pair_statistics', inputs: [json('pairs', { pairs: [{ id: 's',
+    predicted: { epoch: '2026-10-10T12:04:30.000', interpolationDegree: 5, covarianceAxes: 'RTN', samples: Array.from({ length: 8 }, (_, i) => ({
+      epoch: new Date(Date.UTC(2026, 9, 10, 12, i)).toISOString().replace('Z', ''), position: [7e6 - 50 * i * i, 7.5e3 * 60 * i, 1e3 * i], velocity: [-100 * i / 60, 7.5e3, 1e3 / 60],
+      covariance: [100 + i, 0, 400 + 2 * i, 0, 0, 25] })) },
+    truth: { position: [7e6 - 50 * 4.5 * 4.5, 7.5e3 * 270, 4.5e3], velocity: [-7.5, 7.5e3, 1e3 / 60] } }] })] } },
   { id: 'fit-calibration', request: { methodId: 'fit_calibration', inputs: [json('samples', { samples: [[1, 1, 1], [2, 1, 1], [3, 0, 0], [0, 0, 0], [2, 2, 2]]
     .map((e, i) => ({ stratum: 's', object: i % 3, error: e, covariance: [1, 0, 1, 0, 0, 1] })) }), json('options', { method: 'axes-mle' })] } },
   { id: 'calibrate-covariance-sets', request: { methodId: 'calibrate_covariance', inputs: [

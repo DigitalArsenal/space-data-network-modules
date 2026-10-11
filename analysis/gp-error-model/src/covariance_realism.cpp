@@ -3,7 +3,8 @@
 // RTN axes, positive-definite test and 6x6 algebra it uses. Units are SI throughout (m, m/s; m^2, m^2/s, m^2/s^2)
 // unless a field says otherwise.
 //
-// pair_statistics       a predicted and a truth state, each with a covariance (RTN or inertial axes): the error in
+// pair_statistics       a predicted and a truth state, each with a covariance (RTN or inertial axes), or ephemeris samples
+//                       interpolated at an epoch (Lagrange through the nearest degree + 1, covariance linear): the error in
 //                       the RTN axes of the predicted state (or the truth's), both position covariances in those
 //                       axes, d^2 against the combined covariance and against the predicted one alone, and the
 //                       per-axis standardized errors. Operator file pairs, HPOP samples, element-set samples.
@@ -150,6 +151,63 @@ bool interpolate_bins(const std::vector<std::pair<double, double>>& bins, const 
   return false;
 }
 
+
+// A side given as ephemeris samples and an epoch: position and velocity by Lagrange interpolation through the
+// degree + 1 samples nearest the epoch (the container's rule, e.g. a CCSDS OEM's INTERPOLATION_DEGREE), the
+// covariance linear between the two samples that bracket it (a sample's own at its epoch). No extrapolation:
+// an epoch outside the samples is reported, not guessed.
+std::string interpolate_side(const nlohmann::json& side, nlohmann::json* out) {
+  Instant t;
+  if (!parse_instant(json_string(side, "epoch"), &t)) return "a side with samples needs epoch (ISO 8601 UTC).";
+  const nlohmann::json& samples = side["samples"];
+  if (!samples.is_array() || samples.size() < 2) return "samples is an array of at least two {epoch, position, velocity, covariance?}.";
+  const int degree = static_cast<int>(json_number(side, "interpolationDegree", 5));
+  if (degree < 1) return "interpolationDegree is at least 1.";
+  const size_t n = samples.size();
+  std::vector<double> dt(n), pv(6 * n);
+  for (size_t i = 0; i < n; ++i) {
+    Instant ti;
+    if (!samples[i].is_object() || !parse_instant(json_string(samples[i], "epoch"), &ti) || !vec(samples[i]["position"], 3, &pv[6 * i]) ||
+        !vec(samples[i]["velocity"], 3, &pv[6 * i + 3]))
+      return "each sample needs epoch, position [3] and velocity [3].";
+    dt[i] = seconds_between(t, ti);
+    if (i && !(dt[i] > dt[i - 1])) return "samples are in strictly increasing time order.";
+  }
+  if (dt[0] > 1e-6 || dt[n - 1] < -1e-6) return "outside";
+  size_t hi = 0;
+  while (hi < n && dt[hi] < 0) ++hi;  // first sample at or after the epoch
+  const size_t m = std::min(n, static_cast<size_t>(degree) + 1);
+  size_t start = hi >= m / 2 ? hi - m / 2 : 0;
+  if (start + m > n) start = n - m;
+  std::vector<double> x(6, 0.0);
+  for (size_t j = start; j < start + m; ++j) {
+    double w = 1;
+    for (size_t k = start; k < start + m; ++k)
+      if (k != j) w *= (0 - dt[k]) / (dt[j] - dt[k]);
+    for (int c = 0; c < 6; ++c) x[c] += w * pv[6 * j + c];
+  }
+  (*out)["position"] = std::vector<double>(x.begin(), x.begin() + 3);
+  (*out)["velocity"] = std::vector<double>(x.begin() + 3, x.end());
+  (*out)["covarianceAxes"] = side.value("covarianceAxes", std::string("RTN"));
+  const size_t a = hi < n && std::fabs(dt[hi]) <= 1e-6 ? hi : (hi == 0 ? 0 : hi - 1), b = std::min(n - 1, a + 1);
+  if (samples[a].contains("covariance") && !samples[a]["covariance"].is_null()) {
+    double ca[36], cb[36];
+    int da = 0, db = 0;
+    if (!covariance_of(samples[a]["covariance"], ca, &da)) return "a sample's covariance is a lower triangle (6 or 21) or a full matrix (9 or 36).";
+    double f = 0;
+    if (b != a && std::fabs(dt[a]) > 1e-6) {
+      if (!samples[b].contains("covariance") || !covariance_of(samples[b]["covariance"], cb, &db) || db != da) return "bracketing samples need covariances of one size.";
+      f = (0 - dt[a]) / (dt[b] - dt[a]);
+    } else {
+      std::copy(ca, ca + 36, cb);
+    }
+    std::vector<double> c(36);
+    for (int k = 0; k < 36; ++k) c[k] = (1 - f) * ca[k] + f * cb[k];
+    (*out)["covariance"] = c;
+  }
+  (*out)["interpolated"] = {{"degree", static_cast<int>(m) - 1}, {"from", start}, {"samples", m}};
+  return {};
+}
 }  // namespace covreal
 
 // ── pair_statistics ──
@@ -163,8 +221,24 @@ extern "C" int pair_statistics() {
   uint64_t not_pd = 0, without_truth_cov = 0;
   for (const auto& p : in["pairs"]) {
     if (!p.is_object() || !p.contains("predicted") || !p.contains("truth")) return fail("invalid-pairs", "each pair needs predicted and truth.");
-    const nlohmann::json& pr = p["predicted"];
-    const nlohmann::json& tr = p["truth"];
+    nlohmann::json resolved[2];
+    std::string missing;
+    for (int side = 0; side < 2 && missing.empty(); ++side) {
+      const nlohmann::json& given = p[side ? "truth" : "predicted"];
+      if (given.is_object() && given.contains("samples")) {
+        const std::string e = interpolate_side(given, &resolved[side]);
+        if (e == "outside") missing = std::string(side ? "truth" : "predicted") + " epoch outside its samples";
+        else if (!e.empty()) return fail("invalid-pairs", e);
+      } else {
+        resolved[side] = given;
+      }
+    }
+    if (!missing.empty()) {
+      rows.push_back({{"id", id_of(p)}, {"missing", missing}});
+      continue;
+    }
+    const nlohmann::json& pr = resolved[0];
+    const nlohmann::json& tr = resolved[1];
     double rp[3], vp[3], rt[3], vt[3];
     if (!pr.is_object() || !tr.is_object() || !vec(pr["position"], 3, rp) || !vec(pr["velocity"], 3, vp) || !vec(tr["position"], 3, rt) ||
         !vec(tr["velocity"], 3, vt))
@@ -214,6 +288,7 @@ extern "C" int pair_statistics() {
     for (int k = 0; k < 36; ++k) comb[k] = pp[k] + (has_t ? pt[k] : 0.0);
     if (!has_t) ++without_truth_cov;
     nlohmann::json row{{"id", id_of(p)}, {"errorRtn", std::vector<double>(err, err + 3)}, {"velocityErrorRtn", std::vector<double>(verr, verr + 3)},
+                       {"predictedInterpolated", pr.contains("interpolated") ? pr["interpolated"] : nlohmann::json(nullptr)},
                        {"predictedRtn", lower6(pp)}, {"truthRtn", has_t ? nlohmann::json(lower6(pt)) : nlohmann::json(nullptr)}};
     double d2c = 0, d2p = 0, ldc = 0;
     const bool okc = d2_of(comb, err, &d2c, &ldc), okp = d2_of(pp, err, &d2p);

@@ -73,6 +73,27 @@ test('pair_statistics: RTN error, d^2 combined and predicted alone, per-axis z; 
   await refused(t, 'pair_statistics', [json('pairs', { pairs: [{ predicted: { position: rp, velocity: vp }, truth: { position: rt, velocity: vp } }] })], /predicted state needs a covariance/);
 });
 
+test('pair_statistics with ephemeris samples: Lagrange through the nearest degree + 1 reproduces a quintic exactly; covariance linear; no extrapolation', async (t) => {
+  // Each axis a quintic in tau = t / 60 s (designed coefficients); velocity its derivative per second.
+  const coef = [[7e6, 1e3, 2, -0.5, 0.01, -1e-4], [1e5, -7.4e5, 3, 0.2, -0.02, 2e-4], [-3e5, 2e4, -1, 0.1, 0.003, -5e-5]];
+  const pos = (tau) => coef.map((c) => c.reduce((a, ck, k) => a + ck * tau ** k, 0));
+  const vel = (tau) => coef.map((c) => c.reduce((a, ck, k) => a + (k ? k * ck * tau ** (k - 1) : 0), 0) / 60);
+  const t0 = Date.UTC(2026, 9, 10, 12);
+  const iso = (sec) => new Date(t0 + sec * 1000).toISOString().replace('Z', '');
+  // RTN covariance diag(100 + i, 400 + 2i, 25) at sample i (lower triangle 3x3).
+  const samples = Array.from({ length: 10 }, (_, i) => ({ epoch: iso(60 * i), position: pos(i), velocity: vel(i), covariance: [100 + i, 0, 400 + 2 * i, 0, 0, 25] }));
+  const at = 270 / 60;  // between samples 4 and 5
+  const out = await call(t, 'pair_statistics', [json('pairs', { pairs: [
+    { id: 'in', predicted: { samples, epoch: iso(270), covarianceAxes: 'RTN' }, truth: { position: pos(at), velocity: vel(at) } },
+    { id: 'out', predicted: { samples, epoch: iso(600), covarianceAxes: 'RTN' }, truth: { position: pos(10), velocity: vel(10) } }] })]);
+  const [p, q] = out.pairs;
+  p.errorRtn.forEach((x, k) => assert.ok(Math.abs(x) < 1e-6, `error ${k}: ${x}`));
+  p.velocityErrorRtn.forEach((x, k) => assert.ok(Math.abs(x) < 1e-9, `velocity error ${k}: ${x}`));
+  assert.deepEqual(p.predictedInterpolated, { degree: 5, from: 2, samples: 6 });
+  [104.5, 409, 25].forEach((x, k) => close(p.predictedRtn[[0, 2, 5][k]], x, 1e-12, `covariance ${k}`));
+  assert.equal(q.missing, 'predicted epoch outside its samples');
+});
+
 test('fit_calibration: scalar maximum likelihood, coverage-matched and per-axis factors', async (t) => {
   const I = [1, 0, 1, 0, 0, 1];
   // |e|^2 = 3, 6, 9, 0, 12 under unit covariance: mean d^2 / 3 = 30 / 5 / 3 = 2.

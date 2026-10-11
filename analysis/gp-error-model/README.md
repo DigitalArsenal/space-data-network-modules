@@ -187,7 +187,11 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
   minus truth, in the RTN axes of the predicted state (or the truth's,
   `axesFrom`), both position covariances in those axes, d² against the
   combined covariance and against the predicted one alone, and per-axis
-  z = e/σ.
+  z = e/σ. A side may instead be ephemeris `samples` and an `epoch`:
+  position and velocity by Lagrange interpolation through the
+  `interpolationDegree` + 1 samples nearest the epoch (the container's rule),
+  the covariance linear between the two samples that bracket it; an epoch
+  outside the samples gives the pair `missing`, never an extrapolation.
 - **`fit_calibration`** (`samples`, `options` → `calibration`). Samples
   (stratum, RTN error, RTN position covariance, object). Per stratum a
   variance factor: `scalar-mle`, k² = mean d²/3 (the maximum-likelihood
@@ -223,7 +227,7 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
 
 Tests (`tests/covariance_realism.test.mjs`) use designed inputs with
 closed-form answers: d² of diagonal cases and its invariance under a rotation
-of the whole case; factors of designed samples; diagonal scalings, the RTN to
+of the whole case; a quintic reproduced exactly by degree-5 interpolation; factors of designed samples; diagonal scalings, the RTN to
 inertial rotation and the midpoint of two bins; Hejduk's weights and
 σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices.
 
