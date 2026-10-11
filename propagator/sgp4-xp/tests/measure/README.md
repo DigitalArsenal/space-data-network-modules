@@ -1,8 +1,10 @@
 # SGP4-XP against SDN's SGP4
 
 Fit root-mean-square and held-out accuracy of the SGP4-XP element sets this module fits (`fit`, propagator/sgp4-xp 0.1.0,
-module.wasm `c92ac99248e835ed`) against the SGP4 element sets of SDN's own fitter (`fit_elements` of analysis/gp-error-model 0.2.0, branch
-task/omm-fit-20261010 at 8398be41), on the same ephemerides. Measured 2026-10-11.
+module.wasm `c92ac99248e835ed`) against the SGP4 element sets of SDN's own fitter (`fit_elements` of analysis/gp-error-model 0.5.0,
+module.wasm `53182ac3ef5ac48f`, on main from the merge `1ff06d3e` of task/omm-fit-20261010, whose fitter commits are `cc0cb5ea` and `8398be41`),
+on the same ephemerides. Measured 2026-10-11, first with the fitter as it was on the branch (gp-error-model 0.2.0, `8398be41`) and again with the one
+on main: all 505 windows, XP and SGP4, give the same numbers to every digit the result files store (the files differ in the fitter's version and the times).
 
 ## What is compared
 
@@ -47,7 +49,7 @@ Position RMS in km, 3D, TEME.
 | 3 | 12 | 16.5 | 15.5 | 16.4 | 16.0 | 17% |
 | 7 | 8 | 88.9 | 80.1 | 88.8 | 80.7 | 25% |
 
-A fit takes 0.8 s at the median (1.0 s at most) in V8 on a loaded machine.
+A fit takes 0.7 s at the median (1.2 s at most) in V8 on a loaded machine.
 
 ### Starlink
 
@@ -58,7 +60,7 @@ A fit takes 0.8 s at the median (1.0 s at most) in V8 on a loaded machine.
 | 0 (the fit) | 196 | 0.539 | 0.714 | 0.534 | 0.613 | 33% |
 | 1 | 196 | 3.67 | 6.68 | 5.92 | 8.59 | 68% |
 
-A fit takes 0.7 s at the median (1.3 s at most) in V8 on a loaded machine.
+A fit takes 0.8 s at the median (1.5 s at most) in V8 on a loaded machine.
 
 ### GNSS
 
@@ -80,7 +82,7 @@ SGP4-XP on all 120 windows it fitted:
 | 3 | 108 | 0.162 | 0.172 | 0.290 |
 | 7 | 84 | 0.420 | 0.430 | 0.710 |
 
-A fit takes 0.5 s at the median (0.7 s at most) in V8 on a loaded machine.
+A fit takes 0.5 s at the median (1.1 s at most) in V8 on a loaded machine.
 
 ### Laser-ranged, high (LAGEOS-1/2, Etalon-1/2)
 
@@ -93,7 +95,7 @@ A fit takes 0.5 s at the median (0.7 s at most) in V8 on a loaded machine.
 | 3 | 36 | 0.242 | 0.300 | 1.22 | 1.50 | 86% |
 | 7 | 28 | 0.570 | 0.701 | 6.61 | 8.57 | 89% |
 
-A fit takes 0.5 s at the median (1.1 s at most) in V8 on a loaded machine.
+A fit takes 0.6 s at the median (1.5 s at most) in V8 on a loaded machine.
 
 ### Laser-ranged, low (Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2)
 
@@ -106,7 +108,7 @@ A fit takes 0.5 s at the median (1.1 s at most) in V8 on a loaded machine.
 | 2 | 89 | 0.782 | 1.87 | 2.58 | 3.14 | 62% |
 | 3 | 75 | 1.16 | 3.75 | 5.10 | 6.89 | 67% |
 
-A fit takes 0.5 s at the median (0.8 s at most) in V8 on a loaded machine.
+A fit takes 0.5 s at the median (0.9 s at most) in V8 on a loaded machine.
 
 ### SGP4-XP against SGP4 in one table
 
@@ -161,18 +163,18 @@ percentile), "fits not converged" is the fitter's own flag.
 
 ## Limits of the comparison
 
-- The SGP4 side is SDN's own fitter. A different SGP4 fitter (another weighting, another epoch convention, differential correction as 18 SDS runs it) would score differently. `fit_elements` is in analysis/gp-error-model 0.2.0, which is on branch task/omm-fit-20261010 (8398be41) and not yet in main.
+- The SGP4 side is SDN's own fitter. A different SGP4 fitter (another weighting, another epoch convention, differential correction as 18 SDS runs it) would score differently. `fit_elements` is in analysis/gp-error-model 0.5.0 on main (`1ff06d3e`).
 - The ephemeris is the truth here. An error is whatever the ephemeris holds that neither model represents: manoeuvres, continuous thrust (Starlink orbit raising is a steady along-track force), the operator's own force model, and for the high satellites the products' own uncertainty (centimetres to a decimetre).
 - A fitted set is a point of the two-line text's lattice (angles to 1e-4 degree, 12 m at low orbit; mean motion to 1e-8 rev/day; eccentricity to 1e-7), so no fit is better than a few metres at low orbit whatever the model.
 - The SpaceX files cover two to three days, so Starlink has days 0 and 1 only; the NSGF arcs are four days, so the low laser-ranged satellites have days 0 to 3; ISS, GNSS and the high laser-ranged satellites have days 0, 1, 3 and 7.
 - The reference states are GCRF with Earth orientation applied. The Earth-fixed path of the module (no Earth orientation: UT1 = UTC, mean pole) is checked on a real Earth-fixed ephemeris by `tests/fit.test.mjs` (the ILRS prediction of LAGEOS-1: 10 m over the 2.5 hours fitted), not by these tables.
-- Times are for a loaded machine (the load average was 50 to 90) and V8, not for the SDN node's WasmEdge.
+- Times are for a loaded machine (the load average was 40 to 90) and V8, not for the SDN node's WasmEdge.
 
 ## Reproducing
 
 ```sh
 cd propagator/sgp4-xp && npm ci && npm run build
-export SDN_GP_ERROR_MODEL=<a checkout of analysis/gp-error-model 0.2.0, built>
+# the SGP4 fitter is analysis/gp-error-model of this checkout (its committed dist); SDN_GP_ERROR_MODEL=<dir> names another, built
 node tests/measure/run.mjs --source iss --fit-hours 24 --stride-hours 24 --leads 1,3,7
 node tests/measure/run.mjs --source starlink --limit 100 --fit-hours 24 --stride-hours 24 --leads 1
 node tests/measure/run.mjs --source gnss --per 4 --days 20 --fit-hours 24 --stride-hours 48 --leads 1,3,7

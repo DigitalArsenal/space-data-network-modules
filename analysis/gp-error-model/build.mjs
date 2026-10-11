@@ -9,6 +9,7 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 // engine (TEME -> GCRF), the Vallado SGP4 that propagator/sgp4 compiles,
 // Izzo's Lambert kernel (analysis/lambert-izzo), the SHA-256 that orbit-products
 // uses for record hashes, and nlohmann::json for the control frames.
+// fit_elements.cpp (SGP4 element fitting) comes last.
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
@@ -26,7 +27,7 @@ const json = await fs.readFile(jsonHeader, 'utf8');
 const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'fit_elements.cpp']
   .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
