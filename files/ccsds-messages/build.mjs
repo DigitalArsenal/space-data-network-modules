@@ -187,17 +187,30 @@ if (compilation.threadModel !== "wasi-sequential") {
 }
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
+// The file identifiers of the typed ports the methods declare, in the order they first appear.
+const portTypes = (direction) => [
+  ...new Set(
+    manifest.methods.flatMap((m) =>
+      m[direction].flatMap((port) =>
+        port.acceptedTypeSets.flatMap((set) => set.allowedTypes.map((t) => t.fileIdentifier)),
+      ),
+    ),
+  ),
+].filter(Boolean);
 fsSync.writeFileSync(
   path.join(distRoot, "build-provenance.json"),
   `${JSON.stringify(
     {
       spacedatastandards: sdsVersion,
       threadModel: "wasi-sequential",
+      // What the manifest declares, so the record cannot disagree with it.
       records: {
-        in: ["$NCD", "$OMM", "$AEM", "$TDM"],
-        out: ["$OMM", "$AEM", "$TDM", "$NCD"],
+        in: portTypes("inputPorts"),
+        out: portTypes("outputPorts"),
       },
-      formats: ["CCSDS_OMM_KVN", "CCSDS_OMM_XML", "CCSDS_AEM_KVN", "CCSDS_TDM_KVN"],
+      formats: manifest.methods
+        .filter((m) => m.methodId.startsWith("read_"))
+        .flatMap((m) => ["KVN", "XML"].map((syntax) => `CCSDS_${m.methodId.slice(5).toUpperCase()}_${syntax}`)),
     },
     null,
     2,
