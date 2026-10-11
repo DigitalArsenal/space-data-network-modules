@@ -219,7 +219,9 @@ The steps, in order:
 The measured table is an input the experiments refresh. Its regimes are the ones `analysis/gp-error-model`
 labels (E14's: LEO-L, LEO-M, LEO-H, MEO, GEO); E3's results are keyed by its own test strata, so a table for this recipe
 is keyed by the regimes above. An object whose products carry no regime (a regime without a model, such as HEO) is
-selected by `sourceOrder`. Limits: 250,000 records per port, 128 MiB of input, 64 trajectories, 4,096 identity links.
+selected by `sourceOrder`. It selects and does not fuse: E3 found combining sources no more accurate than selecting one (H2 not
+supported in any regime). Limits: 250,000 records per port, 128 MiB of input, 64 trajectories, 4,096 identity links; the report is
+about 1.5 KB per object, so a flow shards a large catalog.
 
 `tests/integrator.test.mjs` fixes each outcome by construction: the lowest measured median, a row under
 `minSamples` measuring nothing, the newest set per source, `maxAgeDays`, SGP4 and SGP4-XP chosen separately, a burn retiring

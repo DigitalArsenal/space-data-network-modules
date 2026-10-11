@@ -214,6 +214,16 @@ test('a source\'s own name joins an object only through a link its trajectories 
   }
 });
 
+test('a link may name its object by international designator', async () => {
+  const r = await identityRun({ ...vimpelA, pairs: [link('v', 'r', { cospar: '2026-901A' })] }, [oem(), oem()]);
+  assert.equal(r.statusCode, 0, r.message);
+  assert.deepEqual([r.report.identity.matches[0].object, r.report.identity.matches[0].bound], ['cospar:2026-901A', true]);
+  assert.equal(objectOf(r, 'ALPHA').products[0].selected.source, 'vimpel');
+  for (const object of [{}, { norad: 0 }, { cospar: 'ALPHA' }, { norad: 1.5 }]) {
+    assert.notEqual((await identityRun({ ...vimpelA, pairs: [link('v', 'r', object)] }, [oem(), oem()])).statusCode, 0, JSON.stringify(object));
+  }
+});
+
 test('a native name proposed for two objects, or two references that both pass, binds to nothing; so does an object the catalog lacks', async () => {
   const two = await identityRun({ candidates: [...vimpelA.candidates, candidate('r2', 'other-catalog', '90002')], pairs: [link('v', 'r', { norad: 90001 }), link('v', 'r2', { norad: 90002 })] }, [oem(), oem(), oem()]);
   assert.deepEqual(two.report.identity.matches.map((m) => [m.status, m.bound]), [['ambiguous', false], ['ambiguous', false]]);
