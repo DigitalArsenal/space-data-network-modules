@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
   "name": "Maneuver detection",
-  "version": "0.2.0",
-  "description": "Detects maneuvers in an element-set history. Takes each element set's trajectory from any propagator, finds where consecutive trajectories cross, measures the energy and orbit-plane change there, and flags steps beyond the object's own noise. Emits $MNV DETECTED events with time, in-track and cross-track delta-V, pre and post states and characterization. Element sets may be given instead of ephemerides; the module then propagates them with Vallado SGP4.",
+  "version": "0.3.0",
+  "description": "Maneuver detection over any pluggable propagator. detect_maneuvers takes element sets ($OMM) and asks for each set's trajectory on a propagator query port (the host routes each query to the plugged propagator: SGP4, HPOP, an ABI provider; inertial or Earth-fixed answers) or takes per-set trajectories ($OEM), and emits $MNV DETECTED from three detectors: D1, the crossing of consecutive trajectories with a median step test; D2, a robust GLR step test on orbit-averaged energy levels and the orbit-normal chain; D3, a GLR test for a change of energy rate (low thrust). compare_ephemerides checks planned maneuvers ($MNV) against successive operator ephemeris versions ($OEM: executed, cancelled or unknown, with the executed delta-V) and reports changes between versions. score_detections matches detected $MNV to truth $MNV (recall, time error, delta-V ratio, false alarms).",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,9 +16,14 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Deterministic statistics over caller-supplied inertial ephemerides. No host calls, threads, propagation or network access."
+    "detail": "Deterministic statistics over caller-supplied element sets, trajectories and records. No host calls, threads, propagation or network access: trajectories come from the caller through the propagator query port."
   },
   "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
     {
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
@@ -36,6 +41,46 @@
       "displayName": "Detect maneuvers",
       "inputPorts": [
         {
+          "portId": "element_sets",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Element sets ($OMM, plain or a stream of size-prefixed records): the module asks for their trajectories on propagation_requests and reads the answers on propagation. Grouped by NORAD_CAT_ID (else OBJECT_ID, else OBJECT_NAME); one set per EPOCH (a later record replaces an earlier one)."
+        },
+        {
+          "portId": "propagation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-answers",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Answers to propagation_requests: one $OEM data block per query, in query order (a refused set: an empty block whose COMMENT begins REFUSED). UTC, km and km/s, Earth-centred inertial or Earth-fixed axes (Earth-fixed states are turned to TEME by GMST)."
+        },
+        {
           "portId": "ephemerides",
           "acceptedTypeSets": [
             {
@@ -51,37 +96,15 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": false,
-          "description": "One or more $OEM frames (or element sets on elements). One data block per element set, in an Earth-centred inertial frame, spanning at least the neighbouring element sets' epochs (two on each side recommended). Blocks are grouped by OBJECT and ordered by the midpoint of their span."
-        },
-        {
-          "portId": "elements",
-          "acceptedTypeSets": [
-            {
-              "setId": "detection-elements-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "{objects: [{id?, norad?, name?, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR, comment?}]}]}: SGP4 element sets the module propagates itself (Vallado SGP4, WGS-72) into one TEME block per set over its neighbours' epochs (two on each side) on the grid_step_s grid."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Element-set histories as JSON, propagated by the module with SGP4 instead of caller-supplied ephemerides."
+          "description": "Per-set trajectories supplied by the caller, instead of element sets: one data block per element set spanning its neighbouring sets' epochs (two on each side), grouped by object and ordered by the midpoint of their span."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "detection-options-v1",
+              "setId": "detection-options-v2",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
@@ -90,14 +113,14 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Detection thresholds as a JSON object (k, floor_in_track_mps, floor_cross_track_mps, median_sets, scale_window_pairs, grid_step_s, report_time); every field optional."
+                "detail": "Detection options as a JSON object (detectors, propagator_port_id, D1, D2 and D3 thresholds, neighbour_sets, grid_step_s, report_time, report_pairs, report_levels); every field optional."
               }
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Detection thresholds as a JSON object; every field optional."
+          "description": "Detection options as a JSON object; every field optional."
         }
       ],
       "outputPorts": [
@@ -117,15 +140,15 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": false,
           "description": "One $MNV frame per detected maneuver, STATUS DETECTED."
         },
         {
-          "portId": "report",
+          "portId": "propagation_requests",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "propagation-requests-v1",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
@@ -134,14 +157,244 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Per-pair crossing times, jumps, steps and thresholds for every object, and each event's evidence; the scientific result is the $MNV frames."
+                "detail": "{status: needs-propagation, propagator_port_id, neighbour_sets, queries: [{sequence, object, norad, object_id, set, epoch, start, stop, step_s}]}: one trajectory per element set for the host to route to the plugged propagator."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The trajectories the detector needs, when element sets arrive without answers."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-pair crossing times, jumps, steps and thresholds, and each event's evidence, as JSON."
+          "description": "Per-object evidence of every detector as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "compare_ephemerides",
+      "displayName": "Compare ephemeris versions",
+      "inputPorts": [
+        {
+          "portId": "versions",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-versions",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Ephemeris versions: one $OEM per version (CREATION_DATE is its issue time), one data block per object."
+        },
+        {
+          "portId": "planned",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv-planned",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Planned maneuvers ($MNV): EVENT_START_TIME the TIG, DELTA_VEL the planned size (km/s), SAT_NO or ORIG_OBJECT_ID the object."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "margin_s, post_start_after_s, executed_fraction, cancelled_fraction, unplanned_threshold_km, within_version, report_time; every field optional."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Options as a JSON object; every field optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "maneuvers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv-checked",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each planned maneuver checked (STATUS EXECUTED, CANCELLED or UNKNOWN, with the executed delta-V), and version changes above unplanned_threshold_km (STATUS DETECTED)."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "score_detections",
+      "displayName": "Score detections against truth",
+      "inputPorts": [
+        {
+          "portId": "detected",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv-detected",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Detected maneuvers ($MNV)."
+        },
+        {
+          "portId": "truth",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv-truth",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Truth maneuvers ($MNV): EVENT_START_TIME to EVENT_END_TIME, delta-V from DELTA_VEL or from MNVR_ACCEL_TIMES / MNVR_ACCELS (U, V, W per point, km/s^2, held until the next time)."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "score-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "before_s, after_s, bins_mps, explained, assessed and spans ([{object, from, to}]); every field optional."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Matching window and intervals as a JSON object."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "score-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Recall with its Wilson interval, by delta-V bin, time error and delta-V ratio distributions, false alarms per object-year, and every match, miss and unmatched event."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Metrics as JSON."
         }
       ],
       "maxBatch": 1,

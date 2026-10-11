@@ -17,7 +17,7 @@ def day(path):
 if __name__ == '__main__':
     files = sorted(glob.glob(f'{root}/spacetrack/gp_history/by-creation/*/*.json.gz'))
     rows = []
-    with Pool() as pool:
+    with Pool(6) as pool:
         for part in pool.imap_unordered(day, files, chunksize=4): rows += part
     zips = glob.glob(f'{root}/historical/*/Archives2.zip')
     if zips:

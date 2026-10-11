@@ -1,0 +1,310 @@
+{
+  "ok": true,
+  "fixture": "maneuver-detection 0.3.0 methods",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "eee3dd9088f6291794196a7a21ce5b05e7d989bf1f11ffda4d58a126c52496d0",
+  "moduleSha256": "eee3dd9088f6291794196a7a21ce5b05e7d989bf1f11ffda4d58a126c52496d0",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 9,
+      "durationMs": 963
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 9,
+      "durationMs": 11559
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 9,
+      "durationMs": 18386
+    }
+  ],
+  "cases": [
+    "detect-ephemerides-burn",
+    "detect-burn-pair",
+    "detect-earth-fixed",
+    "detect-query-requests",
+    "detect-query-sgp4",
+    "detect-query-keplerian",
+    "compare-planned",
+    "score",
+    "refused-option"
+  ],
+  "comparisons": 45,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "detect-ephemerides-burn",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
+      "stdoutLength": 20648
+    },
+    {
+      "lane": "browser",
+      "caseId": "detect-burn-pair",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
+      "stdoutLength": 16904
+    },
+    {
+      "lane": "browser",
+      "caseId": "detect-earth-fixed",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
+      "stdoutLength": 14120
+    },
+    {
+      "lane": "browser",
+      "caseId": "detect-query-requests",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b608dc09bd6470f609cbe5b9739e0c42aa66572ce3300acc7581844d803a8e75",
+      "stdoutLength": 7016
+    },
+    {
+      "lane": "browser",
+      "caseId": "detect-query-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
+      "stdoutLength": 34808
+    },
+    {
+      "lane": "browser",
+      "caseId": "detect-query-keplerian",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
+      "stdoutLength": 34832
+    },
+    {
+      "lane": "browser",
+      "caseId": "compare-planned",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutLength": 2744
+    },
+    {
+      "lane": "browser",
+      "caseId": "score",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5c89e39501b8b7403b34239d9c6bf6648b3f3bcec37d1533c329401e86e68d4",
+      "stdoutLength": 1496
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-option",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9bfc2590da1fbc5113fe98fe87c73bc9669359675ac782976ccdc4ba358716e1",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-ephemerides-burn",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
+      "stdoutLength": 20648
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-burn-pair",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
+      "stdoutLength": 16904
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-earth-fixed",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
+      "stdoutLength": 14120
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-query-requests",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b608dc09bd6470f609cbe5b9739e0c42aa66572ce3300acc7581844d803a8e75",
+      "stdoutLength": 7016
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-query-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
+      "stdoutLength": 34808
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "detect-query-keplerian",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
+      "stdoutLength": 34832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "compare-planned",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutLength": 2744
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "score",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5c89e39501b8b7403b34239d9c6bf6648b3f3bcec37d1533c329401e86e68d4",
+      "stdoutLength": 1496
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-option",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9bfc2590da1fbc5113fe98fe87c73bc9669359675ac782976ccdc4ba358716e1",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-ephemerides-burn",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
+      "stdoutLength": 20648
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-burn-pair",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
+      "stdoutLength": 16904
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-earth-fixed",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
+      "stdoutLength": 14120
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-query-requests",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b608dc09bd6470f609cbe5b9739e0c42aa66572ce3300acc7581844d803a8e75",
+      "stdoutLength": 7016
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-query-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
+      "stdoutLength": 34808
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "detect-query-keplerian",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
+      "stdoutLength": 34832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "compare-planned",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutLength": 2744
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "score",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5c89e39501b8b7403b34239d9c6bf6648b3f3bcec37d1533c329401e86e68d4",
+      "stdoutLength": 1496
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-option",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9bfc2590da1fbc5113fe98fe87c73bc9669359675ac782976ccdc4ba358716e1",
+      "stdoutLength": 156
+    }
+  ]
+}
