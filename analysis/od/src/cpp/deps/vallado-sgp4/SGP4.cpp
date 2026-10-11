@@ -2256,7 +2256,8 @@ namespace SGP4Funcs
 			index = alpha5[strIndex];
 			std::string s(satrec.satnumStr);
 			std::string sub = s.substr(1, 4);
-			satrec.satnum = index * 10000 + std::stoi(sub.substr(1, 4));
+			// Local fix: all four digits after the letter (upstream took sub.substr(1, 4), the last three).
+			satrec.satnum = index * 10000 + std::stoi(sub);
 		}
 
 		// sgp4fix note that the ephtype must be 0 for SGP4. SGP4-XP uses 4.

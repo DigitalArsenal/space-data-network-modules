@@ -22,6 +22,7 @@
 #include "od/sgp4_fitter.h"
 #include "od/covariance_validation.h"
 #include "SGP4.h"
+#include "od/tle_text.h"
 
 #include <Eigen/Dense>
 #include <Eigen/SVD>
@@ -127,9 +128,15 @@ static std::string format_exp(double val) {
     return std::string(buf);
 }
 
-static void make_tle_lines(
+// Two standard 69-column lines, each ending in its check digit. False when the catalog number has no
+// five-character form (below 0 or above 339999): the Alpha-5 letter takes the ten-thousands of 100000 and above.
+static bool make_tle_lines(
     const SGP4Elements& el,
     std::string& line1, std::string& line2) {
+
+    char catalog[5];
+    if (!tle_text::encode_catalog_number(el.norad_cat_id, catalog)) return false;
+    const std::string catalog_field(catalog, 5);
 
     // Epoch: convert JD to YYDDD.DDDDDDDD
     int year, month, day_cal, hour, minute;
@@ -138,57 +145,58 @@ static void make_tle_lines(
     double day_of_year = jd_to_day_of_year(el.epoch_jd);
     int yy = year % 100;
 
-    char l1[80], l2[80];
-
     // nddot/6 and bstar in exponential format
-    std::string nddot_str = " 00000-0";
+    std::string nddot_str = format_exp(el.mean_motion_ddot / 6.0);
     std::string bstar_str = format_exp(el.bstar);
 
-    // ndot/2: TLE format " .NNNNNNNN" or "-.NNNNNNNN" (10 chars, col 33-42)
+    // ndot/2: TLE format " .NNNNNNNN" or "-.NNNNNNNN" (10 chars, col 34-43), at most .99999999
     double ndot_half = el.mean_motion_dot / 2.0;
+    long ndot_digits = std::lround(std::abs(ndot_half) * 1e8);
+    if (ndot_digits > 99999999L) ndot_digits = 99999999L;
     char ndot_buf[16];
-    if (ndot_half >= 0.0) {
-        std::snprintf(ndot_buf, sizeof(ndot_buf), " .%08d",
-            static_cast<int>(std::round(std::abs(ndot_half) * 1e8)));
-    } else {
-        std::snprintf(ndot_buf, sizeof(ndot_buf), "-.%08d",
-            static_cast<int>(std::round(std::abs(ndot_half) * 1e8)));
-    }
-    std::string ndot_str(ndot_buf, 10);
+    std::snprintf(ndot_buf, sizeof(ndot_buf), "%c.%08ld", ndot_half < 0.0 ? '-' : ' ', ndot_digits);
 
+    const char classification = (el.classification >= 'A' && el.classification <= 'Z') ? el.classification : 'U';
+    const int ephemeris_type = (el.ephemeris_type >= 0 && el.ephemeris_type <= 9) ? el.ephemeris_type : 0;
+    const std::string designator = tle_text::designator_field(el.object_id);
+
+    char l1[80];
     std::snprintf(l1, sizeof(l1),
-        "1 %05dU %-8s %02d%012.8f %s %s %s 0    0",
-        el.norad_cat_id % 100000,
-        el.object_id.empty() ? "00000A  " : el.object_id.c_str(),
+        "1 %s%c %s %02d%012.8f %s %s %s %d %4d",
+        catalog_field.c_str(), classification,
+        designator.c_str(),
         yy, day_of_year,
-        ndot_str.c_str(),
+        ndot_buf,
         nddot_str.c_str(),
-        bstar_str.c_str());
+        bstar_str.c_str(),
+        ephemeris_type,
+        el.element_set_no % 10000);
 
     // Eccentricity: 7 digits, no leading "0."
     int ecc_int = static_cast<int>(std::round(el.eccentricity * 1e7));
     if (ecc_int < 0) ecc_int = 0;
     if (ecc_int > 9999999) ecc_int = 9999999;
 
+    char l2[80];
     std::snprintf(l2, sizeof(l2),
-        "2 %05d %8.4f %8.4f %07d %8.4f %8.4f %11.8f    0",
-        el.norad_cat_id % 100000,
+        "2 %s %8.4f %8.4f %07d %8.4f %8.4f %11.8f%5d",
+        catalog_field.c_str(),
         el.inclination,
         el.ra_of_asc_node,
         ecc_int,
         el.arg_of_pericenter,
         el.mean_anomaly,
-        el.mean_motion);
+        el.mean_motion,
+        el.rev_at_epoch % 100000);
 
-    // Ensure exact 69 chars
+    // Exactly 68 characters, then the check digit
     line1 = std::string(l1);
     line2 = std::string(l2);
-    // Pad or trim to 69 chars
-    line1.resize(69, ' ');
-    line2.resize(69, ' ');
-    // Set line numbers
-    line1[0] = '1';
-    line2[0] = '2';
+    line1.resize(68, ' ');
+    line2.resize(68, ' ');
+    line1 += static_cast<char>('0' + tle_text::checksum(line1.c_str()));
+    line2 += static_cast<char>('0' + tle_text::checksum(line2.c_str()));
+    return true;
 }
 
 // ── Cartesian → Keplerian ──
@@ -1466,7 +1474,7 @@ std::string elements_to_json(const SGP4Elements& el) {
 
 std::string elements_to_tle(const SGP4Elements& el) {
     std::string l1, l2;
-    make_tle_lines(el, l1, l2);
+    if (!make_tle_lines(el, l1, l2)) return std::string();
     return l1 + "\n" + l2;
 }
 

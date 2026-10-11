@@ -48,6 +48,17 @@ The fitter propagates in **TEME**, so every sample handed to it must be TEME.
 flow from the parsed ephemeris (OEM `META`) or from `options.objectName` /
 `options.objectId` / `options.noradCatId` overrides.
 
+### Two-line output
+
+`options.emitTle: true` adds `TLE_LINE1` and `TLE_LINE2` to the text path's JSON: the fitted element set as a legacy
+two-line element set (69 columns, both check digits, the international designator of `OBJECT_ID`, the classification,
+element set number and revolution number of the record). A catalog number from 100000 to 339999 is written as Alpha-5,
+as Space-Track writes it: a letter for the ten-thousands (A to Z without I and O, 10 to 33) and four digits, so 100000
+is `A0000`, 123456 is `C3456` and 339999 is `Z9999`. A number outside 0 to 339999 has no two-line form and the fit
+fails with `unrepresentable-catalog-number`. `tests/alpha5_tle.test.mjs` checks the lines against the fitted elements
+and reads them back with data-source/catalog-source; `tests/parity_alpha5.mjs` holds the same cases byte-identical in
+the browser, WasmEdge and Docker WasmEdge.
+
 ## Workflow
 
 1. Parse the source ephemeris into a TEME state-vector series.
@@ -122,6 +133,7 @@ npm run build
 node --test tests/test_wasm.mjs
 node --test tests/sdk_compat.test.mjs
 node --test tests/ocm_emission.test.mjs   # OCM builder + perturbation mapper
+node --test tests/alpha5_tle.test.mjs     # Alpha-5 two-line output, read back by catalog-source
 ```
 
 For the native benchmark helper:

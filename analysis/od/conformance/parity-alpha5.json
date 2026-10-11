@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "fixture": "analysis/od fit emitTle, Alpha-5 catalog numbers",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "e81c0a0e3691d2593a4a4f1542f2582deda8597df65a0257767a0ab424496689",
+  "moduleSha256": "e81c0a0e3691d2593a4a4f1542f2582deda8597df65a0257767a0ab424496689",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 5,
+      "durationMs": 1085
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 5,
+      "durationMs": 581
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 5,
+      "durationMs": 4658
+    }
+  ],
+  "cases": [
+    "fit-tle-99999",
+    "fit-tle-100000",
+    "fit-tle-123456",
+    "fit-tle-339999",
+    "fit-tle-340000"
+  ],
+  "comparisons": 25,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "fit-tle-99999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52424198246e2aaf93be2212e51252bd2dd049046f96648ef9d0dff54b58e92",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-tle-100000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad56624065aa5e0be30d2cae0c4b5d69d27c308e85d0301d551de679cc740c87",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-tle-123456",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d2b77e4eccaae83e126f29ab561579fa0470d575bd8170cfb2034ef8adf5c410",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-tle-339999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "72850a27adaf13b275e4967995aa79b96028fcd32acb8df50f9a2bcd94d44c53",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-tle-340000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "dd010679c1e3280dc00a5ffec96560e1008bcd94c1207ca1b96ebded5f833ce1",
+      "stdoutLength": 204
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-tle-99999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52424198246e2aaf93be2212e51252bd2dd049046f96648ef9d0dff54b58e92",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-tle-100000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad56624065aa5e0be30d2cae0c4b5d69d27c308e85d0301d551de679cc740c87",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-tle-123456",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d2b77e4eccaae83e126f29ab561579fa0470d575bd8170cfb2034ef8adf5c410",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-tle-339999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "72850a27adaf13b275e4967995aa79b96028fcd32acb8df50f9a2bcd94d44c53",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-tle-340000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "dd010679c1e3280dc00a5ffec96560e1008bcd94c1207ca1b96ebded5f833ce1",
+      "stdoutLength": 204
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-tle-99999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52424198246e2aaf93be2212e51252bd2dd049046f96648ef9d0dff54b58e92",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-tle-100000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad56624065aa5e0be30d2cae0c4b5d69d27c308e85d0301d551de679cc740c87",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-tle-123456",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d2b77e4eccaae83e126f29ab561579fa0470d575bd8170cfb2034ef8adf5c410",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-tle-339999",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "72850a27adaf13b275e4967995aa79b96028fcd32acb8df50f9a2bcd94d44c53",
+      "stdoutLength": 832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-tle-340000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "dd010679c1e3280dc00a5ffec96560e1008bcd94c1207ca1b96ebded5f833ce1",
+      "stdoutLength": 204
+    }
+  ]
+}
