@@ -1,0 +1,148 @@
+{
+ "wasmSha256": "ca5b9898007b5067c88e51bb54de82004a5e0a6e114bdba59843677cd2b6c106",
+ "wasmBytes": 1260275,
+ "runtimes": [
+  "node-v8",
+  "chrome",
+  "wasmedge",
+  "docker-wasmedge",
+  "wasmedge-aot-sdn-patched"
+ ],
+ "instance": "one persistent direct instance per runtime",
+ "catalog": "tests/lib/syntheticCatalog.mjs (invented)",
+ "objects": 241,
+ "window": {
+  "startJd": 2461314.5,
+  "hours": 1
+ },
+ "steps": [
+  {
+   "label": "prepare-catalog",
+   "requestSha256": "90e675f9f21715e443c9032c0e93a67b8b021cd3a39e127304d26f5e2968fb65",
+   "responseSha256": "59a5c9dcd66f28adbf9a2da2b6c4a3f585bf30368e7400b28f9e7b5ad85be634",
+   "errorCode": null
+  },
+  {
+   "label": "grid-step-0",
+   "requestSha256": "53837fd5b8f5b4996d9eadb608056631197729709e9faca77d60c106e9b0310b",
+   "responseSha256": "1d8290207237050c95d8f33fc34bb5f7f9f60984b698d8d0340791654d65dcb6",
+   "errorCode": null
+  },
+  {
+   "label": "grid-steps-1",
+   "requestSha256": "f3dfc53135a0ae7fcdd388cc9f4eaaad747dbdab81c205bba2da76592250fcda",
+   "responseSha256": "55eed3113660477c5030dbd5a27276e777e3f12991fa3268bdb498b00d1a4ad4",
+   "errorCode": null
+  },
+  {
+   "label": "grid-steps-33",
+   "requestSha256": "7dae19e0487c96c7caa74248e47a6884366a75649021cd1b79e65db40fda18cf",
+   "responseSha256": "b95d388cdb5fbc5cee9490f65d8816a1576d53fbdbe1e30789f8af8a00c81a23",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-all-0",
+   "requestSha256": "a8b1a4222a5b2cc5d911c3c445e5b934259d757a1de69062e5be145c92554777",
+   "responseSha256": "0e2149c4c98de964658f977285b894c915c8836df3f1c4b1e4e1da767eb1103b",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-all-1",
+   "requestSha256": "8b18d4bd31da2097c5af7d9ff4bb1411cb23ac7b674848e94453822d88501ac4",
+   "responseSha256": "efe473fa6a8063d3ea960f236a15ab6f4e8ff4b24d858fa7b87026c385df17b9",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-all-2",
+   "requestSha256": "5ac3614cd3f7eabc33e031418764ca14fe027ee62108baadc588481f8ad7a875",
+   "responseSha256": "c77254311b4b8fb3ae7ec7b0e5e202cbaa5ca6e504aa3e43ddf702df624069c8",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-0",
+   "requestSha256": "e9f2f6a6901989402c2250d4860b673f9842655d827763e6c1f7455ce2e447e0",
+   "responseSha256": "ec909baba0bcd992f4ba28230e0f0cd5a6d7d9768d14afdb795d9a6878019129",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-1",
+   "requestSha256": "04dec4c72e978582c2cc1af936951fbe4e0db7bf29947388daf102bcff4f0023",
+   "responseSha256": "95e64257b9787a907b4d1f9f583a15cf0c0facb56920e8f8e2f9fe35cb64d32d",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-2",
+   "requestSha256": "ef437d86be12b070f2b275bb7001d1822095d5e63785f55398003506e2fe5b83",
+   "responseSha256": "6071d20f29955088312806151faff59d14b71f2a28fd0dddd577f616f98c3859",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-4-threads-0",
+   "requestSha256": "b9d6c5f14c16c55bac237e9e89f5bfb0856fcf56c115537ca9ab9f272bbd6528",
+   "responseSha256": "ec909baba0bcd992f4ba28230e0f0cd5a6d7d9768d14afdb795d9a6878019129",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-4-threads-1",
+   "requestSha256": "eaa697aba372d4be25f597216f9552bc8f6e022cf10df95c57bdc9043da9b981",
+   "responseSha256": "95e64257b9787a907b4d1f9f583a15cf0c0facb56920e8f8e2f9fe35cb64d32d",
+   "errorCode": null
+  },
+  {
+   "label": "search-grid-roles-4-threads-2",
+   "requestSha256": "4433e9c52e6578c95ae7bdccccc4a78d0af3ea027457fb04b345165697e1658f",
+   "responseSha256": "6071d20f29955088312806151faff59d14b71f2a28fd0dddd577f616f98c3859",
+   "errorCode": null
+  },
+  {
+   "label": "search-candidates-steps-1",
+   "requestSha256": "a87efde2c34e89d3638637181da70d8af9c55ddbdf48e100a6712db5545bef81",
+   "responseSha256": "46853999b3aaa809291225a028351190dae477b2d2e572f5b7bc232f911663ca",
+   "errorCode": null
+  },
+  {
+   "label": "prepare-one-source",
+   "requestSha256": "78ce7a95c3634bb373b24233dce2280b590d9a58d84120ab7ffdc5c395ead022",
+   "responseSha256": "10e5e4f89b052f2cc1f34abd971be4b1d9546c2e56abe0409ed2c3aa00eb17f6",
+   "errorCode": null
+  },
+  {
+   "label": "grid-one-source",
+   "requestSha256": "aead6615213321a9ed2ae0e6c80d8c337d6b96033064e479f2b15a07a554cc17",
+   "responseSha256": "7074bc1ea608c54553bcb9ba475077e96133bca75c7466a7a90e80997472dc01",
+   "errorCode": null
+  },
+  {
+   "label": "prepare-sub-index",
+   "requestSha256": "fdaf95b55330622ed24fdd4846240cb94e73daae53b93576c50581506a227737",
+   "responseSha256": "eadaabe72bba6421fa13b3cb765405cd39797e53d694e37d6def2a0e9dccb119",
+   "errorCode": null
+  },
+  {
+   "label": "refine-sub-index-0",
+   "requestSha256": "dd4e574db7dfbc347bd6e81f56879cb3942c74dff1a4f7dbbe77da9b8fc41748",
+   "responseSha256": "7dee82cc6198f796db7701b367f8c9ecee826d03f3156dc9382bb6c2ceffd3bd",
+   "errorCode": null
+  },
+  {
+   "label": "refuse-roles-count",
+   "requestSha256": "e1ee71cc020bf56581f79bcfd3a91dba0aa8c7124c4791b83ac1dedb60931546",
+   "responseSha256": "364069ad8c5e25da02d109aac74530b29b3f9893f805062ddddb79e557276d36",
+   "errorCode": "invalid-roles"
+  },
+  {
+   "label": "refuse-truncated-grid",
+   "requestSha256": "57cef8178c4ca7f56f1f068a265921021d51b47820d0d62b76414bf28e641d44",
+   "responseSha256": "bcb7003e1a7e36020058ba4262da6f34907049b35effb226f2376ab4473d5168",
+   "errorCode": "invalid-grid"
+  }
+ ],
+ "outcomes": {
+  "steps": "1..32",
+  "searchGridCandidates": 205,
+  "searchCandidatesCandidates": 205,
+  "searchCandidatesMissing": 0,
+  "rolesThreadIndependent": true,
+  "subIndexObjects": 19
+ }
+}

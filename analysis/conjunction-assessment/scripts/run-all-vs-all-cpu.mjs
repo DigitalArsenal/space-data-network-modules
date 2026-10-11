@@ -25,11 +25,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { execFileSync } from 'node:child_process';
 import { createModuleHarness } from 'space-data-module-sdk/testing';
 import { createConjunctionCommandHarness } from '../tests/lib/conjunctionCommandHarness.mjs';
 import { eventSummary, screenCatalog, screenWindows, splitCatalog } from '../gpu/catalogScreen.mjs';
 import { createHpopFarm } from './lib/hpopFarm.mjs';
+import { aotModule } from './lib/aot.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values: o } = parseArgs({ options: {
@@ -51,24 +51,10 @@ const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6
 const windows = screenWindows(Number(o.start), Number(o.days), windowHours);
 const MARGIN_DAYS = 2 / 1440;   // HPOP returns whole intervals; this covers TDB - UTC
 
-// AOT: the module's sections (without the appended signature trailer, which
-// wasmedgec does not read), compiled to a universal wasm WasmEdge runs natively.
-function aotModule() {
-  const bytes = fs.readFileSync(path.join(root, 'dist/isomorphic/module.wasm'));
-  let at = 8;
-  while (at < bytes.length && bytes[at] <= 13) {
-    let p = at + 1, size = 0, shift = 0;
-    for (;;) { const x = bytes[p++]; size |= (x & 0x7f) << shift; shift += 7; if (!(x & 0x80)) break; }
-    at = p + size;
-  }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-aot-'));
-  fs.writeFileSync(path.join(dir, 'module.wasm'), bytes.subarray(0, at));
-  const compiler = process.env.WASMEDGEC ?? [path.join(os.homedir(), '.wasmedge/bin/wasmedgec')].find((x) => fs.existsSync(x)) ?? 'wasmedgec';
-  execFileSync(compiler, ['--enable-threads', path.join(dir, 'module.wasm'), path.join(dir, 'module.aot.wasm')], { stdio: 'ignore' });
-  return path.join(dir, 'module.aot.wasm');
-}
+// AOT: compiled to a universal wasm WasmEdge runs natively, as SDN nodes do.
+const compiler = () => process.env.WASMEDGEC ?? [path.join(os.homedir(), '.wasmedge/bin/wasmedgec')].find((x) => fs.existsSync(x)) ?? 'wasmedgec';
 const tc = performance.now();
-const wasmSource = o.aot && o.runtime !== 'node' ? aotModule() : undefined;
+const wasmSource = o.aot && o.runtime !== 'node' ? aotModule(path.join(root, 'dist/isomorphic/module.wasm'), compiler()) : undefined;
 const aotCompileMs = wasmSource ? performance.now() - tc : 0;   // once per install on a node; not part of the screen
 const harness = o['wasmedge-runner']
   ? await createModuleHarness({ runtime: { kind: 'wasmedge', launchPlan: { command: o['wasmedge-runner'],

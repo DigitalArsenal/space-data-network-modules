@@ -2367,7 +2367,8 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
     return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, or a covariance method with an uncertainty_model.");
   if (!t.index->primaries.empty())
     return error("unsupported-index", std::string(method) + " screens every source against every other; the index names primaries.");
-  if (t.index->sources.size() < 2)
+  // Sampling needs one source (the rows of one updated object); pairs need two.
+  if (t.index->sources.size() < (std::strcmp(method, "coarse_grid") == 0 ? 1u : 2u))
     return error("invalid-catalog", "At least two sources are required.");
   for (auto &s : t.index->sources) {
     if (!window(s, c, f))
@@ -2502,6 +2503,89 @@ extern "C" int search_candidates() {
                             reinterpret_cast<const uint8_t *>(out.data()), static_cast<uint32_t>(out.size() * 4)) < 0)
     return 500;
   return pushBlockReport(first, count, last, t.refs.size(), found.excluded) ? 0 : 500;
+}
+
+// The candidates of a coarse grid the host kept from coarse_grid (the same
+// window and block), found on the module's threads: the CPU counterpart of the
+// GPU search for a stored grid. Inputs: request (a $CQR WINDOW_REQUEST whose
+// controls give the window, coarse step, threshold and workers; its index is
+// not consulted: the grid holds every state the search reads); grid (CAG1 as
+// coarse_grid returned it); roles (optional: CAR1, u32 count = the grid's
+// objects, then one byte per object: 0 secondary, 1 primary, 2 skip; a pair is
+// searched when one member is a primary and neither is skipped; absent: every
+// pair). Outputs: candidates (CAC1 in grid rows, by step then pair) and report
+// (JSON: the block and the roles counted). Rows that are not finite (objects
+// coarse_grid excluded) are not searched. refine_candidates takes the
+// candidates on an index whose sources are the grid's rows, or the rows the
+// candidates name, in the same order.
+extern "C" int search_grid() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->WINDOW_REQUEST())
+    return error("invalid-request-arm", "search_grid requires WINDOW_REQUEST."), 400;
+  ScreeningConfig c;
+  if (!controls(q->WINDOW_REQUEST()->CONTROLS(), c))
+    return 400;
+  auto g = reader(input("grid"));
+  uint32_t first = 0, count = 0, objects = 0;
+  if (!g.tag("CAG1") || !g.get(first) || !g.get(count) || !g.get(objects))
+    return error("invalid-grid", "grid must be CAG1, u32 first_step, u32 step_count, u32 objects, then f32 states and bands."), 400;
+  const int32_t last = tight_last_coarse_step(c);
+  const size_t values = static_cast<size_t>(count) * objects * 8;
+  if (objects == 0 || count == 0 || static_cast<int64_t>(first) + count - 1 > last ||
+      g.n != 16 + (values + static_cast<size_t>(objects) * 2) * sizeof(float))
+    return error("invalid-grid", "The grid must hold rows for 1 or more steps of the window (steps 0.." +
+                                     std::to_string(last) + "), in coarse_grid's layout."), 400;
+  std::vector<uint8_t> roles;
+  if (const auto rf = input("roles")) {
+    auto r = reader(rf);
+    uint32_t n = 0;
+    if (!r.tag("CAR1") || !r.get(n) || n != objects || r.n != 8 + static_cast<size_t>(n))
+      return error("invalid-roles", "roles must be CAR1, u32 count (the grid's objects), then one byte per object."), 400;
+    roles.assign(r.p + 8, r.p + 8 + n);
+    if (std::any_of(roles.begin(), roles.end(), [](uint8_t x) { return x > kTightRoleSkip; }))
+      return error("invalid-roles", "A role is 0 (secondary), 1 (primary) or 2 (skip)."), 400;
+  }
+  // The rows are read in place when the frame is 4-byte aligned past its tag, else copied.
+  std::vector<float> copy;
+  const float* rows = reinterpret_cast<const float*>(g.p + 16);
+  if (reinterpret_cast<uintptr_t>(rows) % alignof(float) != 0) {
+    copy.resize(values + static_cast<size_t>(objects) * 2);
+    std::memcpy(copy.data(), g.p + 16, copy.size() * sizeof(float));
+    rows = copy.data();
+  }
+  StoredCoarseGrid grid;
+  grid.first_step = static_cast<int32_t>(first);
+  grid.step_count = static_cast<int32_t>(count);
+  grid.objects = objects;
+  grid.states = rows;
+  grid.bands = rows + values;
+  auto found = tight_grid_search_block(grid, c, roles);
+  if (conjunction::has_error())
+    return error("screening-failed", conjunction::error_message()), 422;
+  std::vector<uint32_t> out(2 + found.candidates.size() * 3);
+  std::memcpy(out.data(), "CAC1", 4);
+  out[1] = static_cast<uint32_t>(found.candidates.size());
+  for (size_t k = 0; k < found.candidates.size(); ++k) {
+    out[2 + 3 * k] = found.candidates[k].obj1;
+    out[3 + 3 * k] = found.candidates[k].obj2;
+    out[4 + 3 * k] = static_cast<uint32_t>(found.candidates[k].step);
+  }
+  if (plugin_push_output_ex("candidates", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
+                            reinterpret_cast<const uint8_t *>(out.data()), static_cast<uint32_t>(out.size() * 4)) < 0)
+    return 500;
+  size_t counted[3] = {0, 0, 0};
+  if (roles.empty()) counted[kTightRolePrimary] = objects;
+  for (const uint8_t x : roles) ++counted[x];
+  const std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
+                             ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(objects) +
+                             ",\"primaries\":" + std::to_string(counted[kTightRolePrimary]) +
+                             ",\"secondaries\":" + std::to_string(counted[kTightRoleSecondary]) +
+                             ",\"skipped\":" + std::to_string(counted[kTightRoleSkip]) +
+                             ",\"candidates\":" + std::to_string(found.candidates.size()) + "}";
+  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+                               reinterpret_cast<const uint8_t *>(report.data()), static_cast<uint32_t>(report.size())) >= 0
+             ? 0 : 500;
 }
 
 // Refines candidate pairs into the catalog result screen_catalog returns.

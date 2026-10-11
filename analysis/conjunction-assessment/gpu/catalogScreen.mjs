@@ -19,7 +19,7 @@ import {
 import { PRW } from 'spacedatastandards.org/lib/js/PRW/main.js';
 import { screenWindowsOnGpu } from './allVsAll.mjs';
 
-const INSTANCE = () => new PRWInstanceT('conjunction-assessment', 'catalog-screen', 1n);
+export const INSTANCE = () => new PRWInstanceT('conjunction-assessment', 'catalog-screen', 1n);
 const CQR_TYPE = { schemaName: 'CQR.fbs', fileIdentifier: '$CQR', rootTypeName: 'CQR', wireFormat: 'flatbuffer' };
 const PRW_TYPE = { schemaName: 'PRW.fbs', fileIdentifier: '$PRW', rootTypeName: 'PRW', wireFormat: 'flatbuffer' };
 
@@ -31,7 +31,8 @@ function encode(arm, value) {
   return builder.asUint8Array().slice();
 }
 
-function windowRequest(handle, frameName, { startJd, durationDays }, { thresholdKm, coarseStepSec, workers, algorithm }) {
+/** The $CQR WINDOW_REQUEST of a window on a resident index (`instance`: the index's). */
+export function windowRequest(handle, frameName, { startJd, durationDays }, { thresholdKm, coarseStepSec, workers, algorithm }, instance = INSTANCE()) {
   const controls = new CQRScreeningControlsT(
     new TIMInstantT(timingStandard.UTC, timEpochRepresentation.JULIAN_DATE, startJd),
     durationDays * 86400, thresholdKm * 1000, workers, coarseStepSec);
@@ -40,7 +41,7 @@ function windowRequest(handle, frameName, { startJd, durationDays }, { threshold
   const frame = frameName === 'TEME'
     ? new RFMCoordinateSystemT('TEME', rfmAxisType.TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399))
     : new RFMCoordinateSystemT('GCRF', rfmAxisType.ICRF, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399), 399);
-  return encode('WINDOW_REQUEST', new CQRWindowRequestT(INSTANCE(), handle, controls, frame));
+  return encode('WINDOW_REQUEST', new CQRWindowRequestT(instance, handle, controls, frame));
 }
 
 export const decodeCatalogResult = (bytes) => CQR.getRootAsCQR(new flatbuffers.ByteBuffer(bytes)).unpack().CATALOG_RESULT;
@@ -78,36 +79,50 @@ export const eventSummary = (e) => ({
  * @param {'sgp4'|'trajectories'} o.propagator
  * @param {Uint8Array[]} [o.catalog]  sgp4: one $OMM per object.
  * @param {{objects: {handle: number, objectId: string, name?: string, norad: number}[],
- *          window: (k: number, window: object) => Promise<{frames: Uint8Array[], dropped: {objectId: string, jd: number}[]}>}} [o.trajectories]
+ *          window: (k: number, window: object) => Promise<{frames: Uint8Array[], dropped: {objectId: string, norad: number, jd: number}[]}>}} [o.trajectories]
  *   trajectories: identities, and each window's $PRW records.
  * @param {object[]} o.windows  From screenWindows.
  * @param {{thresholdKm: number, coarseStepSec: number, workers: number}} o.controls
  * @param {{screenBlock: Function}} [o.screener]  A GPU screener; absent, the module searches on the CPU.
  * @param {Function} [o.onProgress]
  */
+/** The prepare_screening_index inputs for the sources (and, for trajectories, the propagator's $PRW records). */
+export const indexInputs = (sources, trajectories = [], instance = INSTANCE()) => [{ portId: 'request', typeRef: CQR_TYPE,
+  payload: encode('INDEX_REQUEST', new CQRIndexRequestT(instance, 0, [], 0, [],
+    cqrIndexRepresentation.SOURCE_DESCRIPTIONS, cqrRefinementStrategy.EXACT_ONLY, sources)) },
+  ...trajectories.map((payload) => ({ portId: 'trajectories', typeRef: PRW_TYPE, payload }))];
+
+/** A resident index of the sources (and, for trajectories, the propagator's $PRW records); its handle. */
+export async function prepareIndex(invoke, sources, trajectories = [], instance = INSTANCE()) {
+  const response = await invoke('prepare_screening_index', indexInputs(sources, trajectories, instance));
+  if (response.statusCode !== 0) throw new Error(`prepare_screening_index: ${response.errorCode}: ${response.errorMessage}`);
+  return CQR.getRootAsCQR(new flatbuffers.ByteBuffer(response.outputs[0].payload)).unpack().INDEX_RESULT.SCREENING_INDEX_HANDLE;
+}
+
+export const releaseIndex = (invoke, handle, instance = INSTANCE()) => invoke('destroy_screening_index', [{ portId: 'request',
+  typeRef: CQR_TYPE, payload: encode('DESTROY_REQUEST', new CQRDestroyRequestT(instance, handle)) }]);
+
+/** SGP4 sources of catalog $OMM records, handles 1..n in catalog order. */
+export function sgp4Sources(catalog) {
+  return catalog.map((bytes, i) => {
+    const omm = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack();
+    return new CQRObjectSourceT(omm.OBJECT_ID || String(omm.NORAD_CAT_ID), omm.OBJECT_NAME, omm.NORAD_CAT_ID, null, i + 1, 'sgp4', omm);
+  });
+}
+
 export async function screenCatalog(o) {
   const { invoke, controls } = o;
-  const prepare = async (sources, trajectories = []) => {
-    const response = await invoke('prepare_screening_index', [{ portId: 'request', typeRef: CQR_TYPE,
-      payload: encode('INDEX_REQUEST', new CQRIndexRequestT(INSTANCE(), 0, [], 0, [],
-        cqrIndexRepresentation.SOURCE_DESCRIPTIONS, cqrRefinementStrategy.EXACT_ONLY, sources)) },
-      ...trajectories.map((payload) => ({ portId: 'trajectories', typeRef: PRW_TYPE, payload }))]);
-    if (response.statusCode !== 0) throw new Error(`prepare_screening_index: ${response.errorCode}: ${response.errorMessage}`);
-    return CQR.getRootAsCQR(new flatbuffers.ByteBuffer(response.outputs[0].payload)).unpack().INDEX_RESULT.SCREENING_INDEX_HANDLE;
-  };
-  const release = (handle) => invoke('destroy_screening_index', [{ portId: 'request', typeRef: CQR_TYPE,
-    payload: encode('DESTROY_REQUEST', new CQRDestroyRequestT(INSTANCE(), handle)) }]);
+  const prepare = (sources, trajectories) => prepareIndex(invoke, sources, trajectories);
+  const release = (handle) => releaseIndex(invoke, handle);
 
   const t0 = performance.now();
   let prepareWindow, objects;
   if (o.propagator === 'sgp4') {
-    const omms = o.catalog.map((bytes) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack());
-    const sources = omms.map((omm, i) => new CQRObjectSourceT(omm.OBJECT_ID || String(omm.NORAD_CAT_ID), omm.OBJECT_NAME,
-      omm.NORAD_CAT_ID, null, i + 1, 'sgp4', omm));
+    const sources = sgp4Sources(o.catalog);
     const handle = await prepare(sources);
-    const sourceIds = sources.map((s) => s.OBJECT_ID);
+    const identities = sources.map((s) => [s.OBJECT_ID, s.NORAD_CATALOG_ID]);
     objects = sources.length;
-    prepareWindow = async (w) => ({ request: windowRequest(handle, 'TEME', w, controls), sourceIds });
+    prepareWindow = async (w) => ({ request: windowRequest(handle, 'TEME', w, controls), objects: identities });
   } else {
     const identity = new Map(o.trajectories.objects.map((x) => [x.handle, x]));
     objects = identity.size;
@@ -119,8 +134,8 @@ export async function screenCatalog(o) {
         return new CQRObjectSourceT(x.objectId, x.name, x.norad, null, h);
       });
       const handle = await prepare(sources, frames);
-      return { request: windowRequest(handle, 'GCRF', w, controls), sourceIds: sources.map((s) => s.OBJECT_ID),
-        excluded: dropped.map((d) => [d.objectId, d.jd]), release: () => release(handle) };
+      return { request: windowRequest(handle, 'GCRF', w, controls), objects: sources.map((s) => [s.OBJECT_ID, s.NORAD_CATALOG_ID]),
+        excluded: dropped.map((d) => [d.objectId, d.norad, d.jd]), release: () => release(handle) };
     };
   }
   const loadMs = performance.now() - t0;
