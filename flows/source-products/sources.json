@@ -528,6 +528,150 @@
         "AOE rewrites an object's set every three hours and keeps the last until the next: a snapshot holds one newest set per object, and the record's ctime (CREATION_DATE) is the moment a set was available. A history across snapshots is what the maneuver detector screens.",
         "parse_aoe also gives the id crosswalk (what AOE states about each object, as candidates) for the $CAT integrator; the flow does not take it."
       ]
+    },
+    {
+      "id": "igs-gps-precise",
+      "registry": [
+        "gps-precise"
+      ],
+      "kind": "ephemeris",
+      "originator": "IGS / BKG",
+      "lineage": "igs-sp3",
+      "licence": {
+        "class": "reproducible",
+        "id": "igs"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/sp3-precise-source",
+          "method": "read_sp3",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "analysis/od",
+        "method": "fit",
+        "input": "oem",
+        "output": "omm",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "IGS final and ultra-rapid GPS orbits (BKG mirrors them; the data centres serve them gzip-compressed, which the host expands). IGS products are open with citation, so a real file is a fixture: files/orbit-products/fixtures/igs15000.3ep.sp3 is the test's.",
+        "read_sp3 gives one $OEM per satellite, Earth-fixed in the realization the header names, on the file's time system; a file without velocity records ('P' only) stays position-only (STATE_VECTOR_SIZE 3), the shape analysis/od fits. The flow takes one ephemeris per invocation of the fit.",
+        "An SP3 file names a satellite by its vehicle id (G01), which is a PRN slot that is reassigned over time, not a catalog number. analysis/od gives an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A on its $OMM: a host must read the OEM's name, and the integrator joins an id to a catalog object only through a link.",
+        "A precise orbit is a derived product of its analysis centre with no covariance in the file: the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure."
+      ]
+    },
+    {
+      "id": "esa-glonass-precise",
+      "registry": [
+        "glonass-precise"
+      ],
+      "kind": "ephemeris",
+      "originator": "ESA/ESOC Navigation Support Office",
+      "lineage": "esa-glonass-sp3",
+      "licence": {
+        "class": "cite-only",
+        "id": "esa-navigation-office"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/sp3-precise-source",
+          "method": "read_sp3",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "analysis/od",
+        "method": "fit",
+        "input": "oem",
+        "output": "omm",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "ESA/ESOC's GLONASS orbits (ESA0OPSFIN, ESA0OPSRAP, ESA0OPSULT). ESA's terms grant no redistribution right of their own, so the records are computed on and cited, never republished.",
+        "read_sp3 gives one $OEM per satellite, Earth-fixed in the realization the header names, on the file's time system; a file without velocity records ('P' only) stays position-only (STATE_VECTOR_SIZE 3), the shape analysis/od fits. The flow takes one ephemeris per invocation of the fit.",
+        "An SP3 file names a satellite by its vehicle id (G01), which is a PRN slot that is reassigned over time, not a catalog number. analysis/od gives an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A on its $OMM: a host must read the OEM's name, and the integrator joins an id to a catalog object only through a link.",
+        "A precise orbit is a derived product of its analysis centre with no covariance in the file: the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure."
+      ]
+    },
+    {
+      "id": "esa-pod",
+      "registry": [
+        "esa-pod"
+      ],
+      "kind": "ephemeris",
+      "originator": "ESA/ESOC Navigation Support Office",
+      "lineage": "esa-pod-sp3",
+      "licence": {
+        "class": "cite-only",
+        "id": "esa-navigation-office-pod"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/sp3-precise-source",
+          "method": "read_sp3",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "analysis/od",
+        "method": "fit",
+        "input": "oem",
+        "output": "omm",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "ESA/ESOC's precise orbits of ESA Earth-observation satellites that are SP3 files (CryoSat-2, Swarm); Sentinel-1's AUX_POEORB is another format and is not read here. No open licence covers them: the records are computed on and cited, never republished.",
+        "read_sp3 gives one $OEM per satellite, Earth-fixed in the realization the header names, on the file's time system; a file without velocity records ('P' only) stays position-only (STATE_VECTOR_SIZE 3), the shape analysis/od fits. The flow takes one ephemeris per invocation of the fit.",
+        "An SP3 file names a satellite by its vehicle id (G01), which is a PRN slot that is reassigned over time, not a catalog number. analysis/od gives an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A on its $OMM: a host must read the OEM's name, and the integrator joins an id to a catalog object only through a link.",
+        "A precise orbit is a derived product of its analysis centre with no covariance in the file: the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure."
+      ]
     }
   ],
   "refused": [
@@ -542,8 +686,9 @@
       "module": "data-source/gps-source",
       "registry": [],
       "check": "no-orbit-output",
-      "reason": "Pull-only, and its $OMM sets are GPS almanac elements (theory GPS-LNAV-ALMANAC), not SGP4: epoch-state and the SGP4 error model refuse them. GPS precise orbits are the ephemeris source.",
-      "task": "modules-sp3-precise-source-20261011"
+      "reason": "Pull-only, and its $OMM sets are GPS almanac elements (theory GPS-LNAV-ALMANAC), not SGP4: epoch-state and the SGP4 error model refuse them. GPS precise orbits are the ephemeris source (data-source/sp3-precise-source, igs-gps-precise); the almanac is not a substitute for them.",
+      "task": null,
+      "permanent": true
     },
     {
       "module": "data-source/oneweb-source",
@@ -574,22 +719,6 @@
     }
   ],
   "missing": [
-    {
-      "name": "IGS / BKG GPS precise, ESA GLONASS precise and ESA precise orbit determination (SP3)",
-      "registry": [
-        "gps-precise",
-        "glonass-precise",
-        "esa-pod"
-      ],
-      "kind": "ephemeris",
-      "licence": [
-        "igs",
-        "esa-navigation-office",
-        "esa-navigation-office-pod"
-      ],
-      "module": "data-source/sp3-precise-source",
-      "task": "modules-sp3-precise-source-20261011"
-    },
     {
       "name": "Telesat",
       "registry": [

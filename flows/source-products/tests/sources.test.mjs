@@ -110,7 +110,7 @@ test('every orbit data-source module of the repository is classified, and none i
 
 test('the sources refused give no orbit records, with a reason and the task that changes it', () => {
   for (const r of registry.refused) {
-    assert.ok(r.reason.length > 40 && r.task, r.module);
+    assert.ok(r.reason.length > 40 && (r.task || r.permanent), r.module);
     const manifest = manifestOf(r.module);
     assert.equal(r.check, 'no-orbit-output');
     const gives = manifest.methods.flatMap((m) => m.outputPorts.flatMap(typesOf)).filter((t) => ORBIT_TYPES.has(t));
