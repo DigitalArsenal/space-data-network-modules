@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 import {
-  alignedOem, cellOf, encodeMnv, encodeOmm, expectedCovariance, fitOcm, json, leoH, OCM, OEM, OMM, ocmFrame, ommFrame, operatorOem, param, recipeFor, records, unpackMnv, unpackOcm,
+  alignedOem, cellOf, encodeMnv, encodeOmm, expectedCovariance, fitOcm, json, leoH, OCM, OEM, OMM, ocmFrame, ommFrame, ommParam, operatorOem, param, recipeFor, records, unpackMnv, unpackOcm,
   unpackOmm, flatbuffers,
 } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory, LEO, T0, add, kepler, mul, unit, version as ephemerisVersion, planned as plannedBurn, MNV as MD_MNV } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
@@ -73,6 +73,10 @@ test('an element-set source: the newest set of an object gets states, a covarian
   const [mmo] = records(egressBytes(egress, 'omm')).map(unpackOmm);
   assert.equal(mmo.NORAD_CAT_ID, 99999);
   assert.equal(mmo.ORIGINATOR, 'CelesTrak');
+  // The label rides on the $OMM as USER_DEFINED_x keywords. The flow links the modules' objects, so the $OMM the flow writes is
+  // the schema release gp-error-model was built against, not the older one epoch-state was.
+  assert.equal(ommParam(mmo, 'COV_RULE'), '3');
+  assert.equal(JSON.parse(ommParam(mmo, 'COV_LABEL')).regime, 'LEO-L');
   assert.equal(egressJson(egress, 'covariance_report').counts.rule3, 1);
 
   // The 1 m/s burn between sets 15 and 16, found through the detector's two passes with SGP4 answering the port.

@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FIXTURE as VALLADO, mpeStream } from '../../../analysis/epoch-state/tests/fixtures.mjs';
-import { param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
+import { ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { recipeFor, registry } from '../recipe.mjs';
@@ -168,6 +168,11 @@ for (const source of registry.sources) {
       for (const omm of omms) {
         assert.equal(omm.ORIGINATOR, source.originator);
         for (const text of [source.id, provider(w.module), source.licence.class]) assert.ok(omm.COMMENT.includes(text), `the $OMM names ${text}`);
+        // And as USER_DEFINED_x keywords, which only a flow that links every module's own SDS code can write (see the module builds).
+        assert.equal(ommParam(omm, 'SOURCE_ID'), source.id);
+        assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider(w.module));
+        assert.equal(ommParam(omm, 'LICENCE_CLASS'), source.licence.class);
+        assert.equal(ommParam(omm, 'LICENCE_ID'), source.licence.id);
       }
       if (!mpe) {
         // The burn in the history, on a $MNV that names the source.

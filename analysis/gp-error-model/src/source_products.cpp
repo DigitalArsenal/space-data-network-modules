@@ -9,7 +9,7 @@
 //             $OCM   a fit's state and formal covariance (COVARIANCE_DATA)
 //   recipe    JSON   the source's attribution, the models and their held-out verdicts, the measured realism factors
 //   -> ocm    $OCM   state and covariance per object, with the covariance's label
-//      omm    $OMM   the element set with its COVARIANCE and the label in COMMENT
+//      omm    $OMM   the element set with its COVARIANCE, and the source and the label in USER_DEFINED_PARAMETERS
 //      report JSON   per object: the rule that applied, why the earlier rules did not, every row's cell and verdict
 //
 // The first rule that applies gives the covariance of an object's product:
@@ -899,6 +899,25 @@ void add_param(OCMT* ocm, const std::string& name, const std::string& value) {
   p->PARAM_VALUE = value;
   ocm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
 }
+// The same facts on an $OMM, as the USER_DEFINED_x keywords of CCSDS 502.0-B-3 (SDS 1.245.0: OMM USER_DEFINED_PARAMETERS).
+void add_param(OMMT* omm, const std::string& name, const std::string& value) {
+  auto p = std::make_unique<OMMUserDefinedParameterT>();
+  p->PARAM_NAME = name;
+  p->PARAM_VALUE = value;
+  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
+}
+// The facts about the source every record carries, whichever record it is (the $OCM adds PRODUCT and the frame).
+template <class Record>
+void add_source_params(Record* record, const Recipe& r) {
+  add_param(record, "SOURCE_ID", r.a.id);
+  add_param(record, "SOURCE_KIND", r.a.kind);
+  add_param(record, "SOURCE_ORIGINATOR", r.a.originator);
+  add_param(record, "SOURCE_PROVIDER", r.a.provider);
+  add_param(record, "SOURCE_LINEAGE", r.a.lineage);
+  add_param(record, "LICENCE_CLASS", r.a.licence_class);
+  if (!r.a.licence_id.empty()) add_param(record, "LICENCE_ID", r.a.licence_id);
+  add_param(record, "PRODUCER", r.producer);
+}
 
 std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const std::string& name, const std::string& object_id,
                                uint32_t norad, const Product& p) {
@@ -950,14 +969,7 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
   ocm->ORBIT_DETERMINATION->OD_METHOD = p.kind;
   ocm->ORBIT_DETERMINATION->OD_ALGORITHM = p.method;
   ocm->ORBIT_DETERMINATION->OD_COV_REDUCTION = p.method;
-  add_param(ocm.get(), "SOURCE_ID", r.a.id);
-  add_param(ocm.get(), "SOURCE_KIND", r.a.kind);
-  add_param(ocm.get(), "SOURCE_ORIGINATOR", r.a.originator);
-  add_param(ocm.get(), "SOURCE_PROVIDER", r.a.provider);
-  add_param(ocm.get(), "SOURCE_LINEAGE", r.a.lineage);
-  add_param(ocm.get(), "LICENCE_CLASS", r.a.licence_class);
-  if (!r.a.licence_id.empty()) add_param(ocm.get(), "LICENCE_ID", r.a.licence_id);
-  add_param(ocm.get(), "PRODUCER", r.producer);
+  add_source_params(ocm.get(), r);
   add_param(ocm.get(), "PRODUCT", p.kind);
   add_param(ocm.get(), "COV_RULE", std::to_string(p.rule));
   add_param(ocm.get(), "COV_METHOD", p.method);
@@ -968,19 +980,29 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
   return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
 }
 
-// The element set as published, with the covariance of one of the product's rows (in RTN axes) and the label in COMMENT.
+// The element set as published, with the covariance of one of the product's rows (in RTN axes). The source and the label are
+// USER_DEFINED_PARAMETERS (the label of the row the covariance is of is COV_LABEL, as in the $OCM's COV_LABELS) and are
+// read aloud in COMMENT.
 std::vector<uint8_t> build_omm(const Recipe& r, const SetRec& s, const Product* p, size_t row, const std::array<double, 21>* rtn,
                                const std::string& why) {
   std::unique_ptr<OMMT> omm((s.prefixed ? GetSizePrefixedOMM(s.bytes.data()) : GetOMM(s.bytes.data()))->UnPack());
   omm->ORIGINATOR = r.a.originator;
+  add_source_params(omm.get(), r);
   std::string note = "SDN covariance: ";
   if (p && rtn) {
     const Label& label = p->rows[row].label;
     note += "rule " + std::to_string(p->rule) + " " + p->method + "; " + (label.calibrated() ? "CALIBRATED" : "UNCALIBRATED") + "; " + reference_text(label);
     omm->COVARIANCE.assign(rtn->begin(), rtn->end());
     omm->COV_REFERENCE_FRAME = std::make_unique<RFMT>(*rtn_frame());
+    add_param(omm.get(), "COV_RULE", std::to_string(p->rule));
+    add_param(omm.get(), "COV_METHOD", p->method);
+    add_param(omm.get(), "COV_CALIBRATION", label.calibrated() ? "CALIBRATED" : "UNCALIBRATED");
+    Json l = label_json(label);
+    l["epoch"] = p->rows[row].text;
+    add_param(omm.get(), "COV_LABEL", l.dump());
   } else {
     note += "unavailable (" + why + ")";
+    add_param(omm.get(), "COV_UNAVAILABLE", why);
   }
   note += " | source " + r.a.id + ", originator " + r.a.originator + ", provider " + r.a.provider + ", licence " + r.a.licence_class;
   omm->COMMENT = omm->COMMENT.empty() ? note : omm->COMMENT + " | " + note;

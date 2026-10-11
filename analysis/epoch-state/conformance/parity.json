@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "epoch-state: derive with ages, omm_from_mpe, derive_omm, answer_propagation_requests",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "bcfeb823181f32a3deebb2399e09edcaddff21fecae44b983a6fc712f6bfae19",
-  "moduleSha256": "5cc2b4ce07330995191a7741c50ee69a40089a1cc8ada29ae06d5e3f8ffe4b88",
+  "artifactSha256": "d793c5f165b13d152479a6af93e61c7fd0c38dea5a7e6101196236196cb9e421",
+  "moduleSha256": "9cb3e172f0ec00c8ed8e0fd23dcad5db239e4d44fbe55dbcd5af1f5a68ea2855",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 6,
-      "durationMs": 973
+      "durationMs": 1016
     },
     {
       "lane": "wasmedge",
       "runs": 6,
-      "durationMs": 1401
+      "durationMs": 1449
     },
     {
       "lane": "docker-wasmedge",
       "runs": 6,
-      "durationMs": 3523
+      "durationMs": 4043
     }
   ],
   "cases": [

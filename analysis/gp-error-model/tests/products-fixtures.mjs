@@ -142,6 +142,7 @@ export function records(bytes) {
 }
 export const unpackOcm = (b) => OCM.OCM.getSizePrefixedRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
 export const unpackOmm = (b) => OMM.OMM.getSizePrefixedRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
+export const ommParam = (omm, name) => omm.USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === name)?.PARAM_VALUE;
 export const unpackMnv = (b) => MNV.MNV.getSizePrefixedRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
 export const param = (ocm, name) => ocm.USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === name)?.PARAM_VALUE;
 

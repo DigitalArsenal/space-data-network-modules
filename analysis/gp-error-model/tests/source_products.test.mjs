@@ -12,7 +12,7 @@ import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance'
 import { fileURLToPath } from 'node:url';
 import {
   OCM, OEM, OMM, MNV, alignedOem, call, cellOf, deriveStates, encodeMnv, encodeOmm, expectedCovariance, fitOcm, json, kc, leoH, manifest, mnvFrame,
-  beyond, ommFrame, ocmFrame, oemFrame, operatorOem, output, param, recipeFor, records, reportOf, unpackMnv, unpackOcm, unpackOmm, valladoOmm, vallado,
+  beyond, ommFrame, ommParam, ocmFrame, oemFrame, operatorOem, output, param, recipeFor, records, reportOf, unpackMnv, unpackOcm, unpackOmm, valladoOmm, vallado,
 } from './products-fixtures.mjs';
 
 const close = (a, b, what, tolerance = 1e-12) => assert.ok(Math.abs(a - b) <= tolerance * Math.max(1, Math.abs(b)), `${what}: ${a} vs ${b}`);
@@ -92,6 +92,14 @@ test('rule 3: the model covariance at each age, with the held-out verdict of eac
   assert.equal(omms[0].ORIGINATOR, 'CelesTrak');
   assert.match(omms[0].COMMENT, /^GP_ID 1 \| SDN covariance: rule 3 e14-s3-kc; CALIBRATED; orbit-accuracy-experiments E14 test 2026-05-01\.\.2026-09-30: LEO-H 0 d/);
   assert.match(omms[0].COMMENT, /\| source celestrak-gp, originator CelesTrak, provider sdn:celestrak-gp, licence redistributable$/);
+  // The same facts as the CCSDS USER_DEFINED_x keywords (SDS 1.245.0), for a reader that parses rather than reads: the label
+  // is the $OCM's label of the row the covariance is of.
+  for (const [name, value] of Object.entries({ SOURCE_ID: 'celestrak-gp', SOURCE_KIND: 'element-set', SOURCE_ORIGINATOR: 'CelesTrak', SOURCE_PROVIDER: 'sdn:celestrak-gp',
+    SOURCE_LINEAGE: 'space-track-gp', LICENCE_CLASS: 'redistributable', LICENCE_ID: 'celestrak-gp-terms', PRODUCER: 'SDN catalog pipeline', COV_RULE: '3', COV_METHOD: 'e14-s3-kc', COV_CALIBRATION: 'CALIBRATED' })) {
+    assert.equal(ommParam(omms[0], name), value, name);
+  }
+  assert.deepEqual(JSON.parse(ommParam(omms[0], 'COV_LABEL')), labels(ocm)[0]);
+  assert.equal(ommParam(omms[0], 'COV_UNAVAILABLE'), undefined);
   // The report cites each record by its hash.
   assert.equal(report.objects[0].ocmSha256, sha256(ocmBytes[0]));
   assert.equal(report.objects[0].ommSha256, sha256(ommBytes[0]));
@@ -116,6 +124,8 @@ test('rule 4: a source with no model of its own uses the pooled model, uncalibra
   close(row.meanD2Over3, cellOf('LEO-H', 0).meanD2Over3, 'the pooled cell\'s numbers are kept', 0);
   assert.equal(ocm.COV_CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
   assert.match(omms[0].COMMENT, /rule 4 e14-s3-kc-pooled; UNCALIBRATED/);
+  assert.equal(ommParam(omms[0], 'COV_CALIBRATION'), 'UNCALIBRATED');
+  assert.equal(ommParam(omms[0], 'COV_METHOD'), 'e14-s3-kc-pooled');
 });
 
 test('every regime the model covers gets its stratum; HEO has no model and a set beyond every regime has none; both are reported, not guessed', async () => {
@@ -139,6 +149,9 @@ test('every regime the model covers gets its stratum; HEO has no model and a set
   const heo = omms.find((o) => o.OBJECT_ID === '1977-021A');
   assert.equal(heo.COVARIANCE.length, 0);
   assert.match(heo.COMMENT, /SDN covariance: unavailable \(no-model-for-regime\)/);
+  assert.equal(ommParam(heo, 'COV_UNAVAILABLE'), 'no-model-for-regime');
+  assert.equal(ommParam(heo, 'COV_RULE'), undefined, 'no rule applied');
+  assert.equal(ommParam(heo, 'SOURCE_ID'), 'celestrak-gp', 'the set still names its source');
 });
 
 test('the newest set of each object gives the outputs; latestOnly false gives all', async () => {
@@ -158,6 +171,8 @@ test('SGP4-XP sets are published with their source and no covariance until the X
   assert.equal(xp.COVARIANCE.length, 0);
   assert.match(xp.COMMENT, /unavailable \(sgp4xp-no-propagator-or-error-model\)/);
   assert.match(xp.COMMENT, /source celestrak-gp, originator CelesTrak/);
+  assert.equal(ommParam(xp, 'COV_UNAVAILABLE'), 'sgp4xp-no-propagator-or-error-model');
+  assert.equal(ommParam(xp, 'SOURCE_ORIGINATOR'), 'CelesTrak');
   assert.equal(report.counts.withoutCovariance, 1);
 });
 

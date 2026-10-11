@@ -293,9 +293,19 @@ covariance has not itself been tested.
 | --- | --- | --- |
 | State | `STATE_DATA`, `STATE_EPOCHS`: the rows of `states`, the operator's, or the fit's | the element set unchanged |
 | Covariance | `COVARIANCE_DATA`, 21 values per row (lower triangle, km², km²/s, km²/s²), `COV_REF_FRAME` RSW for a modeled covariance, as supplied for an operator's | `COVARIANCE` of the row nearest the epoch in RTN, `COV_REFERENCE_FRAME` RSW |
-| Calibration | `COV_CALIBRATION`: Calibrated only if every row is; `COV_CALIBRATION_REFERENCE`: the first row's evidence in one line | the label appended to `COMMENT` |
-| Label of every row | `USER_DEFINED_PARAMETERS` `COV_LABELS`: JSON, one object per row (rule, method, model, regime, cell, verdict, calibration, mean d²/3, coverage, samples, objects, scale factor, basis) | |
-| Source | `HEADER.ORIGINATOR` the source's originator; `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER`, `PRODUCT`, `COV_RULE`, `COV_METHOD`, `COV_FRAME` | `ORIGINATOR` the source's originator; source, provider and licence class appended to `COMMENT` |
+| Calibration | `COV_CALIBRATION`: Calibrated only if every row is; `COV_CALIBRATION_REFERENCE`: the first row's evidence in one line | `COV_CALIBRATION` of the row the covariance is of (`CALIBRATED` or `UNCALIBRATED`) |
+| Label of every row | `USER_DEFINED_PARAMETERS` `COV_LABELS`: JSON, one object per row (rule, method, model, regime, cell, verdict, calibration, mean d²/3, coverage, samples, objects, scale factor, basis) | `USER_DEFINED_PARAMETERS` `COV_LABEL`: the same object, of the row the covariance is of; `COV_RULE` and `COV_METHOD`; for a set without a covariance `COV_UNAVAILABLE` and the reason |
+| Source | `HEADER.ORIGINATOR` the source's originator; `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER`, `PRODUCT`, `COV_RULE`, `COV_METHOD`, `COV_FRAME` | `ORIGINATOR` the source's originator; `USER_DEFINED_PARAMETERS` `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER` |
+
+**SDS carriers (release 1.245.0).** The `$OMM` takes the source and the label as the
+CCSDS `USER_DEFINED_x` keywords (`OMM.USER_DEFINED_PARAMETERS`) and reads them aloud in
+`COMMENT`. The `$OCM` takes the source and the label in its `USER_DEFINED_PARAMETERS`; its
+`COV_CALIBRATION` is one value per message though its rows lie in different cells, so the
+per-row verdict, the measured mean d²/3, the coverage, the samples and the objects are
+`COV_LABELS`. The release's `OCMCovarianceBlock` (`COV_BASIS`, `COV_BASIS_ID`,
+`COV_CONFIDENCE`) states a covariance time history as the message's text lines, a second
+copy of `COVARIANCE_DATA`; the records do not use it. The `$MNV` has no `ORIGINATOR`,
+provider or licence field: its source is in `TAGS`.
 
 The report lists, per object, the rule that applied, why each earlier rule did
 not, every row's cell and verdict, the SHA-256 of each record, and the

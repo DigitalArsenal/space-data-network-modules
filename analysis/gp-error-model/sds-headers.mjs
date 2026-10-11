@@ -58,5 +58,10 @@ export async function generateSdsHeaders(roots, from) {
       .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_${family}_MAIN_H_`)
       .replace(/^#include "main_generated\.h"\n/gm, ""));
   }
-  return { header: headers.join("\n"), version, families: order };
+  // Internal linkage. The flow compiler links the objects of several modules into one artifact, and the linker keeps one
+  // copy of each equal external C++ symbol. Generated SDS code from different releases of a schema (an OMM with and
+  // without USER_DEFINED_PARAMETERS) is equal in name and different in layout, so the copy the linker kept would be
+  // another module's. Each module keeps its own.
+  const body = headers.join("\n").replaceAll('#include "flatbuffers/flatbuffers.h"\n', "");
+  return { header: `#include "flatbuffers/flatbuffers.h"\nnamespace {\n${body}\n}  // namespace\n`, version, families: order };
 }

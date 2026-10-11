@@ -20,9 +20,16 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 
 // One translation unit: the family headers go in dependency order, so their
 // cross-family includes are dropped rather than resolved.
-const sdsHeaders = SCHEMA_FAMILIES.map((family) =>
-  headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, ""),
-);
+// They have internal linkage: the flow compiler links the objects of several modules into one artifact, and the linker
+// keeps one copy of each equal external C++ symbol. Generated SDS code from different releases of a schema is equal in
+// name and different in layout, so the copy kept could be another module's. Each module keeps its own.
+const sdsHeaders = [
+  '#include "flatbuffers/flatbuffers.h"\nnamespace {',
+  ...SCHEMA_FAMILIES.map((family) =>
+    headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "").replaceAll('#include "flatbuffers/flatbuffers.h"\n', ""),
+  ),
+  "}  // namespace",
+];
 
 // The same ERFA, body models and axis engine foundation/frames compiles: one
 // TEME/GCRF chain, not a second implementation.

@@ -14,7 +14,7 @@ compared like for like and any one can be shown on its own:
 
 Every record names its source: `ORIGINATOR` the source's originator, the
 provider, the licence class and the lineage in `USER_DEFINED_PARAMETERS`
-(`$OCM`), `COMMENT` (`$OMM`) and `TAGS` (`$MNV`, which has no `ORIGINATOR`). A
+(`$OCM` and `$OMM`) and `TAGS` (`$MNV`, which has no `ORIGINATOR`). A
 recipe that does not name them is refused. Records of a source without
 reproduction terms are computed on and cited, never republished: the report
 carries the licence of each.
@@ -111,6 +111,11 @@ npm run check   # flow check
 npm run build   # flow compile -> dist/ (single-thread Emception link of the modules' guest-link objects)
 npm test        # the flow in the SDK's JS flow host, compared byte for byte with the module chain
 ```
+
+Each module keeps its own copy of the SDS code it was generated against, with
+internal linkage: the linker keeps one copy of each equal external C++ symbol, and the
+`$OMM` of gp-error-model (release 1.245.0) differs from epoch-state's (1.226.0) in a field
+it writes. Without this the flow wrote the older `$OMM` and dropped the label.
 
 The modules' guest-link objects (`dist/guest-link` of `analysis/epoch-state`,
 `analysis/gp-error-model`, `analysis/maneuver-detection`) are built by their own
