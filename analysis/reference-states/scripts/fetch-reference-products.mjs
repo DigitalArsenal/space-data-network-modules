@@ -5,7 +5,7 @@
 // --eop finals the observed rows of finals2000A, for the Earth rotation.
 //
 //   node scripts/fetch-reference-products.mjs --from 2026-09-01 --to 2026-09-07 \
-//     [--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2] \
+//     [--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2,mgex] \
 //     [--local-archive DIR] [--out DIR]
 //
 // Products (all public):
@@ -37,6 +37,15 @@
 //              L65): 14-hour arcs every 12 hours, 30 s, GPS time. Their
 //              coordinate system is written "CTS", the conventional
 //              terrestrial system, and is read as ITRF.
+//   mgex       one IGS analysis centre's multi-GNSS orbits (--mgex-product, default
+//              GFZ0MGXRAP_: GFZ's rapid MGEX orbits, 5 min, with BeiDou's GEO and
+//              IGSO and QZSS's GEO and QZO satellites), from CDDIS copies under
+//              --local-archive cddis/gnss/products/<week>/ (each checked against
+//              its .provenance.json); the systems of --mgex-systems (default
+//              BeiDou, Galileo, GLONASS, QZSS: GPS is the gps product's), each
+//              satellite's identity from the IGS satellite metadata SINEX as for
+//              gps. Each satellite's sigma is the header's; where the header gives
+//              0, the largest accuracy the same file states (stated with its basis).
 //   cosmic2    UCAR CDAAC near-real-time orbits of the COSMIC-2 spacecraft:
 //              daily tarballs of overlapping SP3-c arcs about 2 hours long
 //              (60 s, IGS08), named leoOrb_<yyyy>.<ddd>.<FM>.<nn>.
@@ -68,8 +77,11 @@ const { values } = parseArgs({ options: {
   // c04: IERS EOP 20 C04 (final, about 30 days behind). finals: IERS finals2000A,
   // observed rows only, for truth newer than C04 reaches.
   eop: { type: 'string', default: 'c04' },
-  // Already-downloaded copies, read by doris, gfz-rso and cosmic2.
+  // Already-downloaded copies, read by doris, gfz-rso, cosmic2 and mgex.
   'local-archive': { type: 'string', default: '/opt/data/sdn-archive/hac' },
+  // mgex: the analysis centre's product prefix and the systems taken (GPS is the gps product's).
+  'mgex-product': { type: 'string', default: 'GFZ0MGXRAP_' },
+  'mgex-systems': { type: 'string', default: 'C,E,R,J' },
 } });
 if (!['c04', 'finals'].includes(values.eop)) throw new Error('--eop is c04 or finals.');
 if (!values.from || !values.to) throw new Error('--from and --to (YYYY-MM-DD) are required.');
@@ -247,6 +259,44 @@ async function gps(day) {
   const { satellites, sinexSha256 } = await gnssIdentities(day + DAY / 2);
   await referenceStates(name.replace('.SP3.gz', ''), sp3, { product: name, source: url, satellites },
     { product: name, url, sha256: sha256(gz), identities: SINEX_URL, identitiesSha256: sinexSha256 });
+}
+
+// ── GNSS MGEX: one analysis centre's multi-GNSS daily orbits, local copies from CDDIS ──
+// The largest header accuracy code (2^n mm) of a file's satellites of `systems` (0 when it states none).
+function mgexMaxCode(sp3, systems) {
+  const head = sp3.toString('latin1', 0, 8192).split('\n');
+  const ids = head.filter((l) => l.startsWith('+ ')).flatMap((l) => l.slice(9, 60).match(/.{3}/g) ?? []).map((x) => x.trim());
+  const codes = head.filter((l) => l.startsWith('++')).flatMap((l) => l.slice(9, 60).match(/.{3}/g) ?? []).map(Number);
+  return Math.max(0, ...ids.map((id, k) => [id, codes[k]]).filter(([id, c]) => /^[A-Z]\d\d$/.test(id) && systems.has(id[0]) && c > 0).map(([, c]) => c));
+}
+let mgexSeriesMax = null;
+async function mgex(day) {
+  const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
+  const week = Math.floor((day - Date.UTC(1980, 0, 6)) / (7 * DAY));
+  const name = `${values['mgex-product']}${d.getUTCFullYear()}${String(doy).padStart(3, '0')}0000_01D_05M_ORB.SP3.gz`;
+  const file = path.join(values['local-archive'], 'cddis', 'gnss', 'products', String(week), name);
+  if (!fs.existsSync(file)) return console.warn(`mgex: ${name} is not in the local archive`);
+  const copy = localCopy(file);
+  if (!copy) return;
+  const systems = new Set(values['mgex-systems'].split(','));
+  const { satellites, sinexSha256 } = await gnssIdentities(day + DAY / 2);
+  const sp3 = gunzipSync(copy.bytes);
+  // A satellite the header leaves at accuracy 0 (unknown) takes the largest accuracy the file states for any satellite
+  // of the systems taken (2^n mm): the analysis centre's own figure for its least accurate orbits.
+  const fileMax = mgexMaxCode(sp3, systems);
+  // A file whose header gives 0 for every satellite takes the largest accuracy the product states on any day held.
+  mgexSeriesMax ??= Math.max(...fs.readdirSync(path.join(values['local-archive'], 'cddis', 'gnss', 'products')).flatMap((w) => {
+    const dir = path.join(values['local-archive'], 'cddis', 'gnss', 'products', w);
+    return fs.readdirSync(dir).filter((n) => n.startsWith(values['mgex-product']) && n.endsWith('_ORB.SP3.gz')).map((n) => mgexMaxCode(gunzipSync(fs.readFileSync(path.join(dir, n))), systems));
+  }));
+  const maxCode = fileMax > 0 ? fileMax : mgexSeriesMax;
+  const statedSigmaM = 2 ** maxCode / 1000;
+  const statedSigmaBasis = fileMax > 0
+    ? `the largest header accuracy ${name.slice(0, 3)} states in the same file for a satellite of systems ${[...systems].join('')} (2^${maxCode} mm), applied where the header gives 0 (unknown)`
+    : `the largest header accuracy ${name.slice(0, 3)} states for a satellite of systems ${[...systems].join('')} in any file of the series held (2^${maxCode} mm): this file's header gives 0 (unknown) for every satellite`;
+  const chosen = Object.fromEntries(Object.entries(satellites).filter(([prn]) => systems.has(prn[0])));
+  await referenceStates(name.replace('.SP3.gz', ''), sp3, { product: name, source: copy.url, statedSigmaM, statedSigmaBasis, satellites: chosen },
+    { product: name, url: copy.url, sha256: copy.sha256, identities: SINEX_URL, identitiesSha256: sinexSha256, systems: [...systems], statedSigmaM, statedSigmaBasis });
 }
 
 // ── SLR: ILRS combined weekly arcs ──
@@ -580,6 +630,7 @@ for (let day = from; day <= to; day += DAY) {
   if (products.has('swarm')) await swarm(day);
   if (products.has('slr-daily') && (day - from) % (4 * DAY) === 0) await slrDaily(day);
   if (products.has('gps')) await gps(day);
+  if (products.has('mgex')) await mgex(day);
   if (products.has('sentinel1')) await sentinel1(day);
   // ILRS arcs are named by their last day, one each week.
   if (products.has('slr')) {
