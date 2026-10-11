@@ -297,6 +297,10 @@ Artifacts:
 - `dist/browser/module.js`
 - `dist/browser/module.wasm`
 
+### Runtime notes
+
+- WasmEdge 0.16 (interpreter): a C++ exception thrown and caught inside the module leaves the module's `free` looping afterwards (V8 is unaffected), so module errors are returned or flagged, never thrown across a call.
+
 ## Portable PRW contract (SDS 1.240.0)
 
 Every advertised method consumes size-prefixed `$PRW` records through the SDK
@@ -346,10 +350,8 @@ interior, where the gravity field diverges. A non-finite state ends it too.
 - **The height** is taken about the GCRF pole, within about 0.2 km of the
   Earth-fixed geodetic height (the CIP's offset from the GCRF pole), so the
   test needs no Earth orientation.
-- **A flag, not an exception.** A C++ exception thrown and caught inside the
-  module left WasmEdge 0.16's interpreter looping in the module's `free`
-  afterwards (V8 was unaffected), so the stop is a recorded flag that the
-  integrators and the PRW methods check.
+- **A flag, not an exception** (see [Runtime notes](#runtime-notes)): the
+  integrators and the PRW methods check the recorded stop.
 
 Tests: `tests/reentry.test.mjs` (a 140 km orbit with Cd*A/m 0.02 m²/kg reenters
 about 1.4 h after its epoch; both paths report the same epoch; another object

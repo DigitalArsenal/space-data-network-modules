@@ -39,10 +39,11 @@ for (const [key, ea] of pa) {
 }
 const quantile = (v, p) => { const s = [...v].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN; };
 const median = (v) => quantile(v, 0.5);
+const largest = (v) => v.reduce((m, x) => (x > m ? x : m), -Infinity);   // no spread: the arrays are large
 const stats = (pairs) => {
   const dt = pairs.map(([, , d]) => d), dm = pairs.map(([x, y]) => Math.abs(x.missM - y.missM));
-  return { tcaAbsDiffS: { median: +median(dt).toFixed(3), p95: +quantile(dt, 0.95).toFixed(3), max: +Math.max(...dt).toFixed(3) },
-    missAbsDiffM: { median: +median(dm).toFixed(1), p95: +quantile(dm, 0.95).toFixed(1), max: +Math.max(...dm).toFixed(1) } };
+  return { tcaAbsDiffS: { median: +median(dt).toFixed(3), p95: +quantile(dt, 0.95).toFixed(3), max: +largest(dt).toFixed(3) },
+    missAbsDiffM: { median: +median(dm).toFixed(1), p95: +quantile(dm, 0.95).toFixed(1), max: +largest(dm).toFixed(1) } };
 };
 const start = A.startJd, dayOf = (e) => Math.min(2, Math.max(0, Math.floor(e.tcaJd - start)));
 const perDay = [0, 1, 2].map((d) => {
