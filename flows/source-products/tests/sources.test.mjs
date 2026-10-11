@@ -128,8 +128,6 @@ test('the sources without a module are the inventory\'s that no module gives, ea
     else assert.ok(exists(m.extends), `${m.extends} is not a module`);
     assert.ok(['element-set', 'ephemeris', 'observation'].includes(m.kind));
   }
-  const tasks = new Set([...registry.missing.map((m) => m.task), ...registry.refused.map((r) => r.task)]);
-  assert.ok(tasks.size >= 10);
 });
 
 // ── the flow, run with each source's recipe ──

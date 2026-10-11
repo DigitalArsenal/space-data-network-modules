@@ -136,11 +136,23 @@
               "port": "omm"
             }
           ]
+        },
+        {
+          "module": "data-source/spacetrack-source",
+          "method": "parse_gp",
+          "port": "omm",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
         }
       ],
       "limits": [
-        "The GP history archive is filled by the node's importer, not by a module (modules-spacetrack-source-20261011).",
-        "retrieval returns what the node's store holds: the request names the dataset, and the recipe must name the source that dataset came from.",
+        "spacetrack-source reads the REST API's gp and gp_history JSON, up to 256 MiB a response; its parse_satcat gives the $CAT of the SATCAT, which the $CAT integrator's identity step reads and this flow does not take.",
+        "gp-archive-records builds the $MPE the node's bulk import stores (`sdn import-gp-archive`); retrieval returns what the node's store holds: the request names the dataset, and the recipe must name the source that dataset came from.",
         "A stream whose records are separated by zero-length padding prefixes is read by epoch-state and gp-error-model but refused by detect_maneuvers; pass the stream without padding."
       ]
     },
@@ -482,18 +494,6 @@
     }
   ],
   "missing": [
-    {
-      "name": "Space-Track GP history",
-      "registry": [
-        "space-track"
-      ],
-      "kind": "element-set",
-      "licence": [
-        "space-track"
-      ],
-      "module": "data-source/spacetrack-source",
-      "task": "modules-spacetrack-source-20261011"
-    },
     {
       "name": "JSC Vimpel elements, ephemerides and datefirst crosswalk",
       "registry": [
