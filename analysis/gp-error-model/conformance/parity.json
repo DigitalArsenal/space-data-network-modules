@@ -1,25 +1,25 @@
 {
   "ok": true,
-  "fixture": "gp-error-model e2b and e14 methods and the catalog pipeline",
+  "fixture": "gp-error-model e2b and e14 methods, the catalog pipeline and the element fit",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "c612c33e815bcef32e7485ec955443f3604e2729df5ae147b00cdec7ef412033",
-  "moduleSha256": "c612c33e815bcef32e7485ec955443f3604e2729df5ae147b00cdec7ef412033",
+  "artifactSha256": "53182ac3ef5ac48f21deaa90ad9e5fa42c724a6f2ec0d0c52063d786392051c8",
+  "moduleSha256": "53182ac3ef5ac48f21deaa90ad9e5fa42c724a6f2ec0d0c52063d786392051c8",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 18,
-      "durationMs": 913
+      "runs": 22,
+      "durationMs": 1633
     },
     {
       "lane": "wasmedge",
-      "runs": 18,
-      "durationMs": 1727
+      "runs": 22,
+      "durationMs": 48044
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 18,
-      "durationMs": 10017
+      "runs": 22,
+      "durationMs": 63004
     }
   ],
   "cases": [
@@ -36,13 +36,17 @@
     "fit-calibration",
     "calibrate-covariance-sets",
     "dcp-covariance",
+    "fit-elements-leo-noise",
+    "fit-elements-geo-multistart",
+    "fit-elements-iss",
+    "element-residuals-iss",
     "attach-rules-3-and-4-every-regime",
     "attach-rule-4-pooled",
     "attach-rule-1-operator",
     "attach-rule-2-fit",
     "attribute-maneuvers"
   ],
-  "comparisons": 90,
+  "comparisons": 110,
   "failures": [],
   "runs": [
     {
@@ -177,6 +181,46 @@
     },
     {
       "lane": "browser",
+      "caseId": "fit-elements-leo-noise",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c52be0841d3afaa94a83e67405453562454bfed15817243b1bd4b4a558cf9dbd",
+      "stdoutLength": 6256
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-elements-geo-multistart",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "31dfd52b206a64f7d957959ca85581505e9a8e817c1c032b95854794c4023a1a",
+      "stdoutLength": 15680
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-elements-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e19782eff4ad05484d9a0fb7bf724fe82038cd4e451ed2a342daaf2b6f55a397",
+      "stdoutLength": 6024
+    },
+    {
+      "lane": "browser",
+      "caseId": "element-residuals-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e73b830ad42e4b9cccc490f5b67af89acaaeef813caa5de46384178a3da16727",
+      "stdoutLength": 9536
+    },
+    {
+      "lane": "browser",
       "caseId": "attach-rules-3-and-4-every-regime",
       "threadCount": 1,
       "exitClass": "ok",
@@ -357,6 +401,46 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "fit-elements-leo-noise",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c52be0841d3afaa94a83e67405453562454bfed15817243b1bd4b4a558cf9dbd",
+      "stdoutLength": 6256
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-elements-geo-multistart",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "31dfd52b206a64f7d957959ca85581505e9a8e817c1c032b95854794c4023a1a",
+      "stdoutLength": 15680
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-elements-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e19782eff4ad05484d9a0fb7bf724fe82038cd4e451ed2a342daaf2b6f55a397",
+      "stdoutLength": 6024
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "element-residuals-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e73b830ad42e4b9cccc490f5b67af89acaaeef813caa5de46384178a3da16727",
+      "stdoutLength": 9536
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "attach-rules-3-and-4-every-regime",
       "threadCount": 1,
       "exitClass": "ok",
@@ -534,6 +618,46 @@
       "spawnCount": null,
       "stdoutSha256": "6af57cada73f8a2e07e34d8f6bdf9f650995406e969a97836083b4581214f8cf",
       "stdoutLength": 2328
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-elements-leo-noise",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c52be0841d3afaa94a83e67405453562454bfed15817243b1bd4b4a558cf9dbd",
+      "stdoutLength": 6256
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-elements-geo-multistart",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "31dfd52b206a64f7d957959ca85581505e9a8e817c1c032b95854794c4023a1a",
+      "stdoutLength": 15680
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-elements-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e19782eff4ad05484d9a0fb7bf724fe82038cd4e451ed2a342daaf2b6f55a397",
+      "stdoutLength": 6024
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "element-residuals-iss",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e73b830ad42e4b9cccc490f5b67af89acaaeef813caa5de46384178a3da16727",
+      "stdoutLength": 9536
     },
     {
       "lane": "docker-wasmedge",
