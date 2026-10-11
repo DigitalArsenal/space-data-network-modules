@@ -87,9 +87,12 @@ inline std::vector<Line> lex(const char* data, size_t length) {
     int no = 0;
     while (i <= length) {
         size_t start = i;
-        while (i < length && data[i] != '\n') ++i;
+        /* A line ends at LF, CRLF or a lone CR: a carriage return inside a value would otherwise be
+         * kept in it and read back as something else. */
+        while (i < length && data[i] != '\n' && data[i] != '\r') ++i;
         std::string text = trim(std::string(data + start, i - start));
         ++no;
+        if (i + 1 < length && data[i] == '\r' && data[i + 1] == '\n') ++i;
         ++i;
         Line l;
         l.no = no;

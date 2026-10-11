@@ -223,6 +223,25 @@ inline std::shared_ptr<Message> build() {
     msg->take_version = [v = msg->version](Obj* o, const std::string&, std::string* e) {
         return Conv<double>::take(static_cast<M*>(o)->CCSDS_CDM_VERS, v, e);
     };
+    msg->check_tree = [](const Node& root) {
+        const Node* body = root.find("body");
+        if (!body) return std::string();  /* what is missing is named as missing */
+        size_t first = 0, second = 0, total = 0;
+        for (const Node& segment : body->kids) {
+            if (!segment.group || segment.name != "segment") continue;
+            ++total;
+            const Node* meta = segment.find("metadata");
+            const Node* label = meta ? meta->find("OBJECT") : nullptr;
+            const std::string v = label ? upper(trim(label->text)) : std::string();
+            if (v == "OBJECT1") ++first;
+            else if (v == "OBJECT2") ++second;
+            else return "a CDM names its objects OBJECT1 and OBJECT2 (OBJECT = " + v + ")";
+        }
+        if (total != 2 || first != 1 || second != 1) {
+            return std::string("a CDM holds two objects, OBJECT1 and OBJECT2, once each");
+        }
+        return std::string();
+    };
     msg->check_record = [](const Obj* o) {
         const M& m = *static_cast<const M*>(o);
         for (int k = 0; k < 2; ++k) {

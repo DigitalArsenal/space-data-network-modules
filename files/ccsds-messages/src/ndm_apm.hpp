@@ -94,7 +94,14 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF(E, ANGLE_1_DOT, "deg/s", false),
         NDM_LEAF(E, ANGLE_2_DOT, "deg/s", false),
         NDM_LEAF(E, ANGLE_3_DOT, "deg/s", false),
-    }, state_block("EULER_START", "EULER_STOP"));
+    }, [] {
+        SectionOptions o = state_block("EULER_START", "EULER_STOP");
+        Choice rates;  /* the three rates, or none */
+        rates.alternatives.push_back({"ANGLE_1_DOT", "ANGLE_2_DOT", "ANGLE_3_DOT"});
+        rates.required = false;
+        o.choices.push_back(rates);
+        return o;
+    }());
 
     auto angular_velocity = section("angularVelocity", NDM_NAV_MANY(M, ANGULAR_VELOCITIES), {
         NDM_COMMENT(W, COMMENT, true),
@@ -120,7 +127,15 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF(S, MOMENTUM_ALPHA, "deg", false),
         NDM_LEAF(S, MOMENTUM_DELTA, "deg", false),
         NDM_LEAF(S, NUTATION_VEL, "deg/s", false),
-    }, state_block("SPIN_START", "SPIN_STOP"));
+    }, [] {
+        SectionOptions o = state_block("SPIN_START", "SPIN_STOP");
+        Choice nutation;  /* nutation about the spin axis, or about the momentum vector, or neither */
+        nutation.alternatives.push_back({"NUTATION", "NUTATION_PER", "NUTATION_PHASE"});
+        nutation.alternatives.push_back({"MOMENTUM_ALPHA", "MOMENTUM_DELTA", "NUTATION_VEL"});
+        nutation.required = false;
+        o.choices.push_back(nutation);
+        return o;
+    }());
 
     auto inertia = section("inertia", NDM_NAV_MANY(M, INERTIAS), {
         NDM_COMMENT(I, COMMENT, true),

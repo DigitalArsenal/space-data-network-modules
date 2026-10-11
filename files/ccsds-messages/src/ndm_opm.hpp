@@ -67,6 +67,7 @@ inline std::shared_ptr<Message> build() {
 
     SectionOptions kepler_options;
     kepler_options.present = [](const Obj* o) { return static_cast<const M*>(o)->SEMI_MAJOR_AXIS != 0.0; };
+    kepler_options.choices.push_back(choose({"TRUE_ANOMALY", "MEAN_ANOMALY"}));
     auto keplerian = section("keplerianElements", nav_same(), {
         read_only(NDM_COMMENT(M, COMMENT, false)),
         NDM_LEAF(M, SEMI_MAJOR_AXIS, "km", true),

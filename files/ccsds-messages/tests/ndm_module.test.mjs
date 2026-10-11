@@ -376,6 +376,12 @@ test("a message that is not well formed, a number that is not a number and two m
 
   const noVersion = await h.invoke(read("OMM", Buffer.from(kvn.replace("CCSDS_OMM_VERS = 3.0\n", "")), undefined));
   assert.equal(noVersion.errorCode, "bad-kvn");
+
+  // A document built to exhaust the stack is refused by name, not trapped on.
+  const deep = `<omm id="CCSDS_OMM_VERS" version="3.0">${"<a>".repeat(20000)}${"</a>".repeat(20000)}</omm>`;
+  const tooDeep = await h.invoke(read("OMM", Buffer.from(deep), undefined));
+  assert.equal(tooDeep.errorCode, "bad-xml");
+  assert.match(tooDeep.errorMessage, /nests deeper than 64/);
 });
 
 test("a keyword with no place, a keyword stated twice and a mandatory keyword left out are refused, each named with its line", { skip }, async (t) => {
@@ -411,6 +417,93 @@ test("a keyword with no place, a keyword stated twice and a mandatory keyword le
   // Optional keywords and blocks are optional: this message states only what it must.
   const bare = kvn.split("\n").filter((l) => !/^(COMMENT|CLASSIFICATION|MESSAGE_ID|GM|MASS|SOLAR_RAD|DRAG_|EPHEMERIS_TYPE|CLASSIFICATION_TYPE|NORAD_CAT_ID|ELEMENT_SET_NO|REV_AT_EPOCH|BSTAR|MEAN_MOTION_D|COV_REF_FRAME|C[XYZ]_|USER_DEFINED)/.test(l)).join("\n");
   ok(await h.invoke(read("OMM", Buffer.from(bare), undefined)));
+});
+
+test("alternatives the standard allows one of are one of them, whole: two stated, none stated or half of one is refused", { skip }, async (t) => {
+  const h = await harness(t);
+  const read1 = async (type, text) => h.invoke(read(type, Buffer.from(text), undefined));
+  const refused = (r, code, pattern) => { assert.notEqual(r.statusCode, 0, `${code} was accepted`); assert.equal(r.errorCode, code); assert.match(r.errorMessage, pattern); };
+
+  // OMM: SEMI_MAJOR_AXIS or MEAN_MOTION; BSTAR or BTERM; MEAN_MOTION_DDOT or AGOM.
+  const omm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.kvn"), "utf8");
+  refused(await read1("OMM", omm.replace("MEAN_MOTION = 1.00273790 [rev/day]", "MEAN_MOTION = 1.0027 [rev/day]\nSEMI_MAJOR_AXIS = 42164.0 [km]")), "conflicting-keyword", /SEMI_MAJOR_AXIS and MEAN_MOTION are alternatives/);
+  refused(await read1("OMM", omm.replace(/^MEAN_MOTION = .*\n/m, "")), "missing-keyword", /SEMI_MAJOR_AXIS or MEAN_MOTION is mandatory/);
+  refused(await read1("OMM", omm.replace(/^BSTAR = .*\n/m, "")), "missing-keyword", /BSTAR or BTERM is mandatory/);
+  refused(await read1("OMM", omm.replace("BSTAR = 0.0001 [1/ER]", "BSTAR = 0.0001 [1/ER]\nBTERM = 0.01 [m**2/kg]")), "conflicting-keyword", /BSTAR and BTERM/);
+  refused(await read1("OMM", omm.replace(/^MEAN_MOTION_DDOT = .*\n/m, "")), "missing-keyword", /MEAN_MOTION_DDOT or AGOM is mandatory/);
+
+  // OPM: TRUE_ANOMALY or MEAN_ANOMALY.
+  const opm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-opm-two-maneuvers.kvn"), "utf8");
+  refused(await read1("OPM", opm.replace("TRUE_ANOMALY = 41.2 [deg]", "TRUE_ANOMALY = 41.2 [deg]\nMEAN_ANOMALY = 40.0 [deg]")), "conflicting-keyword", /TRUE_ANOMALY and MEAN_ANOMALY/);
+  refused(await read1("OPM", opm.replace(/^TRUE_ANOMALY = .*\n/m, "")), "missing-keyword", /TRUE_ANOMALY or MEAN_ANOMALY is mandatory/);
+
+  // ACM maneuver: MAN_END_TIME or MAN_DURATION, and one target (a momentum with its frame, an attitude, or a spin rate).
+  const acm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-acm-blocks.kvn"), "utf8");
+  refused(await read1("ACM", acm.replace(/^MAN_DURATION = .*\n/m, "")), "missing-keyword", /MAN_END_TIME or MAN_DURATION is mandatory/);
+  refused(await read1("ACM", acm.replace("MAN_DURATION = 450.0 [s]", "MAN_DURATION = 450.0 [s]\nMAN_END_TIME = 460.0 [s]")), "conflicting-keyword", /MAN_END_TIME and MAN_DURATION/);
+  refused(await read1("ACM", acm.replace(/^TARGET_MOM_FRAME = .*\n/m, "")), "missing-keyword", /TARGET_MOM_FRAME is mandatory.*stated with TARGET_MOMENTUM/);
+  refused(await read1("ACM", acm.replace(/^TARGET_MOMENTUM = .*\n/m, "")), "missing-keyword", /TARGET_MOMENTUM or TARGET_ATTITUDE or TARGET_SPINRATE is mandatory|TARGET_MOMENTUM is mandatory/);
+  refused(await read1("ACM", acm.replace("TARGET_MOM_FRAME = J2000", "TARGET_MOM_FRAME = J2000\nTARGET_SPINRATE = 1.0 [deg/s]")), "conflicting-keyword", /TARGET_MOMENTUM and TARGET_SPINRATE/);
+
+  // APM: the spin's nutation is a whole set of three or none.
+  const apm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-apm-states.kvn"), "utf8");
+  refused(await read1("APM", apm.replace(/^NUTATION_PER = .*\n/m, "")), "missing-keyword", /NUTATION_PER is mandatory/);
+  refused(await read1("APM", apm.replace("NUTATION_PHASE = 12.5 [deg]", "NUTATION_PHASE = 12.5 [deg]\nMOMENTUM_ALPHA = 1.0 [deg]\nMOMENTUM_DELTA = 2.0 [deg]\nNUTATION_VEL = 3.0 [deg/s]")), "conflicting-keyword", /NUTATION and MOMENTUM_ALPHA/);
+  refused(await read1("APM", apm.replace(/^ANGLE_2_DOT = .*\n/m, "")), "missing-keyword", /ANGLE_2_DOT is mandatory/);
+
+  // A CDM holds two objects, once each.
+  const cdm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-cdm-full-covariance.kvn"), "utf8");
+  refused(await read1("CDM", cdm.replace(/^OBJECT = OBJECT2$/m, "OBJECT = OBJECT1")), "inconsistent-message", /OBJECT1 and OBJECT2, once each/);
+});
+
+test("text that is not UTF-8, a control character, a lone carriage return and an unbalanced units list are refused; a byte order mark and CRLF are not", { skip }, async (t) => {
+  const h = await harness(t);
+  const kvn = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.kvn"));
+  const reference = out(ok(await h.invoke(read("OMM", kvn, undefined))), PORT.OMM);
+  const same = async (bytes, why) => assert.deepEqual(Buffer.from(out(ok(await h.invoke(read("OMM", Buffer.from(bytes), undefined))), PORT.OMM)), Buffer.from(reference), why);
+  await same(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), kvn]), "a byte order mark");
+  await same(Buffer.from(kvn.toString("utf8").replace(/\n/g, "\r\n")), "CRLF line ends");
+  const refusedEncoding = async (bytes) => { const r = await h.invoke(read("OMM", Buffer.from(bytes), undefined)); assert.equal(r.errorCode, "bad-encoding"); return r; };
+  const at = kvn.indexOf("EXAMPLESAT");
+  const bad = Buffer.from(kvn); bad[at] = 0xa0;
+  assert.match((await refusedEncoding(bad)).errorMessage, /not UTF-8 text \(byte \d+\)/);
+  const control = Buffer.from(kvn); control[at] = 0x01;
+  assert.match((await refusedEncoding(control)).errorMessage, /control character/);
+  await refusedEncoding(Buffer.from(kvn.toString("utf8").replace("OBJECT_NAME = EXAMPLESAT 1", "OBJECT_NAME = EXAMPLESAT 1\u0000")));
+  // A carriage return alone ends a line, so it cannot hide inside a value.
+  const lone = await h.invoke(read("OMM", Buffer.from(kvn.toString("utf8").replace("EXAMPLESAT 1", "EXAMPLESAT\r1")), undefined));
+  assert.notEqual(lone.statusCode, 0);
+
+  const ocm = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-ocm-blocks.kvn"), "utf8");
+  const unbalanced = await h.invoke(read("OCM", Buffer.from(ocm.replace("MAN_UNITS = [s, km/s, km/s, km/s]", "MAN_UNITS = [s, km/s, km/s, km/s")), undefined));
+  assert.equal(unbalanced.errorCode, "bad-value");
+  assert.match(unbalanced.errorMessage, /MAN_UNITS/);
+  // An element with nothing in it is a section with nothing in it.
+  const xml = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-ocm-blocks.xml"), "utf8");
+  const emptyData = xml.replace(/<data>[\s\S]*<\/data>/, "<data/>");
+  assert.notEqual(emptyData, xml);
+  ok(await h.invoke(read("OCM", Buffer.from(emptyData), undefined)));
+});
+
+test("a record the syntax cannot state is refused when written: a USER_DEFINED name that is not a KVN keyword, white space in a data line", { skip }, async (t) => {
+  const h = await harness(t);
+  const xml = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-omm-sgp4-covariance.xml"), "utf8");
+  const odd = xml.replace('parameter="CONSOLE_POC"', 'parameter="Console.poc"');
+  assert.notEqual(odd, xml);
+  const record = out(ok(await h.invoke(read("OMM", Buffer.from(odd), undefined))), PORT.OMM);
+  const asKvn = await h.invoke(write("OMM", record));
+  assert.notEqual(asKvn.statusCode, 0);
+  assert.match(asKvn.errorMessage, /USER_DEFINED parameter "Console\.poc" cannot be a KVN keyword/);
+  ok(await h.invoke(write("OMM", record, XML_FORMAT("OMM"))));  // XML names it as it is
+
+  const oem = fs.readFileSync(path.join(FIXTURES, "ndm/ndm-oem-two-segments.xml"), "utf8");
+  const spaced = oem.replace("<EPOCH>2026-10-11T12:03:00.000000</EPOCH>", "<EPOCH>2026-10-11T12:03:00.000000 UTC</EPOCH>");
+  assert.notEqual(spaced, oem);
+  const oemRecord = out(ok(await h.invoke(read("OEM", Buffer.from(spaced), undefined))), PORT.OEM);
+  const oemKvn = await h.invoke(write("OEM", oemRecord));
+  assert.notEqual(oemKvn.statusCode, 0);
+  assert.match(oemKvn.errorMessage, /EPOCH holds white space, which a KVN data line cannot state/);
+  ok(await h.invoke(write("OEM", oemRecord, XML_FORMAT("OEM"))));
 });
 
 test("a record that lacks what the message must state is not written, and says what is missing", { skip }, async (t) => {

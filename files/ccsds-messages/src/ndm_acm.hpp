@@ -266,7 +266,7 @@ inline std::shared_ptr<Message> build() {
         custom_leaf<N>("MAN_DURATION", "s", false,
             [](N& o, const std::string& t, std::string* e) { return Conv<double>::take(o.MAN_DURATION, t, e); },
             [](const N& o, bool, std::vector<std::string>* out) {
-                if (std::isnan(o.MAN_END_TIME)) out->push_back(format_double(std::isnan(o.MAN_DURATION) ? 0.0 : o.MAN_DURATION));
+                if (std::isnan(o.MAN_END_TIME) && !std::isnan(o.MAN_DURATION)) out->push_back(format_double(o.MAN_DURATION));
             }),
         NDM_LEAF(N, ACTUATOR_USED, nullptr, false),
         /* And one target: a momentum with its frame, an attitude, or a spin rate. */
@@ -290,7 +290,16 @@ inline std::shared_ptr<Message> build() {
             [](const N& o, bool, std::vector<std::string>* out) {
                 if (o.TARGET_MOMENTUM.empty() && o.TARGET_ATTITUDE.empty() && !std::isnan(o.TARGET_SPINRATE)) out->push_back(format_double(o.TARGET_SPINRATE));
             }),
-    }, repeated_block("MAN_START", "MAN_STOP"));
+    }, [] {
+        SectionOptions o = repeated_block("MAN_START", "MAN_STOP");
+        o.choices.push_back(choose({"MAN_END_TIME", "MAN_DURATION"}));
+        Choice target;  /* exactly one target: a momentum with its frame, an attitude, or a spin rate */
+        target.alternatives.push_back({"TARGET_MOMENTUM", "TARGET_MOM_FRAME"});
+        target.alternatives.push_back({"TARGET_ATTITUDE"});
+        target.alternatives.push_back({"TARGET_SPINRATE"});
+        o.choices.push_back(target);
+        return o;
+    }());
 
     SectionOptions sensor_options = block("SENSOR_START", "SENSOR_STOP");
     sensor_options.repeat = true;

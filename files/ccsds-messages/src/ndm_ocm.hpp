@@ -61,7 +61,14 @@ template <class C, std::vector<std::string> C::*P, bool Bracketed = false>
 inline Leaf csv_leaf(const char* name, const char* units, bool required) {
     return custom_leaf<C>(
         name, units, required,
-        [](C& o, const std::string& raw, std::string*) {
+        [](C& o, const std::string& raw, std::string* err) {
+            if (Bracketed) {
+                const std::string r = trim(raw);
+                if (!r.empty() && (r.front() == '[') != (r.back() == ']')) {
+                    *err = "a units list is enclosed in square brackets: [a, b, c]";
+                    return false;
+                }
+            }
             const std::string t = Bracketed ? unbracket(raw) : raw;
             std::vector<std::string>& v = o.*P;
             v.clear();

@@ -84,7 +84,8 @@ inline std::string refusal(const Message& msg, const Report& report, std::string
     size_t count = 0;
     for (const Issue& i : report.issues) {
         if (i.kind != IssueKind::UnknownKeyword && i.kind != IssueKind::UnknownStructure &&
-            i.kind != IssueKind::Duplicate && i.kind != IssueKind::MissingRequired) {
+            i.kind != IssueKind::Duplicate && i.kind != IssueKind::MissingRequired &&
+            i.kind != IssueKind::Conflict) {
             continue;
         }
         if (!first) first = &i;
@@ -116,10 +117,17 @@ inline std::string refusal(const Message& msg, const Report& report, std::string
             text += first->line ? " (line " + std::to_string(first->line) + ")" : std::string();
             text += " is stated twice at " + first->where;
             break;
+        case IssueKind::Conflict:
+            *code = "conflicting-keyword";
+            text = first->key + " are alternatives of one another in " + type + " at " + first->where +
+                   "; the message states them together";
+            break;
         default:
             *code = "missing-keyword";
             text = first->key + " is mandatory in " + type + " at " + first->where +
-                   " and the message does not state it";
+                   (first->detail.empty() || first->detail == "one of them"
+                        ? std::string(" and the message does not state it")
+                        : " (" + first->detail + ") and the message does not state it");
             break;
     }
     if (count > 1) text += "; " + std::to_string(count - 1) + " more";
@@ -129,6 +137,23 @@ inline std::string refusal(const Message& msg, const Report& report, std::string
 template <class Codec>
 inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
                          ReadOutcome* out) {
+    /* UTF-8 text, with or without a byte order mark, and no control characters but tab and the
+     * line ends: anything else is not a message, and a string the record cannot hold as text
+     * must not reach it. */
+    if (length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
+        data += 3;
+        length -= 3;
+    }
+    if (const size_t at = utf8_error_at(data, length); at != length) {
+        out->code = "bad-encoding";
+        out->error = "the message is not UTF-8 text (byte " + std::to_string(at) + ")";
+        return false;
+    }
+    if (const size_t at = control_char_at(data, length); at != length) {
+        out->code = "bad-encoding";
+        out->error = "the message holds a control character (byte " + std::to_string(at) + ")";
+        return false;
+    }
     out->syntax = detect_syntax(data, length);
     std::string error;
     if (out->syntax == Syntax::Xml) {
@@ -158,6 +183,14 @@ inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
         out->error = msg.version_key + " = " + out->tree.text + ": " + e;
         return false;
     }
+    if (msg.check_tree) {
+        const std::string reason = msg.check_tree(out->tree);
+        if (!reason.empty()) {
+            out->code = "inconsistent-message";
+            out->error = reason;
+            return false;
+        }
+    }
     FillResult fr;
     fill_section(*msg.top, out->tree, &record, msg.root, &out->report, &fr);
     require_section(*msg.top, &out->tree, msg.root, &out->report);
@@ -173,10 +206,52 @@ inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
         out->error = fr.error + (fr.line ? " (line " + std::to_string(fr.line) + ")" : "");
         return false;
     }
+    if (msg.check_record) {
+        /* What the record could not be written from is not something a message may state either. */
+        const std::string reason = msg.check_record(&record);
+        if (!reason.empty()) {
+            out->code = "inconsistent-message";
+            out->error = reason;
+            return false;
+        }
+    }
     if (msg.after_read) msg.after_read(&record);
     out->record = Codec::pack(record);
     out->ok = true;
     return true;
+}
+
+/* What a record holds that the syntax cannot state: text that is not UTF-8 or carries a control
+ * character (neither syntax can), a line break in a KVN value (a value is one line there), a
+ * USER_DEFINED name that is not a KVN keyword. Returns the first, or empty. */
+inline std::string unwritable(const Node& n, Syntax syntax) {
+    for (const Node& k : n.kids) {
+        if (k.group) {
+            const std::string inner = unwritable(k, syntax);
+            if (!inner.empty()) return inner;
+            continue;
+        }
+        /* A KVN data line (a state vector, a covariance row) is tokens split at white space. */
+        if (syntax == Syntax::Kvn && (n.rows == 1 || k.matrix) &&
+            k.text.find_first_of(" \t\r\n") != std::string::npos) {
+            return k.name + " holds white space, which a KVN data line cannot state";
+        }
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(k.text.data());
+        const std::string label = k.param.empty() ? k.name : "USER_DEFINED_" + k.param;
+        if (utf8_error_at(p, k.text.size()) != k.text.size() || control_char_at(p, k.text.size()) != k.text.size()) {
+            return label + " holds text that is not UTF-8 or carries a control character";
+        }
+        if (syntax == Syntax::Kvn) {
+            if (!k.param.empty() && !kvn::is_keyword_text(label)) {
+                return "the USER_DEFINED parameter \"" + k.param +
+                       "\" cannot be a KVN keyword (upper case letters, digits and underscores)";
+            }
+            if (k.name != "COMMENT" && k.text.find_first_of("\r\n") != std::string::npos) {
+                return label + " holds a line break, which a KVN value cannot state";
+            }
+        }
+    }
+    return std::string();
 }
 
 template <class Codec>
@@ -215,6 +290,10 @@ inline bool write_message(const Message& msg, const uint8_t* record, size_t leng
     }
     Node tree = Node::container(msg.root);
     if (!top.empty()) tree.kids = std::move(top[0].kids);
+    if (const std::string why = unwritable(tree, options.syntax); !why.empty()) {
+        *error = "the record cannot be written as " + std::string(syntax_name(options.syntax)) + ": " + why;
+        return false;
+    }
     tree.text = msg.version;
     if (options.syntax == Syntax::Xml) {
         xml::write(msg.root, msg.version_key, msg.version, tree, options.units, text);

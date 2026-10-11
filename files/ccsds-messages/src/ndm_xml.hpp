@@ -71,7 +71,12 @@ inline bool has_element_child(const pugi::xml_node& el) {
     return false;
 }
 
-inline void to_node(const pugi::xml_node& el, Node* out) {
+/* The deepest nesting read. A message nests eight levels (ocm/body/segment/data/man/...);
+ * the limit is for a document built to exhaust the stack, which is refused, not trapped on. */
+constexpr int kMaxDepth = 64;
+
+inline bool to_node(const pugi::xml_node& el, Node* out, int depth = 0) {
+    if (depth > kMaxDepth) return false;
     out->name = local_name(el.name());
     out->units = el.attribute("units").value();
     out->param = el.attribute("parameter").value();
@@ -87,9 +92,10 @@ inline void to_node(const pugi::xml_node& el, Node* out) {
             continue;
         }
         out->kids.emplace_back();
-        to_node(c, &out->kids.back());
+        if (!to_node(c, &out->kids.back(), depth + 1)) return false;
     }
     if (!out->group) out->text = normalise_text(element_text(el));
+    return true;
 }
 
 /* The message element: the document element, or the one inside <ndm>. */
@@ -141,7 +147,10 @@ inline bool read(const char* data, size_t length, const std::string& root, Node*
                                 : "the document holds <" + *found + ">, not <" + root + ">";
         return false;
     }
-    to_node(message, out);
+    if (!to_node(message, out)) {
+        *error = "the document nests deeper than " + std::to_string(kMaxDepth) + " levels (bad-xml)";
+        return false;
+    }
     out->text = message.attribute("version").value();
     return true;
 }

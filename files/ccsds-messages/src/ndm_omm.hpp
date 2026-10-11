@@ -200,7 +200,7 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF(M, ARG_OF_PERICENTER, "deg", true),
         NDM_LEAF(M, MEAN_ANOMALY, "deg", true),
         NDM_LEAF(M, GM, "km**3/s**2", false),
-    });
+    }, [] { SectionOptions o; o.choices.push_back(choose({"SEMI_MAJOR_AXIS", "MEAN_MOTION"})); return o; }());
 
     SectionOptions optional;
     optional.optional = true;
@@ -216,6 +216,10 @@ inline std::shared_ptr<Message> build() {
 
     SectionOptions tle_options;
     tle_options.present = [](const Obj* o) { return tle_present(*static_cast<const M*>(o)); };
+    /* The drag term is BSTAR, or BTERM under SGP4-XP; the second derivative of the mean motion is
+     * MEAN_MOTION_DDOT, or AGOM under SGP4-XP: one of each. */
+    tle_options.choices.push_back(choose({"BSTAR", "BTERM"}));
+    tle_options.choices.push_back(choose({"MEAN_MOTION_DDOT", "AGOM"}));
     auto tle = section("tleParameters", nav_same(), {
         read_only(NDM_COMMENT(M, COMMENT, false)),
         custom_leaf<M>("EPHEMERIS_TYPE", nullptr, false, ephemeris_type_take, ephemeris_type_give,

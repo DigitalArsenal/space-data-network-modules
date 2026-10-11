@@ -82,6 +82,39 @@ inline bool starts_with(const std::string& s, const char* prefix) {
     return s.size() >= n && s.compare(0, n, prefix) == 0;
 }
 
+/* Strict UTF-8: no overlong forms, no surrogates, nothing above U+10FFFF. Returns the offset of
+ * the first byte that is not, or `n` when all of it is text. A record's strings are UTF-8 (flatc
+ * cannot print one that is not), so a message that is not UTF-8 is refused, not stored. */
+inline size_t utf8_error_at(const uint8_t* p, size_t n) {
+    size_t i = 0;
+    while (i < n) {
+        const uint8_t c = p[i];
+        size_t len = 0;
+        uint32_t cp = 0;
+        if (c < 0x80) { ++i; continue; }
+        if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; }
+        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; }
+        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; }
+        else return i;
+        if (i + len > n) return i;
+        for (size_t k = 1; k < len; ++k) {
+            if ((p[i + k] & 0xC0) != 0x80) return i;
+            cp = (cp << 6) | (p[i + k] & 0x3F);
+        }
+        if ((len == 3 && (cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF))) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF))) return i;
+        i += len;
+    }
+    return n;
+}
+
+/* The offset of the first control character that is not a tab, line feed or carriage return, or `n`. */
+inline size_t control_char_at(const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        if (p[i] < 0x20 && p[i] != '\t' && p[i] != '\n' && p[i] != '\r') return i;
+    }
+    return n;
+}
+
 inline std::vector<std::string> split_lines(const std::string& s) {
     std::vector<std::string> out;
     size_t b = 0;
@@ -321,6 +354,7 @@ enum class IssueKind : int {
     Relocated = 3,        /* carried, but into a different section than it came from */
     DefaultValued = 4,    /* optional keyword whose value equals the field default  */
     MissingRequired = 5,  /* a mandatory keyword the message did not state          */
+    Conflict = 6,         /* alternatives the standard allows one of, stated together */
 };
 
 struct Issue {
@@ -358,6 +392,7 @@ inline const char* issue_name(IssueKind k) {
         case IssueKind::Relocated: return "relocated";
         case IssueKind::DefaultValued: return "default-valued";
         case IssueKind::MissingRequired: return "missing-required";
+        case IssueKind::Conflict: return "conflict";
     }
     return "unknown";
 }
@@ -621,6 +656,15 @@ struct Item {
     Item(std::shared_ptr<Section> s) : is_section(true), sec(std::move(s)) {}
 };
 
+/* Alternatives the standard allows one of (an xsd:choice): each alternative is the run of keywords
+ * stated together, so (TARGET_MOMENTUM, TARGET_MOM_FRAME) is one alternative and TARGET_ATTITUDE
+ * another. Exactly one alternative when `required`, at most one otherwise; an alternative stated in
+ * part is as wrong as two stated. */
+struct Choice {
+    std::vector<std::vector<std::string>> alternatives;
+    bool required = true;
+};
+
 struct Section {
     std::string name;            /* XML element name */
     const char* kvn_start = nullptr;
@@ -640,6 +684,7 @@ struct Section {
     int rows = 0;                /* 1: each instance is one KVN data line */
     bool has_matrix = false;     /* KVN lower-triangle rows for the matrix leaves */
     std::function<bool(const Obj*)> present;  /* null: always; else only when this holds */
+    std::vector<Choice> choices;
     /* Reading: which instance of the parent this node is, when position is not
      * enough (CDM's OBJECT1 and OBJECT2). Null: the next one, via nav.make. */
     std::function<Obj*(Obj*, const Node&)> select;
@@ -692,6 +737,9 @@ struct Message {
     std::shared_ptr<Section> top; /* name == root; items: header, body */
     /* A record the message cannot state at all: the reason, or empty when it can. */
     std::function<std::string(const Obj*)> check_record;
+    /* What the parsed message must satisfy across its sections before it is read into a record:
+     * the reason it does not, or empty (a CDM names its two objects OBJECT1 and OBJECT2, once each). */
+    std::function<std::string(const Node&)> check_tree;
     /* Records that state the same fact in two shapes (OCM's single trajectory and
      * its list of blocks): after a read, make both say it; before a write, make the
      * one the message is written from say it. */
@@ -895,9 +943,18 @@ struct SectionOptions {
     bool optional = false;
     int rows = 0;
     std::function<bool(const Obj*)> present;
+    std::vector<Choice> choices;
     std::function<Obj*(Obj*, const Node&)> select;
     std::function<void(Node&, size_t)> decorate;
 };
+
+/* One alternative per keyword: `choose({"MAN_END_TIME", "MAN_DURATION"})`. */
+inline Choice choose(const std::vector<std::string>& keywords, bool required = true) {
+    Choice c;
+    c.required = required;
+    for (const std::string& k : keywords) c.alternatives.push_back({k});
+    return c;
+}
 
 inline SectionOptions block(const char* start, const char* stop) {
     SectionOptions o;
@@ -943,6 +1000,7 @@ inline std::shared_ptr<Section> section(const char* name, Nav nav, std::vector<I
     s->optional = o.optional;
     s->rows = o.rows;
     s->present = std::move(o.present);
+    s->choices = std::move(o.choices);
     s->select = std::move(o.select);
     s->decorate = std::move(o.decorate);
     for (const Item& it : s->items) {
@@ -1026,7 +1084,8 @@ inline void fill_section(const Section& s, const Node& n, Obj* parent, const std
             continue;
         }
         const Section* child = s.section_named(kid.name);
-        if (child && kid.group) {
+        /* An element with nothing in it (`<data/>`) is a section with nothing in it. */
+        if (child && (kid.group || kid.text.empty())) {
             fill_section(*child, kid, self, path + "/" + kid.name, rep, res);
             continue;
         }
@@ -1067,6 +1126,37 @@ inline void require_section(const Section& s, const Node* n, const std::string& 
             }
         }
         if (!stated) rep->add(IssueKind::MissingRequired, path, leaf.name, "", n ? n->line : 0);
+    }
+    for (const Choice& ch : s.choices) {
+        auto stated_in = [&](const std::string& name) {
+            if (!n) return false;
+            for (const Node& k : n->kids) {
+                if (!k.group && k.name == name && !k.text.empty()) return true;
+            }
+            return false;
+        };
+        size_t alternatives_stated = 0;
+        std::string stated_names, heads;
+        for (const std::vector<std::string>& alt : ch.alternatives) {
+            size_t have = 0;
+            std::string absent;
+            for (const std::string& name : alt) {
+                if (stated_in(name)) ++have;
+                else if (absent.empty()) absent = name;
+            }
+            heads += (heads.empty() ? "" : " or ") + alt[0];
+            if (have == 0) continue;
+            if (have < alt.size()) {
+                rep->add(IssueKind::MissingRequired, path, absent, "stated with " + alt[0], n ? n->line : 0);
+            }
+            ++alternatives_stated;
+            stated_names += (stated_names.empty() ? "" : " and ") + alt[0];
+        }
+        if (alternatives_stated > 1) {
+            rep->add(IssueKind::Conflict, path, stated_names, "alternatives of one another", n ? n->line : 0);
+        } else if (alternatives_stated == 0 && ch.required) {
+            rep->add(IssueKind::MissingRequired, path, heads, "one of them", n ? n->line : 0);
+        }
     }
 }
 
