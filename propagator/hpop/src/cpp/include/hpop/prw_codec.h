@@ -8,6 +8,7 @@
 #include "astrodynamics_types.h"
 #include "coords.h"
 #include "time_convert.h"
+#include "reentry.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -51,6 +52,17 @@ inline std::string formatEpoch(double jd) {
     timesys::Epoch(jd,timesys::TimeScale::TDB).toComponents(y,m,d,h,mi,s);
     char result[48]; std::snprintf(result,sizeof(result),"%04d-%02d-%02dT%02d:%02d:%012.9f",y,m,d,h,mi,s);
     return result;
+}
+// A propagation's stop (lib/reentry.h) as a PRW error: its code, the object
+// when there is one, and the UTC epoch.
+inline std::string stopError(const astro::PropagationStop& stop, const std::string& object = std::string()) {
+    const std::string when = formatEpoch(timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(stop.jd)))) + " UTC";
+    std::string text = std::string(stop.code) + ": " + (object.empty() ? std::string() : object + ": ");
+    if (std::string(stop.code) != "reentry") return text + "the integration produced a non-finite state at " + when + ".";
+    char height[120];
+    std::snprintf(height, sizeof height, "the trajectory descends below %.0f km geodetic altitude (%.1f km) at ",
+                  astro::REENTRY_ALTITUDE_KM, stop.heightKm);
+    return text + height + when + "; HPOP ends it there.";
 }
 inline bool convertEpoch(double jd, timingStandard scale, double& tdb, double& utc, std::string& error) {
     if(!std::isfinite(jd) || jd<2305447.5 || jd>5373484.5)

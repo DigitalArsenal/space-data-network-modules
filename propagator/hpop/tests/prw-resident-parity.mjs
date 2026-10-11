@@ -50,7 +50,7 @@ const groups=[{id:'resident-continuation-and-generation',steps:[
   step('repeated-generation',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31)),'stale-instance'),
   step('invalid-flag',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n,{VALID:false}))),
   step('invalid-selection',req('propagate_state','RESIDENT_REQUEST',batch(2n)),'invalid-state'),
-]},{id:'configured-full-force',steps:configuredSteps()}];
+]},{id:'configured-full-force',steps:configuredSteps()},{id:'configured-reentry',steps:reentrySteps()}];
 // The configured profile: one LEO object and one GEO object under the full
 // force model, ingested with the kernel and environment, then queried.
 function configuredSteps() {
@@ -72,6 +72,25 @@ function configuredSteps() {
     step('configured-ppe-chunk-0',request('DESCRIBE_REQUEST',makeTable('PRWDescribeRequest',{INSTANCE:instance,SEGMENT_SET_HANDLE:1}))),
     step('configured-ppe-chunk-1',request('DESCRIBE_REQUEST',makeTable('PRWDescribeRequest',{INSTANCE:instance,SEGMENT_SET_HANDLE:1}))),
     step('configured-no-configuration',{methodId:'ingest_state',inputs:[...states]},'missing-required-input'),
+  ];
+}
+// A decaying object (140 km circular, Cd*A/m 0.02 m^2/kg) under the full
+// force model: its prepare and its state after reentry stop with `reentry`
+// (lib/reentry.h), and so does the execution request; earlier, it prepares.
+function reentrySteps() {
+  const epoch='2026-08-02T00:00:00.000',tt=(s)=>isoInstant(s,'TT'),r=6518137,v=Math.sqrt(GM/r),i=51.6*Math.PI/180;
+  const state=[r,0,0,0,v*Math.cos(i),v*Math.sin(i)];
+  const instance=makeTable('PRWInstance',{MODULE_ID:'com.orbpro.hpop',INSTANCE_ID:'reentry-parity',GENERATION:1n});
+  const request=(arm,record)=>({methodId:arm==='RESIDENT_REQUEST'?'propagate_state':'prepare_trajectory_segments',
+    outputStreamCap:1,inputs:[frame('request',arm,record)]});
+  const prepare=(seconds)=>request('PREPARE_REQUEST',makeTable('PRWPrepareRequest',{INSTANCE:instance,START_EPOCH:tt('2026-08-02T00:01:09.184000000'),DURATION_SECONDS:seconds,PROFILE:'conjunction-screening'}));
+  return [
+    step('reentry-ingest',{methodId:'ingest_state',inputs:[frame('state','RESIDENT_STATE',residentRecord({instance,handle:1,epoch,state,cdAm:0.02,crAm:0.02})),
+      frame('configuration','EXECUTION_REQUEST',fullForceRequest({epoch,state})),...environmentInputs()]}),
+    step('reentry-prepare-before',prepare(1800)),
+    step('reentry-prepare-across',prepare(86400),'reentry'),
+    step('reentry-state-after',request('RESIDENT_REQUEST',makeTable('PRWResidentRequest',{INSTANCE:instance,TARGET_EPOCH:tt('2026-08-03T00:01:09.184000000'),ENTITY_HANDLES:[1],TARGET_COORDINATE_SYSTEM:coordinateSystem()})),'reentry'),
+    step('reentry-execution',{methodId:'invoke',inputs:[frame('request','EXECUTION_REQUEST',fullForceRequest({epoch,state,target:'2026-08-03T00:01:09.184000000',targetScale:'TT',cdAm:0.02,crAm:0.02})),...environmentInputs()]},'reentry'),
   ];
 }
 async function runProcess(runtime) {

@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "TMPL lane13 PRW malformed classifications",
   "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-resident-full-force-20261010/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "614eb47eae4ed88b7ef79bea7aa01f7d0acc3c749565946dd8f0b344173716ee",
-  "moduleSha256": "614eb47eae4ed88b7ef79bea7aa01f7d0acc3c749565946dd8f0b344173716ee",
+  "artifactSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
+  "moduleSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 72,
-      "durationMs": 1030
+      "durationMs": 920
     },
     {
       "lane": "wasmedge",
       "runs": 72,
-      "durationMs": 3571
+      "durationMs": 3588
     },
     {
       "lane": "docker-wasmedge",
       "runs": 72,
-      "durationMs": 12392
+      "durationMs": 12386
     }
   ],
   "cases": [

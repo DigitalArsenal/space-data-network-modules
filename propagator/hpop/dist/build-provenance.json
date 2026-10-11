@@ -4,8 +4,8 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "614eb47eae4ed88b7ef79bea7aa01f7d0acc3c749565946dd8f0b344173716ee",
-  "bytes": 2033737,
+  "sha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
+  "bytes": 2042860,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [

@@ -3083,6 +3083,23 @@ static std::vector<ResidentIdentity> prwIdentities;
 static std::unordered_map<uint32_t, size_t> prwSlots;
 static std::unordered_map<std::string, uint64_t> prwSeenGenerations;
 static std::unordered_map<uint32_t, PortableSegmentSet> prwSegmentSets;
+std::string residentObject(size_t slot);
+// A resident object's failed query: when its trajectory ended (lib/reentry.h)
+// the error names the stop and the object.
+bool stopped(size_t slot, std::string& error) {
+    if (astro::callStop().active) error = stopError(astro::callStop(), residentObject(slot));
+    return false;
+}
+// A resident object's identity for a named error: its handle, object ID and
+// catalog number.
+std::string residentObject(size_t slot) {
+    const auto& identity = prwIdentities[slot];
+    std::string text = "handle " + std::to_string(identity.handle);
+    if (!identity.objectId.empty()) text += " (" + identity.objectId;
+    if (identity.catalogNumber) text += (identity.objectId.empty() ? " (catalog " : ", catalog ") + std::to_string(identity.catalogNumber);
+    if (!identity.objectId.empty() || identity.catalogNumber) text += ")";
+    return text;
+}
 static uint32_t prwNextSegmentSet = 1;
 static uint32_t prwConfigVersion = 0;
 static uint64_t prwCatalogRevision = 0;
@@ -3293,9 +3310,10 @@ bool propagatePortable(const PRWResidentRequest* request, const uint8_t* data, s
             const auto& identity = prwIdentities[slot];
             astro::StateVector state;
             Mat6 p{};
+            astro::clearCallStop();
             if (identity.hasCovariance ? !prwDynamics->covariance(slot, target, identity.covariance, identity.noise, state, p, error)
                                        : !prwDynamics->state(slot, target, state, error))
-                return false;
+                return stopped(slot, error);
             if (!std::isfinite(state.position.x) || !std::isfinite(state.position.y) || !std::isfinite(state.position.z) ||
                 !std::isfinite(state.velocity.x) || !std::isfinite(state.velocity.y) || !std::isfinite(state.velocity.z))
                 return residentFailure(error, "propagation-failed", "Resident propagation produced a non-finite state.");
@@ -3397,8 +3415,9 @@ bool preparePortable(const PRWPrepareRequest* request, std::vector<std::vector<u
         double positionM = 0, velocityMS = 0;
         for (const auto handle : selected) {
             const auto slot = prwSlots.at(handle);
+            astro::clearCallStop();
             if (!prwDynamics->prepare(slot, start, end, error) || !prwDynamics->residuals(slot, start, end, positionM, velocityMS, error))
-                return false;
+                return stopped(slot, error);
         }
         if (prwNextSegmentSet == 0)
             return residentFailure(error, "handle-exhausted", "Resident segment handle space exhausted; create a new module instance.");
@@ -3488,7 +3507,9 @@ bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, si
             RFMCoordinateSystemWrapperT frameWrapper;
             frameWrapper.COORDINATE_SYSTEM = makeFrame("GCRF", rfmAxisType::ICRF, 399);
             ephemeris.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(frameWrapper));
-            if (!prwDynamics->describe(slot, prepared.startTT, prepared.endTT, ephemeris, source->SEGMENT_QUALITY, error)) return false;
+            astro::clearCallStop();
+            if (!prwDynamics->describe(slot, prepared.startTT, prepared.endTT, ephemeris, source->SEGMENT_QUALITY, error))
+                return stopped(slot, error);
             PRWT result;
             result.DESCRIBE_RESULT = std::make_unique<PRWDescribeResultT>();
             result.DESCRIBE_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
@@ -3562,7 +3583,25 @@ bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, si
 }
 } // namespace
 
+bool processPrwResidentMethod(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
+    std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded, std::string& error);
+
+// The resident methods. A trajectory that ended (lib/reentry.h) without an
+// object-level report (the gravity-only profile) fails the call with the
+// stop's code and epoch.
 bool processPrwResident(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
+    std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded,
+    std::string& error) {
+    astro::clearCallStop();
+    const bool ok = processPrwResidentMethod(methodId, inputs, outputCap, outputs, backlog, yielded, error);
+    const auto& stop = astro::callStop();
+    if (!stop.active || (!ok && error.rfind(std::string(stop.code) + ":", 0) == 0)) return ok;
+    outputs.clear();
+    error = stopError(stop);
+    return false;
+}
+
+bool processPrwResidentMethod(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
     std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded,
     std::string& error) {
     outputs.clear();

@@ -324,6 +324,39 @@ ordered daily rows covering the arc; see
 `jb2008_indices` the `JB2008_INDICES` arm. Public ports do not accept the
 historical JSON or private pointer envelopes.
 
+### The end of a trajectory: reentry
+
+A propagation ends where the trajectory descends below 100 km geodetic
+altitude (the Karman line, `lib/reentry.h`). Below it the object is
+reentering: a cannonball with a fixed drag coefficient no longer describes
+its flight, and integrated further the trajectory reaches the Earth's
+interior, where the gravity field diverges. A non-finite state ends it too.
+
+- **Every path.** The state, the transition matrix and finite burns test each
+  state their integrator evaluates; the first one below the line ends the
+  integration there (the derivative is zero from then on and the RKF78 run
+  takes no further step), so the execution path and a resident object stop
+  at the same epoch.
+- **The error.** `reentry` (or `invalid-state`) with the UTC epoch and the
+  height, and on the resident path the object (its handle, OBJECT_ID and
+  catalog number), as in the test: `reentry: handle 1 (object-1, catalog 1):
+  the trajectory descends below 100 km geodetic altitude (99.5 km) at
+  2026-08-02T01:23:07.517546117 UTC; HPOP ends it there.` A resident object
+  stays queryable before that epoch.
+- **The height** is taken about the GCRF pole, within about 0.2 km of the
+  Earth-fixed geodetic height (the CIP's offset from the GCRF pole), so the
+  test needs no Earth orientation.
+- **A flag, not an exception.** A C++ exception thrown and caught inside the
+  module left WasmEdge 0.16's interpreter looping in the module's `free`
+  afterwards (V8 was unaffected), so the stop is a recorded flag that the
+  integrators and the PRW methods check.
+
+Tests: `tests/reentry.test.mjs` (a 140 km orbit with Cd*A/m 0.02 m²/kg reenters
+about 1.4 h after its epoch; both paths report the same epoch; another object
+and the decaying one before its reentry stay preparable) and the
+`configured-reentry` group of `tests/prw-resident-parity.mjs` (byte-identical
+stops in Chrome, WasmEdge and Docker WasmEdge).
+
 ### VCM parity (SDS 1.240.0)
 
 Everything a Vector Covariance Message carries for propagation has a PRW

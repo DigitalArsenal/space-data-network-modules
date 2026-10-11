@@ -156,6 +156,7 @@ bool startSpan(Execution& e, Branch& b, const Environment& environment, std::str
 // One accepted step of a branch (or the end of its span and the start of the
 // next).
 bool step(Execution& e, Branch& b, const Environment& environment, std::string& error) {
+    clearPropagationStop();   // from an accepted state (reentry.h)
     if (!b.run && !startSpan(e, b, environment, error)) return false;
     auto& run = b.run->run();
     const double target = b.bounded ? elapsedSeconds(b.spanStart, b.spanEnd) : b.direction * std::numeric_limits<double>::infinity();
@@ -176,8 +177,11 @@ bool step(Execution& e, Branch& b, const Environment& environment, std::string& 
     }
     // Another object's steps may have moved the shared driver span.
     if (b.bounded) setDriverSpan(e, b.spanStart, b.spanEnd);
-    while (!run.attempt(target))
+    while (!run.attempt(target)) {
+        // The trajectory ends here (reentry.h): no node past the last accepted one.
+        if (propagationStop().active) return prwError(error, propagationStopMessage().c_str());
         if (!run.running(target)) return true;  // ended by the step limits: reported on the next call
+    }
     record(b, run);
     if (run.endedOnBoundary()) {
         // A kink lies within the events' tolerance of this node: it closes

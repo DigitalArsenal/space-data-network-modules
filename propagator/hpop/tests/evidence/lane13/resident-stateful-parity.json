@@ -1,11 +1,11 @@
 {
-  "wasmSha256": "614eb47eae4ed88b7ef79bea7aa01f7d0acc3c749565946dd8f0b344173716ee",
-  "wasmBytes": 2033737,
+  "wasmSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
+  "wasmBytes": 2042860,
   "wasmedgeVersion": "0.16.4",
   "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
   "runtimeInstances": "One persistent direct instance per group",
-  "groups": 3,
-  "requests": 28,
+  "groups": 4,
+  "requests": 33,
   "runtimes": [
     "real Chrome/V8",
     "native WasmEdge",
@@ -261,6 +261,51 @@
       "responseSha256": "247c572368eb448714823f648655db1a9b0764859e267ddd058c740542af2ccf",
       "bytes": 156,
       "errorCode": "missing-required-input",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-before",
+      "responseSha256": "0a4574acffdc60d707ff54e7660081e396a2e253fa9081adc6805ca8e1ad9795",
+      "bytes": 672,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-across",
+      "responseSha256": "2203be4abb7f5ca6b9bf9a3a7590af0993bd2d0b3ae5256fb63dd68874c8d6f3",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-state-after",
+      "responseSha256": "2203be4abb7f5ca6b9bf9a3a7590af0993bd2d0b3ae5256fb63dd68874c8d6f3",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-execution",
+      "responseSha256": "b4c4f31beea2203f76429a541cc224f254b84ab00291621a93a7e5d35bdd3d70",
+      "bytes": 228,
+      "errorCode": "reentry",
       "yielded": false,
       "backlogRemaining": "0"
     }

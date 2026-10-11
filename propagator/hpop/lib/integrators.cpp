@@ -9,6 +9,7 @@
 #include "integrators.h"
 #include "astrodynamics.h"
 #include "shadow_events.h"
+#include "reentry.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -59,14 +60,17 @@ double clockEpoch(const ForceModel::ForceModelSet& f, const StateVector& s) {
     return f.weather.epoch != 0 ? f.weather.epoch : s.epoch;
 }
 
-/// Wrapper to use ForceModelSet with standard derivative function signature
+/// Wrapper to use ForceModelSet with standard derivative function signature.
+/// Each integration builds one, and starts without a stop (reentry.h).
 struct ForceModelWrapper {
-    ForceModel::ForceModelSet* forceSet;
-    double epoch;  // Julian date at t=0
+    ForceModel::ForceModelSet* forceSet = nullptr;
+    double epoch = 0;  // Julian date at t=0
+    ForceModelWrapper() { clearPropagationStop(); }
 };
 
 void forceModelDerivative(double t, const double* y, double* dydt, void* params) {
     ForceModelWrapper* fw = static_cast<ForceModelWrapper*>(params);
+    if (stopAt(y, fw->epoch + t / 86400.0)) { std::fill(dydt, dydt + 6, 0.0); return; }   // reentry.h
     const Vec3 position(y[0], y[1], y[2]), velocity(y[3], y[4], y[5]);
     const Vec3 acc = ForceModel::ComputeTotalAcceleration(position, velocity, fw->epoch + t / 86400.0, *fw->forceSet);
     dydt[0] = velocity.x;
@@ -829,6 +833,7 @@ RKF78Run::RKF78Run(const std::array<double, 6>& y0, int direction, const Integra
       maxAttempts_(config.maxSteps * 10) {}  // Allow rejections but prevent infinite loop
 
 bool RKF78Run::running(double target) const {
+    if (propagationStop().active) return false;   // reentry.h: no step past a stop
     return std::abs(t_) < std::abs(target) && steps_ < config_.maxSteps && attempts_ < maxAttempts_;
 }
 
@@ -863,6 +868,7 @@ bool RKF78Run::attempt(double target) {
         }
         stepRes.time = t_ + h;
     }
+    if (propagationStop().active) return false;   // a stage reached the stop: no step (reentry.h)
 
     // Compute error norm
     double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
@@ -1889,27 +1895,34 @@ PropagateResult PropagateWithResult(const StateVector& initialState, double dt,
                           initialState.velocity.x, initialState.velocity.y, initialState.velocity.z};
     shadow::BoundaryEvents events(forceSet, wrapper.epoch, 0.0, y0);
     shadow::BoundaryEvents* boundaries = events.active() ? &events : nullptr;
+    PropagateResult result;
     switch (config.method) {
         case IntegrationMethod::RK4:
-            return RK4Propagate(initialState, dt, config.initialStep,
-                               forceModelDerivative, &wrapper);
-
+            result = RK4Propagate(initialState, dt, config.initialStep, forceModelDerivative, &wrapper);
+            break;
         case IntegrationMethod::RKF45:
-            return RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-
+            result = RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+            break;
         case IntegrationMethod::RKF78:
         case IntegrationMethod::RK78:
-            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-
+            result = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+            break;
         case IntegrationMethod::RKDP87:
-            return RKDP87Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-
+            result = RKDP87Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+            break;
         case IntegrationMethod::BS:
-            return BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper, BSConfig(), boundaries);
-
+            result = BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper, BSConfig(), boundaries);
+            break;
         default:
-            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+            result = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+            break;
     }
+    // The trajectory ended (reentry.h): the integration failed there.
+    if (propagationStop().active) {
+        result.success = false;
+        result.errorMessage = propagationStopMessage();
+    }
+    return result;
 }
 
 } // namespace Integrator
