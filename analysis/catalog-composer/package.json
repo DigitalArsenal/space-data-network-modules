@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-catalog-composer",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -12,8 +12,9 @@
   "devDependencies": {
     "esbuild": "0.25.12",
     "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.38",
     "flatsql": "2.0.2",
     "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.223.0"
+    "spacedatastandards.org": "1.245.0"
   }
 }
