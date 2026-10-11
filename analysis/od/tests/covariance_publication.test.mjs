@@ -15,7 +15,7 @@ for(const fastMath of [false,true]) test(`OCM covariance publication rejects fab
             const p=path.join(temp,name);await fs.mkdir(path.dirname(p),{recursive:true});await fs.writeFile(p,content);
         }
         const exe=path.join(temp,'covariance-test');
-        const args=['-std=c++17','-O2',...(fastMath?['-ffast-math']:[]),'-I'+path.join(root,'include'),'-I'+generated,'-I'+temp,
+        const args=['-std=c++17','-O2',...(fastMath?['-ffast-math']:[]),'-I'+path.join(root,'include'),'-I'+generated,'-I'+path.resolve(root,'../../../../common'),'-I'+temp,
           path.join(root,'tests/test_covariance_publication.cpp'),path.join(root,'src/ocm_fb_builder.cpp'),'-o',exe];
         const build=spawnSync(process.env.CXX??'clang++',args,{encoding:'utf8',timeout:60000});
         assert.equal(build.status,0,build.error?.message??build.stderr);
