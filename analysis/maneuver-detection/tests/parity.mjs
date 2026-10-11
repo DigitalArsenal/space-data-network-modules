@@ -56,7 +56,7 @@ const cases = [
     json('options', { spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 15778800) }] })] } },
   { id: 'refused-option', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', burned, OEM_T), json('options', { no_such_option: 1 })] } },
 ];
-const plan = await normalizeParityFixture({ name: 'maneuver-detection 0.3.0 methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
+const plan = await normalizeParityFixture({ name: 'maneuver-detection 0.4.0 methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 300000, log: console.log });
 console.log(formatParityReport(report));

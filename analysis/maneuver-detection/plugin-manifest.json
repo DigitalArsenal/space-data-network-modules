@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
   "name": "Maneuver detection",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Maneuver detection over any pluggable propagator. detect_maneuvers takes element sets ($OMM) and asks for each set's trajectory on a propagator query port (the host routes each query to the plugged propagator: SGP4, HPOP, an ABI provider; inertial or Earth-fixed answers) or takes per-set trajectories ($OEM), and emits $MNV DETECTED from three detectors: D1, the crossing of consecutive trajectories with a median step test; D2, a robust GLR step test on orbit-averaged energy levels and the orbit-normal chain; D3, a GLR test for a change of energy rate (low thrust). compare_ephemerides checks planned maneuvers ($MNV) against successive operator ephemeris versions ($OEM: executed, cancelled or unknown, with the executed delta-V) and reports changes between versions. score_detections matches detected $MNV to truth $MNV (recall, time error, delta-V ratio, false alarms).",
   "pluginFamily": "analysis",
   "capabilities": [],

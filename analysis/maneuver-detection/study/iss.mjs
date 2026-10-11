@@ -48,8 +48,8 @@ async function truth() {
     for (const m of outputsOf(r, 'maneuvers').map(unpackMnv)) {
       const id = m.ID.replace(/:check$/, '');
       if (!group.some((b) => `ISS:${iso(b.tig)}:${b.name}` === id)) continue;
-      checked.set(id, { id, tig: m.EVENT_START_TIME, status: MNV.maneuverStatus[m.STATUS], executed_in_track_mps: m.DELTA_VEL_U * 1000,
-        executed_cross_track_mps: m.DELTA_VEL_V * 1000, executed_mps: m.DELTA_VEL * 1000, check: rows.get(id) });
+      checked.set(id, { id, tig: m.EVENT_START_TIME, status: MNV.maneuverStatus[m.STATUS], executed_in_track_mps: m.DELTA_VEL_V * 1000,
+        executed_cross_track_mps: m.DELTA_VEL_W * 1000, executed_mps: m.DELTA_VEL * 1000, check: rows.get(id) });
     }
     log(`${iso(group[0].tig).slice(0, 10)}: ${group.length} burn(s), ${versions.length} versions`);
   }

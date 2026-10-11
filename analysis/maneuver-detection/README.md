@@ -106,18 +106,18 @@ every set. Each revolution is averaged over 64 samples.
 
 ### `$MNV` fields
 
-U, V and W follow the SDS MNV schema's component comments: U along-track, V
-cross-track, W radial. This is not the usual RTN order; it is the schema's.
+Delta-V is in UVW as the Astrodynamics Standards and the VCM define it: U radial,
+V in-track (W × U), W cross-track along the orbit normal; km/s.
 
 | Field | Value |
 | --- | --- |
 | `EVENT_START_TIME`, `EVENT_END_TIME` | The event time (impulsive: equal) |
-| `DELTA_VEL_U`, `DELTA_VEL_V` | In-track and cross-track delta-V, km/s, 0 unless that component's test fired; positive V is along the orbit normal |
-| `DELTA_VEL_W` | Radial: not estimated, 0 |
+| `DELTA_VEL_U` | Radial: not estimated, 0 |
+| `DELTA_VEL_V`, `DELTA_VEL_W` | In-track and cross-track delta-V, km/s, 0 unless that component's test fired; positive W is along the orbit normal |
 | `MANEUVER_UNC` | Separation of the two trajectories at the event time, km |
 | `PRE_EVENT`, `POST_EVENT` | Osculating two-body states and elements at the event time (μ = 398600.4418 km³/s²) |
 | `CHARACTERIZATION` | DEORBIT (post perigee under 120 km); GEO (period 1300–1600 min, e < 0.05): STATION_KEEPING when \|Δa\| < 5 km, else PHASING; then COMBINED, OUT_OF_PLANE, ORBIT_RAISING or ORBIT_LOWERING |
-| `MNVR_ACCEL_TIMES`, `MNVR_ACCELS` | D3: the change of along-track acceleration (U, V, W; km/s²) |
+| `MNVR_ACCEL_TIMES`, `MNVR_ACCELS` | D3: the change of in-track acceleration, as U, V, W (radial 0, in-track, cross-track 0; km/s²) |
 | `ALGORITHM` | Detector and propagator port |
 | `SOURCED_DATA` | The two bracketing sets (`EPOCH`, and the `$OMM` `COMMENT`, e.g. its GP_ID) |
 
@@ -152,7 +152,7 @@ whole revolutions.
     group, the executed change shared in proportion to the plan.
 - **Status:** EXECUTED when the executed size reaches `executed_fraction` of
   the plan, CANCELLED below `cancelled_fraction`, else UNKNOWN.
-- **In-plane plans** (no `DELTA_VEL_V`) are judged by the in-track change.
+- **In-plane plans** (no `DELTA_VEL_W`) are judged by the in-track change.
   Across a TIG the normals of different revolutions are compared after a
   nodal-regression correction, which leaves a few tenths of a m/s of
   cross-track error in LEO.

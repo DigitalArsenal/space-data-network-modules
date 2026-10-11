@@ -64,7 +64,7 @@ for (const sat of SATELLITES) {
   const events = outputsOf(r, 'maneuvers').map(unpackMnv);
   for (const m of events) {
     truth.push(mnvRecord({ ID: m.ID, SAT_NO: sat.norad, STATUS: MNV.maneuverStatus.EXECUTED, EVENT_START_TIME: m.EVENT_START_TIME,
-      EVENT_END_TIME: m.EVENT_END_TIME, DELTA_VEL: m.DELTA_VEL, DELTA_VEL_U: m.DELTA_VEL_U, DELTA_VEL_V: m.DELTA_VEL_V }));
+      EVENT_END_TIME: m.EVENT_END_TIME, DELTA_VEL: m.DELTA_VEL, DELTA_VEL_V: m.DELTA_VEL_V, DELTA_VEL_W: m.DELTA_VEL_W }));
     explained.push({ object: key, from: iso(seconds(m.EVENT_START_TIME) - 2 * 86400), to: iso(seconds(m.EVENT_END_TIME) + 2 * 86400) });
   }
   // Missing days explain events near them too (a manoeuvre under 0.2 km, or one
@@ -75,7 +75,7 @@ for (const sat of SATELLITES) {
   const first = iso(list[0].start).slice(0, 10), last = iso(list.at(-1).stop + 86400).slice(0, 10);
   histories.push({ history: path.join(flag('gp-dir'), `${sat.norad}.json`), from: first, to: last });
   summary.push({ norad: sat.norad, name: sat.name, arcs: list.length, from: first, to: last, truth: events.length,
-    truthEvents: events.map((m) => ({ from: m.EVENT_START_TIME, to: m.EVENT_END_TIME, in_track_mps: m.DELTA_VEL_U * 1000, cross_track_mps: m.DELTA_VEL_V * 1000 })) });
+    truthEvents: events.map((m) => ({ from: m.EVENT_START_TIME, to: m.EVENT_END_TIME, in_track_mps: m.DELTA_VEL_V * 1000, cross_track_mps: m.DELTA_VEL_W * 1000 })) });
   log(`${sat.name}: ${list.length} arcs ${first} to ${last}, ${events.length} precise-orbit manoeuvres`);
 }
 await compare.destroy();
