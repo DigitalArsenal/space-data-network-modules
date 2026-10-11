@@ -97,7 +97,7 @@ test('SGP4: four 6 h windows report the one-day screen, exclusion included', { s
     const whole = await screenAllVsAllOnGpu({ ...common(harness), request: windowRequest(instance, handle, startJd, 1, 'TEME') });
     assert.ok(whole.events.length > 0 && whole.excluded.length > 0);
     const windowed = await screenWindowsOnGpu({ ...common(harness), windows: quarters(startJd, 1),
-      prepareWindow: async (w) => ({ request: windowRequest(instance, handle, w.startJd, w.durationDays, 'TEME'), sourceIds: sources.map((s) => s.OBJECT_ID) }) });
+      prepareWindow: async (w) => ({ request: windowRequest(instance, handle, w.startJd, w.durationDays, 'TEME'), objects: sources.map((s) => [s.OBJECT_ID, s.NORAD_CATALOG_ID]) }) });
     assertSameEvents(windowed.events, whole.events, 'windows');
     assert.deepEqual(windowed.excluded.map(([id]) => id).sort(), whole.excluded.map(([i]) => sources[i].OBJECT_ID).sort());
   } finally {
@@ -131,7 +131,7 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
     const windowed = await screenWindowsOnGpu({ ...common(harness), windows: quarters(startJd, days),
       prepareWindow: async (w) => {
         const handle = handleOf(await prepare(harness, instance, identity, exportWindow(w)));
-        return { request: windowRequest(instance, handle, w.startJd, w.durationDays, 'GCRF'), sourceIds: identity.map((s) => s.OBJECT_ID),
+        return { request: windowRequest(instance, handle, w.startJd, w.durationDays, 'GCRF'), objects: identity.map((s) => [s.OBJECT_ID, s.NORAD_CATALOG_ID]),
           release: () => harness.invoke({ methodId: 'destroy_screening_index', inputs: [request({ DESTROY_REQUEST: { INSTANCE: instance, SCREENING_INDEX_HANDLE: handle } })] }) };
       } });
     assertSameEvents(windowed.events, whole.events, 'windows');

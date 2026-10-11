@@ -17,14 +17,14 @@ const tagged = (tag, byteLength) => {
   return { bytes, view: new DataView(bytes.buffer) };
 };
 
-function blockFrame(firstStep, stepCount) {
+export function blockFrame(firstStep, stepCount) {
   const { bytes, view } = tagged('CAB1', 12);
   view.setUint32(4, firstStep, true);
   view.setUint32(8, stepCount, true);
   return bytes;
 }
 
-function excludedFrame(excluded) {
+export function excludedFrame(excluded) {
   const { bytes, view } = tagged('CAX1', 8 + excluded.size * 12);
   view.setUint32(4, excluded.size, true);
   let at = 8;
@@ -36,7 +36,7 @@ function excludedFrame(excluded) {
   return bytes;
 }
 
-function candidatesFrame(triples, from, to) {
+export function candidatesFrame(triples, from, to) {
   const count = (to - from) / 3;
   const { bytes, view } = tagged('CAC1', 8 + count * 12);
   view.setUint32(4, count, true);
@@ -44,14 +44,14 @@ function candidatesFrame(triples, from, to) {
   return bytes;
 }
 
+// The request carries its SDS type; the control frames their media type.
+export const sds = (portId, code, payload) => ({ portId, payload,
+  typeRef: { schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' } });
+export const control = (portId, mediaType, payload) => ({ portId, payload, typeRef: { wireFormat: 'flatbuffer', mediaType } });
+
 // Orders candidate triples by pair, then step, so a pair's steps stay in one
 // refine call and make whole encounters.
-// The request carries its SDS type; the control frames their media type.
-const sds = (portId, code, payload) => ({ portId, payload,
-  typeRef: { schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' } });
-const control = (portId, mediaType, payload) => ({ portId, payload, typeRef: { wireFormat: 'flatbuffer', mediaType } });
-
-function sortTriples(triples, objects) {
+export function sortTriples(triples, objects) {
   const n = triples.length / 3;
   const keys = new Float64Array(n);
   for (let q = 0; q < n; q++) keys[q] = (triples[3 * q] * objects + triples[3 * q + 1]) * 1e5 + triples[3 * q + 2];
@@ -76,12 +76,10 @@ function sortTriples(triples, objects) {
  * @param {(stage: string, done: number, total: number) => void} [o.onProgress]
  */
 export async function screenAllVsAllOnGpu(o) {
-  const { invoke, decodeCatalogResult, request, screener, thresholdKm, coarseStepSec } = o;
-  const blockSteps = o.blockSteps ?? (o.screener ? 32 : 120), perRefine = o.candidatesPerRefine ?? 150000;
+  const { invoke, request, screener, thresholdKm, coarseStepSec } = o;
+  const blockSteps = o.blockSteps ?? (o.screener ? 32 : 120);
   const progress = o.onProgress ?? (() => {});
   const requestInput = [sds('request', 'CQR', request)];
-  // An empirical prediction-error model goes to refinement only (where events get their probability).
-  const modelInput = o.uncertaintyModel ? [control('uncertainty_model', 'application/vnd.sdn.ca-uncertainty-model', o.uncertaintyModel)] : [];
   const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
   const timings = { gridMs: 0, gpuMs: 0, refineMs: 0 };
   const excluded = new Map();
@@ -126,13 +124,40 @@ export async function screenAllVsAllOnGpu(o) {
   let at = 0;
   for (const b of blocks) { all.set(b, at); at += b.length; }
   const sorted = sortTriples(all, objects);
+  const { events, excludedRecords, statistics, totals, refineCalls, refineMs } = await refineCandidates({
+    ...o, sorted, excluded, onProgress: (done) => progress('refine', done, candidateCount) });
+  timings.refineMs += refineMs;
+  return {
+    events,
+    excludedRecords,
+    statistics: { ...statistics, ...totals, TOTAL_OBJECTS: objects - excluded.size, PAIRS_SCREENED: objects * (objects - 1) / 2 },
+    excluded: [...excluded],
+    objects, lastStep, candidates: candidateCount, refineCalls, timings,
+  };
+}
 
+/**
+ * Refines sorted candidate triples (sortTriples) into screen_catalog's result:
+ * calls hold whole pairs, and a call whose conjunctions exceed the module's
+ * output staging is split in two and retried.
+ *
+ * @param {object} o  invoke, decodeCatalogResult, request and the optional
+ *   uncertaintyModel and candidatesPerRefine, as screenAllVsAllOnGpu, plus:
+ * @param {Uint32Array} o.sorted  The window's candidate triples, by pair then step.
+ * @param {Map<number, number>} o.excluded  Index -> first failing JD: the window's exclusions.
+ * @param {(refined: number) => void} [o.onProgress]
+ */
+export async function refineCandidates(o) {
+  const { invoke, decodeCatalogResult, sorted } = o;
+  const perRefine = o.candidatesPerRefine ?? 150000;
+  const requestInput = [sds('request', 'CQR', o.request)];
+  // An empirical prediction-error model goes to refinement only (where events get their probability).
+  const modelInput = o.uncertaintyModel ? [control('uncertainty_model', 'application/vnd.sdn.ca-uncertainty-model', o.uncertaintyModel)] : [];
+  const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
   const events = [], excludedRecords = [];
   const totals = { KD_TREE_CANDIDATES: 0, TCA_REFINED: 0, CONJUNCTIONS_FOUND: 0, PROPAGATIONS: 0, FAILED_PAIRS: 0 };
-  let statistics = null;
-  const excludedBytes = excludedFrame(excluded);
-  // Refine calls hold whole pairs. A call whose conjunctions exceed the
-  // module's output staging is split in two and retried.
+  let statistics = null, refineMs = 0;
+  const excludedBytes = excludedFrame(o.excluded);
   const samePair = (a, b) => sorted[a] === sorted[b] && sorted[a + 1] === sorted[b + 1];
   const pairEnd = (at) => { while (at < sorted.length && at > 0 && samePair(at, at - 3)) at += 3; return at; };
   const pairStart = (at) => { while (at > 0 && at < sorted.length && samePair(at, at - 3)) at -= 3; return at; };
@@ -156,13 +181,15 @@ export async function screenAllVsAllOnGpu(o) {
       if (mid >= to) mid = pairStart(to - 3);
       if (mid > from && mid < to) {
         queue.unshift([from, mid], [mid, to]);
-        timings.refineMs += performance.now() - t;
+        refineMs += performance.now() - t;
         continue;
       }
     }
     for (;;) {
       if (response.statusCode !== 0) throw new Error(`refine_candidates: ${response.errorCode}: ${response.errorMessage}`);
-      const result = decodeCatalogResult(port(response.outputs, 'result'));
+      const payload = port(response.outputs, 'result');
+      o.onResult?.(payload);
+      const result = decodeCatalogResult(payload);
       events.push(...(result.EVENTS ?? []));   // an empty window may omit the vector
       if (firstCall) excludedRecords.push(...response.outputs.filter((x) => x.portId === 'excluded').map((x) => x.payload));
       if (result.FINAL_CHUNK) {
@@ -173,17 +200,11 @@ export async function screenAllVsAllOnGpu(o) {
       response = await invoke('refine_candidates', inputs);
     }
     firstCall = false;
-    timings.refineMs += performance.now() - t;
+    refineMs += performance.now() - t;
     refined += (to - from) / 3;
-    progress('refine', refined, candidateCount);
+    o.onProgress?.(refined);
   }
-  return {
-    events,
-    excludedRecords,
-    statistics: { ...statistics, ...totals, TOTAL_OBJECTS: objects - excluded.size, PAIRS_SCREENED: objects * (objects - 1) / 2 },
-    excluded: [...excluded],
-    objects, lastStep, candidates: candidateCount, refineCalls, timings,
-  };
+  return { events, excludedRecords, statistics, totals, refineCalls, refineMs };
 }
 
 /**
@@ -198,13 +219,15 @@ export async function screenAllVsAllOnGpu(o) {
  *
  * @param {object} o  As screenAllVsAllOnGpu, without `request`, plus:
  * @param {{startJd: number, durationDays: number}[]} o.windows  Consecutive.
- * @param {(window: object, k: number) => Promise<{request: Uint8Array, sourceIds: string[], excluded?: [string, number][], release?: () => Promise<void>}>} o.prepareWindow
- *   The window's WINDOW_REQUEST, its source object ids by index, and objects
- *   the propagator could not cover there ([id, first failing JD]).
+ * @param {(window: object, k: number) => Promise<{request: Uint8Array, objects: [string, number][], excluded?: [string, number, number][], release?: () => Promise<void>}>} o.prepareWindow
+ *   The window's WINDOW_REQUEST, each source's identity by index ([object
+ *   id, catalog number]), and objects the propagator could not cover there
+ *   ([id, catalog number, first failing JD]).
+ * @returns {Promise<{events: object[], excluded: [string, number, number][], windows: object[], candidates: number, timings: object}>}
  */
 export async function screenWindowsOnGpu(o) {
   const progress = o.onProgress ?? (() => {});
-  const events = [], excludedIds = new Map(), windows = [];
+  const events = [], excludedKeys = new Map(), windows = [];
   const timings = { prepareMs: 0, gridMs: 0, gpuMs: 0, refineMs: 0 };
   let candidates = 0;
   for (let k = 0; k < o.windows.length; k++) {
@@ -214,25 +237,45 @@ export async function screenWindowsOnGpu(o) {
     const run = await screenAllVsAllOnGpu({ ...o, request: prepared.request,
       onProgress: (stage, done, total) => progress(`window ${k + 1}/${o.windows.length} ${stage}`, done, total) });
     await prepared.release?.();
-    for (const [id, jd] of [...run.excluded.map(([i, d]) => [prepared.sourceIds[i], d]), ...(prepared.excluded ?? [])]) {
-      if (!excludedIds.has(id) || jd < excludedIds.get(id)) excludedIds.set(id, jd);
+    for (const [id, norad, jd] of [...run.excluded.map(([i, d]) => [...prepared.objects[i], d]), ...(prepared.excluded ?? [])]) {
+      const key = objectKey(id, norad);
+      if (!excludedKeys.has(key) || jd < excludedKeys.get(key)[2]) excludedKeys.set(key, [id, norad, jd]);
     }
     for (const key of ['gridMs', 'gpuMs', 'refineMs']) timings[key] += run.timings[key];
     candidates += run.candidates;
     events.push(...run.events);
     windows.push({ ...o.windows[k], conjunctions: run.events.length, candidates: run.candidates });
   }
-  // A TCA within the refinement tolerance of a shared edge is in both windows.
-  const toleranceDays = 2 * Math.max(0.001, o.fineTolSec ?? 0.001) / 86400;
-  const key = (e) => [e.PRIMARY_ID, e.SECONDARY_ID].sort().join('\u0000');
+  return { events: mergeWindowEvents(events, new Set(excludedKeys.keys()), o.fineTolSec), excluded: [...excludedKeys.values()],
+    windows, candidates, timings };
+}
+
+/**
+ * An object's identity in a screen: its object id with its catalog number.
+ * Ids alone repeat (597 objects of the 2026-09-30 catalog are 'UNKNOWN').
+ */
+export const objectKey = (id, norad) => `${id}\u0000${norad ?? 0}`;
+const eventKeys = (e) => [objectKey(e.PRIMARY_ID, e.PRIMARY_NORAD_ID), objectKey(e.SECONDARY_ID, e.SECONDARY_NORAD_ID)];
+
+/**
+ * Windows' events as one screen of the whole span: a TCA within the
+ * refinement tolerance of a shared edge is in both windows and is kept once,
+ * and an object excluded in any window has no conjunctions anywhere.
+ * @param {object[]} events  CQR events of consecutive windows.
+ * @param {Set<string>} excludedKeys  objectKey of each object excluded anywhere.
+ * @param {number} [fineTolSec=0.001]
+ */
+export function mergeWindowEvents(events, excludedKeys, fineTolSec) {
+  const toleranceDays = 2 * Math.max(0.001, fineTolSec ?? 0.001) / 86400;
+  const key = (e) => eventKeys(e).sort().join('\u0001');
   const kept = [];
   for (const e of [...events].sort((a, b) => a.TCA.JULIAN_DATE - b.TCA.JULIAN_DATE)) {
-    if (excludedIds.has(e.PRIMARY_ID) || excludedIds.has(e.SECONDARY_ID)) continue;
+    if (eventKeys(e).some((k) => excludedKeys.has(k))) continue;
     let same = false;
     for (let i = kept.length - 1; i >= 0 && e.TCA.JULIAN_DATE - kept[i].TCA.JULIAN_DATE <= toleranceDays; i--) {
       if (key(kept[i]) === key(e)) { same = true; break; }
     }
     if (!same) kept.push(e);
   }
-  return { events: kept, excluded: [...excludedIds], windows, candidates, timings };
+  return kept;
 }

@@ -15,6 +15,16 @@ namespace {
 
 double norm3(double x, double y, double z) { return std::sqrt(x * x + y * y + z * z); }
 
+// SplitMix64's finalizer: spreads a cell key over the open-addressing table.
+uint64_t tight_cell_mix(uint64_t x) {
+    x ^= x >> 30;
+    x *= 0xbf58476d1ce4e5b9ULL;
+    x ^= x >> 27;
+    x *= 0x94d049bb133111ebULL;
+    return x ^ (x >> 31);
+}
+constexpr uint64_t kTightEmptyCell = ~uint64_t{0};   // no key reaches it (21-bit fields)
+
 // Runs body(worker, first, last) over [0, count) split into num_threads blocks.
 template <typename Body>
 void for_blocks(int64_t count, int num_threads, Body body) {
@@ -132,7 +142,8 @@ CoarseGridBlock tight_coarse_grid_block(const SourceRefs& sources, const Screeni
 
 void tight_box_pairs(const std::vector<StateVector>& states, const std::vector<double>& deviation_km,
                      const std::vector<uint8_t>& ok, double threshold_km, double h,
-                     TightGridScratch& scratch, std::vector<std::pair<uint32_t, uint32_t>>& pairs) {
+                     TightGridScratch& scratch, std::vector<std::pair<uint32_t, uint32_t>>& pairs,
+                     const std::vector<uint8_t>& roles) {
     pairs.clear();
     const size_t n = states.size();
     auto& box = scratch.boxes;
@@ -174,6 +185,80 @@ void tight_box_pairs(const std::vector<StateVector>& states, const std::vector<d
     cells.clear();
     big.clear();
     std::vector<uint8_t> is_big(n, 0);
+    if (!roles.empty()) {
+        // Only the primaries' cells are kept; every other object looks its own
+        // cells up in them. A pair of primaries is reported by the higher one.
+        const auto active = [&](size_t i) { return ok[i] && roles[i] != kTightRoleSkip; };
+        const auto primary = [&](size_t i) { return roles[i] == kTightRolePrimary; };
+        auto& primaries = scratch.primaries;
+        primaries.clear();
+        for (size_t i = 0; i < n; ++i) {
+            if (!active(i)) continue;
+            int64_t lo[3], hi[3];
+            for (int a = 0; a < 3; ++a) { lo[a] = index(box[i * 6 + a]); hi[a] = index(box[i * 6 + 3 + a]); }
+            if (hi[0] - lo[0] > 3 || hi[1] - lo[1] > 3 || hi[2] - lo[2] > 3) {
+                is_big[i] = 1;
+                big.push_back(static_cast<uint32_t>(i));
+            }
+            if (!primary(i)) continue;
+            primaries.push_back(static_cast<uint32_t>(i));
+            if (is_big[i]) continue;
+            for (int64_t x = lo[0]; x <= hi[0]; ++x)
+                for (int64_t y = lo[1]; y <= hi[1]; ++y)
+                    for (int64_t z = lo[2]; z <= hi[2]; ++z) cells.push_back({key(x, y, z), static_cast<uint32_t>(i)});
+        }
+        if (primaries.empty()) return;
+        std::sort(cells.begin(), cells.end());
+        size_t capacity = 16;
+        while (capacity < 2 * cells.size()) capacity <<= 1;
+        const uint64_t mask = capacity - 1;
+        auto& keys = scratch.table_keys;
+        auto& runs = scratch.table_runs;
+        keys.assign(capacity, kTightEmptyCell);
+        runs.assign(capacity * 2, 0);
+        for (size_t a = 0; a < cells.size();) {
+            size_t b = a;
+            while (b < cells.size() && cells[b].first == cells[a].first) ++b;
+            uint64_t slot = tight_cell_mix(cells[a].first) & mask;
+            while (keys[slot] != kTightEmptyCell) slot = (slot + 1) & mask;
+            keys[slot] = cells[a].first;
+            runs[slot * 2] = static_cast<uint32_t>(a);
+            runs[slot * 2 + 1] = static_cast<uint32_t>(b);
+            a = b;
+        }
+        for (size_t j = 0; j < n; ++j) {
+            if (!active(j) || is_big[j]) continue;
+            int64_t lo[3], hi[3];
+            for (int a = 0; a < 3; ++a) { lo[a] = index(box[j * 6 + a]); hi[a] = index(box[j * 6 + 3 + a]); }
+            for (int64_t x = lo[0]; x <= hi[0]; ++x)
+                for (int64_t y = lo[1]; y <= hi[1]; ++y)
+                    for (int64_t z = lo[2]; z <= hi[2]; ++z) {
+                        const uint64_t k = key(x, y, z);
+                        uint64_t slot = tight_cell_mix(k) & mask;
+                        while (keys[slot] != k && keys[slot] != kTightEmptyCell) slot = (slot + 1) & mask;
+                        if (keys[slot] != k) continue;
+                        for (uint32_t u = runs[slot * 2]; u < runs[slot * 2 + 1]; ++u) {
+                            const uint32_t i = cells[u].second;
+                            if (i == j || (primary(j) && i > j) || !overlap(i, j)) continue;
+                            const uint64_t home = key(index(std::max(box[i * 6], box[j * 6])),
+                                                      index(std::max(box[i * 6 + 1], box[j * 6 + 1])),
+                                                      index(std::max(box[i * 6 + 2], box[j * 6 + 2])));
+                            if (home == k) pairs.push_back({std::min<uint32_t>(i, static_cast<uint32_t>(j)),
+                                                            std::max<uint32_t>(i, static_cast<uint32_t>(j))});
+                        }
+                    }
+        }
+        // A large box meets every object (a primary's) or every primary (another's).
+        for (const uint32_t b : big) {
+            const auto visit = [&](size_t j) {
+                if (j == b || !active(j) || (is_big[j] && j < b) || !(primary(b) || primary(j)) || !overlap(b, j)) return;
+                pairs.push_back({std::min<uint32_t>(b, static_cast<uint32_t>(j)), std::max<uint32_t>(b, static_cast<uint32_t>(j))});
+            };
+            if (primary(b)) for (size_t j = 0; j < n; ++j) visit(j);
+            else for (const uint32_t j : primaries) visit(j);
+        }
+        return;
+    }
     for (size_t i = 0; i < n; ++i) {
         if (!ok[i]) continue;
         int64_t lo[3], hi[3];
@@ -264,6 +349,88 @@ TightSearch tight_search_block(const SourceRefs& sources, const ScreeningConfig&
             if (it == out.excluded.end() || x.first_failure_jd < it->second.first_failure_jd) out.excluded[i] = x;
         }
     }
+    return out;
+}
+
+TightSearch tight_grid_search_block(const StoredCoarseGrid& grid, const ScreeningConfig& config,
+                                    const std::vector<uint8_t>& roles) {
+    // An f32 component is within 2^-24 of the f64 it was rounded from, so a
+    // row's straight path over [-h, h] is within 2^-24 (|r| + h |v|) of the
+    // f64 path (|.| from the f32 values, inflated by the same factor), and
+    // its deviation bound within 2^-24 of the f64 bound. Both are added to the
+    // row's bound, with 0.5 cm for the f64 rounding of each test.
+    constexpr double kUnit = 0x1p-24;
+    constexpr double kMarginKm = 0.5e-5;
+    const size_t n = grid.objects;
+    const double h = 0.5 * config.coarse_step_sec;
+    const int workers = std::max(1, config.num_threads);
+    std::vector<std::vector<TightCandidate>> found(workers);
+    // With roles, the secondaries whose radius band meets a primary's (each
+    // band widened by its f32 rounding and the margin, the primaries' by the
+    // threshold): no other secondary can close with a primary in this block.
+    std::vector<uint8_t> scoped = roles;
+    if (!roles.empty() && grid.bands) {
+        const auto widened = [&](size_t i, double pad, double& lo, double& hi) {
+            lo = grid.bands[i * 2];
+            hi = grid.bands[i * 2 + 1];
+            if (!std::isfinite(lo) || !std::isfinite(hi)) return false;
+            const double slack = kUnit * (1 + kUnit) * std::max(std::abs(lo), std::abs(hi)) + kMarginKm + pad;
+            lo -= slack;
+            hi += slack;
+            return true;
+        };
+        std::vector<std::pair<double, double>> spans;
+        for (size_t i = 0; i < n; ++i) {
+            double lo, hi;
+            if (roles[i] == kTightRolePrimary && widened(i, config.threshold_km, lo, hi)) spans.push_back({lo, hi});
+        }
+        std::sort(spans.begin(), spans.end());
+        std::vector<std::pair<double, double>> merged;
+        for (const auto& x : spans) {
+            if (!merged.empty() && x.first <= merged.back().second) merged.back().second = std::max(merged.back().second, x.second);
+            else merged.push_back(x);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            double lo, hi;
+            if (scoped[i] != kTightRoleSecondary || !widened(i, 0.0, lo, hi)) continue;
+            // The first merged span ending at or past lo is the only one that can meet [lo, hi].
+            const auto at = std::lower_bound(merged.begin(), merged.end(), lo,
+                                             [](const std::pair<double, double>& s, double x) { return s.second < x; });
+            if (at == merged.end() || at->first > hi) scoped[i] = kTightRoleSkip;
+        }
+    }
+    for_blocks(grid.step_count, workers, [&](int w, int64_t lo, int64_t hi) {
+        std::vector<StateVector> states(n);
+        std::vector<double> bound(n);
+        std::vector<uint8_t> ok(n);
+        TightGridScratch scratch;
+        std::vector<std::pair<uint32_t, uint32_t>> pairs;
+        for (int64_t s = lo; s < hi; ++s) {
+            const float* step = grid.states + static_cast<size_t>(s) * n * 8;
+            for (size_t i = 0; i < n; ++i) {
+                const float* r = step + i * 8;
+                ok[i] = 0;
+                if (!scoped.empty() && scoped[i] == kTightRoleSkip) continue;
+                bool finite = true;
+                for (int c = 0; c < 7; ++c) finite = finite && std::isfinite(r[c]);
+                if (!finite || r[3] < 0) continue;
+                StateVector& st = states[i];
+                st.x = r[0]; st.y = r[1]; st.z = r[2];
+                st.vx = r[4]; st.vy = r[5]; st.vz = r[6];
+                const double reach = norm3(st.x, st.y, st.z) + h * norm3(st.vx, st.vy, st.vz);
+                bound[i] = static_cast<double>(r[3]) * (1 + 2 * kUnit) + kUnit * (1 + kUnit) * reach + kMarginKm;
+                ok[i] = 1;
+            }
+            tight_box_pairs(states, bound, ok, config.threshold_km, h, scratch, pairs, scoped);
+            std::sort(pairs.begin(), pairs.end());
+            const int32_t at = grid.first_step + static_cast<int32_t>(s);
+            for (const auto& [i, j] : pairs)
+                if (tight_pair_may_close(states[i], bound[i], states[j], bound[j], config.threshold_km, h))
+                    found[w].push_back({i, j, at});
+        }
+    });
+    TightSearch out;
+    for (auto& part : found) out.candidates.insert(out.candidates.end(), part.begin(), part.end());
     return out;
 }
 

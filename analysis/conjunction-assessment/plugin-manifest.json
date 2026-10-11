@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -1384,14 +1384,14 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/vnd.sdn.ca-coarse-grid",
-                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, A, vx, vy, vz, 0) per step and object (TEME km, km/s^2, km/s) and f32 radius bands per object: the GPU screen kernel input."
+                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, D, vx, vy, vz, 0) per step and object (index frame, km and km/s; D is the source bound on its deviation from the straight line over half a coarse step, km) and f32 radius bands per object. The GPU screen kernel input, and search_grid's."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The block of SGP4 coarse states in the GPU layout, with acceleration bounds and radius bands."
+          "description": "The block of coarse states in the GPU layout, with deviation bounds and radius bands."
         },
         {
           "portId": "report",
@@ -1515,6 +1515,125 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "The candidates of a block of coarse steps, found in the module without a GPU: the CPU counterpart of coarse_grid plus the GPU search. Returns the CAC1 frame refine_candidates takes."
+    },
+    {
+      "methodId": "search_grid",
+      "displayName": "Search a stored grid",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WINDOW_REQUEST whose controls give the window, coarse step, threshold and workers; its index is not consulted (the grid holds every state the search reads)."
+        },
+        {
+          "portId": "grid",
+          "acceptedTypeSets": [
+            {
+              "setId": "grid-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-coarse-grid",
+                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, D, vx, vy, vz, 0) per step and object (index frame, km and km/s; D is the source bound on its deviation from the straight line over half a coarse step, km) and f32 radius bands per object."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A block of the window as coarse_grid returned it: one row per object. Non-finite rows (objects coarse_grid excluded) are not searched."
+        },
+        {
+          "portId": "roles",
+          "acceptedTypeSets": [
+            {
+              "setId": "roles-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-roles",
+                "detail": "CAR1 tag, u32 count (the grid's objects), then one byte per object: 0 secondary, 1 primary, 2 skip. A pair is searched when one member is a primary and neither is skipped."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional scope: the objects whose data changed, or a work unit's block, as primaries. Absent: every pair (all-vs-all)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "candidates",
+          "acceptedTypeSets": [
+            {
+              "setId": "candidates-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-candidates",
+                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "description": "CAC1, u32 count, then u32 (obj1, obj2, step) per candidate pair-step.",
+          "required": true
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The block, the window's last step, and the objects by role."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the block, its last step, roles counted and candidates."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "The candidates of a stored coarse grid block, found in the module: the CPU counterpart of the GPU search, optionally scoped by roles (incremental screening of updated objects, or one block of a partitioned screen). The f32 rounding of each row is bounded and added to its deviation bound, so the candidates contain every pair-step search_candidates finds on the same sources and roles; refine_candidates re-tests each in f64, on an index of the grid rows or of the rows the candidates name, in grid order."
     },
     {
       "methodId": "refine_candidates",
