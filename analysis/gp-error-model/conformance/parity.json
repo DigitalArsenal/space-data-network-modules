@@ -1,25 +1,25 @@
 {
   "ok": true,
-  "fixture": "gp-error-model e2b and e14 methods",
+  "fixture": "gp-error-model e2b and e14 methods and the catalog pipeline",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "c697061b0ab6b44bdb2395a62fe6759e9c29ed9820562049a27edae7fc420722",
-  "moduleSha256": "c697061b0ab6b44bdb2395a62fe6759e9c29ed9820562049a27edae7fc420722",
+  "artifactSha256": "14a1569e4f1ef74e74eb0360035e916c90d4564e950b4bd2b2d614acc1d6a184",
+  "moduleSha256": "14a1569e4f1ef74e74eb0360035e916c90d4564e950b4bd2b2d614acc1d6a184",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 13,
-      "durationMs": 698
+      "runs": 18,
+      "durationMs": 1094
     },
     {
       "lane": "wasmedge",
-      "runs": 13,
-      "durationMs": 515
+      "runs": 18,
+      "durationMs": 1730
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 13,
-      "durationMs": 3771
+      "runs": 18,
+      "durationMs": 15872
     }
   ],
   "cases": [
@@ -35,9 +35,14 @@
     "noise-responses",
     "fit-calibration",
     "calibrate-covariance-sets",
-    "dcp-covariance"
+    "dcp-covariance",
+    "attach-rules-3-and-4-every-regime",
+    "attach-rule-4-pooled",
+    "attach-rule-1-operator",
+    "attach-rule-2-fit",
+    "attribute-maneuvers"
   ],
-  "comparisons": 65,
+  "comparisons": 90,
   "failures": [],
   "runs": [
     {
@@ -171,6 +176,56 @@
       "stdoutLength": 2328
     },
     {
+      "lane": "browser",
+      "caseId": "attach-rules-3-and-4-every-regime",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "71d3e28476d7f8f3c536581568747cd22b6781b4d0b4afe66db3230858c73746",
+      "stdoutLength": 38648
+    },
+    {
+      "lane": "browser",
+      "caseId": "attach-rule-4-pooled",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5f922d7ce2fe37ac37653875f76e88656c071bedbaab085c7fc6b40c4796378",
+      "stdoutLength": 40368
+    },
+    {
+      "lane": "browser",
+      "caseId": "attach-rule-1-operator",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7415b058d3bb60e9eec16210511c91a31fae2b1d3200e6f90373dc08d737ae2b",
+      "stdoutLength": 5792
+    },
+    {
+      "lane": "browser",
+      "caseId": "attach-rule-2-fit",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f6c5f8dc2fbca09ccb45a014ff6813d756bb9888ecbcbc98ab4280ebe662daf",
+      "stdoutLength": 5312
+    },
+    {
+      "lane": "browser",
+      "caseId": "attribute-maneuvers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "05760a046e2c4bb82a109b266d3891f73d397aeed2103d6d5f11a96a90e812e8",
+      "stdoutLength": 1392
+    },
+    {
       "lane": "wasmedge",
       "caseId": "common-epoch",
       "threadCount": 1,
@@ -301,6 +356,56 @@
       "stdoutLength": 2328
     },
     {
+      "lane": "wasmedge",
+      "caseId": "attach-rules-3-and-4-every-regime",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "71d3e28476d7f8f3c536581568747cd22b6781b4d0b4afe66db3230858c73746",
+      "stdoutLength": 38648
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "attach-rule-4-pooled",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5f922d7ce2fe37ac37653875f76e88656c071bedbaab085c7fc6b40c4796378",
+      "stdoutLength": 40368
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "attach-rule-1-operator",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7415b058d3bb60e9eec16210511c91a31fae2b1d3200e6f90373dc08d737ae2b",
+      "stdoutLength": 5792
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "attach-rule-2-fit",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f6c5f8dc2fbca09ccb45a014ff6813d756bb9888ecbcbc98ab4280ebe662daf",
+      "stdoutLength": 5312
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "attribute-maneuvers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "05760a046e2c4bb82a109b266d3891f73d397aeed2103d6d5f11a96a90e812e8",
+      "stdoutLength": 1392
+    },
+    {
       "lane": "docker-wasmedge",
       "caseId": "common-epoch",
       "threadCount": 1,
@@ -429,6 +534,56 @@
       "spawnCount": null,
       "stdoutSha256": "6af57cada73f8a2e07e34d8f6bdf9f650995406e969a97836083b4581214f8cf",
       "stdoutLength": 2328
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "attach-rules-3-and-4-every-regime",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "71d3e28476d7f8f3c536581568747cd22b6781b4d0b4afe66db3230858c73746",
+      "stdoutLength": 38648
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "attach-rule-4-pooled",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5f922d7ce2fe37ac37653875f76e88656c071bedbaab085c7fc6b40c4796378",
+      "stdoutLength": 40368
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "attach-rule-1-operator",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7415b058d3bb60e9eec16210511c91a31fae2b1d3200e6f90373dc08d737ae2b",
+      "stdoutLength": 5792
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "attach-rule-2-fit",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f6c5f8dc2fbca09ccb45a014ff6813d756bb9888ecbcbc98ab4280ebe662daf",
+      "stdoutLength": 5312
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "attribute-maneuvers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "05760a046e2c4bb82a109b266d3891f73d397aeed2103d6d5f11a96a90e812e8",
+      "stdoutLength": 1392
     }
   ]
 }

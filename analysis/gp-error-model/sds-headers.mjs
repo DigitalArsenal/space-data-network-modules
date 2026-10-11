@@ -50,7 +50,8 @@ export async function generateSdsHeaders(roots, from) {
   }
   const headers = [];
   for (const family of order) {
-    const rc = flatc.callMain(["--cpp", "--cpp-std", "c++17", "--preserve-case", "--no-warnings",
+    // The object API ("T" types) is what attach_covariance and attribute_maneuvers read and rewrite records with.
+    const rc = flatc.callMain(["--cpp", "--cpp-std", "c++17", "--gen-object-api", "--preserve-case", "--no-warnings",
       "-I", "/schemas", "-o", "/out", `/schemas/${family}/main.fbs`]);
     if (rc !== 0) throw new Error(`flatc failed for ${family} from spacedatastandards.org@${version}`);
     headers.push(flatc.FS.readFile("/out/main_generated.h", { encoding: "utf8" })

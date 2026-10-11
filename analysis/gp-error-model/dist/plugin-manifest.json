@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter).",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -28,6 +28,16 @@
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
       "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
     }
   ],
   "methods": [
@@ -1294,6 +1304,316 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "attach_covariance",
+      "displayName": "Attach Covariance By Rule",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+        },
+        {
+          "portId": "states",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-states",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Each set's states at its epoch plus ages (analysis/epoch-state derive_omm, GCRF, UTC, km, km/s): the OCM rows of a modeled covariance. A block belongs to the set whose epoch is its first row."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Each set's states at its epoch plus ages (analysis/epoch-state derive_omm, GCRF, UTC, km, km/s): the OCM rows of a modeled covariance. A block belongs to the set whose epoch is its first row."
+        },
+        {
+          "portId": "operator",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-operator",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
+        },
+        {
+          "portId": "fit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
+        },
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Gives every object's product a covariance by the first rule that applies: the operator's as supplied, a fit's formal covariance times the realism factor measured for its source and class, the source's own model of its element sets' error by regime and age, or the pooled model. Writes it into $OCM and $OMM with its label: method, source, regime and age cell, CALIBRATED only where the cell passed the realism rule on the held-out window for the source's lineage, else UNCALIBRATED with the cell's measured mean d2/3 and coverage."
+    },
+    {
+      "methodId": "attribute_maneuvers",
+      "displayName": "Attribute Maneuvers To Their Source",
+      "inputPorts": [
+        {
+          "portId": "maneuvers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The maneuvers of one source (analysis/maneuver-detection detect_maneuvers or compare_ephemerides)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The maneuvers of one source (analysis/maneuver-detection detect_maneuvers or compare_ephemerides)."
+        },
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The recipe of attach_covariance; only its source and producer are read.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source's attribution. Configuration, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The recipe of attach_covariance; only its source and producer are read."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "maneuvers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Names the source on every maneuver record so no record travels without its originator, provider and licence class."
     }
   ]
 }

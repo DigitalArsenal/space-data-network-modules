@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.232.0",
+  "spacedatastandards": "1.244.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -10,7 +10,10 @@
     "LCC",
     "CAT",
     "PPE",
-    "OEM"
+    "OEM",
+    "ATM",
+    "OCM",
+    "MNV"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
