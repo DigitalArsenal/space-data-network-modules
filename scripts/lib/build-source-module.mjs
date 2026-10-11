@@ -19,8 +19,9 @@ export async function buildSourceModule({ root, importMeta, compileModuleFromSou
   const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
   const { header, version, families: ordered } = await generateSdsHeaders(families, importMeta, createFlatc);
   const json = await fs.readFile(path.join(repo, "propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");
-  // The headers are concatenated into one translation unit, where a `#pragma once` is only a warning.
-  const read = async (file) => (await fs.readFile(file, "utf8")).replace(/^#pragma once\s*$/gm, "");
+  // The headers are concatenated into one translation unit: a `#pragma once` is only a warning there, and an
+  // `#include "sibling.hpp"` finds nothing (the pieces are already in the unit, in the order given).
+  const read = async (file) => (await fs.readFile(file, "utf8")).replace(/^#pragma once\s*$/gm, "").replace(/^#include "[^"]+"\s*$/gm, "");
   const commonSources = await Promise.all(common.map((name) => read(path.join(repo, "common", name))));
   const extra = await Promise.all(extraHeaders.map((file) => read(path.join(repo, file))));
   const own = await Promise.all(sources.map((file) => read(path.join(root, file))));

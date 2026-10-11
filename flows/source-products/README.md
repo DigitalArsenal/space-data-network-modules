@@ -85,8 +85,8 @@ of E14's horizons.
 
 | | Modules |
 | --- | --- |
-| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration) |
-| Cannot yet | `celestrak-supgp` (pull-only), `gps-source` (almanac elements, not SGP4), `oneweb-source` (the LTEF is not decoded): the reason and the task are in the file |
+| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `sp3-precise-source` (IGS and BKG GPS, ESA GLONASS and ESA POD orbits as SP3, fitted by `analysis/od`); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration) |
+| Cannot yet | `celestrak-supgp` (pull-only), `gps-source` (almanac elements, not SGP4; GPS precise orbits are `sp3-precise-source`'s), `oneweb-source` (the LTEF is not decoded): the reason and the task are in the file |
 | Describe or identify | `celestrak-request`, `ephemeris-source`, `catalog-source`, `spk-source` |
 
 The sources the ephemeris-source inventory lists that no module gives yet, and

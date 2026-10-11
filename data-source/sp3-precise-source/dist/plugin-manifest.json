@@ -1,0 +1,115 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.sp3-precise-source",
+  "name": "SP3 Precise Orbit Source",
+  "version": "0.1.0",
+  "description": "Read precise orbit products in SP3-c and SP3-d (IGS and its analysis centres, BKG, ESA/ESOC: GPS, GLONASS, Galileo, BeiDou and low-Earth-orbit POD) into one canonical SDS OEM per satellite, in the frame and time system the header states, position-only states staying position-only. Download and decompression belong to the SDN host flow.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "read_sp3",
+      "displayName": "Read an SP3 precise orbit file as OEM",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ],
+              "description": "One canonical $OEM per satellite with a position in the file, named for its SP3 vehicle id: Earth-fixed in the realization the header names (or the inertial frame it names), on the file's time system, position-only or with velocity as the file has it."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "One canonical $OEM per satellite with a position in the file, named for its SP3 vehicle id: Earth-fixed in the realization the header names (or the inertial frame it names), on the file's time system, position-only or with velocity as the file has it."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "sp3-precise-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One complete bounded orbit file is read in order into one record per satellite and one control frame; the host parallelizes independent files and this parser creates no threads."
+  }
+}

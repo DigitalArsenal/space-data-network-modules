@@ -16,7 +16,7 @@ import { aoeRecord } from '../../../data-source/spacemapper-aoe-source/tests/fix
 import { gpRecord, synthetic } from '../../../data-source/spacetrack-source/tests/fixtures/spacetrack-format.mjs';
 import { ephemerisFile, keplerArc } from '../../../data-source/vimpel-source/tests/fixtures/vimpel-format.mjs';
 import { recipeFor } from '../recipe.mjs';
-import { bytesOf, egressBytes, moduleAt, runFlow } from './flow-harness.mjs';
+import { bytesOf, egressBytes, framesOf, moduleAt, runFlow } from './flow-harness.mjs';
 
 const textPort = (portId, text) => {
   const payload = Buffer.from(text);
@@ -113,4 +113,29 @@ test('vimpel through data-source/vimpel-source: a rectangular ephemeris, fitted 
   assert.equal(omm.OBJECT_NAME, 'vimpel:40004', 'the native identity survives the fit');
   assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), source.provider);
   assert.ok(Math.abs(omm.MEAN_MOTION - 2.0056) < 0.001, `${omm.MEAN_MOTION} rev/day for a = 26560 km`);
+});
+
+test('igs-gps-precise through data-source/sp3-precise-source: the IGS final orbit of GPS week 1500 (a real SP3-c file), one satellite fitted by analysis/od', async () => {
+  const file = fs.readFileSync(fileURLToPath(new URL('../../../files/orbit-products/fixtures/igs15000.3ep.sp3', import.meta.url)));
+  const read = await moduleAt('data-source/sp3-precise-source')('read_sp3', [{ portId: 'source', payload: file, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: file.length } }]);
+  const ephemerides = framesOf(read, 'oem');
+  assert.equal(ephemerides.length, 32, 'one OEM per satellite');
+  const g01 = ephemerides[0];
+  const recipe = recipeFor('igs-gps-precise', { created: '2026-10-11T00:00:00Z', via: 'data-source/sp3-precise-source', ages: [0, 1] });
+  const { egress, result } = await runFlow([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(g01) }, { trigger: 'ephemeris', portId: 'operator', bytes: g01 },
+    { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
+  assert.equal(result.handlersSkipped, 0);
+  const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
+  assert.equal(param(ocm, 'SOURCE_ID'), 'igs-gps-precise');
+  assert.equal(param(ocm, 'SOURCE_PROVIDER'), 'com.digitalarsenal.data-source.sp3-precise-source');
+  assert.equal(param(ocm, 'LICENCE_CLASS'), 'reproducible');
+  assert.equal(param(ocm, 'LICENCE_ID'), 'igs');
+  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
+  assert.equal(label.rule, 4);
+  assert.equal(label.regime, 'MEO');
+  assert.equal(label.calibration, 'UNCALIBRATED');
+  const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
+  assert.equal(omm.ORIGINATOR, 'IGS / BKG');
+  assert.equal(omm.OBJECT_NAME, 'G01', 'the satellite keeps the file\'s own id through the fit');
+  assert.ok(Math.abs(omm.MEAN_MOTION - 2.0057) < 0.05, `${omm.MEAN_MOTION} rev/day: a GPS satellite (semimajor axis 26,560 km)`);
 });
