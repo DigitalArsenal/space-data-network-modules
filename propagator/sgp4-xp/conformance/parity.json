@@ -1,0 +1,775 @@
+{
+  "ok": true,
+  "fixture": "propagator/sgp4-xp 0.1.0 methods",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "c92ac99248e835edf479b1aa307d161487fff72c1c6b7be1a315b9ad74ca80c3",
+  "moduleSha256": "c92ac99248e835edf479b1aa307d161487fff72c1c6b7be1a315b9ad74ca80c3",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 24,
+      "durationMs": 1616
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 24,
+      "durationMs": 49472
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 24,
+      "durationMs": 71761
+    }
+  ],
+  "cases": [
+    "propagate-sgp4-kind0-teme",
+    "propagate-xp-kind1-teme",
+    "propagate-sgp4-kind2-teme",
+    "propagate-xp-kind3-teme",
+    "propagate-sgp4-kind4-teme",
+    "propagate-xp-kind0-teme",
+    "propagate-sgp4-kind1-teme",
+    "propagate-xp-kind2-teme",
+    "propagate-sgp4-kind3-teme",
+    "propagate-xp-kind4-teme",
+    "propagate-xp-gcrf",
+    "propagate-xp-explicit-epochs",
+    "propagate-default-grid",
+    "ingest-omm",
+    "refused-ingest-omm-sgp4",
+    "refused-propagate-itrf-grid",
+    "refused-propagate-no-omm",
+    "fit-xp-synthetic-8h",
+    "fit-xp-declared-interval-held-out",
+    "fit-xp-position-only-compact",
+    "fit-real-nasa-iss-eme2000-6h",
+    "refused-fit-too-few-states",
+    "refused-fit-leap-second",
+    "refused-fit-unsupported-frame"
+  ],
+  "comparisons": 118,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "propagate-sgp4-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b67092c982880de0b9a39684cf59434980ee26e65715a5f8656e869f38c24ad6",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d0f15d1650172fa8a297fbfb0f7c3c521cd2d941e967bd62de2aa45325af00d3",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-sgp4-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "705b25b46bb4eb5f054b6a8eba2d5903a6a6900ebc4c838b336b4251fb4e2456",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d058653486007ff6922a0b8e97d99ef64bfd39ee40e358432e34f25fbe91c2bf",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-sgp4-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ea65589a39a06ebc0a75756e98870363365475c26ed1484b6b30ec766aecce18",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc2519ce3eeb33eee8242bfa7c01c9699f7bba6083dff932af7850190c1083b5",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-sgp4-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d44074d3f6ce9760e6d0f1547773b612b43438b03adca4831e28001a950404",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3c142009f488cbd28d20c39da948c8d3552dd55157902c1f582ace423cfaefe7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-sgp4-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f8d1ee2d875fba4ffb25eabeec5a84a4d729b72edebf62fea9e173c75d14a9ec",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b2fb1f1eff2edc4bd7688f83aefa573a4fb31cc933b6c9da3b4c877c53413df7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "db2e2b9d0837f834d59d36cb20de8cc28e7242d00975a20ba1158f8c628f4f1c",
+      "stdoutLength": 1800
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-xp-explicit-epochs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6b02cc73faac540dc1795b0a12b6f98bca471338f8acc7cf1816aa3d35287bef",
+      "stdoutLength": 2056
+    },
+    {
+      "lane": "browser",
+      "caseId": "propagate-default-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f015b904b6c00ada29161c29931e2e78c6ef01322a7130eaaf6fa8a062c313",
+      "stdoutLength": 133184
+    },
+    {
+      "lane": "browser",
+      "caseId": "ingest-omm",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-ingest-omm-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7392c1b4611f0825d201ca89a44092db40846dfeff101ac4ea4861758c77d226",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-propagate-itrf-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7eb6c93a926312e14ec279139ba3ac2536da8c12a60b9ae076ba0063eb2b6268",
+      "stdoutLength": 184
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-propagate-no-omm",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": null,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-xp-synthetic-8h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "74c297ec03731d585d9be8035a38d4c6b2bb4ec51ca291d82de2a6b6de12e051",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-xp-declared-interval-held-out",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "96f0d9c0fabe4f123589e215203041ddba6855d674b8c6abcc04c13a859feee3",
+      "stdoutLength": 3216
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-xp-position-only-compact",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c675ad1a47c51eb760bd81e951fd8c38a3f5b8724a695fa0c468b8012f8f1386",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-real-nasa-iss-eme2000-6h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c946aad29e4760d883fb8ae4f255bb5b122ce78f397e30b430c647d59de3d1ed",
+      "stdoutLength": 3224
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-fit-too-few-states",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc51dd9ed31a569295c1567aa5ecdd541a843d9321b3f4da632769d5dc177bc2",
+      "stdoutLength": 164
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-fit-leap-second",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bd3cddf8c5c7dc59e8d13548baaaa2ebae208f6551118fada9390f58ab5eacfb",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-fit-unsupported-frame",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "527175ae257919c0ae6d8342a2d9107d9f0f0d1a9ff4d144ba94cc92379dcafd",
+      "stdoutLength": 248
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-sgp4-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b67092c982880de0b9a39684cf59434980ee26e65715a5f8656e869f38c24ad6",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d0f15d1650172fa8a297fbfb0f7c3c521cd2d941e967bd62de2aa45325af00d3",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-sgp4-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "705b25b46bb4eb5f054b6a8eba2d5903a6a6900ebc4c838b336b4251fb4e2456",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d058653486007ff6922a0b8e97d99ef64bfd39ee40e358432e34f25fbe91c2bf",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-sgp4-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ea65589a39a06ebc0a75756e98870363365475c26ed1484b6b30ec766aecce18",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc2519ce3eeb33eee8242bfa7c01c9699f7bba6083dff932af7850190c1083b5",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-sgp4-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d44074d3f6ce9760e6d0f1547773b612b43438b03adca4831e28001a950404",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3c142009f488cbd28d20c39da948c8d3552dd55157902c1f582ace423cfaefe7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-sgp4-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f8d1ee2d875fba4ffb25eabeec5a84a4d729b72edebf62fea9e173c75d14a9ec",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b2fb1f1eff2edc4bd7688f83aefa573a4fb31cc933b6c9da3b4c877c53413df7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "db2e2b9d0837f834d59d36cb20de8cc28e7242d00975a20ba1158f8c628f4f1c",
+      "stdoutLength": 1800
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-xp-explicit-epochs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6b02cc73faac540dc1795b0a12b6f98bca471338f8acc7cf1816aa3d35287bef",
+      "stdoutLength": 2056
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "propagate-default-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f015b904b6c00ada29161c29931e2e78c6ef01322a7130eaaf6fa8a062c313",
+      "stdoutLength": 133184
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ingest-omm",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-ingest-omm-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7392c1b4611f0825d201ca89a44092db40846dfeff101ac4ea4861758c77d226",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-propagate-itrf-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7eb6c93a926312e14ec279139ba3ac2536da8c12a60b9ae076ba0063eb2b6268",
+      "stdoutLength": 184
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-propagate-no-omm",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": null,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-xp-synthetic-8h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "74c297ec03731d585d9be8035a38d4c6b2bb4ec51ca291d82de2a6b6de12e051",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-xp-declared-interval-held-out",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "96f0d9c0fabe4f123589e215203041ddba6855d674b8c6abcc04c13a859feee3",
+      "stdoutLength": 3216
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-xp-position-only-compact",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c675ad1a47c51eb760bd81e951fd8c38a3f5b8724a695fa0c468b8012f8f1386",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-real-nasa-iss-eme2000-6h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c946aad29e4760d883fb8ae4f255bb5b122ce78f397e30b430c647d59de3d1ed",
+      "stdoutLength": 3224
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-fit-too-few-states",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc51dd9ed31a569295c1567aa5ecdd541a843d9321b3f4da632769d5dc177bc2",
+      "stdoutLength": 164
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-fit-leap-second",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bd3cddf8c5c7dc59e8d13548baaaa2ebae208f6551118fada9390f58ab5eacfb",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-fit-unsupported-frame",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "527175ae257919c0ae6d8342a2d9107d9f0f0d1a9ff4d144ba94cc92379dcafd",
+      "stdoutLength": 248
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-sgp4-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b67092c982880de0b9a39684cf59434980ee26e65715a5f8656e869f38c24ad6",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d0f15d1650172fa8a297fbfb0f7c3c521cd2d941e967bd62de2aa45325af00d3",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-sgp4-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "705b25b46bb4eb5f054b6a8eba2d5903a6a6900ebc4c838b336b4251fb4e2456",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d058653486007ff6922a0b8e97d99ef64bfd39ee40e358432e34f25fbe91c2bf",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-sgp4-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ea65589a39a06ebc0a75756e98870363365475c26ed1484b6b30ec766aecce18",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-kind0-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc2519ce3eeb33eee8242bfa7c01c9699f7bba6083dff932af7850190c1083b5",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-sgp4-kind1-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d44074d3f6ce9760e6d0f1547773b612b43438b03adca4831e28001a950404",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-kind2-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3c142009f488cbd28d20c39da948c8d3552dd55157902c1f582ace423cfaefe7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-sgp4-kind3-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f8d1ee2d875fba4ffb25eabeec5a84a4d729b72edebf62fea9e173c75d14a9ec",
+      "stdoutLength": 1832
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-kind4-teme",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b2fb1f1eff2edc4bd7688f83aefa573a4fb31cc933b6c9da3b4c877c53413df7",
+      "stdoutLength": 1824
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "db2e2b9d0837f834d59d36cb20de8cc28e7242d00975a20ba1158f8c628f4f1c",
+      "stdoutLength": 1800
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-xp-explicit-epochs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6b02cc73faac540dc1795b0a12b6f98bca471338f8acc7cf1816aa3d35287bef",
+      "stdoutLength": 2056
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "propagate-default-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f015b904b6c00ada29161c29931e2e78c6ef01322a7130eaaf6fa8a062c313",
+      "stdoutLength": 133184
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ingest-omm",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-ingest-omm-sgp4",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7392c1b4611f0825d201ca89a44092db40846dfeff101ac4ea4861758c77d226",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-propagate-itrf-grid",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7eb6c93a926312e14ec279139ba3ac2536da8c12a60b9ae076ba0063eb2b6268",
+      "stdoutLength": 184
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-propagate-no-omm",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": null,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-xp-synthetic-8h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "74c297ec03731d585d9be8035a38d4c6b2bb4ec51ca291d82de2a6b6de12e051",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-xp-declared-interval-held-out",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "96f0d9c0fabe4f123589e215203041ddba6855d674b8c6abcc04c13a859feee3",
+      "stdoutLength": 3216
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-xp-position-only-compact",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c675ad1a47c51eb760bd81e951fd8c38a3f5b8724a695fa0c468b8012f8f1386",
+      "stdoutLength": 2736
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-real-nasa-iss-eme2000-6h",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c946aad29e4760d883fb8ae4f255bb5b122ce78f397e30b430c647d59de3d1ed",
+      "stdoutLength": 3224
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-fit-too-few-states",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc51dd9ed31a569295c1567aa5ecdd541a843d9321b3f4da632769d5dc177bc2",
+      "stdoutLength": 164
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-fit-leap-second",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bd3cddf8c5c7dc59e8d13548baaaa2ebae208f6551118fada9390f58ab5eacfb",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-fit-unsupported-frame",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "527175ae257919c0ae6d8342a2d9107d9f0f0d1a9ff4d144ba94cc92379dcafd",
+      "stdoutLength": 248
+    }
+  ]
+}

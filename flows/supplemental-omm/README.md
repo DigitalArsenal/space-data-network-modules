@@ -25,6 +25,10 @@ fallback. The OD node reassembles and validates the complete response, parses
 MEME, SP3, ECF, CPF, or CCSDS OEM KVN internally, fits the complete arc, and
 emits multiple epoch-specific OMM, OCM, and OBD record streams.
 
+Every ephemeris is also fitted with SGP4-XP, beside the OD core's SGP4 sets: each window is one `$OMM`
+(MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) and one `$OBD` in the same record streams,
+and names its source. See [the OD node](nodes/od/README.md).
+
 Each successful fit batch also emits an idempotent FlatSQL `CONFIGURE_INDEX`
 control containing the complete canonical result schema and the `$OMM`, `$OCM`,
 and `$OBD` table bindings. Only fitted result records reach the independent
