@@ -192,6 +192,8 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
   `interpolationDegree` + 1 samples nearest the epoch (the container's rule),
   the covariance linear between the two samples that bracket it; an epoch
   outside the samples gives the pair `missing`, never an extrapolation.
+  A side's covariance may be `covarianceTerms`, a weighted sum of covariances
+  in one axes (for example HPOP's A plus q-weighted unit-noise responses).
 - **`fit_calibration`** (`samples`, `options` → `calibration`). Samples
   (stratum, RTN error, RTN position covariance, object). Per stratum a
   variance factor: `scalar-mle`, k² = mean d²/3 (the maximum-likelihood

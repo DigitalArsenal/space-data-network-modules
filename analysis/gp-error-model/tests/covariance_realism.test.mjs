@@ -70,6 +70,10 @@ test('pair_statistics: RTN error, d^2 combined and predicted alone, per-axis z; 
   close(r2.d2Predicted, p.d2Predicted, 1e-9, 'rotated d2 predicted');
   close(r2.d2Combined, p.d2Combined, 1e-9, 'rotated d2 combined');
 
+  // A weighted sum of terms equals the summed covariance: P = 0.5 * 2P + 3 * (0) + 1 * diag(0, 0, 0).
+  const terms = { pairs: [{ id: 'c', predicted: { position: rp, velocity: vp, covarianceAxes: 'RTN', covarianceTerms: [{ weight: 0.5, covariance: lower(P).map((x) => 2 * x) },
+    { weight: 3, covariance: [0, 0, 0, 0, 0, 0] }] }, truth: { position: rt, velocity: vp, covariance: lower(Tc), covarianceAxes: 'RTN' } }] };
+  close((await call(t, 'pair_statistics', [json('pairs', terms)])).pairs[0].d2Combined, p.d2Combined, 1e-12, 'terms d2');
   await refused(t, 'pair_statistics', [json('pairs', { pairs: [{ predicted: { position: rp, velocity: vp }, truth: { position: rt, velocity: vp } }] })], /predicted state needs a covariance/);
 });
 

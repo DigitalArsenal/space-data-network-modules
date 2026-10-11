@@ -250,10 +250,26 @@ extern "C" int pair_statistics() {
     // rotated through inertial axes when the other state's axes are used.
     auto to_axes = [&](const nlohmann::json& side, const double r[3], const double v[3], double out[36], bool* present) -> std::string {
       *present = false;
-      if (!side.contains("covariance") || side["covariance"].is_null()) return {};
-      double m[36];
+      double m[36] = {};
       int dim = 0;
-      if (!covariance_of(side["covariance"], m, &dim)) return "covariance is a lower triangle (6 or 21) or a full matrix (9 or 36).";
+      if (side.contains("covarianceTerms")) {
+        // A weighted sum of covariances in the same axes (e.g. A + q_R U_R + q_T U_T + q_N U_N + a consider term).
+        const nlohmann::json& terms = side["covarianceTerms"];
+        if (!terms.is_array() || terms.empty()) return "covarianceTerms is a non-empty array of {weight, covariance}.";
+        for (const auto& term : terms) {
+          double c[36];
+          int d = 0;
+          if (!term.is_object() || !term.contains("covariance") || !covariance_of(term["covariance"], c, &d))
+            return "each covariance term needs a covariance (lower 6 or 21, or full 9 or 36).";
+          const double w = json_number(term, "weight", 1.0);
+          if (!(w >= 0)) return "covariance term weights are non-negative.";
+          for (int k = 0; k < 36; ++k) m[k] += w * c[k];
+          dim = std::max(dim, d);
+        }
+      } else {
+        if (!side.contains("covariance") || side["covariance"].is_null()) return {};
+        if (!covariance_of(side["covariance"], m, &dim)) return "covariance is a lower triangle (6 or 21) or a full matrix (9 or 36).";
+      }
       const std::string axes = side.value("covarianceAxes", std::string("RTN"));
       double inertial[36];
       if (axes == "RTN" || axes == "UVW") {
