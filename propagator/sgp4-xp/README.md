@@ -99,6 +99,20 @@ covers it (it also passes with a restoration before every satellite). A set that
 table keeps its memory until `plugin_destroy`, and the library's memory is limited to 2 GiB: 40,000 SGP4-XP sets ingest
 (about 15 KB each), 100,000 are refused with `element-set-refused`.
 
+## Accuracy against SDN's SGP4
+
+Median 3D position error (km, TEME) of the sets fitted to 24 hours of an ephemeris, on the fit and on the days after it, SGP4-XP / SDN's SGP4 on the windows both fitted. [tests/measure/README.md](tests/measure/README.md) has every table, the windows and the limits.
+
+| Source | Windows | Fit | Day 1 | Day 3 | Day 7 |
+| --- | --: | --: | --: | --: | --: |
+| ISS (NASA OEM) | 14 | 0.455 / 0.461 | 2.16 / 2.12 | 16.5 / 16.4 | 88.9 / 88.8 |
+| Starlink (SpaceX MEME) | 196 | 0.539 / 0.534 | 3.67 / 5.92 |  |  |
+| GPS, Galileo, GLONASS (ESA final orbits) | 98 | 0.022 / 0.134 | 0.057 / 0.420 | 0.161 / 2.40 | 0.419 / 14.2 |
+| LAGEOS-1/2, Etalon-1/2 (ILRS) | 36 | 0.095 / 0.116 | 0.104 / 0.227 | 0.242 / 1.22 | 0.570 / 6.61 |
+| Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (ILRS) | 139 | 0.371 / 0.389 | 0.735 / 0.977 | 1.16 / 5.10 |  |
+
+The low laser-ranged satellites have four-day arcs: their day-3 column is the last one. Starlink files hold two to three days.
+
 ## Licence of the Space Force library
 
 "Use" is defined by the Agreement (section 1.L) as the application of the software for any purpose. Its introduction
