@@ -97,6 +97,8 @@ async function epochStates(epochStateDir, omms) {
  * @param {string} o.modulesRoot  The space-data-network-modules checkout.
  * @param {number} [o.workers]
  * @param {number} [o.screenStartJd]  UTC JD the screen starts (default: the first window's start).
+ * @param {number} [o.loadCeiling]  Pause each worker's next chunk of objects while the host's
+ *   1-minute load average exceeds it (none by default).
  * @returns {Promise<{objects: object[], excluded: object[], reentries: object[], window: Function, close: Function}>}
  *
  * HPOP ends a trajectory at reentry (100 km geodetic altitude) with the error
@@ -148,8 +150,10 @@ export async function createHpopFarm(o) {
       manifestPath: path.join(hpop, 'plugin-manifest.json'), catalogPath: path.join(hpop, 'catalog.mjs'), profile, environment,
       id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
   }
-  await Promise.all(adds);
+  const ingestCpuMs = (await Promise.all(adds)).reduce((sum, r) => sum + (r?.cpuMs ?? 0), 0);
   const ingestMs = performance.now() - t1;
+  // CPU time of the workers (user and system, per thread): ingest and each window.
+  const cpu = { ingestS: ingestCpuMs / 1000, windows: [] };
   const byHandle = new Map(objects.map((x) => [x.handle, x]));
   const reentries = [];
   let screenStartJd = o.screenStartJd;
@@ -160,11 +164,13 @@ export async function createHpopFarm(o) {
   };
 
   return {
-    objects, excluded, reentries, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
+    objects, excluded, reentries, cpu, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
     /** Trajectories of every object over [startJd, startJd + days], UTC. */
     async window(startJd, days) {
       screenStartJd ??= startJd;
-      const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400 })));
+      const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400, loadCeiling: o.loadCeiling })));
+      cpu.windows.push({ startJd, cpuS: parts.reduce((sum, p) => sum + p.cpuMs, 0) / 1000,
+        maxWorkerCpuS: Math.max(...parts.map((p) => p.cpuMs)) / 1000, maxWorkerPausedS: Math.max(...parts.map((p) => p.pausedMs)) / 1000 });
       const frames = parts.flatMap((p) => p.frames);
       const dropped = [];
       for (const d of parts.flatMap((p) => p.dropped)) {

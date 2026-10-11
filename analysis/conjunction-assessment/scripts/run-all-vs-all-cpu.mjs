@@ -5,7 +5,7 @@
 //          [--runtime wasmedge|docker-wasmedge|node] [--propagator sgp4|hpop]
 //          [--start <jd>] [--days 3] [--window-hours 6|1] [--threshold-km 5]
 //          [--step-s 60] [--workers N] [--farm-workers N] [--aot] [--wasmedge-runner <path>]
-//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
+//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only] [--load-ceiling L]
 //          [--algorithm FOSTER --uncertainty-model <model.cau1>] [--out summary.json]
 // wasmedge runs the module as an SDN node does (WasmEdge, wasi-threads), and
 // --aot compiles it ahead of time first as SDN nodes do (wasmedgec; set
@@ -17,6 +17,9 @@
 // patched static WasmEdge) instead of the one the tests build. --algorithm with
 // --uncertainty-model (scripts/uncertainty-model.mjs) gives element-set events
 // the empirical model's covariance probability; the default is ALFANO_MAXIMUM.
+// --load-ceiling pauses the HPOP farm's next chunk of objects while the host's
+// 1-minute load average exceeds L. The summary gives the farm's CPU time (each
+// worker thread's user and system time) beside the wall-clock stages.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,7 +36,7 @@ const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, runtime: { type: 'string', default: 'wasmedge' }, propagator: { type: 'string', default: 'sgp4' },
   start: { type: 'string', default: '2461314.5' }, days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' },
   'threshold-km': { type: 'string', default: '5' }, 'step-s': { type: 'string', default: '60' },
-  workers: { type: 'string' }, 'farm-workers': { type: 'string' }, 'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' }, aot: { type: 'boolean', default: false }, 'wasmedge-runner': { type: 'string' }, out: { type: 'string' },
+  workers: { type: 'string' }, 'farm-workers': { type: 'string' }, 'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' }, 'load-ceiling': { type: 'string' }, aot: { type: 'boolean', default: false }, 'wasmedge-runner': { type: 'string' }, out: { type: 'string' },
   algorithm: { type: 'string', default: 'ALFANO_MAXIMUM' }, 'uncertainty-model': { type: 'string' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
@@ -43,7 +46,7 @@ const t0 = performance.now();
 const catalog = splitCatalog(new Uint8Array(fs.readFileSync(o.catalog)));
 const workers = Number(o.workers ?? Math.max(1, os.availableParallelism() - 1));
 // HPOP's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
-// trajectories, which the module indexes in about 1.1 of its 2 GiB.
+// trajectories, which the module indexes in about 1.05 of its 2 GiB.
 const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6));
 const windows = screenWindows(Number(o.start), Number(o.days), windowHours);
 const MARGIN_DAYS = 2 / 1440;   // HPOP returns whole intervals; this covers TDB - UTC
@@ -77,7 +80,8 @@ try {
   if (o.propagator === 'hpop') {
     farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
       workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
-      profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start) });
+      profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start),
+      loadCeiling: o['load-ceiling'] ? Number(o['load-ceiling']) : undefined });
   }
   // The next window exports while this one screens.
   const exports = [], hpopDropped = [];
@@ -117,7 +121,9 @@ try {
     startJd: +o.start, durationDays: +o.days, windowHours, workers, wallMs, aotCompileMs, objects: result.objects, windows: result.windows,
     candidates: result.candidates, excluded: result.excluded, timings: t, algorithm: o.algorithm,
     uncertaintyModel: o['uncertainty-model'] ? path.basename(o['uncertainty-model']) : null,
-    ...(farm ? { hpop: { profile: farm.profile, farmWorkers: farm.workers, instances: farm.instances,
+    processCpuS: (({ user, system }) => (user + system) / 1e6)(process.cpuUsage()),
+    ...(farm ? { hpop: { profile: farm.profile, farmWorkers: farm.workers, instances: farm.instances, loadCeiling: o['load-ceiling'] ? Number(o['load-ceiling']) : null,
+      cpu: { ingestS: farm.cpu.ingestS, propagationS: farm.cpu.windows.reduce((sum, w) => sum + w.cpuS, 0), windows: farm.cpu.windows },
       dropped: hpopDropped.map(({ norad, objectId, name, reason, jd }) => ({ norad, objectId, name, reason, jd })),
       reentries: farm.reentries.map(({ norad, objectId, name, phase, jd }) => ({ norad, objectId, name, phase, jd })) } } : {}),
     events: [...summaries].sort((a, b) => a.missM - b.missM) }, null, 1) + '\n');
@@ -125,7 +131,8 @@ try {
     `${result.windows.length} windows: ${result.candidates} candidates, ${result.events.length} conjunctions, ` +
     `${result.excluded.length} excluded, ${s(wallMs)} end to end (load ${s(t.loadMs)}, window prep/wait ${s(t.prepareMs)}, ` +
     `search ${s(t.gridMs)}, refine ${s(t.refineMs)}${wasmSource ? `; AOT compile ${s(aotCompileMs)} not counted` : ''})` +
-    (farm ? `; HPOP reentries: ${farm.reentries.filter((x) => x.phase === 'catch-up').length} before the screen, ` +
+    (farm ? `; HPOP farm CPU ${(farm.cpu.ingestS + farm.cpu.windows.reduce((sum, w) => sum + w.cpuS, 0)).toFixed(0)} s` +
+      `; HPOP reentries: ${farm.reentries.filter((x) => x.phase === 'catch-up').length} before the screen, ` +
       `${farm.reentries.filter((x) => x.phase === 'screen').length} during it` : '') +
     (o['uncertainty-model'] ? `; ${o.algorithm}: ${summaries.filter((e) => e.uncertainty === 'SYNTHESIZED_COVARIANCE').length} ` +
       `covariance probabilities, ${summaries.filter((e) => e.calibration === 'Calibrated').length} calibrated` : ''));
