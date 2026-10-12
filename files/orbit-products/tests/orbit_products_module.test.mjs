@@ -299,3 +299,46 @@ test("a hash over other bytes is refused, not read anyway", { skip: !ready }, as
     await h.destroy?.();
   }
 });
+
+/* An STK ephemeris with a lower-triangular 6x6 covariance block, as COMSPOC's
+ * SynCoPate files carry: the covariance must reach $OEM in the block's own
+ * frame, at its own epochs, in km units whatever the file's DistanceUnit. */
+function stkWithCovariance({ unit = "Kilometers", format = "LowerTriangular" } = {}) {
+  const k = unit === "Meters" ? 1000 : 1;
+  const lower = Array.from({ length: 21 }, (_, i) => (i + 1) * 0.5);
+  const rows = [0, 60, 120].map((t, i) => [t, 7000 + i, 10 * i, 20, 0.1, 7.5, 0.01].map((v, j) => (j ? v * k : v)).join(" "));
+  const cov = [0, 120].map((t, i) => [t, ...lower.map((v) => v * (i + 1) * k * k)].join(" "));
+  return new TextEncoder().encode([
+    "stk.v.12.0", "BEGIN Ephemeris", "NumberOfEphemerisPoints 3", "ScenarioEpoch 11 Oct 2026 04:13:59.875",
+    "InterpolationMethod Lagrange", "InterpolationSamplesM1 5", "CentralBody Earth", "CoordinateSystem TEMEOfDate",
+    "CovarianceInterpolationMethod TwoBodyQuadraticArithmeticBlending", `CovarianceFormat ${format}`, `DistanceUnit ${unit}`,
+    "EphemerisTimePosVel", ...rows, "CovarianceTimePosVel", ...cov, "END Ephemeris", "",
+  ].join("\n"));
+}
+
+test("read_container carries an STK covariance block into $OEM covariance lines", { skip: !fs.existsSync(WASM_PATH) }, async () => {
+  const h = await harness();
+  try {
+    for (const unit of ["Kilometers", "Meters"]) {
+      const res = await h.invoke({ methodId: "read_container",
+        inputs: [{ portId: "container", typeRef: NCD_TYPE, payload: buildFrame(stkWithCovariance({ unit }), ncdContainerFormat.SCENARIO_EPOCH_EPHEMERIS_TEXT) }] });
+      assert.equal(res.statusCode, 0, `${unit}: ${res.errorCode ?? ""} ${res.errorMessage ?? ""}`);
+      const oem = OEM.getSizePrefixedRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(res.outputs.find((o) => o.portId === "ephemeris").payload)));
+      const block = oem.EPHEMERIS_DATA_BLOCK(0);
+      assert.equal(block.COV_REFERENCE_FRAME().NAME(), "TEMEOfDate");
+      assert.equal(block.covarianceMatrixLinesLength(), 2);
+      const first = block.COVARIANCE_MATRIX_LINES(0), second = block.COVARIANCE_MATRIX_LINES(1);
+      assert.equal(first.EPOCH(), "2026-10-11T04:13:59.875000");
+      assert.equal(second.EPOCH(), "2026-10-11T04:15:59.875000");
+      assert.ok(Math.abs(first.CX_X() - 0.5) < 1e-12, `${unit}: CX_X ${first.CX_X()}`);
+      assert.ok(Math.abs(first.CY_X() - 1.0) < 1e-12);
+      assert.ok(Math.abs(first.CZ_DOT_Z_DOT() - 10.5) < 1e-12);
+      assert.ok(Math.abs(second.CX_DOT_X_DOT() - 10) < 1e-12);
+    }
+    const refused = await h.invoke({ methodId: "read_container",
+      inputs: [{ portId: "container", typeRef: NCD_TYPE, payload: buildFrame(stkWithCovariance({ format: "UpperTriangular" }), ncdContainerFormat.SCENARIO_EPOCH_EPHEMERIS_TEXT) }] });
+    assert.notEqual(refused.statusCode, 0);
+  } finally {
+    await h.destroy?.();
+  }
+});

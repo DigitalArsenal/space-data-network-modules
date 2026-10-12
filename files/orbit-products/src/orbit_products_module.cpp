@@ -647,6 +647,23 @@ int32_t build_oem(const Loaded& loaded, OEMT* out) {
             }
         }
 
+        /* The container's covariance, in the frame of its states (STK has one
+         * CoordinateSystem for both). */
+        if (!s.covariance.empty()) {
+            if (block->REFERENCE_FRAME) block->COV_REFERENCE_FRAME.reset(new RFMT(*block->REFERENCE_FRAME));
+            for (const ephem::CovarianceRow& c : s.covariance) {
+                std::unique_ptr<covarianceMatrixLineT> line(new covarianceMatrixLineT());
+                line->EPOCH = ephem::oem::iso_from_seconds(c.epoch + zero);
+                const double* v = c.lower;
+                line->CX_X = v[0];  line->CY_X = v[1];  line->CY_Y = v[2];
+                line->CZ_X = v[3];  line->CZ_Y = v[4];  line->CZ_Z = v[5];
+                line->CX_DOT_X = v[6];  line->CX_DOT_Y = v[7];  line->CX_DOT_Z = v[8];  line->CX_DOT_X_DOT = v[9];
+                line->CY_DOT_X = v[10]; line->CY_DOT_Y = v[11]; line->CY_DOT_Z = v[12]; line->CY_DOT_X_DOT = v[13]; line->CY_DOT_Y_DOT = v[14];
+                line->CZ_DOT_X = v[15]; line->CZ_DOT_Y = v[16]; line->CZ_DOT_Z = v[17]; line->CZ_DOT_X_DOT = v[18]; line->CZ_DOT_Y_DOT = v[19]; line->CZ_DOT_Z_DOT = v[20];
+                block->COVARIANCE_MATRIX_LINES.push_back(std::move(line));
+            }
+        }
+
         out->EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
     }
 

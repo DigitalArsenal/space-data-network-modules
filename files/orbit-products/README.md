@@ -137,6 +137,16 @@ covariance, drag coefficient or SRP coefficient is fabricated.
 See [catalog epoch fitting](../../analysis/catalog-composer/docs/epoch-fitting.md)
 for position-arc validation, fitting and reproducible real-provider evidence.
 
+## STK covariance (0.1.4)
+
+An STK ephemeris with a `CovarianceTimePosVel` block in `CovarianceFormat
+LowerTriangular` (COMSPOC's SynCoPate files, for example) reads with its
+covariance: each row becomes an `$OEM` covariance line at its own epoch, the 21
+lower-triangle values in the order both formats share, converted from
+`DistanceUnit` to km units, with `COV_REFERENCE_FRAME` equal to the states'
+`CoordinateSystem`. A position-only or upper-triangular covariance block is
+refused by name. The STK writer writes the block back.
+
 ## SES and Intelsat eleven-parameter ephemerides (0.1.3)
 
 `normalize_ses_i11` reads an Intelsat eleven-parameter (IESS-412) ephemeris

@@ -23,11 +23,15 @@
  * both authorities assume). No leap second is consulted, so a round trip
  * through this header cannot move an epoch.
  *
+ * COVARIANCE. A CovarianceTimePosVel block in CovarianceFormat
+ * LowerTriangular (the 21-value lower triangle, row by row, in DistanceUnit
+ * squared) is carried on Series::covariance and leaves as $OEM covariance
+ * lines. A position-only or upper-triangular block is refused by name.
+ *
  * WHAT THIS READER REFUSES RATHER THAN DROPS. An LLA block is latitude,
  * longitude and altitude — not a Cartesian state, and treating its degrees as
- * kilometres would produce a plausible-looking series that is nonsense. A
- * Covariance block is real data the spine has nowhere to put. Both come back as
- * UnsupportedVariant. What this reader DOES drop, and cannot help dropping, is
+ * kilometres would produce a plausible-looking series that is nonsense. It
+ * comes back as UnsupportedVariant, as do the covariance variants above. What this reader DOES drop, and cannot help dropping, is
  * a SegmentBoundaryTimes block: the spine carries no segmentation, so a file
  * with impulsive-manoeuvre boundaries reads correctly but writes back without
  * them.
@@ -285,7 +289,7 @@ inline ephem::Status read(const char* text, size_t len, ephem::Series* out) {
 
     *out = ephem::Series{};
 
-    enum class Block { None, TimePos, TimePosVel, TimePosVelAcc, SegmentBoundaries };
+    enum class Block { None, TimePos, TimePosVel, TimePosVelAcc, CovTimePosVel, SegmentBoundaries };
     Block block = Block::None;
     bool saw_version = false;
     bool saw_begin = false;
@@ -318,6 +322,18 @@ inline ephem::Status read(const char* text, size_t len, ephem::Series* out) {
             if (block == Block::None) return ephem::Status::Malformed;
 
             detail::split(line, &tokens);
+            if (block == Block::CovTimePosVel) {
+                if (tokens.size() != 22) return ephem::Status::Malformed;
+                ephem::CovarianceRow row;
+                if (!detail::parse_double(tokens[0], &row.epoch)) return ephem::Status::Malformed;
+                for (int i = 0; i < 21; ++i) {
+                    double v = 0.0;
+                    if (!detail::parse_double(tokens[1 + i], &v)) return ephem::Status::Malformed;
+                    row.lower[i] = v * to_km * to_km;
+                }
+                out->covariance.push_back(row);
+                continue;
+            }
             const size_t want = block == Block::TimePos          ? 4
                                 : block == Block::TimePosVel     ? 7
                                                                  : 10;
@@ -451,6 +467,19 @@ inline ephem::Status read(const char* text, size_t len, ephem::Series* out) {
         if (key.size() > 9 && key.compare(0, 9, "Ephemeris") == 0) {
             return ephem::Status::UnsupportedVariant;
         }
+        if (detail::equals_ignore_case(key, "CovarianceFormat")) {
+            if (tokens.size() < 2 || !detail::equals_ignore_case(tokens[1], "LowerTriangular")) {
+                return ephem::Status::UnsupportedVariant;
+            }
+            continue;
+        }
+        if (detail::equals_ignore_case(key, "CovarianceTimePosVel")) {
+            block = Block::CovTimePosVel;
+            continue;
+        }
+        /* How STK blends covariance between rows is the reader's to choose;
+         * the rows themselves are the data. */
+        if (detail::equals_ignore_case(key, "CovarianceInterpolationMethod")) continue;
         if (key.size() >= 10 && key.compare(0, 10, "Covariance") == 0) {
             return ephem::Status::UnsupportedVariant;
         }
@@ -595,6 +624,20 @@ inline ephem::Status write(const ephem::Series& s, const WriteOptions& opt, std:
             text += buf;
         }
         text += '\n';
+    }
+
+    if (!s.covariance.empty()) {
+        text += "\nCovarianceFormat        LowerTriangular\n\nCovarianceTimePosVel\n\n";
+        for (const ephem::CovarianceRow& c : s.covariance) {
+            std::snprintf(buf, sizeof(buf), fmt, c.epoch);
+            text += buf;
+            for (int k = 0; k < 21; ++k) {
+                std::snprintf(buf, sizeof(buf), fmt, c.lower[k] * from_km * from_km);
+                text += ' ';
+                text += buf;
+            }
+            text += '\n';
+        }
     }
 
     text += "\nEND Ephemeris\n";

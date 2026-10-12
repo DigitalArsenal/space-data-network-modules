@@ -128,6 +128,15 @@ struct StateRow {
     bool has_clock = false;
 };
 
+/* A 6x6 position-velocity covariance at one epoch: the lower triangle row by
+ * row (km^2, km^2/s, km^2/s^2), which is the order of both STK's
+ * LowerTriangular block and $OEM's covarianceMatrixLine, so neither side
+ * reorders. The epoch is on the same axis as StateRow::epoch. */
+struct CovarianceRow {
+    double epoch = 0.0;
+    double lower[21] = {};
+};
+
 /* ------------------------------------------------------------------------ */
 /* The series                                                                */
 /* ------------------------------------------------------------------------ */
@@ -168,6 +177,10 @@ struct Series {
     bool has_naif_ids = false;
 
     std::vector<StateRow> rows;
+
+    /* The container's own covariance history, in the series' frame. Empty for
+     * containers that carry none. Its epochs need not match the rows'. */
+    std::vector<CovarianceRow> covariance;
 
     bool uniform_step(double* step_out, double tol = 1e-9) const {
         if (rows.size() < 2) return false;
