@@ -102,15 +102,19 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
-test("built artifact carries a trusted SDS module signature", async () => {
+// Main carries unsigned builds (owner 2026-10-12): the node signs at
+// publication. A signature, when present, must be the trusted signer.
+test("a signed artifact is signed by the trusted SDS module signer", async () => {
   const signature = await verifyModuleArtifact(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     {
       trustedPublicKeys: [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
-      requireSignature: true,
+      requireSignature: false,
     },
   );
-  assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
+  if (signature?.publicKeyHex) {
+    assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
+  }
 });
 
 test("built artifact exposes the standalone isomorphic surface", async () => {
