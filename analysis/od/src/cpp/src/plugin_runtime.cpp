@@ -135,6 +135,18 @@ std::string parse_string_option(std::string_view json, std::string_view key) {
     return value;
 }
 
+// True when the flat options object has `key` set to the JSON literal true.
+bool parse_bool_option(std::string_view json, std::string_view key) {
+    const std::string quoted_key = std::string("\"") + std::string(key) + "\"";
+    const auto key_pos = json.find(quoted_key);
+    if (key_pos == std::string_view::npos) return false;
+    const auto colon_pos = json.find(':', key_pos + quoted_key.size());
+    if (colon_pos == std::string_view::npos) return false;
+    size_t cursor = colon_pos + 1;
+    while (cursor < json.size() && std::isspace(static_cast<unsigned char>(json[cursor]))) cursor += 1;
+    return json.substr(cursor, 4) == "true";
+}
+
 // Extract a JSON number value for `key` from a flat options object. Mirrors the
 // colon-anchored needle convention used by the int/string parsers, but accepts
 // signed, fractional, and E-notation values via strtod (BSTAR/ndot come in as
@@ -299,8 +311,22 @@ PluginFitResult fit_ephemeris_payload(
 
         FitterConfig config = parse_fit_options(options_json);
         auto fit = fit_sgp4_series(series, config);
-        result.ok = true;
         result.json = elements_to_json(fit.elements);
+        // Opt-in legacy two-line set of the fitted elements; the catalog number takes Alpha-5 from 100000.
+        if (parse_bool_option(options_json, "emitTle")) {
+            const std::string tle = elements_to_tle(fit.elements);
+            if (tle.empty()) {
+                result.error_code = "unrepresentable-catalog-number";
+                result.error_message = "emitTle needs a catalog number from 0 to 339999 (Alpha-5 above 99999); got " +
+                                       std::to_string(fit.elements.norad_cat_id) + ".";
+                result.json = std::string("{\"error\":\"") + json_escape(result.error_message) + "\"}";
+                return result;
+            }
+            const auto split = tle.find('\n');
+            result.json.pop_back();  // the closing brace of elements_to_json
+            result.json += ",\"TLE_LINE1\":\"" + tle.substr(0, split) + "\",\"TLE_LINE2\":\"" + tle.substr(split + 1) + "\"}";
+        }
+        result.ok = true;
         return result;
     } catch (const std::exception& ex) {
         result.error_code = "fit-failed";

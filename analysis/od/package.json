@@ -3,13 +3,16 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs tests/ocm_emission.test.mjs tests/covariance_publication.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs tests/ocm_emission.test.mjs tests/covariance_publication.test.mjs tests/alpha5_tle.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:covariance-publication": "node --test tests/covariance_publication.test.mjs",
+    "test:alpha5": "node --test tests/alpha5_tle.test.mjs",
+    "test:parity-alpha5": "node tests/parity_alpha5.mjs",
     "build:wasi": "node build-wasi.mjs",
     "test:release": "node --test tests/wasi_release.test.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.25.12",
     "space-data-module-sdk": "0.8.25"
   }
 }
