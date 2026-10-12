@@ -53,7 +53,8 @@ export const outputsOf = (response, port) => response.outputs.filter((f) => f.po
 export const jsonOf = (response, port) => JSON.parse(Buffer.from(outputsOf(response, port)[0]).toString('utf8'));
 
 // ── element sets ──────────────────────────────────────────────────────────────
-// One GP JSON row (Space-Track field names) as a size-prefixed $OMM.
+// One GP JSON row (Space-Track field names) as a size-prefixed $OMM; the
+// row's PROVENANCE, when it has one, is a PVNT.
 export function ommRecord(row) {
   const t = new OMM.OMMT();
   const num = (k) => (row[k] === undefined || row[k] === null || row[k] === '' ? 0 : Number(row[k]));
@@ -64,6 +65,7 @@ export function ommRecord(row) {
     ARG_OF_PERICENTER: num('ARG_OF_PERICENTER'), MEAN_ANOMALY: num('MEAN_ANOMALY'), BSTAR: num('BSTAR'),
     MEAN_MOTION_DOT: num('MEAN_MOTION_DOT'), MEAN_MOTION_DDOT: num('MEAN_MOTION_DDOT'), REV_AT_EPOCH: num('REV_AT_EPOCH'),
     ELEMENT_SET_NO: num('ELEMENT_SET_NO'), COMMENT: row.GP_ID ? `GP_ID ${row.GP_ID}` : '',
+    PROVENANCE: row.PROVENANCE ?? null,
   });
   const b = new flatbuffers.Builder(512);
   OMM.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b));

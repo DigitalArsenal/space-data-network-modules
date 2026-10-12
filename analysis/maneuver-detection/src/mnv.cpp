@@ -1,8 +1,7 @@
 // analysis/maneuver-detection: $MNV records.
 //
-// U, V and W follow the component comments of the SDS MNV schema: U along
-// track (in-track), V cross-track (along the orbit normal), W radial. This is
-// not the common RTN order; it is the schema's, kept as written.
+// Delta-V is in the standard UVW axes of the SDS MNV schema: U radial, V
+// in-track, W cross-track (along the orbit normal), km/s.
 namespace {
 
 flatbuffers::Offset<mnvOrbitalState> stateTable(flatbuffers::FlatBufferBuilder& fb, const Vec3& r, const Vec3& v) {
@@ -38,12 +37,15 @@ std::string algorithmOf(const std::string& detector) {
   return "C: D1 and D2 combined";
 }
 
-struct Provenance {
+// What a detected event is about: its object, the report it belongs to, the
+// two element sets it lies between and the source those sets come from.
+struct EventContext {
   std::string key, objectId, reportTime, frame, propagatorPort, comment0, comment1;
+  Source source;
   uint32_t norad = 0;
 };
 
-std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverStatus status) {
+std::vector<uint8_t> encodeEvent(const Event& e, const EventContext& pv, maneuverStatus status) {
   const Elements pre = elementsOf(e.r0, e.v0), post = elementsOf(e.r1, e.v1);
   const maneuverCharacterization kind = characterize(e, pre, post);
   const double big = std::max(std::fabs(e.rawInTrack), std::fabs(e.rawCrossTrack));
@@ -57,7 +59,7 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   const auto end = fb.CreateString(isoMs(e.endTime));
   const auto preState = stateTable(fb, e.r0, e.v0);
   const auto postState = stateTable(fb, e.r1, e.v1);
-  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.4.0 " + algorithmOf(e.detector) +
+  const auto algorithm = fb.CreateString(std::string(kProducer) + " " + algorithmOf(e.detector) +
     (pv.propagatorPort.empty() ? "" : "; trajectories from propagator port " + pv.propagatorPort));
   std::string text = "Impulsive estimate from consecutive element-set trajectories (" + pv.frame +
     "). Delta-V in UVW: DELTA_VEL_V in-track from the energy change, DELTA_VEL_W cross-track from the orbit-normal change, each 0 unless its "
@@ -71,6 +73,7 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   if (!pv.comment1.empty()) sourced.push_back(fb.CreateString(pv.comment1));
   const auto sourcedData = fb.CreateVector(sourced);
   const auto sourcedTypes = fb.CreateString("OEM");
+  const auto provenance = encodeProvenance(fb, pv.source);
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> accelTimes;
   flatbuffers::Offset<flatbuffers::Vector<double>> accels;
   if (e.detector == "D3") {
@@ -105,6 +108,7 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   b.add_ALGORITHM(algorithm);
   b.add_SOURCED_DATA(sourcedData);
   b.add_SOURCED_DATA_TYPES(sourcedTypes);
+  b.add_PROVENANCE(provenance);
   FinishMNVBuffer(fb, b.Finish());
   return std::vector<uint8_t>(fb.GetBufferPointer(), fb.GetBufferPointer() + fb.GetSize());
 }

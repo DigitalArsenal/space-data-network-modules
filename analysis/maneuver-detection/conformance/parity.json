@@ -1,25 +1,25 @@
 {
   "ok": true,
-  "fixture": "maneuver-detection 0.4.0 methods",
+  "fixture": "maneuver-detection 0.5.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "ea5f7397923f23d2fa1df4a9d9cbd862c484be1b0b309fba143715cf881cc60d",
-  "moduleSha256": "ea5f7397923f23d2fa1df4a9d9cbd862c484be1b0b309fba143715cf881cc60d",
+  "artifactSha256": "f1e8797b584c81a67b6083e893331a81c7f7ca4d2b84df032d80ca17ade259b3",
+  "moduleSha256": "f1e8797b584c81a67b6083e893331a81c7f7ca4d2b84df032d80ca17ade259b3",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 9,
-      "durationMs": 1392
+      "runs": 11,
+      "durationMs": 1419
     },
     {
       "lane": "wasmedge",
-      "runs": 9,
-      "durationMs": 15380
+      "runs": 11,
+      "durationMs": 12496
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 9,
-      "durationMs": 17419
+      "runs": 11,
+      "durationMs": 15879
     }
   ],
   "cases": [
@@ -30,10 +30,12 @@
     "detect-query-sgp4",
     "detect-query-keplerian",
     "compare-planned",
+    "compare-planned-cross-track",
+    "compare-planned-in-track",
     "score",
     "refused-option"
   ],
-  "comparisons": 45,
+  "comparisons": 55,
   "failures": [],
   "runs": [
     {
@@ -43,8 +45,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
-      "stdoutLength": 20680
+      "stdoutSha256": "dd01b35eb0f0233461be4c7a13011e876ccc5516f533e100ff8aa1a594f3a056",
+      "stdoutLength": 20776
     },
     {
       "lane": "browser",
@@ -53,8 +55,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
-      "stdoutLength": 16968
+      "stdoutSha256": "84a78821604e6caf06cd566d95503c8ff0ddf898317a28317b578b30db8eb27a",
+      "stdoutLength": 17152
     },
     {
       "lane": "browser",
@@ -63,8 +65,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
-      "stdoutLength": 14152
+      "stdoutSha256": "a419c8a475f5655e81808aefa7502fff3995663ebb59a4cde609750e32ea5222",
+      "stdoutLength": 14240
     },
     {
       "lane": "browser",
@@ -83,8 +85,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
-      "stdoutLength": 34968
+      "stdoutSha256": "e610b270e697acff361fa28994dc3e598b128b64aaca2a5e087cc165db3b3a66",
+      "stdoutLength": 36024
     },
     {
       "lane": "browser",
@@ -93,8 +95,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
-      "stdoutLength": 34992
+      "stdoutSha256": "680aa6f84222c26aafd72f5d07acda510186db8eec33b83d5478a588482c838c",
+      "stdoutLength": 36032
     },
     {
       "lane": "browser",
@@ -103,8 +105,28 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
-      "stdoutLength": 2744
+      "stdoutSha256": "330b4ee056042e389451376029adf3ebf1d80d03dddadef9d19248210dfa9d17",
+      "stdoutLength": 2840
+    },
+    {
+      "lane": "browser",
+      "caseId": "compare-planned-cross-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a152dfe08e214c02e61aca980a00f1d36837ec5b402a0ebfe4cfa8bb999926bd",
+      "stdoutLength": 2968
+    },
+    {
+      "lane": "browser",
+      "caseId": "compare-planned-in-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "81fa18fb0ca0da664465dff6b4caa604391171064998651466395b5018e5f2d5",
+      "stdoutLength": 2968
     },
     {
       "lane": "browser",
@@ -133,8 +155,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
-      "stdoutLength": 20680
+      "stdoutSha256": "dd01b35eb0f0233461be4c7a13011e876ccc5516f533e100ff8aa1a594f3a056",
+      "stdoutLength": 20776
     },
     {
       "lane": "wasmedge",
@@ -143,8 +165,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
-      "stdoutLength": 16968
+      "stdoutSha256": "84a78821604e6caf06cd566d95503c8ff0ddf898317a28317b578b30db8eb27a",
+      "stdoutLength": 17152
     },
     {
       "lane": "wasmedge",
@@ -153,8 +175,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
-      "stdoutLength": 14152
+      "stdoutSha256": "a419c8a475f5655e81808aefa7502fff3995663ebb59a4cde609750e32ea5222",
+      "stdoutLength": 14240
     },
     {
       "lane": "wasmedge",
@@ -173,8 +195,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
-      "stdoutLength": 34968
+      "stdoutSha256": "e610b270e697acff361fa28994dc3e598b128b64aaca2a5e087cc165db3b3a66",
+      "stdoutLength": 36024
     },
     {
       "lane": "wasmedge",
@@ -183,8 +205,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
-      "stdoutLength": 34992
+      "stdoutSha256": "680aa6f84222c26aafd72f5d07acda510186db8eec33b83d5478a588482c838c",
+      "stdoutLength": 36032
     },
     {
       "lane": "wasmedge",
@@ -193,8 +215,28 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
-      "stdoutLength": 2744
+      "stdoutSha256": "330b4ee056042e389451376029adf3ebf1d80d03dddadef9d19248210dfa9d17",
+      "stdoutLength": 2840
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "compare-planned-cross-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a152dfe08e214c02e61aca980a00f1d36837ec5b402a0ebfe4cfa8bb999926bd",
+      "stdoutLength": 2968
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "compare-planned-in-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "81fa18fb0ca0da664465dff6b4caa604391171064998651466395b5018e5f2d5",
+      "stdoutLength": 2968
     },
     {
       "lane": "wasmedge",
@@ -223,8 +265,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
-      "stdoutLength": 20680
+      "stdoutSha256": "dd01b35eb0f0233461be4c7a13011e876ccc5516f533e100ff8aa1a594f3a056",
+      "stdoutLength": 20776
     },
     {
       "lane": "docker-wasmedge",
@@ -233,8 +275,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
-      "stdoutLength": 16968
+      "stdoutSha256": "84a78821604e6caf06cd566d95503c8ff0ddf898317a28317b578b30db8eb27a",
+      "stdoutLength": 17152
     },
     {
       "lane": "docker-wasmedge",
@@ -243,8 +285,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
-      "stdoutLength": 14152
+      "stdoutSha256": "a419c8a475f5655e81808aefa7502fff3995663ebb59a4cde609750e32ea5222",
+      "stdoutLength": 14240
     },
     {
       "lane": "docker-wasmedge",
@@ -263,8 +305,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
-      "stdoutLength": 34968
+      "stdoutSha256": "e610b270e697acff361fa28994dc3e598b128b64aaca2a5e087cc165db3b3a66",
+      "stdoutLength": 36024
     },
     {
       "lane": "docker-wasmedge",
@@ -273,8 +315,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
-      "stdoutLength": 34992
+      "stdoutSha256": "680aa6f84222c26aafd72f5d07acda510186db8eec33b83d5478a588482c838c",
+      "stdoutLength": 36032
     },
     {
       "lane": "docker-wasmedge",
@@ -283,8 +325,28 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
-      "stdoutLength": 2744
+      "stdoutSha256": "330b4ee056042e389451376029adf3ebf1d80d03dddadef9d19248210dfa9d17",
+      "stdoutLength": 2840
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "compare-planned-cross-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "a152dfe08e214c02e61aca980a00f1d36837ec5b402a0ebfe4cfa8bb999926bd",
+      "stdoutLength": 2968
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "compare-planned-in-track",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "81fa18fb0ca0da664465dff6b4caa604391171064998651466395b5018e5f2d5",
+      "stdoutLength": 2968
     },
     {
       "lane": "docker-wasmedge",

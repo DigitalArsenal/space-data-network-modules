@@ -12,6 +12,7 @@ namespace {
 
 struct ElementSet {
   std::string key, objectId, objectName, comment;
+  Source source;
   uint32_t norad = 0;
   double epoch = 0;
   size_t record = 0;  // index of the $OMM record over all element_sets frames
@@ -22,6 +23,7 @@ struct Query {
   std::string key;
   uint32_t norad = 0;
   std::string objectId, comment;
+  Source source;
   double epoch = 0, start = 0, stop = 0, step = 0;
 };
 
@@ -40,6 +42,7 @@ bool loadElementSets(const std::vector<const OMM*>& records, SetsByObject& objec
       return failWith("Element set " + std::to_string(i) + " names no object (NORAD_CAT_ID, OBJECT_ID or OBJECT_NAME).");
     if (!parseIso(omm->EPOCH(), s.epoch)) return failWith("Element set " + std::to_string(i) + " has no valid EPOCH (ISO 8601 UTC).");
     s.key = objectKey(s.norad, s.objectId, s.objectName);
+    s.source = sourceOf(omm->PROVENANCE());
     s.comment = "EPOCH " + isoMs(s.epoch) + (omm->COMMENT() && omm->COMMENT()->size() ? " " + omm->COMMENT()->str() : "");
     objects[s.key].push_back(s);
   }
@@ -77,6 +80,7 @@ std::vector<Query> queriesFor(const SetsByObject& objects, int neighbours, doubl
       q.norad = sets[i].norad;
       q.objectId = sets[i].objectId;
       q.comment = sets[i].comment;
+      q.source = sets[i].source;
       q.epoch = sets[i].epoch;
       q.start = sets[i >= size_t(neighbours) ? i - neighbours : 0].epoch;
       q.stop = sets[std::min(sets.size() - 1, i + neighbours)].epoch;
@@ -131,6 +135,7 @@ bool takeAnswers(const std::vector<Query>& queries, const std::vector<const ephe
     b.objectId = q.objectId.empty() ? b.objectId : q.objectId;
     b.epoch = q.epoch;
     b.comment = q.comment;
+    b.source = q.source;
     objects[q.key].push_back(std::move(b));
   }
   return true;

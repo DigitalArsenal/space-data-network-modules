@@ -120,14 +120,24 @@ V in-track (W × U), W cross-track along the orbit normal; km/s.
 | `MNVR_ACCEL_TIMES`, `MNVR_ACCELS` | D3: the change of in-track acceleration, as U, V, W (radial 0, in-track, cross-track 0; km/s²) |
 | `ALGORITHM` | Detector and propagator port |
 | `SOURCED_DATA` | The two bracketing sets (`EPOCH`, and the `$OMM` `COMMENT`, e.g. its GP_ID) |
+| `PROVENANCE` | Below |
+
+### `PROVENANCE`
+
+Every `$MNV` this module writes carries a `$PVN`:
+- `PRODUCER` is this module and its version (`com.digitalarsenal.analysis.maneuver-detection 0.5.0`);
+- `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`, `LICENSE_CLASS`, `LICENSE_ID` and `LINEAGE` are the input's `PROVENANCE`: the `$OMM` element sets for `detect_maneuvers`, the planned `$MNV` for `compare_ephemerides`;
+- an input without a `PROVENANCE` (an `$OEM`) gives a record that names only its producer, with `LICENSE_CLASS` Unspecified, which is never a grant;
+- an object whose element sets name different sources gets the fields they agree on. A field they differ in is empty, and licence classes that differ give CiteOnly.
 
 ## `compare_ephemerides`
 
 The method checks operator files against each other. Its inputs:
 - `versions`: one `$OEM` per version, `CREATION_DATE` its issue time, one
   block per object;
-- `planned`: `$MNV` records, with `EVENT_START_TIME` the TIG and `DELTA_VEL`
-  the planned size;
+- `planned`: `$MNV` records, with `EVENT_START_TIME` the TIG, `DELTA_VEL` the
+  planned size, `DELTA_VEL_W` (cross-track, UVW) when the plan leaves the
+  orbit plane, and `PROVENANCE`, which the check carries;
 - `options`: `margin_s` (600), `post_start_after_s` (3600),
   `executed_fraction` (0.5), `cancelled_fraction` (0.25),
   `unplanned_threshold_km` (off), `within_version` (false).
@@ -213,6 +223,6 @@ propagated by `propagator/sgp4` through the query port. Results and method:
 ```sh
 npm ci
 npm run build
-npm test                                          # E2E: 13 cases through the built module
+npm test                                          # E2E: 15 cases through the built module
 PATH=$HOME/.wasmedge/bin:$PATH npm run test:parity   # browser, WasmEdge, Docker WasmEdge
 ```

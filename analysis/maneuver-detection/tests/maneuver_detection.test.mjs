@@ -10,6 +10,9 @@ import {
   EPOCHS, LEO, MNV, MU, OEM, OMEGA, T0, add, block, burns, circular, cross, dot, eme2000, flatbuffers, gmst, gpHistory, history, iso, kepler, manifest, mul, norm, oem, planned, require, root, rtn, seconds, sma, stumpff, toFixed, unit, version, visViva, wasm, wasmPath,
 } from './fixtures.mjs';
 
+// PROVENANCE.PRODUCER of every $MNV the module writes: itself and its version.
+const PRODUCER = `${manifest.pluginId} ${manifest.version}`;
+
 // D1's closed-form cases run D1 alone (the module's default is C, D1 + D2);
 // a test that names its detectors runs those.
 async function detect(t, bytes, given) {
@@ -73,6 +76,13 @@ test('a 1 m/s in-track burn on a grid node: exact time and vis-viva delta-V', as
   assert.equal(e.SAT_NO, 99001);
   assert.equal(e.ORIG_OBJECT_ID, '2026-900A');
   assert.deepEqual(e.SOURCED_DATA, ['ELSET 15', 'ELSET 16']);
+  // An $OEM names no source: the record names its producer only, and its
+  // licence class stays Unspecified, which is never a grant.
+  assert.equal(e.PROVENANCE.PRODUCER, PRODUCER);
+  assert.ok(e.ALGORITHM.startsWith(PRODUCER));
+  assert.deepEqual([e.PROVENANCE.SOURCE_ID, e.PROVENANCE.ORIGINATOR, e.PROVENANCE.PROVIDER_ID, e.PROVENANCE.LICENSE_ID, e.PROVENANCE.LINEAGE], [null, null, null, null, null]);
+  assert.equal(e.PROVENANCE.SOURCE_KIND, MNV.pvnSourceKind.Unspecified);
+  assert.equal(e.PROVENANCE.LICENSE_CLASS, MNV.pvnLicenseClass.Unspecified);
   // PRE_EVENT / POST_EVENT are the osculating states at t_b.
   assert.ok(Math.abs(e.PRE_EVENT.SMA - a0) < 1e-6 && Math.abs(e.POST_EVENT.SMA - a1) < 1e-6);
   assert.ok(Math.abs(e.PRE_EVENT.INCLINATION - 51.6) < 1e-9);
@@ -233,6 +243,72 @@ test('compare_ephemerides: a planned burn executed and cancelled', async (t) => 
   const skipped = await compare(t, [before, version(pre, tig + 6 * 3600, T0 + 3 * 86400, tig + 8 * 3600)], planned(tig, 0.001));
   assert.equal(skipped.checks[0].STATUS, MNV.maneuverStatus.CANCELLED);
   assert.ok(Math.abs(skipped.checks[0].DELTA_VEL_V) < 1e-6);
+});
+
+test('compare_ephemerides: a plan is out of plane when it states DELTA_VEL_W (UVW cross-track), in plane when it states only DELTA_VEL_V', async (t) => {
+  // A 2 m/s burn along the orbit normal at the TIG, flown as modelled. Its
+  // size is all cross-track: a plan that states DELTA_VEL_W is judged by the
+  // hypotenuse and the burn is EXECUTED. The same flight against a plan that
+  // states only DELTA_VEL_V (2 m/s in-track) is judged by the in-track change,
+  // the vis-viva term dv^2 / (2 v) = 2.6e-4 m/s, under the 25 % bound: the
+  // in-track burn did not happen, CANCELLED.
+  const pre = LEO();
+  const tig = T0 + 86400;
+  const [r, v] = pre(tig);
+  const post = kepler(r, add(v, mul(rtn(r, v).N, 0.002)), tig);
+  const versions = [version((s) => (s < tig ? pre : post)(s), T0, T0 + 3 * 86400, tig - 7200), version(post, tig + 6 * 3600, T0 + 3 * 86400, tig + 8 * 3600)];
+  const source = Object.assign(new MNV.PVNT(), { SOURCE_ID: 'operator-ephemeris', SOURCE_KIND: MNV.pvnSourceKind.Ephemeris, ORIGINATOR: 'Test operator',
+    PROVIDER_ID: 'sdn-test-node', PRODUCER: 'plan-editor 1.0', LICENSE_CLASS: MNV.pvnLicenseClass.CiteOnly, LICENSE_ID: 'operator-terms', LINEAGE: 'operator' });
+  const cross = await compare(t, versions, planned(tig, 0.002, { DELTA_VEL_W: 0.002, PROVENANCE: source }));
+  assert.equal(cross.error, undefined, cross.error);
+  assert.equal(cross.checks[0].STATUS, MNV.maneuverStatus.EXECUTED);
+  // The executed cross-track delta-V is the orbit-normal rotation, v dv / sqrt(v^2 + dv^2) as in the D1 case; the
+  // two-body versions have no nodal regression, so 1e-6 km/s (1 mm/s) bounds the Hermite interpolation of the averages.
+  const vs = norm(v);
+  assert.ok(Math.abs(cross.checks[0].DELTA_VEL_W - vs * 0.002 / Math.hypot(vs, 0.002)) < 1e-6, `${cross.checks[0].DELTA_VEL_W}`);
+  // The check names the plan's source and this module as its producer.
+  const named = cross.checks[0].PROVENANCE;
+  assert.deepEqual([named.SOURCE_ID, named.SOURCE_KIND, named.ORIGINATOR, named.PROVIDER_ID, named.LICENSE_CLASS, named.LICENSE_ID, named.LINEAGE],
+    ['operator-ephemeris', MNV.pvnSourceKind.Ephemeris, 'Test operator', 'sdn-test-node', MNV.pvnLicenseClass.CiteOnly, 'operator-terms', 'operator']);
+  assert.equal(named.PRODUCER, PRODUCER);
+  const inTrack = await compare(t, versions, planned(tig, 0.002, { DELTA_VEL_V: 0.002 }));
+  assert.equal(inTrack.error, undefined, inTrack.error);
+  assert.equal(inTrack.checks[0].STATUS, MNV.maneuverStatus.CANCELLED);
+  assert.equal(inTrack.checks[0].PROVENANCE.PRODUCER, PRODUCER);
+  assert.equal(inTrack.checks[0].PROVENANCE.SOURCE_ID, null);
+});
+
+test('detected maneuvers name their producer and the source their element sets agree on', async () => {
+  const host = await import('../study/lib/host.mjs');
+  const detector = await host.loadModule('analysis/maneuver-detection');
+  try {
+    const { rows } = gpHistory(1);
+    const source = (fields) => Object.assign(new host.MNV.PVNT(), { SOURCE_KIND: MNV.pvnSourceKind.ElementSet, ORIGINATOR: 'Test catalog', PRODUCER: 'gp-parser 3.0',
+      LICENSE_CLASS: MNV.pvnLicenseClass.Reproducible, LICENSE_ID: 'CC0-1.0', LINEAGE: 'test-catalog', ...fields });
+    const options = { propagator_port_id: 'test', detectors: ['D1', 'D2'] };
+    const provider = await host.sgp4Provider();
+    const detectWith = async (sets) => {
+      const { results } = await host.detectWith(detector, provider, sets, [options]);
+      const events = results[0].maneuvers.map(host.unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
+      assert.equal(events.length, 1, JSON.stringify(results[0].report.objects[0].events));
+      return events[0].PROVENANCE;
+    };
+    // One source: the event names it, and this module replaces the parser as producer.
+    const one = await detectWith(rows.map((row) => ({ ...row, PROVENANCE: source({ SOURCE_ID: 'test-gp', PROVIDER_ID: 'node-a' }) })));
+    assert.deepEqual([one.SOURCE_ID, one.SOURCE_KIND, one.ORIGINATOR, one.PROVIDER_ID, one.LICENSE_CLASS, one.LICENSE_ID, one.LINEAGE],
+      ['test-gp', MNV.pvnSourceKind.ElementSet, 'Test catalog', 'node-a', MNV.pvnLicenseClass.Reproducible, 'CC0-1.0', 'test-catalog']);
+    assert.equal(one.PRODUCER, PRODUCER);
+    // Two sources, one lineage: the event keeps what they agree on and names no single source or provider; a licence
+    // class that differs is never a grant, CiteOnly.
+    const mixed = await detectWith(rows.map((row, i) => ({ ...row, PROVENANCE: i < 15
+      ? source({ SOURCE_ID: 'test-gp', PROVIDER_ID: 'node-a' })
+      : source({ SOURCE_ID: 'test-gp-mirror', PROVIDER_ID: 'node-b', LICENSE_CLASS: MNV.pvnLicenseClass.CiteOnly, LICENSE_ID: 'mirror-terms' }) })));
+    assert.deepEqual([mixed.SOURCE_ID, mixed.PROVIDER_ID, mixed.LICENSE_ID], [null, null, null]);
+    assert.deepEqual([mixed.SOURCE_KIND, mixed.ORIGINATOR, mixed.LINEAGE, mixed.LICENSE_CLASS], [MNV.pvnSourceKind.ElementSet, 'Test catalog', 'test-catalog', MNV.pvnLicenseClass.CiteOnly]);
+    assert.equal(mixed.PRODUCER, PRODUCER);
+  } finally {
+    await detector.destroy();
+  }
 });
 
 test('the propagator query port: SGP4 and an ABI provider each answer, and each finds the burn', async () => {

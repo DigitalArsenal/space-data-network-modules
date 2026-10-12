@@ -80,6 +80,7 @@ State fixedToTeme(double t, const State& s) {
 // ── one trajectory, km and km/s, inertial ────────────────────────────────────
 struct Block {
   std::string key, objectId, objectName, comment, frame;
+  Source source;           // the element set's PROVENANCE (query answers); empty for an ephemeris
   uint32_t norad = 0;
   double epoch = kNaN;     // the element set's epoch when known (query answers)
   double issued = kNaN;    // the version's issue time (compare_ephemerides)
