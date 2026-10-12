@@ -561,6 +561,7 @@ bool run_time_ms(const std::string& config, int64_t* out, std::string* err) {
 
 struct Pending { std::vector<std::string> requests, jobs; };
 std::vector<Pending> g_plan_backlog, g_select_backlog;
+std::string g_planned;   // the run (and products, leads) plan() last queued - plan_key
 size_t g_plan_next = 0, g_select_next = 0;
 
 int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocation, const char* request_port, const char* job_port) {
@@ -621,6 +622,17 @@ int plan(void) {
     std::vector<int> physics_leads;
     for (const std::string& l : list_of(config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads))) physics_leads.push_back(std::atoi(l.c_str()));
     const long timeout = static_cast<long>(config_number(config, "nwp_idx_timeout_ms", kDefaultIdxTimeoutMs));
+    // A run already planned (the same run, products and leads): nothing planned again - the tick only lets the work it
+    // queued go on. A node drains a bounded number of invocations a trigger (internal/flowrt cronmount: 1000); a run of
+    // tiled leads (gfs-0p25-sea: 512 batches a lead) takes several triggers, and re-planning the same run on each would
+    // fetch and store it again (each record carries its retrieval time: new bytes, new CIDs). A new cycle plans as before.
+    const std::string plan_key = run_id + "|" + config_string(config, "nwp_products", kDefaultProducts) + "|" + std::to_string(max_lead) + "|" +
+                                 std::to_string(step) + "|" + config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads);
+    if (plan_key == g_planned) {
+        if (g_plan_next < g_plan_backlog.size()) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
+        return push_status("already-planned");
+    }
+    g_planned = plan_key;
     for (const std::string& id : list_of(config_string(config, "nwp_products", kDefaultProducts))) {
         const Product* p = product_named(id);
         if (!p) { plugin_set_error("unknown-product", ("nwp_products names an unknown product: " + id).c_str()); return 400; }
