@@ -24,7 +24,7 @@ One decade needs 31 MB; all ten need 159 MB.
 
 - Direct (resident, per frame): `ssb_load_kernel`, `ssb_states`,
   `ssb_orientations`, `ssb_apparent`, `ssb_observer`, `ssb_hill_radius`,
-  `ssb_cartographic`, `ssb_small_body_magnitudes`, `ssb_body_record`,
+  `ssb_cartographic`, `ssb_light_time`, `ssb_small_body_magnitudes`, `ssb_body_record`,
   `ssb_body_names`, `ssb_et`, `ssb_last_error`.
 - Command: `evaluate` takes `kernel` frames and one JSON `request`
   (`catalog`, `states`, `orientations`, `apparent`, `observer_state`,

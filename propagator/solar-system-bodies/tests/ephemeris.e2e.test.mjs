@@ -170,3 +170,20 @@ test("an epoch outside every segment is the named failure, never a number", { sk
   assert.equal(new Int32Array(mem(), status, 1)[0], -5);
   assert.deepEqual(Array.from(new Float64Array(mem(), out, 6)), [0, 0, 0, 0, 0, 0]);
 });
+
+test("light time from the Earth: the geometric distance over c, and unknown states refuse", { skip: !kernelsDir && "SSB_KERNELS_DIR not set" }, async () => {
+  const { x, mem } = await loadModule(kernelFiles());
+  const et = (2461326.5 - 2451545.0) * 86400; // 2026-10-13 TDB
+  const ids = x.plugin_alloc(4), out = x.plugin_alloc(48), status = x.plugin_alloc(4);
+  for (const id of [499, 301, 599, 10]) {
+    new Int32Array(mem(), ids, 1)[0] = id;
+    x.ssb_states(et, ids, 1, 399, out, status);
+    const s = new Float64Array(mem(), out, 6);
+    const expected = Math.hypot(s[0], s[1], s[2]) / 299792458;
+    const lt = x.ssb_light_time(et, 399, id);
+    assert.ok(Math.abs(lt - expected) <= 1e-12 * expected, `${id}: ${lt} vs ${expected}`);
+  }
+  const mars = x.ssb_light_time(et, 399, 499);
+  assert.ok(mars > 182 && mars < 1342, `Earth-Mars light time ${mars} s is outside 0.37-2.68 AU`);
+  assert.ok(x.ssb_light_time(et, 399, 123456) < 0);
+});

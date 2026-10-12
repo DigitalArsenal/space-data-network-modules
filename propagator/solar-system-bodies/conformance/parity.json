@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "solar-system-bodies 0.1.0 evaluate",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "eb6fb6e415b14470aab0077c1168b32829d873991cf7b24c94056b80e4bdb865",
-  "moduleSha256": "eb6fb6e415b14470aab0077c1168b32829d873991cf7b24c94056b80e4bdb865",
+  "artifactSha256": "0f4ce18e314465e744c088bd9db24fe3916d5c95a0d1d97dce079175111e5966",
+  "moduleSha256": "0f4ce18e314465e744c088bd9db24fe3916d5c95a0d1d97dce079175111e5966",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 9,
-      "durationMs": 996
+      "durationMs": 911
     },
     {
       "lane": "wasmedge",
       "runs": 9,
-      "durationMs": 347
+      "durationMs": 306
     },
     {
       "lane": "docker-wasmedge",
       "runs": 9,
-      "durationMs": 8476
+      "durationMs": 7112
     }
   ],
   "cases": [

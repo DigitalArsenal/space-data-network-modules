@@ -767,6 +767,16 @@ SSB_EXPORT("ssb_hill_radius") double ssb_hill_radius(double et, int32_t id) {
     return ssb::hill_radius(id, et, &r) == ssb::Ok ? r : -1.0;
 }
 
+/* One-way light time (s) from body `from` to body `to` at `et`: the geometric
+ * distance over c (IAU 2009 / SI defining constant), no iteration for the
+ * light path (a display quantity). Negative when either state is unknown. */
+SSB_EXPORT("ssb_light_time") double ssb_light_time(double et, int32_t from, int32_t to) {
+    constexpr double kSpeedOfLight = 299792458.0;
+    double s[6];
+    if (ssb::state_m(to, from, et, s) != ssb::Ok) return -1.0;
+    return ssb::norm3(s) / kSpeedOfLight;
+}
+
 SSB_EXPORT("ssb_cartographic") int32_t ssb_cartographic(int32_t id, int32_t mode, const double* in, double* out) {
     return ssb::cartographic_convert(id, mode, in, out);
 }
