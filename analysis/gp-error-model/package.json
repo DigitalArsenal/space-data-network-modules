@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-analysis-gp-error-model",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -13,6 +13,6 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.8.26",
-    "spacedatastandards.org": "1.245.0"
+    "spacedatastandards.org": "1.246.0"
   }
 }

@@ -4,15 +4,17 @@
 // - rules 3 and 4: the stratum of the object's regime, linear in age between bin centres, and its cell's verdict;
 // - rule 1: the supplied covariance exactly, and its rotation to RTN for an operator that states it in inertial axes;
 // - rule 2: the formal covariance times the realism factor of the recipe;
-// - records: decoded with the generated SDS bindings, hashes with node:crypto.
+// - records: decoded with the generated SDS bindings, hashes with node:crypto;
+// - the source: PROVENANCE (PVN) of each record equals the recipe's source, and no label of it rides in USER_DEFINED_PARAMETERS,
+//   COMMENT or TAGS; the covariance's label: one CVR per covariance epoch (COV_REALISM), its verdict by the CVR's own rule.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import test from 'node:test';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { fileURLToPath } from 'node:url';
 import {
-  OCM, OEM, OMM, MNV, alignedOem, call, cellOf, deriveStates, encodeMnv, encodeOmm, expectedCovariance, fitOcm, json, kc, leoH, manifest, mnvFrame,
-  beyond, ommFrame, ommParam, ocmFrame, oemFrame, operatorOem, output, param, recipeFor, records, reportOf, unpackMnv, unpackOcm, unpackOmm, valladoOmm, vallado,
+  OCM, OEM, OMM, MNV, PVN_LICENCES, alignedOem, assertSourceNamed, call, cellOf, deriveStates, encodeMnv, encodeOmm, expectedCovariance, expectedProvenance, fitOcm, json, kc, leoH,
+  manifest, mnvFrame, beyond, ommFrame, ocmFrame, oemFrame, operatorOem, output, provenanceOf, recipeFor, records, reportOf, unpackMnv, unpackOcm, unpackOmm, valladoOmm, vallado,
 } from './products-fixtures.mjs';
 
 const close = (a, b, what, tolerance = 1e-12) => assert.ok(Math.abs(a - b) <= tolerance * Math.max(1, Math.abs(b)), `${what}: ${a} vs ${b}`);
@@ -36,7 +38,8 @@ async function attach(sets, { ages = [0], recipe = recipeFor(), operator, fit, o
     states,
   };
 }
-const labels = (ocm) => JSON.parse(param(ocm, 'COV_LABELS'));
+const Calibrated = OCM.covarianceCalibration.Calibrated, Uncalibrated = OCM.covarianceCalibration.Uncalibrated;
+const verdictOf = (cell) => (cell.calibration === 'CALIBRATED' ? Calibrated : Uncalibrated);
 const lowerOf = (ocm, k) => ocm.COVARIANCE_DATA.slice(21 * k, 21 * k + 21);
 
 test('the artifact passes SDK compliance', async () => {
@@ -47,7 +50,8 @@ test('the artifact passes SDK compliance', async () => {
 
 test('rule 3: the model covariance at each age, with the held-out verdict of each row\'s cell', async () => {
   const ages = [0, 0.5, 1, 3];
-  const { report, ocms, ocmBytes, omms, ommBytes, states } = await attach([leoH], { ages });
+  const recipe = recipeFor();
+  const { report, ocms, ocmBytes, omms, ommBytes, states } = await attach([leoH], { ages, recipe });
   assert.equal(report.counts.rule3, 1);
   assert.equal(ocms.length, 1);
   const ocm = ocms[0];
@@ -62,44 +66,41 @@ test('rule 3: the model covariance at each age, with the held-out verdict of eac
   const cellIndex = [0, 1, 2, 4];
   ages.forEach((age, k) => {
     closeAll(lowerOf(ocm, k), expectedCovariance('LEO-H', age), `covariance at ${age} d`);
-    const label = labels(ocm)[k];
+    const cvr = ocm.COV_REALISM[k];
     const cell = cellOf('LEO-H', cellIndex[k]);
-    assert.equal(label.rule, 3);
-    assert.equal(label.regime, 'LEO-H');
-    assert.equal(label.cell.ageIndex, cellIndex[k]);
-    assert.equal(label.calibration, cell.calibration);
-    assert.equal(label.verdict, cell.decision);
-    close(label.meanD2Over3, cell.meanD2Over3, `mean d2/3 at ${age} d`, 0);
-    close(label.coverage95, cell.coverage95, `coverage at ${age} d`, 0);
-    assert.equal(label.samples, cell.samples);
-    assert.equal(label.objects, cell.objects);
+    assert.equal(cvr.RULE, OCM.covarianceRule.SourceModel);
+    assert.equal(cvr.MODEL_ID, kc.id);
+    assert.equal(cvr.REGIME, 'LEO-H');
+    close(cvr.AGE_DAYS, age, `age at row ${k}`);
+    assert.equal(cvr.HORIZON_DAYS, cell.horizonDays);
+    assert.equal(cvr.MEASURED_LINEAGE, 'space-track-gp', 'the lineage the cell was measured on, which is the source\'s');
+    assert.equal(cvr.TEST_WINDOW, kc.measuredOn.window.replace('..', '/'), 'an ISO 8601 interval');
+    assert.equal(cvr.MEAN_D2_OVER_3, cell.meanD2Over3);
+    assert.equal(cvr.COVERAGE_95, cell.coverage95);
+    assert.equal(cvr.SAMPLES, cell.samples);
+    assert.equal(cvr.OBJECTS, cell.objects);
+    assert.ok(Number.isNaN(cvr.SCALE_FACTOR), 'the model applies no factor');
+    assert.equal(cvr.CALIBRATION, verdictOf(cell));
+    assert.equal(cvr.EVIDENCE, kc.measuredOn.evidence);
   });
+  assert.equal(ocm.COV_REALISM.length, ages.length, 'one CVR per covariance epoch');
   // E14 found LEO-H realistic at 0 and 0.5 days only.
-  assert.deepEqual(labels(ocm).map((l) => l.calibration), ['CALIBRATED', 'CALIBRATED', 'UNCALIBRATED', 'UNCALIBRATED']);
-  assert.equal(ocm.COV_CALIBRATION, OCM.covarianceCalibration.Uncalibrated, 'Calibrated only when every row is');
-  assert.match(ocm.COV_CALIBRATION_REFERENCE, /^orbit-accuracy-experiments E14 test 2026-05-01\.\.2026-09-30: LEO-H 0 d, mean d2\/3 0\.983, 95 % coverage 0\.946 \(4260 samples, 10 objects\)/);
-  assert.equal(param(ocm, 'SOURCE_ID'), 'celestrak-gp');
-  assert.equal(param(ocm, 'SOURCE_ORIGINATOR'), 'CelesTrak');
-  assert.equal(param(ocm, 'SOURCE_PROVIDER'), 'sdn:celestrak-gp');
-  assert.equal(param(ocm, 'LICENCE_CLASS'), 'redistributable');
-  assert.equal(param(ocm, 'COV_RULE'), '3');
-  assert.equal(ocm.HEADER.ORIGINATOR, 'CelesTrak');
+  assert.deepEqual(ocm.COV_REALISM.map((c) => c.CALIBRATION), [Calibrated, Calibrated, Uncalibrated, Uncalibrated]);
+  assert.equal(ocm.COV_CALIBRATION, Uncalibrated, 'Calibrated only when every row is');
+  assert.equal(ocm.COV_CALIBRATION_REFERENCE, kc.measuredOn.evidence);
+  // The source is PROVENANCE; the message's creator is the producer, and nothing is appended to COMMENT.
+  assertSourceNamed(ocm, recipe);
+  assert.deepEqual(ocm.HEADER.COMMENT, []);
+  assert.equal(ocm.HEADER.ORIGINATOR, 'SDN catalog pipeline');
   assert.equal(ocm.METADATA.OBJECT_DESIGNATOR, '90101');
-  // The OMM: the source's set with the covariance at its epoch (RTN), the originator, and the label in COMMENT.
+  // The OMM: the source's set with the covariance at its epoch (RTN), the CVR of that row, the source in PROVENANCE.
   assert.equal(omms.length, 1);
   closeAll(omms[0].COVARIANCE, expectedCovariance('LEO-H', 0), 'OMM covariance');
   assert.equal(omms[0].COV_REFERENCE_FRAME.NAME, 'RSW');
-  assert.equal(omms[0].ORIGINATOR, 'CelesTrak');
-  assert.match(omms[0].COMMENT, /^GP_ID 1 \| SDN covariance: rule 3 e14-s3-kc; CALIBRATED; orbit-accuracy-experiments E14 test 2026-05-01\.\.2026-09-30: LEO-H 0 d/);
-  assert.match(omms[0].COMMENT, /\| source celestrak-gp, originator CelesTrak, provider sdn:celestrak-gp, licence redistributable$/);
-  // The same facts as the CCSDS USER_DEFINED_x keywords (SDS 1.245.0), for a reader that parses rather than reads: the label
-  // is the $OCM's label of the row the covariance is of.
-  for (const [name, value] of Object.entries({ SOURCE_ID: 'celestrak-gp', SOURCE_KIND: 'element-set', SOURCE_ORIGINATOR: 'CelesTrak', SOURCE_PROVIDER: 'sdn:celestrak-gp',
-    SOURCE_LINEAGE: 'space-track-gp', LICENCE_CLASS: 'redistributable', LICENCE_ID: 'celestrak-gp-terms', PRODUCER: 'SDN catalog pipeline', COV_RULE: '3', COV_METHOD: 'e14-s3-kc', COV_CALIBRATION: 'CALIBRATED' })) {
-    assert.equal(ommParam(omms[0], name), value, name);
-  }
-  assert.deepEqual(JSON.parse(ommParam(omms[0], 'COV_LABEL')), labels(ocm)[0]);
-  assert.equal(ommParam(omms[0], 'COV_UNAVAILABLE'), undefined);
+  assert.deepEqual({ ...omms[0].COV_REALISM }, { ...ocm.COV_REALISM[0] }, 'the CVR of the row the covariance is of');
+  assertSourceNamed(omms[0], recipe);
+  assert.equal(omms[0].ORIGINATOR, 'SDN catalog pipeline', 'the message\'s creator; the source\'s originator is PROVENANCE.ORIGINATOR');
+  assert.equal(omms[0].COMMENT, 'GP_ID 1', 'the set\'s own comment, nothing appended');
   // The report cites each record by its hash.
   assert.equal(report.objects[0].ocmSha256, sha256(ocmBytes[0]));
   assert.equal(report.objects[0].ommSha256, sha256(ommBytes[0]));
@@ -111,33 +112,37 @@ test('rule 3: every row calibrated makes the OCM Calibrated', async () => {
 });
 
 test('rule 4: a source with no model of its own uses the pooled model, uncalibrated where it was never measured', async () => {
-  const { report, ocms, omms } = await attach([leoH], { ages: [0, 0.5], recipe: recipeFor({ id: 'spacemapper-aoe', lineage: 'spacemapper-aoe', own: false }) });
+  const recipe = recipeFor({ id: 'spacemapper-aoe', lineage: 'spacemapper-aoe', own: false });
+  const { report, ocms, omms } = await attach([leoH], { ages: [0, 0.5], recipe });
   assert.equal(report.counts.rule4, 1);
   const ocm = ocms[0];
   closeAll(lowerOf(ocm, 0), expectedCovariance('LEO-H', 0), 'covariance');
-  const [row] = labels(ocm);
-  assert.equal(row.rule, 4);
-  assert.equal(row.method, 'e14-s3-kc-pooled');
-  // The cell passed on Space-Track's sets; it says nothing about another lineage's, so the label does not borrow it.
-  assert.equal(row.calibration, 'UNCALIBRATED');
-  assert.match(row.basis, /not measured on spacemapper-aoe/);
-  close(row.meanD2Over3, cellOf('LEO-H', 0).meanD2Over3, 'the pooled cell\'s numbers are kept', 0);
-  assert.equal(ocm.COV_CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
-  assert.match(omms[0].COMMENT, /rule 4 e14-s3-kc-pooled; UNCALIBRATED/);
-  assert.equal(ommParam(omms[0], 'COV_CALIBRATION'), 'UNCALIBRATED');
-  assert.equal(ommParam(omms[0], 'COV_METHOD'), 'e14-s3-kc-pooled');
+  const [row] = ocm.COV_REALISM;
+  assert.equal(row.RULE, OCM.covarianceRule.PooledModel);
+  assert.equal(row.MODEL_ID, kc.id);
+  // The cell passed on Space-Track's sets; it says nothing about another lineage's, so the CVR does not borrow it: the lineage
+  // is the cell's, the numbers are kept, and the verdict is Uncalibrated.
+  assert.equal(row.CALIBRATION, Uncalibrated);
+  assert.equal(row.MEASURED_LINEAGE, 'space-track-gp');
+  close(row.MEAN_D2_OVER_3, cellOf('LEO-H', 0).meanD2Over3, 'the pooled cell\'s numbers are kept', 0);
+  assert.equal(ocm.COV_CALIBRATION, Uncalibrated);
+  assert.equal(omms[0].COV_REALISM.RULE, OCM.covarianceRule.PooledModel);
+  assert.equal(omms[0].COV_REALISM.CALIBRATION, Uncalibrated);
+  assertSourceNamed(omms[0], recipe);
+  assert.equal(report.objects[0].rows[0].measuredLineage, 'space-track-gp');
+  assert.match(report.objects[0].rows[0].basis, /not measured on spacemapper-aoe/);
 });
 
 test('every regime the model covers gets its stratum; HEO has no model and a set beyond every regime has none; both are reported, not guessed', async () => {
   const sets = [valladoOmm(6251), valladoOmm(28057), valladoOmm(5), valladoOmm(14128), valladoOmm(9880), leoH, beyond];
   const { report, ocms, omms } = await attach(sets);
-  const byKey = new Map(ocms.map((o) => [param(o, 'COV_LABELS') && labels(o)[0].regime, o]));
+  const byKey = new Map(ocms.map((o) => [o.COV_REALISM[0].REGIME, o]));
   const expectRegime = { 'LEO-L': 6251, 'LEO-M': 28057, MEO: 5, GEO: 14128, 'LEO-H': 90101 };
   for (const [regime, id] of Object.entries(expectRegime)) {
     const ocm = byKey.get(regime);
     assert.ok(ocm, `${regime} has an OCM`);
     closeAll(lowerOf(ocm, 0), expectedCovariance(regime, 0), `${regime} covariance`);
-    assert.equal(labels(ocm)[0].calibration, cellOf(regime, 0).calibration);
+    assert.equal(ocm.COV_REALISM[0].CALIBRATION, verdictOf(cellOf(regime, 0)));
     assert.ok(id);
   }
   assert.equal(ocms.length, 5);
@@ -148,10 +153,9 @@ test('every regime the model covers gets its stratum; HEO has no model and a set
   assert.match(reasons['2026-102A'] ?? reasons['NORAD:90102'], /outside-regimes/);
   const heo = omms.find((o) => o.OBJECT_ID === '1977-021A');
   assert.equal(heo.COVARIANCE.length, 0);
-  assert.match(heo.COMMENT, /SDN covariance: unavailable \(no-model-for-regime\)/);
-  assert.equal(ommParam(heo, 'COV_UNAVAILABLE'), 'no-model-for-regime');
-  assert.equal(ommParam(heo, 'COV_RULE'), undefined, 'no rule applied');
-  assert.equal(ommParam(heo, 'SOURCE_ID'), 'celestrak-gp', 'the set still names its source');
+  assert.equal(heo.COV_REALISM, null, 'no covariance, no CVR; the report says why');
+  assert.equal(heo.COMMENT, 'GP_ID 1');
+  assertSourceNamed(heo, recipeFor());
 });
 
 test('the newest set of each object gives the outputs; latestOnly false gives all', async () => {
@@ -169,10 +173,9 @@ test('SGP4-XP sets are published with their source and no covariance until the X
   const xp = omms.find((o) => o.NORAD_CAT_ID === 90103);
   assert.equal(xp.MEAN_ELEMENT_THEORY, OMM.meanElementSource.SGP4XP);
   assert.equal(xp.COVARIANCE.length, 0);
-  assert.match(xp.COMMENT, /unavailable \(sgp4xp-no-propagator-or-error-model\)/);
-  assert.match(xp.COMMENT, /source celestrak-gp, originator CelesTrak/);
-  assert.equal(ommParam(xp, 'COV_UNAVAILABLE'), 'sgp4xp-no-propagator-or-error-model');
-  assert.equal(ommParam(xp, 'SOURCE_ORIGINATOR'), 'CelesTrak');
+  assert.equal(xp.COV_REALISM, null);
+  assertSourceNamed(xp, recipeFor());
+  assert.match(JSON.stringify(report.objects.find((o) => o.object === 'NORAD:90103').notes), /sgp4xp-no-propagator-or-error-model/);
   assert.equal(report.counts.withoutCovariance, 1);
 });
 
@@ -186,7 +189,7 @@ test('rule 1: the operator\'s covariance as supplied beats the model; the OMM ca
   const rows = [0, 1, 2, 3, 4].map((k) => ({ epoch: at(60 * k), x: [...c.gcrfR.map((v, i) => v + 0.1 * k + i), ...c.gcrfV] }));
   const cov = [0, 2, 4].map((k) => ({ epoch: at(60 * k), lower: designed(k) }));
   const operator = operatorOem({ objectId: LEO_M.objectId, name: LEO_M.name, rows, cov, covFrame: 'UVW' });
-  const recipe = recipeFor({ id: 'spacex-starlink', lineage: 'spacex-meme', kind: 'ephemeris', own: false, extra: { maxOperatorRows: 2 } });
+  const recipe = recipeFor({ id: 'spacex-starlink', lineage: 'spacex-meme', kind: 'ephemeris', own: false, licence: 'reproducible', extra: { maxOperatorRows: 2 } });
   const { report, ocms, omms } = await attach([LEO_M], { recipe, operator });
   assert.equal(report.counts.rule1, 1);
   assert.equal(report.counts.rule3 + report.counts.rule4, 0);
@@ -198,14 +201,17 @@ test('rule 1: the operator\'s covariance as supplied beats the model; the OMM ca
   closeAll(ocm.STATE_DATA.slice(6, 12), rows[4].x, 'state at the last covariance epoch', 0);
   assert.equal(ocm.TRAJ_REF_FRAME.NAME, 'GCRF');
   assert.equal(ocm.COV_REF_FRAME.NAME, 'UVW');
-  const label = labels(ocm)[0];
-  assert.equal(label.rule, 1);
-  assert.equal(label.method, 'operator-supplied');
-  assert.equal(label.calibration, 'UNCALIBRATED', 'operator covariance is not measured until E14 S1 reports');
-  assert.equal(ocm.COV_CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
+  assert.equal(ocm.COV_REALISM.length, 2);
+  const cvr = ocm.COV_REALISM[0];
+  assert.equal(cvr.RULE, OCM.covarianceRule.Operator);
+  assert.equal(cvr.CALIBRATION, Uncalibrated, 'operator covariance is not measured until E14 S1 reports');
+  assert.ok(!cvr.MODEL_ID && !cvr.REGIME && Number.isNaN(cvr.MEAN_D2_OVER_3) && cvr.SAMPLES === 0, 'a supplied covariance names no model and no test');
+  assert.equal(ocm.COV_CALIBRATION, Uncalibrated);
+  assertSourceNamed(ocm, recipe);
   // UVW is RTN: the OMM's covariance is the supplied one.
   closeAll(omms[0].COVARIANCE, designed(0), 'OMM covariance', 0);
-  assert.equal(omms[0].ORIGINATOR, 'spacex-starlink originator');
+  assert.equal(omms[0].COV_REALISM.RULE, OCM.covarianceRule.Operator);
+  assertSourceNamed(omms[0], recipe);
 });
 
 test('rule 1: a covariance in the state\'s inertial axes reaches the OMM rotated to RTN', async () => {
@@ -235,7 +241,7 @@ test('rule 1 refuses a covariance frame it cannot rotate, and the model answers 
   const operator = operatorOem({ objectId: LEO_M.objectId, name: LEO_M.name, rows, cov: [{ epoch: at(0), lower: designed(0) }], covFrame: 'ITRF' });
   const { report, ocms } = await attach([LEO_M], { operator, recipe: recipeFor({ id: 'planet-oem', kind: 'ephemeris', own: false, lineage: 'planet-oem' }) });
   assert.equal(report.counts.rule4, 1);
-  assert.equal(labels(ocms[0])[0].rule, 4);
+  assert.equal(ocms[0].COV_REALISM[0].RULE, OCM.covarianceRule.PooledModel);
   assert.match(JSON.stringify(report.objects[0].notes), /covariance frame ITRF is not RTN-family/);
 });
 
@@ -252,14 +258,19 @@ test('rule 2: a fit\'s formal covariance times the realism factor measured for t
   const ocm = ocms[0];
   closeAll(lowerOf(ocm, 0), lower.map((v) => v * 17.04), 'scaled covariance');
   closeAll(ocm.STATE_DATA, x, 'fit state', 0);
-  const label = labels(ocm)[0];
-  assert.equal(label.rule, 2);
-  assert.equal(label.method, 'fit-formal-scaled');
-  assert.equal(label.scaleFactor, 17.04);
-  assert.equal(label.meanD2Over3, 17.04, 'the measured error of the formal covariance, before scaling');
-  assert.equal(label.coverage95, 0.17);
-  assert.equal(label.calibration, 'UNCALIBRATED', 'the scaled covariance has not been tested itself');
-  assert.match(ocm.COV_CALIBRATION_REFERENCE, /orbit-accuracy-experiments E6 test 2026-05-01\.\.2026-09-30: mean d2\/3 17\.040, 95 % coverage 0\.170 \(1000 samples, 5 objects\); formal covariance times 17\.040/);
+  const cvr = ocm.COV_REALISM[0];
+  assert.equal(cvr.RULE, OCM.covarianceRule.ScaledFit);
+  assert.equal(cvr.MODEL_ID, 'slr-hpop-fit');
+  assert.equal(cvr.SCALE_FACTOR, 17.04);
+  assert.equal(cvr.MEAN_D2_OVER_3, 17.04, 'the measured error of the formal covariance, before scaling');
+  assert.equal(cvr.COVERAGE_95, 0.17);
+  assert.deepEqual([cvr.SAMPLES, cvr.OBJECTS], [1000, 5]);
+  assert.equal(cvr.MEASURED_LINEAGE, 'ilrs-slr');
+  assert.equal(cvr.TEST_WINDOW, '2026-05-01/2026-09-30');
+  assert.equal(cvr.CALIBRATION, Uncalibrated, 'the scaled covariance has not been tested itself');
+  assert.equal(cvr.EVIDENCE, 'orbit-accuracy-experiments E6 test');
+  assert.equal(ocm.COV_CALIBRATION_REFERENCE, 'orbit-accuracy-experiments E6 test');
+  assertSourceNamed(ocm, recipe);
   // The OMM carries the scaled covariance in RTN: the fit's TEME axes rotated by the fit state's own RTN.
   const unit = (a) => a.map((v) => v / Math.hypot(...a));
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -280,22 +291,44 @@ test('rule 2 needs a measured factor for the source and class; without one the n
   const { report, ocms } = await attach([leoH], { recipe, fit });
   assert.equal(report.counts.rule2, 0);
   assert.equal(report.counts.rule4, 1);
-  assert.equal(labels(ocms[0])[0].rule, 4);
+  assert.equal(ocms[0].COV_REALISM[0].RULE, OCM.covarianceRule.PooledModel);
   assert.match(JSON.stringify(report.objects[0].notes), /no measured realism factor for source od-fit-source and fit class od-sgp4-fit/);
 });
 
+// ── the CVR's own rule ──
+test('a row is Calibrated by the numbers of its cell: mean d2/3 in [0.8, 1.25], coverage in [0.93, 0.97], from at least 30 samples of 3 objects of the lineage', async () => {
+  // The model file calls the LEO-H cell at 0 days CALIBRATED; each variant changes one of its numbers, and the file's word does not decide.
+  const verdict = async (changed) => {
+    const model = { ...kc, sources: ['celestrak-gp'], pooled: true, cells: kc.cells.map((c) => (c.regime === 'LEO-H' && c.ageIndex === 0 ? { ...c, ...changed } : c)) };
+    const { ocms } = await attach([leoH], { recipe: recipeFor({ extra: { models: [model] } }) });
+    return ocms[0].COV_REALISM[0].CALIBRATION;
+  };
+  assert.equal(await verdict({}), Calibrated);
+  for (const changed of [{ meanD2Over3: 0.8 }, { meanD2Over3: 1.25 }, { coverage95: 0.93 }, { coverage95: 0.97 }, { samples: 30 }, { objects: 3 }]) {
+    assert.equal(await verdict(changed), Calibrated, `${JSON.stringify(changed)} is on the bound`);
+  }
+  for (const changed of [{ meanD2Over3: 0.79 }, { meanD2Over3: 1.26 }, { coverage95: 0.92 }, { coverage95: 0.98 }, { samples: 29 }, { objects: 2 }]) {
+    assert.equal(await verdict(changed), Uncalibrated, `${JSON.stringify(changed)} is past the bound`);
+  }
+});
+
 // ── attribute_maneuvers ──
-test('attribute_maneuvers names the source on every maneuver and keeps what the record had', async () => {
-  const stream = Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', TAGS: ['originator:CelesTrak'] })]);
+test('attribute_maneuvers names the source in the PROVENANCE of every maneuver, keeps what the record had and the detector as its producer', async () => {
+  const detector = 'com.digitalarsenal.analysis.maneuver-detection 0.5.0';
+  const made = Object.assign(new MNV.PVNT(), { PRODUCER: detector });
+  const stream = Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', PROVENANCE: made })]);
   const recipe = recipeFor();
-  const response = await call('attribute_maneuvers', [mnvFrame('maneuvers', stream), json('recipe', { ...recipe, producer: 'SDN catalog pipeline' })]);
+  const response = await call('attribute_maneuvers', [mnvFrame('maneuvers', stream), json('recipe', recipe)]);
   assert.equal(response.statusCode, 0, response.errorMessage);
   const out = records(output(response, 'maneuvers')).map(unpackMnv);
   assert.equal(out.length, 2);
-  assert.deepEqual(out[0].TAGS, ['existing', 'originator:CelesTrak', 'source:celestrak-gp', 'provider:sdn:celestrak-gp', 'licence:redistributable', 'licence-id:celestrak-gp-terms', 'lineage:space-track-gp', 'producer:SDN catalog pipeline']);
-  assert.deepEqual(out[1].TAGS, ['originator:CelesTrak', 'source:celestrak-gp', 'provider:sdn:celestrak-gp', 'licence:redistributable', 'licence-id:celestrak-gp-terms', 'lineage:space-track-gp', 'producer:SDN catalog pipeline'], 'a tag is not repeated');
+  assert.deepEqual(provenanceOf(out[0]), expectedProvenance(recipe, 'SDN catalog pipeline'), 'a record that names no producer gets the recipe\'s');
+  assert.deepEqual(provenanceOf(out[1]), expectedProvenance(recipe, detector), 'the detector stays the producer');
+  for (const m of out) assert.deepEqual(m.TAGS, ['existing'], 'no tag is added');
   assert.equal(out[0].EVENT_START_TIME, '2026-10-01T12:00:00.000Z');
-  assert.equal(reportOf(response).maneuvers, 2);
+  const report = reportOf(response);
+  assert.equal(report.maneuvers, 2);
+  assert.equal(report.source.id, 'celestrak-gp');
 });
 
 test('attribute_maneuvers reads the detector\'s frames, one plain FlatBuffer per event, as well as size-prefixed streams', async () => {
@@ -303,7 +336,7 @@ test('attribute_maneuvers reads the detector\'s frames, one plain FlatBuffer per
   assert.equal(response.statusCode, 0, response.errorMessage);
   const out = records(output(response, 'maneuvers')).map(unpackMnv);
   assert.deepEqual(out.map((m) => m.ID), ['P1', 'P2']);
-  assert.ok(out.every((m) => m.TAGS.includes('source:celestrak-gp') && m.TAGS.includes('existing')));
+  for (const m of out) assertSourceNamed(m, recipeFor());
 });
 
 test('a recipe that does not name the source is refused', async () => {
@@ -314,4 +347,13 @@ test('a recipe that does not name the source is refused', async () => {
   const response = await call('attach_covariance', [ommFrame('elements', stream), alignedOem('states', states), json('recipe', bad)]);
   assert.notEqual(response.statusCode, 0);
   assert.match(response.errorMessage, /recipe\.source\.provider is required/);
+  // The licence class is one of the four the SDS PVN names.
+  for (const [name, value] of Object.entries(PVN_LICENCES)) {
+    const ok = await call('attribute_maneuvers', [mnvFrame('maneuvers', encodeMnv()), json('recipe', recipeFor({ licence: name }))]);
+    assert.equal(ok.statusCode, 0, `${name}: ${ok.errorMessage}`);
+    assert.equal(unpackMnv(records(output(ok, 'maneuvers'))[0]).PROVENANCE.LICENSE_CLASS, value, name);
+  }
+  const unknown = await call('attribute_maneuvers', [mnvFrame('maneuvers', encodeMnv()), json('recipe', recipeFor({ licence: 'public-domain' }))]);
+  assert.notEqual(unknown.statusCode, 0);
+  assert.match(unknown.errorMessage, /licence\.class is reproducible, cite-only, share-alike or non-commercial/);
 });

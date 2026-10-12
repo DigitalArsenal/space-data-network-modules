@@ -3,7 +3,7 @@
   "name": "Source Products Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its label, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV tags. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
+  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its CVR (COV_REALISM) and the source in PROVENANCE, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV PROVENANCE. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
   "capabilities": [],
   "dependencies": [
     {
@@ -13,8 +13,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "minVersion": "0.5.0",
-      "maxVersion": "0.5.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
@@ -142,13 +142,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -163,13 +163,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -230,13 +230,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -248,7 +248,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -259,7 +259,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -402,13 +402,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -423,13 +423,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -490,13 +490,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -508,7 +508,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -519,7 +519,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -630,7 +630,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -641,7 +641,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
         }
       ],
       "outputPorts": [
@@ -681,13 +681,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -702,13 +702,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -769,13 +769,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -787,7 +787,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -798,7 +798,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -989,13 +989,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -1010,13 +1010,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -1077,13 +1077,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -1095,7 +1095,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1106,7 +1106,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -1250,13 +1250,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -1271,13 +1271,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -1338,13 +1338,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -1356,7 +1356,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1367,7 +1367,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -1503,13 +1503,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -1524,13 +1524,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -1591,13 +1591,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -1609,7 +1609,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1620,7 +1620,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -1756,13 +1756,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -1777,13 +1777,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -1844,13 +1844,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -1862,7 +1862,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1873,7 +1873,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -2017,13 +2017,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -2038,13 +2038,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -2105,13 +2105,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -2123,7 +2123,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -2134,7 +2134,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",
@@ -2245,7 +2245,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -2256,7 +2256,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
         }
       ],
       "outputPorts": [
@@ -2296,13 +2296,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -2317,13 +2317,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "covariance_report",
@@ -2384,13 +2384,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "attribute_report",
@@ -2402,7 +2402,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -2413,7 +2413,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         },
         {
           "portId": "detect_report",

@@ -58,15 +58,17 @@ test('the products the flow writes for two sources are integrated: the lower mea
   const selected = alpha.products[0].selected;
   assert.equal(selected.covariance.from, 'ocm');
   assert.equal(selected.covariance.calibration, 'Uncalibrated', 'E14 found only LEO-H at 0 and 0.5 days realistic');
-  assert.equal(selected.covariance.label.rule, 3);
+  const written = unpackOcm(records(celestrak.ocm)[0]).COV_REALISM[0];
+  assert.equal(selected.covariance.label.rule, OCM.covarianceRule.SourceModel);
   assert.equal(selected.covariance.label.regime, 'LEO-L');
-  assert.equal(selected.covariance.label.method, 'e14-s3-kc');
+  assert.equal(selected.covariance.label.modelId, written.MODEL_ID, 'the model the flow named');
+  assert.equal(selected.covariance.label.meanD2Over3, written.MEAN_D2_OVER_3);
 
   // What the integrator read is what the flow wrote.
   const chosen = unpackOmm(records(r.omm)[0]);
-  assert.equal(chosen.ORIGINATOR, 'CelesTrak');
-  assert.equal(chosen.USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === 'SOURCE_ID').PARAM_VALUE, 'celestrak-gp');
-  assert.equal(unpackOcm(records(r.ocm)[0]).USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === 'SOURCE_ID').PARAM_VALUE, 'celestrak-gp');
+  assert.equal(chosen.PROVENANCE.ORIGINATOR, 'CelesTrak', "the source's originator; ORIGINATOR names the message's creator");
+  assert.equal(chosen.PROVENANCE.SOURCE_ID, 'celestrak-gp');
+  assert.equal(unpackOcm(records(r.ocm)[0]).PROVENANCE.SOURCE_ID, 'celestrak-gp');
   assert.equal(OCM.covarianceCalibration.Uncalibrated, unpackOcm(records(r.ocm)[0]).COV_CALIBRATION);
 
   // With the measurements reversed the other source's products come out, covariance with them.

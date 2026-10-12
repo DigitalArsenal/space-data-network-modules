@@ -12,12 +12,13 @@ compared like for like and any one can be shown on its own:
 | State and covariance | `$OCM` | SGP4 epoch states (`analysis/epoch-state`) with the modeled covariance | the operator's covariance as supplied, else the same modeled covariance | the estimate's formal covariance times the measured realism factor |
 | Maneuvers | `$MNV` | `detect_maneuvers` over the set history, SGP4 answering the propagator query port | `compare_ephemerides` (the versions against the planned maneuvers) and the same detector over the history of fitted sets | the detector over the history of fitted sets, when the host supplies several |
 
-Every record names its source: `ORIGINATOR` the source's originator, the
-provider, the licence class and the lineage in `USER_DEFINED_PARAMETERS`
-(`$OCM` and `$OMM`) and `TAGS` (`$MNV`, which has no `ORIGINATOR`). A
-recipe that does not name them is refused. Records of a source without
-reproduction terms are computed on and cited, never republished: the report
-carries the licence of each.
+Every record names its source in `PROVENANCE` (SDS 1.246.0 PVN, on `$OMM`, `$OCM`
+and `$MNV`): `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR` the source's originator,
+`PROVIDER_ID`, `PRODUCER`, `LICENSE_CLASS`, `LICENSE_ID` and `LINEAGE`. The CCSDS
+`ORIGINATOR` of an `$OMM` or `$OCM` names the message's creator, the recipe's
+`producer` (this flow). A recipe that does not name the source is refused. Records of
+a source without reproduction terms (`LICENSE_CLASS` other than Reproducible) are
+computed on and cited, never republished: the report carries the licence of each.
 
 ## Covariance for every object
 
@@ -30,11 +31,12 @@ The first rule that applies, by `analysis/gp-error-model` `attach_covariance`
 4. **Pooled model**: the model pooled over all sources, for a source with none of its own.
 
 Rules 3 and 4 cover every object that has an SGP4 element set in a regime the
-model covers (LEO-L, LEO-M, LEO-H, MEO, GEO). Each row carries its label:
-method, source, regime and age cell, and the held-out verdict for that cell.
-A row is `CALIBRATED` where E14's realism rule passed on the test window for
-the lineage the source belongs to (E14: LEO-H at 0 and 0.5 days); otherwise
-`UNCALIBRATED`, with the cell's measured mean d²/3 and coverage and the reason.
+model covers (LEO-L, LEO-M, LEO-H, MEO, GEO). Each row carries its CVR
+(`COV_REALISM`): the rule, the model, the regime and age cell, and the numbers and
+verdict of that cell's held-out test. A row is `Calibrated` where its numbers pass
+E14's realism rule on the test window for the lineage the source belongs to (E14:
+LEO-H at 0 and 0.5 days); otherwise `Uncalibrated`, with the cell's measured
+mean d²/3 and coverage.
 
 ## Ingress and egress
 
@@ -121,8 +123,9 @@ npm test        # the flow in the SDK's JS flow host, compared byte for byte wit
 
 Each module keeps its own copy of the SDS code it was generated against, with
 internal linkage: the linker keeps one copy of each equal external C++ symbol, and the
-`$OMM` of gp-error-model (release 1.245.0) differs from epoch-state's (1.226.0) in a field
-it writes. Without this the flow wrote the older `$OMM` and dropped the label.
+`$OMM` of gp-error-model (release 1.246.0) differs from epoch-state's (1.226.0) in a field
+it writes. Without this the flow wrote the older `$OMM` and dropped the CVR and the
+source.
 
 The modules' guest-link objects (`dist/guest-link` of `analysis/epoch-state`,
 `analysis/gp-error-model`, `analysis/maneuver-detection`) are built by their own

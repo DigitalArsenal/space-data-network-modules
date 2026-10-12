@@ -9,14 +9,18 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 import {
-  alignedOem, cellOf, encodeMnv, encodeOmm, expectedCovariance, fitOcm, json, leoH, OCM, OEM, OMM, ocmFrame, ommFrame, ommParam, operatorOem, param, recipeFor, records, unpackMnv, unpackOcm,
-  unpackOmm, flatbuffers,
+  alignedOem, assertSourceNamed, cellOf, encodeMnv, encodeOmm, expectedCovariance, expectedProvenance, fitOcm, json, leoH, OCM, OEM, OMM, ocmFrame, ommFrame, operatorOem, provenanceOf, recipeFor, records,
+  unpackMnv, unpackOcm, unpackOmm, flatbuffers,
 } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory, LEO, T0, add, kepler, mul, unit, version as ephemerisVersion, planned as plannedBurn, MNV as MD_MNV } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { FIXTURE as VALLADO, mpeStream, mpeType } from '../../../analysis/epoch-state/tests/fixtures.mjs';
 import { bytesOf, egressBytes, egressJson, flowDocument, flowManifest, framesOf, moduleAt, runFlow } from './flow-harness.mjs';
 
+// The detector is the producer of the maneuvers it writes (its PROVENANCE.PRODUCER), whatever the source.
+const detectorManifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../../analysis/maneuver-detection/plugin-manifest.json', import.meta.url)), 'utf8'));
+const DETECTOR = `${detectorManifest.pluginId} ${detectorManifest.version}`;
+const Calibrated = OCM.covarianceCalibration.Calibrated, Uncalibrated = OCM.covarianceCalibration.Uncalibrated;
 const epoch = moduleAt('analysis/epoch-state');
 const gem = moduleAt('analysis/gp-error-model');
 const detector = moduleAt('analysis/maneuver-detection');
@@ -65,18 +69,21 @@ test('an element-set source: the newest set of an object gets states, a covarian
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
   assert.equal(ocm.STATE_EPOCHS.length, 2);
   assert.equal(ocm.STATE_EPOCHS[0].slice(0, 19), rows.at(-1).EPOCH.slice(0, 19));
-  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
-  assert.equal(label.regime, 'LEO-L');
-  assert.equal(label.rule, 3);
-  assert.equal(label.calibration, cellOf('LEO-L', 0).calibration);
+  const cvr = ocm.COV_REALISM[0];
+  assert.equal(cvr.REGIME, 'LEO-L');
+  assert.equal(cvr.RULE, OCM.covarianceRule.SourceModel);
+  assert.equal(cvr.CALIBRATION, cellOf('LEO-L', 0).calibration === 'CALIBRATED' ? Calibrated : Uncalibrated);
+  assert.equal(ocm.COV_REALISM.length, 2, 'a CVR per row');
+  assertSourceNamed(ocm, recipe);
   [0, 1].forEach((k) => assert.ok(Math.abs(ocm.COVARIANCE_DATA[21 * k] - expectedCovariance('LEO-L', [0, 0.5][k])[0]) < 1e-12));
   const [mmo] = records(egressBytes(egress, 'omm')).map(unpackOmm);
   assert.equal(mmo.NORAD_CAT_ID, 99999);
-  assert.equal(mmo.ORIGINATOR, 'CelesTrak');
-  // The label rides on the $OMM as USER_DEFINED_x keywords. The flow links the modules' objects, so the $OMM the flow writes is
-  // the schema release gp-error-model was built against, not the older one epoch-state was.
-  assert.equal(ommParam(mmo, 'COV_RULE'), '3');
-  assert.equal(JSON.parse(ommParam(mmo, 'COV_LABEL')).regime, 'LEO-L');
+  // The flow links the modules' objects, so the $OMM the flow writes is the schema release gp-error-model was built against, not the
+  // older one epoch-state was: it carries its CVR and its source.
+  assert.equal(mmo.ORIGINATOR, recipe.producer, 'the message\'s creator; the source\'s originator is PROVENANCE.ORIGINATOR');
+  assert.equal(mmo.COV_REALISM.RULE, OCM.covarianceRule.SourceModel);
+  assert.equal(mmo.COV_REALISM.REGIME, 'LEO-L');
+  assertSourceNamed(mmo, recipe);
   assert.equal(egressJson(egress, 'covariance_report').counts.rule3, 1);
 
   // The 1 m/s burn between sets 15 and 16, found through the detector's two passes with SGP4 answering the port.
@@ -84,7 +91,7 @@ test('an element-set source: the newest set of an object gets states, a covarian
   assert.equal(burns.length, 1);
   assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
-  for (const tag of ['originator:CelesTrak', 'source:celestrak-gp', 'provider:sdn:celestrak-gp', 'licence:redistributable', 'lineage:space-track-gp']) assert.ok(burns[0].TAGS.includes(tag), tag);
+  assertSourceNamed(burns[0], recipe, DETECTOR);
   assert.equal(egressJson(egress, 'propagation_report').refused, 0);
 });
 
@@ -117,7 +124,10 @@ test('the GP history archive\'s $MPE records: omm_from_mpe leads, and the produc
   // Every set is published and names its source, however the archive identified it.
   const published = records(egressBytes(egress, 'omm')).map(unpackOmm);
   assert.equal(published.length, VALLADO.cases.length);
-  for (const o of published) assert.equal(o.ORIGINATOR, 'space-track-gp originator');
+  for (const o of published) {
+    assert.equal(o.ORIGINATOR, recipe.producer);
+    assertSourceNamed(o, recipe);
+  }
   assert.equal(published.find((o) => o.NORAD_CAT_ID === 11801)?.OBJECT_ID ?? null, null, 'NORAD:11801 is the NORAD number, not a designator');
 });
 
@@ -162,7 +172,7 @@ async function odFit(plain) {
 test('an ephemeris source: NASA\'s public ISS ephemeris, fitted by analysis/od, gets the pooled model\'s covariance, uncalibrated for a lineage it was not measured on', async () => {
   const { prefixed: ephemeris, plain } = await issOem();
   const fit = await odFit(plain);
-  const recipe = { ...recipeFor({ id: 'nasa-iss-oem', kind: 'ephemeris', lineage: 'nasa-iss-oem', own: false, licence: 'public-domain' }), ages: [0, 1] };
+  const recipe = { ...recipeFor({ id: 'nasa-iss-oem', kind: 'ephemeris', lineage: 'nasa-iss-oem', own: false, licence: 'reproducible' }), ages: [0, 1] };
   const { egress } = await runFlow([frame('fit_omm', 'omm', fit.omm), frame('ephemeris', 'operator', ephemeris), frame('fit_recipe', 'recipe', recipeBytes(recipe))]);
 
   const states = bytesOf(await epoch('derive_omm', [{ ...omm('omm', fit.omm), typeRef: { ...ommFrame('omm', fit.omm).typeRef } }, jsonPort('options', recipeBytes(recipe))]), 'states');
@@ -172,20 +182,22 @@ test('an ephemeris source: NASA\'s public ISS ephemeris, fitted by analysis/od, 
   assert.deepEqual(egressBytes(egress, 'omm'), bytesOf(attach, 'omm'));
 
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  const labels = JSON.parse(param(ocm, 'COV_LABELS'));
-  assert.equal(labels[0].rule, 4, 'NASA\'s ephemeris carries no covariance and no model of its own exists: the pooled model answers');
-  assert.equal(labels[0].regime, 'LEO-L');
-  assert.equal(labels[0].calibration, 'UNCALIBRATED');
-  assert.match(labels[0].basis, /not measured on nasa-iss-oem/);
-  assert.equal(ocm.COV_CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
+  const [cvr] = ocm.COV_REALISM;
+  assert.equal(cvr.RULE, OCM.covarianceRule.PooledModel, 'NASA\'s ephemeris carries no covariance and no model of its own exists: the pooled model answers');
+  assert.equal(cvr.REGIME, 'LEO-L');
+  assert.equal(cvr.CALIBRATION, Uncalibrated);
+  assert.equal(cvr.MEASURED_LINEAGE, 'space-track-gp', 'the cell was measured on Space-Track\'s sets, not NASA\'s');
+  assert.equal(ocm.COV_CALIBRATION, Uncalibrated);
   assert.equal(ocm.METADATA.OBJECT_DESIGNATOR, '25544');
-  assert.equal(param(ocm, 'LICENCE_CLASS'), 'public-domain');
+  assertSourceNamed(ocm, recipe);
   const report = egressJson(egress, 'covariance_report');
   assert.match(JSON.stringify(report.objects[0].notes), /the operator ephemeris carries no covariance/);
   assert.equal(report.counts.rule4, 1);
   const [fitted] = records(egressBytes(egress, 'omm')).map(unpackOmm);
   assert.equal(fitted.NORAD_CAT_ID, 25544);
-  assert.equal(fitted.ORIGINATOR, 'nasa-iss-oem originator', 'the record names its source, not the fit that produced it');
+  assert.equal(fitted.ORIGINATOR, recipe.producer);
+  assertSourceNamed(fitted, recipe);
+  assert.equal(provenanceOf(fitted).SOURCE_ID, 'nasa-iss-oem', 'the record names its source, not the fit that produced it');
 });
 
 test('an ephemeris source with covariance: the operator\'s is rule 1; a planned burn is checked against the next version and attributed', async () => {
@@ -211,14 +223,13 @@ test('an ephemeris source with covariance: the operator\'s is rule 1; a planned 
     frame('ephemeris_versions', 'versions', after), frame('planned_maneuvers', 'planned', planned), frame('fit_recipe', 'recipe', recipeBytes(recipe))]);
 
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
-  assert.equal(label.rule, 1);
-  assert.equal(label.method, 'operator-supplied');
+  assert.equal(ocm.COV_REALISM[0].RULE, OCM.covarianceRule.Operator);
+  assertSourceNamed(ocm, recipe);
   assert.deepEqual(ocm.COVARIANCE_DATA, lower, 'the operator\'s covariance, as supplied');
   const [executed] = records(egressBytes(egress, 'mnv')).map(unpackMnv);
   assert.equal(executed.STATUS, MD_MNV.maneuverStatus.EXECUTED);
   assert.ok(executed.DELTA_VEL_V > 0);
-  for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:redistributable']) assert.ok(executed.TAGS.includes(tag), tag);
+  assertSourceNamed(executed, recipe, DETECTOR);
   assert.equal(egressJson(egress, 'compare_report').method, 'compare_ephemerides');
 });
 
@@ -235,12 +246,12 @@ test('an ephemeris source\'s history of fitted sets is screened in the same two 
   assert.equal(burns.length, 1);
   assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
-  for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:reproducible', 'lineage:spacex-meme']) assert.ok(burns[0].TAGS.includes(tag), tag);
+  assertSourceNamed(burns[0], recipe, DETECTOR);
 
   // The newest fitted set alone is the product's element set: one $OCM, the pooled model's covariance.
   const ocms = records(egressBytes(egress, 'ocm')).map(unpackOcm);
   assert.equal(ocms.length, 1);
-  assert.equal(JSON.parse(param(ocms[0], 'COV_LABELS'))[0].rule, 4);
+  assert.equal(ocms[0].COV_REALISM[0].RULE, OCM.covarianceRule.PooledModel);
 });
 
 // ── an observation source ──
@@ -248,7 +259,7 @@ test('an observation source: the fit\'s formal covariance times the measured rea
   const x = [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75];
   const lower = Array.from({ length: 21 }, (_, i) => (i === 0 || i === 2 || i === 5 ? 1e-6 : i === 9 || i === 14 || i === 20 ? 1e-12 : 0));
   const realism = [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }];
-  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit', licence: 'cc-by-4.0', extra: { realism } });
+  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit', licence: 'reproducible', extra: { realism } });
   const fit = fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x, lower });
   const { egress } = await runFlow([frame('fit_omm', 'omm', encodeOmm(leoH)), frame('fit', 'fit', fit), frame('fit_recipe', 'recipe', recipeBytes(recipe))]);
   const states = bytesOf(await epoch('derive_omm', [omm('omm', encodeOmm(leoH)), jsonPort('options', recipeBytes(recipe))]), 'states');
@@ -256,11 +267,11 @@ test('an observation source: the fit\'s formal covariance times the measured rea
   assert.deepEqual(egressBytes(egress, 'ocm'), bytesOf(attach, 'ocm'));
   assert.deepEqual(egressBytes(egress, 'omm'), bytesOf(attach, 'omm'));
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
-  assert.equal(label.rule, 2);
-  assert.equal(label.scaleFactor, 17.04);
-  assert.equal(label.meanD2Over3, 17.04);
-  assert.equal(label.calibration, 'UNCALIBRATED');
+  const [cvr] = ocm.COV_REALISM;
+  assert.equal(cvr.RULE, OCM.covarianceRule.ScaledFit);
+  assert.equal(cvr.SCALE_FACTOR, 17.04);
+  assert.equal(cvr.MEAN_D2_OVER_3, 17.04);
+  assert.equal(cvr.CALIBRATION, Uncalibrated);
   assert.ok(Math.abs(ocm.COVARIANCE_DATA[0] - 1e-6 * 17.04) < 1e-18);
-  assert.equal(param(ocm, 'LICENCE_CLASS'), 'cc-by-4.0');
+  assertSourceNamed(ocm, recipe);
 });

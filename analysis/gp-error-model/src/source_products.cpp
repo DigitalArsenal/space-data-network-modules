@@ -8,8 +8,8 @@
 //   operator  $OEM   optional: the operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES), or
 //             $OCM   a fit's state and formal covariance (COVARIANCE_DATA)
 //   recipe    JSON   the source's attribution, the models and their held-out verdicts, the measured realism factors
-//   -> ocm    $OCM   state and covariance per object, with the covariance's label
-//      omm    $OMM   the element set with its COVARIANCE, and the source and the label in USER_DEFINED_PARAMETERS
+//   -> ocm    $OCM   state and covariance per object: PROVENANCE (PVN) names the source, COV_REALISM holds one CVR per covariance epoch
+//      omm    $OMM   the element set with its COVARIANCE, its PROVENANCE and the CVR of the row the covariance is of (COV_REALISM)
 //      report JSON   per object: the rule that applied, why the earlier rules did not, every row's cell and verdict
 //
 // The first rule that applies gives the covariance of an object's product:
@@ -19,13 +19,14 @@
 //   3  the source's own model of its element sets' error by regime and age (E14 S3-KC)
 //   4  the model pooled over all sources, for a source with no model of its own
 // Rules 3 and 4 cover every object that has an SGP4 element set in a regime the model covers.
-// A covariance is labeled CALIBRATED only where the model's cell was REALISTIC on E14's held-out window for the
-// lineage the source belongs to (mean d^2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97]); everywhere else it is
-// UNCALIBRATED with the cell's measured mean d^2/3 and coverage, or without them for a source never measured.
+// A covariance's CVR is Calibrated only where the numbers of its cell pass the rule on the held-out window, measured on
+// the lineage the source belongs to (mean d^2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97], from at least 30 samples
+// of at least 3 objects); everywhere else it is Uncalibrated with the cell's numbers, or without them for a source never
+// measured. The verdict is computed from the numbers, never read from the model file.
 //
 // attribute_maneuvers
-//   maneuvers $MNV, recipe JSON -> maneuvers $MNV: every record names its source in TAGS (the schema has no
-//   ORIGINATOR), and the report counts them.
+//   maneuvers $MNV, recipe JSON -> maneuvers $MNV: every record names its source in PROVENANCE (a PRODUCER the record
+//   already names, the detector, stays), and the report counts them.
 //
 // Errors are returned, not thrown: the module is built without exceptions.
 
@@ -36,6 +37,8 @@ using namespace covreal;
 
 constexpr size_t kMaxRecordsPerPort = 400000;
 constexpr double kDay = 86400.0;
+// The software that made a record, when the recipe names none.
+constexpr const char* kDefaultProducer = "SDN catalog pipeline";
 
 // ── small utilities ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -48,17 +51,6 @@ bool contains(const std::vector<std::string>& list, const std::string& value) {
   return std::find(list.begin(), list.end(), value) != list.end();
 }
 Json finite_or_null(double x) { return std::isfinite(x) ? Json(x) : Json(nullptr); }
-std::string stat(double x) {
-  if (!std::isfinite(x)) return "n/a";
-  char b[40];
-  std::snprintf(b, sizeof b, std::fabs(x) < 1000 ? "%.3f" : "%.3g", x);
-  return b;
-}
-std::string number_text(double x) {
-  char b[40];
-  std::snprintf(b, sizeof b, "%g", x);
-  return b;
-}
 std::string sha256_hex(const std::vector<uint8_t>& bytes) {
   ephem::Sha256 h;
   h.update(bytes.data(), bytes.size());
@@ -79,9 +71,10 @@ std::string string_list(const Json& j, const char* key, std::vector<std::string>
 
 struct Attribution {
   std::string id, kind, lineage, originator, provider, fit_class, licence_class, licence_id;
+  pvnSourceKind source_kind = pvnSourceKind::Unspecified;
+  pvnLicenseClass licence = pvnLicenseClass::Unspecified;
 };
 struct Verdict {
-  bool realistic = false;
   std::string decision;
   double horizon = NAN, mean_d2 = NAN, coverage = NAN;
   uint64_t samples = 0, objects = 0;
@@ -98,14 +91,12 @@ struct Realism {
   std::string cls, evidence, window;
   double factor = NAN, mean_d2 = NAN, coverage = NAN;
   uint64_t samples = 0, objects = 0;
-  bool scaled_realistic = false;  // the scaled covariance itself passed a held-out test
 };
 struct Recipe {
   Attribution a;
-  std::string producer = "SDN catalog pipeline", created;
+  std::string producer = kDefaultProducer, created;
   bool latest_only = true;
   size_t max_operator_rows = 8;
-  std::string operator_calibration = "UNCALIBRATED", operator_evidence = "operator covariance as supplied; not measured against independent orbits";
   std::vector<Model> models;
   std::vector<Realism> realism;
 };
@@ -124,10 +115,18 @@ std::string read_attribution(const Json& j, Attribution* a) {
     a->licence_id = json_string(s["licence"], "id");
   }
   if (a->id.empty()) return "recipe.source.id is required.";
-  if (a->kind != "element-set" && a->kind != "ephemeris" && a->kind != "observation") return "recipe.source.kind is element-set, ephemeris or observation.";
+  if (a->kind == "element-set") a->source_kind = pvnSourceKind::ElementSet;
+  else if (a->kind == "ephemeris") a->source_kind = pvnSourceKind::Ephemeris;
+  else if (a->kind == "observation") a->source_kind = pvnSourceKind::Observation;
+  else return "recipe.source.kind is element-set, ephemeris or observation.";
   if (a->originator.empty()) return "recipe.source.originator is required: every record names its source.";
   if (a->provider.empty()) return "recipe.source.provider is required: every record names its publishing provider.";
   if (a->licence_class.empty()) return "recipe.source.licence.class is required: every record carries its source's licence class.";
+  if (a->licence_class == "reproducible") a->licence = pvnLicenseClass::Reproducible;
+  else if (a->licence_class == "cite-only") a->licence = pvnLicenseClass::CiteOnly;
+  else if (a->licence_class == "share-alike") a->licence = pvnLicenseClass::ShareAlike;
+  else if (a->licence_class == "non-commercial") a->licence = pvnLicenseClass::NonCommercial;
+  else return "recipe.source.licence.class is reproducible, cite-only, share-alike or non-commercial.";
   if (a->lineage.empty()) a->lineage = a->id;
   return {};
 }
@@ -156,7 +155,6 @@ std::string read_model(const Json& j, Model* m) {
         return "each cell needs integer regimeIndex and ageIndex.";
       Verdict v;
       v.decision = json_string(c, "decision");
-      v.realistic = json_string(c, "calibration") == "CALIBRATED";
       v.horizon = json_number(c, "horizonDays", NAN);
       v.mean_d2 = json_number(c, "meanD2Over3", NAN);
       v.coverage = json_number(c, "coverage95", NAN);
@@ -179,14 +177,6 @@ std::string read_recipe(const Json& j, Recipe* r) {
   if (j.contains("maxOperatorRows")) {
     if (!j["maxOperatorRows"].is_number_unsigned() || j["maxOperatorRows"].get<size_t>() < 1) return "maxOperatorRows is a positive integer.";
     r->max_operator_rows = j["maxOperatorRows"].get<size_t>();
-  }
-  if (j.contains("operator") && j["operator"].is_object()) {
-    const std::string c = json_string(j["operator"], "calibration");
-    if (!c.empty()) {
-      if (c != "CALIBRATED" && c != "UNCALIBRATED") return "operator.calibration is CALIBRATED or UNCALIBRATED.";
-      r->operator_calibration = c;
-    }
-    if (!json_string(j["operator"], "evidence").empty()) r->operator_evidence = json_string(j["operator"], "evidence");
   }
   if (j.contains("models")) {
     if (!j["models"].is_array()) return "models is an array.";
@@ -213,7 +203,6 @@ std::string read_recipe(const Json& j, Recipe* r) {
       s.objects = static_cast<uint64_t>(std::max(0.0, json_number(x, "objects", 0)));
       s.evidence = json_string(x, "evidence");
       s.window = json_string(x, "window");
-      s.scaled_realistic = x.contains("scaledDecision") && x["scaledDecision"].is_string() && x["scaledDecision"].get<std::string>() == "REALISTIC";
       r->realism.push_back(std::move(s));
     }
   }
@@ -224,12 +213,21 @@ std::string read_recipe(const Json& j, Recipe* r) {
 
 struct Label {
   int rule = 0;
-  std::string method, model_id, regime, verdict, calibration, basis, window, evidence;
+  std::string method, model_id, regime, verdict, calibration, basis, window, evidence, measured_lineage;
   int age_index = -1;
   double age_days = NAN, horizon = NAN, mean_d2 = NAN, coverage = NAN, scale = NAN;
   uint64_t samples = 0, objects = 0;
   bool calibrated() const { return calibration == "CALIBRATED"; }
 };
+
+// The CVR's own rule for its verdict: Calibrated when mean d^2/3 lies in [0.8, 1.25] and the 95 % coverage in
+// [0.93, 0.97], from at least 30 samples of at least 3 objects of the lineage the covariance's source has; Uncalibrated
+// otherwise, a cell never measured included. The verdict follows from the numbers beside it.
+std::string verdict_of(const Label& l, bool measured_here) {
+  const bool passed = measured_here && std::isfinite(l.mean_d2) && std::isfinite(l.coverage) && l.mean_d2 >= 0.8 && l.mean_d2 <= 1.25 &&
+                      l.coverage >= 0.93 && l.coverage <= 0.97 && l.samples >= 30 && l.objects >= 3;
+  return passed ? "CALIBRATED" : "UNCALIBRATED";
+}
 
 Json label_json(const Label& l) {
   Json j = {{"rule", l.rule}, {"method", l.method}, {"calibration", l.calibration}, {"basis", l.basis}};
@@ -245,22 +243,8 @@ Json label_json(const Label& l) {
   if (std::isfinite(l.scale)) j["scaleFactor"] = l.scale;
   if (!l.window.empty()) j["window"] = l.window;
   if (!l.evidence.empty()) j["evidence"] = l.evidence;
+  if (!l.measured_lineage.empty()) j["measuredLineage"] = l.measured_lineage;
   return j;
-}
-
-// One line, the evidence of a row's label as the experiments write it.
-std::string reference_text(const Label& l) {
-  std::string t;
-  if (!l.evidence.empty()) t += l.evidence + (l.window.empty() ? "" : " " + l.window) + ": ";
-  if (!l.regime.empty()) t += l.regime + " " + number_text(std::isfinite(l.horizon) ? l.horizon : l.age_days) + " d, ";
-  if (std::isfinite(l.mean_d2)) {
-    t += "mean d2/3 " + stat(l.mean_d2) + ", 95 % coverage " + stat(l.coverage) + " (" + std::to_string(l.samples) + " samples, " +
-         std::to_string(l.objects) + " objects)";
-  }
-  if (std::isfinite(l.scale)) t += "; formal covariance times " + stat(l.scale);
-  if (!l.calibrated() && !l.verdict.empty()) t += "; " + l.verdict;
-  if (!l.basis.empty()) t += (t.empty() ? "" : "; ") + l.basis;
-  return t;
 }
 
 // ── inputs ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -586,6 +570,7 @@ struct Lookup {
   int regime = -1, age_index = -1;
   std::string regime_id;
   std::array<double, 21> cov{};
+  double scale = NAN;  // the factor the model's covariance was multiplied by, when it has one
 };
 Lookup model_lookup(const Model& m, double alt_km, double ecc, double age_days) {
   Lookup out;
@@ -613,8 +598,10 @@ Lookup model_lookup(const Model& m, double alt_km, double ecc, double age_days) 
   }
   double k2 = 1.0;
   if (std::any_of(have_factor.begin(), have_factor.end(), [](bool b) { return b; }) &&
-      interpolate_bins(o.ages, have_factor, age_days, [&](int i, size_t) { return m.sm.factor.find({out.regime, i})->second; }, 1, &factor))
+      interpolate_bins(o.ages, have_factor, age_days, [&](int i, size_t) { return m.sm.factor.find({out.regime, i})->second; }, 1, &factor)) {
     k2 = factor[0];
+    out.scale = k2;
+  }
   for (int k = 0; k < 21; ++k) out.cov[k] = c21[k] * k2;
   return out;
 }
@@ -635,10 +622,12 @@ Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk,
   l.regime = lk.regime_id;
   l.age_index = lk.age_index;
   l.age_days = age_days;
+  l.scale = lk.scale;
   l.window = m.window;
   l.evidence = m.evidence;
   const auto it = m.cells.find({lk.regime, lk.age_index});
   const bool measured_here = contains(m.lineages, r.a.lineage);
+  l.measured_lineage = measured_here ? r.a.lineage : (m.lineages.empty() ? std::string() : m.lineages.front());
   if (it != m.cells.end()) {
     const Verdict& v = it->second;
     l.horizon = v.horizon;
@@ -647,14 +636,12 @@ Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk,
     l.coverage = v.coverage;
     l.samples = v.samples;
     l.objects = v.objects;
-    if (measured_here && v.realistic) {
-      l.calibration = "CALIBRATED";
+    l.calibration = verdict_of(l, measured_here);
+    if (l.calibrated()) {
       l.basis = "the cell passed the realism rule on the held-out window for " + r.a.lineage;
     } else if (measured_here) {
-      l.calibration = "UNCALIBRATED";
       l.basis = "the cell did not pass the realism rule on the held-out window for " + r.a.lineage;
     } else {
-      l.calibration = "UNCALIBRATED";
       l.basis = "not measured on " + r.a.lineage + "; the cell's numbers are the model's own lineage (" +
                 (m.lineages.empty() ? std::string("unstated") : m.lineages.front()) + ")";
     }
@@ -761,9 +748,8 @@ bool operator_rule(const Recipe& r, const Block& b, Product* p) {
     o.cov = c.c;
     o.label.rule = 1;
     o.label.method = "operator-supplied";
-    o.label.calibration = r.operator_calibration;
-    o.label.basis = r.operator_evidence;
-    o.label.evidence = r.operator_evidence;
+    o.label.calibration = "UNCALIBRATED";
+    o.label.basis = "operator covariance as supplied; not measured against independent orbits";
     p->rows.push_back(o);
   }
   if (unmatched) p->notes.push_back({{"rule", 1}, {"reason", std::to_string(unmatched) + " covariance epoch(s) without a state at that epoch, or not finite"}});
@@ -806,6 +792,7 @@ bool fit_rule(const Recipe& r, const Block& b, Product* p) {
     for (int k = 0; k < 21; ++k) o.cov[k] = c.c[k] * hit->factor;
     o.label.rule = 2;
     o.label.method = "fit-formal-scaled";
+    o.label.model_id = hit->cls;
     o.label.scale = hit->factor;
     o.label.mean_d2 = hit->mean_d2;
     o.label.coverage = hit->coverage;
@@ -814,9 +801,12 @@ bool fit_rule(const Recipe& r, const Block& b, Product* p) {
     o.label.window = hit->window;
     o.label.evidence = hit->evidence;
     o.label.verdict = "formal covariance, before scaling";
-    o.label.calibration = hit->scaled_realistic ? "CALIBRATED" : "UNCALIBRATED";
-    o.label.basis = hit->scaled_realistic ? "the scaled covariance passed the realism rule on held-out data"
-                                          : "scaled by the factor measured on held-out data; the scaled covariance has not been tested itself";
+    // The factor was measured for this source when the entry names it; an entry for every source ("*") says nothing of its lineage.
+    const bool measured_here = contains(hit->sources, r.a.id);
+    if (measured_here) o.label.measured_lineage = r.a.lineage;
+    o.label.calibration = verdict_of(o.label, measured_here);
+    o.label.basis = o.label.calibrated() ? "the covariance passed the realism rule on held-out data"
+                                         : "scaled by the factor measured on held-out data; the scaled covariance has not been tested itself";
     p->rows.push_back(o);
   }
   if (p->rows.empty()) return false;
@@ -882,41 +872,51 @@ bool all_calibrated(const Product& p) {
     if (!row.label.calibrated()) return false;
   return true;
 }
-std::string param(const Attribution& a, const Recipe& r, const char* name) {
-  const std::string n = name;
-  if (n == "SOURCE_ID") return a.id;
-  if (n == "SOURCE_KIND") return a.kind;
-  if (n == "SOURCE_ORIGINATOR") return a.originator;
-  if (n == "SOURCE_PROVIDER") return a.provider;
-  if (n == "SOURCE_LINEAGE") return a.lineage;
-  if (n == "LICENCE_CLASS") return a.licence_class;
-  if (n == "LICENCE_ID") return a.licence_id;
-  return r.producer;
+// The source a record names, as the report states it.
+Json source_json(const Attribution& a) {
+  return {{"id", a.id}, {"kind", a.kind}, {"lineage", a.lineage}, {"originator", a.originator}, {"provider", a.provider},
+          {"licence", {{"class", a.licence_class}, {"id", a.licence_id}}}};
 }
-void add_param(OCMT* ocm, const std::string& name, const std::string& value) {
-  auto p = std::make_unique<UserDefinedParametersT>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  ocm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
+
+// PROVENANCE (PVN): the source, the provider that published it, the software that made the record, the source's terms.
+std::unique_ptr<PVNT> provenance_of(const Attribution& a, const std::string& producer) {
+  auto p = std::make_unique<PVNT>();
+  p->SOURCE_ID = a.id;
+  p->SOURCE_KIND = a.source_kind;
+  p->ORIGINATOR = a.originator;
+  p->PROVIDER_ID = a.provider;
+  p->PRODUCER = producer;
+  p->LICENSE_CLASS = a.licence;
+  p->LICENSE_ID = a.licence_id;
+  p->LINEAGE = a.lineage;
+  return p;
 }
-// The same facts on an $OMM, as the USER_DEFINED_x keywords of CCSDS 502.0-B-3 (SDS 1.245.0: OMM USER_DEFINED_PARAMETERS).
-void add_param(OMMT* omm, const std::string& name, const std::string& value) {
-  auto p = std::make_unique<OMMUserDefinedParameterT>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
+
+// The window as an ISO 8601 interval: the model file writes start..end, the CVR start/end.
+std::string interval_of(std::string window) {
+  const size_t at = window.find("..");
+  if (at != std::string::npos && at > 0 && at + 2 < window.size()) window.replace(at, 2, "/");
+  return window;
 }
-// The facts about the source every record carries, whichever record it is (the $OCM adds PRODUCT and the frame).
-template <class Record>
-void add_source_params(Record* record, const Recipe& r) {
-  add_param(record, "SOURCE_ID", r.a.id);
-  add_param(record, "SOURCE_KIND", r.a.kind);
-  add_param(record, "SOURCE_ORIGINATOR", r.a.originator);
-  add_param(record, "SOURCE_PROVIDER", r.a.provider);
-  add_param(record, "SOURCE_LINEAGE", r.a.lineage);
-  add_param(record, "LICENCE_CLASS", r.a.licence_class);
-  if (!r.a.licence_id.empty()) add_param(record, "LICENCE_ID", r.a.licence_id);
-  add_param(record, "PRODUCER", r.producer);
+
+// One row's label as a CVR: the rule, the model or factor it came from, the cell and the numbers of its test, the verdict.
+std::unique_ptr<CVRT> realism_of(const Label& l) {
+  auto c = std::make_unique<CVRT>();
+  c->RULE = static_cast<covarianceRule>(l.rule);  // 1 to 4: Operator, ScaledFit, SourceModel, PooledModel
+  c->MODEL_ID = l.model_id;
+  c->REGIME = l.regime;
+  c->AGE_DAYS = l.age_days;
+  c->HORIZON_DAYS = l.horizon;
+  c->MEASURED_LINEAGE = l.measured_lineage;
+  c->TEST_WINDOW = interval_of(l.window);
+  c->MEAN_D2_OVER_3 = l.mean_d2;
+  c->COVERAGE_95 = l.coverage;
+  c->SAMPLES = static_cast<uint32_t>(std::min<uint64_t>(l.samples, UINT32_MAX));
+  c->OBJECTS = static_cast<uint32_t>(std::min<uint64_t>(l.objects, UINT32_MAX));
+  c->SCALE_FACTOR = l.scale;
+  c->CALIBRATION = l.calibrated() ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
+  c->EVIDENCE = l.evidence;
+  return c;
 }
 
 std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const std::string& name, const std::string& object_id,
@@ -925,10 +925,8 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
   ocm->HEADER = std::make_unique<HeaderT>();
   ocm->HEADER->CCSDS_OCM_VERS = "3.0";
   ocm->HEADER->CREATION_DATE = r.created;
-  ocm->HEADER->ORIGINATOR = r.a.originator;
+  ocm->HEADER->ORIGINATOR = r.producer;  // the message's creator; the source's originator is PROVENANCE.ORIGINATOR
   ocm->HEADER->MESSAGE_ID = r.a.id + "/" + key + "/" + p.rows.front().text + "/" + p.method;
-  ocm->HEADER->COMMENT.push_back("State and covariance of " + key + " from " + r.a.id + ": " + p.kind + "; covariance by rule " +
-                                 std::to_string(p.rule) + " (" + p.method + "); " + (all_calibrated(p) ? "CALIBRATED" : "UNCALIBRATED") + ".");
   ocm->METADATA = std::make_unique<MetadataT>();
   MetadataT& meta = *ocm->METADATA;
   meta.OBJECT_NAME = name;
@@ -955,57 +953,37 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
     ocm->STATE_EPOCHS.push_back(row.text);
     for (int k = 0; k < 6; ++k) ocm->STATE_DATA.push_back(row.x[k]);
     for (int k = 0; k < 21; ++k) ocm->COVARIANCE_DATA.push_back(row.has_cov ? row.cov[k] : NAN);
+    ocm->COV_REALISM.push_back(realism_of(row.label));
   }
   ocm->COV_ORDERING = covarianceOrdering::LTM;
   ocm->COV_SIZE = 6;
   ocm->COV_UNITS = {"km**2", "km**2", "km**2", "km**2/s**2", "km**2/s**2", "km**2/s**2"};
+  // Calibrated only when every row's CVR is; the evidence is the first row's (a product's rows share their model's).
   ocm->COV_CALIBRATION = all_calibrated(p) ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
-  std::string reference = reference_text(p.rows.front().label);
-  if (p.rows.size() > 1) reference += " [row 1 of " + std::to_string(p.rows.size()) + "; every row's label is in COV_LABELS]";
-  ocm->COV_CALIBRATION_REFERENCE = reference;
+  ocm->COV_CALIBRATION_REFERENCE = p.rows.front().label.evidence;
   // Where the state came from and how the covariance was made.
   ocm->ORBIT_DETERMINATION = std::make_unique<OrbitDeterminationT>();
   ocm->ORBIT_DETERMINATION->OD_ID = r.a.id + "/" + key;
   ocm->ORBIT_DETERMINATION->OD_METHOD = p.kind;
   ocm->ORBIT_DETERMINATION->OD_ALGORITHM = p.method;
   ocm->ORBIT_DETERMINATION->OD_COV_REDUCTION = p.method;
-  add_source_params(ocm.get(), r);
-  add_param(ocm.get(), "PRODUCT", p.kind);
-  add_param(ocm.get(), "COV_RULE", std::to_string(p.rule));
-  add_param(ocm.get(), "COV_METHOD", p.method);
-  add_param(ocm.get(), "COV_FRAME", p.cov_frame_name.empty() ? p.state_frame_name : p.cov_frame_name);
-  add_param(ocm.get(), "COV_LABELS", rows_labels(p).dump());
+  ocm->PROVENANCE = provenance_of(r.a, r.producer);
   flatbuffers::FlatBufferBuilder fbb(2048);
   FinishSizePrefixedOCMBuffer(fbb, CreateOCM(fbb, ocm.get()));
   return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
 }
 
-// The element set as published, with the covariance of one of the product's rows (in RTN axes). The source and the label are
-// USER_DEFINED_PARAMETERS (the label of the row the covariance is of is COV_LABEL, as in the $OCM's COV_LABELS) and are
-// read aloud in COMMENT.
-std::vector<uint8_t> build_omm(const Recipe& r, const SetRec& s, const Product* p, size_t row, const std::array<double, 21>* rtn,
-                               const std::string& why) {
+// The element set as published, with the covariance of one of the product's rows (in RTN axes) and that row's CVR. The
+// message's creator is the producer; the source is PROVENANCE. A set with no covariance carries no CVR, and the report says why.
+std::vector<uint8_t> build_omm(const Recipe& r, const SetRec& s, const Product* p, size_t row, const std::array<double, 21>* rtn) {
   std::unique_ptr<OMMT> omm((s.prefixed ? GetSizePrefixedOMM(s.bytes.data()) : GetOMM(s.bytes.data()))->UnPack());
-  omm->ORIGINATOR = r.a.originator;
-  add_source_params(omm.get(), r);
-  std::string note = "SDN covariance: ";
+  omm->ORIGINATOR = r.producer;
+  omm->PROVENANCE = provenance_of(r.a, r.producer);
   if (p && rtn) {
-    const Label& label = p->rows[row].label;
-    note += "rule " + std::to_string(p->rule) + " " + p->method + "; " + (label.calibrated() ? "CALIBRATED" : "UNCALIBRATED") + "; " + reference_text(label);
     omm->COVARIANCE.assign(rtn->begin(), rtn->end());
     omm->COV_REFERENCE_FRAME = std::make_unique<RFMT>(*rtn_frame());
-    add_param(omm.get(), "COV_RULE", std::to_string(p->rule));
-    add_param(omm.get(), "COV_METHOD", p->method);
-    add_param(omm.get(), "COV_CALIBRATION", label.calibrated() ? "CALIBRATED" : "UNCALIBRATED");
-    Json l = label_json(label);
-    l["epoch"] = p->rows[row].text;
-    add_param(omm.get(), "COV_LABEL", l.dump());
-  } else {
-    note += "unavailable (" + why + ")";
-    add_param(omm.get(), "COV_UNAVAILABLE", why);
+    omm->COV_REALISM = realism_of(p->rows[row].label);
   }
-  note += " | source " + r.a.id + ", originator " + r.a.originator + ", provider " + r.a.provider + ", licence " + r.a.licence_class;
-  omm->COMMENT = omm->COMMENT.empty() ? note : omm->COMMENT + " | " + note;
   flatbuffers::FlatBufferBuilder fbb(1024);
   FinishSizePrefixedOMMBuffer(fbb, CreateOMM(fbb, omm.get()));
   return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
@@ -1093,7 +1071,7 @@ extern "C" int attach_covariance() {
         if (std::fabs(seconds_between(s->epoch, product.rows[i].t)) < std::fabs(seconds_between(s->epoch, product.rows[nearest].t))) nearest = i;
       std::array<double, 21> rtn{};
       const bool have_rtn = rtn_of(product.axes, product.rows[nearest], &rtn);
-      const std::vector<uint8_t> omm = build_omm(recipe, *s, &product, nearest, have_rtn ? &rtn : nullptr, "the covariance's axes cannot be rotated to RTN");
+      const std::vector<uint8_t> omm = build_omm(recipe, *s, &product, nearest, have_rtn ? &rtn : nullptr);
       omm_stream.insert(omm_stream.end(), omm.begin(), omm.end());
       entry["ommSha256"] = sha256_hex(omm);
       const std::vector<uint8_t> ocm = build_ocm(recipe, s->key, s->name, s->object_id, s->norad, product);
@@ -1109,8 +1087,7 @@ extern "C" int attach_covariance() {
       entry["rows"] = rows_labels(product);
     } else {
       ++uncovered;
-      const std::string why = product.notes.empty() ? std::string("no rule applied") : product.notes.back().value("reason", std::string("no rule applied"));
-      const std::vector<uint8_t> omm = build_omm(recipe, *s, nullptr, 0, nullptr, why);
+      const std::vector<uint8_t> omm = build_omm(recipe, *s, nullptr, 0, nullptr);
       omm_stream.insert(omm_stream.end(), omm.begin(), omm.end());
       entry["ommSha256"] = sha256_hex(omm);
       entry["rule"] = nullptr;
@@ -1133,8 +1110,7 @@ extern "C" int attach_covariance() {
     if (!used_operator.count(i)) unmatched["operator"].push_back({{"object", operators[i].key}});
 
   const Json report = {{"version", 1},
-                       {"source", {{"id", recipe.a.id}, {"kind", recipe.a.kind}, {"lineage", recipe.a.lineage}, {"originator", recipe.a.originator},
-                                   {"provider", recipe.a.provider}, {"licence", {{"class", recipe.a.licence_class}, {"id", recipe.a.licence_id}}}}},
+                       {"source", source_json(recipe.a)},
                        {"counts", {{"elementSets", sets.size()}, {"objects", objects.size()}, {"rule1", by_rule[1]}, {"rule2", by_rule[2]},
                                    {"rule3", by_rule[3]}, {"rule4", by_rule[4]}, {"withoutCovariance", uncovered},
                                    {"calibratedRows", calibrated_rows}, {"uncalibratedRows", uncalibrated_rows},
@@ -1158,20 +1134,18 @@ extern "C" int attribute_maneuvers() {
   if (recipe.is_discarded()) return fail("invalid-recipe", "recipe must be JSON.");
   std::string error = read_attribution(recipe, &a);
   if (!error.empty()) return fail("invalid-recipe", error);
+  std::string producer = json_string(recipe, "producer");
+  if (producer.empty()) producer = kDefaultProducer;
   std::vector<RawRecord> raw;
   if (!port_records("maneuvers", "$MNV", &raw, &error)) return fail("invalid-maneuvers", error);
-  std::vector<std::string> tags = {"originator:" + a.originator, "source:" + a.id, "provider:" + a.provider, "licence:" + a.licence_class};
-  if (!a.licence_id.empty()) tags.push_back("licence-id:" + a.licence_id);
-  if (a.lineage != a.id) tags.push_back("lineage:" + a.lineage);
-  const std::string producer = json_string(recipe, "producer");
-  if (!producer.empty()) tags.push_back("producer:" + producer);
   std::vector<uint8_t> stream;
   for (const RawRecord& rec : raw) {
     if (rec.ident != "$MNV" || !verified(rec, [](flatbuffers::Verifier& v) { return VerifyMNVBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedMNVBuffer(v); }))
       return fail("invalid-maneuvers", "maneuvers carries $MNV records.");
     std::unique_ptr<MNVT> mnv((rec.prefixed ? GetSizePrefixedMNV(rec.bytes.data()) : GetMNV(rec.bytes.data()))->UnPack());
-    for (const std::string& tag : tags)
-      if (!contains(mnv->TAGS, tag)) mnv->TAGS.push_back(tag);
+    // The software that made the maneuver (the detector) stays its PRODUCER; the source is the recipe's.
+    const std::string made_by = mnv->PROVENANCE ? mnv->PROVENANCE->PRODUCER : std::string();
+    mnv->PROVENANCE = provenance_of(a, made_by.empty() ? producer : made_by);
     flatbuffers::FlatBufferBuilder fbb(1024);
     FinishSizePrefixedMNVBuffer(fbb, CreateMNV(fbb, mnv.get()));
     stream.insert(stream.end(), fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
@@ -1179,5 +1153,5 @@ extern "C" int attribute_maneuvers() {
   if (!stream.empty() &&
       plugin_push_output_ex("maneuvers", "MNV.fbs", "$MNV", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "MNV", 0, 0, stream.data(), static_cast<uint32_t>(stream.size())) < 0)
     return 1;
-  return emit("report", {{"version", 1}, {"maneuvers", raw.size()}, {"tags", tags}});
+  return emit("report", {{"version", 1}, {"maneuvers", raw.size()}, {"source", source_json(a)}, {"producer", producer}});
 }

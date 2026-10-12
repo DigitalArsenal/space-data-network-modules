@@ -291,8 +291,9 @@ Inputs: `elements` (`$OMM`), `ephemeris` (`$OEM`, as above), `options`.
 ## Covariance for every object: `attach_covariance`
 
 The catalog pipeline gives every object's product a covariance by the first of
-four rules that applies, writes it into SDS records and labels it. The method
-is the same whatever the source.
+four rules that applies, writes it into SDS records with its CVR (covariance
+realism) and names the source in PROVENANCE (PVN). The method is the same
+whatever the source.
 
 | Rule | Covariance | Applies when |
 | --- | --- | --- |
@@ -318,42 +319,41 @@ in age between bin centres and held at the first and last. Each cell also
 carries its held-out verdict on E14's test window (2026-05-01 to 2026-09-30):
 mean d²/3, 95 % coverage, samples, objects, and REALISTIC or not.
 
-**Labels.** A row is `CALIBRATED` only where the model's cell was REALISTIC on
-the held-out window (mean d²/3 in [0.8, 1.25] and 95 % coverage in
-[0.93, 0.97], at least 30 samples from 3 objects) **and** the model was
-measured on the lineage the source belongs to (`source.lineage` is in the
-model's `measuredOn.lineages`). Otherwise it is `UNCALIBRATED`, with the cell's
-numbers and the reason: the cell failed, or the model was never measured on
-this source's lineage (the pooled model of a new source). E14 found two of
-the 35 cells realistic: LEO-H at 0 and 0.5 days. Operator covariance is
-`UNCALIBRATED` until the recipe's `operator.calibration` says otherwise
-(E14 S1 has not reported). A rule 2 covariance is `UNCALIBRATED` until the
-recipe's realism entry has `scaledDecision: "REALISTIC"`: the scaled
-covariance has not itself been tested.
+**Verdicts.** A row's CVR is `Calibrated` only where the numbers of its cell pass
+the rule on the held-out window: mean d²/3 in [0.8, 1.25] and 95 % coverage in
+[0.93, 0.97], from at least 30 samples of at least 3 objects, **and** the model
+was measured on the lineage the source belongs to (`source.lineage` is in the
+model's `measuredOn.lineages`). The module computes the verdict from the numbers;
+a verdict written in the model file does not decide. Otherwise the CVR is
+`Uncalibrated`, with the cell's numbers: the cell failed, or the model was never
+measured on this source's lineage (the pooled model of a new source; the CVR's
+`MEASURED_LINEAGE` is then the lineage the cell was measured on). E14 found two of
+the 35 cells realistic: LEO-H at 0 and 0.5 days. An operator's covariance is
+`Uncalibrated` (E14 S1 has not reported), and so is a rule 2 covariance: the
+numbers of its realism entry are the test of the formal covariance, before
+scaling, and the scaled covariance has not itself been tested.
 
-**Records.** Per object, one `$OCM` and one `$OMM`:
+**Records.** Per object, one `$OCM` and one `$OMM` (SDS 1.246.0):
 
 | Field | `$OCM` | `$OMM` |
 | --- | --- | --- |
 | State | `STATE_DATA`, `STATE_EPOCHS`: the rows of `states`, the operator's, or the fit's | the element set unchanged |
 | Covariance | `COVARIANCE_DATA`, 21 values per row (lower triangle, km², km²/s, km²/s²), `COV_REF_FRAME` RSW for a modeled covariance, as supplied for an operator's | `COVARIANCE` of the row nearest the epoch in RTN, `COV_REFERENCE_FRAME` RSW |
-| Calibration | `COV_CALIBRATION`: Calibrated only if every row is; `COV_CALIBRATION_REFERENCE`: the first row's evidence in one line | `COV_CALIBRATION` of the row the covariance is of (`CALIBRATED` or `UNCALIBRATED`) |
-| Label of every row | `USER_DEFINED_PARAMETERS` `COV_LABELS`: JSON, one object per row (rule, method, model, regime, cell, verdict, calibration, mean d²/3, coverage, samples, objects, scale factor, basis) | `USER_DEFINED_PARAMETERS` `COV_LABEL`: the same object, of the row the covariance is of; `COV_RULE` and `COV_METHOD`; for a set without a covariance `COV_UNAVAILABLE` and the reason |
-| Source | `HEADER.ORIGINATOR` the source's originator; `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER`, `PRODUCT`, `COV_RULE`, `COV_METHOD`, `COV_FRAME` | `ORIGINATOR` the source's originator; `USER_DEFINED_PARAMETERS` `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER` |
+| Realism | `COV_REALISM`: one CVR per row, in the order of `STATE_EPOCHS`; `COV_CALIBRATION`: Calibrated only if every CVR is; `COV_CALIBRATION_REFERENCE`: the first row's `EVIDENCE` | `COV_REALISM`: the CVR of the row the covariance is of; none for a set without a covariance (the report says why) |
+| Source | `PROVENANCE`: `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`, `PRODUCER`, `LICENSE_CLASS`, `LICENSE_ID`, `LINEAGE` | the same `PROVENANCE` |
+| Message's creator | `HEADER.ORIGINATOR` and `METADATA.TECH_ORG`: the recipe's `producer` | `ORIGINATOR`: the recipe's `producer` |
 
-**SDS carriers (release 1.245.0).** The `$OMM` takes the source and the label as the
-CCSDS `USER_DEFINED_x` keywords (`OMM.USER_DEFINED_PARAMETERS`) and reads them aloud in
-`COMMENT`. The `$OCM` takes the source and the label in its `USER_DEFINED_PARAMETERS`; its
-`COV_CALIBRATION` is one value per message though its rows lie in different cells, so the
-per-row verdict, the measured mean d²/3, the coverage, the samples and the objects are
-`COV_LABELS`. The release's `OCMCovarianceBlock` (`COV_BASIS`, `COV_BASIS_ID`,
-`COV_CONFIDENCE`) states a covariance time history as the message's text lines, a second
-copy of `COVARIANCE_DATA`; the records do not use it. The `$MNV` has no `ORIGINATOR`,
-provider or licence field: its source is in `TAGS`.
+A CVR holds `RULE` (1 to 4: Operator, ScaledFit, SourceModel, PooledModel),
+`MODEL_ID` (the model, or for ScaledFit the realism entry's class), `REGIME`,
+`AGE_DAYS`, `HORIZON_DAYS`, `MEASURED_LINEAGE`, `TEST_WINDOW` (an ISO 8601
+interval), `MEAN_D2_OVER_3`, `COVERAGE_95`, `SAMPLES`, `OBJECTS`, `SCALE_FACTOR`,
+`CALIBRATION` and `EVIDENCE`. Fields a rule has no value for are NaN, 0 or empty.
+Nothing about the source or the covariance rides in `USER_DEFINED_PARAMETERS`,
+`COMMENT` or `TAGS`.
 
 The report lists, per object, the rule that applied, why each earlier rule did
 not, every row's cell and verdict, the SHA-256 of each record, and the
-licence. The module only labels: a record whose source has no reproduction
+licence. It is where the reason a set got no covariance is. The module only labels: a record whose source has no reproduction
 terms is computed on and cited, never republished, and the publishing node
 reads `licence` from the report.
 
@@ -369,7 +369,6 @@ with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
              "licence": {"class": "cite-only", "id": "celestrak"}, "fitClass": ""},
   "producer": "SDN catalog pipeline", "created": "2026-10-11T00:00:00Z",
   "latestOnly": true, "maxOperatorRows": 8,
-  "operator": {"calibration": "UNCALIBRATED", "evidence": "..."},
   "realism": [{"sources": ["ilrs-crd"], "class": "slr-hpop-fit", "factor": 17.04, "meanD2Over3": 17.04,
                "coverage95": 0.17, "samples": 1000, "objects": 5, "evidence": "...", "window": "..."}],
   "models": [{"...": "data/e14-s3-kc.json", "sources": ["celestrak-gp"], "pooled": true}]
@@ -377,10 +376,11 @@ with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
 ```
 
 `provider` is the plugin id of the module that gave the records, `licence.class`
-the `reproduce` field of the audited licence register (`reproducible`, `cite-only`,
-`share-alike`, `non-commercial`) and `licence.id` its source id; the module copies them
-onto the records and does not interpret them. `flows/source-products/recipe.mjs`
-makes the recipe of each registered source.
+the `reproduce` field of the audited licence register and `licence.id` its source id.
+`kind` is `element-set`, `ephemeris` or `observation` (PVN `SOURCE_KIND`), and
+`licence.class` is `reproducible`, `cite-only`, `share-alike` or `non-commercial`
+(PVN `LICENSE_CLASS`); any other value is refused. `producer` is the software that made
+the records. `flows/source-products/recipe.mjs` makes the recipe of each registered source.
 
 Only the newest element set of each object gives outputs unless `latestOnly`
 is false. A recipe that does not name the source (id, kind, originator,
@@ -388,9 +388,11 @@ provider, licence class) is refused: no record travels without its source.
 
 ## `attribute_maneuvers`
 
-`$MNV` has no `ORIGINATOR`, so the source goes into `TAGS` (originator,
-source, provider, licence class and id, lineage, producer) on every maneuver
-of `analysis/maneuver-detection`, keeping the tags a record had.
+Every maneuver of `analysis/maneuver-detection` gets the recipe's source in its
+`PROVENANCE` (`SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`,
+`LICENSE_CLASS`, `LICENSE_ID`, `LINEAGE`). Its `PRODUCER` stays the detector when the
+record names one (`analysis/maneuver-detection` does), else it is the recipe's
+`producer`. The record's tags are untouched.
 
 ## Model and validation
 

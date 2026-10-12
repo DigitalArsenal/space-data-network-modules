@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import {
-  alignedOem, beyond, deriveStates, encodeMnv, encodeOmm, fitOcm, json as jsonFrame, leoH, mnvFrame, ocmFrame, ommFrame, oemFrame, operatorOem, recipeFor,
+  MNV, alignedOem, beyond, deriveStates, encodeMnv, encodeOmm, fitOcm, json as jsonFrame, leoH, mnvFrame, ocmFrame, ommFrame, oemFrame, operatorOem, recipeFor,
   valladoOmm, vallado,
 } from './products-fixtures.mjs';
 
@@ -151,7 +151,7 @@ const productCases = [
     ocmFrame('fit', fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x: [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75], lower: lower21(1) })),
     jsonFrame('recipe', recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit',
       extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }] } }))] } },
-  { id: 'attribute-maneuvers', request: { methodId: 'attribute_maneuvers', inputs: [mnvFrame('maneuvers', Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', TAGS: [] })])), jsonFrame('recipe', recipeFor())] } },
+  { id: 'attribute-maneuvers', request: { methodId: 'attribute_maneuvers', inputs: [mnvFrame('maneuvers', Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', TAGS: [], PROVENANCE: Object.assign(new MNV.PVNT(), { PRODUCER: 'detector 1' }) })])), jsonFrame('recipe', recipeFor())] } },
 ];
 cases.push(...productCases);
 const plan = await normalizeParityFixture({ name: 'gp-error-model e2b and e14 methods, the catalog pipeline and the element fit', cases: cases.map((c) => ({ ...c, request: { ...c.request,

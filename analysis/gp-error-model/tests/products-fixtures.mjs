@@ -1,5 +1,6 @@
 // Inputs for the tests and the parity run of attach_covariance and attribute_maneuvers: element sets, the states
 // analysis/epoch-state derives from them, an operator ephemeris with covariance, a fit's $OCM, a recipe, maneuvers.
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -66,7 +67,7 @@ export async function deriveStates(ommStream, ages = [0]) {
 }
 
 // ── recipe ──
-export function recipeFor({ id = 'celestrak-gp', kind = 'element-set', lineage = 'space-track-gp', own = true, pooled = true, licence = 'redistributable', fitClass = '', extra = {} } = {}) {
+export function recipeFor({ id = 'celestrak-gp', kind = 'element-set', lineage = 'space-track-gp', own = true, pooled = true, licence = 'cite-only', fitClass = '', extra = {} } = {}) {
   return {
     version: 1,
     source: { id, kind, lineage, originator: id === 'celestrak-gp' ? 'CelesTrak' : `${id} originator`, provider: `sdn:${id}`, licence: { class: licence, id: `${id}-terms` }, ...(fitClass ? { fitClass } : {}) },
@@ -142,9 +143,29 @@ export function records(bytes) {
 }
 export const unpackOcm = (b) => OCM.OCM.getSizePrefixedRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
 export const unpackOmm = (b) => OMM.OMM.getSizePrefixedRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
-export const ommParam = (omm, name) => omm.USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === name)?.PARAM_VALUE;
 export const unpackMnv = (b) => MNV.MNV.getSizePrefixedRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(b))).unpack();
-export const param = (ocm, name) => ocm.USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === name)?.PARAM_VALUE;
+
+// What a record's PROVENANCE (PVN) holds for a recipe's source, derived from the recipe: SOURCE_KIND and LICENSE_CLASS by the
+// names the registry gives them, the rest as the recipe states them. PRODUCER is the software that made the record.
+const PVN_KINDS = { 'element-set': OMM.pvnSourceKind.ElementSet, ephemeris: OMM.pvnSourceKind.Ephemeris, observation: OMM.pvnSourceKind.Observation };
+export const PVN_LICENCES = { reproducible: OMM.pvnLicenseClass.Reproducible, 'cite-only': OMM.pvnLicenseClass.CiteOnly, 'share-alike': OMM.pvnLicenseClass.ShareAlike,
+  'non-commercial': OMM.pvnLicenseClass.NonCommercial };
+export const expectedProvenance = (recipe, producer = recipe.producer) => ({
+  SOURCE_ID: recipe.source.id, SOURCE_KIND: PVN_KINDS[recipe.source.kind], ORIGINATOR: recipe.source.originator, PROVIDER_ID: recipe.source.provider, PRODUCER: producer,
+  LICENSE_CLASS: PVN_LICENCES[recipe.source.licence.class], LICENSE_ID: recipe.source.licence.id ?? null, LINEAGE: recipe.source.lineage ?? recipe.source.id,
+});
+const PVN_FIELDS = ['SOURCE_ID', 'SOURCE_KIND', 'ORIGINATOR', 'PROVIDER_ID', 'PRODUCER', 'LICENSE_CLASS', 'LICENSE_ID', 'LINEAGE'];
+export const provenanceOf = (record) => (record.PROVENANCE ? Object.fromEntries(PVN_FIELDS.map((f) => [f, record.PROVENANCE[f]])) : null);
+// The labels a product once carried as user-defined parameters. A source's own parameters (Space-Track's GP_ID, AOE's
+// channel and record ids) stay; these must not.
+const LABEL_PARAMS = new Set(['SOURCE_ID', 'SOURCE_KIND', 'SOURCE_ORIGINATOR', 'SOURCE_PROVIDER', 'SOURCE_LINEAGE', 'LICENCE_CLASS', 'LICENCE_ID',
+  'PRODUCER', 'PRODUCT', 'COV_RULE', 'COV_METHOD', 'COV_LABEL', 'COV_LABELS', 'COV_UNAVAILABLE']);
+// A record names its source in PROVENANCE and carries no label of it in USER_DEFINED_PARAMETERS or TAGS.
+export function assertSourceNamed(record, recipe, producer) {
+  assert.deepEqual(provenanceOf(record), expectedProvenance(recipe, producer));
+  assert.deepEqual((record.USER_DEFINED_PARAMETERS ?? []).filter((p) => LABEL_PARAMS.has(p.PARAM_NAME)), []);
+  assert.deepEqual((record.TAGS ?? []).filter((t) => /^(originator|source|provider|licence|licence-id|lineage|producer):/.test(t)), []);
+}
 
 export async function call(methodId, inputs) {
   const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
