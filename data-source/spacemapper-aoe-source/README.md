@@ -60,7 +60,6 @@ npm run test:parity    # headless Chrome, native WasmEdge, Docker WasmEdge: byte
 
 SpaceMapper states no licence for the AOE catalog (robots.txt disallows only `/_nuxt/`); the archive keeps it for local use and
 never publishes or redistributes it, and the catalog paper cites it and copies nothing. The data licence audit
-(`orbit-accuracy-experiments` `data/licenses.json`) has no entry for it yet; the registry names it `spacemapper-aoe`, reproduce:
-no. **No SpaceMapper record is in this module, its tests or its fixtures**: they are synthetic, in the archive's record format
+(`orbit-accuracy-experiments` `data/licenses.json`) lists it as `spacemapper-aoe`, reproduce: no. **No SpaceMapper record is in this module, its tests or its fixtures**: they are synthetic, in the archive's record format
 (`tests/fixtures/aoe-format.mjs`). Real records stay under `/opt/data/sdn-archive/hac/spacemapper-aoe`. `NOTICE.md` records the
 terms. Credit line: SpaceMapper, https://spacemapper.cn/.

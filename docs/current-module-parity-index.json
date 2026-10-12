@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-10-10T15:48:27.638Z",
-  "moduleCount": 118,
-  "parityScopeModuleCount": 49,
-  "isomorphicWasmCount": 116,
+  "generatedAt": "2026-10-12T05:49:18.923Z",
+  "moduleCount": 124,
+  "parityScopeModuleCount": 50,
+  "isomorphicWasmCount": 122,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 111,
+  "browserWasmEdgeTargetCount": 117,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -59,6 +59,7 @@
     "propagator/hpop",
     "propagator/hypersonics",
     "propagator/keplerian-reference",
+    "propagator/sgp4-xp",
     "propagator/sgp4"
   ],
   "modules": [
@@ -155,10 +156,11 @@
       "pluginId": "com.digitalarsenal.analysis.catalog-composer",
       "name": "Catalog Editor",
       "pluginFamily": "analysis",
-      "version": "0.1.9",
+      "version": "0.3.0",
       "methodIds": [
         "compose",
         "fit_epoch_step",
+        "integrate_catalog",
         "match_catalog",
         "validate_epoch"
       ],
@@ -172,15 +174,20 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 8,
       "cSourceFileCount": 0,
-      "testFileCount": 17,
+      "testFileCount": 20,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/catalog_composer.cpp",
+        "src/catalog_integrator.cpp",
         "src/catalog_match.cpp",
-        "src/epoch_fit.cpp"
+        "src/epoch_fit.cpp",
+        "src/integrator_identity.cpp",
+        "src/integrator_maneuvers.cpp",
+        "src/integrator_records.cpp",
+        "src/integrator_selection.cpp"
       ],
       "testFiles": [
         "tests/catalog-publication.test.mjs",
@@ -191,6 +198,9 @@
         "tests/epoch-fit.test.mjs",
         "tests/epoch-fixture.mjs",
         "tests/hpop-epoch-runner.mjs",
+        "tests/integrator-chain.test.mjs",
+        "tests/integrator-fixtures.mjs",
+        "tests/integrator.test.mjs",
         "tests/matching-fixture.mjs",
         "tests/matching.test.mjs",
         "tests/parity.test.mjs",
@@ -241,7 +251,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -264,6 +274,7 @@
         "screen_segment_window",
         "screen_window",
         "search_candidates",
+        "search_grid",
         "version",
         "write_cdm_kvn",
         "write_cdm_xml"
@@ -281,7 +292,7 @@
       ],
       "cxxSourceFileCount": 31,
       "cSourceFileCount": 1,
-      "testFileCount": 150,
+      "testFileCount": 152,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -337,6 +348,7 @@
         "tests/buildTreeHygiene.test.mjs",
         "tests/celestrakFetchCache.test.mjs",
         "tests/coarseExclusion.test.mjs",
+        "tests/continuousScreening.test.mjs",
         "tests/cqrAuthoritative.test.mjs",
         "tests/cqrStreaming.test.mjs",
         "tests/data/README.md",
@@ -449,6 +461,7 @@
         "tests/lib/privateFixtures.mjs",
         "tests/lib/screenCatalogParityHarness.mjs",
         "tests/lib/sgp4TrackHarness.mjs",
+        "tests/lib/syntheticCatalog.mjs",
         "tests/lib/tiledPairSolver.mjs",
         "tests/lib/wasmedgePthreadRunner.mjs",
         "tests/lib/wasmedgeWasiThreadsRunner.mjs",
@@ -508,11 +521,13 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration (JB2008 temperature corrections)",
       "pluginFamily": "analysis",
-      "version": "0.2.1",
+      "version": "0.4.0",
       "methodIds": [
         "calibrate",
         "calibrate_decay",
         "decay",
+        "drag_work",
+        "energy",
         "evaluate"
       ],
       "runtimeTargets": [
@@ -527,7 +542,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -535,7 +550,10 @@
       ],
       "testFiles": [
         "tests/decay.test.mjs",
-        "tests/density_calibration.test.mjs"
+        "tests/density_calibration.test.mjs",
+        "tests/energy.test.mjs",
+        "tests/nrlmsise.test.mjs",
+        "tests/parity.mjs"
       ]
     },
     {
@@ -574,9 +592,12 @@
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
       "name": "SDN Epoch State",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
-        "derive"
+        "answer_propagation_requests",
+        "derive",
+        "derive_omm",
+        "omm_from_mpe"
       ],
       "runtimeTargets": [
         "browser",
@@ -590,14 +611,18 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 6,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/epoch_state_module.cpp"
       ],
       "testFiles": [
+        "tests/ages-reference.json",
+        "tests/ages-reference.py",
         "tests/epoch_state.test.mjs",
+        "tests/fixtures.mjs",
+        "tests/parity.mjs",
         "tests/vallado-verification.json"
       ]
     },
@@ -694,14 +719,23 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.6.0",
       "methodIds": [
         "accumulate",
+        "attach_covariance",
+        "attribute_maneuvers",
+        "calibrate_covariance",
         "common_epoch",
+        "dcp_covariance",
+        "element_residuals",
         "finalize",
+        "fit_calibration",
+        "fit_elements",
         "hpop_arcs",
         "hpop_coverage",
         "map_covariance",
+        "noise_responses",
+        "pair_statistics",
         "scale_model",
         "screening_cases",
         "screening_evaluation"
@@ -716,20 +750,29 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 11,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/common_epoch.cpp",
+        "src/covariance_realism.cpp",
+        "src/fit_elements.cpp",
         "src/gp_error_model.cpp",
+        "src/source_products.cpp",
         "src/state_transition.cpp"
       ],
       "testFiles": [
         "tests/covariance_mapping.test.mjs",
+        "tests/covariance_realism.test.mjs",
+        "tests/fit-reference.json",
+        "tests/fit-reference.py",
+        "tests/fit_elements.test.mjs",
         "tests/gp_error_model.test.mjs",
         "tests/parity.mjs",
+        "tests/products-fixtures.mjs",
+        "tests/source_products.test.mjs",
         "tests/stm-reference.json",
         "tests/stm-reference.py"
       ]
@@ -893,9 +936,11 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.5.0",
       "methodIds": [
-        "detect_maneuvers"
+        "compare_ephemerides",
+        "detect_maneuvers",
+        "score_detections"
       ],
       "runtimeTargets": [
         "browser",
@@ -907,16 +952,27 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/maneuver_detection.cpp"
+        "src/common.cpp",
+        "src/compare.cpp",
+        "src/crossing.cpp",
+        "src/glr.cpp",
+        "src/maneuver_detection.cpp",
+        "src/mnv.cpp",
+        "src/provenance.cpp",
+        "src/queries.cpp",
+        "src/score.cpp",
+        "src/trajectory.cpp"
       ],
       "testFiles": [
-        "tests/maneuver_detection.test.mjs"
+        "tests/fixtures.mjs",
+        "tests/maneuver_detection.test.mjs",
+        "tests/parity.mjs"
       ]
     },
     {
@@ -1410,8 +1466,9 @@
       "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
       "name": "SDN VCM Adapter",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
+        "ocm",
         "read",
         "write"
       ],
@@ -1427,7 +1484,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -1435,6 +1492,7 @@
       ],
       "testFiles": [
         "tests/fixtures/sample-vcm.txt",
+        "tests/parity.mjs",
         "tests/vcm_adapter.test.mjs"
       ]
     },
@@ -2194,6 +2252,42 @@
       ]
     },
     {
+      "modulePath": "data-source/ilrs-crd-source",
+      "pluginId": "com.digitalarsenal.data-source.ilrs-crd-source",
+      "name": "ILRS CRD Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "read_crd"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/ilrs_crd_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/crd-format.mjs",
+        "tests/fixtures/lageos1_20261008.first-two-passes.np2",
+        "tests/fixtures/read-tdm.mjs",
+        "tests/module.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/imager-observation-parser",
       "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
       "name": "Geostationary Imager Observation Parser Node",
@@ -2807,6 +2901,106 @@
       ]
     },
     {
+      "modulePath": "data-source/sp3-precise-source",
+      "pluginId": "com.digitalarsenal.data-source.sp3-precise-source",
+      "name": "SP3 Precise Orbit Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "read_sp3"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/sp3_precise_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/sp3-format.mjs",
+        "tests/module.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/spacemapper-aoe-source",
+      "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
+      "name": "SpaceMapper AOE Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_aoe"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/spacemapper_aoe_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/aoe-format.mjs",
+        "tests/module.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/spacetrack-source",
+      "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
+      "name": "Space-Track Source",
+      "pluginFamily": "data_source",
+      "version": "0.2.0",
+      "methodIds": [
+        "parse_gp",
+        "parse_satcat"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/spacetrack_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/spacetrack-format.mjs",
+        "tests/module.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/spacex-starlink-source",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "name": "SpaceX Starlink Data Source",
@@ -3014,6 +3208,41 @@
       ]
     },
     {
+      "modulePath": "data-source/vimpel-source",
+      "pluginId": "com.digitalarsenal.data-source.vimpel-source",
+      "name": "Vimpel Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "normalize_orbits",
+        "read_datefirst",
+        "read_ephemeris"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/vimpel_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/vimpel-format.mjs",
+        "tests/module.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/weathernext-parser",
       "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
       "name": "Global Ensemble Forecast Parser Nodes",
@@ -3140,11 +3369,27 @@
       "pluginId": "com.digitalarsenal.files.ccsds-messages",
       "name": "CCSDS Message Reader",
       "pluginFamily": "parser",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
+        "read_acm",
         "read_aem",
+        "read_apm",
+        "read_cdm",
+        "read_ocm",
+        "read_oem",
+        "read_omm",
+        "read_opm",
+        "read_rdm",
         "read_tdm",
+        "write_acm",
         "write_aem",
+        "write_apm",
+        "write_cdm",
+        "write_ocm",
+        "write_oem",
+        "write_omm",
+        "write_opm",
+        "write_rdm",
         "write_tdm"
       ],
       "runtimeTargets": [
@@ -3157,15 +3402,18 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 17,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/ccsds_messages_module.cpp",
         "tests/ccsds_native.cpp",
-        "tests/ccsds_projection_native.cpp"
+        "tests/ccsds_projection_native.cpp",
+        "tests/ndm_fuzz.cpp",
+        "tests/ndm_native.cpp",
+        "third_party/pugixml/pugixml.cpp"
       ],
       "testFiles": [
         "tests/ccsds_kvn.test.mjs",
@@ -3173,7 +3421,18 @@
         "tests/ccsds_native.cpp",
         "tests/ccsds_projection.test.mjs",
         "tests/ccsds_projection_native.cpp",
-        "tests/ccsds_test_support.hpp"
+        "tests/ccsds_test_support.hpp",
+        "tests/lib/ndm_frames.mjs",
+        "tests/lib/ndm_shapes.mjs",
+        "tests/ndm_engine.test.mjs",
+        "tests/ndm_fuzz.cpp",
+        "tests/ndm_fuzz.test.mjs",
+        "tests/ndm_headers.hpp",
+        "tests/ndm_module.test.mjs",
+        "tests/ndm_native.cpp",
+        "tests/ndm_real_data.test.mjs",
+        "tests/ndm_xsd.test.mjs",
+        "tests/parity.mjs"
       ]
     },
     {
@@ -4349,12 +4608,13 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 4,
+      "cxxSourceFileCount": 5,
       "cSourceFileCount": 0,
       "testFileCount": 5,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
+        "src/cpp/src/grant_quota.cpp",
         "src/cpp/src/key_server.cpp",
         "src/cpp/src/license_client.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
@@ -4685,10 +4945,11 @@
       "pluginId": "com.orbpro.hpop",
       "name": "HPOP High-Precision Orbit Propagator",
       "pluginFamily": "propagator",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
+        "ingest_state_gravity_only",
         "invoke",
         "prepare_trajectory_segments",
         "propagate_state"
@@ -4703,9 +4964,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 34,
+      "cxxSourceFileCount": 37,
       "cSourceFileCount": 0,
-      "testFileCount": 288,
+      "testFileCount": 297,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -4723,11 +4984,14 @@
         "lib/time_convert.cpp",
         "lib/us76.cpp",
         "lib/variational.cpp",
+        "src/cpp/src/kernel_store.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
+        "src/cpp/src/prw_dynamics.cpp",
         "src/cpp/src/prw_execution.cpp",
         "src/cpp/src/prw_sdk_adapter.cpp",
+        "src/cpp/src/resident_dynamics.cpp",
         "src/cpp/wasm_api.cpp",
         "src/cpp/wasm_api_reference.cpp",
         "src/hpop_plugin.cpp",
@@ -4747,6 +5011,7 @@
       "testFiles": [
         "tests/atmosphere_ports.test.mjs",
         "tests/atmosphere_ports_native.cpp",
+        "tests/ballistic_coefficient.test.mjs",
         "tests/batch_all_positions.test.mjs",
         "tests/coverage-rate-bench.mjs",
         "tests/de440_force.test.mjs",
@@ -4782,6 +5047,8 @@
         "tests/evidence/lane13/sdk-compat-final.log",
         "tests/evidence/lane13/variational-parity-final.log",
         "tests/evidence/lane13/variational-parity.json",
+        "tests/evidence/orekit/summary-simple-eop.json",
+        "tests/evidence/orekit/summary.json",
         "tests/evidence/xval/summary.json",
         "tests/finite-burn-fixture.mjs",
         "tests/finite-burn-parity.mjs",
@@ -4817,6 +5084,8 @@
         "tests/fixtures/orekit/orekit-reference.json",
         "tests/fixtures/orekit/spw-2026-08.json",
         "tests/fixtures/request.propagate.json",
+        "tests/fixtures/resident/eop-2026-08.json",
+        "tests/fixtures/resident/spw-2026-08-synthetic.json",
         "tests/fixtures/tudat/NOTICE",
         "tests/fixtures/tudat/tudat-wasm-reference.json",
         "tests/fixtures/tudat/tudat-wasm-reference.mjs",
@@ -4995,6 +5264,7 @@
         "tests/jb2008_abi.test.mjs",
         "tests/kernel-parity.mjs",
         "tests/kernel_invoke.test.mjs",
+        "tests/lib/fullForce.mjs",
         "tests/lib/gnssSrpCases.mjs",
         "tests/lib/orekitCases.mjs",
         "tests/lib/pivInvokeHelper.mjs",
@@ -5002,6 +5272,7 @@
         "tests/lib/residentRuntime.mjs",
         "tests/lib/xvalCases.mjs",
         "tests/no_duplicate_sources.test.mjs",
+        "tests/orekit-summary.mjs",
         "tests/orekit_reference.test.mjs",
         "tests/path_state_vectors.test.mjs",
         "tests/pivInvokeContract.test.mjs",
@@ -5016,7 +5287,9 @@
         "tests/prw_gnss_srp.test.mjs",
         "tests/prw_parameters.test.mjs",
         "tests/prw_resident.test.mjs",
+        "tests/prw_resident_configured.test.mjs",
         "tests/prw_sequence.test.mjs",
+        "tests/reentry.test.mjs",
         "tests/sdk-build-preflight.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/variational-benchmark.mjs",
@@ -5101,6 +5374,60 @@
         "tests/harness.mjs",
         "tests/lifecycle.test.mjs",
         "tests/sdk-conformance-runner.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "propagator/sgp4-xp",
+      "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
+      "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
+      "pluginFamily": "propagator",
+      "version": "0.1.0",
+      "methodIds": [
+        "fit",
+        "ingest_omm",
+        "propagate"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 22,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/artifact.test.mjs",
+        "tests/fit.test.mjs",
+        "tests/lib/module.mjs",
+        "tests/lib/oemkvn.mjs",
+        "tests/lib/sds.mjs",
+        "tests/lib/tle.mjs",
+        "tests/measure/README.md",
+        "tests/measure/lib/experiment.mjs",
+        "tests/measure/lib/modules.mjs",
+        "tests/measure/lib/sources.mjs",
+        "tests/measure/lib/summary.mjs",
+        "tests/measure/lib/time.mjs",
+        "tests/measure/results/gnss-24h.json",
+        "tests/measure/results/iss-24h.json",
+        "tests/measure/results/slr-24h.json",
+        "tests/measure/results/slr-leo-24h.json",
+        "tests/measure/results/starlink-24h.json",
+        "tests/measure/resummarize.mjs",
+        "tests/measure/run.mjs",
+        "tests/measure/tables.mjs",
+        "tests/parity.mjs",
+        "tests/ussf_parity.test.mjs"
       ]
     },
     {
