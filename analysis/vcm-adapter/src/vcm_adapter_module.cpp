@@ -1,4 +1,4 @@
-// analysis/vcm-adapter — Vector Covariance Messages in and out of the stack.
+// analysis/vcm-adapter - Vector Covariance Messages in and out of the stack.
 //
 // read:  one VCM (the SP VECTOR/COVARIANCE MESSAGE V2.0, JANAP-128 narrative
 //        lines prefixed "<>"; survey/legacy-messages/vcm in
@@ -11,13 +11,17 @@
 //                             INITIAL_COVARIANCE;
 //          earth_orientation  $PRW EARTH_ORIENTATION: the VCM's single EOP
 //                             point as daily $EOP rows over the arc;
-//          vcm                the $VCM record;
+//          eop                the same rows as size-prefixed $EOP records;
+//          ocm                the $OCM, which carries everything the message
+//                             states (common/ocm_fb_builder.hpp);
 //          report             JSON: every field read, the transformed
 //                             covariance, and the UVW sigmas recomputed from it
 //                             beside the ones the VCM states.
-// write: a $PRW EXECUTION_RESULT whose FINAL_SAMPLE is in EME2000 with a
+// ocm:   a $PRW EXECUTION_RESULT whose FINAL_SAMPLE is in EME2000 with a
 //        covariance over the state and DYNAMIC_PARAMETERS, plus a JSON header
-//        (identity and model lines) -> VCM text.
+//        (identity and model lines) -> the $OCM.
+// write: an $OCM (and the $EOP records of its day) -> VCM text, for the
+//        systems that still read it.
 //
 // The covariance. A VCM's covariance is in SP's equinoctial elements
 // (af, ag, L, n, chi, psi) and the model parameters after them (B, BDOT,
@@ -58,8 +62,8 @@
 // ESA's final orbit) the fractional reading's radial and in-track sigmas
 // are about twice the errors; the absolute reading's, 7 to 20 times. B and AGOM rows are scaled by their values when
 // fractional, BDOT and T rows are taken as printed, and every read reports
-// the parameter sigmas it carried. write takes the same keys in its header
-// and prints the rows back the same way.
+// the parameter sigmas it carried. The $OCM records the choice
+// (PARAMETER_ROWS) and write prints the rows back the same way.
 //
 // Pure compute: output bytes depend only on input bytes.
 
@@ -362,7 +366,7 @@ double mjdOf(const Utc& t) { return unixSeconds(t) / 86400.0 + 40587.0; }
 // ---------------------------------------------------------------------------
 // The parsed VCM.
 struct Vcm {
-    std::string messageTime, center, satellite, intDes, name, epochText, geopotential, drag;
+    std::string indicator, messageTime, center, satellite, intDes, name, epochText, geopotential, drag, leapText;
     Utc epoch, leap;
     double epochRev = 0;
     double j2kPos[3] = {}, j2kVel[3] = {};
@@ -401,7 +405,11 @@ std::string parseVcm(const std::string& text, Vcm& m) {
     }
     if (!lineWith(lines, "VECTOR/COVARIANCE MESSAGE")) return "not-a-vcm: no \"VECTOR/COVARIANCE MESSAGE\" line";
     int messages = 0;
-    for (const auto& line : lines) if (line.find("VECTOR/COVARIANCE MESSAGE") != std::string::npos) ++messages;
+    for (size_t i = 0; i < lines.size(); ++i)
+        if (lines[i].find("VECTOR/COVARIANCE MESSAGE") != std::string::npos) {
+            ++messages;
+            if (i + 1 < lines.size()) m.indicator = trim(lines[i + 1]);   // REAL, TEST or EXERCISE, the line below the title
+        }
     if (messages != 1) return "one-message: read takes exactly one VCM";
     m.messageTime = field(lines, "MESSAGE TIME (UTC):", {"CENTER:"});
     m.center = field(lines, "CENTER:");
@@ -454,7 +462,8 @@ std::string parseVcm(const std::string& text, Vcm& m) {
         double terms = 0;
         if (number(field(lines, "NUTAT:", {"TERMS"}), &terms)) m.nutationTerms = int(terms);
     }
-    m.leap = parseVcmTime(field(lines, "LEAP SECOND TIME (UTC):"));
+    m.leapText = field(lines, "LEAP SECOND TIME (UTC):");
+    m.leap = parseVcmTime(m.leapText);
     m.integratorMode = field(lines, "INTEGRATOR MODE:", {"COORD SYS:"});
     m.coordSys = field(lines, "COORD SYS:", {"PARTIALS:"});
     m.partials = field(lines, "PARTIALS:");
@@ -672,6 +681,424 @@ Parameters solvedParameters(const Vcm& m, std::vector<std::string>& notes) {
     return p;
 }
 
+// ---------------------------------------------------------------------------
+// A solution as the legacy message states it: the state, the force model, the dynamical-model parameters and the
+// covariance. read makes one from a VCM and ocm from a propagation result; the $OCM carries it; write prints it.
+struct Solution {
+    std::string indicator, center, satellite, intDes, name;
+    Utc messageTime, epoch, leap;            // UTC
+    std::string leapText;                    // the VCM's own text for the leap second time, else ""
+    double epochRev = 0;
+    double rv[6] = {};                       // km and km/s in EME2000 at `epoch`
+    std::string geopotential;                // the model, "EGM-96"
+    int zonals = 0, tesserals = 0;
+    std::string drag;
+    bool lunarSolar = false, srp = false, solidTides = false, inTrackThrust = false;
+    double b = 0, bdot = 0, agom = 0, edr = 0, thrust = 0, cmOffset = 0;
+    bool solved[4] = {false, false, false, false};  // B, BDOT, AGOM, T: the orbit determination solved for it
+    double f10 = 0, avgF10 = 0, avgAp = 0;
+    double taiUtc = 37, ut1Utc = 0;
+    int nutationTerms = 106;
+    std::string integratorMode = "SDN HPOP", coordSys = "J2000", partials = "ANALYTIC", stepMode = "AUTO", fixedStep = "OFF", stepSelection = "AUTO";
+    double initialStep = 30, errorControl = 1e-13;
+    double weightedRms = 0;                  // 0: none stated
+    std::string eopSource;
+    // The covariance, n x n and full, Cartesian: the state in km and km/s, then the parameter rows named by
+    // `rows` (slots 0..3 for B, BDOT, AGOM, T) in their own units. Empty when the message states none.
+    unsigned n = 0;
+    std::vector<double> cartesian;
+    std::vector<unsigned> rows;
+    // How the printed covariance became this one, so write can undo it.
+    double covarianceScale = 1.0;            // multiplied in: max(1, WTD RMS)^2, or 1
+    std::string meanMotionUnit = "fraction";
+    bool fractionalParameterRows = true;
+};
+
+const char* const kParameterName[4] = {"DRAG_AREA_OVER_MASS", "DRAG_AREA_OVER_MASS_RATE", "SRP_AREA_OVER_MASS", "IN_TRACK_ACCELERATION"};
+const char* const kParameterUnit[4] = {"m**2/kg", "m**2/kg/s", "m**2/kg", "m/s**2"};
+int parameterSlot(const std::string& name) {
+    for (int k = 0; k < 4; ++k) if (name == kParameterName[k]) return k;
+    return -1;
+}
+std::string exact(double x) {
+    char b[40];
+    std::snprintf(b, sizeof b, "%.17g", x);
+    return b;
+}
+std::string onOffText(bool on) { return on ? "ON" : "OFF"; }
+
+// The $OCM of a solution (size-prefixed).
+std::vector<uint8_t> ocmOf(const Solution& s) {
+    ocm_fb::Record r;
+    if (s.messageTime.ok) r.creationDate = iso(s.messageTime);
+    r.originator = s.center;
+    r.objectName = s.name;
+    r.internationalDesignator = s.intDes;
+    r.catalogName = "SATCAT";
+    r.objectDesignator = s.satellite;
+    r.timeSystem = "UTC";
+    r.epoch = iso(s.epoch);
+    r.taiMinusUtc = s.taiUtc;
+    r.ut1MinusUtc = s.ut1Utc;
+    // A leap second time after the epoch and before the "unknown" 2049 of SP's message is a next leap second.
+    if (s.leap.ok && s.leap.year < 2049 && unixSeconds(s.leap) > unixSeconds(s.epoch)) {
+        r.nextLeapEpoch = iso(s.leap);
+        r.nextLeapTaiMinusUtc = s.taiUtc + 1.0;
+    }
+    r.eopSource = s.eopSource;
+    r.state.assign(s.rv, s.rv + 6);
+    r.frame = "EME2000";
+    r.centerName = "EARTH";
+    if (s.epochRev >= 0) r.revolution = uint32_t(std::llround(s.epochRev));
+    if (s.n >= 6 && s.cartesian.size() == size_t(s.n) * s.n) {
+        for (unsigned i = 0; i < s.n; ++i) for (unsigned j = 0; j <= i; ++j) r.covariance.push_back(s.cartesian[i * s.n + j]);
+        r.covarianceFrame = "EME2000";
+        r.covType = "CARTPV";
+        r.ordering = "LTM";
+        r.covSize = int(s.n);
+        for (const char* unit : {"km", "km", "km", "km/s", "km/s", "km/s"}) r.covUnits.push_back(unit);
+        for (const unsigned slot : s.rows) { r.covParameters.push_back(kParameterName[slot]); r.covUnits.push_back(kParameterUnit[slot]); }
+    }
+    r.force.present = true;
+    r.force.gravityModel = s.geopotential;
+    r.force.geopotentialModel = s.geopotential + " " + std::to_string(s.zonals) + "Z," + std::to_string(s.tesserals) + "T";
+    r.force.gravityDegree = std::max(s.zonals, s.tesserals);
+    r.force.gravityOrder = s.tesserals;
+    r.force.gm = gmFor(s.geopotential);
+    r.force.atmosphericDrag = s.drag;
+    r.force.solarRadPressure = onOffText(s.srp);
+    r.force.solidTidesModel = onOffText(s.solidTides);
+    if (s.lunarSolar) r.force.nBody = {"MOON", "SUN"};
+    r.force.f10p7 = s.f10;
+    r.force.f10p7Mean = s.avgF10;
+    r.force.geomagAp = s.avgAp;
+    r.od.present = true;
+    r.od.method = "DIFFERENTIAL_CORRECTION";
+    r.od.epoch = r.epoch;
+    if (s.weightedRms > 0) r.od.weightedRms = s.weightedRms;
+    r.od.sedr = s.edr;
+    const double values[4] = {s.b, s.bdot, s.agom, s.thrust};
+    for (int k = 0; k < 4; ++k) {
+        if (k == 3 && !s.inTrackThrust) continue;  // the force is part of the model only when it is on
+        ocm_fb::DynamicParameter p;
+        p.name = kParameterName[k];
+        p.value = values[k];
+        p.units = kParameterUnit[k];
+        p.solvedFor = s.solved[k];
+        r.od.dynamicParameters.push_back(p);
+    }
+    r.user = {{"VCM_INDICATOR", s.indicator}, {"VCM_INTEGRATOR_MODE", s.integratorMode}, {"VCM_COORD_SYS", s.coordSys},
+              {"VCM_PARTIALS", s.partials}, {"VCM_STEP_MODE", s.stepMode}, {"VCM_FIXED_STEP", s.fixedStep},
+              {"VCM_STEP_SIZE_SELECTION", s.stepSelection}, {"VCM_INITIAL_STEP_SIZE_S", exact(s.initialStep)},
+              {"VCM_ERROR_CONTROL", exact(s.errorControl)}, {"VCM_NUTATION_TERMS", std::to_string(s.nutationTerms)},
+              {"VCM_CM_OFFSET_M", exact(s.cmOffset)}, {"VCM_LEAP_SECOND_TIME", s.leapText},
+              {"COVARIANCE_SCALE", exact(s.covarianceScale)}, {"MEAN_MOTION_UNIT", s.meanMotionUnit},
+              {"PARAMETER_ROWS", s.fractionalParameterRows ? "fractional" : "absolute"}};
+    return ocm_fb::build(r);
+}
+
+// A solution from an $OCM: EME2000 position and velocity, a position-velocity covariance with the parameter rows
+// COV_PARAMETERS names, the force model, the dynamical-model parameters and, in USER_DEFINED_PARAMETERS, the
+// settings a VCM states that an OCM has no field for. Empty on success, else the reason.
+std::string solutionOf(const OCMT& o, Solution& s) {
+    if (!o.METADATA) return "invalid-ocm: no METADATA";
+    const MetadataT& m = *o.METADATA;
+    if (o.STATE_DATA.size() < 6) return "invalid-ocm: STATE_DATA holds no position and velocity";
+    {
+        const std::string frame = o.TRAJ_REF_FRAME ? o.TRAJ_REF_FRAME->NAME : "";
+        if (frame != "EME2000" && frame != "J2000") return "unsupported-frame: the legacy message states J2K position and velocity; the OCM's TRAJ_REF_FRAME is \"" + frame + "\" (EME2000 or J2000 required)";
+    }
+    if (o.TRAJ_TYPE != trajectoryType::CARTESIAN_PV) return "unsupported-trajectory: TRAJ_TYPE is CARTESIAN_PV for a legacy message";
+    for (int i = 0; i < 6; ++i) s.rv[i] = o.STATE_DATA[i];
+    {   // epoch: the first state's, UTC
+        const std::string text = !o.STATE_EPOCHS.empty() ? o.STATE_EPOCHS[0] : !m.START_TIME.empty() ? m.START_TIME : m.EPOCH_TZERO;
+        int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
+        double ss = 0;
+        if (std::sscanf(text.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) != 6) return "invalid-ocm: the epoch \"" + text + "\" is not an ISO 8601 UTC time";
+        if (!m.TIME_SYSTEM.empty() && m.TIME_SYSTEM != "UTC") return "unsupported-time-system: the OCM's TIME_SYSTEM is " + m.TIME_SYSTEM + " (UTC required)";
+        s.epoch.year = y; s.epoch.month = mo; s.epoch.day = d; s.epoch.hour = hh; s.epoch.minute = mi; s.epoch.second = ss; s.epoch.ok = true;
+    }
+    if (o.HEADER) {
+        s.center = o.HEADER->ORIGINATOR;
+        int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
+        double ss = 0;
+        if (std::sscanf(o.HEADER->CREATION_DATE.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) == 6) {
+            s.messageTime.year = y; s.messageTime.month = mo; s.messageTime.day = d; s.messageTime.hour = hh; s.messageTime.minute = mi; s.messageTime.second = ss; s.messageTime.ok = true;
+        }
+    }
+    s.name = m.OBJECT_NAME;
+    s.intDes = m.INTERNATIONAL_DESIGNATOR;
+    s.satellite = m.OBJECT_DESIGNATOR;
+    s.taiUtc = m.TAIMUTC_AT_TZERO;
+    s.ut1Utc = m.UT1MUTC_AT_TZERO;
+    s.eopSource = m.EOP_SOURCE;
+    s.epochRev = o.ORB_REVNUM;
+    if (!m.NEXT_LEAP_EPOCH.empty()) {
+        int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
+        double ss = 0;
+        if (std::sscanf(m.NEXT_LEAP_EPOCH.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) == 6) {
+            s.leap.year = y; s.leap.month = mo; s.leap.day = d; s.leap.hour = hh; s.leap.minute = mi; s.leap.second = ss; s.leap.ok = true;
+        }
+    }
+    if (o.PERTURBATIONS) {
+        const PerturbationsT& p = *o.PERTURBATIONS;
+        const std::string& g = p.GEOPOTENTIAL_MODEL;   // "EGM-96 70Z,70T"
+        const size_t z = g.find('Z');
+        bool parsed = false;
+        if (z != std::string::npos) {
+            size_t d = z;
+            while (d > 0 && g[d - 1] == ' ') --d;
+            const size_t digitsEnd = d;
+            while (d > 0 && std::isdigit(static_cast<unsigned char>(g[d - 1]))) --d;
+            std::string tail;
+            for (const char c : g.substr(d)) if (c != ' ') tail += c;
+            if (d < digitsEnd && std::sscanf(tail.c_str(), "%dZ,%dT", &s.zonals, &s.tesserals) == 2) { s.geopotential = trim(g.substr(0, d)); parsed = true; }
+        }
+        if (!parsed) { s.geopotential = p.GRAVITY_MODEL; s.zonals = p.GRAVITY_DEGREE; s.tesserals = p.GRAVITY_ORDER; }
+        s.drag = p.ATMOSPHERIC_DRAG;
+        s.srp = onOff(p.SOLAR_RAD_PRESSURE);
+        s.solidTides = onOff(p.SOLID_TIDES_MODEL);
+        s.lunarSolar = !p.N_BODY_PERTURBATIONS.empty();
+        s.f10 = p.FIXED_F10P7;
+        s.avgF10 = p.FIXED_F10P7_MEAN;
+        s.avgAp = p.FIXED_GEOMAG_AP;
+    }
+    if (o.ORBIT_DETERMINATION) {
+        const OrbitDeterminationT& d = *o.ORBIT_DETERMINATION;
+        s.weightedRms = d.WEIGHTED_RMS;
+        s.edr = d.SEDR;
+        for (const auto& p : d.OD_DYNAMIC_PARAMETERS) {
+            const int slot = p ? parameterSlot(p->NAME) : -1;
+            if (slot < 0) continue;   // a parameter this message has no slot for
+            double* value[4] = {&s.b, &s.bdot, &s.agom, &s.thrust};
+            *value[slot] = p->VALUE;
+            s.solved[slot] = p->SOLVED_FOR;
+            if (slot == 3) s.inTrackThrust = true;
+        }
+    }
+    for (const auto& u : o.USER_DEFINED_PARAMETERS) {
+        if (!u) continue;
+        const std::string& k = u->PARAM_NAME;
+        const std::string& v = u->PARAM_VALUE;
+        double x = 0;
+        if (k == "VCM_INDICATOR") s.indicator = v;
+        else if (k == "VCM_INTEGRATOR_MODE") s.integratorMode = v;
+        else if (k == "VCM_COORD_SYS") s.coordSys = v;
+        else if (k == "VCM_PARTIALS") s.partials = v;
+        else if (k == "VCM_STEP_MODE") s.stepMode = v;
+        else if (k == "VCM_FIXED_STEP") s.fixedStep = v;
+        else if (k == "VCM_STEP_SIZE_SELECTION") s.stepSelection = v;
+        else if (k == "VCM_INITIAL_STEP_SIZE_S") { if (number(v, &x)) s.initialStep = x; }
+        else if (k == "VCM_ERROR_CONTROL") { if (number(v, &x)) s.errorControl = x; }
+        else if (k == "VCM_NUTATION_TERMS") { if (number(v, &x)) s.nutationTerms = int(x); }
+        else if (k == "VCM_CM_OFFSET_M") { if (number(v, &x)) s.cmOffset = x; }
+        else if (k == "VCM_LEAP_SECOND_TIME") s.leapText = v;
+        else if (k == "COVARIANCE_SCALE") { if (number(v, &x) && x > 0) s.covarianceScale = x; }
+        else if (k == "MEAN_MOTION_UNIT") s.meanMotionUnit = v;
+        else if (k == "PARAMETER_ROWS") s.fractionalParameterRows = v != "absolute";
+    }
+    // The covariance: any ordering, full in memory.
+    if (!o.COVARIANCE_DATA.empty()) {
+        const std::string type = o.COV_TYPE.empty() ? "CARTPV" : o.COV_TYPE;
+        if (type != "CARTPV") return "unsupported-covariance: COV_TYPE is " + type + " (CARTPV required)";
+        const unsigned n = o.COV_SIZE;
+        if (n < 6 || n > 20) return "invalid-ocm: COV_SIZE must be 6 to 20";
+        if (o.COV_PARAMETERS.size() != n - 6) return "invalid-ocm: COV_SIZE minus six does not match COV_PARAMETERS";
+        const covarianceOrdering ordering = o.COV_ORDERING;
+        const size_t needed = (ordering == covarianceOrdering::LTM || ordering == covarianceOrdering::UTM) ? size_t(n) * (n + 1) / 2 : size_t(n) * n;
+        if (o.COVARIANCE_DATA.size() < needed) return "invalid-ocm: COVARIANCE_DATA holds fewer values than COV_SIZE and COV_ORDERING state";
+        if (o.COV_REF_FRAME && o.COV_REF_FRAME->NAME != "EME2000" && o.COV_REF_FRAME->NAME != "J2000") return "unsupported-frame: COV_REF_FRAME is " + o.COV_REF_FRAME->NAME + " (EME2000 required)";
+        s.n = n;
+        s.cartesian.assign(size_t(n) * n, 0.0);
+        const std::vector<double>& v = o.COVARIANCE_DATA;
+        size_t k = 0;
+        switch (ordering) {
+            case covarianceOrdering::LTM:
+                for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j <= i; ++j) s.cartesian[i * n + j] = s.cartesian[j * n + i] = v[k++];
+                break;
+            case covarianceOrdering::UTM:
+                for (unsigned i = 0; i < n; ++i) for (unsigned j = i; j < n; ++j) s.cartesian[i * n + j] = s.cartesian[j * n + i] = v[k++];
+                break;
+            case covarianceOrdering::FULL:
+                for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) s.cartesian[i * n + j] = v[k++];
+                break;
+            case covarianceOrdering::LTMWCC:   // the covariances on and below the diagonal; the correlations above it are redundant
+                for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j, ++k) if (i >= j) s.cartesian[i * n + j] = s.cartesian[j * n + i] = v[k];
+                break;
+            case covarianceOrdering::UTMWCC:   // the covariances on and above the diagonal; the correlations below it are redundant
+                for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j, ++k) if (i <= j) s.cartesian[i * n + j] = s.cartesian[j * n + i] = v[k];
+                break;
+        }
+        for (const auto& name : o.COV_PARAMETERS) {
+            const int slot = parameterSlot(name);
+            if (slot < 0) return "unsupported-covariance: the parameter row " + name + " has no slot in a VCM (B, BDOT, AGOM, T)";
+            s.rows.push_back(unsigned(slot));
+        }
+        for (const unsigned slot : s.rows) s.solved[slot] = true;
+    }
+    return "";
+}
+
+// The Earth orientation a text needs besides the OCM's own TAI - UTC and UT1 - UTC: the rate of UT1 and the pole.
+struct EopPoint {
+    bool found = false;
+    double ut1RateMsPerDay = 0, polarX = 0, polarY = 0;  // arcsec
+};
+// The record of the day of `epochMjd` in a stream of size-prefixed $EOP records.
+EopPoint eopOf(const uint8_t* bytes, size_t size, double epochMjd) {
+    EopPoint point;
+    size_t at = 0;
+    while (at + 4 <= size) {
+        const uint32_t length = uint32_t(bytes[at]) | uint32_t(bytes[at + 1]) << 8 | uint32_t(bytes[at + 2]) << 16 | uint32_t(bytes[at + 3]) << 24;
+        if (size_t(length) + 4 > size - at) break;
+        ::flatbuffers::Verifier verifier(bytes + at, size_t(length) + 4);
+        if (!VerifySizePrefixedEOPBuffer(verifier)) break;
+        const EOP* row = GetSizePrefixedEOP(bytes + at);
+        if (row->MJD() == uint32_t(std::floor(epochMjd))) {
+            const double lod = row->LENGTH_OF_DAY_CORRECTION_SECONDS_HP() != 0 ? row->LENGTH_OF_DAY_CORRECTION_SECONDS_HP() : double(row->LENGTH_OF_DAY_CORRECTION_SECONDS());
+            const double x = row->X_POLE_WANDER_RADIANS_HP() != 0 ? row->X_POLE_WANDER_RADIANS_HP() : double(row->X_POLE_WANDER_RADIANS());
+            const double y = row->Y_POLE_WANDER_RADIANS_HP() != 0 ? row->Y_POLE_WANDER_RADIANS_HP() : double(row->Y_POLE_WANDER_RADIANS());
+            point.found = true;
+            point.ut1RateMsPerDay = -lod * 1e3;
+            point.polarX = x / kArcsec;
+            point.polarY = y / kArcsec;
+            break;
+        }
+        at += size_t(length) + 4;
+    }
+    return point;
+}
+
+// SP's text of a solution. `error` is set (and "" returned) when it cannot be printed.
+std::string vcmTextOf(const Solution& s, const EopPoint& eop, const std::string& meanMotionUnit, bool fractionalParameterRows, double covarianceScale, std::string& error) {
+    double nScale = 1000.0;
+    bool fractionalMeanMotion = true;
+    if (!meanMotionRow(meanMotionUnit, nScale, fractionalMeanMotion)) { error = "invalid-options: meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day"; return ""; }
+    const double mu = gmFor(s.geopotential);
+    const double* rv = s.rv;
+    double u1 = 0, u2 = 0;
+    if (eraDtf2d("UTC", s.epoch.year, s.epoch.month, s.epoch.day, s.epoch.hour, s.epoch.minute, s.epoch.second, &u1, &u2) != 0) { error = "invalid-ocm: the epoch is out of range"; return ""; }
+
+    // ECI (TEME) and EFG: GCRF = B^T EME2000, TEME from the axis engine,
+    // EFG = R3(GMST 1982 of UT1) TEME (polar motion not applied, as the VCM says).
+    double rb[3][3], rp[3][3], rbp[3][3];
+    double tt1 = 0, tt2 = 0;
+    {
+        double a1 = 0, a2 = 0;
+        eraUtctai(u1, u2, &a1, &a2);
+        eraTaitt(a1, a2, &tt1, &tt2);
+    }
+    eraBp06(tt1, tt2, rb, rp, rbp);
+    double gcrf[6];
+    for (int k = 0; k < 2; ++k)
+        for (int i = 0; i < 3; ++i) gcrf[3 * k + i] = rb[0][i] * rv[3 * k] + rb[1][i] * rv[3 * k + 1] + rb[2][i] * rv[3 * k + 2];
+    sdn::frames::Epoch e;
+    e.tt1 = tt1; e.tt2 = tt2; e.ut11 = 0; e.ut12 = 0;
+    const sdn::frames::Mat3 R = sdn::frames::gcrfToTeme(e);
+    sdn::frames::Epoch e1 = e, e2 = e;
+    e1.tt2 -= 600.0 / 86400.0; e2.tt2 += 600.0 / 86400.0;
+    const sdn::frames::Mat3 Ra = sdn::frames::gcrfToTeme(e1), Rb = sdn::frames::gcrfToTeme(e2);
+    double teme[6];
+    for (int i = 0; i < 3; ++i) {
+        teme[i] = R.m[i][0] * gcrf[0] + R.m[i][1] * gcrf[1] + R.m[i][2] * gcrf[2];
+        double rate = 0;
+        for (int j = 0; j < 3; ++j) rate += (Rb.m[i][j] - Ra.m[i][j]) / 1200.0 * gcrf[j];
+        teme[3 + i] = R.m[i][0] * gcrf[3] + R.m[i][1] * gcrf[4] + R.m[i][2] * gcrf[5] + rate;
+    }
+    const double gmst = eraGmst82(u1, u2 + s.ut1Utc / 86400.0);
+    const double c = std::cos(gmst), sn = std::sin(gmst);
+    double efg[6] = {c * teme[0] + sn * teme[1], -sn * teme[0] + c * teme[1], teme[2], 0, 0, teme[5]};
+    efg[3] = c * teme[3] + sn * teme[4] + kEarthRate * efg[1];
+    efg[4] = -sn * teme[3] + c * teme[4] - kEarthRate * efg[0];
+
+    // Covariance: Cartesian (state, then the parameter rows) -> equinoctial with the VCM's parameter slots
+    // (B, BDOT, AGOM, T), as read scaled it undone.
+    const V3<double> hv = cross(V3<double>{rv[0], rv[1], rv[2]}, V3<double>{rv[3], rv[4], rv[5]});
+    const int fr = hv.z >= 0 ? 1 : -1;
+    std::vector<double> eqCov;
+    unsigned size = 0;
+    double sig[6] = {};
+    if (s.n >= 6) {
+        const unsigned n = s.n;
+        // The sigmas SP prints are those of the covariance the OCM carries.
+        uvwSigmasOf(rv, s.cartesian, n, sig);
+        double tj[36];
+        jacobianToEquinoctial(rv, mu, fr, nScale, tj);
+        const std::vector<double> q = transform(s.cartesian, n, tj);
+        std::vector<int> slot(n, -1);
+        for (unsigned i = 0; i < 6; ++i) slot[i] = int(i);
+        size = 6;
+        for (unsigned k = 0; k + 6 < n; ++k) {
+            const int at = 6 + int(s.rows[k]);
+            slot[6 + k] = at;
+            size = std::max(size, unsigned(at + 1));
+        }
+        eqCov.assign(size * size, 0.0);
+        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) eqCov[slot[i] * size + slot[j]] = q[i * n + j];
+        if (fractionalParameterRows) {
+            // B and AGOM rows back as fractions of their values (read's option).
+            std::vector<double> scaleOf(size, 1.0);
+            if (size > 6) { if (!(s.b > 0)) { error = "invalid-ocm: fractional parameter rows need a ballistic coefficient above zero"; return ""; } scaleOf[6] = 1.0 / s.b; }
+            if (size > 8 && s.agom > 0) scaleOf[8] = 1.0 / s.agom;
+            for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) eqCov[i * size + j] *= scaleOf[i] * scaleOf[j];
+        }
+        double ew[6];
+        cartesianToEquinoctial(rv, mu, fr, nScale, ew);
+        const double unscale = 1.0 / covarianceScale;
+        for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) {
+            double f = unscale;
+            if (fractionalMeanMotion && i == 3) f /= ew[3];
+            if (fractionalMeanMotion && j == 3) f /= ew[3];
+            eqCov[i * size + j] *= f;
+        }
+    }
+
+    char line[200];
+    std::string out;
+    auto put = [&](const std::string& text) { out += "<> " + text + "\n"; };
+    const Utc messageTime = s.messageTime.ok ? s.messageTime : s.epoch;
+    const bool numeric = !s.satellite.empty() && std::all_of(s.satellite.begin(), s.satellite.end(), [](char ch) { return ch >= '0' && ch <= '9'; });
+    std::string satellite = s.satellite;
+    if (numeric && satellite.size() < 5) satellite = std::string(5 - satellite.size(), '0') + satellite;
+    if (satellite.empty()) satellite = "00000";
+    put("SP VECTOR/COVARIANCE MESSAGE - V2.0");
+    put(s.indicator);
+    std::snprintf(line, sizeof line, "MESSAGE TIME (UTC): %s  CENTER: %s", vcmTime(messageTime).c_str(), s.center.empty() ? "SDN" : s.center.c_str()); put(line);
+    std::snprintf(line, sizeof line, "SATELLITE NUMBER: %s                    INT. DES.: %s", satellite.c_str(), s.intDes.c_str()); put(line);
+    put("COMMON NAME: " + s.name);
+    std::snprintf(line, sizeof line, "EPOCH TIME (UTC): %s  EPOCH REV: %5ld", vcmTime(s.epoch).c_str(), std::lround(s.epochRev)); put(line);
+    auto posLine = [&](const char* label, const double* v) { std::snprintf(line, sizeof line, "%-15s %16.8f %16.8f %16.8f", label, v[0], v[1], v[2]); put(line); };
+    auto velLine = [&](const char* label, const double* v) { std::snprintf(line, sizeof line, "%-15s %16.12f %16.12f %16.12f", label, v[0], v[1], v[2]); put(line); };
+    posLine("J2K POS (KM):", rv); velLine("J2K VEL (KM/S):", rv + 3);
+    posLine("ECI POS (KM):", teme); velLine("ECI VEL (KM/S):", teme + 3);
+    posLine("EFG POS (KM):", efg); velLine("EFG VEL (KM/S):", efg + 3);
+    std::snprintf(line, sizeof line, "GEOPOTENTIAL: %s %2dZ,%2dT  DRAG: %12s  LUNAR/SOLAR: %3s", s.geopotential.c_str(), s.zonals, s.tesserals, s.drag.empty() ? "NONE" : s.drag.c_str(), onOffText(s.lunarSolar).c_str()); put(line);
+    std::snprintf(line, sizeof line, "SOLAR RAD PRESS: %3s  SOLID EARTH TIDES: %3s  IN-TRACK THRUST: %3s", onOffText(s.srp).c_str(), onOffText(s.solidTides).c_str(), onOffText(s.inTrackThrust).c_str()); put(line);
+    std::snprintf(line, sizeof line, "BALLISTIC COEF (M2/KG): %13s BDOT (M2/KG-S): %12s", fortranE(s.b, 6).c_str(), fortranE(s.bdot, 6).c_str()); put(line);
+    std::snprintf(line, sizeof line, "SOLAR RAD PRESS COEFF (M2/KG): %13s  EDR(W/KG): %9s", fortranE(s.agom, 6).c_str(), fortranE(s.edr, 2).c_str()); put(line);
+    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13s  C.M. OFFSET (M): %13s", fortranE(s.thrust, 6).c_str(), fortranE(s.cmOffset, 6).c_str()); put(line);
+    std::snprintf(line, sizeof line, "SOLAR FLUX: F10: %3ld  AVERAGE F10: %3ld  AVERAGE AP: %5.1f", std::lround(s.f10), std::lround(s.avgF10), s.avgAp); put(line);
+    std::snprintf(line, sizeof line, "TAI-UTC (S): %2ld  UT1-UTC (S): %8.5f  UT1 RATE (MS/DAY): %6.3f", std::lround(s.taiUtc), s.ut1Utc, eop.ut1RateMsPerDay); put(line);
+    std::snprintf(line, sizeof line, "POLAR MOT X,Y (ARCSEC): %7.4f %7.4f IAU 1980 NUTAT: %3d TERMS", eop.polarX, eop.polarY, s.nutationTerms); put(line);
+    put("TIME CONST LEAP SECOND TIME (UTC): " + (!s.leapText.empty() ? s.leapText : s.leap.ok ? vcmTime(s.leap) : std::string("2049 365 (31 DEC) 23:59:59.999")));
+    std::snprintf(line, sizeof line, "INTEGRATOR MODE: %-12s COORD SYS: %-5s  PARTIALS: %s", s.integratorMode.c_str(), s.coordSys.c_str(), s.partials.c_str()); put(line);
+    std::snprintf(line, sizeof line, "STEP MODE: %s  FIXED STEP: %s  STEP SIZE SELECTION: %s", s.stepMode.c_str(), s.fixedStep.c_str(), s.stepSelection.c_str()); put(line);
+    std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9s", s.initialStep, fortranE(s.errorControl, 3).c_str()); put(line);
+    std::snprintf(line, sizeof line, "VECTOR U,V,W SIGMAS (KM):        %10.4f %10.4f %10.4f", sig[0], sig[1], sig[2]); put(line);
+    std::snprintf(line, sizeof line, "VECTOR UD,VD,WD SIGMAS (KM/S):    %10.4f %10.4f %10.4f", sig[3], sig[4], sig[5]); put(line);
+    std::snprintf(line, sizeof line, "COVARIANCE MATRIX (EQUINOCTIAL ELS): (%2ux%2u) WTD RMS: %12s", size, size, fortranE(s.weightedRms > 0 ? s.weightedRms : 1.0, 5).c_str()); put(line);
+    std::string row;
+    int count = 0;
+    for (unsigned i = 0; i < size; ++i)
+        for (unsigned j = 0; j <= i; ++j) {
+            std::snprintf(line, sizeof line, "%s%12s", row.empty() ? "" : " ", fortranE(eqCov[i * size + j], 5).c_str());
+            row += line;
+            if (++count % 5 == 0) { put(row); row.clear(); }
+        }
+    if (!row.empty()) put(row);
+    return out;
+}
+
 }  // namespace
 
 extern "C" {
@@ -849,10 +1276,10 @@ int read(void) {
         requestBytes = finishPrw(fbb, PRW::Pack(fbb, &prw));
     }
 
-    // ---- earth_orientation: daily rows from the day before the epoch to the
+    // ---- eop and earth_orientation: daily $EOP rows from the day before the epoch to the
     // day after the arc; UT1 - UTC moves at the stated rate and steps at the
     // stated leap second; polar motion is held. ----
-    std::vector<uint8_t> eopBytes;
+    std::vector<uint8_t> eopBytes, earthOrientationBytes;
     {
         auto table = std::make_unique<PRWEarthOrientationT>();
         const double epochMjd = mjdOf(m.epoch);
@@ -880,61 +1307,52 @@ int read(void) {
             row->DATA_TYPE = DataType::PREDICTED;
             row->SERIES = eopSeries::OTHER;
             row->DATA_SET_CID = "VCM " + m.satellite + " " + iso(m.epoch);
+            {   // one size-prefixed $EOP record per day
+                ::flatbuffers::FlatBufferBuilder fbb;
+                FinishSizePrefixedEOPBuffer(fbb, EOP::Pack(fbb, row.get()));
+                eopBytes.insert(eopBytes.end(), fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
+            }
             table->ROWS.push_back(std::move(row));
         }
         ::flatbuffers::FlatBufferBuilder fbb;
         PRWT prw;
         prw.EARTH_ORIENTATION = std::move(table);
-        eopBytes = finishPrw(fbb, PRW::Pack(fbb, &prw));
+        earthOrientationBytes = finishPrw(fbb, PRW::Pack(fbb, &prw));
     }
 
-    // ---- vcm ($VCM) ----
-    std::vector<uint8_t> vcmBytes;
+    // ---- ocm ($OCM): the state, the force model, the parameters' values and the covariance, with the
+    // rows the request carries ----
+    std::vector<uint8_t> ocmBytes;
     {
-        VCMT v;
-        v.CREATION_DATE = m.messageTime;
-        v.ORIGINATOR = m.center;
-        v.OBJECT_NAME = m.name;
-        v.OBJECT_ID = m.intDes;
-        v.CENTER_NAME = "EARTH";
-        v.REF_FRAME = "EME2000";
-        v.TIME_SYSTEM = "UTC";
-        v.STATE_VECTOR = std::make_unique<VCMStateVectorT>();
-        v.STATE_VECTOR->EPOCH = iso(m.epoch);
-        v.STATE_VECTOR->X = m.j2kPos[0]; v.STATE_VECTOR->Y = m.j2kPos[1]; v.STATE_VECTOR->Z = m.j2kPos[2];
-        v.STATE_VECTOR->X_DOT = m.j2kVel[0]; v.STATE_VECTOR->Y_DOT = m.j2kVel[1]; v.STATE_VECTOR->Z_DOT = m.j2kVel[2];
-        v.EQUINOCTIAL_ELEMENTS = std::make_unique<equinoctialElementsT>();
-        v.EQUINOCTIAL_ELEMENTS->AF = elements[0];
-        v.EQUINOCTIAL_ELEMENTS->AG = elements[1];
-        v.EQUINOCTIAL_ELEMENTS->L = elements[2];
-        v.EQUINOCTIAL_ELEMENTS->N = std::cbrt(mu / std::pow(elements[3] / o.nScale, 2));  // the schema's N: semi-major axis, km
-        v.EQUINOCTIAL_ELEMENTS->CHI = elements[4];
-        v.EQUINOCTIAL_ELEMENTS->PSI = elements[5];
-        v.GM = mu;
-        v.ATMOSPHERIC_MODEL_DATA = std::make_unique<VCMAtmosphericModelDataT>();
-        v.ATMOSPHERIC_MODEL_DATA->ATMOSPHERIC_MODEL = drag.find("JB") != std::string::npos ? atmosphericSource::JB2008
-                                                    : drag.find("JAC") != std::string::npos ? atmosphericSource::JACCHIA_70
-                                                    : drag.find("MSIS") != std::string::npos ? atmosphericSource::NRLMSISE_00 : atmosphericSource::NONE;
-        v.ATMOSPHERIC_MODEL_DATA->GEOPOTENTIAL_MODEL = geo.find("EGM-96") != std::string::npos || geo.find("EGM96") != std::string::npos ? geopotentialSource::EGM96
-                                                     : geo.find("WGS-84") != std::string::npos ? geopotentialSource::WGS84
-                                                     : geo.find("JGM-2") != std::string::npos ? geopotentialSource::JGM2
-                                                     : geo.find("GEM-T3") != std::string::npos ? geopotentialSource::GEMT3 : geopotentialSource::NONE;
-        v.ATMOSPHERIC_MODEL_DATA->LUNAR_SOLAR_PERTURBATION = m.lunarSolar ? perturbationStatus::ON : perturbationStatus::OFF;
-        v.ATMOSPHERIC_MODEL_DATA->SOLAR_RADIATION_PRESSURE = m.srp ? perturbationStatus::ON : perturbationStatus::OFF;
-        v.ATMOSPHERIC_MODEL_DATA->SRP_MODEL = m.srp ? solarRadiationPressureModel::SPHERICAL_MODEL : solarRadiationPressureModel::NONE;
-        v.UVW_SIGMAS = std::make_unique<uvwSigmasT>();
-        v.UVW_SIGMAS->U_SIGMA = m.sigmas[0]; v.UVW_SIGMAS->V_SIGMA = m.sigmas[1]; v.UVW_SIGMAS->W_SIGMA = m.sigmas[2];
-        v.UVW_SIGMAS->UD_SIGMA = m.sigmas[3]; v.UVW_SIGMAS->VD_SIGMA = m.sigmas[4]; v.UVW_SIGMAS->WD_SIGMA = m.sigmas[5];
-        v.SRP = m.srp ? perturbationStatus::ON : perturbationStatus::OFF;
-        v.NORAD_CAT_ID = uint32_t(std::strtoul(m.satellite.c_str(), nullptr, 10));
-        v.REV_AT_EPOCH = m.epochRev;
-        v.COV_REFERENCE_FRAME = "EME2000";
-        if (!cartesian.empty())
-            for (unsigned i = 0; i < 6; ++i) for (unsigned j = 0; j <= i; ++j) v.COVARIANCE.push_back(cartesian[i * n + j]);
-        v.USER_DEFINED_EARTH_MODEL = m.geopotential + " " + std::to_string(m.zonals) + "Z," + std::to_string(m.tesserals) + "T";
-        ::flatbuffers::FlatBufferBuilder fbb;
-        FinishSizePrefixedVCMBuffer(fbb, VCM::Pack(fbb, &v));
-        vcmBytes.assign(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
+        Solution s;
+        s.indicator = m.indicator; s.center = m.center; s.satellite = m.satellite; s.intDes = m.intDes; s.name = m.name;
+        s.messageTime = parseVcmTime(m.messageTime); s.epoch = m.epoch; s.leap = m.leap; s.leapText = m.leapText;
+        s.epochRev = m.epochRev;
+        for (int i = 0; i < 3; ++i) { s.rv[i] = m.j2kPos[i]; s.rv[3 + i] = m.j2kVel[i]; }
+        s.geopotential = m.geopotential; s.zonals = m.zonals; s.tesserals = m.tesserals; s.drag = m.drag;
+        s.lunarSolar = m.lunarSolar; s.srp = m.srp; s.solidTides = m.solidTides; s.inTrackThrust = m.inTrackThrust;
+        s.b = m.b; s.bdot = m.bdot; s.agom = m.agom; s.edr = m.edr; s.thrust = m.thrust; s.cmOffset = m.cmOffset;
+        s.f10 = m.f10; s.avgF10 = m.avgF10; s.avgAp = m.avgAp;
+        s.taiUtc = m.taiUtc; s.ut1Utc = m.ut1Utc; s.nutationTerms = m.nutationTerms;
+        s.integratorMode = m.integratorMode; s.coordSys = m.coordSys; s.partials = m.partials;
+        s.stepMode = m.stepMode; s.fixedStep = m.fixedStep; s.stepSelection = m.stepSelection;
+        s.initialStep = m.initialStep; s.errorControl = m.errorControl;
+        s.weightedRms = m.weightedRms;
+        s.eopSource = "VCM";
+        s.covarianceScale = variance; s.meanMotionUnit = o.meanMotionUnit; s.fractionalParameterRows = o.fractionalParameterRows;
+        if (!cartesian.empty()) {
+            std::vector<unsigned> idx{0, 1, 2, 3, 4, 5};
+            idx.insert(idx.end(), keptIndex.begin(), keptIndex.end());
+            s.n = unsigned(idx.size());
+            s.cartesian.assign(size_t(s.n) * s.n, 0.0);
+            for (unsigned i = 0; i < s.n; ++i) for (unsigned j = 0; j < s.n; ++j) s.cartesian[i * s.n + j] = cartesian[idx[i] * n + idx[j]];
+            for (unsigned k = 0; k < keptIndex.size(); ++k) {
+                const unsigned slot = parameters.rows[keptIndex[k] - 6] - 6;
+                s.rows.push_back(slot);
+                s.solved[slot] = true;
+            }
+        }
+        ocmBytes = ocmOf(s);
     }
 
     // ---- report ----
@@ -995,17 +1413,21 @@ int read(void) {
     r += "]}";
 
     if (plugin_push_output_ex("request", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0, requestBytes.data(), uint32_t(requestBytes.size())) < 0) return 500;
-    if (plugin_push_output_ex("earth_orientation", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0, eopBytes.data(), uint32_t(eopBytes.size())) < 0) return 500;
-    if (plugin_push_output_ex("vcm", "VCM.fbs", "$VCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "VCM", 0, 0, vcmBytes.data(), uint32_t(vcmBytes.size())) < 0) return 500;
+    if (plugin_push_output_ex("earth_orientation", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0, earthOrientationBytes.data(), uint32_t(earthOrientationBytes.size())) < 0) return 500;
+    if (plugin_push_output_ex("eop", "EOP.fbs", "$EOP", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "EOP", 0, 0, eopBytes.data(), uint32_t(eopBytes.size())) < 0) return 500;
+    if (plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0, ocmBytes.data(), uint32_t(ocmBytes.size())) < 0) return 500;
     if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(r.data()), uint32_t(r.size())) < 0) return 500;
     return 0;
 }
 
-int write(void) {
+// ocm: a $PRW EXECUTION_RESULT (EME2000) with the identity and model lines of the message it stands for
+// ("header") -> the $OCM. The final sample's state and covariance become the OCM's; the model lines become its
+// force model, the parameters' values and the settings a VCM states that an OCM has no field for.
+int ocm(void) {
     const int32_t resultIndex = plugin_find_input_index("result", 0);
     const plugin_input_frame_t* frame = resultIndex >= 0 ? plugin_get_input_frame(uint32_t(resultIndex)) : nullptr;
     if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-result", "write requires a $PRW EXECUTION_RESULT on port \"result\".");
+        plugin_set_error("missing-result", "ocm requires a $PRW EXECUTION_RESULT on port \"result\".");
         return 400;
     }
     ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
@@ -1013,7 +1435,7 @@ int write(void) {
     const PRW* prw = GetSizePrefixedPRW(frame->payload);
     const PRWExecutionResult* result = prw->EXECUTION_RESULT();
     if (!result || !result->FINAL_SAMPLE() || !result->FINAL_SAMPLE()->STATE() || !result->FINAL_SAMPLE()->STATE()->STATE()) {
-        plugin_set_error("invalid-result", "write requires EXECUTION_RESULT.FINAL_SAMPLE.STATE.");
+        plugin_set_error("invalid-result", "ocm requires EXECUTION_RESULT.FINAL_SAMPLE.STATE.");
         return 400;
     }
     const auto* sample = result->FINAL_SAMPLE();
@@ -1021,7 +1443,7 @@ int write(void) {
     const auto* frameName = state->COORDINATE_SYSTEM_NAME();
     const std::string axes = frameName ? frameName->str() : "";
     if (axes != "EME2000" && axes != "J2000") {
-        plugin_set_error("unsupported-frame", "write takes a result in EME2000 (request the propagation in EME2000, as read builds it).");
+        plugin_set_error("unsupported-frame", "ocm takes a result in EME2000 (request the propagation in EME2000, as read builds it).");
         return 400;
     }
     if (!state->POSITION() || !state->VELOCITY() || !state->EPOCH()) { plugin_set_error("invalid-result", "The final state needs position, velocity and epoch."); return 400; }
@@ -1038,168 +1460,165 @@ int write(void) {
     }
     auto text = [&](const char* key, const char* fallback) { const std::string* v = lookup(h, key); return v ? (v->size() && (*v)[0] == '"' ? v->substr(1) : *v) : std::string(fallback); };
     auto num = [&](const char* key, double fallback) { const std::string* v = lookup(h, key); double x = fallback; if (v) number(*v, &x); return x; };
-    double nScale = 1000.0;
-    bool fractionalMeanMotion = true;
-    if (!meanMotionRow(text("meanMotionUnit", "fraction"), nScale, fractionalMeanMotion)) { plugin_set_error("invalid-header", "meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day"); return 400; }
-    const std::string geopotential = text("geopotential", "EGM-96");
-    const double mu = gmFor(geopotential);
-    const double rv[6] = {state->POSITION()->X() / 1000, state->POSITION()->Y() / 1000, state->POSITION()->Z() / 1000,
-                          state->VELOCITY()->X() / 1000, state->VELOCITY()->Y() / 1000, state->VELOCITY()->Z() / 1000};
-    // Epoch: the result labels it TDB; the VCM wants UTC.
-    std::string epochText = state->EPOCH()->str();
-    const std::string scale = state->EPOCH_TIME_SYSTEM() ? state->EPOCH_TIME_SYSTEM()->str() : "UTC";
-    int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
-    double ss = 0;
-    if (std::sscanf(epochText.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) != 6) { plugin_set_error("invalid-result", "Unreadable final epoch."); return 400; }
-    double u1 = 0, u2 = 0;
-    if (scale == "TDB" || scale == "TT") {
-        double t1 = 0, t2 = 0;
-        if (eraDtf2d("TT", y, mo, d, hh, mi, ss, &t1, &t2) != 0) { plugin_set_error("invalid-result", "Final epoch out of range."); return 400; }
-        // TDB - TT is below 2 ms; the VCM prints milliseconds.
-        double a1 = 0, a2 = 0;
-        eraTttai(t1, t2, &a1, &a2);
-        eraTaiutc(a1, a2, &u1, &u2);
-    } else if (scale == "UTC") {
-        eraDtf2d("UTC", y, mo, d, hh, mi, ss, &u1, &u2);
-    } else { plugin_set_error("invalid-result", "Final epoch must be UTC, TT or TDB."); return 400; }
-    int iy = 0, im = 0, id = 0, ihmsf[4] = {0, 0, 0, 0};
-    eraD2dtf("UTC", 3, u1, u2, &iy, &im, &id, ihmsf);
-    Utc epoch;
-    epoch.year = iy; epoch.month = im; epoch.day = id; epoch.hour = ihmsf[0]; epoch.minute = ihmsf[1];
-    epoch.second = ihmsf[2] + ihmsf[3] / 1000.0; epoch.ok = true;
 
-    // ECI (TEME) and EFG: GCRF = B^T EME2000, TEME from the axis engine,
-    // EFG = R3(GMST 1982 of UT1) TEME (polar motion not applied, as the VCM says).
-    double rb[3][3], rp[3][3], rbp[3][3];
-    double tt1 = 0, tt2 = 0;
+    Solution s;
+    s.indicator = text("indicator", "");
+    s.center = text("center", "SDN");
+    s.satellite = text("satelliteNumber", "");
+    s.intDes = text("internationalDesignator", "");
+    s.name = text("commonName", "");
+    s.epochRev = num("epochRev", 0);
+    if (const std::string* mt = lookup(h, "messageTime")) s.messageTime = parseVcmTime(mt->size() && (*mt)[0] == '"' ? mt->substr(1) : *mt);
+    s.geopotential = text("geopotential", "EGM-96");
+    s.zonals = int(std::lround(num("zonals", 0)));
+    s.tesserals = int(std::lround(num("tesserals", 0)));
+    s.drag = text("drag", "NONE");
+    s.lunarSolar = onOff(text("lunarSolar", "OFF"));
+    s.srp = onOff(text("solarRadiationPressure", "OFF"));
+    s.solidTides = onOff(text("solidEarthTides", "OFF"));
+    s.inTrackThrust = onOff(text("inTrackThrust", "OFF"));
+    s.b = num("ballisticCoefficient", 0.0);
+    s.bdot = num("bdot", 0.0);
+    s.agom = num("agom", 0.0);
+    s.edr = num("edr", 0.0);
+    s.thrust = num("thrustAcceleration", 0.0);
+    s.cmOffset = num("centerOfMassOffset", 0.0);
+    s.f10 = num("f10", 0.0);
+    s.avgF10 = num("averageF10", 0.0);
+    s.avgAp = num("averageAp", 0.0);
+    s.taiUtc = num("taiMinusUtcS", 37.0);
+    s.ut1Utc = num("ut1MinusUtcS", 0.0);
+    s.nutationTerms = int(std::lround(num("nutationTerms", 106)));
+    s.leapText = text("leapSecondTime", "");
+    if (!s.leapText.empty()) s.leap = parseVcmTime(s.leapText);
+    s.integratorMode = text("integratorMode", "SDN HPOP");
+    s.partials = text("partials", "ANALYTIC");
+    s.stepMode = text("stepMode", "AUTO");
+    s.fixedStep = text("fixedStep", "OFF");
+    s.stepSelection = text("stepSizeSelection", "AUTO");
+    s.initialStep = num("initialStepSize", 30);
+    s.errorControl = num("errorControl", 1e-13);
+    s.weightedRms = num("weightedRms", 0.0);
+    s.eopSource = text("eopSource", "");
+    s.meanMotionUnit = text("meanMotionUnit", "fraction");
     {
-        double a1 = 0, a2 = 0;
-        eraUtctai(u1, u2, &a1, &a2);
-        eraTaitt(a1, a2, &tt1, &tt2);
+        double scale = 0;
+        bool fraction = false;
+        if (!meanMotionRow(s.meanMotionUnit, scale, fraction)) { plugin_set_error("invalid-header", "meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day"); return 400; }
     }
-    eraBp06(tt1, tt2, rb, rp, rbp);
-    double gcrf[6];
-    for (int k = 0; k < 2; ++k)
-        for (int i = 0; i < 3; ++i) gcrf[3 * k + i] = rb[0][i] * rv[3 * k] + rb[1][i] * rv[3 * k + 1] + rb[2][i] * rv[3 * k + 2];
-    sdn::frames::Epoch e;
-    e.tt1 = tt1; e.tt2 = tt2; e.ut11 = 0; e.ut12 = 0;
-    const sdn::frames::Mat3 R = sdn::frames::gcrfToTeme(e);
-    sdn::frames::Epoch e1 = e, e2 = e;
-    e1.tt2 -= 600.0 / 86400.0; e2.tt2 += 600.0 / 86400.0;
-    const sdn::frames::Mat3 Ra = sdn::frames::gcrfToTeme(e1), Rb = sdn::frames::gcrfToTeme(e2);
-    double teme[6];
-    for (int i = 0; i < 3; ++i) {
-        teme[i] = R.m[i][0] * gcrf[0] + R.m[i][1] * gcrf[1] + R.m[i][2] * gcrf[2];
-        double rate = 0;
-        for (int j = 0; j < 3; ++j) rate += (Rb.m[i][j] - Ra.m[i][j]) / 1200.0 * gcrf[j];
-        teme[3 + i] = R.m[i][0] * gcrf[3] + R.m[i][1] * gcrf[4] + R.m[i][2] * gcrf[5] + rate;
-    }
-    const double ut1Utc = num("ut1MinusUtcS", 0.0);
-    const double gmst = eraGmst82(u1, u2 + ut1Utc / 86400.0);
-    const double c = std::cos(gmst), s = std::sin(gmst);
-    double efg[6] = {c * teme[0] + s * teme[1], -s * teme[0] + c * teme[1], teme[2], 0, 0, teme[5]};
-    efg[3] = c * teme[3] + s * teme[4] + kEarthRate * efg[1];
-    efg[4] = -s * teme[3] + c * teme[4] - kEarthRate * efg[0];
-
-    // Covariance: Cartesian SI (6 + parameters) -> equinoctial with the VCM's
-    // parameter slots (B, BDOT, AGOM, T), unscaled by the weighted RMS.
-    const V3<double> hv = cross(V3<double>{rv[0], rv[1], rv[2]}, V3<double>{rv[3], rv[4], rv[5]});
-    const int fr = hv.z >= 0 ? 1 : -1;
-    std::vector<double> eqCov;
-    unsigned size = 0;
-    double sig[6] = {};
-    const double rms = num("weightedRms", 1.0);
-    if (const auto* cov = sample->COVARIANCE()) {
-        const unsigned n = cov->DIMENSION();
-        if (!cov->VALUES() || cov->VALUES()->size() != n * n || n < 6) { plugin_set_error("invalid-result", "Covariance dimension and values disagree."); return 400; }
-        std::vector<double> p(n * n);
-        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) p[i * n + j] = cov->VALUES()->Get(i * n + j) / ((i < 6 ? 1000.0 : 1.0) * (j < 6 ? 1000.0 : 1.0));
-        // The result's covariance is the one the sigmas are printed from;
-        // the message carries it divided by max(1, RMS)^2 (read's inverse).
-        uvwSigmasOf(rv, p, n, sig);
-        double tj[36];
-        jacobianToEquinoctial(rv, mu, fr, nScale, tj);
-        const std::vector<double> q = transform(p, n, tj);
-        // Parameter slots.
-        std::vector<int> slot(n, -1);
-        for (unsigned i = 0; i < 6; ++i) slot[i] = int(i);
-        size = 6;
-        const auto* params = result->DYNAMIC_PARAMETERS();
-        if ((params ? params->size() : 0u) != n - 6) { plugin_set_error("invalid-result", "DYNAMIC_PARAMETERS do not match the covariance dimension."); return 400; }
-        for (unsigned k = 0; k < n - 6; ++k) {
-            const auto kind = static_cast<prwDynamicParameter>(params->Get(k));
-            const int at = kind == prwDynamicParameter::DRAG_AREA_OVER_MASS ? 6 : kind == prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE ? 7
-                         : kind == prwDynamicParameter::SRP_AREA_OVER_MASS ? 8 : kind == prwDynamicParameter::IN_TRACK_ACCELERATION ? 9 : -1;
-            if (at < 0) { plugin_set_error("invalid-result", "Unknown dynamic parameter."); return 400; }
-            slot[6 + k] = at;
-            size = std::max(size, unsigned(at + 1));
-        }
-        eqCov.assign(size * size, 0.0);
-        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) eqCov[slot[i] * size + slot[j]] = q[i * n + j];
-        // Parameter rows back as fractions when asked (the read's option).
+    {
         const std::string rows = text("parameterRows", "fractional");
         if (rows != "absolute" && rows != "fractional") { plugin_set_error("invalid-header", "parameterRows is absolute or fractional"); return 400; }
-        if (rows == "fractional") {
-            const double b = num("ballisticCoefficient", 0.0), agom = num("agom", 0.0);
-            std::vector<double> scaleOf(size, 1.0);
-            if (size > 6) { if (!(b > 0)) { plugin_set_error("invalid-header", "fractional parameter rows need ballisticCoefficient > 0"); return 400; } scaleOf[6] = 1.0 / b; }
-            if (size > 8 && agom > 0) scaleOf[8] = 1.0 / agom;
-            for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) eqCov[i * size + j] *= scaleOf[i] * scaleOf[j];
+        s.fractionalParameterRows = rows == "fractional";
+    }
+    // The covariance of a result is the one the sigmas are printed from; a message carries it divided by
+    // max(1, WTD RMS)^2 (read's inverse), unless the header states another scale.
+    s.covarianceScale = num("covarianceScale", std::max(1.0, s.weightedRms) * std::max(1.0, s.weightedRms));
+    if (!(s.covarianceScale > 0)) { plugin_set_error("invalid-header", "covarianceScale must be above zero"); return 400; }
+
+    for (int i = 0; i < 3; ++i) {
+        s.rv[i] = (i == 0 ? state->POSITION()->X() : i == 1 ? state->POSITION()->Y() : state->POSITION()->Z()) / 1000.0;
+        s.rv[3 + i] = (i == 0 ? state->VELOCITY()->X() : i == 1 ? state->VELOCITY()->Y() : state->VELOCITY()->Z()) / 1000.0;
+    }
+    // Epoch: the result labels it TDB; the OCM states UTC.
+    {
+        const std::string epochText = state->EPOCH()->str();
+        const std::string scale = state->EPOCH_TIME_SYSTEM() ? state->EPOCH_TIME_SYSTEM()->str() : "UTC";
+        int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
+        double ss = 0;
+        if (std::sscanf(epochText.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) != 6) { plugin_set_error("invalid-result", "Unreadable final epoch."); return 400; }
+        double u1 = 0, u2 = 0;
+        if (scale == "TDB" || scale == "TT") {
+            double t1 = 0, t2 = 0;
+            if (eraDtf2d("TT", y, mo, d, hh, mi, ss, &t1, &t2) != 0) { plugin_set_error("invalid-result", "Final epoch out of range."); return 400; }
+            // TDB - TT is below 2 ms; the OCM keeps milliseconds.
+            double a1 = 0, a2 = 0;
+            eraTttai(t1, t2, &a1, &a2);
+            eraTaiutc(a1, a2, &u1, &u2);
+        } else if (scale == "UTC") {
+            eraDtf2d("UTC", y, mo, d, hh, mi, ss, &u1, &u2);
+        } else { plugin_set_error("invalid-result", "Final epoch must be UTC, TT or TDB."); return 400; }
+        int iy = 0, im = 0, id = 0, ihmsf[4] = {0, 0, 0, 0};
+        eraD2dtf("UTC", 3, u1, u2, &iy, &im, &id, ihmsf);
+        s.epoch.year = iy; s.epoch.month = im; s.epoch.day = id; s.epoch.hour = ihmsf[0]; s.epoch.minute = ihmsf[1];
+        s.epoch.second = ihmsf[2] + ihmsf[3] / 1000.0; s.epoch.ok = true;
+    }
+
+    // The covariance: Cartesian SI over the state and the result's DYNAMIC_PARAMETERS -> km, km/s and the
+    // parameters' own units, rows named by the parameters.
+    if (const auto* cov = sample->COVARIANCE()) {
+        const unsigned n = cov->DIMENSION();
+        if (!cov->VALUES() || cov->VALUES()->size() != n * n || n < 6 || n > 20) { plugin_set_error("invalid-result", "Covariance dimension and values disagree."); return 400; }
+        const auto* params = result->DYNAMIC_PARAMETERS();
+        if ((params ? params->size() : 0u) != n - 6) { plugin_set_error("invalid-result", "DYNAMIC_PARAMETERS do not match the covariance dimension."); return 400; }
+        s.n = n;
+        s.cartesian.assign(size_t(n) * n, 0.0);
+        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) s.cartesian[i * n + j] = cov->VALUES()->Get(i * n + j) / ((i < 6 ? 1000.0 : 1.0) * (j < 6 ? 1000.0 : 1.0));
+        for (unsigned k = 0; k < n - 6; ++k) {
+            const auto kind = static_cast<prwDynamicParameter>(params->Get(k));
+            const int slot = kind == prwDynamicParameter::DRAG_AREA_OVER_MASS ? 0 : kind == prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE ? 1
+                           : kind == prwDynamicParameter::SRP_AREA_OVER_MASS ? 2 : kind == prwDynamicParameter::IN_TRACK_ACCELERATION ? 3 : -1;
+            if (slot < 0) { plugin_set_error("invalid-result", "Unknown dynamic parameter."); return 400; }
+            s.rows.push_back(unsigned(slot));
+            s.solved[slot] = true;
         }
-        {
-            double ew[6];
-            cartesianToEquinoctial(rv, mu, fr, nScale, ew);
-            const double unscale = 1.0 / (std::max(1.0, rms) * std::max(1.0, rms));
-            for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) {
-                double f = unscale;
-                if (fractionalMeanMotion && i == 3) f /= ew[3];
-                if (fractionalMeanMotion && j == 3) f /= ew[3];
-                eqCov[i * size + j] *= f;
+    }
+    const std::vector<uint8_t> bytes = ocmOf(s);
+    if (plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0, bytes.data(), uint32_t(bytes.size())) < 0) return 500;
+    return 0;
+}
+
+// write: the $OCM (EME2000 position and velocity, a position-velocity covariance with the parameter rows
+// COV_PARAMETERS names) and, if given, the $EOP records of its day -> the SP VECTOR/COVARIANCE MESSAGE V2.0 text,
+// for the systems that still read it. options: meanMotionUnit, parameterRows and covarianceScale override what
+// the OCM records of how its covariance was made.
+int write(void) {
+    const int32_t ocmIndex = plugin_find_input_index("ocm", 0);
+    const plugin_input_frame_t* frame = ocmIndex >= 0 ? plugin_get_input_frame(uint32_t(ocmIndex)) : nullptr;
+    if (!frame || !frame->payload || frame->payload_length < 8) {
+        plugin_set_error("missing-ocm", "write requires an $OCM on port \"ocm\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifySizePrefixedOCMBuffer(verifier)) { plugin_set_error("invalid-ocm", "Port \"ocm\" is not a size-prefixed $OCM FlatBuffer."); return 400; }
+    std::unique_ptr<OCMT> ocmRecord(GetSizePrefixedOCM(frame->payload)->UnPack());
+    Solution s;
+    if (std::string error = solutionOf(*ocmRecord, s); !error.empty()) {
+        plugin_set_error("invalid-ocm", error.c_str());
+        return 400;
+    }
+    std::string meanMotionUnit = s.meanMotionUnit;
+    bool fractionalParameterRows = s.fractionalParameterRows;
+    double covarianceScale = s.covarianceScale;
+    {
+        const int32_t optionsIndex = plugin_find_input_index("options", 0);
+        const plugin_input_frame_t* of = optionsIndex >= 0 ? plugin_get_input_frame(uint32_t(optionsIndex)) : nullptr;
+        if (of && of->payload && of->payload_length) {
+            std::vector<std::pair<std::string, std::string>> kv;
+            std::string error;
+            if (!readFlatJson(std::string(reinterpret_cast<const char*>(of->payload), of->payload_length), kv, error)) { plugin_set_error("invalid-options", error.c_str()); return 400; }
+            for (const auto& p : kv) {
+                const std::string value = p.second.empty() || p.second[0] != '"' ? p.second : p.second.substr(1);
+                if (p.first == "meanMotionUnit") meanMotionUnit = value;
+                else if (p.first == "parameterRows") {
+                    if (value != "absolute" && value != "fractional") { plugin_set_error("invalid-options", "parameterRows is absolute or fractional"); return 400; }
+                    fractionalParameterRows = value == "fractional";
+                } else if (p.first == "covarianceScale") {
+                    if (!number(value, &covarianceScale) || !(covarianceScale > 0)) { plugin_set_error("invalid-options", "covarianceScale must be above zero"); return 400; }
+                } else { plugin_set_error("invalid-options", ("unknown key " + p.first).c_str()); return 400; }
             }
         }
     }
-
-    char line[160];
-    std::string out;
-    auto put = [&](const std::string& s) { out += "<> " + s + "\n"; };
-    Utc messageTime = epoch;
-    if (const std::string* mt = lookup(h, "messageTime")) { Utc t = parseVcmTime(mt->size() && (*mt)[0] == '"' ? mt->substr(1) : *mt); if (t.ok) messageTime = t; }
-    put("SP VECTOR/COVARIANCE MESSAGE - V2.0");
-    put(text("indicator", ""));
-    std::snprintf(line, sizeof line, "MESSAGE TIME (UTC): %s  CENTER: %s", vcmTime(messageTime).c_str(), text("center", "SDN").c_str()); put(line);
-    std::snprintf(line, sizeof line, "SATELLITE NUMBER: %05ld                    INT. DES.: %s", std::lround(num("satelliteNumber", 0)), text("internationalDesignator", "").c_str()); put(line);
-    put("COMMON NAME: " + text("commonName", ""));
-    std::snprintf(line, sizeof line, "EPOCH TIME (UTC): %s  EPOCH REV: %5ld", vcmTime(epoch).c_str(), std::lround(num("epochRev", 0))); put(line);
-    auto posLine = [&](const char* label, const double* v) { std::snprintf(line, sizeof line, "%-15s %16.8f %16.8f %16.8f", label, v[0], v[1], v[2]); put(line); };
-    auto velLine = [&](const char* label, const double* v) { std::snprintf(line, sizeof line, "%-15s %16.12f %16.12f %16.12f", label, v[0], v[1], v[2]); put(line); };
-    posLine("J2K POS (KM):", rv); velLine("J2K VEL (KM/S):", rv + 3);
-    posLine("ECI POS (KM):", teme); velLine("ECI VEL (KM/S):", teme + 3);
-    posLine("EFG POS (KM):", efg); velLine("EFG VEL (KM/S):", efg + 3);
-    std::snprintf(line, sizeof line, "GEOPOTENTIAL: %s %2ldZ,%2ldT  DRAG: %12s  LUNAR/SOLAR: %3s", geopotential.c_str(), std::lround(num("zonals", 0)), std::lround(num("tesserals", 0)), text("drag", "NONE").c_str(), text("lunarSolar", "OFF").c_str()); put(line);
-    std::snprintf(line, sizeof line, "SOLAR RAD PRESS: %3s  SOLID EARTH TIDES: %3s  IN-TRACK THRUST: %3s", text("solarRadiationPressure", "OFF").c_str(), text("solidEarthTides", "OFF").c_str(), text("inTrackThrust", "OFF").c_str()); put(line);
-    std::snprintf(line, sizeof line, "BALLISTIC COEF (M2/KG): %13s BDOT (M2/KG-S): %12s", fortranE(num("ballisticCoefficient", 0), 6).c_str(), fortranE(num("bdot", 0), 6).c_str()); put(line);
-    std::snprintf(line, sizeof line, "SOLAR RAD PRESS COEFF (M2/KG): %13s  EDR(W/KG): %9s", fortranE(num("agom", 0), 6).c_str(), fortranE(num("edr", 0), 2).c_str()); put(line);
-    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13s  C.M. OFFSET (M): %13s", fortranE(num("thrustAcceleration", 0), 6).c_str(), fortranE(num("centerOfMassOffset", 0), 6).c_str()); put(line);
-    std::snprintf(line, sizeof line, "SOLAR FLUX: F10: %3ld  AVERAGE F10: %3ld  AVERAGE AP: %5.1f", std::lround(num("f10", 0)), std::lround(num("averageF10", 0)), num("averageAp", 0)); put(line);
-    std::snprintf(line, sizeof line, "TAI-UTC (S): %2ld  UT1-UTC (S): %8.5f  UT1 RATE (MS/DAY): %6.3f", std::lround(num("taiMinusUtcS", 37)), ut1Utc, num("ut1RateMsPerDay", 0)); put(line);
-    std::snprintf(line, sizeof line, "POLAR MOT X,Y (ARCSEC): %7.4f %7.4f IAU 1980 NUTAT: %3ld TERMS", num("polarX", 0), num("polarY", 0), std::lround(num("nutationTerms", 106))); put(line);
-    put("TIME CONST LEAP SECOND TIME (UTC): " + text("leapSecondTime", "2049 365 (31 DEC) 23:59:59.999"));
-    std::snprintf(line, sizeof line, "INTEGRATOR MODE: %-12s COORD SYS: %-5s  PARTIALS: %s", text("integratorMode", "SDN HPOP").c_str(), "J2000", text("partials", "ANALYTIC").c_str()); put(line);
-    std::snprintf(line, sizeof line, "STEP MODE: %s  FIXED STEP: %s  STEP SIZE SELECTION: %s", text("stepMode", "AUTO").c_str(), text("fixedStep", "OFF").c_str(), text("stepSizeSelection", "AUTO").c_str()); put(line);
-    std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9s", num("initialStepSize", 30), fortranE(num("errorControl", 1e-13), 3).c_str()); put(line);
-    std::snprintf(line, sizeof line, "VECTOR U,V,W SIGMAS (KM):        %10.4f %10.4f %10.4f", sig[0], sig[1], sig[2]); put(line);
-    std::snprintf(line, sizeof line, "VECTOR UD,VD,WD SIGMAS (KM/S):    %10.4f %10.4f %10.4f", sig[3], sig[4], sig[5]); put(line);
-    std::snprintf(line, sizeof line, "COVARIANCE MATRIX (EQUINOCTIAL ELS): (%2ux%2u) WTD RMS: %12s", size, size, fortranE(rms, 5).c_str()); put(line);
-    std::string row;
-    int count = 0;
-    for (unsigned i = 0; i < size; ++i)
-        for (unsigned j = 0; j <= i; ++j) {
-            std::snprintf(line, sizeof line, "%s%12s", row.empty() ? "" : " ", fortranE(eqCov[i * size + j], 5).c_str());
-            row += line;
-            if (++count % 5 == 0) { put(row); row.clear(); }
-        }
-    if (!row.empty()) put(row);
-    if (plugin_push_output_ex("message", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(out.data()), uint32_t(out.size())) < 0) return 500;
+    EopPoint eop;
+    {
+        const int32_t eopIndex = plugin_find_input_index("eop", 0);
+        const plugin_input_frame_t* ef = eopIndex >= 0 ? plugin_get_input_frame(uint32_t(eopIndex)) : nullptr;
+        if (ef && ef->payload && ef->payload_length) eop = eopOf(ef->payload, ef->payload_length, mjdOf(s.epoch));
+    }
+    std::string error;
+    const std::string message = vcmTextOf(s, eop, meanMotionUnit, fractionalParameterRows, covarianceScale, error);
+    if (!error.empty()) { plugin_set_error(error.substr(0, error.find(':')).c_str(), error.c_str()); return 400; }
+    if (plugin_push_output_ex("message", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(message.data()), uint32_t(message.size())) < 0) return 500;
     return 0;
 }
 

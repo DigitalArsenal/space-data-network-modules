@@ -30,7 +30,7 @@ try {
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit'];
  const args=[...toolchain.toolchainArgs,'-std=c++17','-O3','-ffast-math','-mbulk-memory','-fignore-exceptions','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE','-DOD_REACTOR_BUILD',
-  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds'),
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds'),
   ...sources,'-mexec-model=reactor','-Wl,--initial-memory=67108864','-Wl,--max-memory=2147483648','-Wl,-z,stack-size=2097152',...exports.map(x=>'-Wl,--export='+x),'-o',executable];
  const result=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});
  if(result.status!==0)throw new Error(result.error?.message??result.stderr);

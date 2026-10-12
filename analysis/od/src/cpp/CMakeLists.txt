@@ -100,6 +100,7 @@ target_include_directories(od_lib PUBLIC include "${VALLADO_SGP4_DIR}")
 target_include_directories(od_lib PRIVATE
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${SDN_CORE_SDS_GENERATED_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../common"
 )
 target_link_libraries(od_lib PUBLIC sgp4_lib Eigen3::Eigen)
 

@@ -1,13 +1,19 @@
 {
   "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
   "name": "SDN VCM Adapter",
-  "version": "0.1.0",
-  "description": "Vector Covariance Messages in and out of the stack: reads an SP VECTOR/COVARIANCE MESSAGE V2.0 into a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP rows and a $VCM record; writes a PRW execution result back as VCM text with the equinoctial covariance. Pure compute; output bytes depend only on input bytes.",
+  "version": "0.2.0",
+  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Pure compute; output bytes depend only on input bytes.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "sequentialJustification": {
     "kind": "pure-transform",
     "detail": "One message per invocation in one bounded pass; the module starts no workers."
@@ -19,55 +25,153 @@
       "inputPorts": [
         {
           "portId": "message",
-          "acceptedTypeSets": [{
-            "setId": "vcm-text",
-            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "One VCM as text: the JANAP-128 narrative lines prefixed \"<>\" (spacedatastandards.org survey/legacy-messages/vcm). Other lines are ignored.",
-            "wildcardJustification": { "kind": "foreign-wire-format", "mediaType": "text/x-sp-vcm", "detail": "The legacy fixed-format ASCII message this module exists to translate into SDS records." }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-text",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One VCM as text: the JANAP-128 narrative lines prefixed \"<>\" (spacedatastandards.org survey/legacy-messages/vcm). Other lines are ignored.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/x-sp-vcm",
+                "detail": "The legacy fixed-format ASCII message this module exists to translate into SDS records."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The VCM."
         },
         {
           "portId": "options",
-          "acceptedTypeSets": [{
-            "setId": "vcm-read-options-v1",
-            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"fractional\"|\"absolute\"}; every key optional, the first value of each the default.",
-            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Interpretation options for the legacy message; never persisted." }
-          }],
-          "minStreams": 0, "maxStreams": 1, "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-read-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"fractional\"|\"absolute\"}; every key optional, the first value of each the default.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Interpretation options for the legacy message; never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
           "description": "Read options."
         }
       ],
       "outputPorts": [
         {
           "portId": "request",
-          "acceptedTypeSets": [{ "setId": "sds-prw", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/hpop's request port." }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ],
+              "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/hpop's request port."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The propagation the VCM describes, to arcSeconds after its epoch."
         },
         {
           "portId": "earth_orientation",
-          "acceptedTypeSets": [{ "setId": "sds-prw-eop", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EARTH_ORIENTATION with daily $EOP rows from the VCM's single point: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held." }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ],
+              "description": "Size-prefixed $PRW EARTH_ORIENTATION with daily $EOP rows from the VCM's single point: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "Earth orientation for propagator/hpop's earth_orientation port."
         },
         {
-          "portId": "vcm",
-          "acceptedTypeSets": [{ "setId": "sds-vcm", "allowedTypes": [{ "schemaName": "VCM.fbs", "fileIdentifier": "$VCM", "rootTypeName": "VCM" }], "description": "Size-prefixed $VCM: identity, the J2K state as EME2000, equinoctial elements (N as the schema states it, semi-major axis in km), model flags, the stated UVW sigmas and the Cartesian 6x6 covariance (km units, lower triangle)." }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "The message as an SDS record."
+          "portId": "eop",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                }
+              ],
+              "description": "Size-prefixed $EOP records, one per day from the day before the VCM's epoch to the day after the arc: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held. The earth orientation the $OCM's legacy text needs besides its own TAI-UTC and UT1-UTC."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The VCM's Earth orientation as $EOP records."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Size-prefixed $OCM: identity, the J2K state as EME2000 (km, km/s), the Cartesian covariance (COV_TYPE CARTPV, LTM, COV_SIZE 6 plus the parameter rows COV_PARAMETERS names, units in COV_UNITS, scaled by the weighted RMS as SP prints its sigmas), the force model, the values of B, BDOT, AGOM and the thrust acceleration (OD_DYNAMIC_PARAMETERS), the weighted RMS and energy dissipation rate, and the integrator settings, the covariance's derivation and the message's other settings as USER_DEFINED_PARAMETERS."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message as an SDS $OCM."
         },
         {
           "portId": "report",
-          "acceptedTypeSets": [{
-            "setId": "vcm-read-report-v1",
-            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "JSON: every field read, the equinoctial elements and their round trip, the dynamic parameters carried, the Cartesian covariance, the stated UVW sigmas and the ones recomputed from the transformed covariance, and notes on what could not be carried.",
-            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Translation accounting; diagnostic metadata." }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-read-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: every field read, the equinoctial elements and their round trip, the dynamic parameters carried, the Cartesian covariance, the stated UVW sigmas and the ones recomputed from the transformed covariance, and notes on what could not be carried.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Translation accounting; diagnostic metadata."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "Read report."
         }
       ],
@@ -76,51 +180,201 @@
       "description": "Translates one VCM. A message that is not a VCM, has no epoch or J2K state, or has a malformed covariance is refused."
     },
     {
-      "methodId": "write",
-      "displayName": "Write a VCM",
+      "methodId": "ocm",
+      "displayName": "Write a propagation result as an OCM",
       "inputPorts": [
         {
           "portId": "result",
-          "acceptedTypeSets": [{ "setId": "sds-prw", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/hpop; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written." }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ],
+              "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/hpop; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The state to write."
         },
         {
           "portId": "header",
-          "acceptedTypeSets": [{
-            "setId": "vcm-write-header-v1",
-            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "JSON: identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust, ballisticCoefficient, bdot, agom, thrustAcceleration, f10, averageF10, averageAp), Earth orientation (taiMinusUtcS, ut1MinusUtcS, ut1RateMsPerDay, polarX, polarY), weightedRms, meanMotionUnit and parameterRows (as read took them).",
-            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Message metadata the propagation result does not carry." }
-          }],
-          "minStreams": 0, "maxStreams": 1, "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-write-header-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev, indicator), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust), the parameters' values (ballisticCoefficient, bdot, agom, thrustAcceleration, centerOfMassOffset, edr), space weather (f10, averageF10, averageAp), taiMinusUtcS, ut1MinusUtcS, leapSecondTime, nutationTerms, integrator lines (integratorMode, partials, stepMode, fixedStep, stepSizeSelection, initialStepSize, errorControl), weightedRms and covarianceScale, meanMotionUnit and parameterRows (as read took them).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Message metadata the propagation result does not carry."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
           "description": "Message header."
         }
       ],
       "outputPorts": [
         {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Size-prefixed $OCM of the final state: as read writes it, from a result."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The result as an SDS $OCM."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Writes one propagation result as an $OCM: the final state in EME2000 (km, km/s), its covariance over the state and DYNAMIC_PARAMETERS with the parameter rows named, and the header's model lines."
+    },
+    {
+      "methodId": "write",
+      "displayName": "Write a VCM",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Size-prefixed $OCM: TRAJ_TYPE CARTESIAN_PV in EME2000 (km, km/s); a covariance of COV_TYPE CARTPV in any COV_ORDERING with the parameter rows COV_PARAMETERS names (DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION), when one is to be written."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The solution to write."
+        },
+        {
+          "portId": "eop",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                }
+              ],
+              "description": "Size-prefixed $EOP records; the one of the OCM's epoch day gives the UT1 rate (from LOD) and the polar motion the text states."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The Earth orientation of the epoch day."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-write-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"parameterRows\": \"fractional\"|\"absolute\", \"covarianceScale\": number}; every key optional, overriding what the OCM records of how its covariance was made.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Interpretation options for the legacy message; never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Write options."
+        }
+      ],
+      "outputPorts": [
+        {
           "portId": "message",
-          "acceptedTypeSets": [{
-            "setId": "vcm-text",
-            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "The VCM text, \"<>\"-prefixed lines.",
-            "wildcardJustification": { "kind": "foreign-wire-format", "mediaType": "text/x-sp-vcm", "detail": "The legacy fixed-format ASCII message." }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-text",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The VCM text, \"<>\"-prefixed lines.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/x-sp-vcm",
+                "detail": "The legacy fixed-format ASCII message."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The VCM."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes one VCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, model lines from the header, UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots."
+      "description": "Writes one VCM from an $OCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, the force model, parameter values and integrator lines the OCM records, the UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots."
     }
   ],
   "schemasUsed": [
-    { "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" },
-    { "schemaName": "VCM.fbs", "fileIdentifier": "$VCM", "rootTypeName": "VCM" }
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
   ],
   "buildArtifacts": [
-    { "artifactId": "analysis-vcm-adapter-isomorphic", "kind": "wasm", "path": "dist/isomorphic/module.wasm", "target": "browser,wasmedge" }
+    {
+      "artifactId": "analysis-vcm-adapter-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
   ],
   "abiVersion": 1
 }

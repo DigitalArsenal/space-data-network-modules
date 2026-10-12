@@ -2,13 +2,16 @@
 
 Vector Covariance Messages in and out of the stack. A VCM (the SP VECTOR/
 COVARIANCE MESSAGE V2.0; format in spacedatastandards.org
-`survey/legacy-messages/vcm`) becomes what `propagator/hpop` runs, and a
-propagation result becomes a VCM.
+`survey/legacy-messages/vcm`) becomes what `propagator/hpop` runs and an SDS
+`$OCM`; a propagation result becomes an `$OCM`; and the legacy VCM text is
+generated from an `$OCM` for the systems that still read it. SDS `$VCM` is
+deprecated: the `$OCM` carries everything a VCM does.
 
 | Method | In | Out |
 | --- | --- | --- |
-| `read` | `message`: one VCM as text; `options` (JSON, optional) | `request`: `$PRW` EXECUTION_REQUEST; `earth_orientation`: `$PRW` EARTH_ORIENTATION; `vcm`: `$VCM`; `report`: JSON |
-| `write` | `result`: `$PRW` EXECUTION_RESULT (EME2000); `header` (JSON, optional) | `message`: VCM text |
+| `read` | `message`: one VCM as text; `options` (JSON, optional) | `request`: `$PRW` EXECUTION_REQUEST; `earth_orientation`: `$PRW` EARTH_ORIENTATION; `eop`: `$EOP` records; `ocm`: `$OCM`; `report`: JSON |
+| `ocm` | `result`: `$PRW` EXECUTION_RESULT (EME2000); `header` (JSON, optional) | `ocm`: `$OCM` |
+| `write` | `ocm`: `$OCM`; `eop`: `$EOP` records (optional); `options` (JSON, optional) | `message`: VCM text |
 
 ## What `read` builds
 
@@ -34,16 +37,45 @@ propagation result becomes a VCM.
   the day before the epoch to the day after the arc: UT1 − UTC moving at the
   stated rate (LOD = −rate), stepping by a second at the stated leap second,
   polar motion held.
-- **`$VCM`.** Identity, state, equinoctial elements (with `N` as the schema
-  documents it, the semi-major axis in km), model flags, the stated sigmas and
-  the Cartesian 6×6 covariance. The schema has no fields for B, BDOT, AGOM,
-  T or the parameter rows; those travel in the request and the report.
+- **`$EOP`.** The same daily rows as `earth_orientation`, one size-prefixed
+  `$EOP` record per day, for `write` and for any reader of `$EOP`.
+- **`$OCM`.** The message as the one record the stack publishes: see below.
 
 Options: `meanMotionUnit` (`fraction`, default: the covariance's n row as
 dn/n; or `rad/ks`, `rad/s`, `rad/min`, `rev/day`), `scaleCovarianceByWeightedRms`
 (default true: times max(1, WTD RMS)^2), `arcSeconds` (default 86400),
 `ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel on HPOP's kernel
 port), `parameterRows` (`fractional`, default, or `absolute`; see below).
+
+## The `$OCM`
+
+`read` and `ocm` write the same record, built by `common/ocm_fb_builder.hpp`,
+the builder `analysis/od` writes its fits' OCMs with.
+
+| VCM | OCM |
+| --- | --- |
+| message time, center | `HEADER.CREATION_DATE`, `HEADER.ORIGINATOR` |
+| satellite number, int. des., common name | `METADATA.OBJECT_DESIGNATOR` (CATALOG_NAME `SATCAT`), `INTERNATIONAL_DESIGNATOR`, `OBJECT_NAME` |
+| epoch (UTC), epoch rev | `METADATA` START_TIME, STOP_TIME, EPOCH_TZERO; `ORB_REVNUM` |
+| J2K position and velocity | `STATE_DATA` (km, km/s), `TRAJ_REF_FRAME` EME2000, `CENTER_NAME` EARTH |
+| covariance | `COVARIANCE_DATA`: Cartesian, `COV_TYPE` CARTPV, `COV_ORDERING` LTM, `COV_SIZE` 6 plus the parameter rows, `COV_PARAMETERS` naming them, `COV_UNITS`, `COV_REF_FRAME` EME2000; scaled by the weighted RMS as the message's sigmas are (`COVARIANCE_SCALE`) |
+| B, BDOT, AGOM, THRUST ACCEL | `ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS` (DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, each with its value, units and whether the fit solved for it); thrust only when IN-TRACK THRUST is ON |
+| WTD RMS, EDR | `WEIGHTED_RMS`, `SEDR` |
+| geopotential, drag, lunar/solar, solar radiation pressure, solid earth tides, F10, average F10, average AP | `PERTURBATIONS`: `GEOPOTENTIAL_MODEL` (`EGM-96 70Z,70T`), `GRAVITY_MODEL`, `GRAVITY_DEGREE`, `GRAVITY_ORDER`, `ATMOSPHERIC_DRAG`, `N_BODY_PERTURBATIONS`, `SOLAR_RAD_PRESSURE`, `SOLID_TIDES_MODEL`, `FIXED_F10P7`, `FIXED_F10P7_MEAN`, `FIXED_GEOMAG_AP`, `GM` |
+| TAI-UTC, UT1-UTC, leap second time | `METADATA.TAIMUTC_AT_TZERO`, `UT1MUTC_AT_TZERO`, `NEXT_LEAP_EPOCH` |
+| UT1 rate, polar motion | the `$EOP` records (LOD, X and Y pole) |
+| integrator mode, coordinate system, partials, step mode, fixed step, step size selection, initial step, error control, nutation terms, C.M. offset, indicator | `USER_DEFINED_PARAMETERS` named `VCM_*` |
+| ECI and EFG states, U, V, W sigmas | not stored: `write` computes them from the J2K state, the epoch and the covariance |
+
+`USER_DEFINED_PARAMETERS` also records how the covariance was made from the
+printed one (`COVARIANCE_SCALE`, `MEAN_MOTION_UNIT`, `PARAMETER_ROWS`) so that
+`write` undoes it, and `options` on `write` can override them. The record is
+EME2000 only: `write` refuses another frame, a covariance that is not CARTPV,
+or a parameter row a VCM has no slot for. `ocm` builds the same record from an
+HPOP result and the `header` lines (the keys `write` took before the OCM:
+identity, model lines, parameter values, weightedRms, `meanMotionUnit`,
+`parameterRows`, and now `covarianceScale`); the Earth orientation comes from
+the `$EOP` records, not the header.
 
 ## The units of the covariance
 
@@ -82,27 +114,38 @@ evidence, not a calibration of either reading.
 
 ## What `write` writes
 
-J2K from the result (EME2000 required), ECI as TEME of date
-(`foundation/frames` axis engine, IAU 2006/2000A) and EFG by GMST 1982 of
-UT1 without polar motion, as the format defines them; model, solar and Earth
-orientation lines from the header; UVW sigmas and the equinoctial covariance
-with B, BDOT, AGOM and T in their slots (the size is the last slot used).
+The legacy text, from an `$OCM` in EME2000: J2K from the state, ECI as TEME of
+date (`foundation/frames` axis engine, IAU 2006/2000A) and EFG by GMST 1982 of
+UT1 without polar motion, as the format defines them; the model, parameter,
+weather, integrator and leap second lines from the OCM; TAI-UTC and UT1-UTC
+from its metadata, the UT1 rate and the pole from the `$EOP` record of the
+epoch's day (0 without one); UVW sigmas from the covariance and the
+equinoctial covariance with B, BDOT, AGOM and T in their slots (the size is the
+last slot used).
 
 ## Verification
 
 `tests/vcm_adapter.test.mjs`: the sample's sigmas reproduced within 1 % (and
 not with rad/s, rad/min or rev/day); the Cartesian covariance against an
 independent finite-difference Jacobian written in the test (2.3e-7 of the
-sigmas); the private messages when `VCM_PRIVATE_DIR` is set (all within 1 %,
-the scaling rule, and rad/ks excluded); the request run through HPOP for an
-hour with B as a parameter; the result written as a VCM in SP's Fortran
-number format and read back (state to the printed digits, covariance to
-1.8e-5 of the sigmas, with and without a weighted RMS above 1); and
-`parameterRows` both ways (the six element rows identical, the B sigma
-5.14 x B as printed and 4.25 % as a fraction, and a fractional B row written
-back unchanged).
+sigmas); the private messages when `VCM_PRIVATE_DIR` names them (all within
+1 %, the scaling rule, and rad/ks excluded; each also through VCM -> OCM ->
+VCM text); the sample through VCM -> OCM -> VCM text (printed sigmas within
+1 % and the covariance identical to its five printed digits, with every model,
+parameter, Earth orientation, integrator and leap second line as printed); the
+decoded `$OCM` (state, covariance with its parameter row, parameter values,
+force model, settings); the request run through HPOP for an hour with B as a
+parameter, the result written as an `$OCM` and as VCM text and read back (state
+to the printed digits, covariance to 1.8e-5 of the sigmas, with and without a
+weighted RMS above 1); and `parameterRows` both ways (the six element rows
+identical, the B sigma 5.14 x B as printed and 4.25 % as a fraction, and a
+fractional B row written back unchanged).
+
+`tests/parity.mjs`: read, ocm and write byte-identical in the browser,
+WasmEdge and Docker WasmEdge (`conformance/parity.json`).
 
 ```sh
 npm run build   # SDN_WASI_* toolchain environment as for propagator/hpop
 npm test
+npm run test:parity
 ```

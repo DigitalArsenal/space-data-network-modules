@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The C++ FlatBuffer headers this module reads and writes ($VCM, $PRW with
+ * The C++ FlatBuffer headers this module reads and writes ($OCM, $PRW with
  * $EOP), generated with the pinned flatc-wasm from the pinned
  * spacedatastandards.org package (published-deps law). Families are returned
  * in dependency order, so build.mjs can concatenate them into one
@@ -13,11 +13,11 @@ import createFlatc from 'flatc-wasm/module';
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 export const standardsRoot = path.join(packageRoot, 'node_modules', 'spacedatastandards.org');
-export const ROOTS = ['PRW', 'VCM'];
+export const ROOTS = ['PRW', 'OCM'];
 
 export async function generateSdsHeaders() {
   const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'), 'utf8')).version;
-  if (version !== '1.240.0') throw new Error(`Expected spacedatastandards.org 1.240.0 (PRW DYNAMIC_PARAMETERS, EARTH_ORIENTATION); installed ${version}.`);
+  if (version !== '1.244.0') throw new Error(`Expected spacedatastandards.org 1.244.0 (OCM COV_SIZE, COV_PARAMETERS, OD_DYNAMIC_PARAMETERS; PRW DYNAMIC_PARAMETERS, EARTH_ORIENTATION); installed ${version}.`);
   const flatc = await createFlatc();
   const mkdir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
   for (const p of ['/schemas', '/out']) mkdir(p);
