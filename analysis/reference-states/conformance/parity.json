@@ -1,0 +1,155 @@
+{
+  "ok": true,
+  "fixture": "analysis/reference-states compare_to_reference",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "722340532a5c55188c30e5d78bb375b8ccff73e203aa8d50c16d6eb5943232d4",
+  "moduleSha256": "722340532a5c55188c30e5d78bb375b8ccff73e203aa8d50c16d6eb5943232d4",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 4,
+      "durationMs": 750
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 4,
+      "durationMs": 184
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 4,
+      "durationMs": 1402
+    }
+  ],
+  "cases": [
+    "teme-covariance-vs-gcrf",
+    "teme-covariance-vs-eme2000",
+    "gcrf-no-covariance",
+    "refused-itrf-ephemeris"
+  ],
+  "comparisons": 20,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "teme-covariance-vs-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5d2a2f01c7378c98718431f844c4b720a222c4d4f2c69a95b34212be8289741",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "browser",
+      "caseId": "teme-covariance-vs-eme2000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "333521169be00b3486e4c38002ccaefe1763bff1b37a12424182c5a9ed351986",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "browser",
+      "caseId": "gcrf-no-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "557e6926862a6dc016a139f7d7750e399f38905dbb8175b2e38f508f53297e12",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-itrf-ephemeris",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7c154e8f5988c87d2f823b91a099111fed6df78e05b5f5e3e305a93284386ddf",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "teme-covariance-vs-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5d2a2f01c7378c98718431f844c4b720a222c4d4f2c69a95b34212be8289741",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "teme-covariance-vs-eme2000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "333521169be00b3486e4c38002ccaefe1763bff1b37a12424182c5a9ed351986",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "gcrf-no-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "557e6926862a6dc016a139f7d7750e399f38905dbb8175b2e38f508f53297e12",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-itrf-ephemeris",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7c154e8f5988c87d2f823b91a099111fed6df78e05b5f5e3e305a93284386ddf",
+      "stdoutLength": 156
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "teme-covariance-vs-gcrf",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b5d2a2f01c7378c98718431f844c4b720a222c4d4f2c69a95b34212be8289741",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "teme-covariance-vs-eme2000",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "333521169be00b3486e4c38002ccaefe1763bff1b37a12424182c5a9ed351986",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "gcrf-no-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "557e6926862a6dc016a139f7d7750e399f38905dbb8175b2e38f508f53297e12",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-itrf-ephemeris",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7c154e8f5988c87d2f823b91a099111fed6df78e05b5f5e3e305a93284386ddf",
+      "stdoutLength": 156
+    }
+  ]
+}

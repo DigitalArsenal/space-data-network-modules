@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -435,5 +436,228 @@ extern "C" int reference_states() {
     ++emitted;
   }
   if (!emitted) return fail("no-reference-states", "No SP3 satellite matched a catalogued identity.");
+  return 0;
+}
+
+// compare_to_reference: an ephemeris with its covariance (COMSPOC's SynCoPate
+// files through files/orbit-products, for example) against reference states,
+// at the reference's epochs.
+//
+// Inputs:
+//   ephemeris  $OEM, block 0: TEME (TEMEOFDATE) or GCRF, UTC; states as
+//              EPHEMERIS_DATA (uniform) or EPHEMERIS_DATA_LINES; covariance
+//              lines optional, in the block's own frame.
+//   reference  $OEM, block 0: GCRF, or EME2000 (rotated by the IAU 2006 frame
+//              bias), UTC, EPHEMERIS_DATA_LINES.
+// Output: report, JSON, one row per reference epoch inside the ephemeris span:
+// the GCRF position error (reference minus ephemeris, km) and, with
+// covariance, its Mahalanobis distance squared on the 3x3 position block.
+//
+// Interpolation: the block's degree (INTERPOLATION_DEGREE, 5 when absent)
+// Lagrange interpolant through the nearest degree + 1 states, and the same
+// interpolant through the nearest covariance rows for each of the six
+// position-block elements. TEME -> GCRF at each epoch is the foundation/frames
+// IAU 2006/2000A chain with the equation of the equinoxes; UT1 does not enter.
+namespace {
+
+struct Row {
+  double t;  // seconds from the first state, TAI
+  double v[6];
+};
+
+// Lagrange weights at t through ts.
+void value_weights(const double* ts, size_t n, double t, double* w) {
+  for (size_t j = 0; j < n; ++j) {
+    double p = 1.0;
+    for (size_t m = 0; m < n; ++m)
+      if (m != j) p *= (t - ts[m]) / (ts[j] - ts[m]);
+    w[j] = p;
+  }
+}
+
+// The window of n rows nearest t, clamped to the ends.
+size_t nearest_window(const std::vector<Row>& rows, double t, size_t n) {
+  size_t i = 0;
+  while (i + 1 < rows.size() && rows[i + 1].t <= t) ++i;
+  size_t lo = i + 1 >= n / 2 ? i + 1 - n / 2 : 0;
+  return lo + n > rows.size() ? rows.size() - n : lo;
+}
+
+bool interpolate(const std::vector<Row>& rows, double t, size_t n, int count, double* out) {
+  if (rows.size() < n || t < rows.front().t || t > rows.back().t) return false;
+  const size_t lo = nearest_window(rows, t, n);
+  double ts[16], w[16];
+  for (size_t k = 0; k < n; ++k) ts[k] = rows[lo + k].t;
+  value_weights(ts, n, t, w);
+  for (int c = 0; c < count; ++c) {
+    out[c] = 0.0;
+    for (size_t k = 0; k < n; ++k) out[c] += w[k] * rows[lo + k].v[c];
+  }
+  return true;
+}
+
+std::string upper(std::string s) {
+  for (char& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return s;
+}
+
+std::string frame_name(const RFM* f) { return f ? upper(text(f->NAME())) : std::string(); }
+
+bool tt_of(const Instant& t, ax::Epoch* e) {
+  e->ut11 = 0.0;
+  e->ut12 = 0.0;
+  return eraTaitt(t.tai1, t.tai2, &e->tt1, &e->tt2) == 0;
+}
+
+}  // namespace
+
+extern "C" int compare_to_reference() {
+  const OEM* eph = root<OEM>(input("ephemeris"), "$OEM");
+  const OEM* ref = root<OEM>(input("reference"), "$OEM");
+  if (!eph || !eph->EPHEMERIS_DATA_BLOCK() || eph->EPHEMERIS_DATA_BLOCK()->size() == 0)
+    return fail("invalid-ephemeris", "ephemeris must be a verifiable $OEM with a block.");
+  if (!ref || !ref->EPHEMERIS_DATA_BLOCK() || ref->EPHEMERIS_DATA_BLOCK()->size() == 0)
+    return fail("invalid-reference", "reference must be a verifiable $OEM with a block.");
+  const ephemerisDataBlock* eb = eph->EPHEMERIS_DATA_BLOCK()->Get(0);
+  const ephemerisDataBlock* rb = ref->EPHEMERIS_DATA_BLOCK()->Get(0);
+  if (eb->TIME_SYSTEM() != timingStandard::UTC || rb->TIME_SYSTEM() != timingStandard::UTC)
+    return fail("unsupported-time-system", "both ephemerides must be in UTC.");
+  const std::string ef = frame_name(eb->REFERENCE_FRAME());
+  const bool teme = ef == "TEME" || ef == "TEMEOFDATE";
+  if (!teme && ef != "GCRF") return fail("unsupported-frame", "ephemeris frame '" + ef + "' is not TEME or GCRF.");
+  const std::string rf = frame_name(rb->REFERENCE_FRAME());
+  const bool eme = rf == "EME2000" || rf == "J2000";
+  if (!eme && rf != "GCRF") return fail("unsupported-frame", "reference frame '" + rf + "' is not GCRF or EME2000.");
+  const std::string cf = frame_name(eb->COV_REFERENCE_FRAME());
+  if (eb->COVARIANCE_MATRIX_LINES() && !cf.empty() && cf != ef)
+    return fail("unsupported-frame", "covariance frame '" + cf + "' differs from the states' '" + ef + "'.");
+
+  // States on the TAI axis from the first.
+  std::vector<Row> states;
+  Instant t0{};
+  bool have_t0 = false;
+  auto add_state = [&](const std::string& iso, const double* r) {
+    Instant at;
+    if (!instant_of(iso, timingStandard::UTC, &at)) return false;
+    if (!have_t0) { t0 = at; have_t0 = true; }
+    Row row{seconds_between(t0, at), {r[0], r[1], r[2], 0, 0, 0}};
+    states.push_back(row);
+    return true;
+  };
+  if (eb->EPHEMERIS_DATA_LINES() && eb->EPHEMERIS_DATA_LINES()->size() > 0) {
+    for (const ephemerisDataLine* l : *eb->EPHEMERIS_DATA_LINES()) {
+      const double r[3] = {l->X(), l->Y(), l->Z()};
+      if (!add_state(text(l->EPOCH()), r)) return fail("invalid-epoch", "unreadable ephemeris epoch.");
+    }
+  } else if (eb->EPHEMERIS_DATA() && eb->STEP_SIZE() > 0 && eb->STATE_VECTOR_SIZE() >= 3) {
+    Instant start;
+    if (!instant_of(text(eb->START_TIME()), timingStandard::UTC, &start)) return fail("invalid-epoch", "unreadable START_TIME.");
+    t0 = start;
+    have_t0 = true;
+    const size_t width = eb->STATE_VECTOR_SIZE();
+    const auto* data = eb->EPHEMERIS_DATA();
+    for (size_t k = 0; k + width <= data->size(); k += width) {
+      Row row{static_cast<double>(k / width) * eb->STEP_SIZE(), {data->Get(k), data->Get(k + 1), data->Get(k + 2), 0, 0, 0}};
+      states.push_back(row);
+    }
+  }
+  const size_t degree = eb->INTERPOLATION_DEGREE() > 0 ? eb->INTERPOLATION_DEGREE() : 5;
+  const size_t n = degree + 1;
+  if (n > 16) return fail("unsupported-interpolation", "interpolation degree above 15.");
+  if (states.size() < n) return fail("not-enough-states", "fewer states than the interpolant needs.");
+
+  std::vector<Row> covariance;  // the six position-block elements
+  if (eb->COVARIANCE_MATRIX_LINES()) {
+    for (const covarianceMatrixLine* c : *eb->COVARIANCE_MATRIX_LINES()) {
+      Instant at;
+      if (!instant_of(text(c->EPOCH()), timingStandard::UTC, &at)) return fail("invalid-epoch", "unreadable covariance epoch.");
+      covariance.push_back({seconds_between(t0, at), {c->CX_X(), c->CY_X(), c->CY_Y(), c->CZ_X(), c->CZ_Y(), c->CZ_Z()}});
+    }
+  }
+  const bool with_cov = covariance.size() >= n;
+
+  // EME2000 -> GCRF: the transpose of the IAU 2006 frame bias.
+  double bias[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+  if (eme) {
+    double rbm[3][3], rp[3][3], rbp[3][3];
+    eraBp06(2451545.0, 0.0, rbm, rp, rbp);
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j) bias[i][j] = rbm[j][i];
+  }
+
+  nlohmann::json rows = nlohmann::json::array();
+  size_t outside = 0, n_d2 = 0, inside95 = 0;
+  double sum_d2 = 0.0;
+  if (rb->EPHEMERIS_DATA_LINES()) {
+    for (const ephemerisDataLine* l : *rb->EPHEMERIS_DATA_LINES()) {
+      const std::string iso = text(l->EPOCH());
+      Instant at;
+      if (!instant_of(iso, timingStandard::UTC, &at)) return fail("invalid-epoch", "unreadable reference epoch.");
+      const double t = seconds_between(t0, at);
+      double r[3];
+      if (!interpolate(states, t, n, 3, r)) { ++outside; continue; }
+      ax::Mat3 m;  // ephemeris frame -> GCRF
+      if (teme) {
+        ax::Epoch e;
+        if (!tt_of(at, &e)) { ++outside; continue; }
+        m = ax::transpose(ax::gcrfToTeme(e));
+      }
+      const ax::Vec3 pg = ax::apply(m, {r[0], r[1], r[2]});
+      double q[3] = {l->X(), l->Y(), l->Z()}, qg[3];
+      for (int i = 0; i < 3; ++i) qg[i] = bias[i][0] * q[0] + bias[i][1] * q[1] + bias[i][2] * q[2];
+      const double err[3] = {qg[0] - pg.x, qg[1] - pg.y, qg[2] - pg.z};
+      nlohmann::json row = {{"epoch", iso}, {"errorKm", {err[0], err[1], err[2]}},
+                            {"errorNormKm", std::sqrt(err[0] * err[0] + err[1] * err[1] + err[2] * err[2])}};
+      double c[6];
+      if (with_cov && interpolate(covariance, t, n, 6, c)) {
+        // P in the ephemeris frame, then M P M^T.
+        const double p[3][3] = {{c[0], c[1], c[3]}, {c[1], c[2], c[4]}, {c[3], c[4], c[5]}};
+        double mp[3][3], g[3][3];
+        for (int i = 0; i < 3; ++i)
+          for (int j = 0; j < 3; ++j) {
+            mp[i][j] = 0;
+            for (int k = 0; k < 3; ++k) mp[i][j] += m.m[i][k] * p[k][j];
+          }
+        for (int i = 0; i < 3; ++i)
+          for (int j = 0; j < 3; ++j) {
+            g[i][j] = 0;
+            for (int k = 0; k < 3; ++k) g[i][j] += mp[i][k] * m.m[j][k];
+          }
+        const double det = g[0][0] * (g[1][1] * g[2][2] - g[1][2] * g[2][1]) -
+                           g[0][1] * (g[1][0] * g[2][2] - g[1][2] * g[2][0]) +
+                           g[0][2] * (g[1][0] * g[2][1] - g[1][1] * g[2][0]);
+        if (det > 0.0 && std::isfinite(det)) {
+          const double inv[3][3] = {
+              {(g[1][1] * g[2][2] - g[1][2] * g[2][1]) / det, (g[0][2] * g[2][1] - g[0][1] * g[2][2]) / det,
+               (g[0][1] * g[1][2] - g[0][2] * g[1][1]) / det},
+              {(g[1][2] * g[2][0] - g[1][0] * g[2][2]) / det, (g[0][0] * g[2][2] - g[0][2] * g[2][0]) / det,
+               (g[0][2] * g[1][0] - g[0][0] * g[1][2]) / det},
+              {(g[1][0] * g[2][1] - g[1][1] * g[2][0]) / det, (g[0][1] * g[2][0] - g[0][0] * g[2][1]) / det,
+               (g[0][0] * g[1][1] - g[0][1] * g[1][0]) / det}};
+          double d2 = 0.0;
+          for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) d2 += err[i] * inv[i][j] * err[j];
+          row["d2"] = d2;
+          row["sigmaKm"] = {std::sqrt(g[0][0]), std::sqrt(g[1][1]), std::sqrt(g[2][2])};
+          sum_d2 += d2;
+          ++n_d2;
+          if (d2 <= 7.814727903251178) ++inside95;  // chi-square, 3 degrees of freedom, 0.95
+        }
+      }
+      rows.push_back(row);
+    }
+  }
+  nlohmann::json report = {{"ephemerisFrame", ef}, {"referenceFrame", rf}, {"interpolationDegree", degree},
+                           {"covariance", with_cov}, {"compared", rows.size()}, {"outsideSpan", outside},
+                           {"rows", rows}};
+  if (n_d2) {
+    report["meanD2Over3"] = sum_d2 / (3.0 * static_cast<double>(n_d2));
+    report["coverage95"] = static_cast<double>(inside95) / static_cast<double>(n_d2);
+    report["d2Count"] = n_d2;
+  }
+  const std::string out = report.dump();
+  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+                            reinterpret_cast<const uint8_t*>(out.data()), static_cast<uint32_t>(out.size())) < 0)
+    return 500;
   return 0;
 }

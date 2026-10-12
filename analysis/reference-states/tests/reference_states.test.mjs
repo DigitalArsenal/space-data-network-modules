@@ -200,3 +200,52 @@ test('an SP3 with no accuracy needs a stated one, and never gets a default', asy
   assert.ok(Math.abs(cov.CX_X / (0.025e-3) ** 2 - 1) < 1e-9, `CX_X ${cov.CX_X}`);
   assert.match(blocks[0].COMMENT, /stated by the product description/);
 });
+
+// compare_to_reference. TEME: Vallado, Crawford, Hujsak and Kelso 2006
+// (AIAA 2006-6753), the 2004-04-06 07:51:28.386009 UTC example: TEME
+// (5094.18016210, 6127.64465950, 6380.34453270) km is the GCRF R_GCRF above.
+// Mahalanobis: an error (1, 2, 3) km against diag(1, 4, 9) km^2 is d2 = 3.
+const R_TEME = [5094.18016210, 6127.64465950, 6380.34453270];
+function oemOf({ frame, start, step, states, covariance, lines }) {
+  const block = new OEM.ephemerisDataBlockT();
+  block.REFERENCE_FRAME = Object.assign(new OEM.RFMT(), { NAME: frame });
+  block.TIME_SYSTEM = OEM.timingStandard.UTC;
+  if (states) {
+    block.START_TIME = start; block.STEP_SIZE = step; block.STATE_VECTOR_SIZE = 6; block.INTERPOLATION_DEGREE = 5;
+    block.EPHEMERIS_DATA = states.flatMap((r) => [...r, 0, 0, 0]);
+  }
+  if (lines) block.EPHEMERIS_DATA_LINES = lines.map(([epoch, r]) => Object.assign(new OEM.ephemerisDataLineT(), { EPOCH: epoch, X: r[0], Y: r[1], Z: r[2] }));
+  if (covariance) block.COVARIANCE_MATRIX_LINES = covariance.map(([epoch, c]) => Object.assign(new OEM.covarianceMatrixLineT(), { EPOCH: epoch, CX_X: c[0], CY_Y: c[1], CZ_Z: c[2] }));
+  const doc = new OEM.OEMT(); doc.CCSDS_OEM_VERS = 3.0; doc.EPHEMERIS_DATA_BLOCK = [block];
+  const b = new flatbuffers.Builder(1024); OEM.OEM.finishSizePrefixedOEMBuffer(b, doc.pack(b));
+  return { payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
+}
+async function compare(t, ephemeris, reference) {
+  const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
+  t.after(() => h.destroy());
+  const r = await h.invoke({ methodId: 'compare_to_reference', inputs: [{ portId: 'ephemeris', ...ephemeris }, { portId: 'reference', ...reference }] });
+  assert.equal(r.statusCode, 0, r.errorMessage);
+  return JSON.parse(Buffer.from(r.outputs.find((o) => o.portId === 'report').payload).toString('utf8'));
+}
+
+test('compare_to_reference: TEME -> GCRF reproduces the Vallado 2006 pair', async (t) => {
+  const report = await compare(t,
+    oemOf({ frame: 'TEMEOFDATE', start: '2004-04-06T07:46:28.386009', step: 60, states: Array(11).fill(R_TEME) }),
+    oemOf({ frame: 'GCRF', lines: [['2004-04-06T07:51:28.386009', R_GCRF], ['2004-04-06T09:00:00', R_GCRF]] }));
+  assert.equal(report.compared, 1);
+  assert.equal(report.outsideSpan, 1);
+  assert.ok(report.rows[0].errorNormKm < 0.002, `TEME -> GCRF differs from Vallado by ${report.rows[0].errorNormKm * 1000} m`);
+  assert.equal(report.covariance, false);
+});
+
+test('compare_to_reference: Mahalanobis distance on the position covariance', async (t) => {
+  const epochs = Array.from({ length: 11 }, (_, k) => `2026-10-12T00:${String(k).padStart(2, '0')}:00`);
+  const report = await compare(t,
+    oemOf({ frame: 'GCRF', start: epochs[0], step: 60, states: Array(11).fill([7000, 0, 0]), covariance: epochs.map((e) => [e, [1, 4, 9]]) }),
+    oemOf({ frame: 'GCRF', lines: [['2026-10-12T00:05:30', [7001, 2, 3]]] }));
+  assert.equal(report.compared, 1);
+  assert.ok(Math.abs(report.rows[0].d2 - 3) < 1e-9, `d2 ${report.rows[0].d2}`);
+  assert.ok(Math.abs(report.rows[0].errorNormKm - Math.sqrt(14)) < 1e-9);
+  assert.ok(Math.abs(report.meanD2Over3 - 1) < 1e-9);
+  assert.equal(report.coverage95, 1);
+});

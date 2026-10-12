@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.reference-states",
   "name": "Reference states",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -143,6 +143,79 @@
           "maxStreams": 999,
           "required": false,
           "description": "One $OEM per identified satellite: GCRF states in UTC, velocity from the degree-9 Lagrange interpolant of the positions, covariance from the stated accuracy, provenance in COMMENT."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "compare_to_reference",
+      "displayName": "Compare an ephemeris to reference states",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$OEM, block 0: TEME (TEMEOFDATE) or GCRF, UTC, states and optional covariance lines in the same frame (for example a COMSPOC SynCoPate file read by files/orbit-products 0.1.4)."
+        },
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$OEM, block 0: GCRF or EME2000, UTC, EPHEMERIS_DATA_LINES: the reference states, compared at their own epochs."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-to-reference-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per reference epoch inside the ephemeris span, the GCRF position error (reference minus ephemeris, km), and with covariance the Mahalanobis distance squared on the position block and the GCRF sigmas; meanD2Over3 and coverage95 over the epochs with covariance; the count outside the span.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Comparison statistics for covariance-realism studies. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Comparison report."
         }
       ],
       "maxBatch": 1,

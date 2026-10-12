@@ -21,7 +21,9 @@ const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), '
 const framesModule = await fs.readFile(path.join(framesSrc, 'frames_module.cpp'), 'utf8');
 const parser = framesModule.match(/bool parse_iso_utc\([\s\S]*?\n}\n/);
 if (!parser) throw new Error('foundation/frames/src/frames_module.cpp no longer defines parse_iso_utc.');
-const eopTable = await fs.readFile(path.join(framesSrc, 'eop_table.hpp'), 'utf8');
+// eop_table.hpp includes eop_series.hpp (since propagator/hpop 1.2.0); one translation unit inlines it.
+const eopTable = (await fs.readFile(path.join(framesSrc, 'eop_series.hpp'), 'utf8')) + '\n' +
+  (await fs.readFile(path.join(framesSrc, 'eop_table.hpp'), 'utf8')).replace('#include "eop_series.hpp"', '');
 const json = await fs.readFile(jsonHeader, 'utf8');
 const source = await fs.readFile(path.join(root, 'src/reference_states.cpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));

@@ -43,6 +43,29 @@ One SP3 file per call, read first by `files/orbit-products` `read_container`.
 - **Provenance:** each block's `COMMENT` names the product, its URL, the
   file's SHA-256, the agency and orbit type, and the uncertainty basis.
 
+## Method `compare_to_reference` (0.2.0)
+
+An ephemeris, with its covariance when it carries one, against reference
+states at the reference's own epochs: how a covariance product (COMSPOC's
+SynCoPate files, read by `files/orbit-products` 0.1.4) is scored for realism.
+
+| Port | Type | Content |
+| --- | --- | --- |
+| `ephemeris` | `$OEM` | block 0: TEME (`TEMEOFDATE`) or GCRF, UTC; uniform or line states; covariance lines optional, in the block's frame |
+| `reference` | `$OEM` | block 0: GCRF or EME2000, UTC, line states |
+| `report` (out) | JSON | per reference epoch inside the ephemeris span: `errorKm` (reference minus ephemeris, GCRF), `errorNormKm`, and with covariance `d2` (Mahalanobis distance squared on the position block) and `sigmaKm`; `meanD2Over3`, `coverage95` (d² ≤ 7.8147, the 0.95 point of χ² with 3 degrees of freedom), `compared`, `outsideSpan` |
+
+- **Interpolation:** the block's `INTERPOLATION_DEGREE` (5 when absent) Lagrange
+  interpolant through the nearest degree + 1 states; the same interpolant through
+  the nearest covariance rows for each position-block element.
+- **Frames:** TEME → GCRF by the `foundation/frames` IAU 2006/2000A chain with the
+  equation of the equinoxes (UT1 does not enter); the covariance as M P Mᵀ. EME2000
+  → GCRF by the IAU 2006 frame bias.
+- **Check:** the TEME state of Vallado, Crawford, Hujsak and Kelso (2006,
+  AIAA 2006-6753) at 2004-04-06 07:51:28.386009 UTC maps to their GCRF state within
+  0.11 m. Browser, WasmEdge and Docker WasmEdge agree byte for byte
+  (`tests/parity.mjs`).
+
 ## Products
 
 `scripts/fetch-reference-products.mjs --from YYYY-MM-DD --to YYYY-MM-DD
