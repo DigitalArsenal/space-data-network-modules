@@ -63,6 +63,16 @@ class Library {
     if (live_ == 0 && xpSinceRecycle_ >= kRecycleAfter) recycle();
     if (xp) ++xpSinceRecycle_;
   }
+  // True when enough XP satellites have come and gone that the next creation should start from a restored library;
+  // the caller releases every live satellite first, since the library is restored only when none is live.
+  bool recycleDue() const { return xpSinceRecycle_ >= kRecycleAfter; }
+  // Puts the library back in its starting state with satellites still live, which it then no longer knows: their
+  // owners must abandon() them. Removing one of several live XP satellites crashed the library itself (memory access
+  // out of bounds inside Sgp4RemoveSats, reproduced on the unmodified runtime, 2026-10-12); a restore removes nothing.
+  void restore() {
+    recycle();
+    live_ = 0;
+  }
   void satelliteAdded() { ++live_; }
   void satelliteRemoved() { if (live_ > 0) --live_; }
 
@@ -146,6 +156,8 @@ class Satellite {
   ~Satellite() { release(); }
 
   bool valid() const { return live_; }
+  // Forgets the satellite without telling the library: only after Library::restore(), which already dropped it.
+  void abandon() { live_ = false; }
 
   // false: the text was refused, or the library could not initialise it (its own error code is in `error`).
   bool create(const Elements& elements, uint32_t satnum, int32_t* error = nullptr) {

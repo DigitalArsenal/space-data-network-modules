@@ -10,7 +10,7 @@ ephemeris, and says which source it was.
 
 | | |
 |---|---|
-| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.1.0 |
+| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.1.1 |
 | Family, thread model | `propagator`, `wasi-sequential` |
 | Library | US Space Force Sgp4Prop WebAssembly 9.1.1.0 (Astro Standards v9.1), XP build, SHA-256 `9f061110...cbeb7` |
 | Artifact | `dist/isomorphic/module.wasm`, the one file the three runtimes load; imports WASI only |
@@ -50,7 +50,21 @@ Refusals are named, never thrown: `missing-ephemeris`, `invalid-oem`, `unsupport
 **Propagator ABI.** `plugin_init_omm`, `plugin_propagate`, `plugin_propagate_batch`, `plugin_destroy` and the
 rest of the exports of [`propagator/keplerian-reference`](../keplerian-reference/README.md), Earth-fixed metres, so
 OrbPro's pluggable propagation and the maneuver detector's propagator query port route to this module.
-`space-data-module conformance propagator` passes (no failing or required-but-missing check); its Tier B anchors and the vis-viva and period invariants, which are two-body statements, are gaps for want of a corpus.
+`space-data-module conformance propagator` passes with the corpus in [`vectors/`](vectors/PROVENANCE.md): 15 Tier B
+anchors from the unmodified US Space Force runtime across LEO, sun-synchronous, MEO, GEO and highly eccentric orbits;
+the vis-viva and period invariants, two-body statements, are declared not applicable. `space-data-module
+parity-gate` finds the module satisfied in the browser, Docker WasmEdge and native WasmEdge lanes.
+
+**Call order (0.1.1).** The library carries integration state from one call to the next. Continuing away from the
+epoch reproduces the fresh epoch-to-time propagation byte for byte; any other request does not (a repeated instant
+came back 243 m off, a return towards the epoch up to 18 m). Each entity keeps its satellite while calls move away
+from its epoch, returns the stored state for a repeated instant, and otherwise starts again at its epoch. Removing
+one of several live XP satellites crashes the library itself (out-of-bounds access inside `Sgp4RemoveSats`,
+reproduced on its own runtime), so satellites leave only by restoring the library to its starting state, which also
+returns the memory it keeps of each XP satellite. Sequential calls cost about 4 µs; 100,000 calls do not grow
+memory. One residual remains: the deep-space integrator's state is shared between satellites, so interleaving MEO or
+highly eccentric sets can move a result from the fresh evaluation (in 300 random-order calls, 4 differed: three by
+under 1 µm, one by 6.3 m).
 
 ## The digits of two-line text
 

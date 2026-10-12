@@ -20,7 +20,7 @@ namespace sgp4xp {
 
 constexpr const char* kModuleName = "propagator/sgp4-xp";
 constexpr const char* kProduct =
-    "SDN propagator/sgp4-xp 0.1.0 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN propagator/sgp4-xp 0.1.1 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 // States one request may write or read, over all its blocks.
 constexpr size_t kMaxStates = 500000;
 
@@ -408,11 +408,22 @@ constexpr int32_t kErrNullOutput = -3;
 constexpr int32_t kErrBadInput = -4;
 constexpr int32_t kErrUnphysical = -6;
 
+// An entity is its element set and, while it moves away from its epoch, the library's satellite for it.
+// The library carries integration state from one call to the next. Continuing away from the epoch reproduces the
+// fresh epoch-to-time propagation byte for byte (all five regimes of vectors/, 2026-10-12); any other request after
+// a propagation does not (a second request for an instant already reached came back 243 m off, a return towards the
+// epoch up to 18 m). So a request further from the epoch on the same side continues, the same instant returns the
+// state already computed, and anything else starts the satellite again at its epoch: every state is the
+// epoch-to-time propagation whatever the call order. The library keeps about 29 KB of every XP satellite it has
+// held and gives it back only when none is live, so when a restoration is due every entity lets its satellite go.
 struct Entity {
   Elements elements;
-  Satellite satellite;
   uint32_t satnum = 0;
   double epochJd = 0;
+  Satellite satellite;
+  bool reached = false;   // lastMinutes/lastState hold the satellite's last propagation
+  double lastMinutes = 0;
+  double lastState[8] = {0};
 };
 std::vector<std::unique_ptr<Entity>>* g_entities = nullptr;
 uint32_t g_nextSatnum = 0;
@@ -452,10 +463,29 @@ int32_t addEntity(const OrbProOMMRecord& record) {
   if (!adopt(record, entity.get())) return kErrBadInput;
   if (g_nextSatnum >= 99999) return kErrBadInput;
   entity->satnum = ++g_nextSatnum;
-  if (!entity->satellite.create(entity->elements, entity->satnum)) return kErrUnphysical;
+  {
+    Satellite probe;  // the library's own acceptance of the set, released at once
+    if (!probe.create(entity->elements, entity->satnum)) return kErrUnphysical;
+  }
   entities().push_back(std::move(entity));
   return static_cast<int32_t>(entities().size() - 1);
 }
+
+// Every entity lets its satellite go and the library returns to its starting state, removing nothing.
+void restoreLibrary() {
+  if (g_entities != nullptr) {
+    for (auto& e : *g_entities) { e->satellite.abandon(); e->reached = false; }
+  }
+  Library::instance().restore();
+}
+
+// A fresh satellite number for every satellite the library is given: it keeps state of removed satellites, and a
+// number added again while other satellites are live crashed it (2026-10-12).
+uint32_t nextSatnum() {
+  if (g_nextSatnum >= 99999) { restoreLibrary(); g_nextSatnum = 0; }
+  return ++g_nextSatnum;
+}
+
 
 int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* out) {
   const double mjd = julianDate - 2400000.5;
@@ -464,9 +494,29 @@ int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* ou
   t.seconds = (mjd - static_cast<double>(t.day)) * kSecondsPerDay;
   const double minutes = minutesSinceEpoch(entity.elements, t);
   double state[8] = {0};
-  if (!entity.satellite.propagate(&minutes, 1, state)) {
-    orbpro_state_init(out);
-    return kErrUnphysical;
+  const bool sameSide = entity.reached && (minutes >= 0) == (entity.lastMinutes >= 0);
+  if (sameSide && minutes == entity.lastMinutes) {
+    std::memcpy(state, entity.lastState, sizeof state);
+  } else {
+    if (!(sameSide && std::fabs(minutes) > std::fabs(entity.lastMinutes)) || !entity.satellite.valid()) {
+      // A restart, or a satellite the library has not got: the library is restored first whenever it holds this
+      // entity's satellite (removing one of several crashes it) or a restoration is due.
+      if (entity.satellite.valid() || Library::instance().recycleDue()) restoreLibrary();
+      if (!entity.satellite.create(entity.elements, nextSatnum())) {
+        entity.reached = false;
+        orbpro_state_init(out);
+        return kErrUnphysical;
+      }
+    }
+    if (!entity.satellite.propagate(&minutes, 1, state)) {
+      restoreLibrary();
+      entity.reached = false;
+      orbpro_state_init(out);
+      return kErrUnphysical;
+    }
+    entity.reached = true;
+    entity.lastMinutes = minutes;
+    std::memcpy(entity.lastState, state, sizeof state);
   }
   const double theta = gmstRadians(julianDate);
   const double c = std::cos(theta), s = std::sin(theta);
@@ -489,7 +539,8 @@ int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* ou
 }
 
 void clearEntities() {
-  delete g_entities;  // each entity's satellite leaves the library with it
+  restoreLibrary();  // the satellites leave by restoration: removing them one by one can crash the library
+  delete g_entities;
   g_entities = nullptr;
   g_nextSatnum = 0;
 }
