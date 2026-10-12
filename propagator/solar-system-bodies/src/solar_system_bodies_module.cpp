@@ -574,10 +574,22 @@ inline int32_t hill_radius(int32_t id, double et, double* out) {
 
 /* The observer for the sky: SSB position and velocity (ICRF, m, m/s). Inside
  * the central body's Hill sphere it moves with that body plus the camera's own
- * inertial velocity; from the Hill radius out to 1e14 m the velocity eases to
- * zero (a smoothstep in log distance); beyond, it is the SSB at rest. */
-inline int32_t observer_state(int32_t central, double et, const double cam_pos[3], const double cam_vel[3],
-                              double out[6]) {
+ * inertial velocity (and, for a camera fixed in the body's frame, the body's
+ * rotation: omega x r about its pole); from the Hill radius out to 1e14 m the
+ * velocity eases to zero (a smoothstep in log distance); beyond, it is the SSB
+ * at rest. */
+inline int32_t observer_state(int32_t central, double et, const double cam_pos[3], const double cam_vel_in[3],
+                              bool corotating, double out[6]) {
+    double cam_vel[3] = {cam_vel_in[0], cam_vel_in[1], cam_vel_in[2]};
+    if (corotating) {
+        double rot[9], spin = 0.0;
+        if (rotation(central, et, rot, &spin) == Ok) {
+            const double w[3] = {rot[6] * spin, rot[7] * spin, rot[8] * spin};
+            cam_vel[0] += w[1] * cam_pos[2] - w[2] * cam_pos[1];
+            cam_vel[1] += w[2] * cam_pos[0] - w[0] * cam_pos[2];
+            cam_vel[2] += w[0] * cam_pos[1] - w[1] * cam_pos[0];
+        }
+    }
     double c[6];
     int32_t code = state_m(central, 0, et, c);
     if (code != Ok) return code;
@@ -743,9 +755,11 @@ SSB_EXPORT("ssb_apparent") int32_t ssb_apparent(double et, const double* observe
 }
 
 /* Observer SSB state (6 doubles) for a camera at `cam` (position 3, inertial
- * velocity 3; ICRF, relative to `central`). */
-SSB_EXPORT("ssb_observer") int32_t ssb_observer(double et, int32_t central, const double* cam, double* out) {
-    return ssb::observer_state(central, et, cam, cam + 3, out);
+ * velocity 3; ICRF, relative to `central`). `corotating` != 0: the camera is
+ * at rest in the central body's fixed frame and turns with it. */
+SSB_EXPORT("ssb_observer") int32_t ssb_observer(double et, int32_t central, const double* cam, int32_t corotating,
+                                                 double* out) {
+    return ssb::observer_state(central, et, cam, cam + 3, corotating != 0, out);
 }
 
 SSB_EXPORT("ssb_hill_radius") double ssb_hill_radius(double et, int32_t id) {
@@ -894,7 +908,8 @@ int run(const Json& request, Json* response) {
         if (!vec3(params, "camera_position_m", cam)) return fail("bad-argument", "params.camera_position_m is required");
         vec3(params, "camera_velocity_m_s", cam + 3);
         double out[6];
-        const int32_t code = ssb::observer_state(params.value("central", 399), et, cam, cam + 3, out);
+        const int32_t code = ssb::observer_state(params.value("central", 399), et, cam, cam + 3,
+                                                 params.value("corotating", false), out);
         if (code != ssb::Ok) return fail(ssb::code_name(code), "observer state unavailable");
         (*response)["position_m"] = vec(out, 3);
         (*response)["velocity_m_s"] = vec(out + 3, 3);
