@@ -3,7 +3,7 @@
   "name": "SDN Record Retention Flow",
   "version": "0.1.0",
   "engineLinkage": "bridge",
-  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which deletes every configured target's records older than now minus window_hours (module config; default 72 h over the weather fields WXF by VALID_TIME_MS) - read with storage.flatsql_query_stream, deleted by content ID with storage.delete. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
+  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which asks the node (storage.expire) to delete each configured lane's records older than now minus window_hours (module config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
   "nodes": [
     {
       "nodeId": "expire",

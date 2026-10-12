@@ -56,13 +56,14 @@ await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 
 // A test build of the same source for the SDK's in-process harness, which is
 // the browser leg only (tests/sdk_compat.test.mjs): declared for browser and
-// wasmedge with the read capability alone, so the harness loads it and its
-// stubbed host answers storage.delete. Never shipped - the artifact the node
+// wasmedge with no capability, so the harness loads it and its stubbed host
+// answers storage.expire. Never shipped - the artifact the node
 // runs is dist/isomorphic/module.wasm above (wasmedge, storage_write).
 const testManifest = {
   ...manifest,
   runtimeTargets: ["browser", "wasmedge"],
-  capabilities: ["storage_query"],
+  capabilities: [],
+  externalInterfaces: [],
   buildArtifacts: [{ ...manifest.buildArtifacts[0], path: "dist/test-browser/module.wasm", target: "browser,wasmedge" }],
 };
 await fs.mkdir(path.join(distRoot, "test-browser"), { recursive: true });

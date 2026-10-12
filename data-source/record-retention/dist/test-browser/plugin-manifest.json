@@ -2,27 +2,10 @@
   "pluginId": "com.digitalarsenal.data-source.record-retention",
   "name": "SDN Record Retention",
   "version": "0.1.0",
-  "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it. Each target names a standard, its FlatSQL relation, the record's own time column and the sources it covers; records older than now minus window_hours are read with storage.flatsql_query_stream, their content IDs computed as the node computes them (raw CIDv1, sha2-256 of the bare bytes) and deleted with storage.delete. Default target: the weather fields (WXF, by VALID_TIME_MS) of every source. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive.",
+  "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it. Each target names a standard and its lane (provider and/or sources); the node's storage.expire host op deletes the lane's records whose own indexed time (WXF VALID_TIME_MS, OMM/MPE EPOCH, ...) is older than now minus window_hours, paging the store's record index. Default target: WXF from provider noaa-ncep. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive.",
   "pluginFamily": "data_source",
-  "capabilities": [
-    "storage_query"
-  ],
-  "externalInterfaces": [
-    {
-      "interfaceId": "flatsql-retention",
-      "kind": "host-service",
-      "direction": "bidirectional",
-      "capability": "storage_query",
-      "resource": "storage://flatsql",
-      "description": "Reads the expired records (storage.flatsql_query_stream) and deletes them by content ID (storage.delete, the storage_write tier).",
-      "properties": {
-        "hostOps": [
-          "storage.flatsql_query_stream",
-          "storage.delete"
-        ]
-      }
-    }
-  ],
+  "capabilities": [],
+  "externalInterfaces": [],
   "invokeSurfaces": [
     "direct",
     "command"
@@ -46,7 +29,12 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "Timer tick frame (content ignored)."
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Timer tick, content ignored."
+              }
             }
           ],
           "minStreams": 0,
@@ -72,16 +60,16 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted, not held and refused; not a data record."
+                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted and not held; not a data record."
               }
             }
           ],
-          "description": "{window_hours, cutoff_ms, deleted, not_held, refused, capped}"
+          "description": "{window_hours, cutoff_ms, deleted, not_held, capped}"
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Deletes every configured target's records older than now minus window_hours (plugin config; compiled default 72 h over WXF by VALID_TIME_MS), at most max_deletes a pass."
+      "description": "Deletes every configured target's records older than now minus window_hours (plugin config; compiled default 72 h over WXF from provider noaa-ncep), at most max_deletes a pass, through the node's storage.expire."
     }
   ],
   "schemasUsed": [

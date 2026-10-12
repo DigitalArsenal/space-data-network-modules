@@ -3,9 +3,8 @@
   "name": "SDN Record Retention Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which deletes every configured target's records older than now minus window_hours (module config; default 72 h over the weather fields WXF by VALID_TIME_MS) - read with storage.flatsql_query_stream, deleted by content ID with storage.delete. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
+  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which asks the node (storage.expire) to delete each configured lane's records older than now minus window_hours (module config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
   "capabilities": [
-    "storage_query",
     "storage_write"
   ],
   "dependencies": [
@@ -17,16 +16,15 @@
   ],
   "externalInterfaces": [
     {
-      "interfaceId": "flatsql-retention",
+      "interfaceId": "record-expiry",
       "kind": "host-service",
-      "direction": "bidirectional",
-      "capability": "storage_query",
-      "resource": "storage://flatsql",
-      "description": "Reads the expired records (storage.flatsql_query_stream) and deletes them by content ID (storage.delete, the storage_write tier).",
+      "direction": "output",
+      "capability": "storage_write",
+      "resource": "storage://records",
+      "description": "storage.expire: delete one lane's records older than a cutoff, through the store's record index (sdn-server internal/storage/record_expiry.go).",
       "properties": {
         "hostOps": [
-          "storage.flatsql_query_stream",
-          "storage.delete"
+          "storage.expire"
         ]
       }
     }
@@ -47,7 +45,12 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "Timer tick frame (content ignored)."
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Timer tick, content ignored."
+              }
             }
           ],
           "minStreams": 0,
@@ -73,11 +76,11 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted, not held and refused; not a data record."
+                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted and not held; not a data record."
               }
             }
           ],
-          "description": "{window_hours, cutoff_ms, deleted, not_held, refused, capped}"
+          "description": "{window_hours, cutoff_ms, deleted, not_held, capped}"
         }
       ],
       "maxBatch": 1,

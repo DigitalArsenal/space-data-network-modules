@@ -8,7 +8,6 @@
   "edges": 1,
   "triggers": 1,
   "capabilities": [
-    "storage_query",
     "storage_write"
   ],
   "engineLinkage": "bridge",
@@ -34,7 +33,7 @@
       "dependencyId": "com.digitalarsenal.data-source.record-retention",
       "pluginId": "com.digitalarsenal.data-source.record-retention",
       "version": "0.1.0",
-      "sha256": "7152a0101e6ebdb603f5ea86d25f19d763a9b35562441f2f19305f95585eea69",
+      "sha256": "9cbcd7c4da4f29684c6a52b9dd2f5d83f02dd22295e8535958ca472f2720a8d5",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
