@@ -378,12 +378,15 @@ extern "C" int parse_satcat(void) {
     else if (!designator.empty()) ++unnumbered_designators;
     const std::string type = trim(r.text("OBJECT_TYPE"));
     cat.OBJECT_TYPE = type == "PAYLOAD" ? spaceObjectClass::PAYLOAD : type == "ROCKET BODY" ? spaceObjectClass::ROCKET_BODY : type == "DEBRIS" ? spaceObjectClass::DEBRIS : spaceObjectClass::UNKNOWN;
+    // OWNER is always written: an unset field reads back as its first value (AB), a real owner. A code the
+    // enum does not list, or none, is UNK.
     const std::string owner = trim(r.text("COUNTRY"));
-    if (!owner.empty()) {
-      legacyCountryCode code{};
-      if (country(owner, &code)) cat.OWNER = code;
-      else ++unknown_countries[owner];
+    legacyCountryCode code = legacyCountryCode::UNK;
+    if (!owner.empty() && !country(owner, &code)) {
+      code = legacyCountryCode::UNK;
+      ++unknown_countries[owner];
     }
+    cat.OWNER = code;
     const std::string launch = trim(r.text("LAUNCH")), decay = trim(r.text("DECAY"));
     if (iso_date(launch)) cat.LAUNCH_DATE = launch;
     if (iso_date(decay)) {
@@ -413,7 +416,7 @@ extern "C" int parse_satcat(void) {
     return fail("invalid-spacetrack-source", oversize ? "The $CAT output exceeds its byte budget." : error);
   }
   if (counters.emitted == 0) return fail("invalid-spacetrack-source", "No Space-Track SATCAT entry could be read.");
-  // A country code the standard's legacyCountryCode enum does not list is left unset and counted by code, not guessed.
+  // A country code the standard's legacyCountryCode enum does not list is written as UNK and counted by code, not guessed.
   Json countries = Json::object();
   size_t unrepresented_countries = 0;
   for (const auto& entry : unknown_countries) {

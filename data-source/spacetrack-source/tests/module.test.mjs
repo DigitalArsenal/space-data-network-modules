@@ -12,6 +12,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ByteBuffer } from 'flatbuffers';
 import { CAT } from 'spacedatastandards.org/lib/js/CAT/CAT.js';
+import { legacyCountryCode } from 'spacedatastandards.org/lib/js/CAT/legacyCountryCode.js';
 import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
@@ -134,10 +135,11 @@ test('parse_satcat: type, owner, dates, altitudes; a decayed object is DECAYED, 
       DECAY: '2026-05-06', RCSVALUE: '4.25', PERIOD: '88.0', INCLINATION: '65.1', APOGEE: '300', PERIGEE: '120' }),
     satcatRecord({ NORAD_CAT_ID: '100001', OBJECT_NUMBER: '100001', INTLDES: 'TBA - TO BE ASSIGNED', OBJECT_ID: 'TBA - TO BE ASSIGNED', OBJECT_TYPE: 'DEBRIS', COUNTRY: 'XX', SATNAME: 'TBA', OBJECT_NAME: 'TBA' }),
     satcatRecord({ NORAD_CAT_ID: '99001', CURRENT: 'N' }),
+    satcatRecord({ NORAD_CAT_ID: '99003', OBJECT_NUMBER: '99003', INTLDES: '2026-903A', OBJECT_ID: '2026-903A', SATNAME: 'SYNTH 3', OBJECT_NAME: 'SYNTH 3', COUNTRY: 'AGO' }),
   ];
   const result = await host.invoke(request('parse_satcat', JSON.stringify(rows)));
   const cats = records(result, 'catalog', CAT, '$CAT');
-  assert.equal(cats.length, 3);
+  assert.equal(cats.length, 4);
   assert.equal(cats[0].NORAD_CAT_ID, 99001);
   assert.equal(cats[0].OBJECT_ID, '2026-901A');
   assert.equal(cats[0].OBJECT_NAME, 'SYNTH 1');
@@ -157,9 +159,12 @@ test('parse_satcat: type, owner, dates, altitudes; a decayed object is DECAYED, 
   assert.equal(cats[2].NORAD_CAT_ID, 100001);
   assert.equal(cats[2].OBJECT_TYPE, 2); // DEBRIS
   assert.equal(cats[2].OBJECT_ID, null); // not an international designator: no join key is made of it
+  assert.equal(cats[1].OWNER, legacyCountryCode.CIS);
+  assert.equal(cats[2].OWNER, legacyCountryCode.UNK, 'a code the standard does not list is UNK, never the unset first value (AB)');
+  assert.equal(cats[3].OWNER, legacyCountryCode.AGO, 'one of the codes SDS 1.246.0 added');
   const r = report(result);
   assert.deepEqual({ records: r.records, emitted: r.emitted, superseded: r.supersededEntries, designators: r.unrepresentedDesignators, countries: r.unrepresentedCountries, decayed: r.decayed },
-    { records: 4, emitted: 3, superseded: 1, designators: 1, countries: 1, decayed: 1 });
+    { records: 5, emitted: 4, superseded: 1, designators: 1, countries: 1, decayed: 1 });
   assert.deepEqual(r.unrepresentedCountryCodes, { XX: 1 });
 });
 

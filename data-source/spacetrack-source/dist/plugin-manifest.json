@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
   "name": "Space-Track Source",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Parse Space-Track GP and GP-history JSON (omm-gp-json, Alpha-5 catalog numbers read) into canonical SDS OMM records and SATCAT JSON into CAT records. Retrieval, credentials, the request rate and storage belong to the SDN host flow.",
   "pluginFamily": "data_source",
   "capabilities": [],
