@@ -1,0 +1,12 @@
+{
+ "cid": "bafybeienvhlomaeycpi5lyq5tvijwzmxulq23644rtjhqa6lymly23vpkq",
+ "bytes": 350311768,
+ "made": "ipfs add -r --only-hash --cid-version 1 (kubo)",
+ "layout": [
+  "kernels/",
+  "imagery/<naif>/{z}/{x}/{y}.jpg",
+  "smallbodies/",
+  "SOURCES.md",
+  "licences.json"
+ ]
+}

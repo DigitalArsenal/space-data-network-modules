@@ -1,0 +1,458 @@
+{
+ "dataset": "solar-system",
+ "entries": [
+  {
+   "path": "SOURCES.md",
+   "licence": "CC0 1.0 (this index)",
+   "credit": null
+  },
+  {
+   "path": "licences.json",
+   "licence": "CC0 1.0 (this index)",
+   "credit": null
+  },
+  {
+   "path": "kernels/kernel-provenance.json",
+   "licence": "CC0 1.0 (provenance record)",
+   "credit": null
+  },
+  {
+   "path": "kernels/moon-pa-1950.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "1927bf93bf1e595ab20f4993349defdec14aa85d7a45a1a75edbabc19b3bf408"
+  },
+  {
+   "path": "kernels/core-1950.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "17b71ff2ed24de15353abc0397397f86162c59d0e37cb86dbe47bb955bea8dfd"
+  },
+  {
+   "path": "kernels/moon-pa-1960.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "8e441d30984118136e0ea40bbbaa080798959f9e62c893fc6432f3f56d166a4d"
+  },
+  {
+   "path": "kernels/core-1960.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "03e70809567f920bf973d6d2b95d368fdc766b906c2be274104c196a46e86779"
+  },
+  {
+   "path": "kernels/moon-pa-1970.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "3117233e8134f6ff024b253a569c99cdba8a99324eed000de7f9caed0e7f37b0"
+  },
+  {
+   "path": "kernels/core-1970.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "fbf66c130b1dd93bf5772a33f4dcfd502ac17576ebe2f30d86c0b9bea5c19521"
+  },
+  {
+   "path": "kernels/moon-pa-1980.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "03cf7a74ff7bd919e809ccb29d1d987ff752220a76f340de8cf393ec46258e43"
+  },
+  {
+   "path": "kernels/core-1980.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "31b96af6810586bbcc9bfee1d65a3d78454e7cd387fe866edf02f6b95fcd794c"
+  },
+  {
+   "path": "kernels/moon-pa-1990.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "81f0eed6499739b8e856c06a275d7efe1f54a16c632b232a4b1be6575a85d5bd"
+  },
+  {
+   "path": "kernels/core-1990.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "ffbf157b5b5567231c890e5fbf8b398aed0a5cb384e7afd0baf952d3d196efe8"
+  },
+  {
+   "path": "kernels/moon-pa-2000.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "14b3a0e0725ee033cef35c8e4591b57266538874d7f10a9b692c7984a53a4e81"
+  },
+  {
+   "path": "kernels/core-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "f7c39ed6df4a88e9514695d6f1dd9747dea4455ec7776c680dfe111c2e4cd633"
+  },
+  {
+   "path": "kernels/mars-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "4a8d29a9f879912383e3403e32bc4142296c7af2147cc5df2b55ae72b9fbb12b"
+  },
+  {
+   "path": "kernels/jupiter-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "5ee8c9ae9d4430ad82aa00b68ede815c619006c3e9badb09ea1532bf504d50a6"
+  },
+  {
+   "path": "kernels/saturn-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "390af0b6e4327dd511160a24a846384bb41f4d1d3cb36022090e5da860fea83f"
+  },
+  {
+   "path": "kernels/uranus-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "8f7eb473df5fbe89a047edce3a353ff823044fc5b35d8e8a5bd84ca77cf28a20"
+  },
+  {
+   "path": "kernels/neptune-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "8195f8723562d178d16fdf7ff6bede1a41ffd357ff50f40bdbce2793979a59ef"
+  },
+  {
+   "path": "kernels/pluto-2000.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "dab3b58d9c2746763dd9146f65b7b45be90ac064b70e2a95a1ac2a6f9e1ccc6f"
+  },
+  {
+   "path": "kernels/moon-pa-2010.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "04085e6e6aace3bdc0c99bc5f947ed9d583352cef88f39b23ebfebc8c10d44bd"
+  },
+  {
+   "path": "kernels/core-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "a74a643b88d20701d8e82f9a9f582e9497de922361e7dee09cf9e54464888066"
+  },
+  {
+   "path": "kernels/mars-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "02454d52861b5845a2a1a30342cfd6d612ef0993c70d019baed1f4a036c8cba3"
+  },
+  {
+   "path": "kernels/jupiter-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "c0536895ba4c0c29bec36fe68ff6532eb2b815128e1aed505dd545df1dc5f78c"
+  },
+  {
+   "path": "kernels/saturn-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "6ac54265a1c31013ccf06657682acd71d031d1fcc20df93f209b6815c3d75af1"
+  },
+  {
+   "path": "kernels/uranus-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "b8d3f12fac09a6af1ec8d62ce0a1f8a903864a8bee870058474f59bd40e17e8c"
+  },
+  {
+   "path": "kernels/neptune-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "82b14e92a928b2042a277caeac39a8e1596c9c84d17367148723e61b98c9578c"
+  },
+  {
+   "path": "kernels/pluto-2010.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "6e237b04537baca335d44c35826889a21ee464f6fea7be6cf6daac09b5bf1ca5"
+  },
+  {
+   "path": "kernels/moon-pa-2020.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "0b9042a2ce11b2beba564f2f3a7f45371a3fe58d2297c60d707f626be95288ca"
+  },
+  {
+   "path": "kernels/core-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "1907dd4aeeafaeaa7a8466bea7b936304f0504413e866e7962ab9f2cd9894dbc"
+  },
+  {
+   "path": "kernels/mars-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "ee9cdd7794b377518c9e823e9f1c1b38a9996d130ae842f734ffa2429ca28ff3"
+  },
+  {
+   "path": "kernels/jupiter-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "b6c56e6501338b98c334bcddaf210fc97da6e70eb96b7b81cf6527895aa4d3c9"
+  },
+  {
+   "path": "kernels/saturn-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "c921108b148c1b414b6a17ce31d906129580f7306b62ef6049d5884675a6bce9"
+  },
+  {
+   "path": "kernels/uranus-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "45e552fe3862b6aa65ded2bc54e5e1bb7a7dd16109339e32b4f8d4bd04f6f6ef"
+  },
+  {
+   "path": "kernels/neptune-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "ada6015e9536f38c3ac19c5ac9fea532a4f0c782ad2f9d4c7af04b8cb31bc2e8"
+  },
+  {
+   "path": "kernels/pluto-2020.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "4aa3dd8d955f178e323ac8eb666498b4892f7e18b258f3f4615268ad256fb317"
+  },
+  {
+   "path": "kernels/moon-pa-2030.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "10864c945cfbb7062e15ffb46a71fb477b9349d9edb582e869be4be80c1cac43"
+  },
+  {
+   "path": "kernels/core-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "7cda6a2e7cfc97c6acf36873de0d8580a350e6a080b1f6b6cc366a5c5970a3bb"
+  },
+  {
+   "path": "kernels/mars-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "929b46c14e0fc399b92f4771030968d33f1c89ac85d49fb5e23f79eba5876553"
+  },
+  {
+   "path": "kernels/jupiter-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "74a77c65c488112077183d682aec145dea4fb0d17f71516472fa9f8434db06d4"
+  },
+  {
+   "path": "kernels/saturn-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "43b1cd6f73edce164417ca9fb57db435777c72fbfcb677067455a3ab9fe03365"
+  },
+  {
+   "path": "kernels/uranus-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "905029ff26ae15bb2fdadf579e33ac09d4c9d2aa96c7552c8f3f33ba5adaed73"
+  },
+  {
+   "path": "kernels/neptune-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "8f803d22a9a9a6a7f4730c8cab6a4e91170adddff4abd12b577a5d023c7365a1"
+  },
+  {
+   "path": "kernels/pluto-2030.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "bcebf0810e4ee217f148444f538d34202b54ea037dc26574d11bd3ef2f98d17b"
+  },
+  {
+   "path": "kernels/moon-pa-2040.bpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "8d34a2da2c3d3b76e0986486c0731909ee3b0b38ab73d0c9282ef098b5bd78eb"
+  },
+  {
+   "path": "kernels/core-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "ed5e50a2513dc05b993427d46ea55104d3da87a1b99e72586e1c2a90f3b44f5b"
+  },
+  {
+   "path": "kernels/mars-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "33225c713df29b65206240b3f0a84c03d1b04f43c078daac1d6ef981ef386500"
+  },
+  {
+   "path": "kernels/jupiter-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "27a6d03532e9ff106f4ac6d36bcfa2ddcfca8907b8da7ebc82932fef1735c49e"
+  },
+  {
+   "path": "kernels/saturn-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "456aed76350198acb8bab9fad46836f31f2c29c68f344ddd56710ab63d26f167"
+  },
+  {
+   "path": "kernels/uranus-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "09d9e0710f994174d8457ea49c4e44e5f164b7bba64176215899bfb5feaf1d6f"
+  },
+  {
+   "path": "kernels/neptune-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "31d4360dfdc43430e47f5f0ee8ea2ce4809e522d4072ddfa9ee4953323ab233d"
+  },
+  {
+   "path": "kernels/pluto-2040.bsp",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "107078df47393e482b2192394042be23724a87c94d041ca0c1dadd2173335e35"
+  },
+  {
+   "path": "kernels/pck00011.tpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+  },
+  {
+   "path": "kernels/gm_de440.tpc",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140"
+  },
+  {
+   "path": "kernels/moon_de440_250416.tf",
+   "licence": "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System",
+   "credit": "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015",
+   "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768"
+  },
+  {
+   "path": "imagery/199/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JHUAPL/CIW MESSENGER MDIS, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_MESSENGER_MDIS_Basemap_MD3Color_Mosaic_Global_64ppd.tif"
+  },
+  {
+   "path": "imagery/299/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Magellan, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif"
+  },
+  {
+   "path": "imagery/301/",
+   "licence": "public domain (NASA SVS)",
+   "credit": "NASA/GSFC/Arizona State University LRO LROC WAC, NASA Scientific Visualization Studio (CGI Moon Kit)",
+   "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_16k.tif"
+  },
+  {
+   "path": "imagery/499/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Viking Orbiter, USGS Astrogeology MDIM colour",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars_Viking_ClrMosaic_global_925m.tif"
+  },
+  {
+   "path": "imagery/501/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Galileo SSI and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif"
+  },
+  {
+   "path": "imagery/502/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Galileo SSI and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif"
+  },
+  {
+   "path": "imagery/503/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Galileo SSI and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif"
+  },
+  {
+   "path": "imagery/504/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Galileo SSI and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif"
+  },
+  {
+   "path": "imagery/599/",
+   "licence": "public domain (NASA/JPL Photojournal)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS (PIA07782)",
+   "source": "https://assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/pia07/pia07782/PIA07782.tif"
+  },
+  {
+   "path": "imagery/602/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Enceladus_Cassini_ISS_Global_Mosaic_100m_HPF.tif"
+  },
+  {
+   "path": "imagery/603/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Tethys_Cassini_mosaic_global_293m.tif"
+  },
+  {
+   "path": "imagery/604/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Dione_Cassini_Voyager_mosaic_global_154m.tif"
+  },
+  {
+   "path": "imagery/605/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Rhea_Cassini_Voyager_mosaic_global_417m.tif"
+  },
+  {
+   "path": "imagery/606/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Titan_ISS_P19658_Mosaic_Global_4km.tif"
+  },
+  {
+   "path": "imagery/608/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL/Space Science Institute Cassini ISS and Voyager, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Iapetus_Cassini_Voyager_mosaic_global_783m.tif"
+  },
+  {
+   "path": "imagery/801/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JPL Voyager 2, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Triton_Voyager2_ClrMosaic_GlobalFill_600m.tif"
+  },
+  {
+   "path": "imagery/901/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif"
+  },
+  {
+   "path": "imagery/999/",
+   "licence": "public domain (USGS Astrogeology, NASA)",
+   "credit": "NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif"
+  },
+  {
+   "path": "imagery/index.json",
+   "licence": "CC0 1.0 (index)",
+   "credit": null
+  },
+  {
+   "path": "smallbodies/",
+   "licence": "astorb.dat may be freely used, copied, and transmitted provided attribution to Dr. Edward Bowell and the funding sources (NASA grant NAG5-4741, the Lowell Observatory endowment) is made.",
+   "credit": "Asteroid orbits: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant NAG5-4741 and the Lowell Observatory endowment)",
+   "source": "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz",
+   "sourceSha256": "ddbe380ad76979dbddcd7033d1e2ab1433a75480e04308d5640270c6f23372e4"
+  }
+ ]
+}
