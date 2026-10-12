@@ -35,7 +35,7 @@ async function load() {
   return { x, copyIn };
 }
 
-// ---- test-only oracle: two-body from the catalogue's own numbers ----
+// ---- test-only oracle: two-body from the catalog's own numbers ----
 const DEG = Math.PI / 180;
 const AU = 149597870.7e3;
 const GM_SUN = 1.3271244004127942e20;

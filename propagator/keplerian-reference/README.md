@@ -114,7 +114,7 @@ Provenance, tolerance policy and the reason there is no Tier A row:
 ## Small bodies (1.1.0)
 
 Asteroids are a second store beside the ABI entity table, because the ABI's
-state vector is Earth-fixed by contract and a catalogue holds hundreds of
+state vector is Earth-fixed by contract and a catalog holds hundreds of
 thousands of Sun-centred rows.
 
 | Export | |
@@ -133,7 +133,7 @@ Rows are independent, so a host shards them across its own workers, as for
 Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
 within 2.1 mm of an independent two-body oracle at ±30 and ±400 days; median
 366 km (worst 3,485 km) from JPL Horizons 30 days either side of the element
-epoch, the two-body simplification. The whole numbered catalogue (895,910)
+epoch, the two-body simplification. The whole numbered catalog (895,910)
 ingests in 0.4 s and snapshots in 0.11 s on one thread.
 Credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant
 NAG5-4741 and the Lowell Observatory endowment).
