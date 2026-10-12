@@ -11,8 +11,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
@@ -21,8 +21,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",

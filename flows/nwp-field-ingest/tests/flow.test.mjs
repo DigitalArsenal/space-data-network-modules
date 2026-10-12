@@ -36,19 +36,24 @@ const wxfLib = await import(WXF_LIB.href);
 const PUBLISH_URL = "http://127.0.0.1:5003/api/v1/admin/dataset-updates/publish";
 const GFS = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos";
 
-// each fixture file served as its product's lead-24 file, with an .idx listing its messages (offsets in that file)
+// each fixture file served as its product's lead-24 file, with an .idx listing its messages (offsets in that file); fixtures
+// cut from one NOAA file (the 0.25 deg surface and air messages) are served as that one file, their messages in a row
 const SERVED = {};
 for (const [file, inv] of Object.entries(INVENTORY)) {
   const body = fs.readFileSync(new URL(file, SET));
-  const lines = [];
+  const s = SERVED[inv.url] ?? (SERVED[inv.url] = { files: [], body: Buffer.alloc(0), lines: [] });
   for (let at = 0, n = 1; at < body.length; n++) {
     const len = Number(body.readBigUInt64BE(at + 8));
     const [, , date, variable, level, fcst] = inv.idx[n - 1].split(":");
-    lines.push(`${n}:${at}:${date}:${variable}:${level}:${fcst}:`);
+    s.lines.push(`${s.lines.length + 1}:${s.body.length + at}:${date}:${variable}:${level}:${fcst}:`);
     at += len;
   }
-  SERVED[inv.url] = { file, body, idx: lines.join("\n") + "\n" };
+  s.files.push(file);
+  s.body = Buffer.concat([s.body, body]);
 }
+for (const s of Object.values(SERVED)) { s.file = s.files.join("+"); s.idx = s.lines.join("\n") + "\n"; }
+// the default products' fixtures (the sea product, gfs-0p25-sea, is asked for by name)
+const DEFAULT_FILES = Object.keys(EXPECTED).filter((f) => f !== "gfs-0p25-air.grib2");
 
 function encodeEnvelope(meta, segments = []) {
   const metaBytes = encoder.encode(JSON.stringify(meta));
@@ -142,7 +147,7 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
     assert.equal(sequence[at + 1], "publish", sequence.join(" "));
     at += 2; batches++;
   }
-  assert.equal(batches, Object.keys(EXPECTED).length);
+  assert.equal(batches, DEFAULT_FILES.length);
 
   // every ingest: one lead-file's fields, each field's codes equal to ecCodes' packing integers
   for (const ingest of stub.calls.filter((c) => c.operation === "storage.ingest_with_source")) {
@@ -156,7 +161,7 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
       if (!fields.has(r.VARIABLE_NAME)) fields.set(r.VARIABLE_NAME, []);
       fields.get(r.VARIABLE_NAME).push(recordCodes(r));
     }
-    const file = Object.keys(EXPECTED).find((f) => EXPECTED[f].some((e) => fields.has(e.name)) && EXPECTED[f].length === fields.size);
+    const file = DEFAULT_FILES.find((f) => EXPECTED[f].some((e) => fields.has(e.name)) && EXPECTED[f].length === fields.size);
     assert.ok(file, `an ingest matches no product: ${[...fields.keys()].join(", ")}`);
     for (const e of EXPECTED[file]) {
       const parts = fields.get(e.name);
@@ -170,6 +175,50 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
   const missing = egress.filter((r) => r.missing).flatMap((r) => r.missing);
   assert.equal(missing.length, 3);
   assert.ok(missing.every((m) => m.http_status === 404 && m.inventory.includes(".f000.idx")));
-  assert.equal(egress.filter((r) => r.schema === "WXF.fbs").length, Object.keys(EXPECTED).length);
+  assert.equal(egress.filter((r) => r.schema === "WXF.fbs").length, DEFAULT_FILES.length);
   console.log(`runtime linear memory after the cycle: ${(host.memory.buffer.byteLength / 1048576).toFixed(0)} MiB`);
+});
+
+// The sea product (owner 2026-10-12, the world-clouds demo on the weather node): the surface fields and the air of one
+// lead-file in one byte-range fetch, cut by the parser into 11.25 deg tiles - one ingest a tile, 512, each batch named
+// gfs:<run>:f<LLL>:s4:<x>:<y> - and every field, put back together from its tiles, ecCodes' packing integers exactly.
+test("gfs-0p25-sea: one lead-file fetched by range -> 512 tile batches through the backlog -> the fields equal ecCodes'", async () => {
+  const config = { nwp_run: "20261006T00", nwp_products: "gfs-0p25-sea", nwp_max_lead: 24, nwp_lead_step: 24 };
+  const stub = createHostStub(config);
+  const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
+  stub.memoryRef.memory = host.memory;
+  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-06T05:00:00Z" })) });
+  await host.drain({ "sdn.flow.egress:emit": () => ({ statusCode: 0 }) });
+
+  const http = stub.calls.filter((c) => c.operation === "http.request");
+  assert.deepEqual(http.filter((c) => c.meta.url.endsWith(".idx")).map((c) => c.meta.url).sort(), [`${GFS}/gfs.t00z.pgrb2.0p25.f000.idx`, `${GFS}/gfs.t00z.pgrb2.0p25.f024.idx`]);
+  const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
+  assert.equal(ingests.length, 512, "32 x 16 tiles");
+  const names = ["air_temperature_2m", "visibility_surface", "precipitation_rate_surface", "geopotential_height_cloud_ceiling"];
+  const want = Object.fromEntries(["gfs-0p25-surface.grib2", "gfs-0p25-air.grib2"].flatMap((f) => EXPECTED[f]).map((e) => [e.name, e]));
+  const all = Object.fromEntries(names.map((n) => [n, new Int32Array(want[n].nlat * want[n].nlon).fill(-1)]));
+  const batches = new Set();
+  for (const ingest of ingests) {
+    assert.equal(ingest.meta.provider_id, "noaa-ncep");
+    assert.equal(ingest.meta.source_name, "gfs-0p25-sea");
+    const [, x, y] = ingest.meta.batch_id.match(/^gfs:20261006T00:f024:s4:(\d+):(\d+)$/) ?? [];
+    assert.ok(x !== undefined, ingest.meta.batch_id);
+    batches.add(ingest.meta.batch_id);
+    const records = Buffer.from(ingest.segments[ingest.meta.records?.$bin ?? 0]);
+    let n = 0;
+    for (let off = 0; off < records.length; n++) {
+      const len = records.readUInt32LE(off);
+      const r = wxfLib.WXF.getRootAsWXF(new flatbuffers.ByteBuffer(Uint8Array.from(records.subarray(off + 4, off + 4 + len)))).unpack();
+      off += 4 + len;
+      assert.equal(r.FIELD_ID, `gfs:20261006T00:f24:${r.VARIABLE_NAME}:s4:${x}:${y}`);
+      const c = recordCodes(r), e = want[r.VARIABLE_NAME], i0 = Math.round((r.GRID.LAT0 + 90) / 0.25), j0 = Math.round((((r.GRID.LON0 % 360) + 360) % 360) / 0.25);
+      for (let i = 0; i < r.GRID.NLAT; i++) for (let j = 0; j < r.GRID.NLON; j++) all[r.VARIABLE_NAME][(i0 + i) * e.nlon + ((j0 + j) % e.nlon)] = c[i * r.GRID.NLON + j];
+    }
+    assert.equal(n, names.length, `${ingest.meta.batch_id}: the four fields the fixtures carry`);
+  }
+  assert.equal(batches.size, 512, "every tile its own batch");
+  for (const name of names) {
+    assert.ok(all[name].every((v) => v >= 0), `${name}: every point in some tile`);
+    assert.equal(createHash("sha256").update(Buffer.from(Uint16Array.from(all[name]).buffer)).digest("hex"), want[name].sha256, `${name}: equal to ecCodes`);
+  }
 });

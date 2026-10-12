@@ -19,7 +19,9 @@
  * levels, every other point), gfs-0p50-clouds (total/low/middle/high cloud cover, instantaneous), each lead 0 ..
  * nwp_max_lead by nwp_lead_step; gfs-0p25-physics (2 m temperature and dew point, 10 m wind, boundary-layer height,
  * CAPE, surface height, cloud layers, and temperature/height/wind/humidity/vertical velocity on 21 levels plus the
- * tropopause) at nwp_physics_leads. Node CONFIG through plugin.getConfig: nwp_live_access (default true), nwp_run
+ * tropopause) at nwp_physics_leads; gfs-0p25-sea (10 m wind, 2 m temperature and dew point, boundary-layer height, surface
+ * height, the instantaneous precipitation rate, visibility and the cloud ceiling's height) each lead, cut by the parser
+ * into 11.25° tiles, one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>, x from 180 W, y from the north pole). Node CONFIG through plugin.getConfig: nwp_live_access (default true), nwp_run
  * (YYYYMMDDTHH; default the latest cycle nwp_lag_hours (5) old), nwp_products, nwp_max_lead (384), nwp_lead_step (3),
  * nwp_motion_heights_to (12), nwp_physics_leads ("0,3"), timeouts, nwp_publish_url (unset: no publication).
  */
@@ -442,12 +444,16 @@ struct Product {
     const char* model_class;
     int stride, band_rows, ensemble_size;
     bool spread;
+    double tile_deg;            // > 0: the parser cuts the fields into tiles of this size, one batch a tile
 };
 const Product kProducts[] = {
-    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", "NumericalGlobalDeterministic", 1, 0, 0, false},
-    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", "NumericalGlobalEnsemble", 2, 0, 31, true},
-    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", "NumericalGlobalDeterministic", 1, 0, 0, false},
-    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 64, 0, false},
+    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
+    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", "NumericalGlobalEnsemble", 2, 0, 31, true, 0},
+    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
+    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 64, 0, false, 0},
+    // the weather at the surface the world-clouds display reads about its camera (sea state, fog, rain): 11.25° tiles,
+    // one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>), so a client fetches only the tiles it stands in
+    {"gfs-0p25-sea", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 0, 0, false, 11.25},
 };
 const Product* product_named(const std::string& id) {
     for (const Product& p : kProducts) if (id == p.id) return &p;
@@ -464,6 +470,12 @@ bool wanted(const Product& p, const std::string& var, const std::string& level, 
     if (id == "gfs-0p50-clouds")
         return (var == "TCDC" && level == "entire atmosphere") || (var == "LCDC" && level == "low cloud layer") ||
                (var == "MCDC" && level == "middle cloud layer") || (var == "HCDC" && level == "high cloud layer");
+    if (id == "gfs-0p25-sea") {
+        if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
+        if ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") return true;
+        if ((var == "HPBL" || var == "HGT" || var == "PRATE" || var == "VIS") && level == "surface") return true;
+        return var == "HGT" && level == "cloud ceiling";
+    }
     if (id == "gfs-0p25-physics") {
         if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
         if ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") return true;
@@ -693,7 +705,7 @@ int select_messages(void) {
             const std::string host = url.substr(8, url.find('/', 8) - 8);
             pending.jobs.push_back(std::string("{\"url\":\"") + json_escape(url) + "\",\"product\":\"" + p->id + "\",\"model_key\":\"" + p->model_key +
                                    "\",\"model_id\":\"" + json_escape(p->model_id) + "\",\"model_class\":\"" + p->model_class + "\",\"run\":\"" + json_escape(run) +
-                                   "\",\"lead\":" + format_number(lead) + ",\"stride\":" + std::to_string(p->stride) + ",\"band_rows\":" + std::to_string(p->band_rows) +
+                                   "\",\"lead\":" + format_number(lead) + ",\"stride\":" + std::to_string(p->stride) + ",\"band_rows\":" + std::to_string(p->band_rows) + ",\"tile_deg\":" + format_number(p->tile_deg) +
                                    (p->spread ? ",\"spread\":true" : "") + (p->ensemble_size ? ",\"ensemble_size\":" + std::to_string(p->ensemble_size) : std::string()) +
                                    ",\"source_url\":\"" + json_escape(url) + "\",\"provider_id\":\"" + kProviderID + "\",\"source_name\":\"" + p->id +
                                    "\",\"origin_id\":\"" + kOriginID + "\",\"dataset_id\":\"" + json_escape(host.substr(0, host.find('.'))) +
