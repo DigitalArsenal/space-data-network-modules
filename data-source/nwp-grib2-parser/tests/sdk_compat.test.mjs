@@ -33,7 +33,8 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const INIT_MS = Date.UTC(2026, 9, 6, 0);
 const VARIABLES = { wind_east: "WindU", wind_north: "WindV", geopotential_height: "GeopotentialHeight", cloud_cover_total: "TotalCloudCover",
-  cloud_cover_low: "LowCloudCover", cloud_cover_mid: "MediumCloudCover", cloud_cover_high: "HighCloudCover", air_temperature_2m: "Temperature2m" };
+  cloud_cover_low: "LowCloudCover", cloud_cover_mid: "MediumCloudCover", cloud_cover_high: "HighCloudCover", air_temperature_2m: "Temperature2m",
+  precipitation_rate_surface: "Unspecified", visibility_surface: "Unspecified", geopotential_height_cloud_ceiling: "GeopotentialHeight" };
 
 function job(file) {
   return { ...JOBS[file], url: INVENTORY[file].url, run: "20261006T00", lead: 24,
@@ -168,6 +169,35 @@ for (const file of Object.keys(JOBS)) {
     assert.match(meta.batch_id, /^[0-9a-f]{64}$/);
   });
 }
+
+// The sea product's tiles (job tile_deg 11.25: the world-clouds demo's level-4 tiles, x from 180 W, y from the north
+// pole, both edges carried): every tile a batch of its own, handed out one an invocation through the backlog; the whole
+// field, put back together from its tiles, is ecCodes' packing integers exactly, and a point two tiles share (an edge,
+// or the 180th meridian's wrap) carries the same code in both.
+// A tiled job (tile_deg 11.25: the world-clouds demo's level-4 tiles, x from 180 W, y from the north pole): the first
+// tile's batch out, the other 511 yielded as backlog - a yielded node is resumed without input by the compiled flow
+// runtime (flows/nwp-field-ingest/tests puts all 512 back together against ecCodes).
+test("parse: a tiled job - the first tile's batch, the other 511 as backlog", async (t) => {
+  const harness = await createHarness(t);
+  const file = "gfs-0p25-air.grib2";
+  const { response, outputs } = await parse(harness, [jsonInput("jobs", { ...job(file), source_name: "gfs-0p25-sea", tile_deg: 11.25 }), bytesInput("responses", rawResponseFrame(gribBytes(file)))]);
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  assert.equal(response.yielded, true);
+  assert.equal(response.backlogRemaining, 511);
+  const meta = JSON.parse(decoder.decode(outputs.get("wxf_meta").payload));
+  assert.equal(meta.batch_id, "gfs:20261006T00:f024:s4:0:0");
+  assert.equal(meta.source_name, "gfs-0p25-sea");
+  const records = splitStream(outputs.get("wxf_records").payload).map(unpackWxf);
+  assert.deepEqual(records.map((r) => r.VARIABLE_NAME).sort(), EXPECTED[file].map((e) => e.name).sort());
+  for (const r of records) {
+    assert.equal(r.FIELD_ID, `gfs:20261006T00:f24:${r.VARIABLE_NAME}:s4:0:0`);
+    assert.deepEqual([r.GRID.LAT0, r.GRID.LON0, r.GRID.NLAT, r.GRID.NLON, r.GRID.PERIODIC_LON, r.TILE_INDEX, r.TILE_COUNT], [78.75, -180, 46, 46, false, 0, 512]);
+    // the tile's corner (78.75 N, 180 W) is the whole field's row 675, column 720 (lon 0 E is column 0)
+    const e = EXPECTED[file].find((x) => x.name === r.VARIABLE_NAME);
+    assert.equal(recordCodes(r).length, 46 * 46);
+    assert.ok(Math.abs(r.SCALE_FACTOR - e.scale) <= Math.abs(e.scale) * 1e-15);
+  }
+});
 
 test("parse: all four products in one invocation are one batch, no frame dropped", async (t) => {
   const harness = await createHarness(t);

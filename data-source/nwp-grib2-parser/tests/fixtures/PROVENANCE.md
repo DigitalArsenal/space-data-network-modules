@@ -12,6 +12,7 @@ each file's URL and the inventory lines taken.
 | `gefs-0p50-spread.grib2` | GEFS 0.5° ensemble spread `gespr ... pgrb2a.0p50` | UGRD, VGRD at 500 hPa (published at every other point, the 1° grid's) |
 | `gfs-0p50-clouds.grib2` | GFS 0.5° `pgrb2.0p50` | TCDC entire atmosphere, LCDC/MCDC/HCDC cloud layers - instantaneous ("24 hour fcst", not the interval means) |
 | `gfs-0p25-surface.grib2` | GFS 0.25° `pgrb2.0p25` | TMP 2 m above ground (published in 64-row bands) |
+| `gfs-0p25-air.grib2` | GFS 0.25° `pgrb2.0p25` (the same file) | VIS surface, PRATE surface (instantaneous), HGT cloud ceiling (the sea product, `gfs-0p25-sea`: whole fields here, 11.25° tiles with `tile_deg`) - fetched 2026-10-12 by `.idx` byte range |
 
 All are complex packing with spatial differencing (template 5.3), as GFS/GEFS publish nearly every field. Licence:
 NOAA/NCEP model output via NODD, open to the public (https://www.weather.gov/disclaimer).

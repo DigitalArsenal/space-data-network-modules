@@ -31,5 +31,13 @@
   "idx": [
    "581:409386171:d=2026100600:TMP:2 m above ground:24 hour fcst"
   ]
+ },
+ "gfs-0p25-air.grib2": {
+  "url": "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos/gfs.t00z.pgrb2.0p25.f024",
+  "idx": [
+   "10:4213323:d=2026100600:VIS:surface:24 hour fcst",
+   "593:417148665:d=2026100600:PRATE:surface:24 hour fcst",
+   "638:439990325:d=2026100600:HGT:cloud ceiling:24 hour fcst"
+  ]
  }
 }

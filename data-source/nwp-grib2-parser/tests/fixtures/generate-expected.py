@@ -15,7 +15,8 @@ SET = os.path.join(HERE, 'noaa-2026100600-f024')
 JOBS = json.load(open(os.path.join(HERE, 'jobs.json')))
 NAMES = {('u', 'isobaricInhPa'): 'wind_east_{}hPa', ('v', 'isobaricInhPa'): 'wind_north_{}hPa', ('gh', 'isobaricInhPa'): 'geopotential_height_{}hPa',
          ('tcc', 'atmosphere'): 'cloud_cover_total', ('lcc', 'lowCloudLayer'): 'cloud_cover_low', ('mcc', 'middleCloudLayer'): 'cloud_cover_mid',
-         ('hcc', 'highCloudLayer'): 'cloud_cover_high', ('2t', 'heightAboveGround'): 'air_temperature_{}m'}
+         ('hcc', 'highCloudLayer'): 'cloud_cover_high', ('2t', 'heightAboveGround'): 'air_temperature_{}m',
+         ('prate', 'surface'): 'precipitation_rate_surface', ('vis', 'surface'): 'visibility_surface', ('gh', 'cloudCeiling'): 'geopotential_height_cloud_ceiling'}
 PERCENT = {'tcc', 'lcc', 'mcc', 'hcc'}
 expected = {}
 for file, job in JOBS.items():

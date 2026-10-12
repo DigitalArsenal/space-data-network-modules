@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
   "name": "Numerical Weather Prediction GRIB2 Parser Node",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Parser flow node for numerical-weather-prediction model fields in GRIB2 (NOAA/NCEP GFS and GEFS from NOAA Open Data Dissemination's anonymous public buckets, fetched message by message through the .idx inventory). parse turns each instantaneous field into $WXF record(s) carrying the GRIB2 packing's own integers exactly - value = (R + X 2^E) / 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D, times 1/100 for a percentage (the fraction $WXF defines) - coded InlineEncodedChunk (delta/zigzag/shuffle), rows south to north and longitude from 0 east, every stride-th point (GEFS 0.5 deg spread at the 1 deg points), whole or in band_rows bands, named as the world-clouds reference names them (wind_east_850hPa, geopotential_height_500hPa, cloud_cover_low, air_temperature_2m, ..._spread). Raw: nothing is resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives). GRIB2 is read by the vendored grib2mini (grid 3.0, product 4.0/4.1/4.2, packing 5.0/5.2/5.3, bitmaps), checked against ecCodes on NOAA's own files; interval statistics, other grids or packings, unmapped parameters and integers wider than 16 bits are refused by name. capabilities: none, so the node runs in the browser and on WasmEdge alike.",
   "pluginFamily": "data_source",
   "capabilities": [],
