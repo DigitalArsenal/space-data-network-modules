@@ -1,9 +1,11 @@
 {
-  "spacedatastandards": "1.245.0",
+  "spacedatastandards": "1.246.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
     "MET",
+    "CVR",
+    "PVN",
     "OMM",
     "IDM",
     "PLD",

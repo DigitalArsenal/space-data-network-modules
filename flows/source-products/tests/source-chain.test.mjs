@@ -10,7 +10,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
-import { flatbuffers, OCM, ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
+import { flatbuffers, OCM, assertSourceNamed, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { aoeRecord } from '../../../data-source/spacemapper-aoe-source/tests/fixtures/aoe-format.mjs';
 import { gpRecord, synthetic } from '../../../data-source/spacetrack-source/tests/fixtures/spacetrack-format.mjs';
@@ -20,6 +20,9 @@ import { decode, encode, typeRef as estimationType } from '../../../analysis/est
 import { recipeFor } from '../recipe.mjs';
 import { bytesOf, egressBytes, framesOf, moduleAt, runFlow } from './flow-harness.mjs';
 
+// The detector is the producer of the maneuvers it writes (PROVENANCE.PRODUCER), whatever the source.
+const detectorManifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../../analysis/maneuver-detection/plugin-manifest.json', import.meta.url)), 'utf8'));
+const DETECTOR = `${detectorManifest.pluginId} ${detectorManifest.version}`;
 const textPort = (portId, text) => {
   const payload = Buffer.from(text);
   return { portId, payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } };
@@ -41,22 +44,17 @@ async function throughFlow(id, module, omm) {
 }
 
 function assertNamed({ egress, recipe }, tb) {
-  const { id, kind, originator, lineage, provider, licence } = recipe.source;
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  assert.equal(param(ocm, 'SOURCE_ID'), id);
-  assert.equal(param(ocm, 'SOURCE_KIND'), kind);
-  assert.equal(param(ocm, 'SOURCE_PROVIDER'), provider);
-  assert.equal(param(ocm, 'LICENCE_CLASS'), licence.class);
-  assert.equal(JSON.parse(param(ocm, 'COV_LABELS'))[0].regime, 'LEO-L');
+  assertSourceNamed(ocm, recipe);
+  assert.equal(ocm.COV_REALISM[0].REGIME, 'LEO-L');
   const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
-  assert.equal(omm.ORIGINATOR, originator);
   assert.equal(omm.NORAD_CAT_ID, 99999);
-  assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider);
+  assertSourceNamed(omm, recipe);
   const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
   assert.equal(burns.length, 1);
   assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.2, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
-  for (const tag of [`source:${id}`, `originator:${originator}`, `provider:${provider}`, `licence:${licence.class}`, ...(lineage === id ? [] : [`lineage:${lineage}`])]) assert.ok(burns[0].TAGS.includes(tag), tag);
+  assertSourceNamed(burns[0], recipe, DETECTOR);
 }
 
 test('space-track-gp through data-source/spacetrack-source: a gp_history as the REST API serves it', async () => {
@@ -100,20 +98,17 @@ test('vimpel through data-source/vimpel-source: a rectangular ephemeris, fitted 
     { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
   assert.equal(result.handlersSkipped, 0);
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  const { source } = recipe;
-  assert.equal(param(ocm, 'SOURCE_ID'), 'vimpel');
-  assert.equal(param(ocm, 'SOURCE_KIND'), 'ephemeris');
-  assert.equal(param(ocm, 'SOURCE_PROVIDER'), 'com.digitalarsenal.data-source.vimpel-source');
-  assert.equal(param(ocm, 'LICENCE_CLASS'), 'cite-only');
-  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
-  assert.equal(label.rule, 4, 'Vimpel states no covariance and no model of its own exists: the pooled model answers');
-  assert.equal(label.regime, 'MEO');
-  assert.equal(label.calibration, 'UNCALIBRATED');
-  assert.match(label.basis, /not measured on vimpel/);
+  assertSourceNamed(ocm, recipe);
+  assert.deepEqual([ocm.PROVENANCE.SOURCE_ID, ocm.PROVENANCE.PROVIDER_ID], ['vimpel', 'com.digitalarsenal.data-source.vimpel-source']);
+  assert.equal(ocm.PROVENANCE.LICENSE_CLASS, OCM.pvnLicenseClass.CiteOnly);
+  const [cvr] = ocm.COV_REALISM;
+  assert.equal(cvr.RULE, OCM.covarianceRule.PooledModel, 'Vimpel states no covariance and no model of its own exists: the pooled model answers');
+  assert.equal(cvr.REGIME, 'MEO');
+  assert.equal(cvr.CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
+  assert.equal(cvr.MEASURED_LINEAGE, 'space-track-gp', 'the cell was measured on Space-Track\'s sets, not Vimpel\'s');
   const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
-  assert.equal(omm.ORIGINATOR, source.originator);
   assert.equal(omm.OBJECT_NAME, 'vimpel:40004', 'the native identity survives the fit');
-  assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), source.provider);
+  assertSourceNamed(omm, recipe);
   assert.ok(Math.abs(omm.MEAN_MOTION - 2.0056) < 0.001, `${omm.MEAN_MOTION} rev/day for a = 26560 km`);
 });
 
@@ -128,16 +123,16 @@ test('igs-gps-precise through data-source/sp3-precise-source: the IGS final orbi
     { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
   assert.equal(result.handlersSkipped, 0);
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
-  assert.equal(param(ocm, 'SOURCE_ID'), 'igs-gps-precise');
-  assert.equal(param(ocm, 'SOURCE_PROVIDER'), 'com.digitalarsenal.data-source.sp3-precise-source');
-  assert.equal(param(ocm, 'LICENCE_CLASS'), 'reproducible');
-  assert.equal(param(ocm, 'LICENCE_ID'), 'igs');
-  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
-  assert.equal(label.rule, 4);
-  assert.equal(label.regime, 'MEO');
-  assert.equal(label.calibration, 'UNCALIBRATED');
+  assertSourceNamed(ocm, recipe);
+  assert.deepEqual([ocm.PROVENANCE.SOURCE_ID, ocm.PROVENANCE.PROVIDER_ID, ocm.PROVENANCE.LICENSE_ID], ['igs-gps-precise', 'com.digitalarsenal.data-source.sp3-precise-source', 'igs']);
+  assert.equal(ocm.PROVENANCE.LICENSE_CLASS, OCM.pvnLicenseClass.Reproducible);
+  assert.equal(ocm.PROVENANCE.ORIGINATOR, 'IGS / BKG');
+  const [cvr] = ocm.COV_REALISM;
+  assert.equal(cvr.RULE, OCM.covarianceRule.PooledModel);
+  assert.equal(cvr.REGIME, 'MEO');
+  assert.equal(cvr.CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
   const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
-  assert.equal(omm.ORIGINATOR, 'IGS / BKG');
+  assert.equal(omm.PROVENANCE.ORIGINATOR, 'IGS / BKG');
   assert.equal(omm.OBJECT_NAME, 'G01', 'the satellite keeps the file\'s own id through the fit');
   assert.ok(Math.abs(omm.MEAN_MOTION - 2.0057) < 0.05, `${omm.MEAN_MOTION} rev/day: a GPS satellite (semimajor axis 26,560 km)`);
 });

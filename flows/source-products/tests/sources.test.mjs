@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FIXTURE as VALLADO, mpeStream } from '../../../analysis/epoch-state/tests/fixtures.mjs';
-import { fitOcm, ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
+import { OCM, assertSourceNamed, fitOcm, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { recipeFor, registry } from '../recipe.mjs';
@@ -22,6 +22,10 @@ const exists = (module) => fs.existsSync(`${root}${module}/plugin-manifest.json`
 const deps = readJson(`${root}flows/source-products.deps.json`);
 const inventory = readJson(`${root}data-source/ephemeris-source/sources.json`).sources.map((s) => s.source_id);
 
+// The detector is the producer of the maneuvers it writes (PROVENANCE.PRODUCER), whatever the source.
+const detectorManifest = readJson(`${root}analysis/maneuver-detection/plugin-manifest.json`);
+const DETECTOR = `${detectorManifest.pluginId} ${detectorManifest.version}`;
+const Calibrated = OCM.covarianceCalibration.Calibrated, Uncalibrated = OCM.covarianceCalibration.Uncalibrated;
 const method = (manifest, id) => manifest.methods.find((m) => m.methodId === id);
 const port = (manifest, methodId, direction, portId) => method(manifest, methodId)?.[direction].find((p) => p.portId === portId);
 const typesOf = (p) => p.acceptedTypeSets.flatMap((set) => set.allowedTypes.map((t) => t.fileIdentifier).filter(Boolean));
@@ -160,7 +164,8 @@ const provider = (module) => manifestOf(module).pluginId;
 for (const source of registry.sources.filter((s) => s.kind !== 'observation')) {
   for (const w of source.via) {
     test(`${source.id} through ${w.module}: the records name the source, its provider and its licence`, async () => {
-      const recipeBytes = Buffer.from(JSON.stringify(recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module })));
+      const recipe = recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module });
+      const recipeBytes = Buffer.from(JSON.stringify(recipe));
       const mpe = w.type === '$MPE';
       const lane = source.kind === 'ephemeris' ? ['fit_omm', 'omm', 'fit_recipe'] : [mpe ? 'element_sets_mpe' : 'element_sets', mpe ? 'mpe' : 'omm', 'element_set_recipe'];
       const input = mpe ? Buffer.from(mpeStream(VALLADO.cases)) : sets;
@@ -170,37 +175,25 @@ for (const source of registry.sources.filter((s) => s.kind !== 'observation')) {
       const ocms = records(egressBytes(egress, 'ocm')).map(unpackOcm);
       const omms = records(egressBytes(egress, 'omm')).map(unpackOmm);
       assert.ok(ocms.length > 0 && omms.length > 0, 'an $OCM and an $OMM');
+      assert.equal(recipe.source.provider, provider(w.module), 'the provider is the module that gave the records');
       for (const ocm of ocms) {
-        assert.equal(param(ocm, 'SOURCE_ID'), source.id);
-        assert.equal(param(ocm, 'SOURCE_KIND'), source.kind);
-        assert.equal(param(ocm, 'SOURCE_ORIGINATOR'), source.originator);
-        assert.equal(param(ocm, 'SOURCE_PROVIDER'), provider(w.module));
-        assert.equal(param(ocm, 'SOURCE_LINEAGE'), source.lineage);
-        assert.equal(param(ocm, 'LICENCE_CLASS'), source.licence.class);
-        assert.equal(param(ocm, 'LICENCE_ID'), source.licence.id);
+        // PROVENANCE: source, kind, originator, provider, producer, licence class and id, lineage, as the registry states them.
+        assertSourceNamed(ocm, recipe);
         // Rule 3 for a source the model was measured on, rule 4 (pooled) for the others.
-        const labels = JSON.parse(param(ocm, 'COV_LABELS'));
-        assert.deepEqual([...new Set(labels.map((l) => l.rule))], [source.ownModel ? 3 : 4]);
-        // Calibrated only where the held-out cell was realistic and the lineage is one the model was measured on.
-        for (const label of labels) if (label.calibration === 'CALIBRATED') assert.ok(source.ownModel, `${source.id} was not measured`);
+        assert.deepEqual([...new Set(ocm.COV_REALISM.map((c) => c.RULE))], [source.ownModel ? OCM.covarianceRule.SourceModel : OCM.covarianceRule.PooledModel]);
+        // Calibrated only where the held-out cell passed the rule and the lineage is one the model was measured on.
+        for (const cvr of ocm.COV_REALISM) if (cvr.CALIBRATION === Calibrated) assert.ok(source.ownModel, `${source.id} was not measured`);
       }
+      // The CCSDS ORIGINATOR names the message's creator, the flow; the source's originator is PROVENANCE.ORIGINATOR.
       for (const omm of omms) {
-        assert.equal(omm.ORIGINATOR, source.originator);
-        for (const text of [source.id, provider(w.module), source.licence.class]) assert.ok(omm.COMMENT.includes(text), `the $OMM names ${text}`);
-        // And as USER_DEFINED_x keywords, which only a flow that links every module's own SDS code can write (see the module builds).
-        assert.equal(ommParam(omm, 'SOURCE_ID'), source.id);
-        assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider(w.module));
-        assert.equal(ommParam(omm, 'LICENCE_CLASS'), source.licence.class);
-        assert.equal(ommParam(omm, 'LICENCE_ID'), source.licence.id);
+        assert.equal(omm.ORIGINATOR, recipe.producer);
+        assertSourceNamed(omm, recipe);
       }
       if (!mpe) {
-        // The burn in the history, on a $MNV that names the source.
+        // The burn in the history, on a $MNV that names the source and, as its producer, the detector.
         const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
         assert.equal(burns.length, 1);
-        // The lineage is a tag only where it says more than the source's id.
-        const tags = [`source:${source.id}`, `originator:${source.originator}`, `provider:${provider(w.module)}`, `licence:${source.licence.class}`, `licence-id:${source.licence.id}`,
-          ...(source.lineage === source.id ? [] : [`lineage:${source.lineage}`])];
-        for (const tag of tags) assert.ok(burns[0].TAGS.includes(tag), tag);
+        assertSourceNamed(burns[0], recipe, DETECTOR);
       }
     });
   }
@@ -224,36 +217,24 @@ for (const source of registry.sources.filter((s) => s.kind === 'observation')) {
 
       const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
       assert.ok(ocm, 'an $OCM');
-      assert.equal(param(ocm, 'SOURCE_ID'), source.id);
-      assert.equal(param(ocm, 'SOURCE_KIND'), 'observation');
-      assert.equal(param(ocm, 'SOURCE_ORIGINATOR'), source.originator);
-      assert.equal(param(ocm, 'SOURCE_PROVIDER'), provider(w.module));
-      assert.equal(param(ocm, 'SOURCE_LINEAGE'), source.lineage);
-      assert.equal(param(ocm, 'LICENCE_CLASS'), source.licence.class);
-      assert.equal(param(ocm, 'LICENCE_ID'), source.licence.id);
+      assert.equal(recipe.source.provider, provider(w.module), 'the provider is the module that gave the records');
+      assertSourceNamed(ocm, recipe);
       // Rule 2: the formal covariance times the measured factor, and not calibrated, because the scaled covariance has not itself been tested.
-      const labels = JSON.parse(param(ocm, 'COV_LABELS'));
-      assert.deepEqual([...new Set(labels.map((l) => l.rule))], [2]);
-      for (const label of labels) {
-        assert.equal(label.method, 'fit-formal-scaled');
-        assert.equal(label.scaleFactor, realism.factor);
-        assert.equal(label.meanD2Over3, realism.meanD2Over3);
-        assert.equal(label.calibration, 'UNCALIBRATED');
+      assert.deepEqual([...new Set(ocm.COV_REALISM.map((c) => c.RULE))], [OCM.covarianceRule.ScaledFit]);
+      for (const cvr of ocm.COV_REALISM) {
+        assert.equal(cvr.MODEL_ID, realism.class);
+        assert.equal(cvr.SCALE_FACTOR, realism.factor);
+        assert.equal(cvr.MEAN_D2_OVER_3, realism.meanD2Over3);
+        assert.equal(cvr.CALIBRATION, Uncalibrated);
       }
       assert.ok(Math.abs(ocm.COVARIANCE_DATA[0] - lower[0] * realism.factor) < 1e-15, `${ocm.COVARIANCE_DATA[0]} against ${lower[0] * realism.factor}`);
       const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
-      assert.equal(omm.ORIGINATOR, source.originator);
-      for (const text of [source.id, provider(w.module), source.licence.class]) assert.ok(omm.COMMENT.includes(text), `the $OMM names ${text}`);
-      assert.equal(ommParam(omm, 'SOURCE_ID'), source.id);
-      assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider(w.module));
-      assert.equal(ommParam(omm, 'LICENCE_CLASS'), source.licence.class);
-      assert.equal(ommParam(omm, 'LICENCE_ID'), source.licence.id);
-      // The burn in the history of fits, on a $MNV that names the source.
+      assert.equal(omm.ORIGINATOR, recipe.producer);
+      assertSourceNamed(omm, recipe);
+      // The burn in the history of fits, on a $MNV that names the source and the detector as its producer.
       const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
       assert.equal(burns.length, 1);
-      const tags = [`source:${source.id}`, `originator:${source.originator}`, `provider:${provider(w.module)}`, `licence:${source.licence.class}`, `licence-id:${source.licence.id}`,
-        ...(source.lineage === source.id ? [] : [`lineage:${source.lineage}`])];
-      for (const tag of tags) assert.ok(burns[0].TAGS.includes(tag), tag);
+      assertSourceNamed(burns[0], recipe, DETECTOR);
     });
   }
 }

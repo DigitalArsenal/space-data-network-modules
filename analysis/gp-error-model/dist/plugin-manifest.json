@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter). fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -1431,7 +1431,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1442,7 +1442,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
         }
       ],
       "outputPorts": [
@@ -1459,13 +1459,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
         },
         {
           "portId": "omm",
@@ -1480,13 +1480,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
         },
         {
           "portId": "report",
@@ -1514,7 +1514,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Gives every object's product a covariance by the first rule that applies: the operator's as supplied, a fit's formal covariance times the realism factor measured for its source and class, the source's own model of its element sets' error by regime and age, or the pooled model. Writes it into $OCM and $OMM with its label: method, source, regime and age cell, CALIBRATED only where the cell passed the realism rule on the held-out window for the source's lineage, else UNCALIBRATED with the cell's measured mean d2/3 and coverage."
+      "description": "Gives every object's product a covariance by the first rule that applies: the operator's as supplied, a fit's formal covariance times the realism factor measured for its source and class, the source's own model of its element sets' error by regime and age, or the pooled model. Writes it into $OCM and $OMM with its CVR (COV_REALISM): the rule, the model or factor, the regime and age cell, and the numbers of the held-out test, Calibrated only where those numbers pass the realism rule (mean d2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97], from at least 30 samples of 3 objects) on the source's lineage, else Uncalibrated. Every record names its source in PROVENANCE (PVN)."
     },
     {
       "methodId": "attribute_maneuvers",
@@ -1579,13 +1579,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
         },
         {
           "portId": "report",
@@ -1597,7 +1597,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "JSON: the maneuvers attributed and the tags added.",
+              "description": "JSON: the maneuvers attributed, the source and the producer.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -1608,12 +1608,12 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed and the tags added."
+          "description": "JSON: the maneuvers attributed, the source and the producer."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Names the source on every maneuver record so no record travels without its originator, provider and licence class."
+      "description": "Names the source in the PROVENANCE of every maneuver record so no record travels without its originator, provider and licence class; the software that made the maneuver (the detector) stays its PRODUCER."
     },
     {
       "methodId": "fit_elements",
