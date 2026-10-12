@@ -110,3 +110,30 @@ row whose orbital energy does not close.
 
 Provenance, tolerance policy and the reason there is no Tier A row:
 [`vectors/PROVENANCE.md`](vectors/PROVENANCE.md).
+
+## Small bodies (1.1.0)
+
+Asteroids are a second store beside the ABI entity table, because the ABI's
+state vector is Earth-fixed by contract and a catalogue holds hundreds of
+thousands of Sun-centred rows.
+
+| Export | |
+|---|---|
+| `kepler_small_ingest_omm_stream(data, len)` | size-prefixed SDS `$OMM` records: `CENTER_NAME` SUN, `REFERENCE_FRAME` ecliptic J2000 (RFM coordinate system) or ICRF / J2000 / EME2000 axes, `TIME_SYSTEM` TT or TDB, `SEMI_MAJOR_AXIS` km (or `MEAN_MOTION`), `GM` km³/s² (default DE440 Sun). All or nothing; named refusals (-4 bad input, -6 unphysical, -7 centre, -8 frame, -9 time system) with `kepler_small_failed_record()` |
+| `kepler_small_set_photometry(first, count, hg)` | float32 H, G pairs |
+| `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer |
+| `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF |
+| `kepler_small_diameter_from_h(h, albedo)` | equivalent-sphere diameter, m |
+| `kepler_small_count()`, `kepler_small_clear()` | |
+
+`et` is TDB seconds past J2000; TT epochs are taken as TDB (at most 1.7 ms).
+Rows are independent, so a host shards them across its own workers, as for
+`plugin_propagate_batch`.
+
+Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
+within 2.1 mm of an independent two-body oracle at ±30 and ±400 days; median
+366 km (worst 3,485 km) from JPL Horizons 30 days either side of the element
+epoch, the two-body simplification. The whole numbered catalogue (895,910)
+ingests in 0.4 s and snapshots in 0.11 s on one thread.
+Credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant
+NAG5-4741 and the Lowell Observatory endowment).

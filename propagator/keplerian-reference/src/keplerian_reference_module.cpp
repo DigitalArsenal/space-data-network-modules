@@ -410,6 +410,26 @@ class FlatTable {
     return value;
   }
 
+  uint8_t read_uint8(uint16_t slot, uint8_t fallback) const {
+    const uint32_t offset = field_offset(slot);
+    if (offset == 0 || offset + 1 > length_) {
+      return fallback;
+    }
+    return buffer_[offset];
+  }
+
+  /// Absolute offset of a sub-table (or union value) field; 0 when absent.
+  uint32_t read_table(uint16_t slot) const {
+    const uint32_t offset = field_offset(slot);
+    if (offset == 0 || offset + 4 > length_) {
+      return 0;
+    }
+    uint32_t indirect = 0;
+    std::memcpy(&indirect, buffer_ + offset, sizeof(indirect));
+    const uint64_t target = static_cast<uint64_t>(offset) + indirect;
+    return target + 4 <= length_ ? static_cast<uint32_t>(target) : 0;
+  }
+
   /// Returns a pointer to the string bytes and its length; null when absent.
   const char* read_string(uint16_t slot, uint32_t* out_length) const {
     *out_length = 0;
@@ -734,4 +754,340 @@ extern "C" int ingest_omm(void) {
     return 3;
   }
   return 0;
+}
+
+// =============================================================================
+// SMALL BODIES: heliocentric osculating elements, many at once.
+//
+// Asteroids (and later comets) arrive as ratified SDS $OMM records with
+// CENTER_NAME = SUN, osculating elements in the mean ecliptic and equinox of
+// J2000 (or ICRF axes), TIME_SYSTEM TT or TDB, SEMI_MAJOR_AXIS in km and GM in
+// km^3/s^2 (CCSDS 502.0-B-3 units). This store is separate from the ABI entity
+// table above: the ABI's state vector is Earth-fixed by contract, while these
+// rows are Sun-centred and number in the hundreds of thousands.
+//
+// Everything a viewer needs is computed here: positions for a frame snapshot
+// (float32, heliocentric ICRF metres) with the apparent V magnitude from the
+// observer (H-G system, Bowell et al. 1989), one double-precision state for
+// the selected body, and a diameter from H and an albedo. The host shards
+// rows across its own workers (caller-level parallelism, as for the ABI
+// batch): each worker instance holds a disjoint set of rows.
+//
+// TT is taken as TDB: the two differ by at most 1.7 ms, 34 m along a 20 km/s
+// orbit. UTC epochs are refused (they would need leap seconds).
+// =============================================================================
+
+namespace {
+
+constexpr double kAuMeters = 149597870700.0;
+/// DE440 GM of the Sun (gm_de440.tpc BODY10_GM), m^3/s^2.
+constexpr double kGmSun = 1.3271244004127942e20;
+/// Obliquity of the ecliptic at J2000 (IAU 1976, 84381.448"), the angle of
+/// the SPICE ECLIPJ2000 frame about the J2000 x-axis.
+constexpr double kObliquityJ2000 = 84381.448 / 3600.0 * kDegToRad;
+constexpr int32_t kErrUnsupportedCenter = -7;
+constexpr int32_t kErrUnsupportedFrame = -8;
+constexpr int32_t kErrUnsupportedTime = -9;
+
+struct SmallBody {
+  double epoch_et = 0.0;        // TDB seconds past J2000
+  double a = 0.0;               // m
+  double e = 0.0;
+  double n = 0.0;               // rad/s
+  double m0 = 0.0;              // rad at epoch
+  double p[3] = {0, 0, 0};      // perifocal x (to pericentre), ICRF
+  double q[3] = {0, 0, 0};      // perifocal y, ICRF
+  float h = NAN;
+  float g = 0.15f;
+};
+
+std::vector<SmallBody>* g_small = nullptr;
+int32_t g_small_failed_record = -1;
+
+std::vector<SmallBody>& small_bodies() {
+  if (g_small == nullptr) {
+    g_small = new std::vector<SmallBody>();
+  }
+  return *g_small;
+}
+
+bool center_is_sun(const char* text, uint32_t length) {
+  if (text == nullptr || length != 3) return false;
+  return (text[0] == 'S' || text[0] == 's') && (text[1] == 'U' || text[1] == 'u') &&
+         (text[2] == 'N' || text[2] == 'n');
+}
+
+/// 0: equatorial J2000 / ICRF axes; 1: mean ecliptic and equinox of J2000;
+/// -1: anything else.
+int frame_axes(const uint8_t* buffer, uint32_t length, const FlatTable& omm) {
+  const uint32_t rfm_offset = omm.read_table(ORBPRO_OMM_VT_REFERENCE_FRAME);
+  if (rfm_offset == 0) return -1;
+  const FlatTable rfm(buffer, length, rfm_offset);
+  if (!rfm.valid()) return -1;
+  const uint8_t kind = rfm.read_uint8(ORBPRO_RFM_VT_REFERENCE_FRAME_TYPE, 0);
+  const uint32_t value = rfm.read_table(ORBPRO_RFM_VT_REFERENCE_FRAME);
+  if (value == 0) return -1;
+  if (kind == ORBPRO_RFM_UNION_CELESTIAL_FRAME) {
+    const FlatTable wrapper(buffer, length, value);
+    if (!wrapper.valid()) return -1;
+    const uint8_t frame = wrapper.read_uint8(ORBPRO_RFM_CFW_VT_FRAME, 0);
+    return (frame == ORBPRO_RFM_CELESTIAL_ICRF || frame == ORBPRO_RFM_CELESTIAL_J2000 ||
+            frame == ORBPRO_RFM_CELESTIAL_EME2000)
+               ? 0
+               : -1;
+  }
+  if (kind == ORBPRO_RFM_UNION_COORDINATE_SYSTEM) {
+    const FlatTable wrapper(buffer, length, value);
+    if (!wrapper.valid()) return -1;
+    const uint32_t cs_offset = wrapper.read_table(ORBPRO_RFM_CSW_VT_COORDINATE_SYSTEM);
+    if (cs_offset == 0) return -1;
+    const FlatTable cs(buffer, length, cs_offset);
+    if (!cs.valid()) return -1;
+    const uint8_t axes = cs.read_uint8(ORBPRO_RFM_CS_VT_AXIS_TYPE, 0);
+    if (axes == ORBPRO_RFM_AXIS_MEAN_ECLIPTIC_J2000) return 1;
+    if (axes == ORBPRO_RFM_AXIS_ICRF || axes == ORBPRO_RFM_AXIS_MEAN_EQUATOR_J2000) return 0;
+  }
+  return -1;
+}
+
+/// One size-prefixed $OMM record into a small body.
+int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out) {
+  if (!has_omm_file_identifier(buffer, length)) return kErrBadInput;
+  uint32_t root_offset = 0;
+  std::memcpy(&root_offset, buffer, sizeof(root_offset));
+  if (root_offset + 4 > length) return kErrBadInput;
+  const FlatTable omm(buffer, length, root_offset);
+  if (!omm.valid()) return kErrBadInput;
+
+  uint32_t center_length = 0;
+  const char* center = omm.read_string(ORBPRO_OMM_VT_CENTER_NAME, &center_length);
+  if (!center_is_sun(center, center_length)) return kErrUnsupportedCenter;
+  const int axes = frame_axes(buffer, length, omm);
+  if (axes < 0) return kErrUnsupportedFrame;
+  const uint8_t time_system = omm.read_uint8(ORBPRO_OMM_VT_TIME_SYSTEM, ORBPRO_TIM_UTC);
+  if (time_system != ORBPRO_TIM_TT && time_system != ORBPRO_TIM_TDB) return kErrUnsupportedTime;
+
+  uint32_t epoch_length = 0;
+  const char* epoch_text = omm.read_string(ORBPRO_OMM_VT_EPOCH, &epoch_length);
+  double epoch_jd = 0.0;
+  if (!iso8601_to_julian_date(epoch_text, epoch_length, &epoch_jd)) return kErrBadInput;
+
+  double gm = omm.read_double(ORBPRO_OMM_VT_GM, 0.0) * 1e9;  // km^3/s^2 -> m^3/s^2
+  if (!(gm > 0.0)) gm = kGmSun;
+  const double e = omm.read_double(ORBPRO_OMM_VT_ECCENTRICITY, -1.0);
+  if (!(e >= 0.0) || e >= 1.0) return kErrUnphysical;
+  double a = omm.read_double(ORBPRO_OMM_VT_SEMI_MAJOR_AXIS, 0.0) * 1000.0;  // km -> m
+  if (!(a > 0.0)) {
+    const double n_rev_day = omm.read_double(ORBPRO_OMM_VT_MEAN_MOTION, 0.0);
+    if (!(n_rev_day > 0.0)) return kErrUnphysical;
+    const double n = n_rev_day * kTwoPi / kSecondsPerDay;
+    a = std::cbrt(gm / (n * n));
+  }
+  const double inc = omm.read_double(ORBPRO_OMM_VT_INCLINATION, 0.0) * kDegToRad;
+  const double node = omm.read_double(ORBPRO_OMM_VT_RA_OF_ASC_NODE, 0.0) * kDegToRad;
+  const double argp = omm.read_double(ORBPRO_OMM_VT_ARG_OF_PERICENTER, 0.0) * kDegToRad;
+  const double m0 = omm.read_double(ORBPRO_OMM_VT_MEAN_ANOMALY, 0.0) * kDegToRad;
+  if (!std::isfinite(a) || !std::isfinite(inc) || !std::isfinite(node) || !std::isfinite(argp) ||
+      !std::isfinite(m0)) {
+    return kErrBadInput;
+  }
+
+  // Perifocal axes in the element frame (3-1-3 rotation).
+  const double cn = std::cos(node), sn = std::sin(node);
+  const double ci = std::cos(inc), si = std::sin(inc);
+  const double cw = std::cos(argp), sw = std::sin(argp);
+  double p[3] = {cn * cw - sn * sw * ci, sn * cw + cn * sw * ci, sw * si};
+  double q[3] = {-cn * sw - sn * cw * ci, -sn * sw + cn * cw * ci, cw * si};
+  if (axes == 1) {
+    // Ecliptic J2000 -> equatorial J2000 (ICRF axes): rotate about x by -eps.
+    const double ce = std::cos(kObliquityJ2000), se = std::sin(kObliquityJ2000);
+    const double py = ce * p[1] - se * p[2], pz = se * p[1] + ce * p[2];
+    const double qy = ce * q[1] - se * q[2], qz = se * q[1] + ce * q[2];
+    p[1] = py; p[2] = pz; q[1] = qy; q[2] = qz;
+  }
+  out->epoch_et = (epoch_jd - kJ2000) * kSecondsPerDay;
+  out->a = a;
+  out->e = e;
+  out->n = std::sqrt(gm / (a * a * a));
+  out->m0 = m0;
+  for (int c = 0; c < 3; ++c) {
+    out->p[c] = p[c];
+    out->q[c] = q[c];
+  }
+  return kOk;
+}
+
+/// Kepler's equation for the snapshot path: Newton from a third-order start,
+/// converged to 1e-12 rad (sub-millimetre at 50 AU).
+bool small_eccentric_anomaly(double mean_anomaly, double e, double* out) {
+  double m = std::fmod(mean_anomaly, kTwoPi);
+  if (m > kPi) m -= kTwoPi;
+  if (m < -kPi) m += kTwoPi;
+  double ecc = m + e * std::sin(m) * (1.0 + e * std::cos(m));
+  if (e > 0.8) ecc = m < 0.0 ? -kPi : kPi;
+  for (int i = 0; i < 50; ++i) {
+    const double f = ecc - e * std::sin(ecc) - m;
+    const double fp = 1.0 - e * std::cos(ecc);
+    const double d = f / fp;
+    ecc -= d;
+    if (std::fabs(d) < 1e-12) {
+      *out = ecc;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
+  double ecc = 0.0;
+  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.epoch_et), b.e, &ecc)) return false;
+  const double ce = std::cos(ecc), se = std::sin(ecc);
+  const double root = std::sqrt(1.0 - b.e * b.e);
+  const double x = b.a * (ce - b.e);
+  const double y = b.a * root * se;
+  for (int c = 0; c < 3; ++c) r[c] = x * b.p[c] + y * b.q[c];
+  if (v != nullptr) {
+    const double edot = b.n / (1.0 - b.e * ce);
+    const double vx = -b.a * se * edot;
+    const double vy = b.a * root * ce * edot;
+    for (int c = 0; c < 3; ++c) v[c] = vx * b.p[c] + vy * b.q[c];
+  }
+  return true;
+}
+
+/// V from H and G (Bowell et al. 1989): heliocentric distance r, observer
+/// distance d (both AU) and the phase angle alpha (rad).
+double hg_magnitude(double h, double g, double r_au, double d_au, double alpha) {
+  const double t = std::tan(0.5 * alpha);
+  const double phi1 = std::exp(-3.33 * std::pow(t, 0.63));
+  const double phi2 = std::exp(-1.87 * std::pow(t, 1.22));
+  const double mix = (1.0 - g) * phi1 + g * phi2;
+  return h + 5.0 * std::log10(r_au * d_au) - 2.5 * std::log10(mix > 1e-300 ? mix : 1e-300);
+}
+
+/// One snapshot row: x, y, z (m, heliocentric ICRF) and V (NaN without H).
+bool small_snapshot_row(const SmallBody& b, double et, const double* observer, float* out) {
+  double r[3];
+  if (!small_position(b, et, r, nullptr)) {
+    out[0] = out[1] = out[2] = out[3] = NAN;
+    return false;
+  }
+  out[0] = static_cast<float>(r[0]);
+  out[1] = static_cast<float>(r[1]);
+  out[2] = static_cast<float>(r[2]);
+  if (std::isnan(b.h) || observer == nullptr) {
+    out[3] = NAN;
+    return true;
+  }
+  const double to_obs[3] = {observer[0] - r[0], observer[1] - r[1], observer[2] - r[2]};
+  const double rr = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  const double dd = std::sqrt(to_obs[0] * to_obs[0] + to_obs[1] * to_obs[1] + to_obs[2] * to_obs[2]);
+  double cosa = (rr > 0.0 && dd > 0.0)
+                    ? -(r[0] * to_obs[0] + r[1] * to_obs[1] + r[2] * to_obs[2]) / (rr * dd)
+                    : 1.0;
+  cosa = cosa > 1.0 ? 1.0 : (cosa < -1.0 ? -1.0 : cosa);
+  out[3] = static_cast<float>(hg_magnitude(b.h, b.g, rr / kAuMeters, dd / kAuMeters, std::acos(cosa)));
+  return true;
+}
+
+/// Size-prefixed $OMM stream -> rows appended. Returns the count appended or
+/// a negative code (the failing record's index in kepler_small_failed_record).
+int32_t ingest_small_stream(const uint8_t* data, uint32_t length) {
+  g_small_failed_record = -1;
+  std::vector<SmallBody> parsed;
+  uint32_t offset = 0;
+  int32_t record = 0;
+  while (offset < length) {
+    if (offset + 4 > length) return kErrBadInput;
+    uint32_t size = 0;
+    std::memcpy(&size, data + offset, sizeof(size));
+    offset += 4;
+    if (size == 0 || offset + size > length) {
+      g_small_failed_record = record;
+      return kErrBadInput;
+    }
+    SmallBody body;
+    const int32_t code = decode_small_body(data + offset, size, &body);
+    if (code != kOk) {
+      g_small_failed_record = record;
+      return code;
+    }
+    parsed.push_back(body);
+    offset += size;
+    ++record;
+  }
+  std::vector<SmallBody>& store = small_bodies();
+  store.insert(store.end(), parsed.begin(), parsed.end());
+  return static_cast<int32_t>(parsed.size());
+}
+
+}  // namespace
+
+/// Appends the rows of a size-prefixed $OMM stream (4-byte little-endian
+/// length before each FlatBuffer). All or nothing: a refused record leaves the
+/// store unchanged. Returns the number appended or a negative error code.
+ORBPRO_ABI_EXPORT("kepler_small_ingest_omm_stream")
+int32_t kepler_small_ingest_omm_stream(const uint8_t* data, uint32_t length) {
+  if (data == nullptr || length == 0) return kErrBadInput;
+  return ingest_small_stream(data, length);
+}
+
+/// Index of the record the last refused ingest stopped at, or -1.
+ORBPRO_ABI_EXPORT("kepler_small_failed_record")
+int32_t kepler_small_failed_record(void) { return g_small_failed_record; }
+
+ORBPRO_ABI_EXPORT("kepler_small_count")
+int32_t kepler_small_count(void) { return static_cast<int32_t>(small_bodies().size()); }
+
+ORBPRO_ABI_EXPORT("kepler_small_clear")
+void kepler_small_clear(void) {
+  delete g_small;
+  g_small = nullptr;
+}
+
+/// H and G for rows [first, first + count): pairs of float32.
+ORBPRO_ABI_EXPORT("kepler_small_set_photometry")
+int32_t kepler_small_set_photometry(uint32_t first, uint32_t count, const float* hg) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (hg == nullptr) return kErrNullOutput;
+  if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
+  for (uint32_t i = 0; i < count; ++i) {
+    store[first + i].h = hg[2 * i];
+    store[first + i].g = std::isnan(hg[2 * i + 1]) ? 0.15f : hg[2 * i + 1];
+  }
+  return kOk;
+}
+
+/// A frame snapshot of rows [first, first + count) at `et` (TDB seconds past
+/// J2000): four float32 per row, x, y, z (m, heliocentric ICRF) and V from
+/// `observer` (3 doubles, m, heliocentric ICRF; null: V is NaN). A row whose
+/// Kepler solve fails is NaN. Returns the number of failed rows.
+ORBPRO_ABI_EXPORT("kepler_small_snapshot")
+int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const double* observer, float* out) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (out == nullptr) return kErrNullOutput;
+  if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
+  int32_t failed = 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!small_snapshot_row(store[first + i], et, observer, out + 4 * i)) ++failed;
+  }
+  return failed;
+}
+
+/// One row's state in double precision: position (m) and velocity (m/s),
+/// heliocentric ICRF, at `et`.
+ORBPRO_ABI_EXPORT("kepler_small_state")
+int32_t kepler_small_state(double et, uint32_t index, double* out) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (out == nullptr) return kErrNullOutput;
+  if (index >= store.size()) return kErrBadEntityIndex;
+  return small_position(store[index], et, out, out + 3) ? kOk : kErrNotConverged;
+}
+
+/// Equivalent-sphere diameter (m) from H and a geometric albedo:
+/// D = 1329 km / sqrt(p) * 10^(-H/5) (Fowler & Chillemi 1992).
+ORBPRO_ABI_EXPORT("kepler_small_diameter_from_h")
+double kepler_small_diameter_from_h(double h, double albedo) {
+  if (!(albedo > 0.0) || !std::isfinite(h)) return NAN;
+  return 1329.0e3 / std::sqrt(albedo) * std::pow(10.0, -h / 5.0);
 }
