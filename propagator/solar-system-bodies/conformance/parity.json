@@ -1,0 +1,310 @@
+{
+  "ok": true,
+  "fixture": "solar-system-bodies 0.1.0 evaluate",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "225e8c2371295fd3ea38a2510ed4c3a9587c754dbd0b37671f6d63eb1beb3d24",
+  "moduleSha256": "225e8c2371295fd3ea38a2510ed4c3a9587c754dbd0b37671f6d63eb1beb3d24",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 9,
+      "durationMs": 1298
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 9,
+      "durationMs": 1836
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 9,
+      "durationMs": 7530
+    }
+  ],
+  "cases": [
+    "catalog",
+    "states-ssb",
+    "states-geocentric",
+    "orientations",
+    "apparent",
+    "hill-radius",
+    "observer",
+    "out-of-range",
+    "refused-operation"
+  ],
+  "comparisons": 45,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "catalog",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1ea7d08dd567eb9707a32578f0a3f563983e554f35a98a403328a4961084322f",
+      "stdoutLength": 4656
+    },
+    {
+      "lane": "browser",
+      "caseId": "states-ssb",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "browser",
+      "caseId": "states-geocentric",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
+      "stdoutLength": 544
+    },
+    {
+      "lane": "browser",
+      "caseId": "orientations",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6e6a6bef39f0709246bda094f5b8efbe5abeef0422f82c7661c12500cdb3b4e6",
+      "stdoutLength": 1448
+    },
+    {
+      "lane": "browser",
+      "caseId": "apparent",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "57dbba7ca2f99232d1aee799579ba2b1eac1bc00ee6abc581219418689ecfe19",
+      "stdoutLength": 1112
+    },
+    {
+      "lane": "browser",
+      "caseId": "hill-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10c06c855789bf25015358923bb77a0511eb5c87ea712637ebc78d96cac7949c",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "browser",
+      "caseId": "observer",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f910f8d93ca6b67d1b5e19d4b8bc3de296597a0abe5241f0193e194a5359bae",
+      "stdoutLength": 336
+    },
+    {
+      "lane": "browser",
+      "caseId": "out-of-range",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-operation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
+      "stdoutLength": 200
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "catalog",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1ea7d08dd567eb9707a32578f0a3f563983e554f35a98a403328a4961084322f",
+      "stdoutLength": 4656
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "states-ssb",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "states-geocentric",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
+      "stdoutLength": 544
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "orientations",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6e6a6bef39f0709246bda094f5b8efbe5abeef0422f82c7661c12500cdb3b4e6",
+      "stdoutLength": 1448
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "apparent",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "57dbba7ca2f99232d1aee799579ba2b1eac1bc00ee6abc581219418689ecfe19",
+      "stdoutLength": 1112
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "hill-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10c06c855789bf25015358923bb77a0511eb5c87ea712637ebc78d96cac7949c",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "observer",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f910f8d93ca6b67d1b5e19d4b8bc3de296597a0abe5241f0193e194a5359bae",
+      "stdoutLength": 336
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "out-of-range",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-operation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
+      "stdoutLength": 200
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "catalog",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1ea7d08dd567eb9707a32578f0a3f563983e554f35a98a403328a4961084322f",
+      "stdoutLength": 4656
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "states-ssb",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
+      "stdoutLength": 1056
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "states-geocentric",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
+      "stdoutLength": 544
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "orientations",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6e6a6bef39f0709246bda094f5b8efbe5abeef0422f82c7661c12500cdb3b4e6",
+      "stdoutLength": 1448
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "apparent",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "57dbba7ca2f99232d1aee799579ba2b1eac1bc00ee6abc581219418689ecfe19",
+      "stdoutLength": 1112
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "hill-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "10c06c855789bf25015358923bb77a0511eb5c87ea712637ebc78d96cac7949c",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "observer",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f910f8d93ca6b67d1b5e19d4b8bc3de296597a0abe5241f0193e194a5359bae",
+      "stdoutLength": 336
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "out-of-range",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
+      "stdoutLength": 224
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-operation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
+      "stdoutLength": 200
+    }
+  ]
+}
