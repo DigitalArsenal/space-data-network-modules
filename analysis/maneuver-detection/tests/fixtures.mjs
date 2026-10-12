@@ -186,8 +186,10 @@ export function version(orbit, from, to, issued) {
   OEM.OEM.finishOEMBuffer(builder, m.pack(builder));
   return builder.asUint8Array();
 }
-export function planned(tig, dvKms) {
-  const m = Object.assign(new MNV.MNVT(), { ID: 'PLAN-1', SAT_NO: 99001, STATUS: MNV.maneuverStatus.PLANNED, EVENT_START_TIME: iso(tig), DELTA_VEL: dvKms });
+// A planned maneuver of dvKms km/s at the TIG; `fields` states its UVW
+// components (DELTA_VEL_V in-track, DELTA_VEL_W cross-track) and PROVENANCE.
+export function planned(tig, dvKms, fields = {}) {
+  const m = Object.assign(new MNV.MNVT(), { ID: 'PLAN-1', SAT_NO: 99001, STATUS: MNV.maneuverStatus.PLANNED, EVENT_START_TIME: iso(tig), DELTA_VEL: dvKms, ...fields });
   const b = new flatbuffers.Builder(512);
   MNV.MNV.finishMNVBuffer(b, m.pack(b));
   return b.asUint8Array();

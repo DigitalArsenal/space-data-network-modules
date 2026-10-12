@@ -53,9 +53,10 @@ bool readCompareOptions(const Json& j, CompareOptions& o) {
 
 struct Planned {
   std::string id, key, objectId;
+  Source source;                   // the plan's PROVENANCE: the check names the same source
   uint32_t norad = 0;
   double tig = 0, dv = 0;          // s, m/s
-  bool outOfPlane = false;         // the plan states a cross-track component (DELTA_VEL_V)
+  bool outOfPlane = false;         // the plan states a cross-track component (UVW: DELTA_VEL_W)
 };
 
 double inTrackOf(double da, double a) { return std::sqrt(kMu / a) * da / (2.0 * a) * 1000.0; }
@@ -132,12 +133,13 @@ std::vector<uint8_t> encodeCheck(const Planned& p, maneuverStatus status, double
   const auto e = fb.CreateString(isoMs(end));
   const auto preState = stateTable(fb, r0, v0);
   const auto postState = stateTable(fb, r1, v1);
-  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.4.0 compare_ephemerides: orbit-averaged energy and orbit normal of successive ephemeris versions");
+  const auto algorithm = fb.CreateString(std::string(kProducer) + " compare_ephemerides: orbit-averaged energy and orbit normal of successive ephemeris versions");
   const auto text = fb.CreateString(description);
   std::vector<flatbuffers::Offset<flatbuffers::String>> sourced;
   for (const std::string& x : sources) sourced.push_back(fb.CreateString(x));
   const auto sourcedData = fb.CreateVector(sourced);
   const auto sourcedTypes = fb.CreateString("OEM");
+  const auto provenance = encodeProvenance(fb, p.source);
   const Elements pre = elementsOf(r0, v0);
   const bool geo = pre.period > 1300.0 && pre.period < 1600.0 && pre.ecc < 0.05;
   maneuverCharacterization kind = maneuverCharacterization::UNKNOWN;
@@ -167,6 +169,7 @@ std::vector<uint8_t> encodeCheck(const Planned& p, maneuverStatus status, double
   b.add_ALGORITHM(algorithm);
   b.add_SOURCED_DATA(sourcedData);
   b.add_SOURCED_DATA_TYPES(sourcedTypes);
+  b.add_PROVENANCE(provenance);
   FinishMNVBuffer(fb, b.Finish());
   return std::vector<uint8_t>(fb.GetBufferPointer(), fb.GetBufferPointer() + fb.GetSize());
 }

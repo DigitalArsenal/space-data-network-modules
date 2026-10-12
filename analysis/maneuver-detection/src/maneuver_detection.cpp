@@ -82,6 +82,9 @@ bool detect(Objects& objects, const std::string& creation, const Options& o, con
     obj["D1"] = d1Events;
     obj["D2"] = d2Events;
     if (o.d3) obj["D3"] = d3Events;
+    // The sources of the object's sets: the event names what they agree on.
+    Source source = blocks[0].source;
+    for (size_t i = 1; i < blocks.size(); ++i) source = agreement(source, blocks[i].source);
     std::vector<Event> chosen;
     if (o.d1 && o.d2) chosen = mergeEvents(d1.events, d2.events, o.mergeHours);
     else if (o.d1) chosen = d1.events;
@@ -89,8 +92,9 @@ bool detect(Objects& objects, const std::string& creation, const Options& o, con
     if (o.d3) chosen.insert(chosen.end(), d2.lowThrust.begin(), d2.lowThrust.end());
     Json events = Json::array();
     for (const Event& e : chosen) {
-      Provenance pv;
+      EventContext pv;
       pv.key = key;
+      pv.source = source;
       pv.norad = blocks[e.before].norad;
       pv.objectId = blocks[e.before].objectId;
       pv.reportTime = reportTime;
@@ -199,7 +203,8 @@ bool plannedOf(const MNV* m, Planned& p) {
   if (!parseIso(m->EVENT_START_TIME(), p.tig)) return failWith("A planned $MNV has no valid EVENT_START_TIME (its TIG).");
   p.dv = std::fabs(m->DELTA_VEL()) * 1000.0;
   if (!(p.dv > 0)) return failWith("A planned $MNV needs DELTA_VEL above zero (km/s).");
-  p.outOfPlane = m->DELTA_VEL_V() != 0.0;
+  p.outOfPlane = m->DELTA_VEL_W() != 0.0;
+  p.source = sourceOf(m->PROVENANCE());
   return true;
 }
 
