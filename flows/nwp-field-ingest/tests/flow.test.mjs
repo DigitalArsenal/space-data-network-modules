@@ -222,3 +222,31 @@ test("gfs-0p25-sea: one lead-file fetched by range -> 512 tile batches through t
     assert.equal(createHash("sha256").update(Buffer.from(Uint16Array.from(all[name]).buffer)).digest("hex"), want[name].sha256, `${name}: equal to ecCodes`);
   }
 });
+
+// Two lead-files reaching the parser back to back (the runtime hands a node its queued frames on every invocation, a
+// resumed one too - on a live node the next lead arrived while a lead's tiles were going out, and they were lost): the
+// waiting lead is kept and cut after the tiles before it, every tile of both out. (The fixture served again as f048:
+// both carry the GRIB's own lead, 24 h, so each batch id comes twice.)
+test("gfs-0p25-sea: a second lead arriving while the first's tiles go out - all 1024 tile batches out, none lost", async () => {
+  const f048 = `${GFS}/gfs.t00z.pgrb2.0p25.f048`, f024 = `${GFS}/gfs.t00z.pgrb2.0p25.f024`;
+  SERVED[f048] = SERVED[f024];
+  try {
+    const config = { nwp_run: "20261006T00", nwp_products: "gfs-0p25-sea", nwp_max_lead: 48, nwp_lead_step: 24 };
+    const stub = createHostStub(config);
+    const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
+    stub.memoryRef.memory = host.memory;
+    host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-06T05:00:00Z" })) });
+    // (the Go host drains past 1000: each pass runs the in-wasm scheduler, then again while any node is ready -
+    // internal/flowrt runtime.go; the SDK host stops at its maxIterations, 1000 by default)
+    await host.drain({ "sdn.flow.egress:emit": () => ({ statusCode: 0 }) }, { maxIterations: 100000 });
+    const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
+    const byBatch = new Map();
+    for (const i of ingests) byBatch.set(i.meta.batch_id, (byBatch.get(i.meta.batch_id) ?? 0) + 1);
+    assert.equal(ingests.length, 1024, "every tile of both leads");
+    assert.equal(byBatch.size, 512);
+    assert.ok([...byBatch.values()].every((n) => n === 2));
+    console.log(`two leads: runtime linear memory ${(host.memory.buffer.byteLength / 1048576).toFixed(0)} MiB`);
+  } finally {
+    delete SERVED[f048];
+  }
+});

@@ -1020,33 +1020,111 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
 extern "C" {
 
 // A tiled parse's batches, handed out one an invocation (the rest yielded as backlog: the compiled runtime resumes a
-// yielded node without input) - storage-ingest takes one meta + one record stream at a time.
+// yielded node without input) - storage-ingest takes one meta + one record stream at a time. The runtime hands a node
+// its queued frames on EVERY invocation, a resumed one too: a lead-file arriving while a lead's tiles are still going
+// out is kept as its raw GRIB bytes (a few MB, not its ~20 MB of tile records) and cut when the tiles before it are out -
+// nothing dropped, the memory one lead's tiles plus the waiting leads' bytes. (A whole-field or banded batch is parsed
+// and emitted at once, as before.)
 struct PendingBatch { std::string meta; std::vector<uint8_t> stream; };
+struct PendingInput { std::vector<GribJob> jobs; std::vector<HttpResponse> responses; };
 std::vector<PendingBatch> g_tile_backlog;
 size_t g_tile_next = 0;
+std::vector<PendingInput> g_raw_pending;
+size_t g_raw_next = 0;
+uint32_t g_tiles_per_lead = 512;
 
+void set_backlog_state() {
+    const uint32_t tiles = static_cast<uint32_t>(g_tile_backlog.size() - g_tile_next);
+    const uint32_t raw = static_cast<uint32_t>(g_raw_pending.size() - g_raw_next);
+    const uint32_t remaining = tiles + raw * g_tiles_per_lead;
+    plugin_set_backlog_remaining(remaining);
+    plugin_set_yielded(remaining > 0 ? 1 : 0);
+}
+
+// One input's records: a tiled job's into the tile backlog (tiled true), else the batch's meta + record stream.
+// Returns 0, or the failing status with the error set.
+int parse_input(const PendingInput& in, bool* tiled, std::string* meta_out, std::vector<uint8_t>* stream) {
+    Sha256 batch, normalized;
+    int count = 0;
+    TileSinks tiles;
+    for (size_t k = 0; k < in.jobs.size(); k++) {
+        const std::vector<uint8_t>& body = in.responses[k].body;
+        batch.update(body.data(), body.size());
+        std::vector<grib2mini::Message> messages;
+        std::string err;
+        if (!grib2mini::parse(body.data(), body.size(), messages, err)) {
+            plugin_set_error("grib2-unreadable", (in.jobs[k].url + ": " + err).c_str());
+            return 422;
+        }
+        if (messages.empty()) {
+            plugin_set_error("grib2-unreadable", (in.jobs[k].url + ": the range holds no GRIB2 message").c_str());
+            return 422;
+        }
+        const grib2mini::Message* previous_bitmap = nullptr;
+        for (const grib2mini::Message& m : messages) {
+            std::string code, message;
+            if (!message_records(in.jobs[k], body.data(), m, previous_bitmap, retrieved_at_ms(in.responses[k]), stream, &normalized, &count, &code, &message, &tiles)) {
+                plugin_set_error(code.c_str(), message.c_str());
+                return 422;
+            }
+            if (m.bitmapIndicator == 0) previous_bitmap = &m;
+        }
+    }
+    const std::string batch_id = batch.hex_digest();
+    const GribJob& first = in.jobs[0];
+    const HttpResponse& response = in.responses[0];
+    const int64_t retrieved = retrieved_at_ms(response);
+    *tiled = !tiles.empty();
+    if (*tiled) {
+        g_tiles_per_lead = static_cast<uint32_t>(tiles.size());
+        for (auto& [key, t] : tiles) {
+            char lead[8];
+            std::snprintf(lead, sizeof(lead), "%03d", t.lead);
+            const std::string tile_batch = first.model_key + ":" + first.run + ":f" + lead + ":s4:" + key;
+            const std::string tile_provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id,
+                                                                      t.normalized.hex_digest(), t.count, "{\"WXF.fbs\":" + std::to_string(t.count) + "}", retrieved);
+            g_tile_backlog.push_back({build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, tile_batch, tile_provenance), std::move(t.stream)});
+        }
+        return 0;
+    }
+    const std::string provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id, normalized.hex_digest(), count,
+                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
+    *meta_out = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, batch_id, provenance);
+    return 0;
+}
+
+// The next tile batch out - cutting the next waiting lead when the tiles before it are all out. Returns 0 (with or
+// without a batch out), or the failing status.
 int emit_next_tile_batch() {
     if (g_tile_next >= g_tile_backlog.size()) {
         g_tile_backlog.clear(); g_tile_next = 0;
-        plugin_set_backlog_remaining(0);
-        plugin_set_yielded(0);
-        return 0;
+        while (g_tile_backlog.empty() && g_raw_next < g_raw_pending.size()) {
+            PendingInput in = std::move(g_raw_pending[g_raw_next++]);
+            if (g_raw_next >= g_raw_pending.size()) { g_raw_pending.clear(); g_raw_next = 0; }
+            bool tiled = false;
+            std::string unused_meta;
+            std::vector<uint8_t> unused_stream;
+            const int status = parse_input(in, &tiled, &unused_meta, &unused_stream);
+            if (status != 0) return status;
+        }
+        if (g_tile_backlog.empty()) return 0;
     }
-    const PendingBatch& b = g_tile_backlog[g_tile_next++];
+    PendingBatch b = std::move(g_tile_backlog[g_tile_next++]);
     if (push_json("wxf_meta", b.meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", b.stream) < 0) return 500;
-    const uint32_t remaining = static_cast<uint32_t>(g_tile_backlog.size() - g_tile_next);
-    if (remaining == 0) { g_tile_backlog.clear(); g_tile_next = 0; }
-    plugin_set_backlog_remaining(remaining);
-    plugin_set_yielded(remaining > 0 ? 1 : 0);
+    if (g_tile_next >= g_tile_backlog.size()) { g_tile_backlog.clear(); g_tile_next = 0; }
     return 0;
 }
 
 // parse: jobs[k] + responses[k] (paired by position; each response whole GRIB2 messages of one byte range) ->
 // wxf_meta + wxf_records (one batch for the invocation). A tiled job (tile_deg) -> one batch a tile, batch_id
-// <model>:<run>:f<LLL>:s4:<x>:<y>, handed out one an invocation.
+// <model>:<run>:f<LLL>:s4:<x>:<y>, handed out one an invocation; resumed without input, the next.
 int parse(void) {
-    if (plugin_get_input_count() == 0) return emit_next_tile_batch();
+    if (plugin_get_input_count() == 0) {
+        const int status = emit_next_tile_batch();
+        set_backlog_state();
+        return status;
+    }
     const std::vector<const plugin_input_frame_t*> job_frames = frames_on("jobs");
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
     if (job_frames.empty()) {
@@ -1059,70 +1137,41 @@ int parse(void) {
         plugin_set_error("job-response-count-mismatch", msg.c_str());
         return 400;
     }
-    std::vector<GribJob> jobs(job_frames.size());
-    std::vector<HttpResponse> responses(response_frames.size());
-    for (size_t k = 0; k < jobs.size(); k++) {
+    PendingInput in;
+    in.jobs.resize(job_frames.size());
+    in.responses.resize(response_frames.size());
+    bool tiled_job = false;
+    for (size_t k = 0; k < in.jobs.size(); k++) {
         std::string err;
-        if (!read_grib_job(frame_text(job_frames[k]), &jobs[k], &err)) {
+        if (!read_grib_job(frame_text(job_frames[k]), &in.jobs[k], &err)) {
             plugin_set_error("invalid-grib-job", ("GRIB job " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
-        if (!decode_http_response(response_frames[k], &responses[k], &err)) {
+        if (!decode_http_response(response_frames[k], &in.responses[k], &err)) {
             plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
-        if (responses[k].status != 200 && responses[k].status != 206) {
-            plugin_set_error("fetch-failed", (jobs[k].url + " returned HTTP status " + std::to_string(responses[k].status)).c_str());
+        if (in.responses[k].status != 200 && in.responses[k].status != 206) {
+            plugin_set_error("fetch-failed", (in.jobs[k].url + " returned HTTP status " + std::to_string(in.responses[k].status)).c_str());
             return 502;
         }
+        if (in.jobs[k].tile_deg > 0) tiled_job = true;
     }
-    Sha256 batch, normalized;
+    if (tiled_job) {
+        // (kept raw until the tiles before it are out; then cut, and the next tile batch out)
+        g_raw_pending.push_back(std::move(in));
+        const int status = emit_next_tile_batch();
+        set_backlog_state();
+        return status;
+    }
+    bool tiled = false;
+    std::string meta;
     std::vector<uint8_t> stream;
-    int count = 0;
-    TileSinks tiles;
-    for (size_t k = 0; k < jobs.size(); k++) {
-        const std::vector<uint8_t>& body = responses[k].body;
-        batch.update(body.data(), body.size());
-        std::vector<grib2mini::Message> messages;
-        std::string err;
-        if (!grib2mini::parse(body.data(), body.size(), messages, err)) {
-            plugin_set_error("grib2-unreadable", (jobs[k].url + ": " + err).c_str());
-            return 422;
-        }
-        if (messages.empty()) {
-            plugin_set_error("grib2-unreadable", (jobs[k].url + ": the range holds no GRIB2 message").c_str());
-            return 422;
-        }
-        const grib2mini::Message* previous_bitmap = nullptr;
-        for (const grib2mini::Message& m : messages) {
-            std::string code, message;
-            if (!message_records(jobs[k], body.data(), m, previous_bitmap, retrieved_at_ms(responses[k]), &stream, &normalized, &count, &code, &message, &tiles)) {
-                plugin_set_error(code.c_str(), message.c_str());
-                return 422;
-            }
-            if (m.bitmapIndicator == 0) previous_bitmap = &m;
-        }
-    }
-    const std::string batch_id = batch.hex_digest();
-    const GribJob& first = jobs[0];
-    const int64_t retrieved = retrieved_at_ms(responses[0]);
-    if (!tiles.empty()) {
-        g_tile_backlog.clear(); g_tile_next = 0;
-        for (auto& [key, t] : tiles) {
-            char lead[8];
-            std::snprintf(lead, sizeof(lead), "%03d", t.lead);
-            const std::string tile_batch = first.model_key + ":" + first.run + ":f" + lead + ":s4:" + key;
-            const std::string tile_provenance = build_provenance_json(kParserVersion, first.url, responses[0].status, responses[0], batch_id,
-                                                                      t.normalized.hex_digest(), t.count, "{\"WXF.fbs\":" + std::to_string(t.count) + "}", retrieved);
-            g_tile_backlog.push_back({build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, tile_batch, tile_provenance), std::move(t.stream)});
-        }
-        return emit_next_tile_batch();
-    }
-    const std::string provenance = build_provenance_json(kParserVersion, first.url, responses[0].status, responses[0], batch_id, normalized.hex_digest(), count,
-                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
-    const std::string meta = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, batch_id, provenance);
+    const int status = parse_input(in, &tiled, &meta, &stream);
+    if (status != 0) return status;
     if (push_json("wxf_meta", meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", stream) < 0) return 500;
+    set_backlog_state();   // (tiles still going out: yielded, resumed for them)
     return 0;
 }
 

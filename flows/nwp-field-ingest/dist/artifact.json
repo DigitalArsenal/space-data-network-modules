@@ -113,7 +113,7 @@
       "dependencyId": "com.digitalarsenal.data-source.nwp-grib2-parser",
       "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
       "version": "0.2.0",
-      "sha256": "8c3e957e8ba20bc530fb1d5f74cc7e8c8d7eccfe6dc3f027bcebee648270f586",
+      "sha256": "a6fe96c0708955db10ed8ca5ea141f4981c7e42713e9027dcb6672b36c60aa0a",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
