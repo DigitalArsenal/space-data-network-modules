@@ -1,7 +1,7 @@
 // The records the integrator reads: the composed catalog and each source's products ($OMM, $OCM, $MNV).
 //
 // A product names its source or it is refused: no record travels without its source (catalog pipeline C2). An
-// $OMM and an $OCM name it in USER_DEFINED_PARAMETERS (SOURCE_ID), a $MNV in a tag (source:<id>). A product names
+// $OMM, an $OCM and a $MNV name it in PROVENANCE (SOURCE_ID); a covariance states its realism in COV_REALISM. A product names
 // its object by NORAD number or international designator; a source with neither names it natively (an $OMM's
 // USER_DEFINED_OBJECT_DESIGNATOR, an $OCM's OBJECT_DESIGNATOR under the source's own CATALOG_NAME, a $MNV's ON_ORBIT)
 // and that name joins an object only through an identity link the trajectories supported. Names never join.
@@ -125,7 +125,7 @@ struct Ocm {
   int64_t first_epoch;
   bool has_epoch;
   std::string calibration;  // the message's COV_CALIBRATION
-  Json label;               // the label of its first row (COV_LABELS[0])
+  Json label;               // the realism of its first state (COV_REALISM[0])
 };
 struct Mnv {
   size_t ordinal;
@@ -149,23 +149,31 @@ std::string str_of(const flatbuffers::String* s) { return s ? s->str() : ""; }
 // The product of an $OMM is its mean-element theory: sgp4, sgp4xp, ...
 std::string product_of(meanElementSource theory) { return lower(EnumNamemeanElementSource(theory)); }
 
-std::string param_of(const flatbuffers::Vector<flatbuffers::Offset<OMMUserDefinedParameter>>* params, const char* name) {
-  if (params) for (const auto* p : *params) if (p->PARAM_NAME() && p->PARAM_NAME()->str() == name) return str_of(p->PARAM_VALUE());
-  return "";
-}
-std::string param_of(const flatbuffers::Vector<flatbuffers::Offset<UserDefinedParameters>>* params, const char* name) {
-  if (params) for (const auto* p : *params) if (p->PARAM_NAME() && p->PARAM_NAME()->str() == name) return str_of(p->PARAM_VALUE());
-  return "";
-}
-Json parse_label(const std::string& text_) {
-  if (text_.empty()) return Json();
-  Json label = Json::parse(text_, nullptr, false);
-  return label.is_discarded() ? Json() : label;
+std::string source_of(const PVN* provenance) { return provenance ? str_of(provenance->SOURCE_ID()) : ""; }
+
+// A covariance's realism (CVR) as the report states it: the rule, the model, the cell, the numbers of its test and the verdict.
+Json realism_of(const CVR* c) {
+  if (!c) return Json();
+  Json j = {{"rule", static_cast<int>(c->RULE())}, {"ruleName", EnumNamecovarianceRule(c->RULE())},
+            {"calibration", EnumNamecovarianceCalibration(c->CALIBRATION())}, {"samples", c->SAMPLES()}, {"objects", c->OBJECTS()}};
+  const auto text_field = [&](const char* key, const flatbuffers::String* s) { if (s && s->size()) j[key] = s->str(); };
+  const auto number_field = [&](const char* key, double v) { if (std::isfinite(v)) j[key] = v; };
+  text_field("modelId", c->MODEL_ID());
+  text_field("regime", c->REGIME());
+  text_field("measuredLineage", c->MEASURED_LINEAGE());
+  text_field("testWindow", c->TEST_WINDOW());
+  text_field("evidence", c->EVIDENCE());
+  number_field("ageDays", c->AGE_DAYS());
+  number_field("horizonDays", c->HORIZON_DAYS());
+  number_field("meanD2Over3", c->MEAN_D2_OVER_3());
+  number_field("coverage95", c->COVERAGE_95());
+  number_field("scaleFactor", c->SCALE_FACTOR());
+  return j;
 }
 
 bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Omm>* out, std::vector<Refusal>* refused) {
   const auto* omm = GetSizePrefixedOMM(bytes);
-  Omm p{ordinal, bytes, length, param_of(omm->USER_DEFINED_PARAMETERS(), "SOURCE_ID"), lower(EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY())), "", str_of(omm->OBJECT_NAME()), {}, 0, Json()};
+  Omm p{ordinal, bytes, length, source_of(omm->PROVENANCE()), lower(EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY())), "", str_of(omm->OBJECT_NAME()), {}, 0, Json()};
   if (p.source.empty()) { refused->push_back({"omm", ordinal, "unattributed-product"}); return false; }
   if (!omm->EPOCH() || !parse_instant(omm->EPOCH()->str(), &p.epoch)) { refused->push_back({"omm", ordinal, "invalid-epoch"}); return false; }
   p.who.norad = omm->NORAD_CAT_ID();
@@ -173,7 +181,7 @@ bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
   if (cospar(designator)) p.who.cospar = designator;
   p.who.native = trimmed(str_of(omm->USER_DEFINED_OBJECT_DESIGNATOR()));
   if (!p.who.any()) { refused->push_back({"omm", ordinal, "no-object-identity"}); return false; }
-  p.label = parse_label(param_of(omm->USER_DEFINED_PARAMETERS(), "COV_LABEL"));
+  p.label = realism_of(omm->COV_REALISM());
   p.regime = text(field(p.label, "regime"));
   out->push_back(std::move(p));
   return true;
@@ -181,9 +189,8 @@ bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
 
 bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Ocm>* out, std::vector<Refusal>* refused) {
   const auto* ocm = GetSizePrefixedOCM(bytes);
-  Ocm p{ordinal, bytes, length, param_of(ocm->USER_DEFINED_PARAMETERS(), "SOURCE_ID"), {}, 0, false, EnumNamecovarianceCalibration(ocm->COV_CALIBRATION()), Json()};
-  const Json labels = parse_label(param_of(ocm->USER_DEFINED_PARAMETERS(), "COV_LABELS"));
-  if (labels.is_array() && !labels.empty()) p.label = labels[0];
+  Ocm p{ordinal, bytes, length, source_of(ocm->PROVENANCE()), {}, 0, false, EnumNamecovarianceCalibration(ocm->COV_CALIBRATION()), Json()};
+  if (ocm->COV_REALISM() && ocm->COV_REALISM()->size() > 0) p.label = realism_of(ocm->COV_REALISM()->Get(0));
   if (p.source.empty()) { refused->push_back({"ocm", ordinal, "unattributed-product"}); return false; }
   const auto* meta = ocm->METADATA();
   if (meta) {
@@ -204,15 +211,11 @@ bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
   return true;
 }
 
-std::string tag_value(const std::vector<std::string>& tags, const std::string& prefix) {
-  for (const auto& tag : tags) if (tag.compare(0, prefix.size(), prefix) == 0) return tag.substr(prefix.size());
-  return "";
-}
 bool read_mnv(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Mnv>* out, std::vector<Refusal>* refused) {
   const auto* mnv = GetSizePrefixedMNV(bytes);
   Mnv p{ordinal, bytes, length, "", str_of(mnv->ID()), {}, 0, mnv->STATUS(), NAN, {}};
   if (mnv->TAGS()) for (const auto* tag : *mnv->TAGS()) p.tags.push_back(str_of(tag));
-  p.source = tag_value(p.tags, "source:");
+  p.source = source_of(mnv->PROVENANCE());
   if (p.source.empty()) { refused->push_back({"mnv", ordinal, "unattributed-product"}); return false; }
   p.who.norad = mnv->SAT_NO();
   const std::string designator = trimmed(str_of(mnv->ORIG_OBJECT_ID()));

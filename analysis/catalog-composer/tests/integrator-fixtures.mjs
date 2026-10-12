@@ -38,23 +38,24 @@ export function catRecord({ norad = 0, cospar = '', name = '', maneuverable = fa
   return finish((b, o) => CAT.CAT.finishSizePrefixedCATBuffer(b, o), (b) => t.pack(b));
 }
 
-// The covariance label gp-error-model gives the row of a product (regime, rule, calibration, ...).
-export const labelOf = (regime, extra = {}) => ({ rule: 3, method: 'e14-s3-kc', model: 'e14-s3-0e678383cfbd', regime, calibration: 'UNCALIBRATED', verdict: 'NOT REALISTIC (overconfident)', ...extra });
+// The realism gp-error-model gives a product's covariance (COV_REALISM): rule 3 is the source's own model, here E14's cell.
+export const labelOf = (regime, extra = {}) => ({ RULE: OMM.covarianceRule.SourceModel, MODEL_ID: 'e14-s3-0e678383cfbd', REGIME: regime,
+  CALIBRATION: OMM.covarianceCalibration.Uncalibrated, MEAN_D2_OVER_3: 35.6, COVERAGE_95: 0.95, SAMPLES: 2355, OBJECTS: 5, ...extra });
+const realism = (label) => Object.assign(new OMM.CVRT(), label);
+const provenance = (source) => Object.assign(new OMM.PVNT(), { SOURCE_ID: source, ORIGINATOR: source });
 
 export function ommRecord({ source, norad = 0, cospar = '', native = '', name = '', epoch, theory = OMM.meanElementSource.SGP4, label, bstar = 1e-4 }) {
   const t = Object.assign(new OMM.OMMT(), {
     OBJECT_NAME: name, OBJECT_ID: cospar, NORAD_CAT_ID: norad, USER_DEFINED_OBJECT_DESIGNATOR: native, EPOCH: epoch, MEAN_ELEMENT_THEORY: theory,
     MEAN_MOTION: 15.5, ECCENTRICITY: 0.001, INCLINATION: 51.6, RA_OF_ASC_NODE: 10, ARG_OF_PERICENTER: 20, MEAN_ANOMALY: 30, BSTAR: bstar,
-    USER_DEFINED_PARAMETERS: [
-      ...(source ? [new OMM.OMMUserDefinedParameterT('SOURCE_ID', source)] : []),
-      ...(label ? [new OMM.OMMUserDefinedParameterT('COV_LABEL', JSON.stringify(label))] : []),
-    ],
+    PROVENANCE: source ? provenance(source) : null,
+    COV_REALISM: label ? realism(label) : null,
   });
   return finish((b, o) => OMM.OMM.finishSizePrefixedOMMBuffer(b, o), (b) => t.pack(b));
 }
 
-// An $OCM as attach_covariance writes it: the state at the set's epoch, the object under CATALOG_NAME NORAD, the source and
-// the label of each row in USER_DEFINED_PARAMETERS.
+// An $OCM as attach_covariance writes it: the state at the set's epoch, the object under CATALOG_NAME NORAD, the source in
+// PROVENANCE and the realism of each state's covariance in COV_REALISM.
 export function ocmRecord({ source, norad = 0, cospar = '', native = '', epoch, label, calibration = OCM.covarianceCalibration.Uncalibrated }) {
   const meta = Object.assign(new OCM.MetadataT(), {
     OBJECT_NAME: 'TEST', INTERNATIONAL_DESIGNATOR: cospar, CATALOG_NAME: native ? source : 'NORAD', OBJECT_DESIGNATOR: native || (norad ? String(norad) : ''),
@@ -62,10 +63,8 @@ export function ocmRecord({ source, norad = 0, cospar = '', native = '', epoch, 
   });
   const t = Object.assign(new OCM.OCMT(), {
     METADATA: meta, STATE_EPOCHS: [epoch], STATE_DATA: [7000, 0, 0, 0, 7.5, 0], COV_CALIBRATION: calibration,
-    USER_DEFINED_PARAMETERS: [
-      ...(source ? [new OCM.UserDefinedParametersT('SOURCE_ID', source)] : []),
-      new OCM.UserDefinedParametersT('COV_LABELS', JSON.stringify([{ ...label, epoch }])),
-    ],
+    PROVENANCE: source ? provenance(source) : null,
+    COV_REALISM: label ? [realism(label)] : [],
   });
   return finish((b, o) => OCM.OCM.finishSizePrefixedOCMBuffer(b, o), (b) => t.pack(b));
 }
@@ -73,7 +72,8 @@ export function ocmRecord({ source, norad = 0, cospar = '', native = '', epoch, 
 export function mnvRecord({ source, id, norad = 0, cospar = '', native = '', at, status = MNV.maneuverStatus.DETECTED, dv = 0, tags = [] }) {
   const t = Object.assign(new MNV.MNVT(), {
     ID: id, SAT_NO: norad, ORIG_OBJECT_ID: cospar, ON_ORBIT: native, STATUS: status, EVENT_START_TIME: at, DELTA_VEL: dv,
-    TAGS: [...(source ? [`source:${source}`, `originator:${source}`] : []), ...tags],
+    PROVENANCE: source ? provenance(source) : null,
+    TAGS: tags,
   });
   return finish((b, o) => MNV.MNV.finishSizePrefixedMNVBuffer(b, o), (b) => t.pack(b));
 }

@@ -160,10 +160,10 @@ except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
 | `recipe` | in | JSON, version 1: `asOf` (Unix seconds), `identity`, `selection`, `maneuvers` (below) |
 | `catalog` | in | The composed `$CAT`: canonical size-prefixed records, each object once |
 | `ephemerides` | in | Up to 64 normalized `$OEM` trajectories, one per identity candidate in the recipe's order |
-| `omm_products`, `ocm_products`, `mnv_products` | in | Every source's `$OMM`, `$OCM` and `$MNV`, as `flows/source-products` writes them: an `$OMM` and an `$OCM` name their source in `USER_DEFINED_PARAMETERS` `SOURCE_ID`, a `$MNV` in a `source:<id>` tag. A record that names no source or no object is refused and counted |
+| `omm_products`, `ocm_products`, `mnv_products` | in | Every source's `$OMM`, `$OCM` and `$MNV`, as `flows/source-products` writes them: each names its source in `PROVENANCE` (`$PVN` `SOURCE_ID`), and an `$OMM`'s or `$OCM`'s covariance states its realism in `COV_REALISM` (`$CVR`). A record that names no source or no object is refused and counted |
 | `catalog` | out | The input objects in order, original bytes; `MANEUVERABLE` true where the history shows a maneuver |
 | `omm` | out | Per object and product kind (`sgp4`, `sgp4xp`) the element set of the selected source, byte for byte |
-| `ocm` | out | The selected set's state and covariance with the covariance label, byte for byte |
+| `ocm` | out | The selected set's state and covariance with its realism, byte for byte |
 | `mnv` | out | The maneuvers of every source, merged |
 | `report` | out | JSON: the policy, the counts, every identity link with its verdict, per object every candidate and why one was chosen or none, the label of the chosen covariance, the SHA-256 and CID (CIDv1, raw, sha2-256) of every record written, the records refused or unlinked |
 
@@ -198,11 +198,11 @@ The steps, in order:
    wins, a tie going to the source earlier in `sourceOrder` and then to the newer epoch. An unmeasured
    candidate never beats a measured one. With none measured, `sourceOrder` decides and the report says
    `unmeasured-fallback-order`. When every candidate is retired or too old the object is **stale** and has
-   no product. The regime is the one the product's covariance label names (`COV_LABEL` of the `$OMM`), so the
+   no product. The regime is the one the product's covariance realism names (`COV_REALISM` `REGIME` of the `$OMM`), so the
    covariance model and the selection speak of the same strata; the horizon is the recipe's.
 4. **Covariance.** The selected set's own `$OCM` (the same source, first state at the set's epoch) goes out
-   with it, and the report carries its label: rule, method, regime, held-out verdict, calibration. A set
-   with no `$OCM` goes out alone and the report reads its label from the set.
+   with it, and the report carries its realism: rule, model, regime, the held-out test's numbers and verdict. A set
+   with no `$OCM` goes out alone and the report reads its realism from the set.
 
 ```json
 {

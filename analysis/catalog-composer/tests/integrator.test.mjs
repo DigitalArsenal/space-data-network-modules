@@ -22,7 +22,7 @@ const omm = (source, who, daysBefore, extra = {}) => ommRecord({ source, ...who,
 const mnv = (source, who, daysBefore, extra = {}) => mnvRecord({ source, id: `${source}-${daysBefore}`, ...who, at: ocmEpoch(daysBefore), ...extra });
 const names = (r) => r.report.objects.map((o) => o.name);
 const objectOf = (r, name) => r.report.objects.find((o) => o.name === name);
-const sources = (omms) => omms.map((bytes) => unpackOmm(bytes).USER_DEFINED_PARAMETERS.find((p) => p.PARAM_NAME === 'SOURCE_ID').PARAM_VALUE);
+const sources = (omms) => omms.map((bytes) => unpackOmm(bytes).PROVENANCE.SOURCE_ID);
 const run = async (recipe, { catalog, omms = [], ocms = [], mnvs = [], ephemerides = [] }) => integrate([
   frames.recipe(recipe), frames.catalog(catalog),
   ...ephemerides.map(frames.ephemerides),
@@ -146,7 +146,7 @@ test('two sources\' reports of one burn are one event that keeps each source\'s 
   assert.equal(events[0].STATUS, MNV.maneuverStatus.CONFIRMED);
   assert.equal(events[0].ID, 'cel', 'written from the member with the best status');
   assert.deepEqual(events[0].TAGS.filter((t) => t.startsWith('member:') || t.startsWith('merged:')), [`member:${S1}=DETECTED`, `member:${S2}=CONFIRMED`, 'merged:2']);
-  assert.ok(events[0].TAGS.includes(`source:${S2}`));
+  assert.equal(events[0].PROVENANCE.SOURCE_ID, S2, 'and keeps that member\'s provenance');
   assert.deepEqual(records(r.mnv)[1], later, 'an event of one report is that record byte for byte');
   const merged = objectOf(r, 'CHARLIE').maneuvers[0];
   assert.deepEqual(merged.members.map((m) => [m.source, m.status]), [[S1, 'DETECTED'], [S2, 'CONFIRMED']]);
@@ -166,9 +166,9 @@ test('two sources\' reports of one burn are one event that keeps each source\'s 
 });
 
 test('the selected product\'s covariance and its label come out with it, byte for byte', async () => {
-  const label = labelOf('LEO-L', { calibration: 'UNCALIBRATED', meanD2Over3: 1.73, coverage95: 0.916 });
+  const label = labelOf('LEO-L', { MEAN_D2_OVER_3: 1.73, COVERAGE_95: 0.916 });
   const s1 = omm(S1, A, 1), s2 = omm(S2, A, 2);
-  const o1 = ocmRecord({ source: S1, ...A, epoch: ocmEpoch(1), label }), o2 = ocmRecord({ source: S2, ...A, epoch: ocmEpoch(2), label: { ...label, calibration: 'CALIBRATED' }, calibration: OCM.covarianceCalibration.Calibrated });
+  const o1 = ocmRecord({ source: S1, ...A, epoch: ocmEpoch(1), label }), o2 = ocmRecord({ source: S2, ...A, epoch: ocmEpoch(2), label: { ...label, CALIBRATION: OMM.covarianceCalibration.Calibrated }, calibration: OCM.covarianceCalibration.Calibrated });
   const r = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [s1, s2], ocms: [o1, o2] });
   assert.equal(r.statusCode, 0, r.message);
   assert.deepEqual(records(r.ocm), [o2], 'the OCM of the chosen source at the chosen epoch, and only it');
@@ -176,7 +176,8 @@ test('the selected product\'s covariance and its label come out with it, byte fo
   assert.equal(selected.covariance.from, 'ocm');
   assert.equal(selected.covariance.calibration, 'Calibrated');
   assert.equal(selected.covariance.label.regime, 'LEO-L');
-  assert.equal(selected.covariance.label.calibration, 'CALIBRATED');
+  assert.equal(selected.covariance.label.calibration, 'Calibrated');
+  assert.equal(selected.covariance.label.meanD2Over3, 1.73);
   assert.equal(selected.ocm.sha256, sha256(o2));
   // A chosen set whose source gave no OCM at that epoch goes out alone, and the report reads its label from the set.
   const alone = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [s1, s2], ocms: [o1] });

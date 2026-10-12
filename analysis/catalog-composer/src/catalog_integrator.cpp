@@ -4,14 +4,14 @@
 //   recipe        JSON   asOf, the identity links, the selection policy with its measured table, the maneuver policy
 //   catalog       $CAT   the composed catalog (compose's output, or one snapshot): each object once
 //   ephemerides   $OEM   the normalized trajectories of the identity candidates, in candidate order
-//   omm_products  $OMM   every source's element sets, each naming its source (SOURCE_ID) as analysis/gp-error-model writes it
-//   ocm_products  $OCM   every source's states and covariance with the covariance's label
-//   mnv_products  $MNV   every source's maneuvers, each tagged source:<id>
+//   omm_products  $OMM   every source's element sets, each naming its source in PROVENANCE as analysis/gp-error-model writes it
+//   ocm_products  $OCM   every source's states and covariance, with the covariance's realism (COV_REALISM)
+//   mnv_products  $MNV   every source's maneuvers, each naming its source in PROVENANCE
 //   -> catalog    $CAT   the input objects, in order; MANEUVERABLE is true where the history shows a maneuver
 //      omm        $OMM   per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte
-//      ocm        $OCM   the selected product's state and covariance with its label, byte for byte
+//      ocm        $OCM   the selected product's state and covariance with its realism, byte for byte
 //      mnv        $MNV   the maneuvers of every source, merged within the policy's tolerances
-//      report     JSON   per object every candidate, why one was chosen or none, the covariance label, record CIDs
+//      report     JSON   per object every candidate, why one was chosen or none, the covariance's realism, record CIDs
 //
 // The steps, in order: identity (a source's own names join objects only through links the trajectories supported),
 // maneuvers (merged; MANEUVERABLE; a burn after a product's epoch retires it), selection (the lowest measured median

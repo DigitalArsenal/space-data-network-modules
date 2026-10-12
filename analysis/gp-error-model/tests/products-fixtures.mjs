@@ -156,10 +156,14 @@ export const expectedProvenance = (recipe, producer = recipe.producer) => ({
 });
 const PVN_FIELDS = ['SOURCE_ID', 'SOURCE_KIND', 'ORIGINATOR', 'PROVIDER_ID', 'PRODUCER', 'LICENSE_CLASS', 'LICENSE_ID', 'LINEAGE'];
 export const provenanceOf = (record) => (record.PROVENANCE ? Object.fromEntries(PVN_FIELDS.map((f) => [f, record.PROVENANCE[f]])) : null);
+// The labels a product once carried as user-defined parameters. A source's own parameters (Space-Track's GP_ID, AOE's
+// channel and record ids) stay; these must not.
+const LABEL_PARAMS = new Set(['SOURCE_ID', 'SOURCE_KIND', 'SOURCE_ORIGINATOR', 'SOURCE_PROVIDER', 'SOURCE_LINEAGE', 'LICENCE_CLASS', 'LICENCE_ID',
+  'PRODUCER', 'PRODUCT', 'COV_RULE', 'COV_METHOD', 'COV_LABEL', 'COV_LABELS', 'COV_UNAVAILABLE']);
 // A record names its source in PROVENANCE and carries no label of it in USER_DEFINED_PARAMETERS or TAGS.
 export function assertSourceNamed(record, recipe, producer) {
   assert.deepEqual(provenanceOf(record), expectedProvenance(recipe, producer));
-  assert.deepEqual(record.USER_DEFINED_PARAMETERS ?? [], []);
+  assert.deepEqual((record.USER_DEFINED_PARAMETERS ?? []).filter((p) => LABEL_PARAMS.has(p.PARAM_NAME)), []);
   assert.deepEqual((record.TAGS ?? []).filter((t) => /^(originator|source|provider|licence|licence-id|lineage|producer):/.test(t)), []);
 }
 
