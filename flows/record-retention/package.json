@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-record-retention",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../data-source/record-retention/node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../record-retention.flow.json --deps ../record-retention.deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../../spacedatastandards.org && pwd)}\"; node ../../data-source/record-retention/node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../record-retention.flow.json --deps ../record-retention.deps.json --out ./dist",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.25"
+  }
+}

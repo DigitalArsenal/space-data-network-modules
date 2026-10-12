@@ -1,0 +1,47 @@
+{
+  "programId": "com.digitalarsenal.flows.record-retention",
+  "name": "SDN Record Retention Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 2,
+  "edges": 1,
+  "triggers": 1,
+  "capabilities": [
+    "storage_query",
+    "storage_write"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "expire",
+      "pluginId": "com.digitalarsenal.data-source.record-retention",
+      "methodId": "expire",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.record-retention",
+      "pluginId": "com.digitalarsenal.data-source.record-retention",
+      "version": "0.1.0",
+      "sha256": "7152a0101e6ebdb603f5ea86d25f19d763a9b35562441f2f19305f95585eea69",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7265636f72642d726574656e74696f6e_",
+      "methodSymbols": {
+        "expire": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7265636f72642d726574656e74696f6e_expire"
+      }
+    }
+  ]
+}
