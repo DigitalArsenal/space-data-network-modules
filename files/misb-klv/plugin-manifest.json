@@ -1,0 +1,207 @@
+{
+ "pluginId": "com.digitalarsenal.files.misb-klv",
+ "name": "MISB ST 0601 full-motion video",
+ "version": "0.1.0",
+ "description": "Full-motion video with MISB ST 0601 UAS Datalink Local Set metadata, for a video layer draped on the globe. remux demultiplexes an MPEG-2 transport stream (PAT/PMT, H.264 and KLV PES, 33-bit PTS unwrapped across rollover), remuxes the H.264 video to fragmented MP4 for Media Source Extensions and writes a per-frame footprint table; footprints writes one SDS $GDI per ST 0601 packet. Packets are checksum-checked (tag 1) and error values are treated as absent. A footprint comes from the stated corner points (tags 82-89), else the frame centre and corner offsets (23/24 and 26-33), else the sensor corner rays from the platform and sensor pose (5-7 or 90/91, 13-20, 75 or 15) intersected with WGS84 at the frame-centre elevation (25).",
+ "pluginFamily": "parser",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "Deterministic parsing of one transport stream per call: demultiplexing, box writing and closed-form footprint geometry. No host calls, threads or network access."
+ },
+ "schemasUsed": [
+  {
+   "schemaName": "NCD.fbs",
+   "fileIdentifier": "$NCD",
+   "rootTypeName": "NCD"
+  },
+  {
+   "schemaName": "GDI.fbs",
+   "fileIdentifier": "$GDI",
+   "rootTypeName": "GDI"
+  }
+ ],
+ "methods": [
+  {
+   "methodId": "remux",
+   "displayName": "Remux for playback",
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "inputPorts": [
+    {
+     "portId": "video",
+     "displayName": "video",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The transport stream: a size-prefixed SDS $NCD descriptor (FORMAT UNSPECIFIED or PROVIDER_DEFINED; SOURCE_BYTE_LENGTH and SOURCE_SHA256 are checked when stated) followed immediately by the MPEG-2 transport stream's exact bytes (188-byte packets, or 192-byte M2TS packets) in the same frame.",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-ncd-stream",
+       "description": "SDS $NCD envelope with the described stream's bytes appended to the frame.",
+       "allowedTypes": [
+        {
+         "schemaName": "NCD.fbs",
+         "fileIdentifier": "$NCD",
+         "rootTypeName": "NCD"
+        },
+        {
+         "schemaName": "NCD.fbs",
+         "fileIdentifier": "$NCD",
+         "rootTypeName": "NCD",
+         "wireFormat": "aligned-binary",
+         "requiredAlignment": 8
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "init",
+     "displayName": "init",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The fragmented MP4 initialization segment: ftyp and moov with one avc1 track (avcC from the stream's first SPS and PPS) and mvex; timescale 90000.",
+     "acceptedTypeSets": [
+      {
+       "setId": "init-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "video/mp4",
+        "detail": "The fragmented MP4 initialization segment: ftyp and moov with one avc1 track (avcC from the stream's first SPS and PPS) and mvex; timescale 90000."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "media",
+     "displayName": "media",
+     "minStreams": 1,
+     "maxStreams": 60,
+     "required": true,
+     "description": "Fragmented MP4 media segments (moof and mdat), each starting at a sync sample, in decode order; at most 60.",
+     "acceptedTypeSets": [
+      {
+       "setId": "media-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "video/mp4",
+        "detail": "Fragmented MP4 media segments (moof and mdat), each starting at a sync sample, in decode order; at most 60."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "frames",
+     "displayName": "frames",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The per-frame footprint table, little-endian float64: header [1, rows, epochMs, 90000] then per frame in presentation order [key, valid, LL lon, LL lat, LR lon, LR lat, UR lon, UR lat, UL lon, UL lat]; key is the presentation time in 90 kHz ticks.",
+     "acceptedTypeSets": [
+      {
+       "setId": "frames-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.misb-klv.frame-footprints+f64",
+        "detail": "The per-frame footprint table, little-endian float64: header [1, rows, epochMs, 90000] then per frame in presentation order [key, valid, LL lon, LL lat, LR lon, LR lat, UR lon, UR lat, UL lon, UL lat]; key is the presentation time in 90 kHz ticks."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "methodId": "footprints",
+   "displayName": "ST 0601 footprints",
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "inputPorts": [
+    {
+     "portId": "video",
+     "displayName": "video",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The transport stream: a size-prefixed SDS $NCD descriptor (FORMAT UNSPECIFIED or PROVIDER_DEFINED; SOURCE_BYTE_LENGTH and SOURCE_SHA256 are checked when stated) followed immediately by the MPEG-2 transport stream's exact bytes (188-byte packets, or 192-byte M2TS packets) in the same frame.",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-ncd-stream",
+       "description": "SDS $NCD envelope with the described stream's bytes appended to the frame.",
+       "allowedTypes": [
+        {
+         "schemaName": "NCD.fbs",
+         "fileIdentifier": "$NCD",
+         "rootTypeName": "NCD"
+        },
+        {
+         "schemaName": "NCD.fbs",
+         "fileIdentifier": "$NCD",
+         "rootTypeName": "NCD",
+         "wireFormat": "aligned-binary",
+         "requiredAlignment": 8
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "footprints",
+     "displayName": "footprints",
+     "minStreams": 1,
+     "maxStreams": 100000,
+     "required": true,
+     "description": "Size-prefixed SDS $GDI per ST 0601 packet, in presentation order: IMAGE_TIME from tag 2, ID_SENSOR from tag 11, NAME from tag 10, REGION_GEO_JSON the footprint polygon (lower left, lower right, upper right, upper left, closed), NOTES naming how the footprint was found.",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-gdi",
+       "allowedTypes": [
+        {
+         "schemaName": "GDI.fbs",
+         "fileIdentifier": "$GDI",
+         "rootTypeName": "GDI"
+        },
+        {
+         "schemaName": "GDI.fbs",
+         "fileIdentifier": "$GDI",
+         "rootTypeName": "GDI",
+         "wireFormat": "aligned-binary",
+         "requiredAlignment": 8
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
