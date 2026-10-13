@@ -11,7 +11,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { WASI } from "node:wasi";
+import { threadedExports } from "./threaded.mjs";
 
 import {
   ORBPRO_OMM_RECORD,
@@ -38,9 +38,8 @@ export const ErrorCode = Object.freeze({
 
 export async function loadModule() {
   const bytes = await fs.readFile(artifactPath);
-  const wasi = new WASI({ version: "preview1", args: ["module"], env: {} });
-  const module = await WebAssembly.compile(bytes);
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+  // Built with pthreads on an imported shared memory (threaded.mjs).
+  const instance = { exports: await threadedExports(bytes) };
   // Deliberately NOT calling wasi.start(): the artifact declares the `command`
   // invoke surface, so `_start` is the SDK's stdin-driven invoke loop and
   // blocks forever when driven from a test. The propagator ABI is a set of

@@ -224,7 +224,14 @@ const sourceCode = rawSource
       `// --- END INLINED ${path.basename(abiHeaderPath)} ---`,
     ].join("\n"),
   )
-  .replace(SLOTS_MARKER, ommSlotDefines);
+  .replace(SLOTS_MARKER, ommSlotDefines) +
+  // The small-body layer's display decisions (snapshot schedule, fade,
+  // promoted radius), appended to the same translation unit.
+  "\n" +
+  (await fs.readFile(path.join(packageRoot, "src", "small_body_display.hpp"), "utf8")) +
+  // The threaded small-body catalog surface (pool of pthreads, zero-copy).
+  "\n" +
+  (await fs.readFile(path.join(packageRoot, "src", "small_body_catalog.hpp"), "utf8"));
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -261,3 +268,32 @@ console.log(
   `Built ${path.relative(packageRoot, outputPath)} ` +
     `(${compilation.compiler}, threadModel=${compilation.threadModel})`,
 );
+
+// THE SINGLE-THREAD PATH, only where the SDK's tri-runtime tools need it: the
+// SDK's propagator conformance runner and the WasmEdge CLI instantiate a
+// module with no shared memory and no thread-spawn. The same source without
+// the threaded catalog surface, as the sequential model, for them.
+const sequentialPath = path.join(distRoot, "sequential", "module.wasm");
+await fs.mkdir(path.dirname(sequentialPath), { recursive: true });
+const sequentialManifest = {
+  ...manifest,
+  threadModel: "wasi-sequential",
+  sequentialJustification: {
+    kind: "caller-level-parallelism",
+    detail:
+      "The conformance artifact for the SDK's propagator runner and the WasmEdge CLI, which instantiate without threads: the same propagator source without the threaded small-body catalog surface (dist/isomorphic is the pthreads build every host uses).",
+  },
+};
+const sequential = await compileModuleFromSource({
+  manifest: sequentialManifest,
+  sourceCode: sourceCode.slice(0, sourceCode.lastIndexOf("// propagator/keplerian-reference — the small-body catalog surface")),
+  language: "c++",
+  outputPath: sequentialPath,
+  threadModel: "wasi-sequential",
+});
+if (!sequential.report?.ok) {
+  throw new Error(
+    `Sequential conformance artifact failed SDK validation:\n${JSON.stringify(sequential.report?.issues ?? [], null, 2)}`,
+  );
+}
+console.log(`Built ${path.relative(packageRoot, sequentialPath)} (${sequential.compiler}, threadModel=wasi-sequential)`);

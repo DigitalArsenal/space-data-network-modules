@@ -67,18 +67,20 @@ calling the difference an error measures the physics it deliberately omits.
 
 ## Thread model
 
-`wasi-sequential`, justified as `caller-level-parallelism`.
+`emscripten-pthreads` (1.7.0; owner 2026-10-13: modules built with pthreads
+on a SharedArrayBuffer memory): the SDK's isomorphic wasi-threads contract,
+clang `wasm32-wasip1-threads`, an imported shared memory, `wasi.thread-spawn`
+and `wasi_thread_start`. `emcc -pthread` is never used: it is browser-only and
+cannot thread under WasmEdge.
 
-Propagation is embarrassingly parallel ACROSS entities and strictly sequential
-WITHIN one, and the ABI puts the sharding on the HOST: the frame-worker pool
-hands each worker the same output base pointer and a disjoint index range. So
-this module spawns nothing, holds no cross-row state, and is therefore safe
-under any sharding the host chooses. A module that spawned its own pool would
-contend with the pool already scheduling it.
+The propagator ABI's entity exports still spawn nothing and hold no cross-row
+state, so a host may shard them as before. The small-body catalog surface
+(below) runs its own pool of pthreads.
 
-Both thread models compile through the same clang `wasm32-wasip1-threads`
-toolchain. `emcc -pthread` is never used — it is browser-only and cannot
-thread under WasmEdge.
+The single-thread path exists only where the SDK's tri-runtime tools need it:
+`dist/sequential/module.wasm` is the same source without the catalog surface,
+built `wasi-sequential` for the SDK's propagator conformance runner and the
+WasmEdge CLI, which instantiate without threads.
 
 > `build.js` passes `threadModel` explicitly and asserts the compiler agreed.
 > That is required, not belt-and-braces: `resolveThreadModel` reads the compile
@@ -156,3 +158,38 @@ side of the element epoch along the perturbed path (two-body: median 366 km,
 worst 3,485 km). The whole numbered catalog (895,910) ingests in 0.4 s.
 Credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant
 NAG5-4741 and the Lowell Observatory endowment).
+
+## The small-body catalog surface (pthreads, 1.7.0)
+
+One instance holds a whole catalog; its memory is a SharedArrayBuffer the host
+reads in place (`src/small_body_catalog.hpp`). `kepler_catalog_init(capacity,
+name_bytes, threads)` reserves the rows, the snapshot and the display arrays
+and starts a pool of `threads` pthreads; it returns a table of addresses (an
+internal layout, documented in the header; no SDS schema describes
+engine-module buffers). Jobs are begun, never waited for, by the calling
+thread (a browser's main thread may not block): `kepler_catalog_ingest_begin`
+(a shard's size-prefixed `$SBD` records, the selection made in place, decoded
+into the reserved store with their number, H, G, diameter and name beside
+them) and `kepler_catalog_snapshot_begin` (every row's apparent place and V,
+row ranges split across the pool). Each returns a sequence; a control word
+reaches it when the job is done (the host waits with `Atomics.waitAsync`).
+Nothing a job runs allocates, so the caller's own allocations never meet a
+pool thread on the allocator's lock; each thread keeps its own planet-place
+cache. Without threads a job runs inside its begin call.
+
+On the calling thread: `kepler_catalog_search` (number, then name prefixes,
+then inner matches, ASCII case folded), `kepler_catalog_find_number`,
+`kepler_catalog_number_bitmap`, and promoted rows (`kepler_catalog_promote`,
+`kepler_catalog_state`, `kepler_catalog_apparent_offset`) evaluated in double
+precision from a copy made between two jobs.
+
+The small-body layer's display decisions are here too
+(`src/small_body_display.hpp`): `kepler_small_fade_rate` (the clock rate and
+the fade with the camera's distance), `kepler_small_schedule` (the GPU mix
+between two snapshots and when, and for which epoch, the next is asked for;
+never past the rows' validity span) and `kepler_small_display_radius`.
+
+Evidence (`tests/small-catalog.e2e.test.mjs`): three pool threads run; a
+shard ingests with the select and describe exports' results; a threaded
+snapshot equals the single-thread `kepler_small_snapshot_apparent` bit for
+bit; a promoted row equals `kepler_small_state`.

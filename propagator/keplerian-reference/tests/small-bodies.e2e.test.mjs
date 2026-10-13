@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { WASI } from "node:wasi";
+import { threadedExports } from "./threaded.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const wasmPath = path.join(here, "..", "dist", "isomorphic", "module.wasm");
@@ -25,10 +25,7 @@ const records = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "astorb-s
 const horizons = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "horizons-astorb-sample.json"), "utf8"));
 
 async function load() {
-  const wasi = new WASI({ version: "preview1", args: ["module"], env: {} });
-  const module = await WebAssembly.compile(fs.readFileSync(wasmPath));
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-  const x = instance.exports;
+  const x = await threadedExports(fs.readFileSync(wasmPath));
   const copyIn = (bytes) => {
     const p = x.plugin_alloc(bytes.length);
     new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes);
@@ -91,7 +88,7 @@ test("the astorb $SBD stream ingests: every record, in order, with its display f
   const f = new Float32Array(x.memory.buffer, hgd, 3 * n);
   const off = new Uint32Array(x.memory.buffer, offsets, n + 1);
   const bytes = new Uint8Array(x.memory.buffer, names, off[n]);
-  const nameAt = (i) => new TextDecoder().decode(bytes.subarray(off[i], off[i + 1]));
+  const nameAt = (i) => new TextDecoder().decode(bytes.slice(off[i], off[i + 1]));
   records.forEach((r, i) => {
     assert.equal(num[i], r.number);
     assert.equal(nameAt(i), r.name);

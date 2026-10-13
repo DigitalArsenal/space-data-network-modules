@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { WASI } from "node:wasi";
+import { threadedExports } from "./threaded.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const wasmPath = path.join(here, "..", "dist", "isomorphic", "module.wasm");
@@ -32,10 +32,7 @@ const NAMED = ["433", "16", "101955", "3", "7", "1", "4"];
 const ARCSEC = 206264.80624709636;
 
 async function load() {
-  const wasi = new WASI({ version: "preview1", args: ["module"], env: {} });
-  const module = await WebAssembly.compile(fs.readFileSync(wasmPath));
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-  const x = instance.exports;
+  const x = await threadedExports(fs.readFileSync(wasmPath));
   const p = x.plugin_alloc(stream.length);
   new Uint8Array(x.memory.buffer, p, stream.length).set(stream);
   assert.equal(x.kepler_small_ingest_sbd_stream(p, stream.length), ORDER.length);
@@ -74,10 +71,7 @@ const edgesStream = fs.readFileSync(path.join(here, "fixtures", "astorb-edges.fb
 const edges = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "horizons-edges.json"), "utf8"));
 const EDGE_ORDER = ["1", "3", "4", "7", "16", "433", "1036", "1862", "4179", "99942", "101955"];
 async function loadEdges() {
-  const wasi = new WASI({ version: "preview1", args: ["module"], env: {} });
-  const module = await WebAssembly.compile(fs.readFileSync(wasmPath));
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-  const x = instance.exports;
+  const x = await threadedExports(fs.readFileSync(wasmPath));
   const p = x.plugin_alloc(edgesStream.length);
   new Uint8Array(x.memory.buffer, p, edgesStream.length).set(edgesStream);
   assert.equal(x.kepler_small_ingest_sbd_stream(p, edgesStream.length), EDGE_ORDER.length);

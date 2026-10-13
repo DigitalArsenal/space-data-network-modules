@@ -832,21 +832,32 @@ class SmallStore {
     if ((size_ >> kBlockShift) >= blocks_.size()) blocks_.push_back(new SmallBody[kBlockRows]);
     (*this)[size_++] = b;
   }
+  /// Allocates the blocks for n rows now, so no later push_back allocates
+  /// (the threaded catalog's pool threads never meet the caller on the
+  /// allocator's lock). Reserved blocks stay through truncate.
+  void reserve(size_t n) {
+    while (blocks_.size() * kBlockRows < n) blocks_.push_back(new SmallBody[kBlockRows]);
+    reserved_ = blocks_.size();
+  }
   /// Drops rows past n (a refused ingest leaves the store as it was).
   void truncate(size_t n) {
     if (n >= size_) return;
     size_ = n;
-    const size_t keep = (n + kBlockRows - 1) >> kBlockShift;
+    const size_t keep = std::max<size_t>((n + kBlockRows - 1) >> kBlockShift, reserved_);
     while (blocks_.size() > keep) {
       delete[] blocks_.back();
       blocks_.pop_back();
     }
   }
-  ~SmallStore() { truncate(0); }
+  ~SmallStore() {
+    reserved_ = 0;
+    truncate(0);
+  }
 
  private:
   std::vector<SmallBody*> blocks_;
   size_t size_ = 0;
+  size_t reserved_ = 0;
 };
 
 SmallStore* g_small = nullptr;
@@ -1060,8 +1071,9 @@ struct PlanetPlaces {
 };
 // Snapshots ask every row for the same epochs, so the places are kept for the
 // last few dozen epochs asked for.
-PlanetPlaces g_places[48];
-int g_places_next = 0;
+// Per thread: the threaded catalog's pool threads each keep their own.
+thread_local PlanetPlaces g_places[48];
+thread_local int g_places_next = 0;
 
 const PlanetPlaces& planet_places(double et) {
   for (const PlanetPlaces& p : g_places) {
@@ -1069,7 +1081,7 @@ const PlanetPlaces& planet_places(double et) {
   }
   PlanetPlaces& p = g_places[g_places_next];
   g_places_next = (g_places_next + 1) % 48;
-  p.et = et;
+  p.et = NAN;
   const double t = et / (36525.0 * 86400.0);
   const double ce = std::cos(kObliquityJ2000), se = std::sin(kObliquityJ2000);
   for (int k = 0; k < kPlanets; ++k) {
@@ -1090,6 +1102,7 @@ const PlanetPlaces& planet_places(double et) {
     p.r[k][1] = ce * ye - se * ze;
     p.r[k][2] = se * ye + ce * ze;
   }
+  p.et = et;  // last: a cache entry is complete before it matches
   return p;
 }
 
