@@ -15,11 +15,13 @@ for the inactive ellipsoid. Temporary files are deleted after each body.
 
 The `root` mode closes the dataset: it writes SOURCES.md and licences.json
 (one entry for every delivered file, from kernels/kernel-provenance.json,
-imagery/index.json and smallbodies/manifest.json), refuses a file no entry
+imagery/index.json), refuses a file no entry
 covers, copies SOURCES.md and licences.json into data/, and prints the
 directory's root CID (UnixFS, CIDv1, `ipfs add --only-hash`) for a local
 copy. No CID is kept in the repository: hosts read the datasets from the SDN
-data retrieval modules' publications (owner 2026-10-13).
+data retrieval modules' publications (owner 2026-10-13). Asteroids are not in
+this dataset: they are $SBD small-body records published by the
+data-source/lowell-astorb retrieval module.
 
 Writes <out>/imagery/<naif>/{z}/{x}/{y}.jpg, texture.jpg, and
 <out>/imagery/index.json. Needs GDAL >= 3.6 (gdalwarp, gdal_translate,
@@ -165,7 +167,6 @@ def root(dataset):
     data_dir = os.path.join(os.path.dirname(HERE), "data")
     kernels = json.load(open(os.path.join(dataset, "kernels", "kernel-provenance.json")))
     imagery = json.load(open(os.path.join(dataset, "imagery", "index.json")))["bodies"]
-    small = json.load(open(os.path.join(dataset, "smallbodies", "manifest.json")))
     entries = [
         {"path": "SOURCES.md", "licence": "CC0 1.0 (this index)", "credit": None},
         {"path": "licences.json", "licence": "CC0 1.0 (this index)", "credit": None},
@@ -178,8 +179,6 @@ def root(dataset):
         entries.append({"path": f"imagery/{naif}/", "licence": body["licence"], "credit": body["credit"],
                         "source": body["source"]})
     entries.append({"path": "imagery/index.json", "licence": "CC0 1.0 (index)", "credit": None})
-    entries.append({"path": "smallbodies/", "licence": small["licence"], "credit": small["credit"],
-                    "source": small["source"], "sourceSha256": small.get("sourceSha256")})
     # Every delivered file must be covered.
     uncovered = []
     for dirpath, _dirs, files in os.walk(dataset):
@@ -194,7 +193,7 @@ def root(dataset):
         json.dump(licences, f, indent=1)
         f.write("\n")
     lines = ["# Solar-system dataset", "",
-             "Kernels, imagery and small bodies for OrbPro's scene.bodies, delivered by CID.", "",
+             "Kernels and imagery for OrbPro's scene.bodies, delivered by CID.", "",
              "## Kernels (kernels/)", "",
              f"Decade shards cut by tools/build_kernels.py ({kernels['cspice']}, no refit) from:", ""]
     for item in kernels["inputs"]:
@@ -205,10 +204,7 @@ def root(dataset):
               "| NAIF | Levels | Credit | Licence | Source |", "| --- | --- | --- | --- | --- |"]
     for naif, body in sorted(imagery.items(), key=lambda kv: int(kv[0])):
         lines.append(f"| {naif} | 0-{body['maximumLevel']} | {body['credit']} | {body['licence']} | {body['source']} |")
-    lines += ["", "## Small bodies (smallbodies/)", "",
-              f"{small['count']:,} numbered asteroids as SDS $OMM records ({small['contract']}), "
-              f"from {small['source']} (sha256 {str(small.get('sourceSha256'))[:16]}..., {small.get('sourceDate')}).", "",
-              f"Credit: {small['credit']}.", "", f"Licence: {small['licence']}", ""]
+    lines += [""]
     with open(os.path.join(dataset, "SOURCES.md"), "w") as f:
         f.write("\n".join(lines))
     cid = subprocess.run(["ipfs", "add", "-r", "-Q", "--only-hash", "--cid-version", "1", dataset],

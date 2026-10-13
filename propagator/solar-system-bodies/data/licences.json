@@ -464,13 +464,6 @@
    "path": "imagery/index.json",
    "licence": "CC0 1.0 (index)",
    "credit": null
-  },
-  {
-   "path": "smallbodies/",
-   "licence": "astorb.dat may be freely used, copied, and transmitted provided attribution to Dr. Edward Bowell and the funding sources (NASA grant NAG5-4741, the Lowell Observatory endowment) is made.",
-   "credit": "Asteroid orbits: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant NAG5-4741 and the Lowell Observatory endowment)",
-   "source": "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz",
-   "sourceSha256": "ddbe380ad76979dbddcd7033d1e2ab1433a75480e04308d5640270c6f23372e4"
   }
  ]
 }

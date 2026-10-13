@@ -1,6 +1,6 @@
 # Solar-system dataset
 
-Kernels, imagery and small bodies for OrbPro's scene.bodies, delivered by CID.
+Kernels and imagery for OrbPro's scene.bodies, delivered by CID.
 
 ## Kernels (kernels/)
 
@@ -48,11 +48,3 @@ Public-domain global mosaics, planetocentric latitude converted to planetodetic 
 | 999 | 0-4 | NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif |
 | 2000001 | 0-3 | NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology | NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif |
 | 2000004 | 0-4 | NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology | NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif |
-
-## Small bodies (smallbodies/)
-
-895,910 numbered asteroids as SDS $OMM records (CENTER_NAME SUN; REFERENCE_FRAME mean ecliptic and equinox of J2000 (RFM coordinate system, origin NAIF 10); TIME_SYSTEM TT; osculating elements (MEAN_ELEMENT_THEORY unset, SDS MET has no OSCULATING value); SEMI_MAJOR_AXIS km; GM km^3/s^2; USER_DEFINED_PARAMETERS H, G, DIAMETER_KM), from https://ftp.lowell.edu/pub/elgb/astorb.dat.gz (sha256 ddbe380ad76979db..., 2026-10-12T04:43:20Z).
-
-Credit: Asteroid orbits: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant NAG5-4741 and the Lowell Observatory endowment).
-
-Licence: astorb.dat may be freely used, copied, and transmitted provided attribution to Dr. Edward Bowell and the funding sources (NASA grant NAG5-4741, the Lowell Observatory endowment) is made.
