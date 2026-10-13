@@ -13,7 +13,8 @@
  * by CID. Nothing is embedded. An epoch outside every loaded segment is the
  * named failure `out-of-range`; there is no analytic substitute, ever.
  *
- * FRAMES AND UNITS. States are geometric (no light time, no aberration), ICRF
+ * FRAMES AND UNITS. States are geometric (no light time, no aberration; the
+ * ssb_apparent_offsets shifts add both for drawing), ICRF
  * (SPICE "J2000"), metres and metres/second. Rotations are ICRF -> body-fixed:
  * IAU_<body> from the text PCK (WGCCRE 2015, Archinal et al. 2018) and, for
  * the Moon, MOON_ME (DE440 PA angles from the binary PCK, rotated to the mean
@@ -649,6 +650,75 @@ inline int32_t cartographic_convert(int32_t id, int32_t mode, const double in[3]
     return ErrBadArgument;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Where a body is SEEN: light time and stellar aberration                   */
+/* ------------------------------------------------------------------------ */
+constexpr double kSpeedOfLight = 299792458.0; /* m/s, SI defining constant */
+
+/* The apparent position of `id` from an observer (ICRF SSB position and
+ * velocity, m and m/s) minus its geometric position from the same observer:
+ * the shift a renderer adds to draw the body where it is seen, consistent with
+ * stars drawn with aberration. Light time is iterated three times (converged
+ * far below a millimetre in the solar system); aberration is the classical
+ * first-order stellar aberration u' = u + v/c - u (u.v/c), normalized (SPICE
+ * STELAB keeps the second-order term, under 1 mas at 30 km/s). The apparent
+ * vector keeps the light-time distance. NAIF "Aberration Corrections",
+ * spkezr_c LT+S. */
+inline int32_t apparent_offset(int32_t id, double et, const double obs[6], double out[3]) {
+    double b[6];
+    int32_t code = state_m(id, 0, et, b);
+    if (code != Ok) return code;
+    const double geo[3] = {b[0] - obs[0], b[1] - obs[1], b[2] - obs[2]};
+    double p[3] = {geo[0], geo[1], geo[2]};
+    double tau = norm3(p) / kSpeedOfLight;
+    for (int it = 0; it < 3; ++it) {
+        code = state_m(id, 0, et - tau, b);
+        if (code != Ok) return code;
+        for (int c = 0; c < 3; ++c) p[c] = b[c] - obs[c];
+        tau = norm3(p) / kSpeedOfLight;
+    }
+    const double d = norm3(p);
+    if (!(d > 0.0)) return ErrBadArgument;
+    const double u[3] = {p[0] / d, p[1] / d, p[2] / d};
+    const double v[3] = {obs[3] / kSpeedOfLight, obs[4] / kSpeedOfLight, obs[5] / kSpeedOfLight};
+    const double uv = dot3(u, v);
+    double a[3];
+    for (int c = 0; c < 3; ++c) a[c] = u[c] + v[c] - u[c] * uv;
+    const double an = norm3(a);
+    for (int c = 0; c < 3; ++c) out[c] = a[c] / an * d - geo[c];
+    return Ok;
+}
+
+/* Sky appearance (as `apparent`) of a point that is not in the body table: a
+ * small body at `pos` (m, ICRF) relative to `center`, with H and G and a mean
+ * radius (m). */
+inline int32_t apparent_point(double et, const double observer[3], int32_t center, const double pos[3], double h,
+                              double g, double radius, double out[7]) {
+    double c[6], sun[6];
+    int32_t code = state_m(center, 0, et, c);
+    if (code != Ok) return code;
+    code = state_m(10, 0, et, sun);
+    if (code != Ok) return code;
+    double ssb[3], to_body[3], to_sun[3], to_obs[3];
+    for (int k = 0; k < 3; ++k) {
+        ssb[k] = c[k] + pos[k];
+        to_body[k] = ssb[k] - observer[k];
+        to_sun[k] = sun[k] - ssb[k];
+        to_obs[k] = observer[k] - ssb[k];
+    }
+    const double d = norm3(to_body), r = norm3(to_sun);
+    if (!(d > 0.0) || !(r > 0.0)) return ErrBadArgument;
+    for (int k = 0; k < 3; ++k) out[k] = to_body[k] / d;
+    out[3] = d;
+    double cosa = dot3(to_sun, to_obs) / (r * d);
+    cosa = cosa > 1.0 ? 1.0 : (cosa < -1.0 ? -1.0 : cosa);
+    const double alpha = std::acos(cosa);
+    out[4] = std::isfinite(h) ? hg_magnitude(h, std::isfinite(g) ? g : 0.15, r / kAu, d / kAu, alpha) : NAN;
+    out[5] = radius > 0.0 && radius < d ? std::asin(radius / d) : 0.0;
+    out[6] = alpha;
+    return Ok;
+}
+
 }  // namespace ssb
 
 /* ======================================================================== */
@@ -771,10 +841,63 @@ SSB_EXPORT("ssb_hill_radius") double ssb_hill_radius(double et, int32_t id) {
  * distance over c (IAU 2009 / SI defining constant), no iteration for the
  * light path (a display quantity). Negative when either state is unknown. */
 SSB_EXPORT("ssb_light_time") double ssb_light_time(double et, int32_t from, int32_t to) {
-    constexpr double kSpeedOfLight = 299792458.0;
     double s[6];
     if (ssb::state_m(to, from, et, s) != ssb::Ok) return -1.0;
-    return ssb::norm3(s) / kSpeedOfLight;
+    return ssb::norm3(s) / ssb::kSpeedOfLight;
+}
+
+/* One-way light time (s) from body `from` to a point at `pos` (m, ICRF)
+ * relative to body `center` (a promoted asteroid, relative to the Sun). */
+SSB_EXPORT("ssb_light_time_point") double ssb_light_time_point(double et, int32_t from, int32_t center,
+                                                               const double* pos) {
+    double s[6];
+    if (!pos || ssb::state_m(center, from, et, s) != ssb::Ok) return -1.0;
+    const double d[3] = {s[0] + pos[0], s[1] + pos[1], s[2] + pos[2]};
+    return ssb::norm3(d) / ssb::kSpeedOfLight;
+}
+
+/* PCK triaxial radii (m) of any NAIF body the loaded text kernels describe,
+ * in or out of the body table (Eros, Itokawa, Lutetia...). */
+SSB_EXPORT("ssb_radii") int32_t ssb_radii(int32_t id, double* out) {
+    if (!out) return ssb::ErrBadArgument;
+    return ssb::radii_m(id, out) ? ssb::Ok : ssb::ErrNoRotation;
+}
+
+/* Light-time and aberration shifts (3 doubles per body, ICRF, m) for an
+ * observer state (6 doubles: SSB position m, velocity m/s): add to the
+ * geometric position from the observer to draw a body where it is seen. */
+SSB_EXPORT("ssb_apparent_offsets") int32_t ssb_apparent_offsets(double et, const double* observer, const int32_t* ids,
+                                                                 uint32_t n, double* out, int32_t* status) {
+    int32_t failed = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        status[i] = ssb::apparent_offset(ids[i], et, observer, out + 3 * i);
+        if (status[i] != ssb::Ok) {
+            ++failed;
+            for (int c = 0; c < 3; ++c) out[3 * i + c] = 0.0;
+        }
+    }
+    return failed;
+}
+
+/* Sky appearance of one point outside the body table (see ssb_apparent):
+ * `pos` (m, ICRF) relative to `center`, H, G, mean radius (m). */
+SSB_EXPORT("ssb_apparent_point") int32_t ssb_apparent_point(double et, const double* observer, int32_t center,
+                                                             const double* pos, double h, double g, double radius,
+                                                             double* out) {
+    if (!observer || !pos || !out) return ssb::ErrBadArgument;
+    return ssb::apparent_point(et, observer, center, pos, h, g, radius, out);
+}
+
+/* The Milky Way's frame (foundation/frames galactic.hpp): 9 doubles ICRS ->
+ * Galactic (row-major), then the Galactic centre from the Sun (3, ICRS, m),
+ * then R0 and z0 (m). */
+SSB_EXPORT("ssb_galactic") int32_t ssb_galactic(double* out) {
+    if (!out) return ssb::ErrBadArgument;
+    sdn::frames::galactic::icrs_to_galactic(out);
+    sdn::frames::galactic::centre_from_sun(out + 9);
+    out[12] = sdn::frames::galactic::kSunToCentreParsecs * sdn::frames::galactic::kParsecMeters;
+    out[13] = sdn::frames::galactic::kSunHeightParsecs * sdn::frames::galactic::kParsecMeters;
+    return ssb::Ok;
 }
 
 SSB_EXPORT("ssb_cartographic") int32_t ssb_cartographic(int32_t id, int32_t mode, const double* in, double* out) {

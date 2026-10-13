@@ -24,6 +24,7 @@ const parts = [
   stripIncludes(await read(path.join(orbitProducts, "daf.hpp"))),
   stripIncludes(await read(path.join(orbitProducts, "spk_read.hpp"))),
   await read(path.join(modules, "foundation", "frames", "src", "iau_body_models.hpp")),
+  await read(path.join(modules, "foundation", "frames", "src", "galactic.hpp")),
   await read(path.join(root, "src", "text_kernel.hpp")),
   await read(path.join(root, "src", "bodies.hpp")),
   await read(path.join(root, "src", "solar_system_bodies_module.cpp")),

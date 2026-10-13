@@ -24,8 +24,12 @@ One decade needs 31 MB; all ten need 159 MB.
 
 - Direct (resident, per frame): `ssb_load_kernel`, `ssb_states`,
   `ssb_orientations`, `ssb_apparent`, `ssb_observer`, `ssb_hill_radius`,
-  `ssb_cartographic`, `ssb_light_time`, `ssb_small_body_magnitudes`, `ssb_body_record`,
-  `ssb_body_names`, `ssb_et`, `ssb_last_error`.
+  `ssb_cartographic`, `ssb_light_time`, `ssb_light_time_point`, `ssb_small_body_magnitudes`,
+  `ssb_apparent_offsets` (light time and stellar aberration, so bodies are drawn
+  where they are seen), `ssb_apparent_point`, `ssb_radii` (PCK radii of any body,
+  Eros included), `ssb_galactic` (ICRS to Galactic axes, Hipparcos definition;
+  the Galactic centre from the Sun, R0 = 8.178 kpc, z0 = 20.8 pc),
+  `ssb_body_record`, `ssb_body_names`, `ssb_et`, `ssb_last_error`.
 - Command: `evaluate` takes `kernel` frames and one JSON `request`
   (`catalog`, `states`, `orientations`, `apparent`, `observer_state`,
   `hill_radius`) and answers JSON.

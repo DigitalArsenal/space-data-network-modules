@@ -187,3 +187,68 @@ test("light time from the Earth: the geometric distance over c, and unknown stat
   assert.ok(mars > 182 && mars < 1342, `Earth-Mars light time ${mars} s is outside 0.37-2.68 AU`);
   assert.ok(x.ssb_light_time(et, 399, 123456) < 0);
 });
+
+test("bodies drawn where they are seen: light time and aberration from the Earth match CSPICE CN+S", { skip: !ready && "SSB_KERNELS_DIR / spiceypy not available" }, async () => {
+  // Observer: the Earth's geometric SSB state. Module: geometric position from
+  // the observer plus ssb_apparent_offsets. CSPICE: spkpos J2000 "CN+S" from
+  // the Earth. Bound 1 mas (the module's first-order aberration against
+  // STELAB); measured value printed.
+  const files = kernelFiles();
+  const ets = epochs().filter((_, i) => i % 10 === 0);
+  const bodies = [10, 199, 299, 301, 499, 599, 699, 799, 899, 999, 2000001, 2000004];
+  const oracle = spawnSync(python, ["-I", path.join(here, "cspice_oracle.py")], {
+    input: JSON.stringify({ kernels: files, epochs: ets, bodies, frames: {}, apparentFrom: 399 }),
+    maxBuffer: 1 << 28,
+  });
+  assert.equal(oracle.status, 0, String(oracle.stderr));
+  const ref = JSON.parse(String(oracle.stdout));
+  const { x, mem } = await loadModule(files);
+  const n = bodies.length;
+  const ids = x.plugin_alloc(4 * n), out = x.plugin_alloc(8 * 6 * n), status = x.plugin_alloc(4 * n), obs = x.plugin_alloc(48), one = x.plugin_alloc(4);
+  new Int32Array(mem(), ids, n).set(bodies);
+  let worst = 0, compared = 0, worstShift = 0;
+  for (let e = 0; e < ets.length; e += 1) {
+    new Int32Array(mem(), one, 1)[0] = 399;
+    x.ssb_states(ets[e], one, 1, 0, obs, status);
+    const geo = new Float64Array(n * 3);
+    x.ssb_states(ets[e], ids, n, 399, out, status);
+    const st = new Float64Array(mem(), out, 6 * n);
+    for (let i = 0; i < n; i += 1) geo.set(st.subarray(6 * i, 6 * i + 3), 3 * i);
+    assert.equal(x.ssb_apparent_offsets(ets[e], obs, ids, n, out, status), 0);
+    const off = new Float64Array(mem(), out, 3 * n).slice();
+    for (let i = 0; i < n; i += 1) {
+      const r = ref.apparent[e][i];
+      if (!r) continue;
+      const a = [0, 1, 2].map((k) => geo[3 * i + k] + off[3 * i + k]);
+      const b = r.map((v) => v * 1000);
+      const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      const cross = Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
+      const arcsec = (Math.atan2(cross, dot) * 180 / Math.PI) * 3600;
+      const shift = (Math.hypot(off[3 * i], off[3 * i + 1], off[3 * i + 2]) / Math.hypot(...a)) * 206264.806;
+      worst = Math.max(worst, arcsec);
+      worstShift = Math.max(worstShift, shift);
+      compared += 1;
+    }
+  }
+  console.log(`CN+S vs CSPICE: ${compared} directions, worst ${(worst * 1000).toFixed(4)} mas; largest shift from geometric ${worstShift.toFixed(2)}"`);
+  assert.ok(compared >= bodies.length * ets.length * 0.9);
+  assert.ok(worst <= 1e-3, `worst apparent direction ${worst}" > 1 mas`);
+  assert.ok(worstShift > 15, "the shift is applied (the Sun alone is ~20\")");
+});
+
+test("PCK radii of a body outside the table (Eros) and the Galactic frame", { skip: !kernelsDir && "SSB_KERNELS_DIR not set" }, async () => {
+  const { x, mem } = await loadModule(kernelFiles());
+  const out = x.plugin_alloc(8 * 14);
+  assert.equal(x.ssb_radii(2000433, out), 0);
+  assert.deepEqual(Array.from(new Float64Array(mem(), out, 3)), [17000, 5500, 5500]); // pck00011 BODY2000433_RADII
+  assert.notEqual(x.ssb_radii(2999999, out), 0);
+  assert.equal(x.ssb_galactic(out), 0);
+  const g = new Float64Array(mem(), out, 14).slice();
+  // ESA SP-1200 Vol. 1 eq. 1.5.11 (A_G'), to the 10 digits printed there.
+  const esa = [-0.0548755604, -0.8734370902, -0.4838350155, 0.4941094279, -0.4448296300, 0.7469822445, -0.8676661490, -0.1980763734, 0.4559837762];
+  for (let i = 0; i < 9; i += 1) assert.ok(Math.abs(g[i] - esa[i]) < 6e-11, `A_G[${i}] ${g[i]} vs ${esa[i]}`);
+  const pc = 149597870700 * 648000 / Math.PI;
+  assert.ok(Math.abs(Math.hypot(g[9], g[10], g[11]) - 8178 * pc) < 1e3, "the centre is R0 from the Sun");
+  const b = Math.asin((g[6] * g[9] + g[7] * g[10] + g[8] * g[11]) / (8178 * pc)) * 180 / Math.PI;
+  assert.ok(Math.abs(b + Math.asin(20.8 / 8178) * 180 / Math.PI) < 1e-9, `centre latitude ${b} deg`);
+});
