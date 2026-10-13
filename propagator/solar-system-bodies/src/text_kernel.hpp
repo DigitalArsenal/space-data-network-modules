@@ -20,19 +20,25 @@
 #include <cstdlib>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ssb {
 
 struct KernelPool {
-    std::map<std::string, std::vector<double>> numbers;
-    std::map<std::string, std::vector<std::string>> strings;
+    /* Transparent comparators: a lookup by a name in a stack buffer allocates
+     * nothing (the per-frame path runs while a loader thread may hold the
+     * allocator's lock, and a browser's main thread may not wait for it). */
+    std::map<std::string, std::vector<double>, std::less<>> numbers;
+    std::map<std::string, std::vector<std::string>, std::less<>> strings;
 
-    const std::vector<double>* get(const std::string& name) const {
+    const std::vector<double>* get(std::string_view name) const {
         auto it = numbers.find(name);
         return it == numbers.end() ? nullptr : &it->second;
     }
-    bool has(const std::string& name) const { return numbers.count(name) || strings.count(name); }
+    bool has(std::string_view name) const {
+        return numbers.find(name) != numbers.end() || strings.find(name) != strings.end();
+    }
 };
 
 namespace text_detail {

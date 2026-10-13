@@ -84,9 +84,17 @@ constexpr double kOuterRestDistance = 1.0e14; /* m: SSB at rest beyond this */
 /* Resident state                                                            */
 /* ------------------------------------------------------------------------ */
 struct Kernel {
-    std::vector<uint8_t> bytes;
+    std::vector<uint8_t> bytes;       /* copied in (ssb_load_kernel) */
+    uint8_t* adopted = nullptr;       /* adopted from the host (ssb_kernel_job_begin) */
+    uint32_t adopted_size = 0;
     daf::File file;
     bool binary_pck = false;
+    Kernel() = default;
+    Kernel(const Kernel&) = delete;
+    Kernel& operator=(const Kernel&) = delete;
+    ~Kernel() {
+        if (adopted != nullptr) plugin_free(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(adopted)), adopted_size);
+    }
 };
 
 struct State {
@@ -186,8 +194,18 @@ struct Link {
     double st[6];  /* km, km/s relative to center */
 };
 
+/* A chain of links in place (no allocation on the per-frame path). */
+struct Chain {
+    Link links[16];
+    int size = 0;
+    const Link* begin() const { return links; }
+    const Link* end() const { return links + size; }
+    void clear() { size = 0; }
+    void push_back(const Link& l) { links[size++] = l; }
+};
+
 /* The chain body -> center -> ... -> SSB (0). */
-inline int32_t chain_to_ssb(int32_t body, double et, std::vector<Link>* out) {
+inline int32_t chain_to_ssb(int32_t body, double et, Chain* out) {
     out->clear();
     int32_t current = body;
     for (int hop = 0; hop < 16; ++hop) {
@@ -216,21 +234,23 @@ inline int32_t chain_to_ssb(int32_t body, double et, std::vector<Link>* out) {
  * chains are summed only up to their first common node, as the toolkit's
  * SPKGEO does, so the Moon relative to the Earth never passes through the SSB. */
 inline int32_t relative_state(int32_t target, int32_t center, double et, double out[6]) {
-    std::vector<Link> a, b;
+    Chain a, b;
     int32_t code = chain_to_ssb(target, et, &a);
     if (code != Ok) return code;
     code = chain_to_ssb(center, et, &b);
     if (code != Ok) return code;
-    std::vector<int32_t> nodes_b{center};
-    for (const Link& l : b) nodes_b.push_back(l.center);
-    std::vector<int32_t> nodes_a{target};
-    for (const Link& l : a) nodes_a.push_back(l.center);
+    int32_t nodes_b[17], nodes_a[17];
+    int nb = 0, na = 0;
+    nodes_b[nb++] = center;
+    for (const Link& l : b) nodes_b[nb++] = l.center;
+    nodes_a[na++] = target;
+    for (const Link& l : a) nodes_a[na++] = l.center;
     int32_t common = 0;
-    for (int32_t n : nodes_a) {
+    for (int i = 0; i < na; ++i) {
         bool hit = false;
-        for (int32_t m : nodes_b) hit = hit || (m == n);
+        for (int j = 0; j < nb; ++j) hit = hit || (nodes_b[j] == nodes_a[i]);
         if (hit) {
-            common = n;
+            common = nodes_a[i];
             break;
         }
     }
@@ -263,10 +283,15 @@ inline int32_t state_m(int32_t target, int32_t center, double et, double out[6])
 /* ------------------------------------------------------------------------ */
 /* Kernel-pool lookups                                                       */
 /* ------------------------------------------------------------------------ */
-inline std::string var(const char* prefix, int32_t id, const char* suffix) {
+/* A kernel-pool variable name in a stack buffer (no allocation). */
+struct VarName {
     char buf[96];
-    std::snprintf(buf, sizeof buf, "%s%d%s", prefix, static_cast<int>(id), suffix);
-    return buf;
+    operator std::string_view() const { return std::string_view(buf); }
+};
+inline VarName var(const char* prefix, int32_t id, const char* suffix) {
+    VarName v;
+    std::snprintf(v.buf, sizeof v.buf, "%s%d%s", prefix, static_cast<int>(id), suffix);
+    return v;
 }
 
 inline bool radii_m(int32_t id, double out[3]) {
@@ -343,13 +368,13 @@ inline int32_t bpc_angles(int32_t frame_class, double et, double ang[3]) {
             if (idx >= n) idx = n - 1;
             const int per = static_cast<int>((rsize - 2) / 3);
             if (per < 1 || per > 64) return ErrBadKernel;
-            std::vector<double> rec(static_cast<size_t>(rsize));
-            if (!kk.file.words(begin + static_cast<size_t>(idx * rsize), static_cast<size_t>(rsize), rec.data())) {
+            double rec[2 + 3 * 64];
+            if (!kk.file.words(begin + static_cast<size_t>(idx * rsize), static_cast<size_t>(rsize), rec)) {
                 return ErrBadKernel;
             }
             const double x = (et - rec[0]) / rec[1];
             for (int a = 0; a < 3; ++a) {
-                const double* c = rec.data() + 2 + a * per;
+                const double* c = rec + 2 + a * per;
                 double b0 = 0.0, b1 = 0.0, b2 = 0.0;
                 for (int j = per - 1; j >= 1; --j) {
                     b2 = b1;
@@ -373,7 +398,7 @@ inline bool tk_angles(int32_t id, double out[9]) {
     const auto* x = p.get(var("TKFRAME_", id, "_AXES"));
     if (!a || !x || a->size() != 3 || x->size() != 3) return false;
     double scale = kDeg;
-    auto units = p.strings.find(var("TKFRAME_", id, "_UNITS"));
+    auto units = p.strings.find(std::string_view(var("TKFRAME_", id, "_UNITS")));
     if (units != p.strings.end() && !units->second.empty()) {
         const std::string& u = units->second[0];
         if (u == "ARCSECONDS") scale = kDeg / 3600.0;
