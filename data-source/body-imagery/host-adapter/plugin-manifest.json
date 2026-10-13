@@ -1,0 +1,230 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.body-imagery-host",
+  "name": "Body imagery host adapter",
+  "version": "0.1.0",
+  "description": "Host side of the body imagery retrieval flow: plugin.getConfig (keys body_imagery_enabled, body_imagery_producer_peer_id, body_imagery_source), the retrieval receipt, and adding each built imagery file to the node's IPFS through the existing ipfs capability (ipfs.add, pinned). Range planning, decoding, tiling and the $PNM records stay in the portable core.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "ipfs"
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One configuration read or one ipfs.add host call per file, serially; the host owns I/O. No threads."
+  },
+  "methods": [
+    {
+      "methodId": "prepare_scheduled",
+      "displayName": "Prepare scheduled imagery retrieval",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source configuration for plan_imagerys."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The source configuration for plan_imagerys."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "publish_files",
+      "displayName": "Add imagery files to the node's IPFS",
+      "inputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "file-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.named-file-v1",
+                "detail": "One imagery file per frame: u32 name length, the file name, the file bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "One imagery file per frame: u32 name length, the file name, the file bytes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "added",
+          "acceptedTypeSets": [
+            {
+              "setId": "added-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One IPFS add result per file: name, CID (pinned) and length."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "One IPFS add result per file: name, CID (pinned) and length."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "receipt_scheduled",
+      "displayName": "Attach retrieval receipt",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The build job emitted by build_imagerys, forwarded unchanged."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The build job emitted by build_imagerys, forwarded unchanged."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The build job, forwarded unchanged to announce_imagerys."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The build job, forwarded unchanged to announce_imagerys."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "retrieved_at_ms and the producer peer ID of this node."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "retrieved_at_ms and the producer peer ID of this node."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

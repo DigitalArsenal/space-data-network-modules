@@ -1,0 +1,18 @@
+{
+  "name": "@digitalarsenal/sdn-module-body-imagery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs && node host-adapter/build.mjs",
+    "test": "node --test tests/*.e2e.test.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.32",
+    "space-data-module-sdk": "0.8.25",
+    "spacedatastandards.org": "1.247.0",
+    "jpeg-js": "0.4.4"
+  }
+}

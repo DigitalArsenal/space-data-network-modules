@@ -1,0 +1,463 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.body-imagery",
+  "name": "Planet and moon imagery (USGS Astrogeology, NASA)",
+  "version": "0.1.0",
+  "description": "Retrieval nodes for the imagery of the console's bodies: public-domain NASA mission global mosaics (USGS Astrogeology, NASA SVS, NASA/JPL Photojournal; NASA Dawn data with its mission credit) for Mercury, Venus, the Moon, Mars, Jupiter, the Galilean moons, the Saturnian moons, Triton, Pluto, Charon, Phobos, Ceres and Vesta. Nothing is held whole: plan_imagery reads the first MiB of each GeoTIFF, advance_imagery reads any directory arrays and then the image data in whole strips or tile rows, at most three 48 MiB ranges per stage, decodes them (uncompressed or LZW, horizontal predictor) and area-averages every row into a planetodetic output grid on the body's PCK ellipsoid (IAU planetocentric latitude converted, at most 4096 x 2048); build_imagery cuts a JPEG tile pack in the engine's geographic tiling scheme and a 2048 x 1024 whole-body texture per body, plus an index; announce_imagery turns the IPFS add results into one $PNM per file. Fetching, IPFS and storage belong to the host; the node's auto-publisher announces the PNM.fbs lane provider usgs-astrogeology, source body-imagery.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic range planning over TIFF directories, one pass of strip or tile decoding and area averaging per body, and JPEG encoding of its tiles. No host calls, threads or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "plan_imagery",
+      "displayName": "Plan the DAF file-record ranges",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Source configuration from the host adapter (access anonymous)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Source configuration from the host adapter (access anonymous)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request descriptors: the 1 KiB DAF file record of each binary kernel, raw-body-v1."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "hostcap/http-request descriptors: the 1 KiB DAF file record of each binary kernel, raw-body-v1."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.body-imagery-state-v1",
+                "detail": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "advance_imagery",
+      "displayName": "Plan the next stage of DAF ranges",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.body-imagery-state-v1",
+                "detail": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The next stage's range requests: summary and name records, segment directories, text kernels or record windows."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The next stage's range requests: summary and name records, segment directories, text kernels or record windows."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.body-imagery-state-v1",
+                "detail": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "An unchanged cycle (every file record answered 304); never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An unchanged cycle (every file record answered 304); never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "build_imagery",
+      "displayName": "Cut the decade shards",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.body-imagery-state-v1",
+                "detail": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The stage state: per body its TIFF layout, progress and output grid (binary, SDNIMG01)."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 record windows, one per needed segment, in planned order."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "raw-body-v1 record windows, one per needed segment, in planned order."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "file-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.named-file-v1",
+                "detail": "One output file per frame: u32 name length, the file name (imagery/<NAIF id>/tiles.pack, texture.jpg, imagery/index.json), the bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "One output file per frame: u32 name length, the file name (imagery/<NAIF id>/tiles.pack, texture.jpg, imagery/index.json), the bytes."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "File names, lengths, SHA-256 and decade coverage, and the source list."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "File names, lengths, SHA-256 and decade coverage, and the source list."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "announce_imagery",
+      "displayName": "Announce the kernel files as $PNM",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The build job emitted by build_kernels."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The build job emitted by build_kernels."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+        },
+        {
+          "portId": "added",
+          "acceptedTypeSets": [
+            {
+              "setId": "added-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One IPFS add result per kernel file: name, CID and length."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "One IPFS add result per kernel file: name, CID and length."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "records-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $PNM stream, one per kernel file: FILE_NAME, CID, /ipfs/ address and FILE_ID."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Inputs, outputs with SHA-256 and coverage, and the retrieval time; never a dataset record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Inputs, outputs with SHA-256 and coverage, and the retrieval time; never a dataset record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
