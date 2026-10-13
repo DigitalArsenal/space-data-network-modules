@@ -13,6 +13,15 @@ const { header, version } = await generateSdsHeader("PNM", import.meta.url);
 const json = await fs.readFile(path.resolve(root, "../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");
 const sha = await fs.readFile(path.resolve(root, "../../files/orbit-products/src/sha256.hpp"), "utf8");
 const jpeg = await fs.readFile(path.join(root, "src/jpeg_encoder.hpp"), "utf8");
+// stb_image 2.30 (public domain / MIT, github.com/nothings/stb at
+// 013ac3beddff3dbffafd5177e7972067cd2b5083), JPEG only, SHA-256 pinned: the
+// decoder for the giant planets' JPEG cloud maps.
+const stbPath = path.join(root, "vendor/stb_image-2.30/stb_image.h");
+const stbBytes = await fs.readFile(stbPath);
+const stbSha = (await import("node:crypto")).createHash("sha256").update(stbBytes).digest("hex");
+if (stbSha !== "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3") throw new Error(`vendored stb_image.h SHA-256 ${stbSha} does not match the pin`);
+const stb = ["#define STB_IMAGE_IMPLEMENTATION", "#define STBI_ONLY_JPEG", "#define STBI_NO_STDIO", "#define STBI_NO_LINEAR", "#define STBI_NO_HDR",
+  "#define STBI_NO_SIMD", "#define STBI_NO_THREAD_LOCALS", "#define STBI_MAX_DIMENSIONS 16384", stbBytes.toString("utf8")].join("\n");
 const source = await fs.readFile(path.join(root, "src/body_imagery.cpp"), "utf8");
 const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
 const outputPath = path.join(root, "dist/isomorphic/module.wasm");
@@ -20,7 +29,7 @@ await fs.rm(path.join(root, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
-  sourceCode: [header, json, sha, jpeg, source].join("\n"),
+  sourceCode: [header, json, sha, jpeg, stb, source].join("\n"),
   language: "c++",
   outputPath,
   threadModel: "wasi-sequential",

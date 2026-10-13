@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.body-imagery",
   "name": "Planet and moon imagery (USGS Astrogeology, NASA)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Retrieval nodes for the imagery of the console's bodies: public-domain NASA mission global mosaics (USGS Astrogeology, NASA SVS, NASA/JPL Photojournal; NASA Dawn data with its mission credit) for Mercury, Venus, the Moon, Mars, Jupiter, the Galilean moons, the Saturnian moons, Triton, Pluto, Charon, Phobos, Ceres and Vesta. Nothing is held whole: plan_imagery reads the first MiB of each GeoTIFF, advance_imagery reads any directory arrays and then the image data in whole strips or tile rows, at most three 48 MiB ranges per stage, decodes them (uncompressed or LZW, horizontal predictor) and area-averages every row into a planetodetic output grid on the body's PCK ellipsoid (IAU planetocentric latitude converted, at most 4096 x 2048); build_imagery cuts a JPEG tile pack in the engine's geographic tiling scheme and a 2048 x 1024 whole-body texture per body, plus an index; announce_imagery turns the IPFS add results into one $PNM per file. Fetching, IPFS and storage belong to the host; the node's auto-publisher announces the PNM.fbs lane provider usgs-astrogeology, source body-imagery.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -424,14 +424,14 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+                "detail": "Attribution metadata (provider usgs-astrogeology, source body-imagery, licence, citation) for generic storage.ingest_with_source."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+          "description": "Attribution metadata (provider usgs-astrogeology, source body-imagery, licence, citation) for generic storage.ingest_with_source."
         },
         {
           "portId": "report",

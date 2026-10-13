@@ -65,8 +65,8 @@ constexpr int jpegQuality = 85;
 constexpr double kPi = 3.14159265358979323846;
 constexpr const char* providerId = "usgs-astrogeology";
 constexpr const char* sourceName = "body-imagery";
-constexpr const char* credit = "Planet and moon imagery: NASA mission global mosaics via USGS Astrogeology, NASA SVS and NASA/JPL Photojournal";
-constexpr const char* licence = "NASA and USGS Astrogeology mosaics of NASA mission data: public domain; NASA Dawn data free with the mission credit";
+constexpr const char* credit = "Planet and moon imagery: NASA mission global mosaics via USGS Astrogeology, NASA SVS and NASA/JPL Photojournal; giant-planet cloud maps by Solar System Scope";
+constexpr const char* licence = "NASA and USGS Astrogeology mosaics of NASA mission data: public domain; NASA Dawn data free with the mission credit; Solar System Scope textures CC BY 4.0 with credit";
 
 struct Source {
   int32_t naif;
@@ -76,6 +76,7 @@ struct Source {
   bool georef;  // false: the file carries no GeoTIFF keys; it is a -180..180, 90..-90 global grid
   const char* credit;
   const char* licence;
+  bool jpeg = false;  // a baseline JPEG under 1 MiB (read whole by the first range), not a TIFF
 };
 const std::vector<Source>& sources() {
   static const char* pd = "public domain (USGS Astrogeology, NASA)";
@@ -100,6 +101,12 @@ const std::vector<Source>& sources() {
       {901, "Charon", "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif", 606.0, 606.0, true, "NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology", pd},
       {401, "Phobos", "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Phobos_Viking_Mosaic_40ppd_DLRcontrol.tif", 13.0, 9.1, true, "NASA/JPL Viking Orbiter, USGS Astrogeology (DLR control network)", "public domain (NASA Viking mission data, USGS Astrogeology)"},
       {2000001, "Ceres", "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif", 487.3, 446.0, true, "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology", "NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy)"},
+      {601, "Mimas", "https://assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/pia17/pia17214/PIA17214.tif", 207.8, 190.6, false, "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute Cassini ISS (PIA17214, Mimas global map, June 2017)", "public domain (NASA/JPL Photojournal)"},
+      // The giant planets have no surface: their cloud bands from Solar System
+      // Scope's planet textures (made from NASA mission imagery), CC BY 4.0.
+      {699, "Saturn", "https://www.solarsystemscope.com/textures/download/2k_saturn.jpg", 60268.0, 54364.0, false, "Solar System Scope (INOVE), from NASA mission imagery", "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), Solar System Scope", true},
+      {799, "Uranus", "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg", 25559.0, 24973.0, false, "Solar System Scope (INOVE), from NASA mission imagery", "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), Solar System Scope", true},
+      {899, "Neptune", "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg", 24764.0, 24341.0, false, "Solar System Scope (INOVE), from NASA mission imagery", "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), Solar System Scope", true},
       {2000004, "Vesta", "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif", 289.0, 229.0, true, "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology", "NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy)"},
   };
   return s;
@@ -720,6 +727,33 @@ void finishBody(Body& b) {
   std::vector<uint32_t>().swap(b.counts);
 }
 
+// A JPEG source (the giant planets' cloud maps, a few hundred KB) arrives
+// whole in the first range and is decoded at once (stb_image, baseline and
+// progressive JPEG), then fed through the same area averaging as a strip.
+bool decodeJpeg(Body& b, const Source& s, const uint8_t* data, size_t n) {
+  NEED(n >= 4 && data[0] == 0xFF && data[1] == 0xD8, "The source is not a JPEG.");
+  NEED(n < headBytes, "The JPEG is larger than the first range.");
+  int w = 0, h = 0, comp = 0;
+  uint8_t* px = stbi_load_from_memory(data, int(n), &w, &h, &comp, 0);
+  NEED(px != nullptr, "The JPEG could not be decoded.");
+  b.w = uint32_t(w); b.h = uint32_t(h); b.spp = uint32_t(comp); b.bps = 8; b.comp = 1; b.pred = 1; b.planar = 1;
+  b.rps = b.h; b.tw = b.th = 0;
+  b.offs.assign(1, 0);
+  b.counts.assign(1, uint32_t(n));
+  b.needs.clear();
+  bool ok = prepare(b, s);
+  if (ok) {
+    ensureOutput(b);
+    std::vector<uint32_t> col;
+    columns(b, col);
+    feedRows(b, s, px, 0, b.h, b.spp, -1, col);
+    endRows(b, 0);
+    finishBody(b);
+  }
+  stbi_image_free(px);
+  return ok;
+}
+
 // ── stage logic ────────────────────────────────────────────────────────────
 // Applies the responses to the pending requests.
 bool apply(State& st) {
@@ -742,7 +776,9 @@ bool apply(State& st) {
     }
     error = "";
     bool ok = true;
-    if (p.kind == 0) {
+    if (p.kind == 0 && src[b.src].jpeg) {
+      ok = decodeJpeg(b, src[b.src], data, n);
+    } else if (p.kind == 0) {
       ok = readDirectory(b, data, n);
       if (ok) b.status = b.needs.empty() ? kData : kArrays;
       if (ok && b.needs.empty()) ok = prepare(b, src[b.src]);

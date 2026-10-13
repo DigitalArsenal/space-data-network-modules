@@ -25,7 +25,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const wasm = fs.readFileSync(path.join(root, "dist/isomorphic/module.wasm"));
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "plugin-manifest.json")));
 
-import { CERES, DEG, TITAN, geotiff, truth } from "./synthetic.mjs";
+import { CERES, DEG, H, TITAN, W, geotiff, truth } from "./synthetic.mjs";
 
 const input = (portId, value) => {
   const payload = value instanceof Uint8Array ? value : Buffer.from(JSON.stringify(value));
@@ -130,4 +130,43 @@ test("a source that fails is left out and named; the others are published; annou
   assert.equal(meta.provider_id, "usgs-astrogeology");
   assert.equal(meta.source_name, "body-imagery");
   assert.equal(meta.schema, "PNM.fbs");
+});
+
+// The giant planets' cloud maps are JPEGs (Solar System Scope, CC BY 4.0), read
+// whole from the first range and decoded in the module: a synthetic 2048 x 1024
+// JPEG of the same known function, Saturn's PCK flattening (a/c = 1.109), comes
+// out on the planetodetic grid with the north at the top of tile row 0.
+const SATURN = { naif: 699, url: "https://www.solarsystemscope.com/textures/download/2k_saturn.jpg", a: 60268.0, c: 54364.0 };
+test("a JPEG cloud map (the giant planets) is decoded whole and comes out on the planetodetic grid, north up", async (t) => {
+  const rgba = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const v = truth(-180 + (x + 0.5) * 360 / W, 90 - (y + 0.5) * 180 / H);
+    rgba.set([v, v, v, 255], 4 * (y * W + x));
+  }
+  const source = Buffer.from(jpeg.encode({ data: rgba, width: W, height: H }, 95).data);
+  assert.ok(source.length < 1 << 20, "the cloud map fits the first range");
+  const { r } = await run(t, new Map([[SATURN.url, source]]), [SATURN.naif]);
+  const out = filesOf(r);
+  const job = JSON.parse(outs(r, "job")[0]);
+  assert.equal(job.failed["699"], undefined, JSON.stringify(job.failed["699"]));
+  const index = JSON.parse(out.get("imagery/index.json"));
+  assert.equal(index.bodies["699"].maximumLevel, 2);
+  assert.match(index.bodies["699"].licence, /CC BY 4\.0/);
+  const img = decoded(out, "imagery/699/texture.jpg");
+  let worst = 0;
+  for (const lat of [-60, -30, 0, 30, 60]) for (const lon of [-150, -60, 0, 90, 170]) {
+    const x = Math.floor((lon + 180) / 360 * 2048), y = Math.floor((90 - lat) / 180 * 1024);
+    worst = Math.max(worst, Math.abs(img.data[4 * (y * 2048 + x)] - expected(SATURN, lon + 180 / 2048, 90 - (y + 0.5) * 180 / 1024)));
+  }
+  assert.ok(worst <= 8, `worst ${worst}`);
+  // Tile 1/0/0 is the north-west quarter: its top row is the north pole's row.
+  const pack = out.get("imagery/699/tiles.pack");
+  for (let i = 0; i < pack.readUInt32LE(12); i++) {
+    const at = 20 + 16 * i;
+    if (pack[at] !== 1 || pack.readUInt16LE(at + 2) !== 0 || pack.readUInt16LE(at + 4) !== 0) continue;
+    const tile = jpeg.decode(pack.subarray(pack.readUInt32LE(at + 8), pack.readUInt32LE(at + 8) + pack.readUInt32LE(at + 12)), { useTArray: true });
+    const top = tile.data[4 * (2 * 256 + 128)], bottom = tile.data[4 * (253 * 256 + 128)];
+    // lon -135, near 90 N against near 0 N.
+    assert.ok(Math.abs(top - truth(-135, 89)) <= 10 && Math.abs(bottom - truth(-135, 1)) <= 10, `top ${top}, bottom ${bottom}`);
+  }
 });

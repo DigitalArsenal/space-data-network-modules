@@ -8,11 +8,20 @@ node's IPFS (pinned) and announced as one `$PNM`, auto-published as `PNM.fbs`,
 provider `usgs-astrogeology`, source `body-imagery`. It replaces
 `propagator/solar-system-bodies/tools/build-imagery.py` and the dataset CID.
 
-Sources: 21 public global equirectangular GeoTIFFs (USGS Astrogeology, NASA
-SVS, NASA/JPL Photojournal): Mercury, Venus, the Moon, Mars, Phobos,
-Jupiter, Io, Europa, Ganymede, Callisto, Enceladus, Tethys, Dione, Rhea,
-Titan, Iapetus, Triton, Pluto, Charon, Ceres and Vesta (the table is in
-`src/body_imagery.cpp`).
+Sources (the table is in `src/body_imagery.cpp`):
+- 22 public global equirectangular GeoTIFFs (USGS Astrogeology, NASA SVS,
+  NASA/JPL Photojournal): Mercury, Venus, the Moon, Mars, Phobos, Jupiter, Io,
+  Europa, Ganymede, Callisto, Mimas (Cassini, PIA17214), Enceladus, Tethys,
+  Dione, Rhea, Titan, Iapetus, Triton, Pluto, Charon, Ceres and Vesta;
+- 3 cloud maps of the giant planets that have no surface mosaic: Saturn,
+  Uranus and Neptune, Solar System Scope's 2048 x 1024 JPEG textures (made
+  from NASA mission imagery; CC BY 4.0, credited per body). A JPEG source is
+  read whole by the first range and decoded in the module (vendored
+  stb_image 2.30, public domain/MIT, JPEG only, SHA-256 pinned in
+  `build.mjs`).
+- No licence-clear global map exists for Deimos or the Uranian moons (Voyager
+  saw their southern hemispheres only): the console draws them in their
+  colour.
 
 | Stage | Asks for (HTTP ranges) |
 | --- | --- |
@@ -36,7 +45,8 @@ Titan, Iapetus, Triton, Pluto, Charon, Ceres and Vesta (the table is in
   is 1.7 to 5.8 of 255 (JPEG and resampling), with no offset.
 
 Licence: NASA mission products, public domain (USGS Astrogeology, NASA SVS,
-NASA/JPL Photojournal), and NASA Dawn data with its mission credit. Each
+NASA/JPL Photojournal), NASA Dawn data with its mission credit, and the Solar
+System Scope textures under CC BY 4.0 with their credit. Each
 body's credit and licence ride in `imagery/index.json` and the ingest meta.
 
 ```sh

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.body-imagery-host",
   "name": "Body imagery host adapter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Host side of the body imagery retrieval flow: plugin.getConfig (keys body_imagery_enabled, body_imagery_producer_peer_id, body_imagery_source), the retrieval receipt, and adding each built imagery file to the node's IPFS through the existing ipfs capability (ipfs.add, pinned). Range planning, decoding, tiling and the $PNM records stay in the portable core.",
   "pluginFamily": "data_source",
   "capabilities": [
