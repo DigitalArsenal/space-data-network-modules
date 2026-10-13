@@ -2,7 +2,7 @@
 // and ingest_astorb, which streams the validated records into the node's
 // store in parts through the storage_ingest capability. It is built with the
 // same parsing core as the portable module (../src/astorb_core.hpp): miniz for
-// the inflate, the generated $OMM header, nlohmann json and the shared sha256.
+// the inflate, the generated $SBD header, nlohmann json and the shared sha256.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ import { generateSdsHeader } from "../sds-header.mjs";
 import { minizSourceFragments } from "../../geonames-source/miniz-source.mjs";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
-const { header } = await generateSdsHeader("OMM", new URL("../build.mjs", import.meta.url).href);
+const { header } = await generateSdsHeader("SBD", new URL("../build.mjs", import.meta.url).href);
 const json = await fs.readFile(path.resolve(root, "../../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");
 const sha = await fs.readFile(path.resolve(root, "../../../files/orbit-products/src/sha256.hpp"), "utf8");
 const [minizHeader, minizImplementation] = await minizSourceFragments();

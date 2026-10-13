@@ -73,7 +73,7 @@ extern "C" int receipt_scheduled() {
 // The same validation and records as the portable parse_astorb (the shared
 // astorb_core.hpp), but nothing the size of the catalog is ever held: the
 // three range frames are read in place, inflated through a 32 KiB window, and
-// the $OMM records go to the host's storage.ingest_with_source in parts of
+// the $SBD records go to the host's storage.ingest_with_source in parts of
 // about 12 MiB as they are built (the storage_ingest capability, the same
 // hostcall the generic storage-ingest node makes). A first pass validates
 // the whole download (gzip CRC-32 and length, fixed columns, at least 100,000

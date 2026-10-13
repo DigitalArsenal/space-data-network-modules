@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.lowell-astorb-host",
   "name": "Lowell astorb scheduled source adapter",
   "version": "0.2.0",
-  "description": "Host side of the asteroid retrieval flow: generic host configuration (plugin.getConfig: lowell_astorb_enabled, lowell_astorb_producer_peer_id, lowell_astorb_source), the retrieval receipt, and ingest_astorb, which validates the whole download (gzip CRC-32 and length, fixed columns) and then streams the $OMM records into the node's store in ~12 MiB parts through the storage_ingest capability (storage.ingest_with_source), so the node never holds the 372 MB batch at once. Parsing is the portable core's own (astorb_core.hpp). SDN auto-publishes the configured lane once the batch has settled.",
+  "description": "Host side of the asteroid retrieval flow: generic host configuration (plugin.getConfig: lowell_astorb_enabled, lowell_astorb_producer_peer_id, lowell_astorb_source), the retrieval receipt, and ingest_astorb, which validates the whole download (gzip CRC-32 and length, fixed columns) and then streams the $SBD records into the node's store in ~12 MiB parts through the storage_ingest capability (storage.ingest_with_source), so the node never holds the 372 MB batch at once. Parsing is the portable core's own (astorb_core.hpp). SDN auto-publishes the configured lane once the batch has settled.",
   "pluginFamily": "data_source",
   "capabilities": [
     "storage_ingest"
@@ -375,7 +375,7 @@
     },
     {
       "methodId": "ingest_astorb",
-      "displayName": "Store astorb.dat as $OMM, in parts",
+      "displayName": "Store astorb.dat as $SBD, in parts",
       "inputPorts": [
         {
           "portId": "job",
@@ -518,9 +518,9 @@
   ],
   "schemasUsed": [
     {
-      "schemaName": "OMM.fbs",
-      "fileIdentifier": "$OMM",
-      "rootTypeName": "OMM"
+      "schemaName": "SBD.fbs",
+      "fileIdentifier": "$SBD",
+      "rootTypeName": "SBD"
     }
   ]
 }

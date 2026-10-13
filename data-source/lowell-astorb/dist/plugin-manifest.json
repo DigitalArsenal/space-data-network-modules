@@ -1,8 +1,8 @@
 {
  "pluginId": "com.digitalarsenal.data-source.lowell-astorb",
  "name": "Numbered asteroids (Lowell astorb)",
- "version": "0.1.0",
- "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $OMM per asteroid, brightest H band first (osculating heliocentric elements, CENTER_NAME SUN, mean ecliptic and equinox of J2000, TT, km, DE440 GM; H, G and diameter as user-defined parameters). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the OMM.fbs lane provider lowell-astorb, source astorb-numbered.",
+ "version": "0.2.0",
+ "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $SBD small-body record per asteroid, brightest H band first (osculating heliocentric elements with CCSDS OPM keywords: CENTER_NAME SUN, REF_FRAME ECLIPJ2000, TIME_SYSTEM TDB, km, DE440 GM; H, G, IRAS diameter, orbit class, orbit arc, observations and CEU; PVN provenance). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the SBD.fbs lane provider lowell-astorb, source astorb-numbered.",
  "pluginFamily": "data_source",
  "capabilities": [],
  "externalInterfaces": [],
@@ -20,9 +20,9 @@
  },
  "schemasUsed": [
   {
-   "schemaName": "OMM.fbs",
-   "fileIdentifier": "$OMM",
-   "rootTypeName": "OMM"
+   "schemaName": "SBD.fbs",
+   "fileIdentifier": "$SBD",
+   "rootTypeName": "SBD"
   }
  ],
  "methods": [
@@ -148,7 +148,7 @@
   },
   {
    "methodId": "parse_astorb",
-   "displayName": "Normalize astorb.dat to $OMM",
+   "displayName": "Normalize astorb.dat to $SBD",
    "inputPorts": [
     {
      "portId": "job",
@@ -269,9 +269,9 @@
        "setId": "records-records",
        "allowedTypes": [
         {
-         "schemaName": "OMM.fbs",
-         "fileIdentifier": "$OMM",
-         "rootTypeName": "OMM"
+         "schemaName": "SBD.fbs",
+         "fileIdentifier": "$SBD",
+         "rootTypeName": "SBD"
         }
        ]
       }
@@ -279,7 +279,7 @@
      "minStreams": 1,
      "maxStreams": 1,
      "required": true,
-     "description": "Size-prefixed $OMM stream, one per numbered asteroid, brightest H band first."
+     "description": "Size-prefixed $SBD stream, one per numbered asteroid, brightest H band first."
     },
     {
      "portId": "meta",

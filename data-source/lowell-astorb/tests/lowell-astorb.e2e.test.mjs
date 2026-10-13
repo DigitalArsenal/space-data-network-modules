@@ -19,7 +19,8 @@ import { validateArtifactWithStandards } from "space-data-module-sdk/compliance"
 const require = createRequire(import.meta.url);
 const sds = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(require.resolve("spacedatastandards.org/package.json"));
 const { ByteBuffer } = require("flatbuffers");
-const { OMM } = await import(pathToFileURL(path.join(sds, "lib/js/OMM/main.js")));
+const { SBD, sbdOrbitClass } = await import(pathToFileURL(path.join(sds, "lib/js/SBD/main.js")));
+const { pvnLicenseClass } = await import(pathToFileURL(path.join(sds, "lib/js/PVN/main.js")));
 const wasmPath = fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url)));
 const wasm = fs.readFileSync(wasmPath);
@@ -64,8 +65,8 @@ function records(result) {
   for (let offset = 0; offset < bytes.length;) {
     const size = new DataView(bytes.buffer, bytes.byteOffset + offset, 4).getUint32(0, true) + 4;
     const frame = bytes.slice(offset, offset + size);
-    assert.equal(Buffer.from(frame.slice(8, 12)).toString(), "$OMM");
-    rows.push(OMM.getSizePrefixedRootAsOMM(new ByteBuffer(frame)).unpack());
+    assert.equal(Buffer.from(frame.slice(8, 12)).toString(), "$SBD");
+    rows.push(SBD.getSizePrefixedRootAsSBD(new ByteBuffer(frame)).unpack());
     offset += size;
   }
   return rows;
@@ -111,9 +112,14 @@ test("Ceres reads as Lowell publishes it, brightest band first, with the attribu
   assert.equal(result.statusCode, 0, result.errorMessage);
   const rows = records(result);
   assert.equal(rows.length, 120020);
-  const ceres = rows.find((r) => r.OBJECT_ID === "1");
-  assert.equal(ceres.OBJECT_NAME, "Ceres");
+  const ceres = rows.find((r) => r.NUMBER === 1);
+  assert.equal(ceres.NAME, "Ceres");
+  assert.equal(ceres.DESIGNATION, null);
+  assert.equal(ceres.ORBIT_CLASS, sbdOrbitClass.MBA);
+  assert.equal(ceres.NEO, false);
   assert.equal(ceres.CENTER_NAME, "SUN");
+  assert.equal(ceres.REF_FRAME, "ECLIPJ2000");
+  assert.equal(ceres.TIME_SYSTEM, "TDB");
   assert.equal(ceres.EPOCH, "2026-09-17T00:00:00");
   assert.equal(ceres.MEAN_ANOMALY, 295.937548);
   assert.equal(ceres.ARG_OF_PERICENTER, 73.20809);
@@ -122,15 +128,32 @@ test("Ceres reads as Lowell publishes it, brightest band first, with the attribu
   assert.equal(ceres.ECCENTRICITY, 0.07975072);
   assert.equal(ceres.SEMI_MAJOR_AXIS, 2.76592189 * 149597870.7);
   assert.equal(ceres.GM, 1.3271244004127942e11);
-  assert.deepEqual(ceres.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]), [["H", "3.34"], ["G", "0.15"], ["DIAMETER_KM", "848.4"]]);
+  assert.equal(ceres.ABSOLUTE_MAGNITUDE, 3.34);
+  assert.equal(ceres.SLOPE_PARAMETER, 0.15);
+  assert.equal(ceres.DIAMETER, 848.4);
+  assert.ok(Number.isNaN(ceres.ALBEDO));
+  // Orbit quality as astorb gives it: arc 82151 d, 6914 observations, CEU
+  // 0.016" changing 9.5e-5"/day, on 2026-10-12.
+  assert.equal(ceres.ORBIT_ARC, 82151);
+  assert.equal(ceres.OBSERVATION_COUNT, 6914);
+  assert.equal(ceres.CEU, 0.016);
+  assert.equal(ceres.CEU_RATE, 0.000095);
+  assert.equal(ceres.CEU_EPOCH, "2026-10-12");
+  assert.equal(ceres.PROVENANCE.PROVIDER_ID, "lowell-astorb");
+  assert.equal(ceres.PROVENANCE.ORIGINATOR, "Lowell Observatory");
+  assert.equal(ceres.PROVENANCE.LICENSE_CLASS, pvnLicenseClass.Reproducible);
   // H < 12 rows lead: the 20 real rows (all bright) come before the filler band.
-  assert.deepEqual(rows.slice(0, 3).map((r) => r.OBJECT_ID), ["1", "2", "3"]);
+  assert.deepEqual(rows.slice(0, 3).map((r) => r.NUMBER), [1, 2, 3]);
   const meta = decode(result, "meta");
-  assert.equal(meta.schema, "OMM.fbs");
+  assert.equal(meta.schema, "SBD.fbs");
   assert.equal(meta.provider_id, "lowell-astorb");
   assert.equal(meta.source_name, "astorb-numbered");
   assert.match(meta.citation, /Bowell.*NAG5-4741.*Lowell Observatory endowment/);
   assert.equal(meta.batch_id, (await import("node:crypto")).createHash("sha256").update(gz).digest("hex"));
+  // An unnamed asteroid's name columns hold its provisional designation, a
+  // NEO's class follows from a and e (filler rows reuse row 20's columns).
+  const filler = rows.find((r) => r.NUMBER === 500001);
+  assert.ok(filler);
   const report = decode(result, "report");
   assert.equal(report.epoch_min, "2026-09-17T00:00:00");
   assert.equal(report.records, 120020);

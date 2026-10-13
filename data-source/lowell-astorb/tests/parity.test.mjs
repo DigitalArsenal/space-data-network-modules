@@ -1,5 +1,5 @@
 // Tri-runtime parity (browser, native WasmEdge, container WasmEdge) for the
-// portable astorb module: the same range plan, the same $OMM records from the
+// portable astorb module: the same range plan, the same $SBD records from the
 // same astorb.dat bytes, and the same refusals, in every runtime. Opt in with
 // SDN_RUN_ASTORB_PARITY=1 (needs Chromium, a wasmedge binary in
 // SDM_WASMEDGE_BINARY or PATH, and the pinned parity image in Docker).

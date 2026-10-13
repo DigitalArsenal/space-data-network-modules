@@ -11,7 +11,7 @@
 // The astorb.dat core shared by the portable module (lowell_astorb.cpp:
 // plan_astorb, parse_astorb) and its host adapter (host-adapter/src/adapter.cpp:
 // ingest_astorb, which streams the same records into the node's store in
-// parts). One copy of the fixed-column rules and the $OMM layout.
+// parts). One copy of the fixed-column rules and the $SBD layout.
 #ifndef LOWELL_ASTORB_CORE_HPP
 #define LOWELL_ASTORB_CORE_HPP
 using Json = nlohmann::json;
@@ -80,12 +80,42 @@ bool numberField(const char* line, size_t a, size_t b, double& value) {
 
 struct Row {
   int64_t number;
-  std::string name;  // UTF-8
-  bool hasH, hasG, hasD;
-  double h, g, d;
-  std::string epoch;
+  std::string name;  // UTF-8: an IAU name, or the provisional designation of an unnamed body
+  bool hasH, hasG, hasD, hasArc, hasObs, hasCeu, hasCeuRate;
+  double h, g, d, arc, obs, ceu, ceuRate;
+  std::string epoch, ceuEpoch;
   double m, w, node, inc, e, aAu;
 };
+
+// An unnamed numbered asteroid carries its principal provisional designation
+// in the name columns: "1999 RQ36", or a survey designation ("2040 P-L",
+// "3138 T-1").
+bool isDesignation(const std::string& s) {
+  if (s.size() < 7 || s[4] != ' ') return false;
+  for (int i = 0; i < 4; ++i) if (s[i] < '0' || s[i] > '9') return false;
+  const std::string t = s.substr(5);
+  if (t == "P-L" || t == "T-1" || t == "T-2" || t == "T-3") return true;
+  if (t.size() < 2 || t[0] < 'A' || t[0] > 'Z' || t[1] < 'A' || t[1] > 'Z') return false;
+  for (size_t i = 2; i < t.size(); ++i) if (t[i] < '0' || t[i] > '9') return false;
+  return true;
+}
+
+// JPL SBDB asteroid orbit classes from a (AU) and e (sbdOrbitClass).
+sbdOrbitClass orbitClass(double aAu, double e) {
+  if (e == 1.0) return sbdOrbitClass::PAA;
+  if (e > 1.0) return sbdOrbitClass::HYA;
+  const double q = aAu * (1.0 - e), big = aAu * (1.0 + e);
+  if (aAu < 1.0) return big < 0.983 ? sbdOrbitClass::IEO : sbdOrbitClass::ATE;
+  if (q < 1.017) return sbdOrbitClass::APO;
+  if (q < 1.3) return sbdOrbitClass::AMO;
+  if (q < 1.666 && aAu < 3.2) return sbdOrbitClass::MCA;
+  if (aAu < 2.0) return sbdOrbitClass::IMB;
+  if (aAu < 3.2) return sbdOrbitClass::MBA;
+  if (aAu < 4.6) return sbdOrbitClass::OMB;
+  if (aAu < 5.5) return e < 0.3 ? sbdOrbitClass::TJN : sbdOrbitClass::AST;
+  if (aAu < 30.1) return sbdOrbitClass::CEN;
+  return sbdOrbitClass::TNO;
+}
 
 std::string latin1ToUtf8(const char* p, size_t n) {
   std::string s;
@@ -117,6 +147,21 @@ bool parseLine(const char* line, size_t len, Row& row) {
   row.hasD = numberField(line, 59, 64, row.d);
   const char* ep = line + es;
   row.epoch = std::string(ep, 4) + "-" + std::string(ep + 4, 2) + "-" + std::string(ep + 6, 2) + "T00:00:00";
+  // Orbit quality: the observed arc (days), the observations used and the
+  // current ephemeris uncertainty (CEU, arcsec), its rate and its date.
+  row.hasArc = numberField(line, 95, 100, row.arc);
+  row.hasObs = numberField(line, 100, 105, row.obs);
+  row.hasCeu = len >= 216 && numberField(line, 190, 199, row.ceu);
+  row.hasCeuRate = len >= 216 && numberField(line, 199, 207, row.ceuRate);
+  row.ceuEpoch.clear();
+  if (len >= 216) {
+    bool digits = true;
+    for (size_t i = 208; i < 216; ++i) digits = digits && line[i] >= '0' && line[i] <= '9';
+    if (digits) {
+      const char* cp = line + 208;
+      row.ceuEpoch = std::string(cp, 4) + "-" + std::string(cp + 4, 2) + "-" + std::string(cp + 6, 2);
+    }
+  }
   return numberField(line, 115, 125, row.m) && numberField(line, 126, 136, row.w) &&
          numberField(line, 137, 147, row.node) && numberField(line, 148, 157, row.inc) &&
          numberField(line, 158, 168, row.e) && numberField(line, 169, 182, row.aAu);
@@ -159,52 +204,53 @@ int band(const Row& r) {
   return h < 12 ? 0 : h < 15 ? 1 : h < 17 ? 2 : 3;
 }
 
+// One $SBD: the catalog's osculating heliocentric elements as published
+// (CENTER_NAME SUN, REF_FRAME ECLIPJ2000: the mean ecliptic and equinox of
+// J2000; TIME_SYSTEM TDB, the epoch of osculation; angles in degrees,
+// SEMI_MAJOR_AXIS in km, the only arithmetic: AU to km; GM the DE440 Sun),
+// H, G, the IRAS diameter, the orbit class and the orbit quality astorb gives,
+// and the record's provenance (PVN).
 void buildRecord(const Row& r, flatbuffers::FlatBufferBuilder& b) {
   b.Clear();
-  std::vector<flatbuffers::Offset<OMMUserDefinedParameter>> params;
-  const auto param = [&](const char* name, bool has, double value) {
-    if (!has) return;
-    const auto n = b.CreateString(name);
-    const auto v = b.CreateString(jsNumber(value));
-    params.push_back(CreateOMMUserDefinedParameter(b, n, v));
-  };
-  param("H", r.hasH, r.h);
-  param("G", r.hasG, r.g);
-  param("DIAMETER_KM", r.hasD, r.d);
-  const auto paramsVector = params.empty() ? 0 : b.CreateVector(params);
-  RFMOriginBuilder origin(b);
-  origin.add_KIND(rfmOriginKind::CELESTIAL_BODY);
-  origin.add_CELESTIAL_BODY_ID(sunNaifId);
-  const auto originOffset = origin.Finish();
-  RFMCoordinateSystemBuilder system(b);
-  system.add_AXIS_TYPE(rfmAxisType::MEAN_ECLIPTIC_EQUINOX_J2000);
-  system.add_ORIGIN(originOffset);
-  const auto systemOffset = system.Finish();
-  const auto wrapper = CreateRFMCoordinateSystemWrapper(b, systemOffset);
-  RFMBuilder frame(b);
-  frame.add_REFERENCE_FRAME_type(RFMUnion::RFMCoordinateSystemWrapper);
-  frame.add_REFERENCE_FRAME(wrapper.Union());
-  const auto frameOffset = frame.Finish();
+  const auto lane = b.CreateSharedString(providerId);
+  const auto originator = b.CreateSharedString("Lowell Observatory");
+  const auto licenceId = b.CreateSharedString("lowell-astorb-attribution");
+  const auto provenance = CreatePVN(b, lane, pvnSourceKind::ElementSet, originator, lane, 0,
+                                    pvnLicenseClass::Reproducible, licenceId, lane);
+  const bool designation = isDesignation(r.name);
   const auto name = r.name.empty() ? 0 : b.CreateString(r.name);
-  const auto id = b.CreateString(std::to_string(r.number));
-  const auto center = b.CreateString("SUN");
+  const auto center = b.CreateSharedString("SUN");
+  const auto frameName = b.CreateSharedString("ECLIPJ2000");
+  const auto timeSystem = b.CreateSharedString("TDB");
   const auto epoch = b.CreateString(r.epoch);
-  OMMBuilder omm(b);
-  if (!r.name.empty()) omm.add_OBJECT_NAME(name);
-  omm.add_OBJECT_ID(id);
-  omm.add_CENTER_NAME(center);
-  omm.add_REFERENCE_FRAME(frameOffset);
-  omm.add_TIME_SYSTEM(timingStandard::TT);
-  omm.add_EPOCH(epoch);
-  omm.add_SEMI_MAJOR_AXIS(r.aAu * auKm);
-  omm.add_ECCENTRICITY(r.e);
-  omm.add_INCLINATION(r.inc);
-  omm.add_RA_OF_ASC_NODE(r.node);
-  omm.add_ARG_OF_PERICENTER(r.w);
-  omm.add_MEAN_ANOMALY(r.m);
-  omm.add_GM(gmSunKm3s2);
-  if (!params.empty()) omm.add_USER_DEFINED_PARAMETERS(paramsVector);
-  FinishSizePrefixedOMMBuffer(b, omm.Finish());
+  const auto ceuEpoch = r.ceuEpoch.empty() ? 0 : b.CreateString(r.ceuEpoch);
+  const double q = r.aAu * (1.0 - r.e);
+  SBDBuilder sbd(b);
+  sbd.add_NUMBER(uint32_t(r.number));
+  if (name.o) { if (designation) sbd.add_DESIGNATION(name); else sbd.add_NAME(name); }
+  sbd.add_ORBIT_CLASS(orbitClass(r.aAu, r.e));
+  sbd.add_NEO(q < 1.3);
+  sbd.add_CENTER_NAME(center);
+  sbd.add_REF_FRAME(frameName);
+  sbd.add_TIME_SYSTEM(timeSystem);
+  sbd.add_EPOCH(epoch);
+  sbd.add_SEMI_MAJOR_AXIS(r.aAu * auKm);
+  sbd.add_ECCENTRICITY(r.e);
+  sbd.add_INCLINATION(r.inc);
+  sbd.add_RA_OF_ASC_NODE(r.node);
+  sbd.add_ARG_OF_PERICENTER(r.w);
+  sbd.add_MEAN_ANOMALY(r.m);
+  sbd.add_GM(gmSunKm3s2);
+  if (r.hasH) sbd.add_ABSOLUTE_MAGNITUDE(r.h);
+  if (r.hasG) sbd.add_SLOPE_PARAMETER(r.g);
+  if (r.hasD && r.d > 0) sbd.add_DIAMETER(r.d);
+  if (r.hasCeu) sbd.add_CEU(r.ceu);
+  if (r.hasCeuRate) sbd.add_CEU_RATE(r.ceuRate);
+  if (ceuEpoch.o) sbd.add_CEU_EPOCH(ceuEpoch);
+  if (r.hasArc) sbd.add_ORBIT_ARC(r.arc);
+  if (r.hasObs && r.obs >= 0) sbd.add_OBSERVATION_COUNT(uint32_t(r.obs));
+  sbd.add_PROVENANCE(provenance);
+  FinishSizePrefixedSBDBuffer(b, sbd.Finish());
 }
 
 Json canonicalJob() {
@@ -365,7 +411,7 @@ bool survey(const GzipInput& gz, Survey& out) {
 }
 
 Json ingestMeta(const std::string& sourceSha, const std::string& peer) {
-  return {{"schema", "OMM.fbs"}, {"batch_id", sourceSha}, {"provider_id", providerId},
+  return {{"schema", "SBD.fbs"}, {"batch_id", sourceSha}, {"provider_id", providerId},
           {"source_name", sourceName}, {"source_url", sourceUrl}, {"source_peer", peer},
           {"reconcile", "current"}, {"origin_id", "lowell.edu"}, {"origin_name", "Lowell Observatory astorb"},
           {"dataset_id", "lowell-astorb/numbered"}, {"terms_url", "https://asteroid.lowell.edu/astorb/"},

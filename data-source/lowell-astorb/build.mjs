@@ -1,4 +1,4 @@
-// Build data-source/lowell-astorb through the SDK compiler lane: the $OMM
+// Build data-source/lowell-astorb through the SDK compiler lane: the $SBD
 // header generated from the pinned spacedatastandards.org package, nlohmann
 // json, the shared sha256, and the vendored miniz (data-source/geonames-source,
 // SHA-256 pinned) for the gzip inflate. One translation unit.
@@ -10,9 +10,9 @@ import { generateSdsHeader } from "./sds-header.mjs";
 import { minizSourceFragments } from "../geonames-source/miniz-source.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-const { header, version } = await generateSdsHeader("OMM", import.meta.url);
-if (!/CreateOMMUserDefinedParameter\(/.test(header)) {
-  throw new Error(`spacedatastandards.org@${version} has no OMM.USER_DEFINED_PARAMETERS; this module needs 1.247.0 or later.`);
+const { header, version } = await generateSdsHeader("SBD", import.meta.url);
+if (!/struct SBDBuilder/.test(header)) {
+  throw new Error(`spacedatastandards.org@${version} has no $SBD; this module needs 1.248.0 or later.`);
 }
 const json = await fs.readFile(path.resolve(root, "../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");
 const sha = await fs.readFile(path.resolve(root, "../../files/orbit-products/src/sha256.hpp"), "utf8");
@@ -37,5 +37,5 @@ await fs.writeFile(path.join(guest, "module-link.o"), result.guestLink.objectByt
 const { format, language, threadModel, symbolPrefix, methodSymbols } = result.guestLink;
 await fs.writeFile(path.join(guest, "metadata.json"), JSON.stringify({ version: 1, format, language, threadModel, symbolPrefix, methodSymbols }, null, 2) + "\n");
 await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
-await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, schema: "OMM", threadModel: "wasi-sequential", miniz: "3.1.2" }, null, 2)}\n`);
+await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, schema: "SBD", threadModel: "wasi-sequential", miniz: "3.1.2" }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);
