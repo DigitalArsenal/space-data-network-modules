@@ -804,7 +804,8 @@ constexpr double kDefaultSmallValiditySeconds = 60.0 * 86400.0;
 double g_small_validity = kDefaultSmallValiditySeconds;
 
 struct SmallBody {
-  double epoch_et = 0.0;        // TDB seconds past J2000
+  double epoch_et = 0.0;        // TDB seconds past J2000: the record's element epoch (validity)
+  double osc_et = 0.0;          // the epoch the elements below osculate at (moved by small_rebase)
   double a = 0.0;               // m
   double e = 0.0;
   double n = 0.0;               // rad/s
@@ -921,6 +922,7 @@ int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out
     p[1] = py; p[2] = pz; q[1] = qy; q[2] = qz;
   }
   out->epoch_et = (epoch_jd - kJ2000) * kSecondsPerDay;
+  out->osc_et = out->epoch_et;
   out->a = a;
   out->e = e;
   out->n = std::sqrt(gm / (a * a * a));
@@ -960,7 +962,7 @@ bool small_in_validity(const SmallBody& b, double et) {
 bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
   if (!small_in_validity(b, et)) return false;
   double ecc = 0.0;
-  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.epoch_et), b.e, &ecc)) return false;
+  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc)) return false;
   const double ce = std::cos(ecc), se = std::sin(ecc);
   const double root = std::sqrt(1.0 - b.e * b.e);
   const double x = b.a * (ce - b.e);
@@ -973,6 +975,224 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
     for (int c = 0; c < 3; ++c) v[c] = vx * b.p[c] + vy * b.q[c];
   }
   return true;
+}
+
+// ── Planetary perturbations ────────────────────────────────────────────────
+// Osculating elements are a two-body orbit only at their epoch: the planets
+// pull a body off the conic (Psyche 1.4" at +45 days, 3" at +60 days against
+// JPL Horizons on two-body alone). Each row is therefore carried along its
+// perturbed path: when a snapshot asks for an epoch more than kRebaseSpan from
+// the epoch its elements osculate at, the row is integrated there (Encke's
+// method: the deviation from the osculating conic, RK4) under the Sun and the
+// eight planets (Mercury, Venus, the Earth-Moon barycentre, the Mars, Jupiter,
+// Saturn, Uranus and Neptune systems; DE440 GMs) and its elements are replaced
+// by the osculating elements there. Over a snapshot's few days from them the
+// conic is exact to well under 0.1".
+//
+// The planets' heliocentric places are their mean orbits (Standish, "Keplerian
+// Elements for Approximate Positions of the Major Planets", JPL SSD, Table 1,
+// 1800-2050; mean ecliptic and equinox of J2000): a perturbation needs the
+// pulling body's place to about a percent of its distance, and the table holds
+// Jupiter to about 400" (0.01 AU at 5.2 AU), which moves a two-month main-belt
+// perturbation by a few hundredths of an arcsecond.
+constexpr double kRebaseSpan = 2.0 * 86400.0;       // re-osculate past this far from osc_et
+constexpr double kRebaseStep = 6.0 * 86400.0;       // RK4 step for a body far from every planet
+constexpr int kPlanets = 8;
+// a (AU), e, I, L, long. perihelion, long. node (deg) at J2000 and per Julian century.
+constexpr double kStandish[kPlanets][12] = {
+    {0.38709927, 0.20563593, 7.00497902, 252.25032350, 77.45779628, 48.33076593,
+     0.00000037, 0.00001906, -0.00594749, 149472.67411175, 0.16047689, -0.12534081},
+    {0.72333566, 0.00677672, 3.39467605, 181.97909950, 131.60246718, 76.67984255,
+     0.00000390, -0.00004107, -0.00078890, 58517.81538729, 0.00268329, -0.27769418},
+    {1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0,
+     0.00000562, -0.00004392, -0.01294668, 35999.37244981, 0.32327364, 0.0},
+    {1.52371034, 0.09339410, 1.84969142, -4.55343205, -23.94362959, 49.55953891,
+     0.00001847, 0.00007882, -0.00813131, 19140.30268499, 0.44441088, -0.29257343},
+    {5.20288700, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909,
+     -0.00011607, -0.00013253, -0.00183714, 3034.74612775, 0.21252668, 0.20469106},
+    {9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448,
+     -0.00125060, -0.00050991, 0.00193609, 1222.49362201, -0.41897216, -0.28867794},
+    {19.18916464, 0.04725744, 0.77263783, 313.23810451, 170.95427630, 74.01692503,
+     -0.00196176, -0.00004397, -0.00242939, 428.48202785, 0.40805281, 0.04240589},
+    {30.06992276, 0.00859048, 1.77004347, -55.12002969, 44.96476227, 131.78422574,
+     0.00026291, 0.00005105, 0.00035372, 218.45945325, -0.32241464, -0.00508664},
+};
+// GM (m^3/s^2), gm_de440.tpc: BODY1, 2, 3 (Earth + Moon), 4..8 (systems).
+constexpr double kPlanetGm[kPlanets] = {2.2031868551e13, 3.24858592e14, 4.03503235502e14, 4.2828375816e13,
+                                        1.267127641e17, 3.79405848418e16, 5.7945564e15, 6.836527100580e15};
+
+struct PlanetPlaces {
+  double et = NAN;
+  double r[kPlanets][3];
+};
+// Snapshots ask every row for the same epochs, so the places are kept for the
+// last few dozen epochs asked for.
+PlanetPlaces g_places[48];
+int g_places_next = 0;
+
+const PlanetPlaces& planet_places(double et) {
+  for (const PlanetPlaces& p : g_places) {
+    if (p.et == et) return p;
+  }
+  PlanetPlaces& p = g_places[g_places_next];
+  g_places_next = (g_places_next + 1) % 48;
+  p.et = et;
+  const double t = et / (36525.0 * 86400.0);
+  const double ce = std::cos(kObliquityJ2000), se = std::sin(kObliquityJ2000);
+  for (int k = 0; k < kPlanets; ++k) {
+    const double* el = kStandish[k];
+    const double a = (el[0] + el[6] * t) * kAuMeters, e = el[1] + el[7] * t;
+    const double inc = (el[2] + el[8] * t) * kDegToRad, lon = (el[3] + el[9] * t) * kDegToRad;
+    const double varpi = (el[4] + el[10] * t) * kDegToRad, node = (el[5] + el[11] * t) * kDegToRad;
+    const double w = varpi - node;
+    double ecc = 0.0;
+    if (!small_eccentric_anomaly(lon - varpi, e, &ecc)) ecc = lon - varpi;
+    const double x = a * (std::cos(ecc) - e), y = a * std::sqrt(1.0 - e * e) * std::sin(ecc);
+    const double cw = std::cos(w), sw = std::sin(w), cn = std::cos(node), sn = std::sin(node);
+    const double ci = std::cos(inc), si = std::sin(inc);
+    const double xe = (cw * cn - sw * sn * ci) * x + (-sw * cn - cw * sn * ci) * y;
+    const double ye = (cw * sn + sw * cn * ci) * x + (-sw * sn + cw * cn * ci) * y;
+    const double ze = (sw * si) * x + (cw * si) * y;
+    p.r[k][0] = xe;
+    p.r[k][1] = ce * ye - se * ze;
+    p.r[k][2] = se * ye + ce * ze;
+  }
+  return p;
+}
+
+/// The planets' pull on a body at heliocentric r (m), heliocentric frame
+/// (direct and indirect terms), and the body's smallest planet distance (m).
+void planet_acceleration(const double r[3], double et, double out[3], double* nearest) {
+  const PlanetPlaces& p = planet_places(et);
+  out[0] = out[1] = out[2] = 0.0;
+  double near = INFINITY;
+  for (int k = 0; k < kPlanets; ++k) {
+    const double* rk = p.r[k];
+    const double d[3] = {rk[0] - r[0], rk[1] - r[1], rk[2] - r[2]};
+    const double d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    const double dn = std::sqrt(d2);
+    const double rk2 = rk[0] * rk[0] + rk[1] * rk[1] + rk[2] * rk[2];
+    const double f = kPlanetGm[k] / (d2 * dn), g = kPlanetGm[k] / (rk2 * std::sqrt(rk2));
+    for (int c = 0; c < 3; ++c) out[c] += f * d[c] - g * rk[c];
+    near = std::min(near, dn);
+  }
+  if (nearest != nullptr) *nearest = near;
+}
+
+/// The conic's place (and velocity) at et from the row's current elements,
+/// with no validity check (the integrator's own reference orbit).
+bool small_conic(const SmallBody& b, double et, double r[3], double v[3]) {
+  double ecc = 0.0;
+  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc)) return false;
+  const double ce = std::cos(ecc), se = std::sin(ecc);
+  const double root = std::sqrt(1.0 - b.e * b.e);
+  const double x = b.a * (ce - b.e), y = b.a * root * se;
+  for (int c = 0; c < 3; ++c) r[c] = x * b.p[c] + y * b.q[c];
+  if (v != nullptr) {
+    const double edot = b.n / (1.0 - b.e * ce);
+    const double vx = -b.a * se * edot, vy = b.a * root * ce * edot;
+    for (int c = 0; c < 3; ++c) v[c] = vx * b.p[c] + vy * b.q[c];
+  }
+  return true;
+}
+
+/// Encke: the deviation's acceleration at t (the planets' pull at the body's
+/// perturbed place, plus the difference of the Sun's pull there and on the
+/// conic).
+bool encke_acceleration(const SmallBody& b, double gm, double t, const double dr[3], double out[3], double* nearest) {
+  double rho[3];
+  if (!small_conic(b, t, rho, nullptr)) return false;
+  const double r[3] = {rho[0] + dr[0], rho[1] + dr[1], rho[2] + dr[2]};
+  const double rho3 = std::pow(rho[0] * rho[0] + rho[1] * rho[1] + rho[2] * rho[2], 1.5);
+  const double r3 = std::pow(r[0] * r[0] + r[1] * r[1] + r[2] * r[2], 1.5);
+  planet_acceleration(r, t, out, nearest);
+  for (int c = 0; c < 3; ++c) out[c] += gm * (rho[c] / rho3 - r[c] / r3);
+  return true;
+}
+
+/// The row's osculating elements at `et`, from its perturbed path since
+/// osc_et. A failed step or a non-elliptic result leaves the row as it was.
+bool small_rebase(SmallBody& b, double et) {
+  const double span = et - b.osc_et;
+  if (std::fabs(span) <= kRebaseSpan) return true;
+  const double gm = b.n * b.n * b.a * b.a * b.a;
+  double dr[3] = {0, 0, 0}, dv[3] = {0, 0, 0};
+  double t = b.osc_et;
+  // Rows that keep far from every planet share one step grid (their planet
+  // places are computed once per epoch for the whole catalog); a row that
+  // comes within 0.2 AU of a planet steps at a tenth of its distance's
+  // crossing time at 30 km/s.
+  const int base_steps = static_cast<int>(std::ceil(std::fabs(span) / kRebaseStep));
+  const double base_h = span / base_steps;
+  while (std::fabs(et - t) > 1e-6) {
+    double k1v[3], k2v[3], k3v[3], k4v[3], nearest = INFINITY;
+    if (!encke_acceleration(b, gm, t, dr, k1v, &nearest)) return false;
+    double h = base_h;
+    const double close = 0.2 * kAuMeters;
+    if (nearest < close) {
+      const double fine = std::max(600.0, 0.1 * nearest / 30000.0);
+      if (fine < std::fabs(h)) h = std::copysign(fine, span);
+    }
+    if (std::fabs(et - t) < std::fabs(h) * (1.0 + 1e-9)) h = et - t;
+    const double hh = 0.5 * h;
+    double r2[3], v2[3], r3[3], v3[3], r4[3], v4[3];
+    for (int c = 0; c < 3; ++c) { r2[c] = dr[c] + hh * dv[c]; v2[c] = dv[c] + hh * k1v[c]; }
+    if (!encke_acceleration(b, gm, t + hh, r2, k2v, nullptr)) return false;
+    for (int c = 0; c < 3; ++c) { r3[c] = dr[c] + hh * v2[c]; v3[c] = dv[c] + hh * k2v[c]; }
+    if (!encke_acceleration(b, gm, t + hh, r3, k3v, nullptr)) return false;
+    for (int c = 0; c < 3; ++c) { r4[c] = dr[c] + h * v3[c]; v4[c] = dv[c] + h * k3v[c]; }
+    if (!encke_acceleration(b, gm, t + h, r4, k4v, nullptr)) return false;
+    for (int c = 0; c < 3; ++c) {
+      dr[c] += h / 6.0 * (dv[c] + 2.0 * v2[c] + 2.0 * v3[c] + v4[c]);
+      dv[c] += h / 6.0 * (k1v[c] + 2.0 * k2v[c] + 2.0 * k3v[c] + k4v[c]);
+    }
+    t += h;
+  }
+  // The perturbed state at et, and its osculating conic.
+  double r[3], v[3];
+  if (!small_conic(b, et, r, v)) return false;
+  for (int c = 0; c < 3; ++c) { r[c] += dr[c]; v[c] += dv[c]; }
+  const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  const double v2n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  const double hv[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
+  const double hn = std::sqrt(hv[0] * hv[0] + hv[1] * hv[1] + hv[2] * hv[2]);
+  const double inv_a = 2.0 / rn - v2n / gm;
+  if (!(inv_a > 0.0) || !(hn > 0.0)) return false;
+  const double a = 1.0 / inv_a;
+  const double vxh[3] = {v[1] * hv[2] - v[2] * hv[1], v[2] * hv[0] - v[0] * hv[2], v[0] * hv[1] - v[1] * hv[0]};
+  double ev[3];
+  for (int c = 0; c < 3; ++c) ev[c] = vxh[c] / gm - r[c] / rn;
+  const double e = std::sqrt(ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]);
+  if (!(e < 1.0)) return false;
+  double p[3], m;
+  if (e > 1e-10) {
+    for (int c = 0; c < 3; ++c) p[c] = ev[c] / e;
+    const double cos_e = (1.0 - rn / a) / e;
+    const double sin_e = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / (e * std::sqrt(gm * a));
+    const double ecc = std::atan2(sin_e, cos_e);
+    m = ecc - e * std::sin(ecc);
+  } else {
+    for (int c = 0; c < 3; ++c) p[c] = r[c] / rn;
+    m = 0.0;
+  }
+  const double q[3] = {(hv[1] * p[2] - hv[2] * p[1]) / hn, (hv[2] * p[0] - hv[0] * p[2]) / hn,
+                       (hv[0] * p[1] - hv[1] * p[0]) / hn};
+  b.a = a;
+  b.e = e;
+  b.n = std::sqrt(gm / (a * a * a));
+  b.m0 = m;
+  for (int c = 0; c < 3; ++c) {
+    b.p[c] = p[c];
+    b.q[c] = q[c];
+  }
+  b.osc_et = et;
+  return true;
+}
+
+/// A row carried to `et` along its perturbed path when `et` is inside its
+/// validity span (outside it the row is refused anyway).
+void small_rebase_valid(SmallBody& b, double et) {
+  if (small_in_validity(b, et)) small_rebase(b, et);
 }
 
 /// V from H and G (Bowell et al. 1989): heliocentric distance r, observer
@@ -1017,8 +1237,10 @@ constexpr double kSpeedOfLight = 299792458.0;
 /// geometric solve's eccentric anomaly moved by the light time): one or two
 /// steps to 1e-12 rad.
 bool small_position_from(const SmallBody& b, double t, double seed, double r[3], double* ecc_out) {
-  if (!small_in_validity(b, t)) return false;
-  const double m = b.m0 + b.n * (t - b.epoch_et);
+  // No validity check here: the caller checked the observation epoch, and the
+  // light-time place an hour or so before it belongs to that epoch (a row is
+  // drawn to the very edge of its span).
+  const double m = b.m0 + b.n * (t - b.osc_et);
   double ecc = seed;
   bool converged = false;
   for (int i = 0; i < 20; ++i) {
@@ -1060,7 +1282,7 @@ bool small_apparent_place(const SmallBody& b, double et, const double* observer,
   double r[3];
   if (!small_in_validity(b, et)) return false;
   double ecc = 0.0;
-  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.epoch_et), b.e, &ecc) ||
+  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc) ||
       !small_position_from(b, et, ecc, r, &ecc)) {
     return false;
   }
@@ -1287,6 +1509,7 @@ int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const d
   if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
   int32_t failed = 0;
   for (uint32_t i = 0; i < count; ++i) {
+    small_rebase_valid(store[first + i], et);
     if (!small_snapshot_row(store[first + i], et, observer, out + 4 * i)) ++failed;
   }
   return failed;
@@ -1310,6 +1533,7 @@ int32_t kepler_small_snapshot_apparent(double et, uint32_t first, uint32_t count
   small_observer_at(observer, et, at);
   int32_t failed = 0;
   for (uint32_t i = 0; i < count; ++i) {
+    small_rebase_valid(store[first + i], et);
     if (!small_apparent_row(store[first + i], et, at, out + 4 * i)) ++failed;
   }
   return failed;
@@ -1328,6 +1552,7 @@ int32_t kepler_small_apparent_offset(double et, uint32_t index, const double* ob
   if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
   double seen[3], geometric[3], r[3], at[9];
   small_observer_at(observer, et, at);
+  small_rebase(store[index], et);
   if (!small_apparent_place(store[index], et, at, seen, geometric, r)) return kErrNotConverged;
   for (int c = 0; c < 3; ++c) out[c] = seen[c] - geometric[c];
   return kOk;
@@ -1341,6 +1566,7 @@ int32_t kepler_small_state(double et, uint32_t index, double* out) {
   if (out == nullptr) return kErrNullOutput;
   if (index >= store.size()) return kErrBadEntityIndex;
   if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
+  small_rebase(store[index], et);
   return small_position(store[index], et, out, out + 3) ? kOk : kErrNotConverged;
 }
 

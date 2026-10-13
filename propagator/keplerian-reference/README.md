@@ -111,7 +111,7 @@ row whose orbital energy does not close.
 Provenance, tolerance policy and the reason there is no Tier A row:
 [`vectors/PROVENANCE.md`](vectors/PROVENANCE.md).
 
-## Small bodies (1.1.0)
+## Small bodies (1.1.0; perturbed paths 1.6.0)
 
 Asteroids are a second store beside the ABI entity table, because the ABI's
 state vector is Earth-fixed by contract and a catalog holds hundreds of
@@ -123,9 +123,9 @@ thousands of Sun-centred rows.
 | `kepler_small_describe_sbd_stream(data, len, count, numbers, hgd, offsets, names, capacity)` | the display fields of the same stream without storing it: uint32 NUMBER, float32 H, G, DIAMETER per record, and NAME (else DESIGNATION) packed as UTF-8 with byte offsets |
 | `kepler_small_select_sbd_stream(data, len, class_mask, h_min, h_max, exclude, exclude_bits, out, capacity)` | the records of a stream a selection keeps, unchanged and size-prefixed: ORBIT_CLASS bit in `class_mask` (0 = any), H in [h_min, h_max) (NaN = open), NUMBER not set in the `exclude` bitmap; the console's size-band and class filter |
 | `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer; NaN outside the validity span |
-| `kepler_small_snapshot_apparent(et, first, count, observer, out)` | as `kepler_small_snapshot`, but each row is where the body is SEEN: light time (three iterations) and first-order stellar aberration, NAIF LT+S, the correction `propagator/solar-system-bodies` applies to planets. `observer` is 10 doubles: heliocentric position (m), barycentric velocity (m/s), the Sun's barycentric velocity (m/s), and the TDB epoch (s past J2000) they hold at; the module moves the observer on to `et` with its heliocentric velocity, so a host passes its frame's camera as it is; the row is observer + apparent vector, so a host draws it like a geometric row. Against JPL Horizons LT+S (tests/small-bodies-apparent.e2e.test.mjs): (433), (16), (101955), (3), (7), (1), (4) within 0.76" at the element epoch and 30 days either side; the geometric rows are 2.6-33.5" off |
+| `kepler_small_snapshot_apparent(et, first, count, observer, out)` | as `kepler_small_snapshot`, but each row is where the body is SEEN: light time (three iterations) and first-order stellar aberration, NAIF LT+S, the correction `propagator/solar-system-bodies` applies to planets. `observer` is 10 doubles: heliocentric position (m), barycentric velocity (m/s), the Sun's barycentric velocity (m/s), and the TDB epoch (s past J2000) they hold at; the module moves the observer on to `et` with its heliocentric velocity, so a host passes its frame's camera as it is; the row is observer + apparent vector, so a host draws it like a geometric row. Against JPL Horizons LT+S (tests/small-bodies-apparent.e2e.test.mjs): (1), (3), (4), (7), (16), (433), (1036), (1862), (4179), (99942), (101955) within 0.79" at the element epoch and ±30, ±45 and ±59.5 days; the geometric rows are 2.6-33.5" off |
 | `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF; -10 outside the validity span |
-| `kepler_small_set_validity(seconds)` | the span either side of each row's element epoch in which it is drawn (default 60 days; measured two-body error against JPL Horizons: ~2,200 km worst at 26 days; at the 60-day edge up to 14,600 km, about 3 arcseconds seen from the Earth, for (10) Hygiea and (16) Psyche; 13,000-384,000 km at one year). Outside it a snapshot row is NaN and a state is refused |
+| `kepler_small_set_validity(seconds)` | the span either side of each row's element epoch in which it is drawn (default 60 days). Outside it a snapshot row is NaN and a state is refused |
 | `kepler_small_validity_range(out)` | four doubles: the epochs between which every row is valid, and between which any row is |
 | `kepler_small_diameter_from_h(h, albedo)` | equivalent-sphere diameter, m |
 | `kepler_small_count()`, `kepler_small_clear()` | |
@@ -134,10 +134,23 @@ thousands of Sun-centred rows.
 Rows are independent, so a host shards them across its own workers, as for
 `plugin_propagate_batch`.
 
+**Perturbed paths (1.6.0).** Osculating elements are a conic only at their
+epoch; the planets pull a body off it (two-body alone put (16) Psyche 1.44"
+from Horizons at +45 days and 3" at +60). A row is carried along its perturbed
+path: when an export asks for an epoch more than two days from the epoch its
+elements osculate at, the row is integrated there (Encke's method, RK4 steps
+of at most six days, finer within 0.2 AU of a planet) under the Sun and the
+eight planets (Mercury, Venus, the Earth-Moon barycentre, the Mars, Jupiter,
+Saturn, Uranus and Neptune systems; DE440 GMs, places from Standish's JPL SSD
+mean orbits, 1800-2050) and re-osculated. The record's own epoch still bounds
+the validity span. Cost: a snapshot that re-osculates 20,000 rows over 26 days
+takes 93 ms on one thread (11 ms without), over 73 days 203 ms; the rest are
+plain conics.
+
 Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
-within 2.1 mm of an independent two-body oracle at ±30 and ±400 days; median
-366 km (worst 3,485 km) from JPL Horizons 30 days either side of the element
-epoch, the two-body simplification. The whole numbered catalog (895,910)
-ingests in 0.4 s and snapshots in 0.11 s on one thread.
+within 2.7 mm of an independent two-body oracle of the record within the
+two-day span; median 87 km (worst 876 km) from JPL Horizons 30 days either
+side of the element epoch along the perturbed path (two-body: median 366 km,
+worst 3,485 km). The whole numbered catalog (895,910) ingests in 0.4 s.
 Credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA grant
 NAG5-4741 and the Lowell Observatory endowment).

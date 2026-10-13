@@ -6,7 +6,8 @@
 //   1. a test-only two-body oracle written independently below (A8: within
 //      1 m for every row, double and float32 snapshot paths);
 //   2. JPL Horizons heliocentric ICRF vectors 30 days either side of the
-//      element epoch (A8: median within 10,000 km; values printed);
+//      element epoch along the perturbed path (A8: median within 300 km,
+//      worst within 2,000 km; values printed);
 //   3. the named refusals.
 // Source credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA
 // grant NAG5-4741 and the Lowell Observatory endowment).
@@ -98,16 +99,19 @@ test("the astorb $SBD stream ingests: every record, in order, with its display f
   });
 });
 
-test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (double and float32 snapshot)", async () => {
+// The record's conic is drawn as it is near the element epoch: within two
+// days of it (the module's rebase span) a row is the osculating conic
+// itself, so it must match a plain two-body oracle of the record to the metre
+// (decoding, units, frames). Farther out the row follows its perturbed path
+// (next test).
+test("A8: every row within 1 m of the two-body oracle of its record within the rebase span (double and float32 snapshot)", async () => {
   const { x, copyIn } = await load();
   x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
-  // The conic itself, far from the epoch: widen the validity span for this test.
-  assert.equal(x.kepler_small_set_validity(500 * SECONDS_PER_DAY), 500 * SECONDS_PER_DAY);
   const n = records.length;
   const out = x.plugin_alloc(48);
   const snap = x.plugin_alloc(16 * n);
   let worst = 0, worstSnapshotRelative = 0;
-  for (const days of [-400, -30, 0, 30, 400]) {
+  for (const days of [-1.9, -0.5, 0, 0.5, 1.9]) {
     const et = (2461300.5 + days - 2451545.0) * SECONDS_PER_DAY;
     assert.equal(x.kepler_small_snapshot(et, 0, n, 0, snap), 0);
     const rows = new Float32Array(x.memory.buffer, snap, 4 * n);
@@ -128,7 +132,7 @@ test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (do
   assert.ok(worstSnapshotRelative < 1.2e-7);
 });
 
-test("A8: against JPL Horizons 30 days either side of the element epoch, median within 10,000 km", async () => {
+test("A8: against JPL Horizons 30 days either side of the element epoch along the perturbed path: median within 300 km, worst within 2,000 km", async () => {
   const { x, copyIn } = await load();
   x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   const index = new Map(records.map((r, i) => [r.number, i]));
@@ -143,7 +147,10 @@ test("A8: against JPL Horizons 30 days either side of the element epoch, median 
   errors.sort((a, b) => a - b);
   const median = errors[errors.length >> 1];
   console.log(`Horizons: ${errors.length} states, median ${median.toFixed(0)} km, 90th ${errors[Math.floor(0.9 * errors.length)].toFixed(0)} km, worst ${errors.at(-1).toFixed(0)} km`);
-  assert.ok(median < 10000, `median ${median} km`);
+  // Two-body alone (keplerian-reference 1.5.0): median 366 km, worst 3,485 km;
+  // the perturbed path: median 87 km, worst 876 km.
+  assert.ok(median < 300, `median ${median} km`);
+  assert.ok(errors.at(-1) < 2000, `worst ${errors.at(-1)} km`);
 });
 
 test("V from the record's H and G and the observer: brighter when nearer", async () => {

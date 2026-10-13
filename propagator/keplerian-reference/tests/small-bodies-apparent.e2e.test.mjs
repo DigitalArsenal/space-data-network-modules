@@ -10,11 +10,9 @@
 // heliocentric place and barycentric velocity and the Sun's barycentric
 // velocity are Horizons' own, so only the module is under test).
 //
-// Measured on this fixture (round 2): every named asteroid within 0.76" at
-// the three epochs; the geometric snapshot is 2.6" to 33.5" off the same
-// references, which is the shift the apparent snapshot removes. Past +40 days
-// Ceres and Psyche exceed 1" (1.06" and 1.0" at +40 d, 3.0" at +60 d) from
-// the two-body propagation itself, not the corrections.
+// The rows follow their perturbed paths (the module's small_rebase: Encke
+// under the Sun and the eight planets), not two-body conics, so the 1" holds to
+// the edges of the 60-day span.
 // Source credit: astorb.dat, Dr. Edward Bowell, Lowell Observatory (NASA
 // grant NAG5-4741 and the Lowell Observatory endowment); JPL Horizons.
 import assert from "node:assert/strict";
@@ -62,36 +60,59 @@ function snapshot(x, exportName, observer, et) {
   return { failed, rows: Float32Array.from(new Float32Array(x.memory.buffer, out, 4 * n)) };
 }
 
-test("D1: Eros, Psyche, Bennu, Juno, Iris (and Ceres, Vesta) within 1 arcsec of Horizons LT+S at three epochs within 30 days of the element epoch", async () => {
-  const x = await load();
+// The whole validity span (coordinator D1: 1" at three epochs within 60 days,
+// no waiver): eleven real astorb rows (tests/fixtures/astorb-edges.fbs: the
+// seven above plus 1036 Ganymed, 1862 Apollo, 4179 Toutatis and 99942 Apophis,
+// cut the same way) against Horizons LT+S at the element epoch, +-30, +-45 and
+// +-59.5 days (tests/fixtures/horizons-edges.json, fetched 2026-10-13). Two
+// loads: one asked each epoch straight from the element epoch, one walked
+// through them in order (the console's rebase as its clock runs and jumps).
+// Measured: worst 0.79" (Vesta at +30 d, already 0.75" at the element epoch:
+// astorb's orbit against JPL's); Psyche 0.10" at +45 d and 0.12" at +59.5 d
+// (1.44" and 3.0" on two-body alone).
+const edgesStream = fs.readFileSync(path.join(here, "fixtures", "astorb-edges.fbs"));
+const edges = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "horizons-edges.json"), "utf8"));
+const EDGE_ORDER = ["1", "3", "4", "7", "16", "433", "1036", "1862", "4179", "99942", "101955"];
+async function loadEdges() {
+  const wasi = new WASI({ version: "preview1", args: ["module"], env: {} });
+  const module = await WebAssembly.compile(fs.readFileSync(wasmPath));
+  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+  const x = instance.exports;
+  const p = x.plugin_alloc(edgesStream.length);
+  new Uint8Array(x.memory.buffer, p, edgesStream.length).set(edgesStream);
+  assert.equal(x.kepler_small_ingest_sbd_stream(p, edgesStream.length), EDGE_ORDER.length);
+  return x;
+}
+
+test("D1: eleven asteroids within 1 arcsec of Horizons LT+S across the whole +-60 day span (perturbed path, not two-body)", async () => {
+  const walked = await loadEdges();
   const lines = [];
   let worst = 0;
-  let worstGeometric = Infinity;
-  for (const [k, o] of horizons.observer.entries()) {
+  for (const [k, o] of edges.observer.entries()) {
     const et = (o.jd_tdb - 2451545.0) * 86400;
-    const observer = observerOf(o);
-    const apparent = snapshot(x, "kepler_small_snapshot_apparent", observer, et);
-    const geometric = snapshot(x, "kepler_small_snapshot", observer, et);
-    assert.equal(apparent.failed, 0);
-    const cells = [];
-    for (const id of NAMED) {
-      const i = ORDER.indexOf(id);
-      const ref = horizons.targets[id].apparent_geocentric_m[k];
-      const a = [0, 1, 2].map((c) => apparent.rows[4 * i + c] - o.earth_helio_m[c]);
-      const g = [0, 1, 2].map((c) => geometric.rows[4 * i + c] - o.earth_helio_m[c]);
-      const da = separation(a, ref);
-      const dg = separation(g, ref);
-      worst = Math.max(worst, da);
-      worstGeometric = Math.min(worstGeometric, dg);
-      cells.push(`${id} ${da.toFixed(3)}" (geometric ${dg.toFixed(1)}")`);
-      assert.ok(da < 1.0, `${id} at JD ${o.jd_tdb}: ${da.toFixed(3)}" from Horizons LT+S`);
-      // The light-time distance is kept (the row is drawn at the right range).
-      assert.ok(Math.abs(Math.hypot(...a) / Math.hypot(...ref) - 1) < 1e-5);
+    const days = o.jd_tdb - 2461300.5;
+    const direct = await loadEdges();
+    for (const [label, x] of [["direct", direct], ["walked", walked]]) {
+      const n = EDGE_ORDER.length;
+      const obs = x.plugin_alloc(80);
+      const out = x.plugin_alloc(16 * n);
+      new Float64Array(x.memory.buffer, obs, 10).set(observerOf(o));
+      assert.equal(x.kepler_small_snapshot_apparent(et, 0, n, obs, out), 0, `${label} at ${days} d`);
+      const rows = new Float32Array(x.memory.buffer, out, 4 * n);
+      const cells = [];
+      for (const id of Object.keys(edges.targets)) {
+        const i = EDGE_ORDER.indexOf(id);
+        const a = [0, 1, 2].map((c) => rows[4 * i + c] - o.earth_helio_m[c]);
+        const d = separation(a, edges.targets[id].apparent_geocentric_m[k]);
+        worst = Math.max(worst, d);
+        cells.push(`${id} ${d.toFixed(2)}"`);
+        assert.ok(d < 1.0, `${label}: ${id} at ${days} d: ${d.toFixed(3)}" from Horizons LT+S`);
+      }
+      if (label === "direct") lines.push(`${days >= 0 ? "+" : ""}${days} d: ${cells.join(", ")}`);
     }
-    lines.push(`JD ${o.jd_tdb}: ${cells.join(", ")}`);
   }
   console.log(lines.join("\n"));
-  console.log(`apparent worst ${worst.toFixed(3)}"; geometric at best ${worstGeometric.toFixed(1)}" off the same references`);
+  console.log(`worst ${worst.toFixed(3)}"`);
 });
 
 test("D1: the apparent row keeps V and refuses outside the validity span like the geometric one", async () => {
