@@ -36,7 +36,7 @@ import { LMO, lambertSolveState } from "spacedatastandards.org/lib/js/LMO/main.j
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const IZZO_PATH = new URL("../../lambert-izzo/dist/isomorphic/module.wasm", import.meta.url);

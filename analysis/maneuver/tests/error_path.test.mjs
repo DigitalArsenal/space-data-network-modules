@@ -32,7 +32,7 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MU = 398600441800000.0;

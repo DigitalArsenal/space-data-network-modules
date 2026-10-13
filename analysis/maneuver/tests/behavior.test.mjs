@@ -25,7 +25,7 @@ import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MU_EARTH = 398600441800000.0;
