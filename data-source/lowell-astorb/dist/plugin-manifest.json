@@ -1,0 +1,333 @@
+{
+ "pluginId": "com.digitalarsenal.data-source.lowell-astorb",
+ "name": "Numbered asteroids (Lowell astorb)",
+ "version": "0.1.0",
+ "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $OMM per asteroid, brightest H band first (osculating heliocentric elements, CENTER_NAME SUN, mean ecliptic and equinox of J2000, TT, km, DE440 GM; H, G and diameter as user-defined parameters). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the OMM.fbs lane provider lowell-astorb, source astorb-numbered.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "Bounded deterministic request planning and one pass of gzip inflate, fixed-column parsing and FlatBuffer building over one file. No host calls, threads or network access."
+ },
+ "schemasUsed": [
+  {
+   "schemaName": "OMM.fbs",
+   "fileIdentifier": "$OMM",
+   "rootTypeName": "OMM"
+  }
+ ],
+ "methods": [
+  {
+   "methodId": "plan_astorb",
+   "displayName": "Plan the astorb.dat retrieval",
+   "inputPorts": [
+    {
+     "portId": "config",
+     "acceptedTypeSets": [
+      {
+       "setId": "config-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Source configuration from the host adapter; only the canonical Lowell URL is accepted."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Source configuration from the host adapter; only the canonical Lowell URL is accepted."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request0",
+     "acceptedTypeSets": [
+      {
+       "setId": "request0-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor for byte range 0 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "hostcap/http-request descriptor for byte range 0 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+    },
+    {
+     "portId": "request1",
+     "acceptedTypeSets": [
+      {
+       "setId": "request1-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor for byte range 1 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "hostcap/http-request descriptor for byte range 1 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+    },
+    {
+     "portId": "request2",
+     "acceptedTypeSets": [
+      {
+       "setId": "request2-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor for byte range 2 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "hostcap/http-request descriptor for byte range 2 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+    },
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The canonical retrieval plan; parse_astorb refuses any other."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The canonical retrieval plan; parse_astorb refuses any other."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "parse_astorb",
+   "displayName": "Normalize astorb.dat to $OMM",
+   "inputPorts": [
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The unmodified plan emitted by plan_astorb."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The unmodified plan emitted by plan_astorb."
+    },
+    {
+     "portId": "receipt",
+     "acceptedTypeSets": [
+      {
+       "setId": "receipt-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+    },
+    {
+     "portId": "response0",
+     "acceptedTypeSets": [
+      {
+       "setId": "response0-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 response for byte range 0: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "raw-body-v1 response for byte range 0: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+    },
+    {
+     "portId": "response1",
+     "acceptedTypeSets": [
+      {
+       "setId": "response1-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 response for byte range 1: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "raw-body-v1 response for byte range 1: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+    },
+    {
+     "portId": "response2",
+     "acceptedTypeSets": [
+      {
+       "setId": "response2-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 response for byte range 2: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "raw-body-v1 response for byte range 2: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "records-records",
+       "allowedTypes": [
+        {
+         "schemaName": "OMM.fbs",
+         "fileIdentifier": "$OMM",
+         "rootTypeName": "OMM"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $OMM stream, one per numbered asteroid, brightest H band first."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "meta-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Attribution metadata (provider, source, licence, citation, batch = sha256 of the gzip) for generic storage.ingest_with_source."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Attribution metadata (provider, source, licence, citation, batch = sha256 of the gzip) for generic storage.ingest_with_source."
+    },
+    {
+     "portId": "report",
+     "acceptedTypeSets": [
+      {
+       "setId": "report-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Counts per H band, element epoch range, source hash and retrieval time; never a dataset record."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Counts per H band, element epoch range, source hash and retrieval time; never a dataset record."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  }
+ ]
+}
