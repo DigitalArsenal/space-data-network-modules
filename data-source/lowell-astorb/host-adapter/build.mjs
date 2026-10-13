@@ -12,6 +12,7 @@ import { minizSourceFragments } from "../../geonames-source/miniz-source.mjs";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
 const { header } = await generateSdsHeader("SBD", new URL("../build.mjs", import.meta.url).href);
+const egp = (await generateSdsHeader("EGP", new URL("../build.mjs", import.meta.url).href)).header.replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_MAIN_EGP_H_");
 const json = await fs.readFile(path.resolve(root, "../../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");
 const sha = await fs.readFile(path.resolve(root, "../../../files/orbit-products/src/sha256.hpp"), "utf8");
 const [minizHeader, minizImplementation] = await minizSourceFragments();
@@ -19,7 +20,7 @@ const core = await fs.readFile(path.resolve(root, "../src/astorb_core.hpp"), "ut
 const source = await fs.readFile(path.join(root, "src/adapter.cpp"), "utf8");
 const outputPath = path.join(root, "dist/isomorphic/module.wasm");
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-const result = await compileModuleFromSource({ manifest, sourceCode: [minizHeader, minizImplementation, header, json, sha, core, source].join("\n"), language: "c++", outputPath, threadModel: "wasi-sequential", allowUndefinedImports: true });
+const result = await compileModuleFromSource({ manifest, sourceCode: [minizHeader, minizImplementation, header, egp, json, sha, core, source].join("\n"), language: "c++", outputPath, threadModel: "wasi-sequential", allowUndefinedImports: true });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 const guest = path.join(root, "dist/guest-link");
 await fs.mkdir(guest, { recursive: true });

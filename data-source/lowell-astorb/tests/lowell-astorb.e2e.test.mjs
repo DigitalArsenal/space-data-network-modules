@@ -21,6 +21,7 @@ const sds = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(require.resolv
 const { ByteBuffer } = require("flatbuffers");
 const { SBD, sbdOrbitClass } = await import(pathToFileURL(path.join(sds, "lib/js/SBD/main.js")));
 const { pvnLicenseClass } = await import(pathToFileURL(path.join(sds, "lib/js/PVN/main.js")));
+const { EGP, egpMembershipMode } = await import(pathToFileURL(path.join(sds, "lib/js/EGP/main.js")));
 const wasmPath = fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url)));
 const wasm = fs.readFileSync(wasmPath);
@@ -59,17 +60,22 @@ async function harness(t) {
 const job = { source_url: "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz", provider_id: "lowell-astorb", source_name: "astorb-numbered" };
 const parse = (h, responses, jobValue = job) =>
   h.invoke({ methodId: "parse_astorb", inputs: [input("job", jobValue), input("receipt", receipt), ...responses.map((r, i) => input(`response${i}`, r))] });
-function records(result) {
-  const bytes = result.outputs.find((f) => f.portId === "records").payload;
-  const rows = [];
+function frames(bytes, id) {
+  const out = [];
   for (let offset = 0; offset < bytes.length;) {
     const size = new DataView(bytes.buffer, bytes.byteOffset + offset, 4).getUint32(0, true) + 4;
     const frame = bytes.slice(offset, offset + size);
-    assert.equal(Buffer.from(frame.slice(8, 12)).toString(), "$SBD");
-    rows.push(SBD.getSizePrefixedRootAsSBD(new ByteBuffer(frame)).unpack());
+    assert.equal(Buffer.from(frame.slice(8, 12)).toString(), id);
+    out.push(frame);
     offset += size;
   }
-  return rows;
+  return out;
+}
+function records(result, port = "records") {
+  return frames(result.outputs.find((f) => f.portId === port).payload, "$SBD").map((frame) => SBD.getSizePrefixedRootAsSBD(new ByteBuffer(frame)).unpack());
+}
+function groups(result) {
+  return frames(result.outputs.find((f) => f.portId === "groups").payload, "$EGP").map((frame) => EGP.getSizePrefixedRootAsEGP(new ByteBuffer(frame)).unpack());
 }
 
 test("the artifact satisfies the SDK contract", async () => {
@@ -159,6 +165,64 @@ test("Ceres reads as Lowell publishes it, brightest band first, with the attribu
   assert.equal(report.records, 120020);
 });
 
+// Owner 2026-10-13: "only the largest 10% showing by default". The subset is
+// the module's, not the console's: ceil(N/10) rows, ranked by the catalog
+// (IRAS) diameter, else by the diameter from H at geometric albedo 0.14,
+// largest first, ties by number. In the fixture every filler row reuses row
+// 20's columns (Massalia, 145.5 km), so the subset is the real rows of at
+// least that size (Massalia itself wins the tie by number) and then the
+// filler rows by number. (9) Metis and (14) Irene have no catalog diameter
+// and rank by H at albedo 0.14 (206 km, 174 km: in); (19) Fortuna, H 7.49, is
+// 113 km and stays out with (5) Astraea 119.1, (8) Flora 135.9, (12) Victoria
+// 112.8, (17) Thetis 90.0 and (18) Melpomene 140.6 km.
+test("the largest tenth is ceil(N/10) rows ranked by size, ties by number, as its own lane", async (t) => {
+  const h = await harness(t);
+  const result = await parse(h, ranges(catalog()));
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  const largest = records(result, "largest");
+  assert.equal(largest.length, Math.ceil(120020 / 10));
+  const real = [1, 2, 3, 4, 6, 7, 9, 10, 11, 13, 14, 15, 16, 20];
+  const expected = [...real, ...Array.from({ length: 12002 - real.length }, (_, i) => 500001 + i)];
+  assert.deepEqual(largest.map((r) => r.NUMBER), expected, "file order: the real rows of at least 145.5 km, then the filler rows by number");
+  // The same records as the full lane, byte for byte.
+  const all = new Map(frames(result.outputs.find((f) => f.portId === "records").payload, "$SBD").map((f) => [SBD.getSizePrefixedRootAsSBD(new ByteBuffer(f)).NUMBER(), Buffer.from(f).toString("hex")]));
+  for (const f of frames(result.outputs.find((p) => p.portId === "largest").payload, "$SBD")) {
+    assert.equal(Buffer.from(f).toString("hex"), all.get(SBD.getSizePrefixedRootAsSBD(new ByteBuffer(f)).NUMBER()));
+  }
+  const report = decode(result, "report");
+  assert.equal(report.largest.records, 12002);
+  assert.equal(report.largest.source_name, "astorb-largest-10pct");
+});
+
+// Owner 2026-10-13: "we need them as a group that is listed on the network
+// (a catalog)". Two $EGP groups, each a live query naming its lane the way an
+// SDN data query names it, with count, cadence, source and licence.
+test("two $EGP groups list both lanes with their query, count, cadence, source and licence", async (t) => {
+  const h = await harness(t);
+  const result = await parse(h, ranges(catalog()));
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  const [all, largest] = groups(result);
+  assert.equal(all.GROUP_ID, "lowell-astorb/numbered");
+  assert.equal(all.NAME, "Asteroids (numbered)");
+  assert.equal(all.MEMBERSHIP_MODE, egpMembershipMode.QUERY_LIVE);
+  assert.equal(all.MEMBERS.length, 0);
+  assert.equal(all.QUERY.DIALECT, "sdn-data-query");
+  assert.deepEqual(JSON.parse(all.QUERY.TEXT), { schema: "SBD.fbs", provider_id: "lowell-astorb", source_name: "astorb-numbered" });
+  assert.equal(all.QUERY.RESULT_COUNT, 120020);
+  assert.deepEqual(all.TAGS, ["cadence:72h", "class:query", "environment:space", "provisioner:lowell-astorb", "regime:heliocentric", "schema:sbd", "source:astorb-numbered"]);
+  assert.deepEqual([...all.TAGS].sort(), all.TAGS, "tags sorted (EGP tag grammar)");
+  assert.equal(all.UPDATED_AT, "2026-10-12T10:13:20.000Z");
+  assert.equal(all.PROVENANCE[0].SOURCE, "Lowell Observatory");
+  assert.equal(all.PROVENANCE[0].SOURCE_URL, "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz");
+  assert.match(all.PROVENANCE[0].LICENSE, /freely used.*NAG5-4741/);
+  assert.match(all.PROVENANCE[0].ATTRIBUTION, /Bowell/);
+  assert.equal(all.PROVENANCE[0].SOURCE_SHA256, decode(result, "meta").batch_id);
+  assert.equal(largest.GROUP_ID, "lowell-astorb/numbered-largest-10pct");
+  assert.equal(largest.QUERY.RESULT_COUNT, 12002);
+  assert.deepEqual(JSON.parse(largest.QUERY.TEXT), { schema: "SBD.fbs", provider_id: "lowell-astorb", source_name: "astorb-largest-10pct" });
+  assert.ok(largest.TAGS.includes("source:astorb-largest-10pct"));
+});
+
 test("refuses a file of fewer than 100,000 numbered asteroids and a failed range", async (t) => {
   const h = await harness(t);
   const small = await parse(h, ranges(catalog(1000)));
@@ -197,19 +261,27 @@ test("ingest_astorb stores the parse_astorb records in parts of about 12 MiB, af
   const parsed = await core.invoke({ methodId: "parse_astorb", inputs });
   assert.equal(parsed.statusCode, 0, parsed.errorMessage);
   const expected = Buffer.from(parsed.outputs.find((f) => f.portId === "records").payload);
+  const expectedLargest = Buffer.from(parsed.outputs.find((f) => f.portId === "largest").payload);
+  const expectedGroups = Buffer.from(parsed.outputs.find((f) => f.portId === "groups").payload);
   const stored = await adapter.invoke({ methodId: "ingest_astorb", inputs });
   assert.equal(stored.statusCode, 0, stored.errorMessage);
   const report = decode(stored, "result");
   assert.equal(report.records, 160020);
   assert.equal(report.parts, parts.length);
-  assert.ok(parts.length >= 4, `${parts.length} parts`);
+  assert.equal(report.largest.stored, 16002);
+  const lane = (name) => parts.filter((_, i) => metas[i].source_name === name);
+  assert.ok(lane("astorb-numbered").length >= 4, `${lane("astorb-numbered").length} parts`);
   for (const part of parts) assert.ok(part.length <= 12 * 1024 * 1024 + 4096, `part of ${part.length} bytes`);
-  assert.ok(Buffer.concat(parts).equals(expected), "the parts join to exactly the parse_astorb records");
+  assert.ok(Buffer.concat(lane("astorb-numbered")).equals(expected), "the parts join to exactly the parse_astorb records");
+  assert.ok(Buffer.concat(lane("astorb-largest-10pct")).equals(expectedLargest), "the largest-10% parts join to exactly parse_astorb's largest");
+  assert.ok(Buffer.concat(lane("astorb-groups")).equals(expectedGroups), "the groups part is exactly parse_astorb's groups");
+  assert.equal(metas.length, parts.length);
   const meta = decode(parsed, "meta");
   for (const m of metas) {
     assert.equal(m.batch_id, meta.batch_id);
     assert.equal(m.provider_id, "lowell-astorb");
-    assert.equal(m.source_name, "astorb-numbered");
+    assert.ok(["astorb-numbered", "astorb-largest-10pct", "astorb-groups"].includes(m.source_name), m.source_name);
+    assert.equal(m.schema, m.source_name === "astorb-groups" ? "EGP.fbs" : "SBD.fbs");
     assert.equal(m.reconcile, "current");
   }
   // A broken download stores nothing: the validation pass runs first.

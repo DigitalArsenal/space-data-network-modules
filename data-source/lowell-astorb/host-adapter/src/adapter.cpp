@@ -155,10 +155,40 @@ extern "C" int ingest_astorb() {
     return fail(message.c_str());
   }
   CHECK(stored==s.rows,"The record pass disagrees with the validation pass; the batch is incomplete.");
+  // The largest tenth: the same records again, under their own lane (the
+  // store keeps one copy of a record and tags it with both lanes).
+  const size_t mainParts=parts;
+  meta=astorb::ingestMeta(sourceSha,peer,astorb::largestSourceName).dump();
+  meta.insert(meta.size()-1,",\"records\":{\"$bin\":0}");
+  size_t largest=0;
+  const bool largestOk=astorb::forEachLargestRecord(gz,s.largest,b,[&](const uint8_t* p,size_t n){
+    if(failed) return;
+    part.insert(part.end(),p,p+n);
+    ++largest;
+    if(part.size()>=partBytes) flush();
+  });
+  if(!largestOk) return fail(astorb::error);
+  flush();
+  if(failed){
+    std::string message="Storing the largest-10% lane failed after "+std::to_string(parts-mainParts)+" part(s): "+why;
+    return fail(message.c_str());
+  }
+  CHECK(largest==s.largest.count,"The largest-10% pass disagrees with the validation pass.");
+  // The catalog listing: the two $EGP groups (lane astorb-groups).
+  meta=astorb::ingestMeta(sourceSha,peer,astorb::groupsSourceName).dump();
+  meta.insert(meta.size()-1,",\"records\":{\"$bin\":0}");
+  part=astorb::groupRecords(s,sourceSha,retrieved);
+  flush();
+  if(failed){
+    std::string message="Storing the asteroid groups failed: "+why;
+    return fail(message.c_str());
+  }
   Json report=astorb::surveyReport(s,sourceSha,gz.size,recordBytes,retrieved);
   report["parts"]=parts;
   report["inserted"]=inserted;
   report["part_bytes"]=partBytes;
+  report["largest"]["stored"]=largest;
+  report["groups"]=2;
   return output("result",report)<0?1:0;
 }
 

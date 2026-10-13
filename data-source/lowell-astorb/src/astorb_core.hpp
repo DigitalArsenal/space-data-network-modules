@@ -27,6 +27,14 @@ constexpr size_t maxTextBytes = 512u * 1024u * 1024u;       // astorb.dat is abo
 constexpr const char* sourceUrl = "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz";
 constexpr const char* providerId = "lowell-astorb";
 constexpr const char* sourceName = "astorb-numbered";
+// The largest tenth of the numbered asteroids (owner 2026-10-13: "only the
+// largest 10% showing by default"): its own lane, a deterministic subset of
+// the same records (rankSizeKm below).
+constexpr const char* largestSourceName = "astorb-largest-10pct";
+// The catalog listing: one $EGP group per lane (owner 2026-10-13: "we need
+// them as a group that is listed on the network (a catalog)").
+constexpr const char* groupsSourceName = "astorb-groups";
+constexpr const char* cadence = "72h";
 constexpr double auKm = 149597870.7;                        // IAU 2012 B2
 constexpr double gmSunKm3s2 = 1.3271244004127942e11;       // gm_de440.tpc BODY10_GM
 constexpr int32_t sunNaifId = 10;
@@ -202,6 +210,41 @@ std::string jsNumber(double v) {
 int band(const Row& r) {
   const double h = r.hasH ? r.h : 99;
   return h < 12 ? 0 : h < 15 ? 1 : h < 17 ? 2 : 3;
+}
+
+// ── the largest 10% ─────────────────────────────────────────────────────────
+// A row's size: the catalog (IRAS) diameter when astorb gives one, else the
+// equivalent-sphere diameter from its absolute magnitude at geometric albedo
+// 0.14, D = 1329 km / sqrt(p) x 10^(-H/5) (Fowler & Chillemi 1992; the albedo
+// of the 140 m NEO threshold at H = 22). A row with neither ranks last. The
+// rows are ranked largest first, ties by number (a total order, so the subset
+// is the same in every runtime), and the first ceil(N/10) are the subset.
+constexpr double rankAlbedo = 0.14;
+double rankSizeKm(const Row& r) {
+  if (r.hasD && r.d > 0) return r.d;
+  if (r.hasH) return 1329.0 / std::sqrt(rankAlbedo) * std::pow(10.0, -r.h / 5.0);
+  return 0.0;
+}
+struct Largest {
+  std::vector<uint8_t> member;  // by asteroid number: 1 = in the subset
+  size_t count = 0, measured = 0;
+  double smallestKm = 0;
+  bool has(int64_t number) const { return number >= 0 && size_t(number) < member.size() && member[size_t(number)]; }
+};
+struct RankedRow { float km; uint32_t number; bool measured; };
+void chooseLargest(std::vector<RankedRow>& rows, Largest& out) {
+  out.count = (rows.size() + 9) / 10;
+  if (out.count == 0) return;
+  const auto larger = [](const RankedRow& a, const RankedRow& b) { return a.km != b.km ? a.km > b.km : a.number < b.number; };
+  std::nth_element(rows.begin(), rows.begin() + (out.count - 1), rows.end(), larger);
+  uint32_t maxNumber = 0;
+  for (size_t i = 0; i < out.count; ++i) maxNumber = std::max(maxNumber, rows[i].number);
+  out.member.assign(size_t(maxNumber) + 1, 0);
+  out.smallestKm = rows[out.count - 1].km;
+  for (size_t i = 0; i < out.count; ++i) {
+    out.member[rows[i].number] = 1;
+    if (rows[i].measured) ++out.measured;
+  }
 }
 
 // One $SBD: the catalog's osculating heliocentric elements as published
@@ -396,10 +439,12 @@ struct Survey {
   size_t rows = 0, lines = 0, skipped = 0;
   size_t bands[4] = {0, 0, 0, 0};
   std::string minEpoch, maxEpoch;
+  Largest largest;
 };
 bool survey(const GzipInput& gz, Survey& out) {
   Row row;
-  return forEachLine(gz, [&](const char* line, size_t len) {
+  std::vector<RankedRow> ranked;
+  const bool ok = forEachLine(gz, [&](const char* line, size_t len) {
     if (len == 0) return;
     ++out.lines;
     if (!parseLine(line, len, row)) { ++out.skipped; return; }
@@ -407,20 +452,32 @@ bool survey(const GzipInput& gz, Survey& out) {
     if (out.maxEpoch.empty() || row.epoch > out.maxEpoch) out.maxEpoch = row.epoch;
     ++out.rows;
     ++out.bands[band(row)];
+    ranked.push_back({float(rankSizeKm(row)), uint32_t(row.number), row.hasD && row.d > 0});
   });
+  if (ok) chooseLargest(ranked, out.largest);
+  return ok;
 }
 
-Json ingestMeta(const std::string& sourceSha, const std::string& peer) {
-  return {{"schema", "SBD.fbs"}, {"batch_id", sourceSha}, {"provider_id", providerId},
-          {"source_name", sourceName}, {"source_url", sourceUrl}, {"source_peer", peer},
+// The storage meta of one lane: astorb-numbered (every numbered asteroid),
+// astorb-largest-10pct (the largest tenth, $SBD) or astorb-groups (the two
+// $EGP groups that list them). One batch per retrieval: the file's SHA-256.
+Json ingestMeta(const std::string& sourceSha, const std::string& peer, const char* lane = sourceName) {
+  const bool groups = std::strcmp(lane, groupsSourceName) == 0;
+  const bool largest = std::strcmp(lane, largestSourceName) == 0;
+  return {{"schema", groups ? "EGP.fbs" : "SBD.fbs"}, {"batch_id", sourceSha}, {"provider_id", providerId},
+          {"source_name", lane}, {"source_url", sourceUrl}, {"source_peer", peer},
           {"reconcile", "current"}, {"origin_id", "lowell.edu"}, {"origin_name", "Lowell Observatory astorb"},
-          {"dataset_id", "lowell-astorb/numbered"}, {"terms_url", "https://asteroid.lowell.edu/astorb/"},
-          {"citation", credit}, {"licence", licence}};
+          {"dataset_id", groups ? "lowell-astorb/groups" : largest ? "lowell-astorb/numbered-largest-10pct" : "lowell-astorb/numbered"},
+          {"terms_url", "https://asteroid.lowell.edu/astorb/"}, {"citation", credit}, {"licence", licence}};
 }
 
 Json surveyReport(const Survey& s, const std::string& sourceSha, size_t gzLength, size_t recordBytes, int64_t retrieved) {
   return {{"records", s.rows}, {"lines", s.lines}, {"skipped_lines", s.skipped},
           {"bands", {{"H00-12", s.bands[0]}, {"H12-15", s.bands[1]}, {"H15-17", s.bands[2]}, {"H17-99", s.bands[3]}}},
+          {"largest", {{"source_name", largestSourceName}, {"records", s.largest.count},
+                       {"by_diameter", s.largest.measured}, {"by_absolute_magnitude", s.largest.count - s.largest.measured},
+                       {"smallest_km", s.largest.smallestKm},
+                       {"rank", "catalog (IRAS) diameter, else 1329 km / sqrt(0.14) x 10^(-H/5); largest first, ties by number; the first ceil(N/10)"}}},
           {"epoch_min", s.minEpoch}, {"epoch_max", s.maxEpoch}, {"source_sha256", sourceSha},
           {"gzip_bytes", gzLength}, {"record_bytes", recordBytes}, {"retrieved_at_ms", retrieved}};
 }
@@ -436,6 +493,72 @@ bool forEachRecordInBand(const GzipInput& gz, int wanted, flatbuffers::FlatBuffe
     onRecord(b.GetBufferPointer(), b.GetSize());
   });
 }
+// Every record of the largest tenth, in file (number) order.
+template <class OnRecord>
+bool forEachLargestRecord(const GzipInput& gz, const Largest& largest, flatbuffers::FlatBufferBuilder& b, OnRecord onRecord) {
+  Row row;
+  return forEachLine(gz, [&](const char* line, size_t len) {
+    if (len == 0 || !parseLine(line, len, row) || !largest.has(row.number)) return;
+    buildRecord(row, b);
+    onRecord(b.GetBufferPointer(), b.GetSize());
+  });
+}
+
+// RFC 3339 UTC with fixed milliseconds, from Unix milliseconds.
+std::string rfc3339Ms(int64_t ms) {
+  int64_t days = ms / 86400000, rest = ms % 86400000;
+  if (rest < 0) { rest += 86400000; --days; }
+  // civil_from_days (H. Hinnant)
+  days += 719468;
+  const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+  const int64_t doe = days - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153;
+  const int64_t d = doy - (153 * mp + 2) / 5 + 1, m = mp < 10 ? mp + 3 : mp - 9, y = yoe + era * 400 + (m <= 2);
+  char out[32];
+  std::snprintf(out, sizeof out, "%04lld-%02lld-%02lldT%02lld:%02lld:%02lld.%03lldZ", (long long)y, (long long)m, (long long)d,
+                (long long)(rest / 3600000), (long long)(rest / 60000 % 60), (long long)(rest / 1000 % 60), (long long)(rest % 1000));
+  return out;
+}
+
+// The catalog listing: two size-prefixed $EGP groups, one per lane, each a
+// live query (QUERY_LIVE: the query is the definition, there is no member
+// list) naming its lane the way an SDN data query names it, with its count,
+// cadence, source and licence.
+std::vector<uint8_t> groupRecords(const Survey& s, const std::string& sourceSha, int64_t retrieved) {
+  std::vector<uint8_t> stream;
+  const std::string at = rfc3339Ms(retrieved);
+  const auto one = [&](const char* id, const char* name, const char* description, const char* lane, size_t count) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    // Sorted and deduplicated (EGP tag grammar).
+    const std::string tagText[] = {std::string("cadence:") + cadence, "class:query", "environment:space",
+                                   "provisioner:lowell-astorb", "regime:heliocentric", "schema:sbd",
+                                   std::string("source:") + lane};
+    std::vector<flatbuffers::Offset<flatbuffers::String>> tags;
+    for (const auto& t : tagText) tags.push_back(b.CreateString(t));
+    const std::string queryText = Json({{"schema", "SBD.fbs"}, {"provider_id", providerId}, {"source_name", lane}}).dump();
+    const auto provenance = CreateEGPProvenanceDirect(b, "Lowell Observatory", "astorb.dat", nullptr, sourceUrl, nullptr, at.c_str(),
+                                                      sourceSha.c_str(), licence, credit, nullptr);
+    const auto query = CreateEGPQueryDirect(b, "sdn-data-query", queryText.c_str(), at.c_str(), uint32_t(count), s.maxEpoch.c_str());
+    std::vector<flatbuffers::Offset<EGPProvenance>> provenances = {provenance};
+    const auto group = CreateEGPDirect(b, id, name, description, &tags, egpMembershipMode::QUERY_LIVE, nullptr, query, at.c_str(),
+                                       at.c_str(), &provenances, nullptr);
+    FinishSizePrefixedEGPBuffer(b, group);
+    stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+  };
+  one("lowell-astorb/numbered", "Asteroids (numbered)",
+      "Every numbered asteroid in Lowell Observatory's astorb.dat as $SBD small-body records (osculating heliocentric "
+      "elements, H, G, diameter, orbit class and quality), refreshed every 72 h.",
+      sourceName, s.rows);
+  one("lowell-astorb/numbered-largest-10pct", "Asteroids (numbered, largest 10%)",
+      "The largest tenth of the numbered asteroids, the subset drawn by default: ranked by the catalog (IRAS) diameter, "
+      "else by the diameter from H at geometric albedo 0.14 (D = 1329 km / sqrt(0.14) x 10^(-H/5)), largest first, ties "
+      "by number; the first ceil(N/10).",
+      largestSourceName, s.largest.count);
+  return stream;
+}
+
 // config (from the host adapter) -> request0..2 + job (plan_astorb, exported
 // by both the portable module and the host adapter).
 int planAstorb() {

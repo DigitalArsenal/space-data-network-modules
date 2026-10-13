@@ -11,6 +11,9 @@ import { minizSourceFragments } from "../geonames-source/miniz-source.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const { header, version } = await generateSdsHeader("SBD", import.meta.url);
+// The catalog listing's $EGP groups: a second generated header, its include
+// guard renamed (flatc names both after main.fbs).
+const egp = (await generateSdsHeader("EGP", import.meta.url)).header.replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_MAIN_EGP_H_");
 if (!/struct SBDBuilder/.test(header)) {
   throw new Error(`spacedatastandards.org@${version} has no $SBD; this module needs 1.248.0 or later.`);
 }
@@ -25,7 +28,7 @@ await fs.rm(path.join(root, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
-  sourceCode: [minizHeader, minizImplementation, header, json, sha, core, source].join("\n"),
+  sourceCode: [minizHeader, minizImplementation, header, egp, json, sha, core, source].join("\n"),
   language: "c++",
   outputPath,
   threadModel: "wasi-sequential",
@@ -37,5 +40,5 @@ await fs.writeFile(path.join(guest, "module-link.o"), result.guestLink.objectByt
 const { format, language, threadModel, symbolPrefix, methodSymbols } = result.guestLink;
 await fs.writeFile(path.join(guest, "metadata.json"), JSON.stringify({ version: 1, format, language, threadModel, symbolPrefix, methodSymbols }, null, 2) + "\n");
 await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
-await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, schema: "SBD", threadModel: "wasi-sequential", miniz: "3.1.2" }, null, 2)}\n`);
+await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, schemas: ["SBD", "EGP"], threadModel: "wasi-sequential", miniz: "3.1.2" }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

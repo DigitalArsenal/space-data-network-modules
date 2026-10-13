@@ -1,8 +1,8 @@
 {
  "pluginId": "com.digitalarsenal.data-source.lowell-astorb",
  "name": "Numbered asteroids (Lowell astorb)",
- "version": "0.2.0",
- "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $SBD small-body record per asteroid, brightest H band first (osculating heliocentric elements with CCSDS OPM keywords: CENTER_NAME SUN, REF_FRAME ECLIPJ2000, TIME_SYSTEM TDB, km, DE440 GM; H, G, IRAS diameter, orbit class, orbit arc, observations and CEU; PVN provenance). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the SBD.fbs lane provider lowell-astorb, source astorb-numbered.",
+ "version": "0.3.0",
+ "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $SBD small-body record per asteroid, brightest H band first, then the largest tenth of them (ranked by the IRAS diameter, else the diameter from H at geometric albedo 0.14; ties by number) and two $EGP groups that list both lanes on the network (osculating heliocentric elements with CCSDS OPM keywords: CENTER_NAME SUN, REF_FRAME ECLIPJ2000, TIME_SYSTEM TDB, km, DE440 GM; H, G, IRAS diameter, orbit class, orbit arc, observations and CEU; PVN provenance). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the SBD.fbs lanes lowell-astorb/astorb-numbered and lowell-astorb/astorb-largest-10pct and the EGP.fbs lane lowell-astorb/astorb-groups.",
  "pluginFamily": "data_source",
  "capabilities": [],
  "externalInterfaces": [],
@@ -23,6 +23,11 @@
    "schemaName": "SBD.fbs",
    "fileIdentifier": "$SBD",
    "rootTypeName": "SBD"
+  },
+  {
+   "schemaName": "EGP.fbs",
+   "fileIdentifier": "$EGP",
+   "rootTypeName": "EGP"
   }
  ],
  "methods": [
@@ -324,6 +329,44 @@
      "maxStreams": 1,
      "required": true,
      "description": "Counts per H band, element epoch range, source hash and retrieval time; never a dataset record."
+    },
+    {
+     "portId": "largest",
+     "acceptedTypeSets": [
+      {
+       "setId": "largest-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SBD.fbs",
+         "fileIdentifier": "$SBD",
+         "rootTypeName": "SBD"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $SBD stream of the largest tenth of the numbered asteroids (ceil(N/10) records, file order): ranked by the IRAS diameter, else 1329 km / sqrt(0.14) x 10^(-H/5), largest first, ties by number. Lane lowell-astorb/astorb-largest-10pct."
+    },
+    {
+     "portId": "groups",
+     "acceptedTypeSets": [
+      {
+       "setId": "groups-records",
+       "allowedTypes": [
+        {
+         "schemaName": "EGP.fbs",
+         "fileIdentifier": "$EGP",
+         "rootTypeName": "EGP"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Two size-prefixed $EGP groups (QUERY_LIVE) listing the lanes on the network: Asteroids (numbered) and Asteroids (numbered, largest 10%), each with its SDN data query, count, cadence, source and licence. Lane lowell-astorb/astorb-groups."
     }
    ],
    "maxBatch": 1,

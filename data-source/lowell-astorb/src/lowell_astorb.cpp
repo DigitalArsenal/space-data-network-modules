@@ -7,7 +7,9 @@
 // parse_astorb joins the ranges, validates the whole gzip member (CRC-32 and
 // length, so a short, stale-mixed or truncated join is refused), checks every
 // line's fixed columns, and only then emits one size-prefixed $SBD per numbered
-// asteroid, brightest H band first. No host calls: fetching, storage and
+// asteroid, brightest H band first; then the largest tenth of them (ranked by
+// size, astorb_core.hpp rankSizeKm) and the two $EGP groups that list both
+// lanes on the network. No host calls: fetching, storage and
 // publication belong to the host, and the node's auto-publisher announces the
 // stored batch (SBD.fbs, provider lowell-astorb, source astorb-numbered).
 //
@@ -60,6 +62,17 @@ extern "C" int parse_astorb() {
   const Json meta = ingestMeta(sourceSha, peer);
   const Json report = surveyReport(s, sourceSha, gz.size, stream.size(), retrieved);
   if (output("meta", meta) < 0 || output("report", report) < 0) return 1;
-  return plugin_push_output_ex("records", "SBD.fbs", "$SBD", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "SBD", 0, 0,
-                               stream.data(), stream.size()) < 0 ? 1 : 0;
+  if (plugin_push_output_ex("records", "SBD.fbs", "$SBD", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "SBD", 0, 0,
+                            stream.data(), stream.size()) < 0) return 1;
+  // The largest tenth (lane astorb-largest-10pct), in file order, and the two
+  // $EGP groups that list both lanes (lane astorb-groups).
+  std::vector<uint8_t>().swap(stream);
+  std::vector<uint8_t> largest;
+  largest.reserve(s.largest.count * 440);
+  CHECK(forEachLargestRecord(gz, s.largest, b, [&](const uint8_t* p, size_t n) { largest.insert(largest.end(), p, p + n); }), error);
+  if (plugin_push_output_ex("largest", "SBD.fbs", "$SBD", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "SBD", 0, 0,
+                            largest.data(), largest.size()) < 0) return 1;
+  const std::vector<uint8_t> groups = groupRecords(s, sourceSha, retrieved);
+  return plugin_push_output_ex("groups", "EGP.fbs", "$EGP", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "EGP", 0, 0,
+                               groups.data(), groups.size()) < 0 ? 1 : 0;
 }
