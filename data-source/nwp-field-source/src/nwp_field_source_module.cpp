@@ -630,7 +630,10 @@ int plan(void) {
                                  std::to_string(step) + "|" + config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads);
     if (plan_key == g_planned) {
         if (g_plan_next < g_plan_backlog.size()) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
-        return push_status("already-planned");
+        // Nothing new upstream (the next cycle is not out yet): the node's unchanged notice (internal/flowrt cronmount
+        // egressReportsUnchanged), so a quiet tick between cycles is a success without a batch, not a failure that
+        // widens the retrieval window and holds the next cycle back.
+        return push_json("status", "{\"skipped\":\"already-planned\",\"status\":304,\"unchanged\":true}") < 0 ? 500 : 0;
     }
     g_planned = plan_key;
     for (const std::string& id : list_of(config_string(config, "nwp_products", kDefaultProducts))) {

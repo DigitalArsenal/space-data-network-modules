@@ -108,7 +108,8 @@ test("plan: a tick for the run already planned hands out its queue, never plans 
   assert.equal(again.backlogRemaining, 0);
   const third = await harness.invoke({ methodId: "plan", inputs: [jsonInput("tick", {})] });
   assert.equal(framesOn(third, "jobs").length, 0);
-  assert.match(JSON.stringify(framesOn(third, "status")), /already-planned/);
+  // the node's unchanged notice: a quiet tick between cycles is not a failed retrieval
+  assert.deepEqual(framesOn(third, "status"), [{ skipped: "already-planned", status: 304, unchanged: true }]);
 });
 
 test("plan: the run's inventories, sixteen per invocation, the rest as backlog", async (t) => {
