@@ -35,6 +35,10 @@ const job = { source_url: "https://ftp.lowell.edu/pub/elgb/astorb.dat.gz", provi
 const receipt = { retrieved_at_ms: 1791800000000, producer_peer_id: "16Uiu2HAm1apfD3rAJJjgx4AC5Ms3PejRBwoqEsKpRx36uYwXuW9h" };
 const parse = (gz) => ({ methodId: "parse_astorb", inputs: [wire("job", job), wire("receipt", receipt), ...ranges(gz).map((r, i) => wire(`response${i}`, r))] });
 
+// SDN_PARITY_LANES=browser,wasmedge narrows the lanes (an explicit decision,
+// e.g. while the Docker daemon is down); the default is all three.
+const lanesOption = process.env.SDN_PARITY_LANES ? { lanes: process.env.SDN_PARITY_LANES.split(",") } : {};
+
 test("plan_astorb and parse_astorb agree in Chromium, native WasmEdge and container WasmEdge", { skip: process.env.SDN_RUN_ASTORB_PARITY !== "1" }, async () => {
   const plan = await normalizeParityFixture({
     name: "lowell-astorb",
@@ -46,8 +50,8 @@ test("plan_astorb and parse_astorb agree in Chromium, native WasmEdge and contai
       { id: "refuse-short-file", request: parse(catalog(1000)), expect: "ok" } ,
     ],
   });
-  const report = await runParityHarness({ wasmPath: fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)), plan, autoBuildDockerImage: false, timeoutMs: 900000, log: (m) => console.log(m) });
+  const report = await runParityHarness({ wasmPath: fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)), plan, ...lanesOption, autoBuildDockerImage: false, timeoutMs: 900000, log: (m) => console.log(m) });
   console.log(formatParityReport(report));
   assert.equal(report.ok, true, formatParityReport(report));
-  assert.equal(report.lanes.length, 3);
+  assert.equal(report.lanes.length, lanesOption.lanes?.length ?? 3);
 });
