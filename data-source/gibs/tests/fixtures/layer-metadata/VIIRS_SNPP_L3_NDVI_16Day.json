@@ -1,0 +1,27 @@
+{
+  "title": "Vegetation Index (L3, 16-Day)",
+  "subtitle": "Suomi NPP / VIIRS",
+  "ongoing": true,
+  "measurement": "Vegetation Indices",
+  "retentionPeriod": -1,
+  "daynight": [
+    "day"
+  ],
+  "orbitTracks": [
+    "OrbitTracks_Suomi_NPP_Ascending"
+  ],
+  "orbitDirection": [
+    "ascending"
+  ],
+  "conceptIds": [
+    {
+      "type": "STD",
+      "value": "C2519127224-LPCLOUD",
+      "shortName": "VNP13A1",
+      "title": "VIIRS/NPP Vegetation Indices 16-Day L3 Global 500m SIN Grid V002",
+      "version": "002",
+      "dataCenter": "LPCLOUD"
+    }
+  ],
+  "layerPeriod": "16-Day"
+}

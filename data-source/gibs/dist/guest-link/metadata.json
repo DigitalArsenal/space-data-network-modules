@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-sequential",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_",
+  "methodSymbols": {
+    "plan_capabilities": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_plan_capabilities",
+    "plan_details": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_plan_details",
+    "advance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_advance",
+    "build_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_build_catalog",
+    "announce_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e67696273_announce_catalog"
+  }
+}

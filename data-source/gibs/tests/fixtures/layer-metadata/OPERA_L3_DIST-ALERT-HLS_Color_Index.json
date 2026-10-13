@@ -1,0 +1,31 @@
+{
+  "title": "OPERA Vegetation Disturbance Status (Color Index)",
+  "subtitle": "DIST-ALERT-HLS",
+  "ongoing": true,
+  "measurement": "Vegetation Disturbance Status",
+  "retentionPeriod": -1,
+  "daynight": [
+    "day"
+  ],
+  "orbitTracks": [
+    "OrbitTracks_Landsat-8_Descending",
+    "OrbitTracks_Landsat-9_Descending",
+    "OrbitTracks_Sentinel-2A_Descending",
+    "OrbitTracks_Sentinel-2B_Descending",
+    "OrbitTracks_Sentinel-2C_Descending"
+  ],
+  "orbitDirection": [
+    "descending"
+  ],
+  "conceptIds": [
+    {
+      "type": "STD",
+      "value": "C2746980408-LPCLOUD",
+      "shortName": "OPERA_L3_DIST-ALERT-HLS_V1",
+      "title": "OPERA Land Surface Disturbance Alert from Harmonized Landsat Sentinel-2 product (Version 1)",
+      "version": "1",
+      "dataCenter": "LPCLOUD"
+    }
+  ],
+  "layerPeriod": "Multi-Day"
+}

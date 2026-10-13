@@ -1,0 +1,46 @@
+{
+  "title": "Cloud Top Height (L2, Polar)",
+  "subtitle": "Aqua / AIRS",
+  "ongoing": true,
+  "measurement": "Cloud Top Height",
+  "retentionPeriod": -1,
+  "daynight": [
+    "day",
+    "night"
+  ],
+  "conceptIds": [
+    {
+      "type": "NRT",
+      "value": "C1701805625-GES_DISC",
+      "shortName": "AIRS2RET_NRT",
+      "title": "Aqua/AIRS L2 Near Real Time (NRT) Standard Physical Retrieval (AIRS-only) V7.0 at GES DISC",
+      "version": "7.0",
+      "dataCenter": "GES_DISC"
+    },
+    {
+      "type": "STD",
+      "value": "C1243477381-GES_DISC",
+      "shortName": "AIRS2RET",
+      "title": "AIRS/Aqua L2 Standard Physical Retrieval (AIRS-only) V006 (AIRS2RET) at GES DISC",
+      "version": "006",
+      "dataCenter": "GES_DISC"
+    },
+    {
+      "type": "STD",
+      "value": "C1701805619-GES_DISC",
+      "shortName": "AIRS2RET",
+      "title": "Aqua/AIRS L2 Standard Physical Retrieval (AIRS-only) V7.0 at GES DISC",
+      "version": "7.0",
+      "dataCenter": "GES_DISC"
+    }
+  ],
+  "orbitTracks": [
+    "OrbitTracks_Aqua_Ascending",
+    "OrbitTracks_Aqua_Descending"
+  ],
+  "orbitDirection": [
+    "ascending",
+    "descending"
+  ],
+  "layerPeriod": "Daily"
+}

@@ -1,0 +1,37 @@
+{
+  "title": "Nitrogen Dioxide (L2, Vertical Column Troposphere, Subdaily) (PROVISIONAL)",
+  "subtitle": "TEMPO",
+  "ongoing": true,
+  "measurement": "Nitrogen Dioxide",
+  "retentionPeriod": -1,
+  "daynight": [
+    "unspecified"
+  ],
+  "conceptIds": [
+    {
+      "type": "STD",
+      "value": "C2930725014-LARC_CLOUD",
+      "shortName": "TEMPO_NO2_L2",
+      "title": "TEMPO NO2 tropospheric and stratospheric columns V03 (PROVISIONAL)",
+      "version": "V03",
+      "dataCenter": "LARC_CLOUD"
+    },
+    {
+      "type": "STD",
+      "value": "C3685896872-LARC_CLOUD",
+      "shortName": "TEMPO_NO2_L2",
+      "title": "TEMPO NO2 tropospheric and stratospheric columns V04 (PROVISIONAL)",
+      "version": "V04",
+      "dataCenter": "LARC_CLOUD"
+    },
+    {
+      "type": "NRT",
+      "value": "C3685668972-LARC_CLOUD",
+      "shortName": "TEMPO_NO2_L2_NRT",
+      "title": "TEMPO NO2 tropospheric and stratospheric columns V02 (NRT) PROVISIONAL",
+      "version": "V02",
+      "dataCenter": "LARC_CLOUD"
+    }
+  ],
+  "layerPeriod": "Subdaily"
+}
