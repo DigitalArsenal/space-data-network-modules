@@ -30,6 +30,7 @@ Public-domain global mosaics, planetocentric latitude converted to planetodetic 
 | 199 | 0-5 | NASA/JHUAPL/CIW MESSENGER MDIS, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_MESSENGER_MDIS_Basemap_MD3Color_Mosaic_Global_64ppd.tif |
 | 299 | 0-4 | NASA/JPL Magellan, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif |
 | 301 | 0-5 | NASA/GSFC/Arizona State University LRO LROC WAC, NASA Scientific Visualization Studio (CGI Moon Kit) | public domain (NASA SVS) | https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_16k.tif |
+| 401 | 0-4 | NASA/JPL Viking Orbiter, USGS Astrogeology (DLR control network) | public domain (NASA Viking mission data, USGS Astrogeology) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Phobos_Viking_Mosaic_40ppd_DLRcontrol.tif |
 | 499 | 0-5 | NASA/JPL Viking Orbiter, USGS Astrogeology MDIM colour | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars_Viking_ClrMosaic_global_925m.tif |
 | 501 | 0-4 | NASA/JPL Galileo SSI and Voyager, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif |
 | 502 | 0-4 | NASA/JPL Galileo SSI and Voyager, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif |
@@ -45,6 +46,8 @@ Public-domain global mosaics, planetocentric latitude converted to planetodetic 
 | 801 | 0-4 | NASA/JPL Voyager 2, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Triton_Voyager2_ClrMosaic_GlobalFill_600m.tif |
 | 901 | 0-4 | NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif |
 | 999 | 0-4 | NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif |
+| 2000001 | 0-3 | NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology | NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif |
+| 2000004 | 0-4 | NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology | NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif |
 
 ## Small bodies (smallbodies/)
 

@@ -353,6 +353,12 @@
    "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_16k.tif"
   },
   {
+   "path": "imagery/401/",
+   "licence": "public domain (NASA Viking mission data, USGS Astrogeology)",
+   "credit": "NASA/JPL Viking Orbiter, USGS Astrogeology (DLR control network)",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Phobos_Viking_Mosaic_40ppd_DLRcontrol.tif"
+  },
+  {
    "path": "imagery/499/",
    "licence": "public domain (USGS Astrogeology, NASA)",
    "credit": "NASA/JPL Viking Orbiter, USGS Astrogeology MDIM colour",
@@ -441,6 +447,18 @@
    "licence": "public domain (USGS Astrogeology, NASA)",
    "credit": "NASA/JHUAPL/SwRI New Horizons LORRI and MVIC, USGS Astrogeology",
    "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif"
+  },
+  {
+   "path": "imagery/2000001/",
+   "licence": "NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy)",
+   "credit": "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif"
+  },
+  {
+   "path": "imagery/2000004/",
+   "licence": "NASA Dawn mission data (Planetary Data System archive), free use with the mission credit (NASA/JPL image use policy)",
+   "credit": "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA Dawn Framing Camera, USGS Astrogeology",
+   "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif"
   },
   {
    "path": "imagery/index.json",
