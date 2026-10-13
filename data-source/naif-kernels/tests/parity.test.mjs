@@ -40,6 +40,10 @@ const frame = (portId, value) => {
 };
 const wire = (f) => ({ portId: f.portId, typeRef: f.typeRef, payloadBase64: Buffer.from(f.payload).toString("base64") });
 
+// SDN_PARITY_LANES=browser,wasmedge narrows the lanes (an explicit decision,
+// e.g. while the Docker daemon is down); the default is all three.
+const lanesOption = process.env.SDN_PARITY_LANES ? { lanes: process.env.SDN_PARITY_LANES.split(",") } : {};
+
 test("plan_kernels, the first DAF stage and announce_kernels agree in Chromium, native and container WasmEdge", { skip: process.env.SDN_RUN_NAIF_PARITY !== "1" }, async () => {
   const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: "direct" });
   const config = frame("config", { access: "anonymous" });
@@ -60,8 +64,8 @@ test("plan_kernels, the first DAF stage and announce_kernels agree in Chromium, 
       { id: "refuse-missing-response", request: { methodId: "advance", inputs: [wire(frame("state", state.payload)), ...responses.slice(1).map(wire)] }, expect: "ok" } ,
     ],
   });
-  const report = await runParityHarness({ wasmPath, plan, autoBuildDockerImage: false, timeoutMs: 600000, log: (m) => console.log(m) });
+  const report = await runParityHarness({ wasmPath, plan, ...lanesOption, autoBuildDockerImage: false, timeoutMs: 600000, log: (m) => console.log(m) });
   console.log(formatParityReport(report));
   assert.equal(report.ok, true, formatParityReport(report));
-  assert.equal(report.lanes.length, 3);
+  assert.equal(report.lanes.length, lanesOption.lanes?.length ?? 3);
 });
