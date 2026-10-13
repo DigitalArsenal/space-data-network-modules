@@ -4,10 +4,10 @@
  * One method, `expire`: keeps a rolling window of records on the node and
  * deletes what has fallen out of it. Each configured target names a standard
  * and its lane (provider and/or sources); the node's storage.expire host op
- * deletes the lane's records whose own indexed time (WXF VALID_TIME_MS, OMM/MPE
- * EPOCH, ...) is older than now - window_hours, paging the store's record
- * index - every stored record, not only the engine's resident hot window that
- * module SQL sees.
+ * deletes the lane's records that arrived on the node before now - window_hours
+ * (the store's own arrival time, for every standard alike), paging the store's
+ * record index - every stored record, not only the engine's resident hot
+ * window that module SQL sees.
  *
  * Owner 2026-10-12, the weather node: "we only need to keep a rolling window
  * of 3 days, we should NOT be archiving more than that (configurable in the
