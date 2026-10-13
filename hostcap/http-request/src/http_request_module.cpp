@@ -686,6 +686,15 @@ int perform_one_request(const std::string& request_json) {
     if (has_body) {
         payload += ",\"body\":{\"$bin\":0},\"body_encoding\":\"base64\"";
     }
+    // raw-body-v1 asks the Go host for the body as a binary envelope segment
+    // (its http.request response_encoding "binary"), so the bytes cross the
+    // boundary once, verbatim: the base64 default made a 48 MiB range a
+    // 64 MiB string, a 64 MiB JSON envelope and a 48 MiB decode in this
+    // guest (owner A1 2026-10-13: the astorb ingest must fit a 7 GB host).
+    // The JS hosts already detach the body for responseType "binary".
+    if (raw_response) {
+        payload += ",\"response_encoding\":\"binary\"";
+    }
     payload += "}";
 
     const std::vector<uint8_t> env =
