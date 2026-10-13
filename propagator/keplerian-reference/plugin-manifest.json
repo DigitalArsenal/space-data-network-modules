@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.keplerian.reference",
   "name": "Keplerian Reference Propagator",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Two-body Keplerian propagator. The reference implementation of the official OrbPro WASM propagator ABI \u2014 the minimal complete surface, written to be copied. Also: heliocentric osculating elements for small bodies (asteroids) from SDS $OMM records centred on the Sun, with frame snapshots (positions and H-G magnitudes) for hundreds of thousands of rows and one double-precision state for a selected body.",
   "pluginFamily": "propagator",
   "capabilities": [],

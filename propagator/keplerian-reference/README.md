@@ -121,8 +121,10 @@ thousands of Sun-centred rows.
 |---|---|
 | `kepler_small_ingest_omm_stream(data, len)` | size-prefixed SDS `$OMM` records: `CENTER_NAME` SUN, `REFERENCE_FRAME` ecliptic J2000 (RFM coordinate system) or ICRF / J2000 / EME2000 axes, `TIME_SYSTEM` TT or TDB, `SEMI_MAJOR_AXIS` km (or `MEAN_MOTION`), `GM` km³/s² (default DE440 Sun). All or nothing; named refusals (-4 bad input, -6 unphysical, -7 centre, -8 frame, -9 time system) with `kepler_small_failed_record()` |
 | `kepler_small_set_photometry(first, count, hg)` | float32 H, G pairs |
-| `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer |
-| `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF |
+| `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer; NaN outside the validity span |
+| `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF; -10 outside the validity span |
+| `kepler_small_set_validity(seconds)` | the span either side of each row's element epoch in which it is drawn (default 60 days; measured two-body error against JPL Horizons: ~2,200 km worst at 26 days, 13,000-384,000 km at one year). Outside it a snapshot row is NaN and a state is refused |
+| `kepler_small_validity_range(out)` | four doubles: the epochs between which every row is valid, and between which any row is |
 | `kepler_small_diameter_from_h(h, albedo)` | equivalent-sphere diameter, m |
 | `kepler_small_count()`, `kepler_small_clear()` | |
 

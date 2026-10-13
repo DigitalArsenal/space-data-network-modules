@@ -83,6 +83,8 @@ test("the astorb $OMM stream ingests: every record, in order", async () => {
 test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (double and float32 snapshot)", async () => {
   const { x, copyIn } = await load();
   x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  // The conic itself, far from the epoch: widen the validity span for this test.
+  assert.equal(x.kepler_small_set_validity(500 * SECONDS_PER_DAY), 500 * SECONDS_PER_DAY);
   const n = records.length;
   const out = x.plugin_alloc(48);
   const snap = x.plugin_alloc(16 * n);
@@ -170,4 +172,30 @@ test("refusals are named: a truncated stream, a record not centred on the Sun", 
   one.set(Buffer.from("EAR"), text);
   assert.equal(x.kepler_small_ingest_omm_stream(copyIn(one), one.length), -7);
   assert.equal(x.kepler_small_diameter_from_h(3.34, 0.09) > 9e5, true);
+});
+
+test("outside 60 days of the element epoch a row is refused, never drawn at a two-body guess", async () => {
+  // Measured (verify round 1): Apophis at its 2029-04-13 Earth approach drawn
+  // 111,299 km from the geocentre instead of 38,011 km by two-body from a
+  // 2026 epoch. The default span refuses it.
+  const { x, copyIn } = await load();
+  x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  const n = records.length;
+  const range = x.plugin_alloc(32);
+  assert.equal(x.kepler_small_validity_range(range), 0);
+  const [lo, hi, anyLo, anyHi] = new Float64Array(x.memory.buffer, range, 4);
+  assert.ok(lo <= hi && anyLo <= lo && anyHi >= hi);
+  assert.ok(Math.abs(hi - lo - 120 * SECONDS_PER_DAY) < 120 * SECONDS_PER_DAY, `common span ${(hi - lo) / SECONDS_PER_DAY} d`);
+  const out = x.plugin_alloc(48);
+  const snap = x.plugin_alloc(16 * n);
+  const inside = 0.5 * (lo + hi);
+  assert.equal(x.kepler_small_snapshot(inside, 0, n, 0, snap), 0);
+  assert.equal(x.kepler_small_state(inside, 0, out), 0);
+  const apophis2029 = (2462240.5 - 2451545.0) * SECONDS_PER_DAY; // 2029-04-13 TDB
+  assert.equal(x.kepler_small_snapshot(apophis2029, 0, n, 0, snap), n, "every row refused");
+  const rows = new Float32Array(x.memory.buffer, snap, 4 * n);
+  for (let i = 0; i < n; ++i) assert.ok(Number.isNaN(rows[4 * i]), "a refused row is NaN");
+  assert.equal(x.kepler_small_state(apophis2029, 0, out), -10);
+  assert.equal(x.kepler_small_state(anyHi + 1, 0, out), -10);
+  assert.equal(x.kepler_small_set_validity(0), 60 * SECONDS_PER_DAY, "non-positive restores the default");
 });

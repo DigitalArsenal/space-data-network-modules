@@ -48,6 +48,7 @@
 // what the W1.1 generation lane exists to end.
 #include "orbpro/orbpro_propagator_abi.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -788,6 +789,17 @@ constexpr double kObliquityJ2000 = 84381.448 / 3600.0 * kDegToRad;
 constexpr int32_t kErrUnsupportedCenter = -7;
 constexpr int32_t kErrUnsupportedFrame = -8;
 constexpr int32_t kErrUnsupportedTime = -9;
+/// The epoch is farther from the row's element epoch than the validity span.
+constexpr int32_t kErrOutsideValidity = -10;
+
+/// Osculating elements are a two-body orbit only near their epoch: away from
+/// it the planets pull the body off the conic. Measured against JPL Horizons
+/// on the test sample (tests/small-bodies.e2e.test.mjs): about 2,200 km worst
+/// at 26 days, 13,000 to 384,000 km at one year, 13.6 million km at five
+/// years. Beyond this span a row is refused (NaN in a snapshot, an error for a
+/// state); the host refreshes the catalog instead of drawing a wrong place.
+constexpr double kDefaultSmallValiditySeconds = 60.0 * 86400.0;
+double g_small_validity = kDefaultSmallValiditySeconds;
 
 struct SmallBody {
   double epoch_et = 0.0;        // TDB seconds past J2000
@@ -938,7 +950,12 @@ bool small_eccentric_anomaly(double mean_anomaly, double e, double* out) {
   return false;
 }
 
+bool small_in_validity(const SmallBody& b, double et) {
+  return std::fabs(et - b.epoch_et) <= g_small_validity;
+}
+
 bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
+  if (!small_in_validity(b, et)) return false;
   double ecc = 0.0;
   if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.epoch_et), b.e, &ecc)) return false;
   const double ce = std::cos(ecc), se = std::sin(ecc);
@@ -1061,7 +1078,8 @@ int32_t kepler_small_set_photometry(uint32_t first, uint32_t count, const float*
 /// A frame snapshot of rows [first, first + count) at `et` (TDB seconds past
 /// J2000): four float32 per row, x, y, z (m, heliocentric ICRF) and V from
 /// `observer` (3 doubles, m, heliocentric ICRF; null: V is NaN). A row whose
-/// Kepler solve fails is NaN. Returns the number of failed rows.
+/// Kepler solve fails, or whose element epoch is farther than the validity
+/// span from `et`, is NaN. Returns the number of failed rows.
 ORBPRO_ABI_EXPORT("kepler_small_snapshot")
 int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const double* observer, float* out) {
   std::vector<SmallBody>& store = small_bodies();
@@ -1081,7 +1099,38 @@ int32_t kepler_small_state(double et, uint32_t index, double* out) {
   std::vector<SmallBody>& store = small_bodies();
   if (out == nullptr) return kErrNullOutput;
   if (index >= store.size()) return kErrBadEntityIndex;
+  if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
   return small_position(store[index], et, out, out + 3) ? kOk : kErrNotConverged;
+}
+
+/// The validity span (seconds either side of each row's element epoch).
+/// A non-positive or non-finite value restores the default of 60 days.
+ORBPRO_ABI_EXPORT("kepler_small_set_validity")
+double kepler_small_set_validity(double seconds) {
+  g_small_validity = (std::isfinite(seconds) && seconds > 0.0) ? seconds : kDefaultSmallValiditySeconds;
+  return g_small_validity;
+}
+
+/// The epochs (TDB seconds past J2000) between which every row is valid, and
+/// those between which at least one row is: four doubles (common start,
+/// common end, any start, any end). Returns kErrNotInitialized without rows.
+ORBPRO_ABI_EXPORT("kepler_small_validity_range")
+int32_t kepler_small_validity_range(double* out) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (out == nullptr) return kErrNullOutput;
+  if (store.empty()) return kErrNotInitialized;
+  double lo = -INFINITY, hi = INFINITY, any_lo = INFINITY, any_hi = -INFINITY;
+  for (const SmallBody& b : store) {
+    lo = std::max(lo, b.epoch_et - g_small_validity);
+    hi = std::min(hi, b.epoch_et + g_small_validity);
+    any_lo = std::min(any_lo, b.epoch_et - g_small_validity);
+    any_hi = std::max(any_hi, b.epoch_et + g_small_validity);
+  }
+  out[0] = lo;
+  out[1] = hi;
+  out[2] = any_lo;
+  out[3] = any_hi;
+  return kOk;
 }
 
 /// Equivalent-sphere diameter (m) from H and a geometric albedo:
