@@ -16,8 +16,10 @@ for the inactive ellipsoid. Temporary files are deleted after each body.
 The `root` mode closes the dataset: it writes SOURCES.md and licences.json
 (one entry for every delivered file, from kernels/kernel-provenance.json,
 imagery/index.json and smallbodies/manifest.json), refuses a file no entry
-covers, and computes the root CID (UnixFS, CIDv1, `ipfs add --only-hash`)
-into data/root-cid.json beside copies of SOURCES.md and licences.json.
+covers, copies SOURCES.md and licences.json into data/, and prints the
+directory's root CID (UnixFS, CIDv1, `ipfs add --only-hash`) for a local
+copy. No CID is kept in the repository: hosts read the datasets from the SDN
+data retrieval modules' publications (owner 2026-10-13).
 
 Writes <out>/imagery/<naif>/{z}/{x}/{y}.jpg, texture.jpg, and
 <out>/imagery/index.json. Needs GDAL >= 3.6 (gdalwarp, gdal_translate,
@@ -215,11 +217,6 @@ def root(dataset):
     os.makedirs(data_dir, exist_ok=True)
     shutil.copyfile(os.path.join(dataset, "SOURCES.md"), os.path.join(data_dir, "SOURCES.md"))
     shutil.copyfile(os.path.join(dataset, "licences.json"), os.path.join(data_dir, "licences.json"))
-    with open(os.path.join(data_dir, "root-cid.json"), "w") as f:
-        json.dump({"cid": cid, "bytes": total, "made": "ipfs add -r --only-hash --cid-version 1 (kubo)",
-                   "layout": ["kernels/", "imagery/<naif>/{z}/{x}/{y}.jpg", "smallbodies/", "SOURCES.md", "licences.json"]},
-                  f, indent=1)
-        f.write("\n")
     print(f"root {cid} ({total / 1e6:.1f} MB)")
 
 
