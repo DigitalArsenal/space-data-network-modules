@@ -1,0 +1,164 @@
+{
+ "$comment": "The sources the site-registry module reads or cites, and their terms (read 2026-10-13). licenseClass is the SDS $PVN pvnLicenseClass; use: publish (reproduced with its credit), check-only (compared by tools/check-only.mjs, never published), not-read. Wikipedia is read for infobox facts and titles only, never prose.",
+ "sources": [
+  {
+   "id": "wikidata",
+   "name": "Wikidata",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC0-1.0",
+   "terms": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+   "attribution": "Wikidata",
+   "use": "publish",
+   "recordUrl": "https://www.wikidata.org/wiki/{recordId}"
+  },
+  {
+   "id": "wikipedia",
+   "name": "Wikipedia",
+   "licenseClass": "ShareAlike",
+   "licenseId": "CC-BY-SA-4.0",
+   "terms": "https://en.wikipedia.org/wiki/Wikipedia:Copyrights",
+   "attribution": "Wikipedia contributors, CC BY-SA 4.0 (article and revision per record)",
+   "credit": "Wikipedia contributors (CC BY-SA 4.0)",
+   "use": "publish",
+   "recordUrl": "https://{lang}.wikipedia.org/w/index.php?title={title}&oldid={version}"
+  },
+  {
+   "id": "gem-gnpt",
+   "name": "Global Energy Monitor, Global Nuclear Power Tracker",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC-BY-4.0",
+   "terms": "https://globalenergymonitor.org/creative-commons-license",
+   "attribution": "Global Energy Monitor, Global Nuclear Power Tracker, August 2026 release",
+   "credit": "Global Energy Monitor, Global Nuclear Power Tracker (CC BY 4.0)",
+   "use": "publish",
+   "version": "GNPT 2026-08",
+   "data": "https://publicgemdata.nyc3.cdn.digitaloceanspaces.com/Current_maps/gnpt/gnpt_map_2026-08.geojson"
+  },
+  {
+   "id": "us-nrc",
+   "name": "U.S. Nuclear Regulatory Commission",
+   "licenseClass": "Reproducible",
+   "licenseId": "US-PD-17USC105",
+   "terms": "17 U.S.C. 105 (nrc.gov answered HTTP 403 to automated fetches on 2026-10-13)",
+   "attribution": "U.S. NRC",
+   "use": "not-read"
+  },
+  {
+   "id": "uk-onr",
+   "name": "UK Office for Nuclear Regulation",
+   "licenseClass": "Reproducible",
+   "licenseId": "OGL-UK-3.0",
+   "terms": "https://www.onr.org.uk/access-to-information/copyright",
+   "attribution": "Contains public sector information published by the Office for Nuclear Regulation and licensed under the Open Government Licence v3.0.",
+   "use": "not-read"
+  },
+  {
+   "id": "ror",
+   "name": "Research Organization Registry",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC0-1.0",
+   "terms": "https://ror.org/about/faqs/",
+   "attribution": "Research Organization Registry (ROR)",
+   "use": "publish",
+   "recordUrl": "{recordId}"
+  },
+  {
+   "id": "eea-industrial",
+   "name": "European Environment Agency, EU Registry on industrial sites",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC-BY-4.0",
+   "terms": "https://www.eea.europa.eu/en/legal-notice",
+   "attribution": "European Environment Agency",
+   "use": "not-read"
+  },
+  {
+   "id": "iaea-rrdb",
+   "name": "IAEA Research Reactor Database",
+   "licenseClass": "CiteOnly",
+   "licenseId": "IAEA-NUCLEUS-terms",
+   "terms": "https://nucleus.iaea.org/Pages/Others/Disclaimer.aspx",
+   "attribution": "IAEA",
+   "use": "check-only"
+  },
+  {
+   "id": "iaea-pris",
+   "name": "IAEA Power Reactor Information System",
+   "licenseClass": "CiteOnly",
+   "licenseId": "IAEA-NUCLEUS-terms",
+   "terms": "https://nucleus.iaea.org/Pages/Others/Disclaimer.aspx",
+   "attribution": "IAEA",
+   "use": "check-only"
+  },
+  {
+   "id": "de-base",
+   "name": "BASE, Auflistung kerntechnischer Anlagen",
+   "licenseClass": "CiteOnly",
+   "licenseId": "all-rights-reserved",
+   "terms": "https://www.base.bund.de/de/service-funktionen/impressum/impressum_inhalt.html",
+   "attribution": "BASE",
+   "use": "check-only"
+  },
+  {
+   "id": "fr-asnr",
+   "name": "ASNR",
+   "licenseClass": "CiteOnly",
+   "licenseId": "droits-reserves",
+   "terms": "https://www.asnr.fr/mentions-legales",
+   "attribution": "ASNR",
+   "use": "check-only"
+  },
+  {
+   "id": "ca-cnsc",
+   "name": "Canadian Nuclear Safety Commission",
+   "licenseClass": "CiteOnly",
+   "licenseId": "GoC-noncommercial",
+   "terms": "https://www.canada.ca/en/transparency/terms.html",
+   "attribution": "CNSC",
+   "use": "check-only"
+  },
+  {
+   "id": "spaceaware-curated",
+   "name": "SDN site register (curated rows)",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC-BY-4.0",
+   "terms": "data-source/site-registry/register/curated.json",
+   "attribution": "Space Data Network site register",
+   "use": "publish",
+   "version": "2026-10-13",
+   "recordUrl": "",
+   "credit": "Space Data Network site register (CC BY 4.0)"
+  },
+  {
+   "id": "osm",
+   "name": "OpenStreetMap",
+   "licenseClass": "ShareAlike",
+   "licenseId": "ODbL-1.0",
+   "terms": "https://www.openstreetmap.org/copyright",
+   "attribution": "(c) OpenStreetMap contributors",
+   "use": "check-only"
+  },
+  {
+   "id": "geonames",
+   "name": "GeoNames",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC-BY-4.0",
+   "terms": "https://www.geonames.org/about.html",
+   "attribution": "GeoNames (geonames.org)",
+   "credit": "GeoNames (CC BY 4.0)",
+   "use": "publish",
+   "version": "2026-09 dump",
+   "recordUrl": "https://www.geonames.org/{recordId}"
+  },
+  {
+   "id": "space-sites",
+   "name": "SDN site register (space sites)",
+   "licenseClass": "Reproducible",
+   "licenseId": "CC-BY-4.0",
+   "terms": "data-source/site-registry/register/space-sites.json",
+   "attribution": "Space Data Network site register: published pad and facility positions, checked 2026-09-14",
+   "use": "publish",
+   "version": "2026-09-14",
+   "credit": "Space Data Network site register (CC BY 4.0)"
+  }
+ ]
+}

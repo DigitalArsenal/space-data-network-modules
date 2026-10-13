@@ -1,0 +1,34 @@
+{
+ "$comment": "National nuclear regulators, by the ISO 3166-1 code of the country a facility row names, as Wikidata items. The Info card links the regulator's official website (Wikidata P856, resolved by src/tools/fetch-wikidata-references.mjs, never typed here) for the nuclear facility rows of that country: categories NUCL and NUCF, and STORE rows whose kind names radioactive waste. Each item was read on `checked` and states the country (P17 or P1001) and an official website. A country with no item here gets no regulator link. The link names the country's national regulator; it does not say that body licenses the site, and rows whose kind matches excludeKinds (US Department of Energy national laboratories, which DOE oversees) get none.",
+ "checked": "2026-10-13",
+ "categories": [
+  "NUCL",
+  "NUCF"
+ ],
+ "storeKinds": "radioactive",
+ "excludeKinds": "US national laboratory",
+ "regulators": {
+  "AU": "Q4824596",
+  "BE": "Q2264049",
+  "CA": "Q654536",
+  "CH": "Q1302638",
+  "CN": "Q6974596",
+  "CZ": "Q12056891",
+  "DE": "Q15793043",
+  "FI": "Q2753932",
+  "FR": "Q131620137",
+  "GB": "Q7079167",
+  "IN": "Q3522235",
+  "IT": "Q18418486",
+  "JP": "Q1502596",
+  "KR": "Q15621831",
+  "NG": "Q104845771",
+  "NO": "Q10677723",
+  "PK": "Q7125664",
+  "PL": "Q11815192",
+  "RU": "Q1758977",
+  "SE": "Q198678",
+  "UA": "Q16697646",
+  "US": "Q1320326"
+ }
+}

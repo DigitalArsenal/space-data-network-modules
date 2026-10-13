@@ -1,0 +1,94 @@
+{
+ "$comment": "Wikidata class membership per network, in priority order (an item in several lands in the first): the audit's order (fetch-facilities.mjs), with the nuclear power plant class (NPP) before NUCF, which never took power plants. transitive: P31/P279*.",
+ "networks": {
+  "NPP": "Nuclear power plants",
+  "NUCL": "Nuclear labs",
+  "NUCF": "Nuclear facilities",
+  "STORE": "Storage sites",
+  "CHEMP": "Chemical plants",
+  "RSCH": "Research facilities",
+  "BIO": "Bio labs",
+  "CHEM": "Chemical labs",
+  "SPACE": "Space sites"
+ },
+ "classes": [
+  [
+   "NUCL",
+   "Q1438105",
+   "research reactor",
+   true
+  ],
+  [
+   "NUCL",
+   "Q109909183",
+   "nuclear research institute",
+   true
+  ],
+  [
+   "NUCL",
+   "Q2624320",
+   "US national laboratory",
+   true
+  ],
+  [
+   "STORE",
+   "Q21493801",
+   "radioactive waste repository",
+   true
+  ],
+  [
+   "STORE",
+   "Q1340555",
+   "deep geological repository",
+   true
+  ],
+  [
+   "STORE",
+   "Q63313760",
+   "weapons depot",
+   true
+  ],
+  [
+   "STORE",
+   "Q60983064",
+   "military depot",
+   true
+  ],
+  [
+   "NPP",
+   "Q134447",
+   "nuclear power plant",
+   true
+  ],
+  [
+   "NUCF",
+   "Q1739545",
+   "nuclear facility",
+   true
+  ],
+  [
+   "CHEMP",
+   "Q905286",
+   "chemical plant",
+   true
+  ],
+  [
+   "RSCH",
+   "Q483242",
+   "laboratory",
+   true
+  ],
+  [
+   "RSCH",
+   "Q3214482",
+   "underground research laboratory",
+   true
+  ],
+  [
+   "RSCH",
+   "Q31855",
+   "research institute",
+   false
+  ]
+ ]
+}

@@ -1,0 +1,4900 @@
+{
+ "$comment": "Lifecycle facts read by hand where no infobox or Wikidata property states them. Steps are a timeline: for one item, facts and their steps are listed oldest first and the last step is the current state. reviewedAt is when the cited revision was retrieved. Wikipedia entries (CC BY-SA 4.0) carry only the status, its date and the article revision they were read from; no article text is copied. wikidata entries (CC0) record a judgement read from the item's own statements at the cited revision. An entry whose qid is \"geonames:<id>\" is a GeoNames placemark (src/tools/placemark-status.mjs). gem-gnpt entries join a facility (or a placemark) to tracker units by unit id when names or positions differ. Check-only registers (IAEA RRDB, BASE, ASNR) chose which articles to read and are never cited here. duplicates: Wikidata items that are one facility; the kept item stands for both. notFacilities: items that are not sites (vessels, single test events), left out of every set. dismantlingReviewed: prose statements of a completed dismantling or delicensing (wikipedia.mjs dismantlingStatements), or of a started one (decommissioningStarts), that were read and do not speak for the row (a sister reactor or an earlier plant on the site, one structure such as a cooling tower, an announcement); every other completed statement on a row that is not DECOMMISSIONED, and every started statement on a row still PERMANENT_SHUTDOWN, stays open in the report for the weekly refresh's reviewer. A geonames:<id> key reviews a statement for that placemark only.",
+ "evidence": [
+  {
+   "qid": "Q1438110",
+   "wiki": "de",
+   "title": "Forschungsreaktor Karlstein",
+   "revision": 230253801,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976",
+     "basis": "PR-10 in operation from 27 January 1961 until 1976"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1976-07-27",
+     "basis": "decommissioning of the reactor began 27 July 1976"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1978-02-22",
+     "basis": "decommissioning completed 22 February 1978"
+    }
+   ]
+  },
+  {
+   "qid": "Q65083710",
+   "wiki": "en",
+   "title": "FiR 1",
+   "revision": 1369127912,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2015",
+     "basis": "permanently shut down in 2015"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2024-04",
+     "basis": "dismantling began June 2023 and finished April 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q284035",
+   "wiki": "en",
+   "title": "Advanced Test Reactor",
+   "revision": 1364551118,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "one of the reactors still in operation at the site"
+    }
+   ]
+  },
+  {
+   "qid": "Q352410",
+   "wiki": "en",
+   "title": "ASTRA (reactor)",
+   "revision": 1337163311,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1999",
+     "basis": "power history table: decommissioned 1999"
+    }
+   ]
+  },
+  {
+   "qid": "Q368333",
+   "wiki": "de",
+   "title": "Forschungs-Neutronenquelle Heinz Maier-Leibnitz",
+   "revision": 271266410,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2020-03-16",
+     "basis": "cycle 47 ended with the planned shutdown on 16 March 2020; restart delayed by a C-14 release, the pandemic, the cold source and a central-channel leak; no restart date as of end 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q1024300",
+   "wiki": "fr",
+   "title": "Crocus (réacteur)",
+   "revision": 240256254,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "the only research reactor in Switzerland since PROTEUS shut down in 2011"
+    }
+   ]
+  },
+  {
+   "qid": "Q6715421",
+   "wiki": "en",
+   "title": "MERLIN reactor",
+   "revision": 1083720136,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1962",
+     "basis": "operated from 6 November 1959 until 1962"
+    }
+   ]
+  },
+  {
+   "qid": "Q6716310",
+   "wiki": "en",
+   "title": "MIT Nuclear Research Reactor",
+   "revision": 1364551204,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "in operation since 1958"
+    }
+   ]
+  },
+  {
+   "qid": "Q7894454",
+   "wiki": "en",
+   "title": "Universities Research Reactor",
+   "revision": 1347572971,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1992",
+     "basis": "decommissioning work began in 1992"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2006",
+     "basis": "decommissioning finished in 2006"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040244",
+   "wiki": "fr",
+   "title": "Masurca (réacteur)",
+   "revision": 213050985,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2006",
+     "basis": "shut down since 2006 for a major renovation"
+    }
+   ]
+  },
+  {
+   "qid": "Q3466167",
+   "wiki": "nl",
+   "title": "Biologisch Agrarische Reactor Nederland",
+   "revision": 68061479,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1980",
+     "basis": "reactor closed in 1980"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2009-10-14",
+     "basis": "IAEA inspection of 14 October 2009 found the reactor dismantled"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438112",
+   "wiki": "de",
+   "title": "Forschungsreaktor Mainz",
+   "revision": 271041866,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "operated as a neutron source since 1965"
+    }
+   ]
+  },
+  {
+   "qid": "Q8069544",
+   "wiki": "en",
+   "title": "Zero Power Physics Reactor",
+   "revision": 1315112774,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1990",
+     "basis": "operated as a critical facility from April 1969 until 1990"
+    }
+   ]
+  },
+  {
+   "qid": "Q1496060",
+   "wiki": "fr",
+   "title": "Centrale nucléaire de Taechon",
+   "revision": 234330962,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1994",
+     "basis": "construction abandoned after the 1994 agreement; still abandoned in 2019"
+    }
+   ]
+  },
+  {
+   "qid": "Q3532260",
+   "wiki": "en",
+   "title": "WEST (formerly Tore Supra)",
+   "revision": 1356450612,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "remained in operation; record discharge 12 February 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q3552583",
+   "wiki": "fr",
+   "title": "Usine FBFC de Pierrelatte",
+   "revision": 236122666,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1998",
+     "basis": "nuclear activities stopped in 1998"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2003-05-22",
+     "basis": "lost its basic nuclear installation status (INB 131) on 22 May 2003: the nuclear facility was released from regulatory control; the site still makes non-nuclear fuel-assembly components (infobox en service)"
+    }
+   ]
+  },
+  {
+   "qid": "Q3552670",
+   "wiki": "en",
+   "title": "West Valley Demonstration Project",
+   "revision": 1368426979,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976",
+     "basis": "all operations at the facility ceased in 1976"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1980",
+     "basis": "1980 act directed the Department of Energy cleanup of the site"
+    }
+   ]
+  },
+  {
+   "qid": "Q4156573",
+   "wiki": "en",
+   "title": "Degelen",
+   "revision": 1368791643,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1993",
+     "basis": "tunnels closed in 1993"
+    }
+   ]
+  },
+  {
+   "qid": "Q4391462",
+   "wiki": "en",
+   "title": "N-Reactor",
+   "revision": 1368984339,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1987",
+     "basis": "shut down in 1987"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1994",
+     "basis": "final deactivation began in 1994 and was completed in 1998"
+    }
+   ]
+  },
+  {
+   "qid": "Q5641253",
+   "wiki": "en",
+   "title": "Halden Reactor",
+   "revision": 1346489413,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2018-06",
+     "basis": "operational 1958-2018; closed permanently by board decision June 2018"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2025-04-01",
+     "basis": "transferred to Norwegian Nuclear Decommissioning on 1 April 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q7090036",
+   "wiki": "en",
+   "title": "Omega West Reactor",
+   "revision": 1118334680,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1992",
+     "basis": "operated until 1992"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2003",
+     "basis": "fully decommissioned in 1994 and demolished in 2003"
+    }
+   ]
+  },
+  {
+   "qid": "Q7119684",
+   "wiki": "en",
+   "title": "PLUTO reactor",
+   "revision": 1373156360,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1990",
+     "basis": "end of life in 1990"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1990",
+     "basis": "decommissioning from 1990; complete dismantling expected by 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q2515803",
+   "wiki": "de",
+   "title": "Verglasungseinrichtung Karlsruhe",
+   "revision": 266282082,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2010-11",
+     "basis": "vitrification process completed November 2010; decommissioning and dismantling to follow"
+    }
+   ]
+  },
+  {
+   "qid": "Q292586",
+   "wiki": "de",
+   "title": "AGN-211-P",
+   "revision": 262249852,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2019-02",
+     "basis": "decommissioning order issued February 2019"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2021",
+     "basis": "dismantling completed 2020; released from federal supervision 2021"
+    }
+   ]
+  },
+  {
+   "qid": "Q315738",
+   "wiki": "en",
+   "title": "Wendelstein 7-X",
+   "revision": 1379470777,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "the world's largest stellarator in operation"
+    }
+   ]
+  },
+  {
+   "qid": "Q318446",
+   "wiki": "en",
+   "title": "Moruroa",
+   "revision": 1376224815,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1995-12-27",
+     "basis": "last nuclear test on Moruroa 27 December 1995"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1996",
+     "basis": "test site dismantled after France's last test in January 1996"
+    }
+   ]
+  },
+  {
+   "qid": "Q14710076",
+   "wiki": "en",
+   "title": "Molten-Salt Reactor Experiment",
+   "revision": 1352248463,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1969-12",
+     "basis": "final shutdown December 1969"
+    }
+   ]
+  },
+  {
+   "qid": "Q20729928",
+   "wiki": "en",
+   "title": "BN-600 reactor",
+   "revision": 1372240743,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "in operation since 1980"
+    }
+   ]
+  },
+  {
+   "qid": "Q25431399",
+   "wiki": "en",
+   "title": "JEEP II",
+   "revision": 1364582852,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2018",
+     "basis": "in operation between 1966 and 2018"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2019-04-25",
+     "basis": "board decided 25 April 2019 not to restart and to start decommissioning"
+    }
+   ]
+  },
+  {
+   "qid": "Q2500027",
+   "wiki": "de",
+   "title": "Uranerzaufbereitungsanlage Ellweiler",
+   "revision": 267918714,
+   "reviewedAt": "2026-10-13T15:18:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1989",
+     "basis": "operation stopped in 1989"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2000",
+     "basis": "site remediated 1990-2000"
+    }
+   ]
+  },
+  {
+   "qid": "Q2214815",
+   "wiki": "en",
+   "title": "Salmon Site",
+   "revision": 1370416290,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1966-12-03",
+     "basis": "two nuclear tests, 22 October 1964 and 3 December 1966"
+    }
+   ]
+  },
+  {
+   "qid": "Q4788524",
+   "wiki": "en",
+   "title": "Area 2 (Nevada National Security Site)",
+   "revision": 1371119290,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1992",
+     "basis": "testing stopped in 1992 ahead of the test-ban treaty"
+    }
+   ]
+  },
+  {
+   "qid": "Q3149614",
+   "wiki": "fr",
+   "title": "In Ecker",
+   "revision": 239604885,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1966-02-16",
+     "basis": "the Grenat shot of 16 February 1966 ended nuclear testing in Algeria"
+    }
+   ]
+  },
+  {
+   "qid": "Q506815",
+   "wiki": "en",
+   "title": "Fangataufa",
+   "revision": 1363957515,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1996",
+     "basis": "used as a nuclear test site from 1966 to 1996"
+    }
+   ]
+  },
+  {
+   "qid": "Q114196712",
+   "wiki": "en",
+   "title": "Doel Nuclear Power Station",
+   "revision": 1368815504,
+   "reviewedAt": "2026-10-13T16:12:27Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2025-02-14",
+     "basis": "unit table: Doel 1 licensed until 14 February 2025; cited report of the Doel-1 shutdown"
+    }
+   ]
+  },
+  {
+   "qid": "Q114197101",
+   "wiki": "en",
+   "title": "Doel Nuclear Power Station",
+   "revision": 1368815504,
+   "reviewedAt": "2026-10-13T16:12:27Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2025",
+     "basis": "unit table: Doel 2 licensed until 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q5507728",
+   "wiki": "en",
+   "title": "Fukushima Daiichi Nuclear Power Plant",
+   "revision": 1378002632,
+   "reviewedAt": "2026-10-13T16:12:27Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2014-01",
+     "basis": "units 5 and 6 shut down January 2014; TEPCO decided in December 2013 to decommission them"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040212",
+   "wiki": "en",
+   "title": "ASTRID (reactor)",
+   "revision": 1360542926,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "2019-08",
+     "basis": "France cancelled ASTRID in August 2019"
+    }
+   ]
+  },
+  {
+   "qid": "Q580142",
+   "wiki": "en",
+   "title": "Marcoule Nuclear Site",
+   "revision": 1374173114,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1956",
+     "basis": "operational since 1956; the Melox plant has made MOX fuel there since 1995 (the infobox dates only its shut UNGG reactors)"
+    }
+   ]
+  },
+  {
+   "qid": "Q1916962",
+   "wiki": "en",
+   "title": "Mega Ampere Spherical Tokamak",
+   "revision": 1365431229,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2013-09",
+     "basis": "MAST ran from December 1999 to September 2013"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2020-10-29",
+     "basis": "its successor MAST Upgrade, on the same Culham site, began operation on 29 October 2020"
+    }
+   ]
+  },
+  {
+   "qid": "Q3100731",
+   "wiki": "en",
+   "title": "T-15 (reactor)",
+   "revision": 1374698692,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1995",
+     "basis": "operational from 1988 until 1995, then rebuilt as T-15MD"
+    }
+   ]
+  },
+  {
+   "qid": "Q3100731",
+   "wiki": "en",
+   "title": "List of fusion experiments",
+   "revision": 1379837384,
+   "reviewedAt": "2026-10-13T18:26:22Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2021",
+     "basis": "T-15MD, the rebuilt T-15 at the Kurchatov Institute: operational, operation 2021–"
+    }
+   ]
+  },
+  {
+   "qid": "Q96310310",
+   "wiki": "en",
+   "title": "List of fusion experiments",
+   "revision": 1379837384,
+   "reviewedAt": "2026-10-13T18:26:22Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Wendelstein II-B (Garching, IPP): shut down; operation from 1971"
+    }
+   ]
+  },
+  {
+   "qid": "Q5008800",
+   "wiki": "en",
+   "title": "CAREM",
+   "revision": 1379067577,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2014-02",
+     "basis": "first concrete poured in February 2014"
+    },
+    {
+     "status": "CONSTRUCTION_SUSPENDED",
+     "date": "2024-09",
+     "basis": "construction halted again in September 2024; never completed"
+    }
+   ]
+  },
+  {
+   "qid": "Q1372727",
+   "wiki": "en",
+   "title": "Wackersdorf reprocessing plant",
+   "revision": 1374455063,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1989",
+     "basis": "a planned reprocessing plant, never completed: construction 1985 to 1989; today an industrial site"
+    }
+   ]
+  },
+  {
+   "qid": "Q111660718",
+   "wiki": "en",
+   "title": "Fermi 1",
+   "revision": 1365771525,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1972-11-27",
+     "basis": "ran until closing on November 27, 1972; officially decommissioned on December 31, 1975"
+    }
+   ]
+  },
+  {
+   "qid": "Q30602442",
+   "wiki": "en",
+   "title": "7 Naval Ammunition Depot",
+   "revision": 1286355161,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "a World War II US Navy ammunition depot that was located at Springhill; only remains such as bunkers stand today"
+    }
+   ]
+  },
+  {
+   "qid": "Q686884",
+   "wiki": "en",
+   "title": "Lucens reactor",
+   "revision": 1365265185,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1969-01-21",
+     "basis": "nuclear accident on 21 January 1969 ended operation"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1969-03-03",
+     "basis": "decontamination and dismantling began once the cavern could be entered on 3 March 1969"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1995-04",
+     "basis": "dismantling completed end of 1974; site released from oversight in April 1995 (last waste patch cleared after 2003)"
+    }
+   ]
+  },
+  {
+   "qid": "Q140265559",
+   "wiki": "en",
+   "title": "Wackersdorf reprocessing plant",
+   "revision": 1374455063,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1989",
+     "basis": "a building of the reprocessing plant, which was never completed: construction 1985 to 1989"
+    }
+   ]
+  },
+  {
+   "qid": "Q5306661",
+   "wiki": "en",
+   "title": "Punggye-ri Nuclear Test Site",
+   "revision": 1365838340,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2018-05-24",
+     "basis": "tunnel entrances partially demolished in May 2018"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2022",
+     "basis": "observers noted the site was rehabilitated in early 2022 for possible tests; no test since 2017"
+    }
+   ]
+  },
+  {
+   "qid": "Q12299625",
+   "wiki": "bg",
+   "title": "Ядрена научно-експериментална база",
+   "revision": 12383400,
+   "reviewedAt": "2026-10-13T18:26:22Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "1989-07-13",
+     "basis": "IRT-2000 stopped 'temporarily' on 13 July 1989; fuel removed 2003 and 2008 for its rebuild as a low-power reactor"
+    }
+   ]
+  },
+  {
+   "qid": "Q959223",
+   "wiki": "es",
+   "title": "Teatro Paiol",
+   "revision": 173857402,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "a powder magazine (paiol) built 1874, a theatre since 27 December 1971"
+    }
+   ]
+  },
+  {
+   "qid": "Q137734007",
+   "source": "wikidata",
+   "revision": 2452968349,
+   "reviewedAt": "2026-10-13T15:54:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "de description: a Bundeswehr depot in which weapons and ammunition were stored during the Cold War (past tense)"
+    }
+   ]
+  },
+  {
+   "qid": "Q59695277",
+   "source": "wikidata",
+   "revision": 1905014480,
+   "reviewedAt": "2026-10-13T15:54:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "de description: an explosives factory of the National Socialist era"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7534487",
+   "wiki": "en",
+   "title": "Tihange Nuclear Power Station",
+   "revision": 1380015855,
+   "reviewedAt": "2026-10-13T16:12:27Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2025-10-01",
+     "basis": "Tihange 1: infobox decommissioned 1 October 2025 (the tracker still lists the unit as operating)"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7534488",
+   "wiki": "en",
+   "title": "Tihange Nuclear Power Station",
+   "revision": 1380015855,
+   "reviewedAt": "2026-10-13T16:12:27Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2023-02-01",
+     "basis": "Tihange 2: infobox decommissioned 1 February 2023"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283511",
+   "wiki": "de",
+   "title": "Kernkraftwerk Unterweser",
+   "revision": 264684560,
+   "reviewedAt": "2026-10-13T18:26:22Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03",
+     "basis": "Esenshamm is the Unterweser plant; shut down in March 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2018-02-05",
+     "basis": "decommissioning and dismantling licensed on 5 February 2018"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11839420",
+   "wiki": "en",
+   "title": "Zaporizhzhia Nuclear Power Plant",
+   "revision": 1379203837,
+   "reviewedAt": "2026-10-13T16:12:28Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2022",
+     "basis": "occupied since 2022; five units in cold shutdown and one in hot shutdown, none generating (the tracker lists the units as operating)"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11838972",
+   "wiki": "en",
+   "title": "Tōkai Nuclear Power Plant",
+   "revision": 1366974487,
+   "reviewedAt": "2026-10-13T17:52:39Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2011-03-11",
+     "basis": "not operational since the reactor shut down in the 2011 Tōhoku earthquake; Tōkai I dismantled, Tōkai II under safety work"
+    }
+   ]
+  },
+  {
+   "qid": "Q5507728",
+   "source": "gem-gnpt",
+   "units": [
+    "G100000500369",
+    "G100000500370",
+    "G100000500132"
+   ],
+   "basis": "Fukushima Daiichi units 4, 5 and 6"
+  },
+  {
+   "qid": "Q114197300",
+   "source": "gem-gnpt",
+   "units": [
+    "G100000500234"
+   ],
+   "basis": "Doel 4"
+  },
+  {
+   "qid": "geonames:13679204",
+   "source": "gem-gnpt",
+   "units": [
+    "G100000501228"
+   ],
+   "basis": "the placemark lies on the site of tracker unit 2 (39.7886 N, 125.7622 E), not unit 1"
+  },
+  {
+   "qid": "Q97276462",
+   "wiki": "it",
+   "title": "Reattore nucleare LENA",
+   "revision": 141137305,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1965-11-15",
+     "basis": "first criticality 15 November 1965; used for research and training since"
+    }
+   ]
+  },
+  {
+   "qid": "Q111846674",
+   "wiki": "uk",
+   "title": "Ядерна підкритична установка «Джерело нейтронів»",
+   "revision": 47824139,
+   "reviewedAt": "2026-10-13T16:53:56Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2021-10-06",
+     "basis": "fuel loaded and physical start-up 6 October 2021"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2022-02-24",
+     "basis": "put into a deep subcritical state on 24 February 2022 at the full-scale invasion; building shelled 2022 and 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q116769321",
+   "wiki": "en",
+   "title": "Nigeria research reactor-1",
+   "revision": 1374816001,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2004-02-03",
+     "basis": "first criticality 3 February 2004; LEU core, back at full power December 2018"
+    }
+   ]
+  },
+  {
+   "qid": "Q123468516",
+   "wiki": "en",
+   "title": "Vulcan Naval Reactor Test Establishment",
+   "revision": 1369886473,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2015-07-21",
+     "basis": "final reactor shut down 21 July 2015"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2023",
+     "basis": "decommissioning programme from 2023 after defuelling"
+    }
+   ]
+  },
+  {
+   "qid": "Q126285275",
+   "wiki": "it",
+   "title": "AGN-201 Costanza",
+   "revision": 151085338,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1960",
+     "basis": "in operation at the University of Palermo since 1960, still active"
+    }
+   ]
+  },
+  {
+   "qid": "Q778029",
+   "wiki": "de",
+   "title": "Ausbildungskernreaktor Dresden",
+   "revision": 263107257,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2005-03-22",
+     "basis": "AKR-2 in operation since 22 March 2005"
+    }
+   ]
+  },
+  {
+   "qid": "Q989491",
+   "wiki": "en",
+   "title": "Open-pool Australian lightwater reactor",
+   "revision": 1375253925,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2006-08-12",
+     "basis": "first criticality 12 August 2006; 20 years of operation by August 2026"
+    }
+   ]
+  },
+  {
+   "qid": "Q1236693",
+   "wiki": "ru",
+   "title": "ИВВ-2",
+   "revision": 154341178,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1966-04-23",
+     "basis": "first criticality 23 April 1966; rebuilt 1975-1988, service life extended"
+    }
+   ]
+  },
+  {
+   "qid": "Q2075888",
+   "wiki": "en",
+   "title": "University of Massachusetts Lowell Radiation Laboratory",
+   "revision": 1364551255,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1975-01-02",
+     "basis": "first startup 2 January 1975; reactor operating"
+    }
+   ]
+  },
+  {
+   "qid": "Q3421929",
+   "wiki": "en",
+   "title": "NUR Reactor",
+   "revision": 1359968103,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1989-04",
+     "basis": "first criticality April 1989"
+    }
+   ]
+  },
+  {
+   "qid": "Q3533376",
+   "wiki": "en",
+   "title": "KAMINI",
+   "revision": 1342564403,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1996-10-29",
+     "basis": "criticality 29 October 1996"
+    }
+   ]
+  },
+  {
+   "qid": "Q4479886",
+   "wiki": "ru",
+   "title": "Ф-1 (реактор)",
+   "revision": 153879705,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2012",
+     "basis": "infobox years of operation 1946-2012"
+    }
+   ]
+  },
+  {
+   "qid": "Q5424659",
+   "wiki": "en",
+   "title": "Fast Breeder Test Reactor",
+   "revision": 1365744859,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1985-10",
+     "basis": "first criticality October 1985"
+    }
+   ]
+  },
+  {
+   "qid": "Q5636149",
+   "wiki": "ja",
+   "title": "高温工学試験研究炉",
+   "revision": 101339462,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1998-11-10",
+     "basis": "first criticality 10 November 1998"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2011-01",
+     "basis": "operation suspended from January 2011"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2021-07-30",
+     "basis": "restarted 30 July 2021"
+    }
+   ]
+  },
+  {
+   "qid": "Q2450052",
+   "wiki": "nl",
+   "title": "Hoger Onderwijs Reactor",
+   "revision": 68586225,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1963",
+     "basis": "in use since 1963"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2019-05-06",
+     "basis": "shut down 6 May 2019 for the Oyster upgrade, restart planned"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438119",
+   "wiki": "en",
+   "title": "Maria reactor",
+   "revision": 1358474770,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1974-12-18",
+     "basis": "activated 18 December 1974"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2025-04-01",
+     "basis": "temporarily shut down 1 April 2025 when its licence ended"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438119",
+   "wiki": "pl",
+   "title": "Reaktor Maria",
+   "revision": 80940145,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2025",
+     "basis": "a new operating licence after a few months in 2025, operation resumed"
+    }
+   ]
+  },
+  {
+   "qid": "Q2305250",
+   "wiki": "nl",
+   "title": "BR1",
+   "revision": 64885876,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "one of four SCK CEN research reactors in operation since 1956-1964, used as a neutron source"
+    }
+   ]
+  },
+  {
+   "qid": "Q4781389",
+   "wiki": "nl",
+   "title": "BR2",
+   "revision": 64408516,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "one of four SCK CEN research reactors in operation since 1956-1964; one of the most powerful research reactors"
+    }
+   ]
+  },
+  {
+   "qid": "Q5916559",
+   "wiki": "fr",
+   "title": "Centre de recherche nucléaire de Téhéran",
+   "revision": 234572395,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1967",
+     "basis": "research reactor commissioned in 1967"
+    }
+   ]
+  },
+  {
+   "qid": "Q5973356",
+   "wiki": "en",
+   "title": "IR-40",
+   "revision": 1367053424,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2004-10",
+     "basis": "civil works began October 2004"
+    },
+    {
+     "status": "CANCELLED",
+     "date": "2016-01",
+     "basis": "never operated; core removed and filled with concrete (Iran stated January 2016); struck in 2025 and March 2026"
+    }
+   ]
+  },
+  {
+   "qid": "Q6305890",
+   "wiki": "en",
+   "title": "Jules Horowitz Reactor",
+   "revision": 1236008176,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2009",
+     "basis": "under construction, first concrete summer 2009; first criticality not before 2030"
+    }
+   ]
+  },
+  {
+   "qid": "Q7125528",
+   "wiki": "en",
+   "title": "Pakistan Atomic Research Reactor",
+   "revision": 1368963631,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "infobox status Active (PARR-I, PARR-II)"
+    }
+   ]
+  },
+  {
+   "qid": "Q7261000",
+   "wiki": "en",
+   "title": "Purdue University Reactor Number One",
+   "revision": 1364551240,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1962-08-30",
+     "basis": "first criticality 30 August 1962; the only operating reactor in Indiana"
+    }
+   ]
+  },
+  {
+   "qid": "Q7895838",
+   "wiki": "en",
+   "title": "University of Missouri Research Reactor Center",
+   "revision": 1357125563,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1966-10-13",
+     "basis": "operational 13 October 1966; most powerful US university reactor as of June 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q12622361",
+   "wiki": "en",
+   "title": "High-Flux Advanced Neutron Application Reactor",
+   "revision": 1364551187,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1995-04",
+     "basis": "first criticality April 1995"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040219",
+   "wiki": "fr",
+   "title": "Cabri (réacteur)",
+   "revision": 239444516,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1963-12-24",
+     "basis": "first divergence 24 December 1963"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2015-10-20",
+     "basis": "first divergence in its new pressurised-water loop configuration 20 October 2015"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040238",
+   "wiki": "fr",
+   "title": "Eole (réacteur)",
+   "revision": 238337450,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2017",
+     "basis": "permanently shut down in 2017"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024",
+     "basis": "dismantling to begin in 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040246",
+   "wiki": "fr",
+   "title": "Minerve (réacteur)",
+   "revision": 236253657,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2017",
+     "basis": "permanently shut down in 2017"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024",
+     "basis": "dismantling to begin in 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040265",
+   "wiki": "fr",
+   "title": "Réacteur à haut flux",
+   "revision": 240215474,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1971",
+     "basis": "first divergence 1971; to keep operating until 2035"
+    }
+   ]
+  },
+  {
+   "qid": "Q17628272",
+   "wiki": "en",
+   "title": "RV-1 nuclear reactor",
+   "revision": 1357406161,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1997",
+     "basis": "last operated March 1991; permanent shutdown decided 1997; core later removed and the building repurposed as a gamma irradiation plant"
+    }
+   ]
+  },
+  {
+   "qid": "Q18208218",
+   "wiki": "en",
+   "title": "ETRR-2",
+   "revision": 1364551153,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1997-11-27",
+     "basis": "first criticality 27 November 1997"
+    }
+   ]
+  },
+  {
+   "qid": "Q25058143",
+   "wiki": "en",
+   "title": "Philippine Research Reactor-1",
+   "revision": 1373462873,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1963-08-26",
+     "basis": "first criticality 26 August 1963"
+    },
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1988",
+     "basis": "the TRIGA critical reactor shut down in 1988; the facility then lay dormant"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2022",
+     "basis": "a subcritical assembly (SATER) became operational in the facility in 2022"
+    }
+   ]
+  },
+  {
+   "qid": "Q25247641",
+   "wiki": "en",
+   "title": "Transient Reactor Test Facility",
+   "revision": 1371819849,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1959",
+     "basis": "operated from 1959"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "1994",
+     "basis": "operation suspended in 1994"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2017-11",
+     "basis": "restarted November 2017, still in operation"
+    }
+   ]
+  },
+  {
+   "qid": "Q47184281",
+   "wiki": "es",
+   "title": "Reactor nuclear Argos",
+   "revision": 161592085,
+   "reviewedAt": "2026-10-13T16:54:02Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1977",
+     "basis": "operated until 1977"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2001",
+     "basis": "dismantling works 2001 to April 2002"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2003-12-23",
+     "basis": "closure granted 23 December 2003"
+    }
+   ]
+  },
+  {
+   "qid": "Q52161703",
+   "wiki": "en",
+   "title": "Ghana Research Reactor-1",
+   "revision": 1364551169,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1994-12-17",
+     "basis": "first criticality 17 December 1994; converted to LEU 2016-2017"
+    }
+   ]
+  },
+  {
+   "qid": "Q112251198",
+   "wiki": "en",
+   "title": "High Altitude Research Laboratory",
+   "revision": 1359530616,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1954-04-04",
+     "basis": "opened 4 April 1954; part of BARC since 1963, Gulmarg observatory in operation since 1977"
+    }
+   ]
+  },
+  {
+   "qid": "Q7972301",
+   "wiki": "en",
+   "title": "Washington State University Reactor",
+   "revision": 1364551261,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1961-03-07",
+     "basis": "first criticality 7 March 1961; upgraded to a 1 MW TRIGA in 1967"
+    }
+   ]
+  },
+  {
+   "qid": "Q96372779",
+   "wiki": "en",
+   "title": "Aurora nuclear reactor",
+   "revision": 1370116357,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2025-09-22",
+     "basis": "Aurora-INL broke ground 22 September 2025; startup planned 2028"
+    }
+   ]
+  },
+  {
+   "qid": "Q135771",
+   "wiki": "en",
+   "title": "Z Pulsed Power Facility",
+   "revision": 1378857389,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1996",
+     "basis": "PBFA-II upgraded into the Z machine in 1996; refurbished from 2007"
+    }
+   ]
+  },
+  {
+   "qid": "Q191788",
+   "wiki": "en",
+   "title": "ITER",
+   "revision": 1379846563,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2013",
+     "basis": "under construction since 2013; first plasma expected 2033-2034"
+    }
+   ]
+  },
+  {
+   "qid": "Q297398",
+   "wiki": "en",
+   "title": "ASDEX Upgrade",
+   "revision": 1376152420,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1991",
+     "basis": "began operation in 1991"
+    }
+   ]
+  },
+  {
+   "qid": "Q499004",
+   "wiki": "en",
+   "title": "Nyongbyon Nuclear Scientific Research Center",
+   "revision": 1373470124,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1965",
+     "basis": "IRT-2000 research reactor operational since 1965"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2015-09-15",
+     "basis": "the Magnox reactor, disabled in 2007, resumed operation (announced 15 September 2015)"
+    }
+   ]
+  },
+  {
+   "qid": "Q582905",
+   "wiki": "en",
+   "title": "Reggane",
+   "revision": 1376594933,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1961",
+     "basis": "four French nuclear tests near Reggane in 1960 and 1961, none since"
+    }
+   ]
+  },
+  {
+   "qid": "Q612137",
+   "wiki": "en",
+   "title": "Mayak",
+   "revision": 1357176275,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1948",
+     "basis": "first reactor A-1 operated from 1948; still active with two reactors as of 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q2500022",
+   "wiki": "de",
+   "title": "Urananreicherungsanlage Gronau",
+   "revision": 266854066,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1985-08-15",
+     "basis": "in operation since 15 August 1985"
+    }
+   ]
+  },
+  {
+   "qid": "Q2868859",
+   "wiki": "fr",
+   "title": "Atelier de technologie du plutonium",
+   "revision": 234388460,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2003-07",
+     "basis": "commercial production ceased July 2003"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2012-06",
+     "basis": "dismantling, suspended October 2009, partly resumed under the ASN authorisation of early June 2012"
+    }
+   ]
+  },
+  {
+   "qid": "Q3552572",
+   "wiki": "fr",
+   "title": "Usine Orano de Pierrelatte",
+   "revision": 228312732,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1984",
+     "basis": "infobox en service; uranium chemistry workshops and the W plant entered service in 1984"
+    }
+   ]
+  },
+  {
+   "qid": "Q3552579",
+   "wiki": "fr",
+   "title": "Usine Philippe-Coste de Pierrelatte",
+   "revision": 240011960,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2018-09-10",
+     "basis": "Comurhex II inaugurated 10 September 2018 (Comurhex I stopped 2017)"
+    }
+   ]
+  },
+  {
+   "qid": "Q3796902",
+   "wiki": "it",
+   "title": "Impianto ITREC",
+   "revision": 147875777,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1987",
+     "basis": "activities stopped after the 1987 referendum"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2003",
+     "basis": "SOGIN took over the plant in 2003 to dismantle it"
+    }
+   ]
+  },
+  {
+   "qid": "Q5133704",
+   "wiki": "en",
+   "title": "Clinch River Breeder Reactor Project",
+   "revision": 1366698897,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1983-10-26",
+     "basis": "Congress terminated funding 26 October 1983"
+    }
+   ]
+  },
+  {
+   "qid": "Q5467879",
+   "wiki": "en",
+   "title": "Ford Nuclear Reactor",
+   "revision": 1372468605,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2003-07-03",
+     "basis": "operated September 1957 until 3 July 2003; the reactor space became a laboratory opened April 2017"
+    }
+   ]
+  },
+  {
+   "qid": "Q5493549",
+   "wiki": "en",
+   "title": "Frascati Tokamak Upgrade",
+   "revision": 1329680842,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1990",
+     "basis": "began operation in 1990"
+    }
+   ]
+  },
+  {
+   "qid": "Q6012307",
+   "wiki": "en",
+   "title": "Natanz Nuclear Facility",
+   "revision": 1369717587,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2003",
+     "basis": "pilot enrichment plant began operation 2003"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2025-06-22",
+     "basis": "struck June 2025 (US strike 22 June 2025) and again in 2026; inaccessible as of March 2026"
+    }
+   ]
+  },
+  {
+   "qid": "Q757565",
+   "wiki": "en",
+   "title": "Fordow Uranium Enrichment Plant",
+   "revision": 1377884072,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2025-06-22",
+     "basis": "struck 22 June 2025; likely knocked out of operation"
+    }
+   ]
+  },
+  {
+   "qid": "Q6879765",
+   "wiki": "en",
+   "title": "Missouri University of Science and Technology Nuclear Reactor",
+   "revision": 1364617340,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1961-12-09",
+     "basis": "initial criticality 9 December 1961; in use per the 2020-2021 annual report"
+    }
+   ]
+  },
+  {
+   "qid": "Q737107",
+   "wiki": "en",
+   "title": "NERVA",
+   "revision": 1359254529,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1973",
+     "basis": "project 1956-1973; infobox status retired"
+    }
+   ]
+  },
+  {
+   "qid": "Q753201",
+   "wiki": "en",
+   "title": "Kapustin Yar",
+   "revision": 1379077275,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1946-05-13",
+     "basis": "established 13 May 1946; test range in use"
+    }
+   ]
+  },
+  {
+   "qid": "Q1063567",
+   "wiki": "en",
+   "title": "Sellafield",
+   "revision": 1378357588,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1950",
+     "basis": "Windscale piles commissioned 1950; processes still active: spent-fuel storage, waste processing and storage, decommissioning (reprocessing ended 17 July 2022)"
+    }
+   ]
+  },
+  {
+   "qid": "Q1132657",
+   "wiki": "en",
+   "title": "Prototype Fast Breeder Reactor",
+   "revision": 1375302576,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2004",
+     "basis": "construction began 2004, completed 4 March 2024"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2026-04-06",
+     "basis": "first criticality achieved 6 April 2026"
+    }
+   ]
+  },
+  {
+   "qid": "Q1153639",
+   "wiki": "en",
+   "title": "DIDO (nuclear reactor)",
+   "revision": 1277017803,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1990",
+     "basis": "shut down in 1990; decommissioning being planned"
+    }
+   ]
+  },
+  {
+   "qid": "Q55632234",
+   "wiki": "en",
+   "title": "SPARC (tokamak)",
+   "revision": 1375545238,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2021",
+     "basis": "construction 2021 to present; first plasma projected 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q60740194",
+   "wiki": "en",
+   "title": "Heliotron J",
+   "revision": 1292657084,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2000",
+     "basis": "operation since 2000"
+    }
+   ]
+  },
+  {
+   "qid": "Q66106930",
+   "wiki": "it",
+   "title": "Divertor Tokamak Test",
+   "revision": 150897570,
+   "reviewedAt": "2026-10-13T16:53:59Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2018",
+     "basis": "construction began in the second half of 2018 at Frascati; first plasma expected around 2028"
+    }
+   ]
+  },
+  {
+   "qid": "Q85204528",
+   "wiki": "ja",
+   "title": "QUEST",
+   "revision": 110450182,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "operated by the Kyushu University RIAM high-temperature plasma centre (運用中)"
+    }
+   ]
+  },
+  {
+   "qid": "Q85802582",
+   "wiki": "en",
+   "title": "Spherical Tokamak for Energy Production",
+   "revision": 1379848714,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PLANNED",
+     "date": "2019",
+     "basis": "concept design from 2019; site chosen 2022; construction planned 2032-2040"
+    }
+   ]
+  },
+  {
+   "qid": "Q135287608",
+   "wiki": "en",
+   "title": "Lanzhou uranium enrichment plant",
+   "revision": 1373232061,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1964",
+     "basis": "operated 1964 to present"
+    }
+   ]
+  },
+  {
+   "qid": "Q11863486",
+   "wiki": "en",
+   "title": "Training Reactor VR-1",
+   "revision": 1364551250,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1990-12-03",
+     "basis": "first criticality 3 December 1990"
+    }
+   ]
+  },
+  {
+   "qid": "Q12071363",
+   "wiki": "de",
+   "title": "JT-60SA",
+   "revision": 263490995,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2013",
+     "basis": "assembly began 2013"
+    },
+    {
+     "status": "OPERATING",
+     "date": "2023-10",
+     "basis": "first plasma discharge October 2023"
+    }
+   ]
+  },
+  {
+   "qid": "Q14552211",
+   "wiki": "en",
+   "title": "Tricastin Nuclear Site",
+   "revision": 1333026528,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1962",
+     "basis": "SUCP began operations on the site in 1962; nuclear plant and fuel-cycle plants in operation"
+    }
+   ]
+  },
+  {
+   "qid": "Q16820666",
+   "wiki": "en",
+   "title": "Dhruva reactor",
+   "revision": 1333899986,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1985-08-08",
+     "basis": "first critical 8 August 1985"
+    }
+   ]
+  },
+  {
+   "qid": "Q19951914",
+   "wiki": "fr",
+   "title": "Brest-300",
+   "revision": 239400734,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2021-06-08",
+     "basis": "construction proper began 8 June 2021"
+    }
+   ]
+  },
+  {
+   "qid": "Q20981528",
+   "wiki": "en",
+   "title": "Duynefontein",
+   "revision": 1337212402,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PLANNED",
+     "date": "2025",
+     "basis": "environmental authorisation for a new nuclear power plant on the site granted in 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q1384378",
+   "wiki": "en",
+   "title": "Experimental Advanced Superconducting Tokamak",
+   "revision": 1379318690,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2006",
+     "basis": "began operations in 2006 (first discharge 28 September 2006)"
+    }
+   ]
+  },
+  {
+   "qid": "Q1411438",
+   "wiki": "fr",
+   "title": "Usine de retraitement de la Hague",
+   "revision": 240248114,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1966",
+     "basis": "commissioned in 1966; operated by Orano"
+    }
+   ]
+  },
+  {
+   "qid": "Q1419531",
+   "wiki": "en",
+   "title": "Rokkasho Reprocessing Plant",
+   "revision": 1328664712,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "1993",
+     "basis": "construction began 1993; completion postponed repeatedly"
+    }
+   ]
+  },
+  {
+   "qid": "Q2307093",
+   "wiki": "en",
+   "title": "Totsky range",
+   "revision": 1331658871,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "training ground still in use (2018 artillery firing); site of the 1954 Totskoye nuclear exercise"
+    }
+   ]
+  },
+  {
+   "qid": "Q2438912",
+   "wiki": "en",
+   "title": "Tokamak à configuration variable",
+   "revision": 1374801360,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1992-11",
+     "basis": "first plasma November 1992"
+    }
+   ]
+  },
+  {
+   "qid": "Q2484595",
+   "wiki": "en",
+   "title": "Petten nuclear reactor",
+   "revision": 1325223247,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1961-11-09",
+     "basis": "criticality 9 November 1961"
+    }
+   ]
+  },
+  {
+   "qid": "Q135029531",
+   "wiki": "en",
+   "title": "IR-40",
+   "revision": 1367053424,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2025-06-19",
+     "basis": "the complex's reactor containment and the heavy-water plant's distillation towers were hit 19 June 2025; struck again 27 March 2026"
+    }
+   ]
+  },
+  {
+   "qid": "Q284681",
+   "wiki": "en",
+   "title": "Chicago Pile-1",
+   "revision": 1377483554,
+   "reviewedAt": "2026-10-13T16:58:46Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1942-12-02",
+     "basis": "first criticality 2 December 1942"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1943",
+     "basis": "moved in 1943 to Site A and rebuilt there as Chicago Pile-2; infobox status dismantled"
+    }
+   ]
+  },
+  {
+   "qid": "Q5095738",
+   "wiki": "en",
+   "title": "Chicago Pile-3",
+   "revision": 1270252448,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1944",
+     "basis": "first criticality 1944"
+    },
+    {
+     "status": "OPERATING",
+     "date": "1950-05",
+     "basis": "dismantled January 1950 over cladding corrosion, rebuilt as CP-3 prime and restarted May 1950"
+    },
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1954",
+     "basis": "operated until it was deactivated in 1954"
+    }
+   ]
+  },
+  {
+   "qid": "Q6107726",
+   "wiki": "en",
+   "title": "JASON reactor",
+   "revision": 1290087276,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1996",
+     "basis": "operational at Greenwich from 1962 to 1996"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1999",
+     "basis": "fully dismantled by 1999"
+    }
+   ]
+  },
+  {
+   "qid": "Q1331046",
+   "wiki": "en",
+   "title": "Monju Nuclear Power Plant",
+   "revision": 1365923749,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2016-12-21",
+     "basis": "the government confirmed closure and decommissioning on 21 December 2016 (last operated 2010)"
+    }
+   ]
+  },
+  {
+   "qid": "Q318042",
+   "wiki": "de",
+   "title": "Kernkraftwerk Großwelzheim",
+   "revision": 266543734,
+   "reviewedAt": "2026-10-13T16:58:47Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1971-04-20",
+     "basis": "shut down 20 April 1971; used for reactor-safety tests after its decommissioning in 1983"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1998",
+     "basis": "dismantling completed in 1998"
+    }
+   ]
+  },
+  {
+   "qid": "Q656869",
+   "wiki": "de",
+   "title": "Kernkraftwerk Grafenrheinfeld",
+   "revision": 270749087,
+   "reviewedAt": "2026-10-13T16:58:47Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2015-06",
+     "basis": "shut down June 2015"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2018-04-11",
+     "basis": "decommissioning and dismantling licence granted (announced 11 April 2018); cooling towers demolished 16 August 2024; dismantling continues"
+    }
+   ]
+  },
+  {
+   "qid": "Q862589",
+   "wiki": "en",
+   "title": "Three Mile Island Nuclear Generating Station",
+   "revision": 1371695590,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2019-09-20",
+     "basis": "unit 1 shut down 20 September 2019 (unit 2 since the 1979 accident)"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2024-09",
+     "basis": "Constellation announced in September 2024 a restart of unit 1 as the Crane Clean Energy Center, expected in 2027; infobox status mothballed"
+    }
+   ]
+  },
+  {
+   "qid": "Q533357",
+   "wiki": "en",
+   "title": "Palisades Nuclear Generating Station",
+   "revision": 1372482521,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2022-05-20",
+     "basis": "shut down 20 May 2022"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2025-08-27",
+     "basis": "status changed from decommissioned to operational on 27 August 2025; restart of generation pending"
+    }
+   ]
+  },
+  {
+   "qid": "Q3931176",
+   "wiki": "ja",
+   "title": "常陽",
+   "revision": 109820104,
+   "reviewedAt": "2026-10-13T17:00:54Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1977",
+     "basis": "experimental fast reactor (critical 1977)"
+    },
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2007",
+     "basis": "operation suspended since an in-core test rig was damaged in 2007; restart under review"
+    }
+   ]
+  },
+  {
+   "qid": "Q1702534",
+   "wiki": "en",
+   "title": "Joint European Torus",
+   "revision": 1380028990,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2023-12",
+     "basis": "finished operations in December 2023; decommissioning to last until 2040"
+    }
+   ]
+  },
+  {
+   "qid": "Q1796182",
+   "wiki": "en",
+   "title": "Royal Tropical Institute",
+   "revision": 1363576481,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1910",
+     "basis": "Colonial Institute founded in Amsterdam in 1910, renamed 1945, the institute in its present form since 1950 (the item's 1945 end date is the renaming)"
+    }
+   ]
+  },
+  {
+   "qid": "Q316122",
+   "wiki": "en",
+   "title": "BESSY",
+   "revision": 1352298278,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1998-09-04",
+     "basis": "operates the BESSY II synchrotron, inaugurated 4 September 1998; part of Helmholtz-Zentrum Berlin since 1 January 2009 (the item's 2009 end date is that merger)"
+    }
+   ]
+  },
+  {
+   "qid": "Q7662222",
+   "wiki": "en",
+   "title": "Synchrotron Radiation Center",
+   "revision": 1341484179,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2014-03-07",
+     "basis": "final beam run 7 March 2014, after which its equipment was dismantled"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739449",
+   "wiki": "en",
+   "title": "Oldbury nuclear power station",
+   "revision": 1377741019,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2012-02-29",
+     "basis": "reactor 1 ceased operating 29 February 2012 (reactor 2 30 June 2011)"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2012-02-29",
+     "basis": "defuelling and building removal under way since, care and maintenance from 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739500",
+   "wiki": "en",
+   "title": "Wylfa nuclear power station",
+   "revision": 1347299564,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2015-12-30",
+     "basis": "reactor 1 shut down 30 December 2015"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2015-12-30",
+     "basis": "infobox decommissioned 2015; defuelling and decommissioning followed"
+    }
+   ]
+  },
+  {
+   "qid": "Q1595271",
+   "wiki": "en",
+   "title": "Berkeley nuclear power station",
+   "revision": 1350115503,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1989",
+     "basis": "infobox decommissioned 1989; decommissioning has removed all fuel (1992), the turbine hall (1995) and cooling ponds (2001)"
+    }
+   ]
+  },
+  {
+   "qid": "Q211150",
+   "wiki": "en",
+   "title": "Bradwell nuclear power station",
+   "revision": 1359048004,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2002-03-28",
+     "basis": "cessation of generation and beginning of the decommissioning stage marked 28 March 2002; long-term decommissioned management from 2019"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739372",
+   "wiki": "en",
+   "title": "Chapelcross nuclear power station",
+   "revision": 1347589350,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2004",
+     "basis": "infobox decommissioned 2004; cooling towers demolished 2007, site under the NDA"
+    }
+   ]
+  },
+  {
+   "qid": "Q1765322",
+   "wiki": "en",
+   "title": "Hinkley Point A nuclear power station",
+   "revision": 1379526576,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2000-05-23",
+     "basis": "infobox decommissioned 23 May 2000; defuelling and building removal to 2031, care and maintenance 2031-2085"
+    }
+   ]
+  },
+  {
+   "qid": "Q5944807",
+   "wiki": "en",
+   "title": "Hunterston A nuclear power station",
+   "revision": 1377821064,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1990-03-31",
+     "basis": "infobox decommissioned 31 March 1990; defuelling, building removal and care and maintenance planned to 2072"
+    }
+   ]
+  },
+  {
+   "qid": "Q782133",
+   "wiki": "en",
+   "title": "Hunterston B nuclear power station",
+   "revision": 1377821295,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2022-01-07",
+     "basis": "reactor B1 shut 26 November 2021, B2 7 January 2022"
+    }
+   ]
+  },
+  {
+   "qid": "Q104946958",
+   "wiki": "en",
+   "title": "Dungeness nuclear power stations",
+   "revision": 1358249079,
+   "reviewedAt": "2026-10-13T17:52:39Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2006-12-31",
+     "basis": "Dungeness A ceased generation 31 December 2006"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2012-06",
+     "basis": "defuelling completed June 2012; care and maintenance from 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q536084",
+   "wiki": "de",
+   "title": "Kernkraftwerk Obrigheim",
+   "revision": 259582449,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2005-05-11",
+     "basis": "finally shut down 11 May 2005"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2008-03",
+     "basis": "infobox Stilllegung (decommissioning licence) March 2008; to be dismantled by 2030"
+    }
+   ]
+  },
+  {
+   "qid": "Q686931",
+   "wiki": "de",
+   "title": "Kernkraftwerk Mühleberg",
+   "revision": 271002981,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2019-12-20",
+     "basis": "power operation ended 20 December 2019"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2020-01-06",
+     "basis": "being dismantled since 6 January 2020"
+    }
+   ]
+  },
+  {
+   "qid": "Q94805",
+   "wiki": "de",
+   "title": "Kernkraftwerk Biblis",
+   "revision": 267208162,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03-18",
+     "basis": "both units shut 18 March 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017-06-01",
+     "basis": "decommissioning of both units took effect 1 June 2017 and dismantling began immediately"
+    }
+   ]
+  },
+  {
+   "qid": "Q1489205",
+   "wiki": "fr",
+   "title": "Site nucléaire de Brennilis",
+   "revision": 239809047,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1985",
+     "basis": "reactor permanently stopped in 1985"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1985-08-09",
+     "basis": "shutdown authorisation of 9 August 1985 began the dismantling procedure, under way since 1985 and planned to 2040"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739389",
+   "wiki": "fr",
+   "title": "Superphénix",
+   "revision": 240088684,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1998-12-30",
+     "basis": "permanent shutdown decreed 30 December 1998"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2007",
+     "basis": "dismantling works under way in 2007, planned to last until 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q762368",
+   "wiki": "en",
+   "title": "San Onofre Nuclear Generating Station",
+   "revision": 1376682820,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2013",
+     "basis": "shut down in 2013"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2014",
+     "basis": "decommissioning 2014 to present"
+    }
+   ]
+  },
+  {
+   "qid": "Q995979",
+   "wiki": "en",
+   "title": "Hamaoka Nuclear Power Plant",
+   "revision": 1374474613,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2011",
+     "basis": "units 3, 4 and 5 in long-term shutdown since the aftermath of the 2011 Fukushima accident (units 1 and 2 being decommissioned since 2009)"
+    }
+   ]
+  },
+  {
+   "qid": "Q2008105",
+   "wiki": "en",
+   "title": "Higashidōri Nuclear Power Plant",
+   "revision": 1337056112,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2011",
+     "basis": "has not generated electricity since the 2011 nationwide shutdown"
+    }
+   ]
+  },
+  {
+   "qid": "Q672931",
+   "wiki": "en",
+   "title": "Shika Nuclear Power Plant",
+   "revision": 1354565019,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2011-03",
+     "basis": "temporarily shut down March 2011; restart of unit 2 sought"
+    }
+   ]
+  },
+  {
+   "qid": "Q367676",
+   "wiki": "en",
+   "title": "Tomari Nuclear Power Plant",
+   "revision": 1379521928,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2012-05-05",
+     "basis": "reactor 3 shut down for inspection 5 May 2012; restart planned June 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739422",
+   "wiki": "en",
+   "title": "Kaliningrad Nuclear Power Plant",
+   "revision": 1362143018,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2010-02-25",
+     "basis": "construction began 25 February 2010"
+    },
+    {
+     "status": "CONSTRUCTION_SUSPENDED",
+     "date": "2013-06",
+     "basis": "construction temporarily stopped June 2013 (mothballing ordered 30 May 2013)"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6254903",
+   "wiki": "en",
+   "title": "Vandellòs Nuclear Power Plant",
+   "revision": 1342065046,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1990-07-31",
+     "basis": "Vandellòs I shut down 31 July 1990 after the 19 October 1989 turbine fire"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2003",
+     "basis": "its radioactive machinery dismantled by 2003; the reactor building remains"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6254902",
+   "wiki": "es",
+   "title": "Central nuclear de Vandellós",
+   "revision": 174983323,
+   "reviewedAt": "2026-10-13T16:54:02Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1988",
+     "basis": "Vandellós II in operation since 1988"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7534489",
+   "wiki": "en",
+   "title": "Tihange Nuclear Power Station",
+   "revision": 1380015855,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1985",
+     "basis": "Tihange 3 entered commercial operation in 1985; operation extended to 2035"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7281893",
+   "wiki": "de",
+   "title": "Kernkraftwerk Gundremmingen",
+   "revision": 270837779,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1977-01-13",
+     "basis": "Block A operated from 1966 to an incident on 13 January 1977"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1983",
+     "basis": "Block A being dismantled since 1983 (last large component removed October 2005)"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283235",
+   "wiki": "de",
+   "title": "Kernkraftwerk Philippsburg",
+   "revision": 265553609,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03",
+     "basis": "KKP 1 shut down March 2011 and left off for good"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017-04",
+     "basis": "dismantling licensed April 2017"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283236",
+   "wiki": "de",
+   "title": "Kernkraftwerk Philippsburg",
+   "revision": 265553609,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2019-12-31",
+     "basis": "KKP 2 shut down 31 December 2019"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2020-01",
+     "basis": "demolition of Block II began right after shutdown, January 2020"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283320",
+   "wiki": "de",
+   "title": "Kernkraftwerk Isar",
+   "revision": 266343423,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03-17",
+     "basis": "Block 1 shut down 17 March 2011; lost its operating licence by the decision of 30 June 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017",
+     "basis": "dismantling of Block 1 licensed 2017"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7282679",
+   "wiki": "de",
+   "title": "Kernkraftwerk Neckarwestheim",
+   "revision": 270364834,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03",
+     "basis": "GKN I shut down March 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017-03",
+     "basis": "dismantling of Block I began March 2017"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7282680",
+   "wiki": "de",
+   "title": "Kernkraftwerk Neckarwestheim",
+   "revision": 270364834,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2023-04-15",
+     "basis": "GKN II finally shut down 15 April 2023"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283401",
+   "wiki": "de",
+   "title": "Kernkraftwerk Biblis",
+   "revision": 267208162,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03-18",
+     "basis": "Block A shut 18 March 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017-06-01",
+     "basis": "decommissioning took effect 1 June 2017, dismantling began immediately"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283402",
+   "wiki": "de",
+   "title": "Kernkraftwerk Biblis",
+   "revision": 267208162,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03-18",
+     "basis": "Block B shut 18 March 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2017-06-01",
+     "basis": "decommissioning took effect 1 June 2017, dismantling began immediately"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7701628",
+   "wiki": "en",
+   "title": "Fukushima Daiichi Nuclear Power Plant",
+   "revision": 1378002632,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-03-11",
+     "basis": "units 1-4 destroyed in the 11 March 2011 accident, shut down April 2012"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2014-01-31",
+     "basis": "units 5 and 6 shut January 2014 (infobox decommissioned 31 January 2014); site under decommissioning"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11839424",
+   "wiki": "en",
+   "title": "Dounreay",
+   "revision": 1375629771,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1994",
+     "basis": "ceased generating in 1994"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1998-11",
+     "basis": "accelerated decommissioning timetable announced November 1998; NDA owner since 1 April 2005"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:10797428",
+   "wiki": "fr",
+   "title": "Centre d’études nucléaires de la Maâmora",
+   "revision": 236720822,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2009",
+     "basis": "TRIGA research reactor in operation since 2009"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7303742",
+   "wiki": "en",
+   "title": "Runit Island",
+   "revision": 1364196364,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1980",
+     "basis": "cleanup waste sealed in the dome 1977-1980; DOE (2020) finds it holds without breach"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7033453",
+   "wiki": "en",
+   "title": "Pakistan Council of Scientific & Industrial Research",
+   "revision": 1363692059,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1956",
+     "basis": "the PCSIR Laboratories Complex, Lahore, established 1956"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11750549",
+   "wiki": "en",
+   "title": "Kundian Nuclear Fuel Complex",
+   "revision": 1332326522,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1978",
+     "basis": "established 1978; makes fuel for Pakistan's power reactors"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11594236",
+   "wiki": "en",
+   "title": "Khushab Nuclear complex",
+   "revision": 1377060051,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1996-03-01",
+     "basis": "unit 1 critical 1 March 1996; units 2-4 operating since 2010-2015"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11836951",
+   "wiki": "en",
+   "title": "Darlington Nuclear Generating Station",
+   "revision": 1377530916,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1990-10-09",
+     "basis": "unit 2 commissioned 9 October 1990, units 1, 3, 4 by 1993"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6327164",
+   "wiki": "en",
+   "title": "St. Lucie Nuclear Power Plant",
+   "revision": 1379270290,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1976-12-21",
+     "basis": "unit 1 commissioned 21 December 1976; FPL continues to operate the station"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11839103",
+   "wiki": "en",
+   "title": "Khmelnytskyi Nuclear Power Plant",
+   "revision": 1366972216,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1987",
+     "basis": "first unit in operation late 1987"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6327224",
+   "wiki": "en",
+   "title": "Marble Hill Nuclear Power Plant",
+   "revision": 1367004748,
+   "reviewedAt": "2026-10-13T18:26:23Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1984",
+     "basis": "construction 1977-1984, then abandoned half-finished"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6346663",
+   "wiki": "en",
+   "title": "Hartsville Nuclear Plant",
+   "revision": 1372724551,
+   "reviewedAt": "2026-10-13T18:26:24Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1984-08-29",
+     "basis": "TVA stopped the last two reactors and shut down Plant A on 29 August 1984"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6327790",
+   "wiki": "en",
+   "title": "Yellow Creek Nuclear Plant",
+   "revision": 1364344250,
+   "reviewedAt": "2026-10-13T18:26:24Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1984-08",
+     "basis": "construction stopped 1982; TVA cancelled the project in August 1984"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:6331873",
+   "wiki": "en",
+   "title": "William H. Zimmer Power Station",
+   "revision": 1356188351,
+   "reviewedAt": "2026-10-13T18:26:24Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "1983",
+     "basis": "the nuclear plant was cancelled in 1983 and later converted to coal"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:11839731",
+   "wiki": "en",
+   "title": "Elk River Station",
+   "revision": 1298995611,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2019-01",
+     "basis": "power production at Elk River ended January 2019 (the nuclear unit ran 1962-1968)"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:13679203",
+   "wiki": "en",
+   "title": "Nyongbyon Nuclear Scientific Research Center",
+   "revision": 1373470124,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "2015-09-15",
+     "basis": "the 5 MWe reactor resumed operation (announced 15 September 2015)"
+    }
+   ]
+  },
+  {
+   "qid": "Q3485454",
+   "wiki": "fr",
+   "title": "Site nucléaire de Creys-Malville",
+   "revision": 239341018,
+   "reviewedAt": "2026-10-13T16:54:01Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1998-12-31",
+     "basis": "permanently shut down December 1998 by government decision"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2007",
+     "basis": "in dismantling: in 2007 the works were planned to last until 2027"
+    }
+   ]
+  },
+  {
+   "qid": "Q113368",
+   "wiki": "en",
+   "title": "Phénix",
+   "revision": 1366973453,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2009",
+     "basis": "shut down in 2009 (infobox decommissioned 1 February 2010)"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2009",
+     "basis": "decommissioning project since 2005; non-nuclear equipment and turbine hall dismantled 2009-2011"
+    }
+   ]
+  },
+  {
+   "qid": "Q1796231",
+   "wiki": "en",
+   "title": "R1 (nuclear reactor)",
+   "revision": 1379528696,
+   "reviewedAt": "2026-10-13T17:07:31Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "1954-07-13",
+     "basis": "active from 13 July 1954"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1970-06-06",
+     "basis": "shut and dismantled 6 June 1970; nothing of the reactor remains, the hall is used for events"
+    }
+   ]
+  },
+  {
+   "qid": "Q703271",
+   "wiki": "de",
+   "title": "Kernkraftwerk Krümmel",
+   "revision": 268773924,
+   "reviewedAt": "2026-10-13T17:07:32Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024-06",
+     "basis": "dismantling licence granted June 2024; dismantling to take at least 15 years"
+    }
+   ]
+  },
+  {
+   "qid": "Q535990",
+   "wiki": "de",
+   "title": "Kernkraftwerk Stade",
+   "revision": 266591628,
+   "reviewedAt": "2026-10-13T17:07:32Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2005-10",
+     "basis": "dismantled since October 2005; expected to last until the end of 2026 (as of March 2025)"
+    }
+   ]
+  },
+  {
+   "qid": "Q7380438",
+   "wiki": "en",
+   "title": "Rooppur Nuclear Power Plant",
+   "revision": 1379565124,
+   "reviewedAt": "2026-10-13T16:53:58Z",
+   "steps": [
+    {
+     "status": "UNDER_CONSTRUCTION",
+     "date": "2017-11",
+     "basis": "unit 1 design and construction licence 4 November 2017, then the first nuclear-island concrete; unit 2 first concrete 14 July 2018"
+    }
+   ]
+  },
+  {
+   "qid": "Q704293",
+   "wiki": "de",
+   "title": "Kernkraftwerk Brunsbüttel",
+   "revision": 269791894,
+   "reviewedAt": "2026-10-13T17:07:32Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2018-12-21",
+     "basis": "first decommissioning and dismantling licence granted 21 December 2018; the plant has since been in decommissioning operation"
+    }
+   ]
+  },
+  {
+   "qid": "Q539412",
+   "wiki": "ru",
+   "title": "БН-350",
+   "revision": 154978997,
+   "reviewedAt": "2026-10-13T16:53:57Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1999",
+     "basis": "operation ended 1999"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1999",
+     "basis": "Kazakh government decree No. 456 of 1999 to decommission BN-350"
+    }
+   ]
+  },
+  {
+   "qid": "Q54338531",
+   "wiki": "en",
+   "title": "Georges-Besse plant",
+   "revision": 1370864681,
+   "reviewedAt": "2026-10-13T17:07:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2012-06-07",
+     "basis": "definitively ceased enrichment 7 June 2012"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2013-02",
+     "basis": "clean-up (PRISME rinsing) from February 2013, first phase completed by 2015, dismantling after the 2017 public inquiry"
+    }
+   ]
+  },
+  {
+   "qid": "Q1433750",
+   "wiki": "de",
+   "title": "Rossendorfer Forschungsreaktor",
+   "revision": 270843962,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1991-06-27",
+     "basis": "shut down 27 June 1991"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2001-01",
+     "basis": "dismantling of the reactor began January 2001"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2019-09-19",
+     "basis": "dismantling completed with the release from the Atomic Energy Act on 19 September 2019; greenfield"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438010",
+   "wiki": "de",
+   "title": "Forschungs- und Messreaktor Braunschweig",
+   "revision": 270144982,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1995-12-19",
+     "basis": "shut down 19 December 1995"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2005-07-28",
+     "basis": "dismantling completed 28 July 2005 and the building released from nuclear supervision"
+    }
+   ]
+  },
+  {
+   "qid": "Q1651536",
+   "wiki": "de",
+   "title": "Siemens Argonaut Reaktor",
+   "revision": 230253771,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1968-10-31",
+     "basis": "shut down 31 October 1968"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1998-03-20",
+     "basis": "released from the Atomic Energy Act 8 January 1992; fully dismantled to greenfield by 20 March 1998"
+    }
+   ]
+  },
+  {
+   "qid": "Q1672842",
+   "wiki": "de",
+   "title": "Rossendorfer Anordnung für kritische Experimente",
+   "revision": 230253755,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1991-11-26",
+     "basis": "shut down 26 November 1991"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1998-10-28",
+     "basis": "fully dismantled; released from the Atomic Energy Act 28 October 1998"
+    }
+   ]
+  },
+  {
+   "qid": "Q1683189",
+   "wiki": "ja",
+   "title": "JPDR",
+   "revision": 109888925,
+   "reviewedAt": "2026-10-13T17:49:38Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976-03-18",
+     "basis": "operation ended 18 March 1976"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1986",
+     "basis": "dismantling from 1986"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1996-03-31",
+     "basis": "dismantled 1986 to 31 March 1996"
+    }
+   ]
+  },
+  {
+   "qid": "Q1789189",
+   "wiki": "de",
+   "title": "Schnelle Nullenergie-Anordnung Karlsruhe",
+   "revision": 266275223,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1985-11",
+     "basis": "shut down November 1985"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1987-05-06",
+     "basis": "decommissioning licence 3 June 1986; released from the Atomic Energy Act 6 May 1987"
+    }
+   ]
+  },
+  {
+   "qid": "Q2167682",
+   "wiki": "de",
+   "title": "Rossendorfer Ringzonenreaktor",
+   "revision": 259465648,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1991-09-25",
+     "basis": "shut down 25 September 1991"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2000-05-11",
+     "basis": "fully dismantled; released from the Atomic Energy Act 11 May 2000"
+    }
+   ]
+  },
+  {
+   "qid": "Q2247630",
+   "wiki": "de",
+   "title": "Schnell-Thermischer Argonaut-Reaktor Karlsruhe",
+   "revision": 266275222,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976-03",
+     "basis": "shut down March 1976"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1977",
+     "basis": "released from the Atomic Energy Act 1977; parts of the reactor given to a museum"
+    }
+   ]
+  },
+  {
+   "qid": "Q2446114",
+   "wiki": "pl",
+   "title": "Belgian Reactor 3",
+   "revision": 69952832,
+   "reviewedAt": "2026-10-13T17:49:51Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1987-06-30",
+     "basis": "permanently shut down 30 June 1987"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1991",
+     "basis": "dismantling began 1991"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2011",
+     "basis": "dismantling completed 2011"
+    }
+   ]
+  },
+  {
+   "qid": "Q3483933",
+   "wiki": "fr",
+   "title": "Siloé (réacteur)",
+   "revision": 237872385,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1997",
+     "basis": "shut down 1997"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2015-01-08",
+     "basis": "reactor building demolished January-February 2013; ASN pronounced the delicensing (déclassement) 8 January 2015"
+    }
+   ]
+  },
+  {
+   "qid": "Q9026367",
+   "wiki": "en",
+   "title": "MOATA",
+   "revision": 1247087753,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1995-05-31",
+     "basis": "shut down 31 May 1995"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2009",
+     "basis": "completely dismantled by 2009 and the site restored"
+    }
+   ]
+  },
+  {
+   "qid": "Q15968445",
+   "wiki": "fr",
+   "title": "Siloette",
+   "revision": 218577647,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2002",
+     "basis": "in service from 1964 to 2002"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2007-08-15",
+     "basis": "delicensed (déclassé) as basic nuclear installation no. 21 on 15 August 2007"
+    }
+   ]
+  },
+  {
+   "qid": "Q15968505",
+   "wiki": "fr",
+   "title": "Mélusine (réacteur)",
+   "revision": 222455932,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1994",
+     "basis": "final shutdown pronounced 1994"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2004-01",
+     "basis": "dismantling decree January 2004"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2012",
+     "basis": "removed from the list of basic nuclear installations (INB 19) 2011; dismantling and clean-up works finished end of 2012"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040290",
+   "wiki": "fr",
+   "title": "Ulysse (réacteur)",
+   "revision": 240258962,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2007-02-09",
+     "basis": "shut down 9 February 2007"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2022-08",
+     "basis": "ASN pronounced the delicensing (déclassement) of Ulysse in August 2022"
+    }
+   ]
+  },
+  {
+   "qid": "Q727399",
+   "wiki": "en",
+   "title": "Shippingport Atomic Power Station",
+   "revision": 1373413112,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1982-10-01",
+     "basis": "ceased operations 1 October 1982"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1985-09",
+     "basis": "dismantlement began September 1985"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1989-12",
+     "basis": "infobox decommissioned December 1989; site cleaned up and released for unrestricted use"
+    }
+   ]
+  },
+  {
+   "qid": "Q1044426",
+   "wiki": "en",
+   "title": "Carolinas–Virginia Tube Reactor",
+   "revision": 1340408755,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1967-01-01",
+     "basis": "shut down 1 January 1967"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2009",
+     "basis": "by fall 2009 demolition was complete and the site returned to greenfield status"
+    }
+   ]
+  },
+  {
+   "qid": "Q3388396",
+   "wiki": "fr",
+   "title": "Pile Zoé",
+   "revision": 235672387,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976-03",
+     "basis": "definitively shut down March 1976, confined 1977"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1978",
+     "basis": "delicensed (déclassée) 1978; the building is now a museum"
+    }
+   ]
+  },
+  {
+   "qid": "Q5095737",
+   "wiki": "it",
+   "title": "Chicago Pile-5",
+   "revision": 139826932,
+   "reviewedAt": "2026-10-13T17:49:42Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1979",
+     "basis": "shut down 1979"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1991",
+     "basis": "site dismantling began 1991"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2000",
+     "basis": "site dismantling completed 2000"
+    }
+   ]
+  },
+  {
+   "qid": "Q5421105",
+   "wiki": "en",
+   "title": "Experimental Breeder Reactor II",
+   "revision": 1363810361,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1994-09",
+     "basis": "shut down in September 1994"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1996-12",
+     "basis": "defuelling, the first decommissioning phase, completed December 1996"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2015",
+     "basis": "below-ground reactor entombed in grout in the 2012-2015 decontamination and entombment project; building reused for industrial research"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438123",
+   "wiki": "de",
+   "title": "Forschungsreaktor TRIGA Heidelberg",
+   "revision": 266230262,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1999-11-30",
+     "basis": "TRIGA HD II shut down 30 November 1999"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2004",
+     "basis": "licence to dismantle both reactor plants granted 2004"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2006-12-13",
+     "basis": "both plants fully dismantled and released from the Atomic Energy Act on 13 December 2006"
+    }
+   ]
+  },
+  {
+   "qid": "Q1516627",
+   "wiki": "fr",
+   "title": "Centrale nucléaire de Maine Yankee",
+   "revision": 238807073,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1997-08-01",
+     "basis": "shut down 1997"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2005-10",
+     "basis": "entirely dismantled October 2005, site returned to grass; only the spent-fuel store remains"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739404",
+   "wiki": "en",
+   "title": "Hallam Nuclear Power Facility",
+   "revision": 1374103213,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1964-09-27",
+     "basis": "operated until 27 September 1964"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1969",
+     "basis": "decommissioning completed 1969; below-ground components entombed on site"
+    }
+   ]
+  },
+  {
+   "qid": "Q655384",
+   "wiki": "en",
+   "title": "Humboldt Bay Nuclear Power Plant",
+   "revision": 1367751113,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1976-07",
+     "basis": "shut down July 1976"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2021-10",
+     "basis": "licence termination issued October 2021 and the site released for unrestricted use"
+    }
+   ]
+  },
+  {
+   "qid": "Q5197089",
+   "wiki": "de",
+   "title": "Kernkraftwerk Saxton",
+   "revision": 264847025,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1972-05",
+     "basis": "shut down May 1972"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2005",
+     "basis": "after dismantling and decontamination the NRC ended the operating licence in 2005"
+    }
+   ]
+  },
+  {
+   "qid": "Q847648",
+   "wiki": "en",
+   "title": "Shoreham Nuclear Power Plant",
+   "revision": 1374684978,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1989-05-01",
+     "basis": "closed 1989"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1994",
+     "basis": "fully decommissioned in 1994"
+    }
+   ]
+  },
+  {
+   "qid": "Q839256",
+   "wiki": "en",
+   "title": "Zion Nuclear Power Station",
+   "revision": 1328301157,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1998-02-13",
+     "basis": "closed February 1998"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1998",
+     "basis": "decommissioned between 1998 and 2020"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2023-11-08",
+     "basis": "the NRC released the plant for unrestricted use on 8 November 2023"
+    }
+   ]
+  },
+  {
+   "qid": "Q757666",
+   "wiki": "es",
+   "title": "Sitio de pruebas de Semipalátinsk",
+   "revision": 157124899,
+   "reviewedAt": "2026-10-13T17:49:40Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1991-08-29",
+     "basis": "officially closed 29 August 1991"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2000-06",
+     "basis": "dismantling of the last scientific buildings concluded June 2000"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438109",
+   "wiki": "de",
+   "title": "Forschungsreaktor Jülich 2",
+   "revision": 270115134,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2006-05-02",
+     "basis": "shut down 2 May 2006"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2012-09-20",
+     "basis": "licence for decommissioning and dismantling granted 20 September 2012; dismantling under way"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040282",
+   "wiki": "fr",
+   "title": "Réacteur universitaire de Strasbourg",
+   "revision": 237240044,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2006-02",
+     "basis": "final shutdown decided February 2006"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2012-10",
+     "basis": "dismantled 2006-2009; delicensing of INB 44 pronounced October 2012"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040240",
+   "wiki": "fr",
+   "title": "Harmonie (réacteur)",
+   "revision": 213051264,
+   "reviewedAt": "2026-10-13T17:49:34Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2009-05-26",
+     "basis": "nuclear dismantling completed 5 October 2007; removed from the list of basic nuclear installations 26 May 2009"
+    }
+   ]
+  },
+  {
+   "qid": "Q525334",
+   "wiki": "de",
+   "title": "Kernkraftwerk Trawsfynydd",
+   "revision": 267323923,
+   "reviewedAt": "2026-10-13T17:49:31Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1991",
+     "basis": "in operation 1965 to 1991"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1993",
+     "basis": "removal of the highly radioactive components 1993-1997, then dismantling, still under way"
+    }
+   ]
+  },
+  {
+   "qid": "Q2450052",
+   "wiki": "nl",
+   "title": "Reactor Instituut Delft",
+   "revision": 70126128,
+   "reviewedAt": "2026-10-13T18:26:24Z",
+   "steps": [
+    {
+     "status": "OPERATING",
+     "date": "",
+     "basis": "the institute's article (revised November 2025) describes the reactor in the present tense: licensed under the Nuclear Energy Act for research and teaching and serving as the institute's neutron and positron source; no licence-OK source dates the end of the 2019 upgrade outage"
+    }
+   ]
+  },
+  {
+   "qid": "Q5131495",
+   "wiki": "pl",
+   "title": "Clementine (reaktor)",
+   "revision": 80233880,
+   "reviewedAt": "2026-10-13T18:12:25Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1952",
+     "basis": "operated until 1952"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1953",
+     "basis": "dismantled a year later"
+    }
+   ]
+  },
+  {
+   "qid": "Q1425223",
+   "wiki": "de",
+   "title": "Forschungsreaktor Hannover",
+   "revision": 259907074,
+   "reviewedAt": "2026-10-13T18:12:19Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2006-05-08",
+     "basis": "decommissioning licence granted 8 May 2006; reactor dismantled by Babcock Noell"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2007",
+     "basis": "dismantled by 2007 and released from the Atomic Energy Act; final decommissioning 13 March 2008"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739425",
+   "wiki": "en",
+   "title": "La Crosse Boiling Water Reactor",
+   "revision": 1366972435,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2023-02",
+     "basis": "the NRC approved the final decommissioning in February 2023, returning the area to unrestricted use except the spent-fuel store"
+    }
+   ]
+  },
+  {
+   "qid": "Q850462",
+   "wiki": "en",
+   "title": "Piqua Nuclear Power Facility",
+   "revision": 1367476275,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1966",
+     "basis": "ceased operation 1966"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1969",
+     "basis": "dismantled 1967 to 1969; the remaining radioactive components entombed in the reactor vessel"
+    }
+   ]
+  },
+  {
+   "qid": "Q891025",
+   "wiki": "de",
+   "title": "Boiling Nuclear Superheater",
+   "revision": 254426405,
+   "reviewedAt": "2026-10-13T18:15:48Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1970",
+     "basis": "dismantled 1969 to 1970; the contaminated reactor vessel entombed in concrete on site"
+    }
+   ]
+  },
+  {
+   "qid": "Q1233845",
+   "wiki": "en",
+   "title": "Rancho Seco Nuclear Generating Station",
+   "revision": 1358948855,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2009-10-23",
+     "basis": "the NRC released the majority of the site for unrestricted public use on 23 October 2009; the spent-fuel and low-level waste stores remain licensed"
+    }
+   ]
+  },
+  {
+   "qid": "Q656534",
+   "wiki": "sv",
+   "title": "Barsebäcks kärnkraftverk",
+   "revision": 59749694,
+   "reviewedAt": "2026-10-13T18:16:05Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2016",
+     "basis": "the radiological dismantling started 2016; the conventional demolition of the buildings is to follow"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739490",
+   "wiki": "fr",
+   "title": "Centrale nucléaire de Vermont Yankee",
+   "revision": 234570426,
+   "reviewedAt": "2026-10-13T18:15:51Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2019",
+     "basis": "NorthStar bought the plant early 2019 to dismantle it; Orano finished segmenting the reactor core in December 2022"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7283319",
+   "wiki": "de",
+   "title": "Kernkraftwerk Isar",
+   "revision": 266343423,
+   "reviewedAt": "2026-10-13T17:00:52Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2023-04-15",
+     "basis": "Block 2 power operation ended 15 April 2023"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024-03-21",
+     "basis": "licence to dismantle Block 2 granted 21 March 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q130439648",
+   "wiki": "es",
+   "title": "Complejo Nuclear Atucha",
+   "revision": 175527432,
+   "reviewedAt": "2026-10-13T18:12:23Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2024-09-29",
+     "basis": "Atucha I ran until 29 September 2024, when its first operating cycle ended and the 30-month life-extension project began"
+    }
+   ]
+  },
+  {
+   "qid": "Q1500817",
+   "wiki": "ja",
+   "title": "ふげん",
+   "revision": 108570915,
+   "reviewedAt": "2026-10-13T18:15:55Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2008-02-12",
+     "basis": "decommissioning plan approved 12 February 2008; decommissioning under way"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7281894",
+   "wiki": "de",
+   "title": "Kernkraftwerk Gundremmingen",
+   "revision": 270837779,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2017-12-31",
+     "basis": "Block B shut down 31 December 2017; dismantling being prepared"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024-05",
+     "basis": "the last licences for demolishing the plant granted May 2024; cooling towers blasted 25 October 2025"
+    }
+   ]
+  },
+  {
+   "qid": "geonames:7281895",
+   "wiki": "de",
+   "title": "Kernkraftwerk Gundremmingen",
+   "revision": 270837779,
+   "reviewedAt": "2026-10-13T16:54:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2021-12-31",
+     "basis": "Block C disconnected from the grid 31 December 2021"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2024-05",
+     "basis": "the last licences for demolishing the plant granted May 2024; cooling towers blasted 25 October 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q535877",
+   "wiki": "de",
+   "title": "Kernkraftwerk Lingen",
+   "revision": 262177465,
+   "reviewedAt": "2026-10-13T18:15:48Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2015-12-21",
+     "basis": "first nuclear licence for dismantling the plant granted 21 December 2015"
+    }
+   ]
+  },
+  {
+   "qid": "Q300178",
+   "wiki": "de",
+   "title": "AVR (Jülich)",
+   "revision": 269562569,
+   "reviewedAt": "2026-10-13T18:15:48Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2003",
+     "basis": "decommissioning plan changed to complete dismantling; the plant taken over in 2003 by the federal decommissioning company EWN"
+    }
+   ]
+  },
+  {
+   "qid": "Q1626301",
+   "wiki": "it",
+   "title": "Centrale nucleare Enrico Fermi",
+   "revision": 149495859,
+   "reviewedAt": "2026-10-13T18:15:59Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2000",
+     "basis": "kept in safe storage until 2000, when SOGIN took ownership to start dismantling"
+    }
+   ]
+  },
+  {
+   "qid": "Q847687",
+   "wiki": "en",
+   "title": "Ignalina Nuclear Power Plant",
+   "revision": 1355487394,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2004",
+     "basis": "decommissioning project: first phase 2004 to 2013 (Unit 2 shut 31 December 2009), second phase from 2014"
+    }
+   ]
+  },
+  {
+   "qid": "Q1536314",
+   "wiki": "en",
+   "title": "Oyster Creek Nuclear Generating Station",
+   "revision": 1379390018,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2019-07",
+     "basis": "sold to Holtec in July 2019 for decommissioning"
+    }
+   ]
+  },
+  {
+   "qid": "Q1536186",
+   "wiki": "en",
+   "title": "Pilgrim Nuclear Power Station",
+   "revision": 1374990944,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2019-05-31",
+     "basis": "shut down 31 May 2019 and began the process of decommissioning"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739385",
+   "wiki": "en",
+   "title": "Crystal River Nuclear Plant",
+   "revision": 1368952546,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2013",
+     "basis": "being decommissioned as of 2013, after the permanent shutdown announced February 2013"
+    }
+   ]
+  },
+  {
+   "qid": "Q111660718",
+   "wiki": "en",
+   "title": "Enrico Fermi Nuclear Generating Station",
+   "revision": 1377386194,
+   "reviewedAt": "2026-10-13T18:12:11Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1996-05-16",
+     "basis": "Fermi 1 decommissioning restarted 16 May 1996; reactor vessel removed; in SAFSTOR"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438102",
+   "wiki": "en",
+   "title": "Ewa reactor",
+   "revision": 1260442104,
+   "reviewedAt": "2026-10-13T18:12:11Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1997",
+     "basis": "decommissioning began 1997"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2002",
+     "basis": "by 2002 the fuel and high-level materials were removed and the reactor dismantled"
+    }
+   ]
+  },
+  {
+   "qid": "Q1724378",
+   "wiki": "en",
+   "title": "NRX",
+   "revision": 1334995238,
+   "reviewedAt": "2026-10-13T17:49:29Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1993-03-30",
+     "basis": "shut down permanently on 30 March 1993; decommissioning under way at Chalk River"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "",
+     "basis": "decommissioning under way at Chalk River; the article does not date its start"
+    }
+   ]
+  },
+  {
+   "qid": "Q11527800",
+   "wiki": "ja",
+   "title": "東海再処理施設",
+   "revision": 109690739,
+   "reviewedAt": "2026-10-13T18:12:22Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2018-06-13",
+     "basis": "decommissioning plan approved by the Nuclear Regulation Authority 13 June 2018"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040271",
+   "wiki": "fr",
+   "title": "Réacteur nucléaire G1",
+   "revision": 235783029,
+   "reviewedAt": "2026-10-13T18:12:21Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1969",
+     "basis": "first dismantling phase began 1969; dismantled to level 2 in 1996"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040273",
+   "wiki": "fr",
+   "title": "Réacteur nucléaire G2",
+   "revision": 239401418,
+   "reviewedAt": "2026-10-13T18:12:21Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1986",
+     "basis": "clean-up and dismantling of G2 began 1986"
+    }
+   ]
+  },
+  {
+   "qid": "Q16040276",
+   "wiki": "fr",
+   "title": "Réacteur nucléaire G3",
+   "revision": 230321437,
+   "reviewedAt": "2026-10-13T18:12:21Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1986",
+     "basis": "clean-up and dismantling of G3 began 1986"
+    }
+   ]
+  },
+  {
+   "qid": "Q1384384",
+   "wiki": "de",
+   "title": "Experimental Breeder Reactor I",
+   "revision": 264689060,
+   "reviewedAt": "2026-10-13T18:12:19Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1976",
+     "basis": "all radioactive internals removed; open to visitors as a museum since 1976"
+    }
+   ]
+  },
+  {
+   "qid": "Q1397653",
+   "wiki": "it",
+   "title": "Fast Flux Test Facility",
+   "revision": 152728375,
+   "reviewedAt": "2026-10-13T18:12:15Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2001-12",
+     "basis": "dismantling resumed December 2001 after the DOE found FFTF was not needed"
+    }
+   ]
+  },
+  {
+   "qid": "Q120752803",
+   "wiki": "en",
+   "title": "Chooz Nuclear Power Plant",
+   "revision": 1326352617,
+   "reviewedAt": "2026-10-13T18:12:11Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2007",
+     "basis": "Chooz A: decommissioning authorised 2007; reactor pressure vessel dismantling from 2016"
+    }
+   ]
+  },
+  {
+   "qid": "Q1284526",
+   "wiki": "en",
+   "title": "Hanford Site",
+   "revision": 1379982799,
+   "reviewedAt": "2026-10-13T18:12:11Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1989-05-15",
+     "basis": "Tri-Party Agreement for environmental remediation signed 15 May 1989; cleanup under way"
+    }
+   ]
+  },
+  {
+   "qid": "Q7911711",
+   "wiki": "en",
+   "title": "Valindaba",
+   "revision": 1370552513,
+   "reviewedAt": "2026-10-13T15:18:28Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1990-02-01",
+     "basis": "Y-Plant closed and dismantled on 1 February 1990"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "1990",
+     "basis": "the Y-Plant was closed and dismantled from 1 February 1990"
+    }
+   ]
+  },
+  {
+   "qid": "Q1438107",
+   "wiki": "de",
+   "title": "Forschungszentrum Jülich",
+   "revision": 271042868,
+   "reviewedAt": "2026-10-13T18:12:19Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "1985",
+     "basis": "FRJ-1 shut down 1985"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2008",
+     "basis": "FRJ-1 fully dismantled 2000 to 2008"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739370",
+   "wiki": "en",
+   "title": "Caorso Nuclear Power Plant",
+   "revision": 1290913524,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2014-01",
+     "basis": "SOGIN started decommissioning the plant in January 2014"
+    }
+   ]
+  },
+  {
+   "qid": "Q1724901",
+   "wiki": "en",
+   "title": "Garigliano Nuclear Power Plant",
+   "revision": 1365626358,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1999",
+     "basis": "ownership transferred to SOGIN in 1999, which began dismantling the plant"
+    }
+   ]
+  },
+  {
+   "qid": "Q1111040",
+   "wiki": "en",
+   "title": "Gentilly Nuclear Generating Station",
+   "revision": 1366971628,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2012-12",
+     "basis": "the remaining reactor shut down December 2012 and the decommissioning process started"
+    }
+   ]
+  },
+  {
+   "qid": "Q1561460",
+   "wiki": "en",
+   "title": "José Cabrera Nuclear Power Station",
+   "revision": 1281076193,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2010",
+     "basis": "ownership transferred 2010 to Enresa for decommissioning; reactor internals dismantling contracted 2010"
+    }
+   ]
+  },
+  {
+   "qid": "Q575275",
+   "wiki": "en",
+   "title": "Dodewaard nuclear power plant",
+   "revision": 1325224071,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2002-05",
+     "basis": "decommissioning licence granted May 2002; safe enclosure reached July 2005; dismantling planned 2045"
+    }
+   ]
+  },
+  {
+   "qid": "Q679563",
+   "wiki": "de",
+   "title": "Kernkraftwerk Brokdorf",
+   "revision": 267738576,
+   "reviewedAt": "2026-10-13T18:15:48Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2025-01",
+     "basis": "dismantling began January 2025"
+    }
+   ]
+  },
+  {
+   "qid": "Q543712",
+   "wiki": "en",
+   "title": "Mülheim-Kärlich Nuclear Power Plant",
+   "revision": 1333795370,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2001",
+     "basis": "the plant began the decommissioning process in 2001; cooling tower demolished 2019"
+    }
+   ]
+  },
+  {
+   "qid": "Q1514659",
+   "wiki": "de",
+   "title": "Kernkraftwerk Kewaunee",
+   "revision": 268417711,
+   "reviewedAt": "2026-10-13T18:15:48Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2022",
+     "basis": "being dismantled by EnergySolutions since 2022"
+    }
+   ]
+  },
+  {
+   "qid": "Q1739429",
+   "wiki": "en",
+   "title": "Latina Nuclear Power Plant",
+   "revision": 1304725338,
+   "reviewedAt": "2026-10-13T18:15:45Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "1999-11",
+     "basis": "Sogin took ownership November 1999 and has been decommissioning the plant"
+    }
+   ]
+  },
+  {
+   "qid": "Q1695264",
+   "wiki": "es",
+   "title": "Central nuclear Santa María de Garoña",
+   "revision": 171347192,
+   "reviewedAt": "2026-10-13T21:10:00Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2022",
+     "basis": "the dismantling itself began in 2022, after the preparatory work finished in 2019"
+    }
+   ]
+  },
+  {
+   "qid": "Q1536182",
+   "wiki": "en",
+   "title": "Hinkley Point B nuclear power station",
+   "revision": 1377820790,
+   "reviewedAt": "2026-10-13T21:10:00Z",
+   "steps": [
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2026-10-01",
+     "basis": "transferred to Nuclear Restoration Services for its decommissioning programme on 1 October 2026, after defuelling"
+    }
+   ]
+  }
+ ],
+ "duplicates": [
+  {
+   "keep": "Q3454314",
+   "drop": "Q865432",
+   "basis": "Es-Salam research reactor at Aïn Oussera (Birine): same reactor, first criticality 17 February 1992 in both items' articles"
+  }
+ ],
+ "notFacilities": [
+  {
+   "qid": "Q504292",
+   "basis": "Admiral Nakhimov, a nuclear-powered cruiser (vessel)"
+  },
+  {
+   "qid": "Q945572",
+   "basis": "Admiral Lazarev, a nuclear-powered cruiser (vessel)"
+  },
+  {
+   "qid": "Q2573281",
+   "basis": "Admiral Ushakov, a nuclear-powered cruiser (vessel)"
+  },
+  {
+   "qid": "Q3052778",
+   "basis": "Pyotr Velikiy, a nuclear-powered cruiser (vessel)"
+  },
+  {
+   "qid": "Q5066829",
+   "basis": "Chagai-II, a single nuclear test (30 May 1998), not a site"
+  }
+ ],
+ "dismantlingReviewed": [
+  {
+   "qid": "Q821507",
+   "recordId": "de:Berliner Experimentier-Reaktor",
+   "phrase": "aus dem Geltungsbereich des Atomgesetzes entlassen",
+   "basis": "the release dated 23 April 1974 is BER I, the predecessor; BER II shut down in December 2019 and its dismantling is still being planned"
+  },
+  {
+   "qid": "Q1438109",
+   "recordId": "de:Forschungsreaktor Jülich 2",
+   "phrase": "Grünen Wiese",
+   "basis": "greenfield is the goal of the dismantling licensed 20 September 2012 and still under way"
+  },
+  {
+   "qid": "Q4133095",
+   "recordId": "en:X-10 Graphite Reactor",
+   "phrase": "fully decommissioned",
+   "basis": "the sentence is about the BNL Graphite Research Reactor; X-10 is kept as a museum"
+  },
+  {
+   "qid": "Q1724901",
+   "recordId": "en:Garigliano Nuclear Power Plant",
+   "phrase": "completely demolished",
+   "basis": "the November 2017 demolition is the old chimney; the reactor's dismantling is not complete"
+  },
+  {
+   "qid": "Q1724901",
+   "recordId": "en:Garigliano Nuclear Power Plant",
+   "phrase": "dismantling of the turbine was completed",
+   "basis": "the turbine only; the reactor's dismantling is not complete"
+  },
+  {
+   "qid": "Q1724901",
+   "recordId": "en:Garigliano Nuclear Power Plant",
+   "phrase": "dismantling was completed",
+   "basis": "the water tower only (4 February 2024); the reactor's dismantling is not complete"
+  },
+  {
+   "qid": "Q1724901",
+   "recordId": "fr:Centrale nucléaire du Garigliano",
+   "phrase": "a été déclassée",
+   "basis": "déclassée here means taken out of service in 1982, not delicensed"
+  },
+  {
+   "qid": "Q847687",
+   "recordId": "en:Ignalina Nuclear Power Plant",
+   "phrase": "dismantling was completed",
+   "basis": "the 2008 completion is the cancelled Unit 3 construction; units 1 and 2 are being decommissioned"
+  },
+  {
+   "qid": "Q569510",
+   "recordId": "ru:АЭС Изар",
+   "phrase": "полностью демонтирован",
+   "basis": "the sentence is about the Niederaichbach plant on the same site, not Isar"
+  },
+  {
+   "qid": "Q569510",
+   "recordId": "uk:АЕС Ізар",
+   "phrase": "повністю демонтован",
+   "basis": "the sentence is about the Niederaichbach plant on the same site, not Isar"
+  },
+  {
+   "qid": "Q368333",
+   "recordId": "de:Forschungs-Neutronenquelle Heinz Maier-Leibnitz",
+   "phrase": "wurde zurückgebaut",
+   "basis": "a moat around the site was removed; the reactor stands"
+  },
+  {
+   "qid": "Q1438109",
+   "recordId": "en:Forschungszentrum Jülich",
+   "phrase": "completely dismantled",
+   "basis": "FRJ-1 (MERLIN), dismantled 2000-2008, not FRJ-2"
+  },
+  {
+   "qid": "Q1438109",
+   "recordId": "de:Forschungszentrum Jülich",
+   "phrase": "vollständig zurückgebaut",
+   "basis": "FRJ-1 (MERLIN), dismantled 2000-2008, not FRJ-2"
+  },
+  {
+   "qid": "Q1438109",
+   "recordId": "de:Forschungszentrum Jülich",
+   "phrase": "wurde er vollständig zurückgebaut",
+   "basis": "FRJ-1 (MERLIN), dismantled 2000-2008, not FRJ-2"
+  },
+  {
+   "qid": "Q5095738",
+   "recordId": "de:Chicago Pile",
+   "phrase": "wurde von 1991 bis 2000 rückgebaut",
+   "basis": "Chicago Pile 5, not CP-3"
+  },
+  {
+   "qid": "Q5095738",
+   "recordId": "fr:Chicago Pile-3",
+   "phrase": "a été démantelé",
+   "basis": "CP-3 was taken apart in January 1950 and rebuilt as CP-3', which ran to 1954"
+  },
+  {
+   "qid": "Q1284526",
+   "recordId": "en:Hanford Site",
+   "phrase": "were entombed",
+   "basis": "the production reactors were cocooned; the site's cleanup is under way"
+  },
+  {
+   "qid": "Q757565",
+   "recordId": "en:Nuclear facilities in Iran",
+   "phrase": "were demolished between ",
+   "basis": "the Lavizan-Shian site, not this facility"
+  },
+  {
+   "qid": "Q6012307",
+   "recordId": "en:Nuclear facilities in Iran",
+   "phrase": "were demolished between ",
+   "basis": "the Lavizan-Shian site, not this facility"
+  },
+  {
+   "qid": "Q135029531",
+   "recordId": "en:Nuclear facilities in Iran",
+   "phrase": "were demolished between ",
+   "basis": "the Lavizan-Shian site, not this facility"
+  },
+  {
+   "qid": "Q16040224",
+   "recordId": "de:Nuklearanlage Marcoule",
+   "phrase": "Rückbau der Anlage begann",
+   "basis": "the UP1 reprocessing plant, not the Célestin reactors"
+  },
+  {
+   "qid": "Q16040224",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "completamente smantellato",
+   "basis": "G-1 is ALMOST completely dismantled; not this row, and not finished"
+  },
+  {
+   "qid": "Q16040271",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "completamente smantellato",
+   "basis": "G-1 is ALMOST completely dismantled; not this row, and not finished"
+  },
+  {
+   "qid": "Q16040273",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "completamente smantellato",
+   "basis": "G-1 is ALMOST completely dismantled; not this row, and not finished"
+  },
+  {
+   "qid": "Q16040276",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "completamente smantellato",
+   "basis": "G-1 is ALMOST completely dismantled; not this row, and not finished"
+  },
+  {
+   "qid": "Q113368",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "completamente smantellato",
+   "basis": "G-1 is ALMOST completely dismantled; not this row, and not finished"
+  },
+  {
+   "qid": "Q16040224",
+   "recordId": "it:Centrale nucleare di Marcoule",
+   "phrase": "smantellamento sono in corso",
+   "basis": "G-2 and G-3, not the Célestin reactors"
+  },
+  {
+   "qid": "Q104946710",
+   "recordId": "en:Sizewell nuclear power stations",
+   "phrase": "was demolished in ",
+   "basis": "the turbine hall only; reactor buildings stand to 2088-2098"
+  },
+  {
+   "qid": "Q507704",
+   "recordId": "en:Vandellòs Nuclear Power Plant",
+   "phrase": "was dismantled by ",
+   "basis": "radioactive machinery dismantled by 2003; the larger structures stay in dormancy until the 2030s"
+  },
+  {
+   "qid": "Q211150",
+   "recordId": "en:Bradwell nuclear power station",
+   "phrase": "was demolished in ",
+   "basis": "the turbine hall; the reactor buildings stand"
+  },
+  {
+   "qid": "Q1739372",
+   "recordId": "en:Chapelcross nuclear power station",
+   "phrase": "were demolished in ",
+   "basis": "the cooling towers; the reactors are being dismantled"
+  },
+  {
+   "qid": "Q1724901",
+   "recordId": "en:Garigliano Nuclear Power Plant",
+   "phrase": "was completely demolished in ",
+   "basis": "the chimney; reactor dismantling began 2023 and is unfinished"
+  },
+  {
+   "qid": "Q686931",
+   "recordId": "fr:Centrale nucléaire de Mühleberg",
+   "phrase": "ont été démantelées",
+   "basis": "other plants of similar design"
+  },
+  {
+   "qid": "Q569510",
+   "recordId": "de:Kernkraftwerk Isar",
+   "phrase": "vollständig rückgebaut",
+   "basis": "Niederaichbach, the earlier plant on the site"
+  },
+  {
+   "qid": "Q536084",
+   "recordId": "en:Obrigheim Nuclear Power Plant",
+   "phrase": "was demolished by ",
+   "basis": "a meteorological mast"
+  },
+  {
+   "qid": "Q762368",
+   "recordId": "de:Kernkraftwerk San Onofre",
+   "phrase": "ist bereits rückgebaut",
+   "basis": "Unit 1 only; Units 2 and 3 are being dismantled"
+  },
+  {
+   "qid": "Q1739490",
+   "recordId": "en:Vermont Yankee Nuclear Power Plant",
+   "phrase": "were demolished in ",
+   "basis": "the cooling towers; the plant is being dismantled"
+  },
+  {
+   "qid": "geonames:7282680",
+   "recordId": "de:Kernkraftwerk Neckarwestheim",
+   "phrase": "Rückbauarbeiten an Block&nbsp;1 begann",
+   "basis": "Block 1; the article dates no dismantling start for Block 2"
+  },
+  {
+   "qid": "geonames:7115643",
+   "recordId": "de:Kernkraftwerk Dungeness",
+   "phrase": "befinden sich zurzeit im Rückbau",
+   "basis": "Dungeness A; Dungeness B shut 2021"
+  }
+ ]
+}

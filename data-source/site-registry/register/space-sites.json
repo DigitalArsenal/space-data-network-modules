@@ -1,0 +1,1438 @@
+{
+ "$comment": "Curated space sites the GeoNames gazetteer lacks or names only in the local language: launch sites, spaceports, space centres, mission control, deep-space and ground stations, space-surveillance radars. lon/lat in decimal degrees (WGS84), from published site coordinates; 'code' selects the FEATURE_CODE/FEATURE_NAME pair in build-space-sites-shard.mjs. Keep one row per site, English name first, local or common aliases in 'ascii'. Every coordinate was checked 2026-09-14 against published pad/facility positions (Wikipedia infoboxes, agency pages, OSM); owner rule: the surveyed pad or facility centre, never the town. Prince Albert, Sonmiani and Poker Flat have only coarse published values. Imported from SpaceAware-UI e0d053f. Wikidata items (wikidata) were matched 2026-10-13 by tools/match-register-qids.mjs and reviewed by hand: same name, the item's class a launch site, spaceport, space centre, ground station or test facility, and its coordinate within 5 km (or none); items typed as a settlement were left out. A site with an item takes the item's position (P625) and lifecycle each run. status/statusDate/statusUrl: a lifecycle the item does not state, with the page that states it (Hammaguir: France left in 1967; ELA-3: Ariane 5's last flight, 2023-07-05).",
+ "codes": {
+  "S.LNCH": "launch site",
+  "S.SPRT": "spaceport",
+  "S.CTRS": "space center",
+  "S.MCC": "mission control center",
+  "S.DSS": "deep space station",
+  "S.STNS": "satellite ground station",
+  "S.SSA": "space surveillance site",
+  "S.TEST": "rocket test site"
+ },
+ "sites": [
+  {
+   "name": "Starbase",
+   "ascii": "SpaceX Starbase Boca Chica",
+   "code": "S.SPRT",
+   "lat": 25.9972,
+   "lon": -97.1554,
+   "cc": "US",
+   "admin1": "Texas",
+   "wikidata": "Q16950811"
+  },
+  {
+   "name": "Boca Chica Launch Site",
+   "ascii": "SpaceX Starbase orbital launch pad",
+   "code": "S.LNCH",
+   "lat": 25.9972,
+   "lon": -97.1554,
+   "cc": "US",
+   "admin1": "Texas",
+   "wikidata": "Q117433755"
+  },
+  {
+   "name": "Kennedy Space Center Launch Complex 39A",
+   "ascii": "LC-39A",
+   "code": "S.LNCH",
+   "lat": 28.6084,
+   "lon": -80.6043,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q24256513"
+  },
+  {
+   "name": "Kennedy Space Center Launch Complex 39B",
+   "ascii": "LC-39B",
+   "code": "S.LNCH",
+   "lat": 28.6272,
+   "lon": -80.6208,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q24256506"
+  },
+  {
+   "name": "Cape Canaveral Space Force Station",
+   "ascii": "Cape Canaveral CCSFS",
+   "code": "S.SPRT",
+   "lat": 28.4889,
+   "lon": -80.5778,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q334465"
+  },
+  {
+   "name": "Space Launch Complex 40, Cape Canaveral",
+   "ascii": "SLC-40",
+   "code": "S.LNCH",
+   "lat": 28.562,
+   "lon": -80.5772,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q948471"
+  },
+  {
+   "name": "Space Launch Complex 41, Cape Canaveral",
+   "ascii": "SLC-41",
+   "code": "S.LNCH",
+   "lat": 28.5834,
+   "lon": -80.583,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q1034348"
+  },
+  {
+   "name": "Space Launch Complex 37, Cape Canaveral",
+   "ascii": "SLC-37",
+   "code": "S.LNCH",
+   "lat": 28.5317,
+   "lon": -80.5649,
+   "cc": "US",
+   "admin1": "Florida",
+   "wikidata": "Q2175575"
+  },
+  {
+   "name": "Launch Complex 36, Cape Canaveral",
+   "ascii": "LC-36 Blue Origin",
+   "code": "S.LNCH",
+   "lat": 28.4705,
+   "lon": -80.5423,
+   "cc": "US",
+   "admin1": "Florida"
+  },
+  {
+   "name": "Patrick Space Force Base",
+   "code": "S.CTRS",
+   "lat": 28.235,
+   "lon": -80.61,
+   "cc": "US",
+   "admin1": "Florida"
+  },
+  {
+   "name": "Vandenberg Space Force Base",
+   "ascii": "Vandenberg VSFB",
+   "code": "S.SPRT",
+   "lat": 34.7513,
+   "lon": -120.5202,
+   "cc": "US",
+   "admin1": "California"
+  },
+  {
+   "name": "Space Launch Complex 4E, Vandenberg",
+   "ascii": "SLC-4E",
+   "code": "S.LNCH",
+   "lat": 34.632,
+   "lon": -120.6108,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q98493195"
+  },
+  {
+   "name": "Space Launch Complex 6, Vandenberg",
+   "ascii": "SLC-6",
+   "code": "S.LNCH",
+   "lat": 34.5813,
+   "lon": -120.6266,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q2510125"
+  },
+  {
+   "name": "Space Launch Complex 2W, Vandenberg",
+   "ascii": "SLC-2W",
+   "code": "S.LNCH",
+   "lat": 34.7556,
+   "lon": -120.6224,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q98457023"
+  },
+  {
+   "name": "Wallops Flight Facility",
+   "ascii": "NASA Wallops",
+   "code": "S.CTRS",
+   "lat": 37.9333,
+   "lon": -75.4678,
+   "cc": "US",
+   "admin1": "Virginia",
+   "wikidata": "Q182348"
+  },
+  {
+   "name": "Mid-Atlantic Regional Spaceport Pad 0A",
+   "ascii": "MARS Pad 0A Wallops",
+   "code": "S.LNCH",
+   "lat": 37.8337,
+   "lon": -75.4881,
+   "cc": "US",
+   "admin1": "Virginia"
+  },
+  {
+   "name": "Rocket Lab Launch Complex 2, Wallops",
+   "ascii": "MARS Pad 0C",
+   "code": "S.LNCH",
+   "lat": 37.8339,
+   "lon": -75.4877,
+   "cc": "US",
+   "admin1": "Virginia",
+   "wikidata": "Q79103560"
+  },
+  {
+   "name": "Pacific Spaceport Complex Alaska",
+   "ascii": "Kodiak Launch Complex PSCA",
+   "code": "S.SPRT",
+   "lat": 57.4353,
+   "lon": -152.3393,
+   "cc": "US",
+   "admin1": "Alaska",
+   "wikidata": "Q283842"
+  },
+  {
+   "name": "Spaceport America",
+   "code": "S.SPRT",
+   "lat": 32.9903,
+   "lon": -106.9697,
+   "cc": "US",
+   "admin1": "New Mexico",
+   "wikidata": "Q1352314"
+  },
+  {
+   "name": "Mojave Air and Space Port",
+   "code": "S.SPRT",
+   "lat": 35.0594,
+   "lon": -118.1517,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q390522"
+  },
+  {
+   "name": "Poker Flat Research Range",
+   "code": "S.LNCH",
+   "lat": 65.1293,
+   "lon": -147.47,
+   "cc": "US",
+   "admin1": "Alaska",
+   "wikidata": "Q2100911"
+  },
+  {
+   "name": "White Sands Launch Complex 36",
+   "code": "S.LNCH",
+   "lat": 32.4169,
+   "lon": -106.3219,
+   "cc": "US",
+   "admin1": "New Mexico",
+   "ascii": "WSMR sounding rocket pad",
+   "wikidata": "Q16821894"
+  },
+  {
+   "name": "White Sands Test Facility",
+   "code": "S.TEST",
+   "lat": 32.507,
+   "lon": -106.611,
+   "cc": "US",
+   "admin1": "New Mexico",
+   "wikidata": "Q618540"
+  },
+  {
+   "name": "Cecil Spaceport",
+   "ascii": "Cecil Airport Jacksonville",
+   "code": "S.SPRT",
+   "lat": 30.2187,
+   "lon": -81.8767,
+   "cc": "US",
+   "admin1": "Florida"
+  },
+  {
+   "name": "Houston Spaceport",
+   "ascii": "Ellington Airport",
+   "code": "S.SPRT",
+   "lat": 29.6073,
+   "lon": -95.1588,
+   "cc": "US",
+   "admin1": "Texas",
+   "wikidata": "Q129261529"
+  },
+  {
+   "name": "Blue Origin Launch Site One",
+   "ascii": "Corn Ranch Van Horn",
+   "code": "S.LNCH",
+   "lat": 31.423,
+   "lon": -104.757,
+   "cc": "US",
+   "admin1": "Texas"
+  },
+  {
+   "name": "SpaceX Rocket Development Facility",
+   "ascii": "McGregor test site",
+   "code": "S.TEST",
+   "lat": 31.4,
+   "lon": -97.462,
+   "cc": "US",
+   "admin1": "Texas",
+   "wikidata": "Q111759054"
+  },
+  {
+   "name": "Stennis Space Center",
+   "code": "S.CTRS",
+   "lat": 30.363,
+   "lon": -89.6,
+   "cc": "US",
+   "admin1": "Mississippi"
+  },
+  {
+   "name": "Michoud Assembly Facility",
+   "code": "S.CTRS",
+   "lat": 30.025,
+   "lon": -89.915,
+   "cc": "US",
+   "admin1": "Louisiana",
+   "wikidata": "Q1441564"
+  },
+  {
+   "name": "Johnson Space Center",
+   "ascii": "NASA JSC Mission Control Houston",
+   "code": "S.MCC",
+   "lat": 29.5593,
+   "lon": -95.09,
+   "cc": "US",
+   "admin1": "Texas",
+   "wikidata": "Q208371"
+  },
+  {
+   "name": "Goddard Space Flight Center",
+   "ascii": "NASA GSFC Greenbelt",
+   "code": "S.CTRS",
+   "lat": 38.995,
+   "lon": -76.853,
+   "cc": "US",
+   "admin1": "Maryland",
+   "wikidata": "Q52152"
+  },
+  {
+   "name": "Jet Propulsion Laboratory",
+   "ascii": "JPL Pasadena",
+   "code": "S.CTRS",
+   "lat": 34.2013,
+   "lon": -118.1714,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q189325"
+  },
+  {
+   "name": "Ames Research Center",
+   "ascii": "NASA Ames Moffett Field",
+   "code": "S.CTRS",
+   "lat": 37.415,
+   "lon": -122.062,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q181052"
+  },
+  {
+   "name": "Glenn Research Center",
+   "ascii": "NASA Glenn Cleveland",
+   "code": "S.CTRS",
+   "lat": 41.415,
+   "lon": -81.861,
+   "cc": "US",
+   "admin1": "Ohio",
+   "wikidata": "Q618728"
+  },
+  {
+   "name": "Neil Armstrong Test Facility",
+   "ascii": "Plum Brook Station",
+   "code": "S.TEST",
+   "lat": 41.35,
+   "lon": -82.652,
+   "cc": "US",
+   "admin1": "Ohio",
+   "wikidata": "Q104869134"
+  },
+  {
+   "name": "Langley Research Center",
+   "ascii": "NASA Langley Hampton",
+   "code": "S.CTRS",
+   "lat": 37.092,
+   "lon": -76.381,
+   "cc": "US",
+   "admin1": "Virginia",
+   "wikidata": "Q618731"
+  },
+  {
+   "name": "Armstrong Flight Research Center",
+   "ascii": "NASA Armstrong Edwards",
+   "code": "S.CTRS",
+   "lat": 34.954,
+   "lon": -117.883,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q305443"
+  },
+  {
+   "name": "Schriever Space Force Base",
+   "ascii": "GPS Master Control Station",
+   "code": "S.MCC",
+   "lat": 38.803,
+   "lon": -104.526,
+   "cc": "US",
+   "admin1": "Colorado",
+   "wikidata": "Q2249926"
+  },
+  {
+   "name": "Peterson Space Force Base",
+   "code": "S.CTRS",
+   "lat": 38.8236,
+   "lon": -104.695,
+   "cc": "US",
+   "admin1": "Colorado",
+   "wikidata": "Q772391"
+  },
+  {
+   "name": "Buckley Space Force Base",
+   "code": "S.STNS",
+   "lat": 39.702,
+   "lon": -104.752,
+   "cc": "US",
+   "admin1": "Colorado",
+   "wikidata": "Q3499338"
+  },
+  {
+   "name": "Cheyenne Mountain Space Force Station",
+   "code": "S.MCC",
+   "lat": 38.744,
+   "lon": -104.846,
+   "cc": "US",
+   "admin1": "Colorado",
+   "wikidata": "Q5094587"
+  },
+  {
+   "name": "Goldstone Deep Space Communications Complex",
+   "ascii": "DSN Goldstone",
+   "code": "S.DSS",
+   "lat": 35.4267,
+   "lon": -116.89,
+   "cc": "US",
+   "admin1": "California",
+   "wikidata": "Q618630"
+  },
+  {
+   "name": "Madrid Deep Space Communications Complex",
+   "ascii": "DSN Robledo de Chavela",
+   "code": "S.DSS",
+   "lat": 40.4272,
+   "lon": -4.2492,
+   "cc": "ES",
+   "admin1": "Madrid",
+   "wikidata": "Q618721"
+  },
+  {
+   "name": "Canberra Deep Space Communication Complex",
+   "ascii": "DSN Tidbinbilla",
+   "code": "S.DSS",
+   "lat": -35.4014,
+   "lon": 148.9819,
+   "cc": "AU",
+   "admin1": "Australian Capital Territory",
+   "wikidata": "Q1032865"
+  },
+  {
+   "name": "Alaska Satellite Facility",
+   "ascii": "Fairbanks ground station",
+   "code": "S.STNS",
+   "lat": 64.859,
+   "lon": -147.85,
+   "cc": "US",
+   "admin1": "Alaska",
+   "wikidata": "Q16002362"
+  },
+  {
+   "name": "Eglin Space Surveillance Radar",
+   "ascii": "AN/FPS-85 Site C-6",
+   "code": "S.SSA",
+   "lat": 30.572,
+   "lon": -86.214,
+   "cc": "US",
+   "admin1": "Florida"
+  },
+  {
+   "name": "Cavalier Space Force Station",
+   "ascii": "PARCS radar",
+   "code": "S.SSA",
+   "lat": 48.7319,
+   "lon": -97.9044,
+   "cc": "US",
+   "admin1": "North Dakota",
+   "wikidata": "Q5054762"
+  },
+  {
+   "name": "Clear Space Force Station",
+   "code": "S.SSA",
+   "lat": 64.2906,
+   "lon": -149.1869,
+   "cc": "US",
+   "admin1": "Alaska",
+   "wikidata": "Q5130643"
+  },
+  {
+   "name": "Cape Cod Space Force Station",
+   "ascii": "PAVE PAWS Cape Cod",
+   "code": "S.SSA",
+   "lat": 41.752,
+   "lon": -70.539,
+   "cc": "US",
+   "admin1": "Massachusetts",
+   "wikidata": "Q5034670"
+  },
+  {
+   "name": "Beale Air Force Base PAVE PAWS",
+   "code": "S.SSA",
+   "lat": 39.136,
+   "lon": -121.436,
+   "cc": "US",
+   "admin1": "California"
+  },
+  {
+   "name": "Maui Space Surveillance Complex",
+   "ascii": "Haleakala AMOS",
+   "code": "S.SSA",
+   "lat": 20.708,
+   "lon": -156.257,
+   "cc": "US",
+   "admin1": "Hawaii"
+  },
+  {
+   "name": "Socorro GEODSS",
+   "ascii": "Stallion Range Center",
+   "code": "S.SSA",
+   "lat": 33.8174,
+   "lon": -106.6526,
+   "cc": "US",
+   "admin1": "New Mexico"
+  },
+  {
+   "name": "Millstone Hill Radar",
+   "ascii": "Haystack Westford",
+   "code": "S.SSA",
+   "lat": 42.617,
+   "lon": -71.491,
+   "cc": "US",
+   "admin1": "Massachusetts"
+  },
+  {
+   "name": "Pituffik Space Base",
+   "ascii": "Thule Air Base BMEWS",
+   "code": "S.SSA",
+   "lat": 76.531,
+   "lon": -68.703,
+   "cc": "GL",
+   "admin1": "Avannaata",
+   "wikidata": "Q131520504"
+  },
+  {
+   "name": "RAF Fylingdales",
+   "code": "S.SSA",
+   "lat": 54.362,
+   "lon": -0.67,
+   "cc": "GB",
+   "admin1": "England",
+   "wikidata": "Q1126073"
+  },
+  {
+   "name": "Diego Garcia GEODSS",
+   "code": "S.SSA",
+   "lat": -7.411,
+   "lon": 72.452,
+   "cc": "IO",
+   "admin1": ""
+  },
+  {
+   "name": "Ascension Island Tracking Station",
+   "ascii": "Ascension Auxiliary Airfield",
+   "code": "S.STNS",
+   "lat": -7.9694,
+   "lon": -14.3939,
+   "cc": "SH",
+   "admin1": "Ascension"
+  },
+  {
+   "name": "Reagan Test Site",
+   "ascii": "Kwajalein Missile Range",
+   "code": "S.SSA",
+   "lat": 8.72,
+   "lon": 167.73,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll",
+   "wikidata": "Q1794892"
+  },
+  {
+   "name": "ALTAIR Radar",
+   "ascii": "Roi-Namur Kwajalein",
+   "code": "S.SSA",
+   "lat": 9.395,
+   "lon": 167.479,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll"
+  },
+  {
+   "name": "Omelek Island Launch Site",
+   "ascii": "SpaceX Falcon 1 Kwajalein",
+   "code": "S.LNCH",
+   "lat": 9.0477,
+   "lon": 167.7431,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll"
+  },
+  {
+   "name": "Globus Radar Vardo",
+   "ascii": "Globus II Vardø",
+   "code": "S.SSA",
+   "lat": 70.367,
+   "lon": 31.127,
+   "cc": "NO",
+   "admin1": "Finnmark"
+  },
+  {
+   "name": "Baikonur Cosmodrome Site 1",
+   "ascii": "Gagarin's Start Baikonur",
+   "code": "S.LNCH",
+   "lat": 45.9203,
+   "lon": 63.342,
+   "cc": "KZ",
+   "admin1": "Baikonur",
+   "wikidata": "Q2580456"
+  },
+  {
+   "name": "Baikonur Cosmodrome Site 31",
+   "ascii": "Baikonur Soyuz pad 31/6",
+   "code": "S.LNCH",
+   "lat": 45.9961,
+   "lon": 63.5642,
+   "cc": "KZ",
+   "admin1": "Baikonur",
+   "wikidata": "Q258129"
+  },
+  {
+   "name": "Baikonur Cosmodrome Site 200",
+   "ascii": "Baikonur Proton pad",
+   "code": "S.LNCH",
+   "lat": 46.0336,
+   "lon": 63.0289,
+   "cc": "KZ",
+   "admin1": "Baikonur",
+   "wikidata": "Q4365460"
+  },
+  {
+   "name": "Plesetsk Cosmodrome",
+   "ascii": "Plesetsk",
+   "code": "S.SPRT",
+   "lat": 62.9257,
+   "lon": 40.5774,
+   "cc": "RU",
+   "admin1": "Arkhangelsk Oblast",
+   "wikidata": "Q15778"
+  },
+  {
+   "name": "Vostochny Cosmodrome",
+   "ascii": "Vostochny",
+   "code": "S.SPRT",
+   "lat": 51.8844,
+   "lon": 128.3339,
+   "cc": "RU",
+   "admin1": "Amur Oblast",
+   "wikidata": "Q1166191"
+  },
+  {
+   "name": "Kapustin Yar",
+   "ascii": "Kapustin Yar Area 107 orbital pads",
+   "code": "S.LNCH",
+   "lat": 48.54,
+   "lon": 46.3,
+   "cc": "RU",
+   "admin1": "Astrakhan Oblast",
+   "wikidata": "Q753201"
+  },
+  {
+   "name": "Yasny Launch Base",
+   "ascii": "Dombarovsky",
+   "code": "S.LNCH",
+   "lat": 51.094,
+   "lon": 59.842,
+   "cc": "RU",
+   "admin1": "Orenburg Oblast"
+  },
+  {
+   "name": "Mission Control Center Moscow",
+   "ascii": "TsUP Korolyov",
+   "code": "S.MCC",
+   "lat": 55.9129,
+   "lon": 37.8097,
+   "cc": "RU",
+   "admin1": "Moscow Oblast"
+  },
+  {
+   "name": "Gagarin Cosmonaut Training Center",
+   "ascii": "Star City Zvyozdny Gorodok",
+   "code": "S.CTRS",
+   "lat": 55.8745,
+   "lon": 38.115,
+   "cc": "RU",
+   "admin1": "Moscow Oblast"
+  },
+  {
+   "name": "Bear Lakes Ground Station",
+   "ascii": "Medvezhi Ozera",
+   "code": "S.STNS",
+   "lat": 55.8681,
+   "lon": 37.9519,
+   "cc": "RU",
+   "admin1": "Moscow Oblast"
+  },
+  {
+   "name": "Ussuriysk Deep Space Station",
+   "ascii": "Galenki RT-70",
+   "code": "S.DSS",
+   "lat": 44.0244,
+   "lon": 131.7572,
+   "cc": "RU",
+   "admin1": "Primorsky Krai",
+   "wikidata": "Q4126652"
+  },
+  {
+   "name": "Yevpatoria Deep Space Station",
+   "ascii": "Evpatoria RT-70",
+   "code": "S.DSS",
+   "lat": 45.189,
+   "lon": 33.187,
+   "cc": "UA",
+   "admin1": "Crimea"
+  },
+  {
+   "name": "Guiana Space Centre",
+   "ascii": "Kourou CSG technical centre",
+   "code": "S.SPRT",
+   "lat": 5.169,
+   "lon": -52.6903,
+   "cc": "GF",
+   "admin1": "Guyane"
+  },
+  {
+   "name": "Ariane 6 Launch Complex ELA-4",
+   "ascii": "ELA-4 Kourou",
+   "code": "S.LNCH",
+   "lat": 5.2626,
+   "lon": -52.7907,
+   "cc": "GF",
+   "admin1": "Guyane"
+  },
+  {
+   "name": "Ariane 5 Launch Complex ELA-3",
+   "ascii": "ELA-3 Kourou",
+   "code": "S.LNCH",
+   "lat": 5.239,
+   "lon": -52.7684,
+   "cc": "GF",
+   "admin1": "Guyane",
+   "status": "PERMANENT_SHUTDOWN",
+   "statusDate": "2023-07-05",
+   "statusUrl": "https://en.wikipedia.org/wiki/Ariane_5",
+   "statusTitle": "en:Ariane 5"
+  },
+  {
+   "name": "Vega Launch Complex ELV",
+   "ascii": "ELV Kourou",
+   "code": "S.LNCH",
+   "lat": 5.236,
+   "lon": -52.775,
+   "cc": "GF",
+   "admin1": "Guyane"
+  },
+  {
+   "name": "Soyuz Launch Complex ELS",
+   "ascii": "ELS Sinnamary",
+   "code": "S.LNCH",
+   "lat": 5.3053,
+   "lon": -52.8347,
+   "cc": "GF",
+   "admin1": "Guyane"
+  },
+  {
+   "name": "Kourou Ground Station",
+   "ascii": "ESA Diane station",
+   "code": "S.STNS",
+   "lat": 5.2517,
+   "lon": -52.8047,
+   "cc": "GF",
+   "admin1": "Guyane"
+  },
+  {
+   "name": "European Space Operations Centre",
+   "ascii": "ESOC Darmstadt",
+   "code": "S.MCC",
+   "lat": 49.871,
+   "lon": 8.6224,
+   "cc": "DE",
+   "admin1": "Hesse",
+   "wikidata": "Q697711"
+  },
+  {
+   "name": "European Space Research and Technology Centre",
+   "ascii": "ESTEC Noordwijk",
+   "code": "S.CTRS",
+   "lat": 52.218,
+   "lon": 4.42,
+   "cc": "NL",
+   "admin1": "South Holland",
+   "wikidata": "Q1378217"
+  },
+  {
+   "name": "ESRIN",
+   "ascii": "ESA Frascati",
+   "code": "S.CTRS",
+   "lat": 41.827,
+   "lon": 12.674,
+   "cc": "IT",
+   "admin1": "Lazio",
+   "wikidata": "Q175492"
+  },
+  {
+   "name": "European Space Astronomy Centre",
+   "ascii": "ESAC Villanueva de la Canada",
+   "code": "S.CTRS",
+   "lat": 40.444,
+   "lon": -3.953,
+   "cc": "ES",
+   "admin1": "Madrid",
+   "wikidata": "Q1378216"
+  },
+  {
+   "name": "European Astronaut Centre",
+   "ascii": "EAC Cologne",
+   "code": "S.CTRS",
+   "lat": 50.8519,
+   "lon": 7.1311,
+   "cc": "DE",
+   "admin1": "North Rhine-Westphalia",
+   "wikidata": "Q314203"
+  },
+  {
+   "name": "Cebreros Deep Space Station",
+   "ascii": "ESA DSA 2",
+   "code": "S.DSS",
+   "lat": 40.4528,
+   "lon": -4.3676,
+   "cc": "ES",
+   "admin1": "Castille and Leon"
+  },
+  {
+   "name": "New Norcia Deep Space Station",
+   "ascii": "ESA DSA 1",
+   "code": "S.DSS",
+   "lat": -31.0483,
+   "lon": 116.1914,
+   "cc": "AU",
+   "admin1": "Western Australia"
+  },
+  {
+   "name": "Malargue Deep Space Station",
+   "ascii": "ESA DSA 3 Malargüe",
+   "code": "S.DSS",
+   "lat": -35.776,
+   "lon": -69.398,
+   "cc": "AR",
+   "admin1": "Mendoza"
+  },
+  {
+   "name": "Kiruna Ground Station",
+   "ascii": "ESA Salmijarvi",
+   "code": "S.STNS",
+   "lat": 67.857,
+   "lon": 20.964,
+   "cc": "SE",
+   "admin1": "Norrbotten"
+  },
+  {
+   "name": "Redu Ground Station",
+   "ascii": "ESA Redu",
+   "code": "S.STNS",
+   "lat": 50.002,
+   "lon": 5.146,
+   "cc": "BE",
+   "admin1": "Wallonia"
+  },
+  {
+   "name": "Santa Maria Ground Station",
+   "ascii": "ESA Azores",
+   "code": "S.STNS",
+   "lat": 36.997,
+   "lon": -25.136,
+   "cc": "PT",
+   "admin1": "Azores"
+  },
+  {
+   "name": "Svalbard Satellite Station",
+   "ascii": "SvalSat KSAT",
+   "code": "S.STNS",
+   "lat": 78.2298,
+   "lon": 15.4078,
+   "cc": "SJ",
+   "admin1": "Svalbard",
+   "wikidata": "Q1796135"
+  },
+  {
+   "name": "Troll Satellite Station",
+   "ascii": "TrollSat Antarctica",
+   "code": "S.STNS",
+   "lat": -72.012,
+   "lon": 2.535,
+   "cc": "AQ",
+   "admin1": "",
+   "wikidata": "Q7845173"
+  },
+  {
+   "name": "Tromso Satellite Station",
+   "ascii": "KSAT Tromsø",
+   "code": "S.STNS",
+   "lat": 69.662,
+   "lon": 18.94,
+   "cc": "NO",
+   "admin1": "Troms",
+   "wikidata": "Q7845399"
+  },
+  {
+   "name": "Andoya Space",
+   "ascii": "Andøya Rocket Range Oksebåsen",
+   "code": "S.LNCH",
+   "lat": 69.2943,
+   "lon": 16.0203,
+   "cc": "NO",
+   "admin1": "Nordland",
+   "wikidata": "Q528446"
+  },
+  {
+   "name": "German Space Operations Center",
+   "ascii": "GSOC DLR Oberpfaffenhofen",
+   "code": "S.MCC",
+   "lat": 48.087,
+   "lon": 11.279,
+   "cc": "DE",
+   "admin1": "Bavaria",
+   "wikidata": "Q1205900"
+  },
+  {
+   "name": "Weilheim Ground Station",
+   "ascii": "DLR Weilheim",
+   "code": "S.STNS",
+   "lat": 47.881,
+   "lon": 11.08,
+   "cc": "DE",
+   "admin1": "Bavaria"
+  },
+  {
+   "name": "Neustrelitz Ground Station",
+   "ascii": "DLR Neustrelitz",
+   "code": "S.STNS",
+   "lat": 53.33,
+   "lon": 13.07,
+   "cc": "DE",
+   "admin1": "Mecklenburg-Vorpommern"
+  },
+  {
+   "name": "Toulouse Space Centre",
+   "ascii": "CNES Toulouse",
+   "code": "S.CTRS",
+   "lat": 43.561,
+   "lon": 1.482,
+   "cc": "FR",
+   "admin1": "Occitanie",
+   "wikidata": "Q3032233"
+  },
+  {
+   "name": "Fucino Space Centre",
+   "ascii": "Telespazio Fucino",
+   "code": "S.STNS",
+   "lat": 41.979,
+   "lon": 13.6,
+   "cc": "IT",
+   "admin1": "Abruzzo",
+   "wikidata": "Q45851275"
+  },
+  {
+   "name": "O'Higgins Antarctic Station",
+   "ascii": "GARS O'Higgins DLR",
+   "code": "S.STNS",
+   "lat": -63.321,
+   "lon": -57.901,
+   "cc": "AQ",
+   "admin1": ""
+  },
+  {
+   "name": "SaxaVord Spaceport",
+   "ascii": "Unst Shetland",
+   "code": "S.SPRT",
+   "lat": 60.817,
+   "lon": -0.767,
+   "cc": "GB",
+   "admin1": "Scotland",
+   "wikidata": "Q102180898"
+  },
+  {
+   "name": "Sutherland Spaceport",
+   "ascii": "A' Mhoine",
+   "code": "S.SPRT",
+   "lat": 58.5107,
+   "lon": -4.5121,
+   "cc": "GB",
+   "admin1": "Scotland",
+   "wikidata": "Q56063893"
+  },
+  {
+   "name": "Spaceport Cornwall",
+   "ascii": "Newquay",
+   "code": "S.SPRT",
+   "lat": 50.4406,
+   "lon": -4.9954,
+   "cc": "GB",
+   "admin1": "England",
+   "wikidata": "Q108551216"
+  },
+  {
+   "name": "Jiuquan Satellite Launch Center",
+   "ascii": "Jiuquan",
+   "code": "S.SPRT",
+   "lat": 40.9583,
+   "lon": 100.2913,
+   "cc": "CN",
+   "admin1": "Inner Mongolia",
+   "wikidata": "Q692677"
+  },
+  {
+   "name": "Xichang Satellite Launch Center",
+   "ascii": "Xichang",
+   "code": "S.SPRT",
+   "lat": 28.2461,
+   "lon": 102.0267,
+   "cc": "CN",
+   "admin1": "Sichuan",
+   "wikidata": "Q734306"
+  },
+  {
+   "name": "Taiyuan Satellite Launch Center",
+   "ascii": "Taiyuan",
+   "code": "S.SPRT",
+   "lat": 38.849,
+   "lon": 111.6083,
+   "cc": "CN",
+   "admin1": "Shanxi",
+   "wikidata": "Q1194479"
+  },
+  {
+   "name": "Wenchang Space Launch Site",
+   "ascii": "Wenchang Hainan",
+   "code": "S.SPRT",
+   "lat": 19.6145,
+   "lon": 110.951,
+   "cc": "CN",
+   "admin1": "Hainan",
+   "wikidata": "Q1246624"
+  },
+  {
+   "name": "Beijing Aerospace Control Center",
+   "ascii": "BACC",
+   "code": "S.MCC",
+   "lat": 40.072,
+   "lon": 116.2571,
+   "cc": "CN",
+   "admin1": "Beijing"
+  },
+  {
+   "name": "Satish Dhawan Space Centre",
+   "ascii": "Sriharikota SHAR",
+   "code": "S.SPRT",
+   "lat": 13.7199,
+   "lon": 80.2304,
+   "cc": "IN",
+   "admin1": "Andhra Pradesh",
+   "wikidata": "Q640273"
+  },
+  {
+   "name": "Kulasekharapatnam Spaceport",
+   "ascii": "Kulasekarapattinam",
+   "code": "S.SPRT",
+   "lat": 8.3612,
+   "lon": 78.0157,
+   "cc": "IN",
+   "admin1": "Tamil Nadu",
+   "wikidata": "Q113628006"
+  },
+  {
+   "name": "Indian Deep Space Network",
+   "ascii": "IDSN Byalalu",
+   "code": "S.DSS",
+   "lat": 12.902,
+   "lon": 77.37,
+   "cc": "IN",
+   "admin1": "Karnataka",
+   "wikidata": "Q6020227"
+  },
+  {
+   "name": "ISRO Telemetry Tracking and Command Network",
+   "ascii": "ISTRAC Bengaluru",
+   "code": "S.MCC",
+   "lat": 13.034,
+   "lon": 77.511,
+   "cc": "IN",
+   "admin1": "Karnataka"
+  },
+  {
+   "name": "Tanegashima Space Center",
+   "ascii": "Tanegashima",
+   "code": "S.SPRT",
+   "lat": 30.4007,
+   "lon": 130.9754,
+   "cc": "JP",
+   "admin1": "Kagoshima",
+   "wikidata": "Q742683"
+  },
+  {
+   "name": "Uchinoura Space Center",
+   "ascii": "Uchinoura",
+   "code": "S.LNCH",
+   "lat": 31.251,
+   "lon": 131.079,
+   "cc": "JP",
+   "admin1": "Kagoshima",
+   "wikidata": "Q1077124"
+  },
+  {
+   "name": "Hokkaido Spaceport",
+   "ascii": "Taiki Aerospace Research Field",
+   "code": "S.SPRT",
+   "lat": 42.5043,
+   "lon": 143.4562,
+   "cc": "JP",
+   "admin1": "Hokkaido",
+   "wikidata": "Q109605856"
+  },
+  {
+   "name": "Tsukuba Space Center",
+   "ascii": "JAXA Tsukuba",
+   "code": "S.MCC",
+   "lat": 36.065,
+   "lon": 140.129,
+   "cc": "JP",
+   "admin1": "Ibaraki",
+   "wikidata": "Q1586339"
+  },
+  {
+   "name": "Usuda Deep Space Center",
+   "ascii": "JAXA Usuda",
+   "code": "S.DSS",
+   "lat": 36.133,
+   "lon": 138.362,
+   "cc": "JP",
+   "admin1": "Nagano",
+   "wikidata": "Q7902244"
+  },
+  {
+   "name": "Sagamihara Campus",
+   "ascii": "JAXA ISAS Sagamihara",
+   "code": "S.CTRS",
+   "lat": 35.559,
+   "lon": 139.396,
+   "cc": "JP",
+   "admin1": "Kanagawa",
+   "wikidata": "Q7398960"
+  },
+  {
+   "name": "Naro Space Center",
+   "ascii": "Naro Goheung",
+   "code": "S.SPRT",
+   "lat": 34.4317,
+   "lon": 127.535,
+   "cc": "KR",
+   "admin1": "Jeollanam-do",
+   "wikidata": "Q495281"
+  },
+  {
+   "name": "Sohae Satellite Launching Station",
+   "ascii": "Sohae Tongchang-ri",
+   "code": "S.LNCH",
+   "lat": 39.66,
+   "lon": 124.705,
+   "cc": "KP",
+   "admin1": "North Pyongan",
+   "wikidata": "Q377158"
+  },
+  {
+   "name": "Tonghae Satellite Launching Ground",
+   "ascii": "Musudan-ri",
+   "code": "S.LNCH",
+   "lat": 40.8556,
+   "lon": 129.666,
+   "cc": "KP",
+   "admin1": "North Hamgyong",
+   "wikidata": "Q136547814"
+  },
+  {
+   "name": "Imam Khomeini Spaceport",
+   "ascii": "Semnan Simorgh launch complex",
+   "code": "S.SPRT",
+   "lat": 35.238,
+   "lon": 53.9508,
+   "cc": "IR",
+   "admin1": "Semnan",
+   "wikidata": "Q4415606"
+  },
+  {
+   "name": "Palmachim Airbase",
+   "ascii": "Palmachim launch site",
+   "code": "S.LNCH",
+   "lat": 31.8848,
+   "lon": 34.6803,
+   "cc": "IL",
+   "admin1": "Central District",
+   "wikidata": "Q590092"
+  },
+  {
+   "name": "Sonmiani Launch Facility",
+   "ascii": "SUPARCO Sonmiani",
+   "code": "S.LNCH",
+   "lat": 25.195,
+   "lon": 66.75,
+   "cc": "PK",
+   "admin1": "Balochistan"
+  },
+  {
+   "name": "Alcantara Launch Center",
+   "ascii": "Centro de Lançamento de Alcântara VLS pad",
+   "code": "S.SPRT",
+   "lat": -2.3177,
+   "lon": -44.3678,
+   "cc": "BR",
+   "admin1": "Maranhão"
+  },
+  {
+   "name": "Barreira do Inferno Launch Center",
+   "ascii": "CLBI Natal",
+   "code": "S.LNCH",
+   "lat": -5.925,
+   "lon": -35.163,
+   "cc": "BR",
+   "admin1": "Rio Grande do Norte",
+   "wikidata": "Q2561110"
+  },
+  {
+   "name": "Cuiaba Ground Station",
+   "ascii": "INPE Cuiabá",
+   "code": "S.STNS",
+   "lat": -15.555,
+   "lon": -56.07,
+   "cc": "BR",
+   "admin1": "Mato Grosso"
+  },
+  {
+   "name": "Cordoba Ground Station",
+   "ascii": "CONAE Teofilo Tabanera",
+   "code": "S.STNS",
+   "lat": -31.5214,
+   "lon": -64.4567,
+   "cc": "AR",
+   "admin1": "Córdoba",
+   "wikidata": "Q5845110"
+  },
+  {
+   "name": "Rocket Lab Launch Complex 1",
+   "ascii": "Mahia Peninsula",
+   "code": "S.LNCH",
+   "lat": -39.2617,
+   "lon": 177.8646,
+   "cc": "NZ",
+   "admin1": "Hawke's Bay",
+   "wikidata": "Q28180879"
+  },
+  {
+   "name": "Awarua Satellite Ground Station",
+   "ascii": "Invercargill",
+   "code": "S.STNS",
+   "lat": -46.53,
+   "lon": 168.38,
+   "cc": "NZ",
+   "admin1": "Southland",
+   "wikidata": "Q4829919"
+  },
+  {
+   "name": "Woomera Launch Area 5",
+   "ascii": "Woomera Range Complex LA-5",
+   "code": "S.LNCH",
+   "lat": -30.9731,
+   "lon": 136.4756,
+   "cc": "AU",
+   "admin1": "South Australia",
+   "wikidata": "Q8034006"
+  },
+  {
+   "name": "Whalers Way Orbital Launch Complex",
+   "ascii": "Southern Launch",
+   "code": "S.SPRT",
+   "lat": -34.9339,
+   "lon": 135.6424,
+   "cc": "AU",
+   "admin1": "South Australia",
+   "wikidata": "Q60760653"
+  },
+  {
+   "name": "Bowen Orbital Spaceport",
+   "ascii": "Abbot Point Gilmour Space",
+   "code": "S.SPRT",
+   "lat": -19.9592,
+   "lon": 148.1137,
+   "cc": "AU",
+   "admin1": "Queensland",
+   "wikidata": "Q131056918"
+  },
+  {
+   "name": "Arnhem Space Centre",
+   "ascii": "Nhulunbuy",
+   "code": "S.SPRT",
+   "lat": -12.3814,
+   "lon": 136.8139,
+   "cc": "AU",
+   "admin1": "Northern Territory",
+   "wikidata": "Q112762197"
+  },
+  {
+   "name": "Dongara Ground Station",
+   "ascii": "SSC Yatharagga",
+   "code": "S.STNS",
+   "lat": -29.046,
+   "lon": 115.348,
+   "cc": "AU",
+   "admin1": "Western Australia"
+  },
+  {
+   "name": "Hartebeesthoek Ground Station",
+   "ascii": "SANSA HartRAO",
+   "code": "S.STNS",
+   "lat": -25.887,
+   "lon": 27.707,
+   "cc": "ZA",
+   "admin1": "Gauteng"
+  },
+  {
+   "name": "Malindi Space Centre",
+   "ascii": "Luigi Broglio San Marco",
+   "code": "S.LNCH",
+   "lat": -2.9383,
+   "lon": 40.2125,
+   "cc": "KE",
+   "admin1": "Kilifi"
+  },
+  {
+   "name": "Hammaguir",
+   "ascii": "Hammaguir Brigitte pad Diamant",
+   "code": "S.LNCH",
+   "lat": 30.7782,
+   "lon": -3.0538,
+   "cc": "DZ",
+   "admin1": "Béchar",
+   "wikidata": "Q1054217",
+   "status": "PERMANENT_SHUTDOWN",
+   "statusDate": "1967",
+   "statusUrl": "https://en.wikipedia.org/wiki/Hammaguir",
+   "statusTitle": "en:Hammaguir"
+  },
+  {
+   "name": "Spaceport Nova Scotia",
+   "ascii": "Canso Maritime Launch",
+   "code": "S.SPRT",
+   "lat": 45.3036,
+   "lon": -60.9829,
+   "cc": "CA",
+   "admin1": "Nova Scotia",
+   "wikidata": "Q140478386"
+  },
+  {
+   "name": "Churchill Rocket Research Range",
+   "code": "S.LNCH",
+   "lat": 58.734,
+   "lon": -93.82,
+   "cc": "CA",
+   "admin1": "Manitoba",
+   "wikidata": "Q1438495"
+  },
+  {
+   "name": "Inuvik Satellite Station Facility",
+   "code": "S.STNS",
+   "lat": 68.317,
+   "lon": -133.548,
+   "cc": "CA",
+   "admin1": "Northwest Territories",
+   "wikidata": "Q1671644"
+  },
+  {
+   "name": "Prince Albert Satellite Station",
+   "code": "S.STNS",
+   "lat": 53.212,
+   "lon": -105.934,
+   "cc": "CA",
+   "admin1": "Saskatchewan"
+  },
+  {
+   "name": "Gatineau Satellite Station",
+   "code": "S.STNS",
+   "lat": 45.585,
+   "lon": -75.809,
+   "cc": "CA",
+   "admin1": "Quebec",
+   "wikidata": "Q1340010"
+  },
+  {
+   "name": "Shahroud Space Center",
+   "ascii": "Shahrud IRGC launch site",
+   "code": "S.LNCH",
+   "lat": 36.2009,
+   "lon": 55.3339,
+   "cc": "IR",
+   "admin1": "Semnan",
+   "wikidata": "Q112648507"
+  },
+  {
+   "name": "Hainan Commercial Space Launch Site",
+   "ascii": "Wenchang commercial pads LC-1 LC-2",
+   "code": "S.SPRT",
+   "lat": 19.6008,
+   "lon": 110.9358,
+   "cc": "CN",
+   "admin1": "Hainan",
+   "wikidata": "Q112957964"
+  },
+  {
+   "name": "Dongfang Spaceport",
+   "ascii": "Haiyang Oriental Spaceport sea launch",
+   "code": "S.SPRT",
+   "lat": 36.6809,
+   "lon": 121.2384,
+   "cc": "CN",
+   "admin1": "Shandong",
+   "wikidata": "Q102302830"
+  },
+  {
+   "name": "Esrange Space Center",
+   "ascii": "Spaceport Esrange Kiruna",
+   "code": "S.LNCH",
+   "lat": 67.8939,
+   "lon": 21.1069,
+   "cc": "SE",
+   "admin1": "Norrbotten",
+   "wikidata": "Q1368518"
+  },
+  {
+   "name": "Sohae Launch Pad 2",
+   "ascii": "Sohae Chollima-1 pad",
+   "code": "S.LNCH",
+   "lat": 39.6529,
+   "lon": 124.7365,
+   "cc": "KP",
+   "admin1": "North Pyongan"
+  }
+ ]
+}

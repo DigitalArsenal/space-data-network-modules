@@ -1,0 +1,1305 @@
+{
+ "$comment": "ISO 3166-1 alpha-2 -> numeric code (SIT CTR_ID), the country's Wikidata item and English label, from Wikidata P297/P299 (CC0), read 2026-10-13. gemNames: the country names the Global Energy Monitor tracker uses where they differ from the label.",
+ "countries": {
+  "AC": {
+   "numeric": "",
+   "wikidata": "Q31890709",
+   "name": "Ascension"
+  },
+  "AD": {
+   "numeric": "020",
+   "wikidata": "Q228",
+   "name": "Andorra"
+  },
+  "AE": {
+   "numeric": "784",
+   "wikidata": "Q878",
+   "name": "United Arab Emirates"
+  },
+  "AF": {
+   "numeric": "004",
+   "wikidata": "Q889",
+   "name": "Afghanistan"
+  },
+  "AG": {
+   "numeric": "028",
+   "wikidata": "Q781",
+   "name": "Antigua and Barbuda"
+  },
+  "AI": {
+   "numeric": "660",
+   "wikidata": "Q25228",
+   "name": "Anguilla"
+  },
+  "AL": {
+   "numeric": "008",
+   "wikidata": "Q222",
+   "name": "Albania"
+  },
+  "AM": {
+   "numeric": "051",
+   "wikidata": "Q399",
+   "name": "Armenia"
+  },
+  "AN": {
+   "numeric": "530",
+   "wikidata": "Q25227",
+   "name": "Netherlands Antilles"
+  },
+  "AO": {
+   "numeric": "024",
+   "wikidata": "Q916",
+   "name": "Angola"
+  },
+  "AQ": {
+   "numeric": "010",
+   "wikidata": "Q10372207",
+   "name": "Antarctic Treaty area"
+  },
+  "AR": {
+   "numeric": "032",
+   "wikidata": "Q414",
+   "name": "Argentina"
+  },
+  "AS": {
+   "numeric": "016",
+   "wikidata": "Q16641",
+   "name": "American Samoa"
+  },
+  "AT": {
+   "numeric": "040",
+   "wikidata": "Q40",
+   "name": "Austria"
+  },
+  "AU": {
+   "numeric": "036",
+   "wikidata": "Q408",
+   "name": "Australia"
+  },
+  "AW": {
+   "numeric": "533",
+   "wikidata": "Q21203",
+   "name": "Aruba"
+  },
+  "AX": {
+   "numeric": "248",
+   "wikidata": "Q5689",
+   "name": "Åland"
+  },
+  "AZ": {
+   "numeric": "031",
+   "wikidata": "Q227",
+   "name": "Azerbaijan"
+  },
+  "BA": {
+   "numeric": "070",
+   "wikidata": "Q225",
+   "name": "Bosnia and Herzegovina"
+  },
+  "BB": {
+   "numeric": "052",
+   "wikidata": "Q244",
+   "name": "Barbados"
+  },
+  "BD": {
+   "numeric": "050",
+   "wikidata": "Q902",
+   "name": "Bangladesh"
+  },
+  "BE": {
+   "numeric": "056",
+   "wikidata": "Q31",
+   "name": "Belgium"
+  },
+  "BF": {
+   "numeric": "854",
+   "wikidata": "Q965",
+   "name": "Burkina Faso"
+  },
+  "BG": {
+   "numeric": "100",
+   "wikidata": "Q219",
+   "name": "Bulgaria"
+  },
+  "BH": {
+   "numeric": "048",
+   "wikidata": "Q398",
+   "name": "Bahrain"
+  },
+  "BI": {
+   "numeric": "108",
+   "wikidata": "Q967",
+   "name": "Burundi"
+  },
+  "BJ": {
+   "numeric": "204",
+   "wikidata": "Q962",
+   "name": "Benin"
+  },
+  "BL": {
+   "numeric": "652",
+   "wikidata": "Q25362",
+   "name": "Saint Barthélemy"
+  },
+  "BM": {
+   "numeric": "060",
+   "wikidata": "Q23635",
+   "name": "Bermuda"
+  },
+  "BN": {
+   "numeric": "096",
+   "wikidata": "Q921",
+   "name": "Brunei"
+  },
+  "BO": {
+   "numeric": "068",
+   "wikidata": "Q750",
+   "name": "Bolivia"
+  },
+  "BQ": {
+   "numeric": "535",
+   "wikidata": "Q27561",
+   "name": "Caribbean Netherlands"
+  },
+  "BR": {
+   "numeric": "076",
+   "wikidata": "Q155",
+   "name": "Brazil"
+  },
+  "BS": {
+   "numeric": "044",
+   "wikidata": "Q778",
+   "name": "The Bahamas"
+  },
+  "BT": {
+   "numeric": "064",
+   "wikidata": "Q917",
+   "name": "Bhutan"
+  },
+  "BV": {
+   "numeric": "074",
+   "wikidata": "Q23408",
+   "name": "Bouvet Island"
+  },
+  "BW": {
+   "numeric": "072",
+   "wikidata": "Q963",
+   "name": "Botswana"
+  },
+  "BY": {
+   "numeric": "112",
+   "wikidata": "Q184",
+   "name": "Belarus"
+  },
+  "BZ": {
+   "numeric": "084",
+   "wikidata": "Q242",
+   "name": "Belize"
+  },
+  "CA": {
+   "numeric": "124",
+   "wikidata": "Q16",
+   "name": "Canada"
+  },
+  "CC": {
+   "numeric": "166",
+   "wikidata": "Q36004",
+   "name": "Cocos (Keeling) Islands"
+  },
+  "CD": {
+   "numeric": "180",
+   "wikidata": "Q974",
+   "name": "Democratic Republic of the Congo"
+  },
+  "CF": {
+   "numeric": "140",
+   "wikidata": "Q929",
+   "name": "Central African Republic"
+  },
+  "CG": {
+   "numeric": "178",
+   "wikidata": "Q971",
+   "name": "Republic of the Congo"
+  },
+  "CH": {
+   "numeric": "756",
+   "wikidata": "Q39",
+   "name": "Switzerland"
+  },
+  "CI": {
+   "numeric": "384",
+   "wikidata": "Q1008",
+   "name": "Ivory Coast"
+  },
+  "CK": {
+   "numeric": "184",
+   "wikidata": "Q26988",
+   "name": "Cook Islands"
+  },
+  "CL": {
+   "numeric": "152",
+   "wikidata": "Q298",
+   "name": "Chile"
+  },
+  "CM": {
+   "numeric": "120",
+   "wikidata": "Q1009",
+   "name": "Cameroon"
+  },
+  "CN": {
+   "numeric": "156",
+   "wikidata": "Q148",
+   "name": "People's Republic of China"
+  },
+  "CO": {
+   "numeric": "170",
+   "wikidata": "Q739",
+   "name": "Colombia"
+  },
+  "CP": {
+   "numeric": "",
+   "wikidata": "Q161258",
+   "name": "Clipperton Island"
+  },
+  "CQ": {
+   "numeric": "",
+   "wikidata": "Q3405693",
+   "name": "Sark"
+  },
+  "CR": {
+   "numeric": "188",
+   "wikidata": "Q800",
+   "name": "Costa Rica"
+  },
+  "CU": {
+   "numeric": "192",
+   "wikidata": "Q241",
+   "name": "Cuba"
+  },
+  "CV": {
+   "numeric": "132",
+   "wikidata": "Q1011",
+   "name": "Cape Verde"
+  },
+  "CW": {
+   "numeric": "531",
+   "wikidata": "Q25279",
+   "name": "Curaçao"
+  },
+  "CX": {
+   "numeric": "162",
+   "wikidata": "Q31063",
+   "name": "Christmas Island"
+  },
+  "CY": {
+   "numeric": "196",
+   "wikidata": "Q229",
+   "name": "Cyprus"
+  },
+  "CZ": {
+   "numeric": "203",
+   "wikidata": "Q213",
+   "name": "Czech Republic"
+  },
+  "DD": {
+   "numeric": "278",
+   "wikidata": "Q16957",
+   "name": "East Germany"
+  },
+  "DE": {
+   "numeric": "276",
+   "wikidata": "Q183",
+   "name": "Germany"
+  },
+  "DG": {
+   "numeric": "",
+   "wikidata": "Q184851",
+   "name": "Diego Garcia"
+  },
+  "DJ": {
+   "numeric": "262",
+   "wikidata": "Q977",
+   "name": "Djibouti"
+  },
+  "DK": {
+   "numeric": "208",
+   "wikidata": "Q35",
+   "name": "Denmark"
+  },
+  "DM": {
+   "numeric": "212",
+   "wikidata": "Q784",
+   "name": "Dominica"
+  },
+  "DO": {
+   "numeric": "214",
+   "wikidata": "Q786",
+   "name": "Dominican Republic"
+  },
+  "DZ": {
+   "numeric": "012",
+   "wikidata": "Q262",
+   "name": "Algeria"
+  },
+  "EC": {
+   "numeric": "218",
+   "wikidata": "Q736",
+   "name": "Ecuador"
+  },
+  "EE": {
+   "numeric": "233",
+   "wikidata": "Q191",
+   "name": "Estonia"
+  },
+  "EG": {
+   "numeric": "818",
+   "wikidata": "Q79",
+   "name": "Egypt"
+  },
+  "EH": {
+   "numeric": "732",
+   "wikidata": "Q6250",
+   "name": "Western Sahara"
+  },
+  "ER": {
+   "numeric": "232",
+   "wikidata": "Q986",
+   "name": "Eritrea"
+  },
+  "ES": {
+   "numeric": "724",
+   "wikidata": "Q29",
+   "name": "Spain"
+  },
+  "ET": {
+   "numeric": "231",
+   "wikidata": "Q115",
+   "name": "Ethiopia"
+  },
+  "FI": {
+   "numeric": "246",
+   "wikidata": "Q33",
+   "name": "Finland"
+  },
+  "FJ": {
+   "numeric": "242",
+   "wikidata": "Q712",
+   "name": "Fiji"
+  },
+  "FK": {
+   "numeric": "238",
+   "wikidata": "Q9648",
+   "name": "Falkland Islands"
+  },
+  "FM": {
+   "numeric": "583",
+   "wikidata": "Q702",
+   "name": "Federated States of Micronesia"
+  },
+  "FO": {
+   "numeric": "234",
+   "wikidata": "Q4628",
+   "name": "Faroe Islands"
+  },
+  "FR": {
+   "numeric": "250",
+   "wikidata": "Q142",
+   "name": "France"
+  },
+  "GA": {
+   "numeric": "266",
+   "wikidata": "Q1000",
+   "name": "Gabon"
+  },
+  "GB": {
+   "numeric": "826",
+   "wikidata": "Q145",
+   "name": "United Kingdom"
+  },
+  "GD": {
+   "numeric": "308",
+   "wikidata": "Q769",
+   "name": "Grenada"
+  },
+  "GE": {
+   "numeric": "268",
+   "wikidata": "Q230",
+   "name": "Georgia"
+  },
+  "GF": {
+   "numeric": "254",
+   "wikidata": "Q3769",
+   "name": "French Guiana"
+  },
+  "GG": {
+   "numeric": "831",
+   "wikidata": "Q25230",
+   "name": "Guernsey"
+  },
+  "GH": {
+   "numeric": "288",
+   "wikidata": "Q117",
+   "name": "Ghana"
+  },
+  "GI": {
+   "numeric": "292",
+   "wikidata": "Q1410",
+   "name": "Gibraltar"
+  },
+  "GL": {
+   "numeric": "304",
+   "wikidata": "Q223",
+   "name": "Greenland"
+  },
+  "GM": {
+   "numeric": "270",
+   "wikidata": "Q1005",
+   "name": "The Gambia"
+  },
+  "GN": {
+   "numeric": "324",
+   "wikidata": "Q1006",
+   "name": "Guinea"
+  },
+  "GP": {
+   "numeric": "312",
+   "wikidata": "Q17012",
+   "name": "Guadeloupe"
+  },
+  "GQ": {
+   "numeric": "226",
+   "wikidata": "Q983",
+   "name": "Equatorial Guinea"
+  },
+  "GR": {
+   "numeric": "300",
+   "wikidata": "Q41",
+   "name": "Greece"
+  },
+  "GS": {
+   "numeric": "239",
+   "wikidata": "Q35086",
+   "name": "South Georgia and the South Sandwich Islands"
+  },
+  "GT": {
+   "numeric": "320",
+   "wikidata": "Q774",
+   "name": "Guatemala"
+  },
+  "GU": {
+   "numeric": "316",
+   "wikidata": "Q16635",
+   "name": "Guam"
+  },
+  "GW": {
+   "numeric": "624",
+   "wikidata": "Q1007",
+   "name": "Guinea-Bissau"
+  },
+  "GY": {
+   "numeric": "328",
+   "wikidata": "Q734",
+   "name": "Guyana"
+  },
+  "HK": {
+   "numeric": "344",
+   "wikidata": "Q8646",
+   "name": "Hong Kong"
+  },
+  "HM": {
+   "numeric": "334",
+   "wikidata": "Q131198",
+   "name": "Heard Island and McDonald Islands"
+  },
+  "HN": {
+   "numeric": "340",
+   "wikidata": "Q783",
+   "name": "Honduras"
+  },
+  "HR": {
+   "numeric": "191",
+   "wikidata": "Q224",
+   "name": "Croatia"
+  },
+  "HT": {
+   "numeric": "332",
+   "wikidata": "Q790",
+   "name": "Haiti"
+  },
+  "HU": {
+   "numeric": "348",
+   "wikidata": "Q28",
+   "name": "Hungary"
+  },
+  "ID": {
+   "numeric": "360",
+   "wikidata": "Q252",
+   "name": "Indonesia"
+  },
+  "IE": {
+   "numeric": "372",
+   "wikidata": "Q27",
+   "name": "Ireland"
+  },
+  "IL": {
+   "numeric": "376",
+   "wikidata": "Q801",
+   "name": "Israel"
+  },
+  "IM": {
+   "numeric": "833",
+   "wikidata": "Q9676",
+   "name": "Isle of Man"
+  },
+  "IN": {
+   "numeric": "356",
+   "wikidata": "Q668",
+   "name": "India"
+  },
+  "IO": {
+   "numeric": "086",
+   "wikidata": "Q43448",
+   "name": "British Indian Ocean Territory"
+  },
+  "IQ": {
+   "numeric": "368",
+   "wikidata": "Q796",
+   "name": "Iraq"
+  },
+  "IR": {
+   "numeric": "364",
+   "wikidata": "Q794",
+   "name": "Iran"
+  },
+  "IS": {
+   "numeric": "352",
+   "wikidata": "Q189",
+   "name": "Iceland"
+  },
+  "IT": {
+   "numeric": "380",
+   "wikidata": "Q38",
+   "name": "Italy"
+  },
+  "JE": {
+   "numeric": "832",
+   "wikidata": "Q785",
+   "name": "Jersey"
+  },
+  "JM": {
+   "numeric": "388",
+   "wikidata": "Q766",
+   "name": "Jamaica"
+  },
+  "JO": {
+   "numeric": "400",
+   "wikidata": "Q810",
+   "name": "Jordan"
+  },
+  "JP": {
+   "numeric": "392",
+   "wikidata": "Q17",
+   "name": "Japan"
+  },
+  "KE": {
+   "numeric": "404",
+   "wikidata": "Q114",
+   "name": "Kenya"
+  },
+  "KG": {
+   "numeric": "417",
+   "wikidata": "Q813",
+   "name": "Kyrgyzstan"
+  },
+  "KH": {
+   "numeric": "116",
+   "wikidata": "Q424",
+   "name": "Cambodia"
+  },
+  "KI": {
+   "numeric": "296",
+   "wikidata": "Q710",
+   "name": "Kiribati"
+  },
+  "KM": {
+   "numeric": "174",
+   "wikidata": "Q970",
+   "name": "Comoros"
+  },
+  "KN": {
+   "numeric": "659",
+   "wikidata": "Q763",
+   "name": "Saint Kitts and Nevis"
+  },
+  "KP": {
+   "numeric": "408",
+   "wikidata": "Q423",
+   "name": "North Korea"
+  },
+  "KR": {
+   "numeric": "410",
+   "wikidata": "Q884",
+   "name": "South Korea"
+  },
+  "KW": {
+   "numeric": "414",
+   "wikidata": "Q817",
+   "name": "Kuwait"
+  },
+  "KY": {
+   "numeric": "136",
+   "wikidata": "Q5785",
+   "name": "Cayman Islands"
+  },
+  "KZ": {
+   "numeric": "398",
+   "wikidata": "Q232",
+   "name": "Kazakhstan"
+  },
+  "LA": {
+   "numeric": "418",
+   "wikidata": "Q819",
+   "name": "Laos"
+  },
+  "LB": {
+   "numeric": "422",
+   "wikidata": "Q822",
+   "name": "Lebanon"
+  },
+  "LC": {
+   "numeric": "662",
+   "wikidata": "Q760",
+   "name": "Saint Lucia"
+  },
+  "LI": {
+   "numeric": "438",
+   "wikidata": "Q347",
+   "name": "Liechtenstein"
+  },
+  "LK": {
+   "numeric": "144",
+   "wikidata": "Q854",
+   "name": "Sri Lanka"
+  },
+  "LR": {
+   "numeric": "430",
+   "wikidata": "Q1014",
+   "name": "Liberia"
+  },
+  "LS": {
+   "numeric": "426",
+   "wikidata": "Q1013",
+   "name": "Lesotho"
+  },
+  "LT": {
+   "numeric": "440",
+   "wikidata": "Q37",
+   "name": "Lithuania"
+  },
+  "LU": {
+   "numeric": "442",
+   "wikidata": "Q32",
+   "name": "Luxembourg"
+  },
+  "LV": {
+   "numeric": "428",
+   "wikidata": "Q211",
+   "name": "Latvia"
+  },
+  "LY": {
+   "numeric": "434",
+   "wikidata": "Q1016",
+   "name": "Libya"
+  },
+  "MA": {
+   "numeric": "504",
+   "wikidata": "Q1028",
+   "name": "Morocco"
+  },
+  "MC": {
+   "numeric": "492",
+   "wikidata": "Q235",
+   "name": "Monaco"
+  },
+  "MD": {
+   "numeric": "498",
+   "wikidata": "Q217",
+   "name": "Moldova"
+  },
+  "ME": {
+   "numeric": "499",
+   "wikidata": "Q236",
+   "name": "Montenegro"
+  },
+  "MF": {
+   "numeric": "663",
+   "wikidata": "Q126125",
+   "name": "Saint-Martin"
+  },
+  "MG": {
+   "numeric": "450",
+   "wikidata": "Q1019",
+   "name": "Madagascar"
+  },
+  "MH": {
+   "numeric": "584",
+   "wikidata": "Q709",
+   "name": "Marshall Islands"
+  },
+  "MK": {
+   "numeric": "807",
+   "wikidata": "Q221",
+   "name": "North Macedonia"
+  },
+  "ML": {
+   "numeric": "466",
+   "wikidata": "Q912",
+   "name": "Mali"
+  },
+  "MM": {
+   "numeric": "104",
+   "wikidata": "Q836",
+   "name": "Myanmar"
+  },
+  "MN": {
+   "numeric": "496",
+   "wikidata": "Q711",
+   "name": "Mongolia"
+  },
+  "MO": {
+   "numeric": "446",
+   "wikidata": "Q14773",
+   "name": "Macau"
+  },
+  "MP": {
+   "numeric": "580",
+   "wikidata": "Q16644",
+   "name": "Northern Mariana Islands"
+  },
+  "MQ": {
+   "numeric": "474",
+   "wikidata": "Q17054",
+   "name": "Martinique"
+  },
+  "MR": {
+   "numeric": "478",
+   "wikidata": "Q1025",
+   "name": "Mauritania"
+  },
+  "MS": {
+   "numeric": "500",
+   "wikidata": "Q13353",
+   "name": "Montserrat"
+  },
+  "MT": {
+   "numeric": "470",
+   "wikidata": "Q233",
+   "name": "Malta"
+  },
+  "MU": {
+   "numeric": "480",
+   "wikidata": "Q1027",
+   "name": "Mauritius"
+  },
+  "MV": {
+   "numeric": "462",
+   "wikidata": "Q826",
+   "name": "Maldives"
+  },
+  "MW": {
+   "numeric": "454",
+   "wikidata": "Q1020",
+   "name": "Malawi"
+  },
+  "MX": {
+   "numeric": "484",
+   "wikidata": "Q96",
+   "name": "Mexico"
+  },
+  "MY": {
+   "numeric": "458",
+   "wikidata": "Q833",
+   "name": "Malaysia"
+  },
+  "MZ": {
+   "numeric": "508",
+   "wikidata": "Q1029",
+   "name": "Mozambique"
+  },
+  "NA": {
+   "numeric": "516",
+   "wikidata": "Q1030",
+   "name": "Namibia"
+  },
+  "NC": {
+   "numeric": "540",
+   "wikidata": "Q33788",
+   "name": "New Caledonia"
+  },
+  "NE": {
+   "numeric": "562",
+   "wikidata": "Q1032",
+   "name": "Niger"
+  },
+  "NF": {
+   "numeric": "574",
+   "wikidata": "Q31057",
+   "name": "Norfolk Island"
+  },
+  "NG": {
+   "numeric": "566",
+   "wikidata": "Q1033",
+   "name": "Nigeria"
+  },
+  "NI": {
+   "numeric": "558",
+   "wikidata": "Q811",
+   "name": "Nicaragua"
+  },
+  "NL": {
+   "numeric": "528",
+   "wikidata": "Q29999",
+   "name": "Kingdom of the Netherlands"
+  },
+  "NO": {
+   "numeric": "578",
+   "wikidata": "Q20",
+   "name": "Norway"
+  },
+  "NP": {
+   "numeric": "524",
+   "wikidata": "Q837",
+   "name": "Nepal"
+  },
+  "NR": {
+   "numeric": "520",
+   "wikidata": "Q697",
+   "name": "Nauru"
+  },
+  "NU": {
+   "numeric": "570",
+   "wikidata": "Q34020",
+   "name": "Niue"
+  },
+  "NZ": {
+   "numeric": "554",
+   "wikidata": "Q664",
+   "name": "New Zealand"
+  },
+  "OM": {
+   "numeric": "512",
+   "wikidata": "Q842",
+   "name": "Oman"
+  },
+  "PA": {
+   "numeric": "591",
+   "wikidata": "Q804",
+   "name": "Panama"
+  },
+  "PC": {
+   "numeric": "582",
+   "wikidata": "Q129237",
+   "name": "Trust Territory of the Pacific Islands"
+  },
+  "PE": {
+   "numeric": "604",
+   "wikidata": "Q419",
+   "name": "Peru"
+  },
+  "PF": {
+   "numeric": "258",
+   "wikidata": "Q30971",
+   "name": "French Polynesia"
+  },
+  "PG": {
+   "numeric": "598",
+   "wikidata": "Q691",
+   "name": "Papua New Guinea"
+  },
+  "PH": {
+   "numeric": "608",
+   "wikidata": "Q928",
+   "name": "Philippines"
+  },
+  "PK": {
+   "numeric": "586",
+   "wikidata": "Q843",
+   "name": "Pakistan"
+  },
+  "PL": {
+   "numeric": "616",
+   "wikidata": "Q36",
+   "name": "Poland"
+  },
+  "PM": {
+   "numeric": "666",
+   "wikidata": "Q34617",
+   "name": "Saint Pierre and Miquelon"
+  },
+  "PN": {
+   "numeric": "612",
+   "wikidata": "Q35672",
+   "name": "Pitcairn Islands"
+  },
+  "PR": {
+   "numeric": "630",
+   "wikidata": "Q1183",
+   "name": "Puerto Rico"
+  },
+  "PS": {
+   "numeric": "275",
+   "wikidata": "Q219060",
+   "name": "Palestine"
+  },
+  "PT": {
+   "numeric": "620",
+   "wikidata": "Q45",
+   "name": "Portugal"
+  },
+  "PW": {
+   "numeric": "585",
+   "wikidata": "Q695",
+   "name": "Palau"
+  },
+  "PY": {
+   "numeric": "600",
+   "wikidata": "Q733",
+   "name": "Paraguay"
+  },
+  "QA": {
+   "numeric": "634",
+   "wikidata": "Q846",
+   "name": "Qatar"
+  },
+  "RE": {
+   "numeric": "638",
+   "wikidata": "Q17070",
+   "name": "Réunion"
+  },
+  "RO": {
+   "numeric": "642",
+   "wikidata": "Q218",
+   "name": "Romania"
+  },
+  "RS": {
+   "numeric": "688",
+   "wikidata": "Q403",
+   "name": "Serbia"
+  },
+  "RU": {
+   "numeric": "643",
+   "wikidata": "Q159",
+   "name": "Russia"
+  },
+  "RW": {
+   "numeric": "646",
+   "wikidata": "Q1037",
+   "name": "Rwanda"
+  },
+  "SA": {
+   "numeric": "682",
+   "wikidata": "Q851",
+   "name": "Saudi Arabia"
+  },
+  "SB": {
+   "numeric": "090",
+   "wikidata": "Q685",
+   "name": "Solomon Islands"
+  },
+  "SC": {
+   "numeric": "690",
+   "wikidata": "Q1042",
+   "name": "Seychelles"
+  },
+  "SD": {
+   "numeric": "729",
+   "wikidata": "Q1049",
+   "name": "Sudan"
+  },
+  "SE": {
+   "numeric": "752",
+   "wikidata": "Q34",
+   "name": "Sweden"
+  },
+  "SG": {
+   "numeric": "702",
+   "wikidata": "Q334",
+   "name": "Singapore"
+  },
+  "SH": {
+   "numeric": "654",
+   "wikidata": "Q192184",
+   "name": "Saint Helena, Ascension and Tristan da Cunha"
+  },
+  "SI": {
+   "numeric": "705",
+   "wikidata": "Q215",
+   "name": "Slovenia"
+  },
+  "SJ": {
+   "numeric": "744",
+   "wikidata": "Q842829",
+   "name": "Svalbard and Jan Mayen"
+  },
+  "SK": {
+   "numeric": "703",
+   "wikidata": "Q214",
+   "name": "Slovakia"
+  },
+  "SL": {
+   "numeric": "694",
+   "wikidata": "Q1044",
+   "name": "Sierra Leone"
+  },
+  "SM": {
+   "numeric": "674",
+   "wikidata": "Q238",
+   "name": "San Marino"
+  },
+  "SN": {
+   "numeric": "686",
+   "wikidata": "Q1041",
+   "name": "Senegal"
+  },
+  "SO": {
+   "numeric": "706",
+   "wikidata": "Q1045",
+   "name": "Somalia"
+  },
+  "SR": {
+   "numeric": "740",
+   "wikidata": "Q730",
+   "name": "Suriname"
+  },
+  "SS": {
+   "numeric": "728",
+   "wikidata": "Q958",
+   "name": "South Sudan"
+  },
+  "ST": {
+   "numeric": "678",
+   "wikidata": "Q1039",
+   "name": "São Tomé and Príncipe"
+  },
+  "SV": {
+   "numeric": "222",
+   "wikidata": "Q792",
+   "name": "El Salvador"
+  },
+  "SX": {
+   "numeric": "534",
+   "wikidata": "Q26273",
+   "name": "Sint Maarten"
+  },
+  "SY": {
+   "numeric": "760",
+   "wikidata": "Q858",
+   "name": "Syria"
+  },
+  "SZ": {
+   "numeric": "748",
+   "wikidata": "Q1050",
+   "name": "Eswatini"
+  },
+  "TA": {
+   "numeric": "",
+   "wikidata": "Q34625512",
+   "name": "Tristan da Cunha"
+  },
+  "TC": {
+   "numeric": "796",
+   "wikidata": "Q18221",
+   "name": "Turks and Caicos Islands"
+  },
+  "TD": {
+   "numeric": "148",
+   "wikidata": "Q657",
+   "name": "Chad"
+  },
+  "TF": {
+   "numeric": "260",
+   "wikidata": "Q129003",
+   "name": "French Southern and Antarctic Lands"
+  },
+  "TG": {
+   "numeric": "768",
+   "wikidata": "Q945",
+   "name": "Togo"
+  },
+  "TH": {
+   "numeric": "764",
+   "wikidata": "Q869",
+   "name": "Thailand"
+  },
+  "TJ": {
+   "numeric": "762",
+   "wikidata": "Q863",
+   "name": "Tajikistan"
+  },
+  "TK": {
+   "numeric": "772",
+   "wikidata": "Q36823",
+   "name": "Tokelau"
+  },
+  "TL": {
+   "numeric": "626",
+   "wikidata": "Q574",
+   "name": "Timor-Leste"
+  },
+  "TM": {
+   "numeric": "795",
+   "wikidata": "Q874",
+   "name": "Turkmenistan"
+  },
+  "TN": {
+   "numeric": "788",
+   "wikidata": "Q948",
+   "name": "Tunisia"
+  },
+  "TO": {
+   "numeric": "776",
+   "wikidata": "Q678",
+   "name": "Tonga"
+  },
+  "TR": {
+   "numeric": "792",
+   "wikidata": "Q43",
+   "name": "Turkey"
+  },
+  "TT": {
+   "numeric": "780",
+   "wikidata": "Q754",
+   "name": "Trinidad and Tobago"
+  },
+  "TV": {
+   "numeric": "798",
+   "wikidata": "Q672",
+   "name": "Tuvalu"
+  },
+  "TW": {
+   "numeric": "158",
+   "wikidata": "Q865",
+   "name": "Taiwan"
+  },
+  "TZ": {
+   "numeric": "834",
+   "wikidata": "Q924",
+   "name": "Tanzania"
+  },
+  "UA": {
+   "numeric": "804",
+   "wikidata": "Q212",
+   "name": "Ukraine"
+  },
+  "UG": {
+   "numeric": "800",
+   "wikidata": "Q1036",
+   "name": "Uganda"
+  },
+  "UM": {
+   "numeric": "581",
+   "wikidata": "Q16645",
+   "name": "United States Minor Outlying Islands"
+  },
+  "US": {
+   "numeric": "840",
+   "wikidata": "Q30",
+   "name": "United States"
+  },
+  "UY": {
+   "numeric": "858",
+   "wikidata": "Q77",
+   "name": "Uruguay"
+  },
+  "UZ": {
+   "numeric": "860",
+   "wikidata": "Q265",
+   "name": "Uzbekistan"
+  },
+  "VA": {
+   "numeric": "336",
+   "wikidata": "Q237",
+   "name": "Vatican City"
+  },
+  "VC": {
+   "numeric": "670",
+   "wikidata": "Q757",
+   "name": "Saint Vincent and the Grenadines"
+  },
+  "VE": {
+   "numeric": "862",
+   "wikidata": "Q717",
+   "name": "Venezuela"
+  },
+  "VG": {
+   "numeric": "092",
+   "wikidata": "Q25305",
+   "name": "British Virgin Islands"
+  },
+  "VI": {
+   "numeric": "850",
+   "wikidata": "Q11703",
+   "name": "United States Virgin Islands"
+  },
+  "VN": {
+   "numeric": "704",
+   "wikidata": "Q881",
+   "name": "Vietnam"
+  },
+  "VU": {
+   "numeric": "548",
+   "wikidata": "Q686",
+   "name": "Vanuatu"
+  },
+  "WF": {
+   "numeric": "876",
+   "wikidata": "Q35555",
+   "name": "Wallis and Futuna"
+  },
+  "WS": {
+   "numeric": "882",
+   "wikidata": "Q683",
+   "name": "Samoa"
+  },
+  "XK": {
+   "numeric": "",
+   "wikidata": "Q1246",
+   "name": "Kosovo"
+  },
+  "YE": {
+   "numeric": "887",
+   "wikidata": "Q805",
+   "name": "Yemen"
+  },
+  "YT": {
+   "numeric": "175",
+   "wikidata": "Q17063",
+   "name": "Mayotte"
+  },
+  "YU": {
+   "numeric": "",
+   "wikidata": "Q36704",
+   "name": "Yugoslavia"
+  },
+  "ZA": {
+   "numeric": "710",
+   "wikidata": "Q258",
+   "name": "South Africa"
+  },
+  "ZM": {
+   "numeric": "894",
+   "wikidata": "Q953",
+   "name": "Zambia"
+  },
+  "ZW": {
+   "numeric": "716",
+   "wikidata": "Q954",
+   "name": "Zimbabwe"
+  }
+ },
+ "gemNames": {
+  "China": "CN",
+  "Netherlands": "NL",
+  "Türkiye": "TR"
+ }
+}

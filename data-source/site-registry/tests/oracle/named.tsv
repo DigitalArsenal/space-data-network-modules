@@ -1,0 +1,25 @@
+# Rows the round-4 and round-5 verdicts named, with the status they must have (round-5 PASS; not-gating fixes: Garona and Hinkley Point B DECOMMISSIONING by reviewed facts; Neckarwestheim 2 stays PERMANENT_SHUTDOWN because no licence-OK source dates its dismantling; Atucha I long-term shutdown). id or name, status, date ("" = any).
+Q1438110	DECOMMISSIONED	1978-02-22
+name:Clementine	DECOMMISSIONED	
+name:Forschungsreaktor Hannover	DECOMMISSIONED	2007
+name:La Crosse	DECOMMISSIONED	
+name:Piqua	DECOMMISSIONED	
+name:BONUS	DECOMMISSIONED	
+name:Barsebäck	DECOMMISSIONING	2016
+name:Vermont Yankee	DECOMMISSIONING	2019
+name:Isar	DECOMMISSIONING	
+name:Gundremmingen	DECOMMISSIONING	
+name:Lingen	DECOMMISSIONING	
+name:AVR	DECOMMISSIONING	
+geonames:11837961	DECOMMISSIONING	2000
+name:Ignalina	DECOMMISSIONING	
+name:Oyster Creek	DECOMMISSIONING	
+name:Pilgrim	DECOMMISSIONING	
+name:Crystal River	DECOMMISSIONING	
+name:Fermi 1	DECOMMISSIONING	
+name:Fugen	DECOMMISSIONING	
+name:Atucha I	LONG_TERM_SHUTDOWN	2024-09-29
+Q1695264	DECOMMISSIONING	2022
+geonames:11839059	DECOMMISSIONING	2022
+Q1536182	DECOMMISSIONING	2026-10-01
+geonames:7282680	PERMANENT_SHUTDOWN	2023-04-15

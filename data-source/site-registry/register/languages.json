@@ -1,0 +1,12 @@
+{
+ "$comment": "The Wikipedia language read for a site in a country, besides English (ISO 3166-1 alpha-2 -> one of the languages the module reads: de fr es it ru ja nl sv pl cs uk zh). A description falls back to it when Wikidata has no English one, and its article is linked beside the English one.",
+ "languages": {
+  "DE": "de", "AT": "de", "CH": "de", "LI": "de",
+  "FR": "fr", "BE": "fr", "LU": "fr", "MC": "fr", "DZ": "fr", "MA": "fr", "TN": "fr", "SN": "fr", "CI": "fr", "GA": "fr", "CM": "fr", "GF": "fr",
+  "ES": "es", "MX": "es", "AR": "es", "CL": "es", "CO": "es", "PE": "es", "VE": "es", "CU": "es", "UY": "es", "BO": "es", "EC": "es", "PY": "es", "GT": "es", "HN": "es", "SV": "es", "NI": "es", "CR": "es", "PA": "es", "DO": "es",
+  "IT": "it", "SM": "it", "VA": "it",
+  "RU": "ru", "BY": "ru", "KZ": "ru", "KG": "ru",
+  "JP": "ja", "NL": "nl", "SE": "sv", "PL": "pl", "CZ": "cs", "UA": "uk",
+  "CN": "zh", "TW": "zh", "HK": "zh", "MO": "zh"
+ }
+}

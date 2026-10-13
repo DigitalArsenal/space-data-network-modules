@@ -1,0 +1,4 @@
+{
+ "$comment": "U.S. Nuclear Regulatory Commission docket numbers for U.S. power and research reactors (U.S. government work, public domain, 17 U.S.C. 105), each entered by hand from the NRC's own reactor page with the date it was checked. nrc.gov refuses automated fetches, so the module never fetches it: a docket here is published as the site's REGULATORY_DOCKET reference. Empty until the dockets are entered (site-registry follow-up).",
+ "dockets": []
+}

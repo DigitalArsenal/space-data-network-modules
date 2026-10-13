@@ -1,0 +1,760 @@
+{
+ "$comment": "Hand-curated facilities Wikidata does not tag: high-containment biological laboratories, chemical defence laboratories and declared chemical/nuclear weapons storage sites (owner 2026-10-04: bio, chemical and nuclear labs, storage places and research facilities, by name, in groups). One row per facility and category; a facility in two categories appears twice. 'position' says where the coordinate comes from: Wikidata (CC0), 'approximate: <what>' when only the town, road or campus is published. No containment level is claimed. Checked 2026-10-04. Imported from SpaceAware-UI e0d053f. position: where the coordinate comes from (wikidata = the item's P625, read each run; register = the row's own published coordinate with its citation). 2026-10-13: the twelve positions taken from OpenStreetMap (ODbL) were replaced: by the site's own Wikidata item where it has a coordinate (P4 Jean Mérieux, the Bundeswehr CBRN institute, the University of Marburg), else by the coordinate of its town's Wikidata item (CC0; positionUrl), marked approximate.",
+ "categories": {
+  "BIO": "Bio labs",
+  "CHEM": "Chemical labs",
+  "STORE": "Storage sites"
+ },
+ "facilities": [
+  {
+   "name": "Centers for Disease Control and Prevention",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q583725",
+   "lat": 33.79944,
+   "lon": -84.32833,
+   "position": "Wikidata"
+  },
+  {
+   "name": "United States Army Medical Research Institute of Infectious Diseases",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q2495299",
+   "lat": 39.438,
+   "lon": -77.4234,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Biodefense Analysis and Countermeasures Center",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q6970984",
+   "lat": 39.4356,
+   "lon": -77.4272,
+   "position": "Wikidata"
+  },
+  {
+   "name": "NIAID Integrated Research Facility at Fort Detrick",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "lat": 39.4356,
+   "lon": -77.4272,
+   "position": "approximate: Fort Detrick"
+  },
+  {
+   "name": "Rocky Mountain Laboratories",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "lat": 46.24833,
+   "lon": -114.15972,
+   "position": "approximate: Hamilton, Montana",
+   "wikidata": "Q7355913",
+   "positionUrl": "https://www.wikidata.org/wiki/Q602520",
+   "positionTitle": "Hamilton, Montana"
+  },
+  {
+   "name": "Galveston National Laboratory",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q5519424",
+   "lat": 29.3106,
+   "lon": -94.7786,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Emerging Infectious Diseases Laboratories",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q14715752",
+   "lat": 42.336,
+   "lon": -71.0686,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Texas Biomedical Research Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q3985377",
+   "lat": 29.4367,
+   "lon": -98.6372,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Bio and Agro-Defense Facility",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "US",
+   "wikidata": "Q6970983",
+   "lat": 39.2031,
+   "lon": -96.5842,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Microbiology Laboratory",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CA",
+   "wikidata": "Q5030541",
+   "lat": 49.9101,
+   "lon": -97.1632,
+   "position": "Wikidata"
+  },
+  {
+   "name": "UK Health Security Agency Porton Down",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GB",
+   "wikidata": "Q7232208",
+   "lat": 51.134,
+   "lon": -1.70159,
+   "position": "Wikidata"
+  },
+  {
+   "name": "The Pirbright Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GB",
+   "lat": 51.2862,
+   "lon": -0.6391,
+   "position": "approximate: Pirbright",
+   "wikidata": "Q6039151",
+   "positionUrl": "https://www.wikidata.org/wiki/Q998491",
+   "positionTitle": "Pirbright"
+  },
+  {
+   "name": "Francis Crick Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GB",
+   "wikidata": "Q326044",
+   "lat": 51.53158,
+   "lon": -0.12889,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Institute for Biological Standards and Control",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GB",
+   "lat": 51.69064,
+   "lon": -0.23661,
+   "position": "approximate: Blanche Lane, South Mimms"
+  },
+  {
+   "name": "Robert Koch Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "DE",
+   "wikidata": "Q679041",
+   "lat": 52.53919,
+   "lon": 13.34719,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Bernhard Nocht Institute for Tropical Medicine",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "DE",
+   "wikidata": "Q617048",
+   "lat": 53.54694,
+   "lon": 9.965,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Institute of Virology, Philipps University of Marburg",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "DE",
+   "wikidata": "Q155354",
+   "lat": 50.81189,
+   "lon": 8.80902,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Friedrich Loeffler Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "DE",
+   "wikidata": "Q1457808",
+   "lat": 54.18278,
+   "lon": 13.36306,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Laboratoire P4 Jean Mérieux",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "FR",
+   "lat": 45.7274,
+   "lon": 4.82504,
+   "position": "Wikidata",
+   "wikidata": "Q3359520"
+  },
+  {
+   "name": "Lazzaro Spallanzani National Institute for Infectious Diseases",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "IT",
+   "wikidata": "Q3803781",
+   "lat": 41.86617,
+   "lon": 12.45761,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Spiez Laboratory",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CH",
+   "wikidata": "Q1422902",
+   "lat": 46.69163,
+   "lon": 7.6446,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Institute of Virology and Immunology",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CH",
+   "lat": 46.87653,
+   "lon": 7.36796,
+   "position": "approximate: Mittelhäusern",
+   "positionUrl": "https://www.wikidata.org/wiki/Q63789984",
+   "positionTitle": "Mittelhäusern"
+  },
+  {
+   "name": "Geneva University Hospitals Laboratory of Virology",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CH",
+   "wikidata": "Q3145370",
+   "lat": 46.19333,
+   "lon": 6.14944,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Public Health Agency of Sweden",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "SE",
+   "lat": 59.36004,
+   "lon": 18.00086,
+   "position": "approximate: Solna",
+   "wikidata": "Q17518896",
+   "positionUrl": "https://www.wikidata.org/wiki/Q28476747",
+   "positionTitle": "Solna"
+  },
+  {
+   "name": "Biological Defence Centre Těchonín",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CZ",
+   "wikidata": "Q85492086",
+   "lat": 50.06043,
+   "lon": 16.61187,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Public Health Center",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "HU",
+   "lat": 47.47573,
+   "lon": 19.09249,
+   "position": "approximate: Albert Flórián út, Budapest"
+  },
+  {
+   "name": "State Research Center of Virology and Biotechnology VECTOR",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "RU",
+   "wikidata": "Q4106097",
+   "lat": 54.9381,
+   "lon": 83.2266,
+   "position": "Wikidata"
+  },
+  {
+   "name": "48th Central Research Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "RU",
+   "lat": 56.25356,
+   "lon": 38.11768,
+   "position": "approximate: Sergiev Posad-6"
+  },
+  {
+   "name": "Wuhan Institute of Virology",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CN",
+   "wikidata": "Q30292611",
+   "lat": 30.37639,
+   "lon": 114.2625,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Harbin Veterinary Research Institute",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CN",
+   "lat": 45.75936,
+   "lon": 126.62762,
+   "position": "approximate: Harbin (city)"
+  },
+  {
+   "name": "Institute of Medical Biology, Chinese Academy of Medical Sciences",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "CN",
+   "lat": 25.03994,
+   "lon": 102.71691,
+   "position": "approximate: Kunming (city)"
+  },
+  {
+   "name": "National Institute of Infectious Diseases",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "JP",
+   "wikidata": "Q10855561",
+   "lat": 35.70417,
+   "lon": 139.71738,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Nagasaki University BSL-4 Facility",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "JP",
+   "wikidata": "Q114892",
+   "lat": 32.76875,
+   "lon": 129.86799,
+   "position": "approximate: Sakamoto campus"
+  },
+  {
+   "name": "Korea Disease Control and Prevention Agency",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "KR",
+   "wikidata": "Q126199836",
+   "lat": 36.63963,
+   "lon": 127.33065,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Institute of Virology",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "IN",
+   "wikidata": "Q6973748",
+   "lat": 18.54331,
+   "lon": 73.7886,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Institute of High Security Animal Diseases",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "IN",
+   "wikidata": "Q64143540",
+   "lat": 23.25563,
+   "lon": 77.49355,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Australian Centre for Disease Preparedness",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "AU",
+   "wikidata": "Q4823811",
+   "lat": -38.151,
+   "lon": 144.389,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Peter Doherty Institute for Infection and Immunity",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "AU",
+   "wikidata": "Q33121652",
+   "lat": -37.80009,
+   "lon": 144.95825,
+   "position": "Wikidata"
+  },
+  {
+   "name": "National Institute for Communicable Diseases",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "ZA",
+   "wikidata": "Q55641219",
+   "lat": -26.1318,
+   "lon": 28.1175,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Centre Interdisciplinaire de Recherches Médicales de Franceville",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GA",
+   "lat": -1.63333,
+   "lon": 13.58333,
+   "position": "approximate: Franceville",
+   "positionUrl": "https://www.wikidata.org/wiki/Q459369",
+   "positionTitle": "Franceville"
+  },
+  {
+   "name": "Richard Lugar Center for Public Health Research",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "GE",
+   "wikidata": "Q60584157",
+   "lat": 41.68944,
+   "lon": 44.94472,
+   "position": "Wikidata"
+  },
+  {
+   "name": "DSO National Laboratories",
+   "category": "BIO",
+   "kind": "high-containment biological laboratory",
+   "cc": "SG",
+   "lat": 1.29333,
+   "lon": 103.78306,
+   "position": "approximate: Kent Ridge",
+   "positionUrl": "https://www.wikidata.org/wiki/Q31266130",
+   "positionTitle": "Kent Ridge"
+  },
+  {
+   "name": "Defence Science and Technology Laboratory, Porton Down",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "GB",
+   "wikidata": "Q7232208",
+   "lat": 51.134,
+   "lon": -1.70159,
+   "position": "Wikidata"
+  },
+  {
+   "name": "DEVCOM Chemical Biological Center",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "US",
+   "lat": 39.41872,
+   "lon": -76.2944,
+   "position": "approximate: Edgewood"
+  },
+  {
+   "name": "Spiez Laboratory",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "CH",
+   "wikidata": "Q1422902",
+   "lat": 46.69163,
+   "lon": 7.6446,
+   "position": "Wikidata"
+  },
+  {
+   "name": "VERIFIN",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "FI",
+   "wikidata": "Q5450785",
+   "lat": 60.2057,
+   "lon": 24.96351,
+   "position": "Wikidata"
+  },
+  {
+   "name": "TNO Defence, Safety and Security",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "NL",
+   "lat": 52.04556,
+   "lon": 4.33,
+   "position": "approximate: Rijswijk",
+   "positionUrl": "https://www.wikidata.org/wiki/Q506745",
+   "positionTitle": "Rijswijk"
+  },
+  {
+   "name": "Swedish Defence Research Agency",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "SE",
+   "wikidata": "Q2445509",
+   "lat": 63.82845,
+   "lon": 20.27057,
+   "position": "approximate: Umeå",
+   "positionUrl": "https://www.wikidata.org/wiki/Q25579",
+   "positionTitle": "Umeå"
+  },
+  {
+   "name": "Bundeswehr Research Institute for Protective Technologies and CBRN Protection",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "DE",
+   "wikidata": "Q1480317",
+   "lat": 53.00167,
+   "lon": 10.14019,
+   "position": "Wikidata"
+  },
+  {
+   "name": "DGA Maîtrise NRBC",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "FR",
+   "lat": 48.55116,
+   "lon": 2.36644,
+   "position": "approximate: Vert-le-Petit"
+  },
+  {
+   "name": "Defence Research and Development Establishment",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "IN",
+   "lat": 26.20372,
+   "lon": 78.15736,
+   "position": "approximate: Gwalior (city)"
+  },
+  {
+   "name": "Defence Research and Development Canada – Suffield",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "CA",
+   "wikidata": "Q1023455",
+   "lat": 50.2733,
+   "lon": -111.175,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Belgian Defence Laboratories",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "BE",
+   "lat": 50.92713,
+   "lon": 4.45459,
+   "position": "approximate: Peutie"
+  },
+  {
+   "name": "Military Institute of Chemistry and Radiometry",
+   "category": "CHEM",
+   "kind": "chemical defence laboratory",
+   "cc": "PL",
+   "wikidata": "Q29346372",
+   "lat": 52.26911,
+   "lon": 21.17275,
+   "position": "Wikidata"
+  },
+  {
+   "name": "State Research Institute of Organic Chemistry and Technology",
+   "category": "CHEM",
+   "kind": "chemical research institute",
+   "cc": "RU",
+   "wikidata": "Q4146350",
+   "lat": 55.75447,
+   "lon": 37.72932,
+   "position": "Wikidata"
+  },
+  {
+   "name": "33rd Central Research Institute",
+   "category": "CHEM",
+   "kind": "chemical defence research institute",
+   "cc": "RU",
+   "wikidata": "Q198332",
+   "lat": 52.11667,
+   "lon": 47.2,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Scientific Studies and Research Center",
+   "category": "CHEM",
+   "kind": "military research centre",
+   "cc": "SY",
+   "lat": 33.55712,
+   "lon": 36.32266,
+   "position": "approximate: Barzeh, Damascus"
+  },
+  {
+   "name": "Rabta chemical weapons plant",
+   "category": "CHEM",
+   "kind": "former chemical weapons plant",
+   "cc": "LY",
+   "lat": 32.16694,
+   "lon": 13.01667,
+   "position": "approximate: Gharyan district (the plant is about 10 km west)",
+   "positionUrl": "https://www.wikidata.org/wiki/Q867102",
+   "positionTitle": "Gharyan"
+  },
+  {
+   "name": "Pueblo Chemical Depot",
+   "category": "STORE",
+   "kind": "chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q7258429",
+   "lat": 38.2739,
+   "lon": -104.343,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Blue Grass Army Depot",
+   "category": "STORE",
+   "kind": "chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q4929146",
+   "lat": 37.68,
+   "lon": -84.2482,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Deseret Chemical Depot",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q5263867",
+   "lat": 40.2978,
+   "lon": -112.343,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Anniston Army Depot",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q4769529",
+   "lat": 33.6522,
+   "lon": -85.9622,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Umatilla Chemical Depot",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q7881197",
+   "lat": 45.8431,
+   "lon": -119.438,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Pine Bluff Arsenal",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q7195066",
+   "lat": 34.3325,
+   "lon": -92.08667,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Newport Chemical Depot",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q7018812",
+   "lat": 39.8507,
+   "lon": -87.438,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Johnston Atoll Chemical Agent Disposal System",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "US",
+   "wikidata": "Q131008",
+   "lat": 16.75,
+   "lon": -169.51667,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Shchuchye chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "wikidata": "Q198400",
+   "lat": 55.21667,
+   "lon": 62.76667,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Kizner chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "wikidata": "Q2511087",
+   "lat": 56.28333,
+   "lon": 51.51111,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Pochep chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "wikidata": "Q183145",
+   "lat": 52.93333,
+   "lon": 33.45,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Leonidovka chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "wikidata": "Q4258807",
+   "lat": 54.72639,
+   "lon": 55.24528,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Maradykovsky chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "lat": 58.31125,
+   "lon": 48.63817,
+   "position": "approximate: Mirny, Kirov Oblast"
+  },
+  {
+   "name": "Kambarka chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "wikidata": "Q143813",
+   "lat": 56.26667,
+   "lon": 54.2,
+   "position": "approximate: town (Wikidata)"
+  },
+  {
+   "name": "Gorny chemical weapons destruction facility",
+   "category": "STORE",
+   "kind": "former chemical weapons stockpile",
+   "cc": "RU",
+   "lat": 51.75564,
+   "lon": 48.51925,
+   "position": "approximate: Gorny, Saratov Oblast"
+  },
+  {
+   "name": "Kirtland Underground Munitions Maintenance and Storage Complex",
+   "category": "STORE",
+   "kind": "nuclear weapons storage",
+   "cc": "US",
+   "wikidata": "Q119518061",
+   "lat": 35.0085,
+   "lon": -106.5495,
+   "position": "Wikidata"
+  },
+  {
+   "name": "Pantex Plant",
+   "category": "STORE",
+   "kind": "nuclear weapons assembly and storage",
+   "cc": "US",
+   "wikidata": "Q2049862",
+   "lat": 35.3116,
+   "lon": -101.56,
+   "position": "Wikidata"
+  }
+ ]
+}

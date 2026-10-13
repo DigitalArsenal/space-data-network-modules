@@ -1,0 +1,98 @@
+{
+ "pluginId": "com.digitalarsenal.data-source.site-registry-host",
+ "name": "Site registry host adapter",
+ "version": "0.1.0",
+ "description": "Host side of the site-registry retrieval flow: plugin.getConfig (keys site_registry_enabled, site_registry_producer_peer_id, site_registry_source with access anonymous) and the run's start time and producer, read once when the timer fires so every stage of a run cites the same time. Parsing, the rules and the records stay in the portable module.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "wasmedge"
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "One configuration read per timer tick; the host owns I/O. No threads."
+ },
+ "methods": [
+  {
+   "methodId": "prepare_scheduled",
+   "displayName": "Read the configuration and start the run",
+   "inputPorts": [
+    {
+     "portId": "tick",
+     "acceptedTypeSets": [
+      {
+       "setId": "tick-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Host timer tick (the node's current tick contract)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Host timer tick."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "config",
+     "acceptedTypeSets": [
+      {
+       "setId": "config-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The source configuration with run_at_ms and producer_peer_id."
+       }
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "The source configuration with run_at_ms and producer_peer_id."
+    },
+    {
+     "portId": "status",
+     "acceptedTypeSets": [
+      {
+       "setId": "status-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "{\"skipped\":\"disabled\"} status of a cycle the configuration disables."
+       }
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "{\"skipped\":\"disabled\"} status of a cycle the configuration disables."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  }
+ ]
+}
