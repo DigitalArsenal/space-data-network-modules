@@ -1,0 +1,18 @@
+{
+  "title": "2-meter Air Temperature (Monthly)",
+  "subtitle": "MERRA-2",
+  "ongoing": true,
+  "measurement": "Temperature",
+  "retentionPeriod": -1,
+  "conceptIds": [
+    {
+      "type": "STD",
+      "value": "C1276812859-GES_DISC",
+      "shortName": "M2TMNXSLV",
+      "title": "MERRA-2 tavgM_2d_slv_Nx: 2d,Monthly mean,Time-Averaged,Single-Level,Assimilation,Single-Level Diagnostics 0.625 x 0.5 degree V5.12.4 (M2TMNXSLV) at GES DISC",
+      "version": "5.12.4",
+      "dataCenter": "GES_DISC"
+    }
+  ],
+  "layerPeriod": "Monthly"
+}

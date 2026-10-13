@@ -1,0 +1,11 @@
+{
+  "title": "Red Visible (0.64 µm, Band 2, 10 minute)",
+  "subtitle": "GOES-East/ABI",
+  "ongoing": true,
+  "measurement": "Geostationary",
+  "retentionPeriod": -1,
+  "daynight": [
+    "day"
+  ],
+  "layerPeriod": "Subdaily"
+}

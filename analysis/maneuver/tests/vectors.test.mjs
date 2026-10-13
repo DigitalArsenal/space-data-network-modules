@@ -22,7 +22,7 @@ import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 import {
   BANDS,
   INVARIANTS,

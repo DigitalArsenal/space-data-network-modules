@@ -1,0 +1,539 @@
+{
+ "pluginId": "com.digitalarsenal.data-source.gibs",
+ "name": "NASA GIBS layer catalog",
+ "version": "0.1.0",
+ "description": "Retrieval nodes for the NASA Global Imagery Browse Services (GIBS) layer catalog: the WMTS 1.0.0 Capabilities documents for EPSG:3857, EPSG:3413 and EPSG:3031, the GIBS layer metadata (measurement, platform and instrument, period, ongoing, day/night, CMR collections) and DescribeDomains for each layer whose time list stops at the 100 values a Capabilities document carries. plan_capabilities asks for the three documents; plan_details parses them in WASM and queues the per-layer requests in 30 batches; advance absorbs a batch and asks for the next; build_catalog writes one merged WMTS 1.0.0 Capabilities document (every layer, polar-only layers with their own renamed TileMatrixSets, licence, attribution and the WMS endpoint for vector layers as ows:Metadata); announce_catalog turns the IPFS add result into one $PNM. Fetching, IPFS and storage belong to the host; the node's auto-publisher announces the PNM.fbs lane provider nasa-gibs, source layer-catalog.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "Deterministic XML and JSON parsing and one document write per cycle. No host calls, threads or network access."
+ },
+ "schemasUsed": [
+  {
+   "schemaName": "PNM.fbs",
+   "fileIdentifier": "$PNM",
+   "rootTypeName": "PNM"
+  }
+ ],
+ "methods": [
+  {
+   "methodId": "plan_capabilities",
+   "displayName": "Plan the Capabilities requests",
+   "inputPorts": [
+    {
+     "portId": "config",
+     "acceptedTypeSets": [
+      {
+       "setId": "config-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Source configuration from the host adapter (access anonymous)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Source configuration from the host adapter (access anonymous)."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptors: the EPSG:3857, EPSG:3413 and EPSG:3031 WMTS Capabilities documents, raw-body-v1."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptors: the EPSG:3857, EPSG:3413 and EPSG:3031 WMTS Capabilities documents, raw-body-v1."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval state for plan_details."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The retrieval state for plan_details."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "plan_details",
+   "displayName": "Parse the Capabilities documents and plan the per-layer requests",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The capabilities stage state."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The capabilities stage state."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 responses, one per Capabilities request in order: $HRB, int32 status, the XML."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 responses, one per Capabilities request in order: $HRB, int32 status, the XML."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The first batch of layer-metadata and DescribeDomains requests."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "The first batch of layer-metadata and DescribeDomains requests."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The layer table and the detail queue."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The layer table and the detail queue."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "advance",
+   "displayName": "Absorb a detail batch and plan the next",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The detail stage state emitted by the previous stage."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The detail stage state emitted by the previous stage."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 responses, one per planned request in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 responses, one per planned request in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The next batch of layer-metadata and DescribeDomains requests."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "The next batch of layer-metadata and DescribeDomains requests."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The detail state after this batch."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The detail state after this batch."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "build_catalog",
+   "displayName": "Write the merged Capabilities document",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The detail state after the last batch was asked for."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The detail state after the last batch was asked for."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 responses of the last batch, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 responses of the last batch, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "file",
+     "acceptedTypeSets": [
+      {
+       "setId": "file-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The merged WMTS 1.0.0 Capabilities document: u32 name length, name, the XML bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The merged WMTS 1.0.0 Capabilities document: u32 name length, name, the XML bytes."
+    },
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The build job: file name, byte length, sha256 and the layer counts."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The build job: file name, byte length, sha256 and the layer counts."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "announce_catalog",
+   "displayName": "Announce the catalog",
+   "inputPorts": [
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The build job from build_catalog."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The build job from build_catalog."
+    },
+    {
+     "portId": "receipt",
+     "acceptedTypeSets": [
+      {
+       "setId": "receipt-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval receipt from the host adapter."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The retrieval receipt from the host adapter."
+    },
+    {
+     "portId": "added",
+     "acceptedTypeSets": [
+      {
+       "setId": "added-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The IPFS add result for the catalog file: {name, cid, bytes}."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The IPFS add result for the catalog file: {name, cid, bytes}."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "records-records",
+       "allowedTypes": [
+        {
+         "schemaName": "PNM.fbs",
+         "fileIdentifier": "$PNM",
+         "rootTypeName": "PNM"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $PNM stream: one record naming the catalog's FILE_NAME, CID, /ipfs/ address and FILE_ID."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "meta-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Ingest meta: provider nasa-gibs, source layer-catalog, citation and licence."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Ingest meta: provider nasa-gibs, source layer-catalog, citation and licence."
+    },
+    {
+     "portId": "report",
+     "acceptedTypeSets": [
+      {
+       "setId": "report-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The cycle report: CID, sha256, layer counts and retrieval time."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The cycle report: CID, sha256, layer counts and retrieval time."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  }
+ ]
+}

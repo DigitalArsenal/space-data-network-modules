@@ -1,0 +1,22 @@
+{
+  "title": "Fires and Thermal Anomalies (Day and Night, 375m)",
+  "subtitle": "NOAA-20 / VIIRS",
+  "ongoing": true,
+  "measurement": "Fires and Thermal Anomalies",
+  "retentionPeriod": -1,
+  "conceptIds": [
+    {
+      "type": "NRT",
+      "value": "C1355615368-LANCEMODIS",
+      "shortName": "VJ114IMGT_NRT",
+      "title": "VIIRS NOAA-20 (JPSS-1) 375m, I-Band Active Fire Product NRT (Vector Data)",
+      "version": "2",
+      "dataCenter": "LANCEMODIS"
+    }
+  ],
+  "daynight": [
+    "day",
+    "night"
+  ],
+  "layerPeriod": "Daily"
+}
