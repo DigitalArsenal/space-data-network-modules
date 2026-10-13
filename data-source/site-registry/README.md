@@ -25,9 +25,11 @@ them over bitswap; it ships no facility, status or reference data.
 | Bio labs, Chemical labs, Storage sites | the curated register (`register/curated.json`) |
 | Space sites | the curated register (`register/space-sites.json`), 101 of 148 with a reviewed Wikidata item |
 
-Run of 2026-10-13 (live sources): 7,342 sites; 6,792 search rows; lane
-10.1 MB, projection 3.8 MB. Native CPU about 12 s, of which the prose scan
-of the reactor articles (the review queue) is 7 s.
+Run of 2026-10-13 (live sources): 7,343 sites; 6,793 search rows; lane
+10.1 MB, projection 3.8 MB. CPU: native about 12 s, the WASM module 14.9 s
+(`articles_b` 7.5 s: the prose scan of the reactor articles for the review
+queue). On a provider node the run took 6.5 minutes, most of it the spaced
+requests.
 
 ## Stages
 
@@ -91,7 +93,8 @@ SPACE_DATA_STANDARDS_ROOT=<SDS 1.249.0 checkout>   # until 1.249.0 is on npm
 ```
 
 Tools: `tools/run-native.mjs` (a development run against live sources with
-the native build), `tools/make-fixtures.mjs` (the e2e fixtures from a recorded
+the native build), `tools/run-wasm.mjs` (a recorded run replayed through the
+WASM module, timed per stage), `tools/make-fixtures.mjs` (the e2e fixtures from a recorded
 run), `tools/equivalence.mjs` (a lane against the audit's oracle),
 `tools/match-register-qids.mjs` and `tools/import-audit-registers.mjs` (how
 the registers were made).
