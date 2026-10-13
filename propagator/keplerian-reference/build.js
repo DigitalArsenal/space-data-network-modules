@@ -114,21 +114,14 @@ const OMM_FIELDS = [
   "MEAN_MOTION_DOT",
   "MEAN_MOTION_DDOT",
   "NORAD_CAT_ID",
-  // Small bodies (heliocentric osculating elements): kepler_small_*.
-  "SEMI_MAJOR_AXIS",
-  "GM",
-  "CENTER_NAME",
-  "REFERENCE_FRAME",
-  "TIME_SYSTEM",
 ];
 
 const omm = await resolveOmmVtableSlots(OMM_FIELDS);
 
 /**
- * The $RFM and $TIM pieces the small-body path reads (REFERENCE_FRAME's
- * union and axes, TIME_SYSTEM's enum), derived from the same pinned catalog.
- * A union field takes two slots (NAME_type, then NAME); enum values follow
- * their declaration (explicit `= n` honoured).
+ * The $SBD fields the small-body path reads (kepler_small_*), derived from the
+ * same pinned catalog: asteroids and comets are $SBD small-body records, never
+ * $OMM.
  */
 async function resolveCatalogEntry(fileIdentifier) {
   const standards = await import("space-data-module-sdk/standards");
@@ -140,7 +133,7 @@ async function resolveCatalogEntry(fileIdentifier) {
   const catalog = Array.isArray(loaded) ? loaded : loaded.catalog;
   const entry = catalog.find((candidate) => candidate.fileIdentifier === fileIdentifier);
   if (!entry) {
-    throw new Error(`The pinned spacedatastandards.org catalog has no ${fileIdentifier} entry.`);
+    throw new Error(`The pinned spacedatastandards.org catalog has no ${fileIdentifier} entry (SBD needs 1.248.0 or later).`);
   }
   return entry;
 }
@@ -168,58 +161,32 @@ function tableSlots(idl, tableName, fieldNames) {
   return slots;
 }
 
-function enumValues(idl, enumName, names) {
-  const text = stripComments(idl);
-  const body = new RegExp(`(?:enum|union)\\s+${enumName}\\b[^{]*\\{([\\s\\S]*?)\\}`).exec(text);
-  if (!body) throw new Error(`enum ${enumName} is not in the pinned IDL.`);
-  const isUnion = new RegExp(`union\\s+${enumName}\\b`).test(text);
-  const values = new Map();
-  let next = isUnion ? 1 : 0; // a union's member n has type value n (0 is NONE)
-  for (const raw of body[1].split(",")) {
-    const item = raw.trim();
-    if (!item) continue;
-    const m = /^(\w+)\s*(?:=\s*(-?\d+))?$/.exec(item);
-    if (!m) continue;
-    const value = m[2] !== undefined ? Number(m[2]) : next;
-    values.set(m[1], value);
-    next = value + 1;
-  }
-  const out = new Map();
-  for (const name of names) {
-    if (!values.has(name)) throw new Error(`${enumName} has no ${name}; refusing to build.`);
-    out.set(name, values.get(name));
-  }
-  return out;
-}
-
-const rfm = await resolveCatalogEntry("$RFM");
-const tim = await resolveCatalogEntry("$TIM");
-const rfmSlots = tableSlots(rfm.idl, "RFM", ["REFERENCE_FRAME_type", "REFERENCE_FRAME"]);
-const cfwSlots = tableSlots(rfm.idl, "CelestialFrameWrapper", ["frame"]);
-const cswSlots = tableSlots(rfm.idl, "RFMCoordinateSystemWrapper", ["COORDINATE_SYSTEM"]);
-const csSlots = tableSlots(rfm.idl, "RFMCoordinateSystem", ["AXIS_TYPE"]);
-const unionValues = enumValues(rfm.idl, "RFMUnion", ["CelestialFrameWrapper", "RFMCoordinateSystemWrapper"]);
-const celestialValues = enumValues(rfm.idl, "CelestialFrame", ["ICRF", "J2000", "EME2000"]);
-const axisValues = enumValues(rfm.idl, "rfmAxisType", ["MEAN_EQUATOR_EQUINOX_J2000", "MEAN_ECLIPTIC_EQUINOX_J2000", "ICRF"]);
-const timeValues = enumValues(tim.idl, "timingStandard", ["UTC", "TT", "TDB"]);
+const SBD_FIELDS = [
+  "NUMBER",
+  "DESIGNATION",
+  "NAME",
+  "CENTER_NAME",
+  "REF_FRAME",
+  "TIME_SYSTEM",
+  "EPOCH",
+  "SEMI_MAJOR_AXIS",
+  "ECCENTRICITY",
+  "INCLINATION",
+  "RA_OF_ASC_NODE",
+  "ARG_OF_PERICENTER",
+  "MEAN_ANOMALY",
+  "GM",
+  "PERICENTER_DISTANCE",
+  "PERICENTER_EPOCH",
+  "ABSOLUTE_MAGNITUDE",
+  "SLOPE_PARAMETER",
+  "DIAMETER",
+];
+const sbd = await resolveCatalogEntry("$SBD");
+const sbdSlots = tableSlots(sbd.idl, "SBD", SBD_FIELDS);
 const smallBodyDefines = [
-  `// --- GENERATED from the pinned SDS $RFM ${rfm.version} and $TIM ${tim.version} schemas ---`,
-  `#define ORBPRO_RFM_VT_REFERENCE_FRAME_TYPE ${rfmSlots.get("REFERENCE_FRAME_type")}`,
-  `#define ORBPRO_RFM_VT_REFERENCE_FRAME ${rfmSlots.get("REFERENCE_FRAME")}`,
-  `#define ORBPRO_RFM_CFW_VT_FRAME ${cfwSlots.get("frame")}`,
-  `#define ORBPRO_RFM_CSW_VT_COORDINATE_SYSTEM ${cswSlots.get("COORDINATE_SYSTEM")}`,
-  `#define ORBPRO_RFM_CS_VT_AXIS_TYPE ${csSlots.get("AXIS_TYPE")}`,
-  `#define ORBPRO_RFM_UNION_CELESTIAL_FRAME ${unionValues.get("CelestialFrameWrapper")}`,
-  `#define ORBPRO_RFM_UNION_COORDINATE_SYSTEM ${unionValues.get("RFMCoordinateSystemWrapper")}`,
-  `#define ORBPRO_RFM_CELESTIAL_ICRF ${celestialValues.get("ICRF")}`,
-  `#define ORBPRO_RFM_CELESTIAL_J2000 ${celestialValues.get("J2000")}`,
-  `#define ORBPRO_RFM_CELESTIAL_EME2000 ${celestialValues.get("EME2000")}`,
-  `#define ORBPRO_RFM_AXIS_MEAN_EQUATOR_J2000 ${axisValues.get("MEAN_EQUATOR_EQUINOX_J2000")}`,
-  `#define ORBPRO_RFM_AXIS_MEAN_ECLIPTIC_J2000 ${axisValues.get("MEAN_ECLIPTIC_EQUINOX_J2000")}`,
-  `#define ORBPRO_RFM_AXIS_ICRF ${axisValues.get("ICRF")}`,
-  `#define ORBPRO_TIM_UTC ${timeValues.get("UTC")}`,
-  `#define ORBPRO_TIM_TT ${timeValues.get("TT")}`,
-  `#define ORBPRO_TIM_TDB ${timeValues.get("TDB")}`,
+  `// --- GENERATED from the pinned SDS $SBD schema, version ${sbd.version} ---`,
+  ...[...sbdSlots].map(([name, slot]) => `#define ORBPRO_SBD_VT_${name} ${slot}`),
   `// --- END GENERATED ---`,
 ].join("\n");
 const ommSlotDefines = [

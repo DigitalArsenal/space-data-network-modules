@@ -1,7 +1,7 @@
 // E2E for kepler_small_snapshot_apparent: asteroids drawn where they are SEEN
 // (coordinator decision D1, 2026-10-13). Real Lowell astorb.dat records
 // (tests/fixtures/astorb-apparent.fbs: 1, 3, 4, 7, 16, 433, 1862, 4179,
-// 99942, 101955 as $OMM, cut from the 2026-10-12 astorb.dat.gz by
+// 99942, 101955 as $SBD, cut from the 2026-10-12 astorb.dat.gz by
 // data-source/lowell-astorb's own parse_astorb) through the built module,
 // against JPL Horizons geocentric ICRF vectors with VEC_CORR LT+S (light time
 // plus stellar aberration: the apparent direction referred to ICRF axes, the
@@ -40,7 +40,7 @@ async function load() {
   const x = instance.exports;
   const p = x.plugin_alloc(stream.length);
   new Uint8Array(x.memory.buffer, p, stream.length).set(stream);
-  assert.equal(x.kepler_small_ingest_omm_stream(p, stream.length), ORDER.length);
+  assert.equal(x.kepler_small_ingest_sbd_stream(p, stream.length), ORDER.length);
   return x;
 }
 
@@ -99,17 +99,11 @@ test("D1: the apparent row keeps V and refuses outside the validity span like th
   const o = horizons.observer[1];
   const observer = observerOf(o);
   const n = ORDER.length;
-  const hg = new Float32Array(2 * n).fill(NaN);
-  hg[0] = 3.34; // Ceres H
-  hg[1] = 0.15;
-  const p = x.plugin_alloc(hg.byteLength);
-  new Uint8Array(x.memory.buffer, p, hg.byteLength).set(new Uint8Array(hg.buffer));
-  assert.equal(x.kepler_small_set_photometry(0, n, p), 0);
   const et = (o.jd_tdb - 2451545.0) * 86400;
   const apparent = snapshot(x, "kepler_small_snapshot_apparent", observer, et);
   const geometric = snapshot(x, "kepler_small_snapshot", observer, et);
   assert.ok(Math.abs(apparent.rows[3] - geometric.rows[3]) < 0.01, `Ceres V ${apparent.rows[3]} vs ${geometric.rows[3]}`);
-  assert.ok(Number.isNaN(apparent.rows[7]), "no H: V is NaN");
+  assert.ok(Number.isFinite(apparent.rows[3]) && Number.isFinite(apparent.rows[7]), "V from each record's own H and G");
   const far = snapshot(x, "kepler_small_snapshot_apparent", observer, et + 400 * 86400);
   assert.equal(far.failed, n);
   assert.ok(Number.isNaN(far.rows[0]));

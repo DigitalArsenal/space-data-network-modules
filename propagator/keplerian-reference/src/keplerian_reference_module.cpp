@@ -760,10 +760,12 @@ extern "C" int ingest_omm(void) {
 // =============================================================================
 // SMALL BODIES: heliocentric osculating elements, many at once.
 //
-// Asteroids (and later comets) arrive as ratified SDS $OMM records with
-// CENTER_NAME = SUN, osculating elements in the mean ecliptic and equinox of
-// J2000 (or ICRF axes), TIME_SYSTEM TT or TDB, SEMI_MAJOR_AXIS in km and GM in
-// km^3/s^2 (CCSDS 502.0-B-3 units). This store is separate from the ABI entity
+// Asteroids (and later comets) arrive as ratified SDS $SBD small-body records
+// (never $OMM: they do not orbit the Earth) with CENTER_NAME = SUN, osculating
+// elements in REF_FRAME ECLIPJ2000 (the mean ecliptic and equinox of J2000) or
+// ICRF / EME2000 / J2000 axes, TIME_SYSTEM TT or TDB, SEMI_MAJOR_AXIS (or a
+// comet's PERICENTER_DISTANCE and PERICENTER_EPOCH) in km and GM in km^3/s^2
+// (the CCSDS 502.0-B-3 OPM keywords and units), H and G. This store is separate from the ABI entity
 // table above: the ABI's state vector is Earth-fixed by contract, while these
 // rows are Sun-centred and number in the hundreds of thousands.
 //
@@ -829,80 +831,81 @@ bool center_is_sun(const char* text, uint32_t length) {
          (text[2] == 'N' || text[2] == 'n');
 }
 
-/// 0: equatorial J2000 / ICRF axes; 1: mean ecliptic and equinox of J2000;
-/// -1: anything else.
-int frame_axes(const uint8_t* buffer, uint32_t length, const FlatTable& omm) {
-  const uint32_t rfm_offset = omm.read_table(ORBPRO_OMM_VT_REFERENCE_FRAME);
-  if (rfm_offset == 0) return -1;
-  const FlatTable rfm(buffer, length, rfm_offset);
-  if (!rfm.valid()) return -1;
-  const uint8_t kind = rfm.read_uint8(ORBPRO_RFM_VT_REFERENCE_FRAME_TYPE, 0);
-  const uint32_t value = rfm.read_table(ORBPRO_RFM_VT_REFERENCE_FRAME);
-  if (value == 0) return -1;
-  if (kind == ORBPRO_RFM_UNION_CELESTIAL_FRAME) {
-    const FlatTable wrapper(buffer, length, value);
-    if (!wrapper.valid()) return -1;
-    const uint8_t frame = wrapper.read_uint8(ORBPRO_RFM_CFW_VT_FRAME, 0);
-    return (frame == ORBPRO_RFM_CELESTIAL_ICRF || frame == ORBPRO_RFM_CELESTIAL_J2000 ||
-            frame == ORBPRO_RFM_CELESTIAL_EME2000)
-               ? 0
-               : -1;
+bool text_is(const char* text, uint32_t length, const char* want) {
+  const uint32_t n = static_cast<uint32_t>(std::strlen(want));
+  if (text == nullptr || length != n) return false;
+  for (uint32_t i = 0; i < n; ++i) {
+    char c = text[i];
+    if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    if (c != want[i]) return false;
   }
-  if (kind == ORBPRO_RFM_UNION_COORDINATE_SYSTEM) {
-    const FlatTable wrapper(buffer, length, value);
-    if (!wrapper.valid()) return -1;
-    const uint32_t cs_offset = wrapper.read_table(ORBPRO_RFM_CSW_VT_COORDINATE_SYSTEM);
-    if (cs_offset == 0) return -1;
-    const FlatTable cs(buffer, length, cs_offset);
-    if (!cs.valid()) return -1;
-    const uint8_t axes = cs.read_uint8(ORBPRO_RFM_CS_VT_AXIS_TYPE, 0);
-    if (axes == ORBPRO_RFM_AXIS_MEAN_ECLIPTIC_J2000) return 1;
-    if (axes == ORBPRO_RFM_AXIS_ICRF || axes == ORBPRO_RFM_AXIS_MEAN_EQUATOR_J2000) return 0;
-  }
+  return true;
+}
+
+/// REF_FRAME -> 0: equatorial J2000 / ICRF axes; 1: mean ecliptic and equinox
+/// of J2000 (SPICE ECLIPJ2000); -1: anything else.
+int frame_axes(const char* text, uint32_t length) {
+  if (text_is(text, length, "ICRF") || text_is(text, length, "EME2000") || text_is(text, length, "J2000")) return 0;
+  if (text_is(text, length, "ECLIPJ2000")) return 1;
   return -1;
 }
 
-/// One size-prefixed $OMM record into a small body.
+/// Does this payload carry the ratified `$SBD` file identifier at offset 4?
+bool has_sbd_file_identifier(const uint8_t* buffer, uint32_t length) {
+  return length >= 8 && buffer[4] == '$' && buffer[5] == 'S' && buffer[6] == 'B' && buffer[7] == 'D';
+}
+
+/// One size-prefixed $SBD record into a small body.
 int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out) {
-  if (!has_omm_file_identifier(buffer, length)) return kErrBadInput;
+  if (!has_sbd_file_identifier(buffer, length)) return kErrBadInput;
   uint32_t root_offset = 0;
   std::memcpy(&root_offset, buffer, sizeof(root_offset));
   if (root_offset + 4 > length) return kErrBadInput;
-  const FlatTable omm(buffer, length, root_offset);
-  if (!omm.valid()) return kErrBadInput;
+  const FlatTable sbd(buffer, length, root_offset);
+  if (!sbd.valid()) return kErrBadInput;
 
-  uint32_t center_length = 0;
-  const char* center = omm.read_string(ORBPRO_OMM_VT_CENTER_NAME, &center_length);
-  if (!center_is_sun(center, center_length)) return kErrUnsupportedCenter;
-  const int axes = frame_axes(buffer, length, omm);
+  uint32_t text_length = 0;
+  const char* center = sbd.read_string(ORBPRO_SBD_VT_CENTER_NAME, &text_length);
+  if (!center_is_sun(center, text_length)) return kErrUnsupportedCenter;
+  const char* frame = sbd.read_string(ORBPRO_SBD_VT_REF_FRAME, &text_length);
+  const int axes = frame_axes(frame, text_length);
   if (axes < 0) return kErrUnsupportedFrame;
-  const uint8_t time_system = omm.read_uint8(ORBPRO_OMM_VT_TIME_SYSTEM, ORBPRO_TIM_UTC);
-  if (time_system != ORBPRO_TIM_TT && time_system != ORBPRO_TIM_TDB) return kErrUnsupportedTime;
+  const char* time_system = sbd.read_string(ORBPRO_SBD_VT_TIME_SYSTEM, &text_length);
+  if (!text_is(time_system, text_length, "TDB") && !text_is(time_system, text_length, "TT")) return kErrUnsupportedTime;
 
   uint32_t epoch_length = 0;
-  const char* epoch_text = omm.read_string(ORBPRO_OMM_VT_EPOCH, &epoch_length);
+  const char* epoch_text = sbd.read_string(ORBPRO_SBD_VT_EPOCH, &epoch_length);
   double epoch_jd = 0.0;
   if (!iso8601_to_julian_date(epoch_text, epoch_length, &epoch_jd)) return kErrBadInput;
 
-  double gm = omm.read_double(ORBPRO_OMM_VT_GM, 0.0) * 1e9;  // km^3/s^2 -> m^3/s^2
+  double gm = sbd.read_double(ORBPRO_SBD_VT_GM, NAN) * 1e9;  // km^3/s^2 -> m^3/s^2
   if (!(gm > 0.0)) gm = kGmSun;
-  const double e = omm.read_double(ORBPRO_OMM_VT_ECCENTRICITY, -1.0);
+  const double e = sbd.read_double(ORBPRO_SBD_VT_ECCENTRICITY, NAN);
   if (!(e >= 0.0) || e >= 1.0) return kErrUnphysical;
-  double a = omm.read_double(ORBPRO_OMM_VT_SEMI_MAJOR_AXIS, 0.0) * 1000.0;  // km -> m
+  double a = sbd.read_double(ORBPRO_SBD_VT_SEMI_MAJOR_AXIS, NAN) * 1000.0;  // km -> m
+  double m0 = sbd.read_double(ORBPRO_SBD_VT_MEAN_ANOMALY, NAN) * kDegToRad;
   if (!(a > 0.0)) {
-    const double n_rev_day = omm.read_double(ORBPRO_OMM_VT_MEAN_MOTION, 0.0);
-    if (!(n_rev_day > 0.0)) return kErrUnphysical;
-    const double n = n_rev_day * kTwoPi / kSecondsPerDay;
-    a = std::cbrt(gm / (n * n));
+    // A comet: q and the time of pericentre give a and the mean anomaly.
+    const double q = sbd.read_double(ORBPRO_SBD_VT_PERICENTER_DISTANCE, NAN) * 1000.0;
+    if (!(q > 0.0)) return kErrUnphysical;
+    a = q / (1.0 - e);
+    uint32_t tp_length = 0;
+    const char* tp_text = sbd.read_string(ORBPRO_SBD_VT_PERICENTER_EPOCH, &tp_length);
+    double tp_jd = 0.0;
+    if (!iso8601_to_julian_date(tp_text, tp_length, &tp_jd)) return kErrBadInput;
+    m0 = std::sqrt(gm / (a * a * a)) * (epoch_jd - tp_jd) * kSecondsPerDay;
   }
-  const double inc = omm.read_double(ORBPRO_OMM_VT_INCLINATION, 0.0) * kDegToRad;
-  const double node = omm.read_double(ORBPRO_OMM_VT_RA_OF_ASC_NODE, 0.0) * kDegToRad;
-  const double argp = omm.read_double(ORBPRO_OMM_VT_ARG_OF_PERICENTER, 0.0) * kDegToRad;
-  const double m0 = omm.read_double(ORBPRO_OMM_VT_MEAN_ANOMALY, 0.0) * kDegToRad;
+  const double inc = sbd.read_double(ORBPRO_SBD_VT_INCLINATION, NAN) * kDegToRad;
+  const double node = sbd.read_double(ORBPRO_SBD_VT_RA_OF_ASC_NODE, NAN) * kDegToRad;
+  const double argp = sbd.read_double(ORBPRO_SBD_VT_ARG_OF_PERICENTER, NAN) * kDegToRad;
   if (!std::isfinite(a) || !std::isfinite(inc) || !std::isfinite(node) || !std::isfinite(argp) ||
       !std::isfinite(m0)) {
     return kErrBadInput;
   }
+  const double h = sbd.read_double(ORBPRO_SBD_VT_ABSOLUTE_MAGNITUDE, NAN);
+  const double g = sbd.read_double(ORBPRO_SBD_VT_SLOPE_PARAMETER, NAN);
+  out->h = static_cast<float>(h);
+  out->g = std::isnan(g) ? 0.15f : static_cast<float>(g);
 
   // Perifocal axes in the element frame (3-1-3 rotation).
   const double cn = std::cos(node), sn = std::sin(node);
@@ -1122,7 +1125,7 @@ bool small_apparent_row(const SmallBody& b, double et, const double* observer, f
   return true;
 }
 
-/// Size-prefixed $OMM stream -> rows appended. Returns the count appended or
+/// Size-prefixed $SBD stream -> rows appended. Returns the count appended or
 /// a negative code (the failing record's index in kepler_small_failed_record).
 int32_t ingest_small_stream(const uint8_t* data, uint32_t length) {
   g_small_failed_record = -1;
@@ -1155,13 +1158,59 @@ int32_t ingest_small_stream(const uint8_t* data, uint32_t length) {
 
 }  // namespace
 
-/// Appends the rows of a size-prefixed $OMM stream (4-byte little-endian
-/// length before each FlatBuffer). All or nothing: a refused record leaves the
-/// store unchanged. Returns the number appended or a negative error code.
-ORBPRO_ABI_EXPORT("kepler_small_ingest_omm_stream")
-int32_t kepler_small_ingest_omm_stream(const uint8_t* data, uint32_t length) {
+/// Appends the rows of a size-prefixed $SBD stream (4-byte little-endian
+/// length before each FlatBuffer), H and G included. All or nothing: a
+/// refused record leaves the store unchanged. Returns the number appended or a
+/// negative error code.
+ORBPRO_ABI_EXPORT("kepler_small_ingest_sbd_stream")
+int32_t kepler_small_ingest_sbd_stream(const uint8_t* data, uint32_t length) {
   if (data == nullptr || length == 0) return kErrBadInput;
   return ingest_small_stream(data, length);
+}
+
+/// The display fields of every record of a size-prefixed $SBD stream, for a
+/// host's search and labels (no store change): `numbers` count uint32 NUMBER,
+/// `hgd` count x 3 float32 (H, G, DIAMETER km; NaN when absent), and the
+/// names (NAME, else DESIGNATION, UTF-8) packed into `names` with `offsets`
+/// count + 1 uint32 byte offsets. `names` holds `capacity` bytes; a stream's
+/// names never exceed its own length. Returns the record count, or a negative
+/// error code (-4 a malformed stream, -11 names past `capacity`).
+ORBPRO_ABI_EXPORT("kepler_small_describe_sbd_stream")
+int32_t kepler_small_describe_sbd_stream(const uint8_t* data, uint32_t length, uint32_t count, uint32_t* numbers,
+                                         float* hgd, uint32_t* offsets, uint8_t* names, uint32_t capacity) {
+  if (data == nullptr || numbers == nullptr || hgd == nullptr || offsets == nullptr || names == nullptr) {
+    return kErrNullOutput;
+  }
+  uint32_t offset = 0, record = 0, used = 0;
+  while (offset < length && record < count) {
+    if (offset + 4 > length) return kErrBadInput;
+    uint32_t size = 0;
+    std::memcpy(&size, data + offset, sizeof(size));
+    offset += 4;
+    if (size == 0 || offset + size > length || !has_sbd_file_identifier(data + offset, size)) return kErrBadInput;
+    const uint8_t* buffer = data + offset;
+    uint32_t root_offset = 0;
+    std::memcpy(&root_offset, buffer, sizeof(root_offset));
+    const FlatTable sbd(buffer, size, root_offset);
+    if (!sbd.valid()) return kErrBadInput;
+    numbers[record] = sbd.read_uint32(ORBPRO_SBD_VT_NUMBER, 0);
+    hgd[3 * record] = static_cast<float>(sbd.read_double(ORBPRO_SBD_VT_ABSOLUTE_MAGNITUDE, NAN));
+    hgd[3 * record + 1] = static_cast<float>(sbd.read_double(ORBPRO_SBD_VT_SLOPE_PARAMETER, NAN));
+    hgd[3 * record + 2] = static_cast<float>(sbd.read_double(ORBPRO_SBD_VT_DIAMETER, NAN));
+    uint32_t name_length = 0;
+    const char* name = sbd.read_string(ORBPRO_SBD_VT_NAME, &name_length);
+    if (name == nullptr || name_length == 0) name = sbd.read_string(ORBPRO_SBD_VT_DESIGNATION, &name_length);
+    offsets[record] = used;
+    if (name != nullptr && name_length > 0) {
+      if (used + name_length > capacity) return -11;
+      std::memcpy(names + used, name, name_length);
+      used += name_length;
+    }
+    offset += size;
+    ++record;
+  }
+  offsets[record] = used;
+  return static_cast<int32_t>(record);
 }
 
 /// Index of the record the last refused ingest stopped at, or -1.
@@ -1175,19 +1224,6 @@ ORBPRO_ABI_EXPORT("kepler_small_clear")
 void kepler_small_clear(void) {
   delete g_small;
   g_small = nullptr;
-}
-
-/// H and G for rows [first, first + count): pairs of float32.
-ORBPRO_ABI_EXPORT("kepler_small_set_photometry")
-int32_t kepler_small_set_photometry(uint32_t first, uint32_t count, const float* hg) {
-  std::vector<SmallBody>& store = small_bodies();
-  if (hg == nullptr) return kErrNullOutput;
-  if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
-  for (uint32_t i = 0; i < count; ++i) {
-    store[first + i].h = hg[2 * i];
-    store[first + i].g = std::isnan(hg[2 * i + 1]) ? 0.15f : hg[2 * i + 1];
-  }
-  return kOk;
 }
 
 /// A frame snapshot of rows [first, first + count) at `et` (TDB seconds past

@@ -1,6 +1,7 @@
 // E2E for the small-body path (kepler_small_*): real Lowell astorb.dat
-// records as SDS $OMM (tests/fixtures/astorb-sample.fbs, 1,004 numbered
-// asteroids made by closed-modules lowell-astorb-provider) through the built
+// records as SDS $SBD small-body records (tests/fixtures/astorb-sample.fbs,
+// 1,004 numbered asteroids cut from the 2026-10-12 astorb.dat.gz by
+// data-source/lowell-astorb's own parse_astorb) through the built
 // module, against
 //   1. a test-only two-body oracle written independently below (A8: within
 //      1 m for every row, double and float32 snapshot paths);
@@ -73,16 +74,33 @@ function oracle(r, et) {
   return [xe, Math.cos(EPS) * ye - Math.sin(EPS) * ze, Math.sin(EPS) * ye + Math.cos(EPS) * ze];
 }
 
-test("the astorb $OMM stream ingests: every record, in order", async () => {
+test("the astorb $SBD stream ingests: every record, in order, with its display fields", async () => {
   const { x, copyIn } = await load();
   const p = copyIn(stream);
-  assert.equal(x.kepler_small_ingest_omm_stream(p, stream.length), records.length);
+  assert.equal(x.kepler_small_ingest_sbd_stream(p, stream.length), records.length);
   assert.equal(x.kepler_small_count(), records.length);
+  // The display fields a host searches and labels by, from the same stream.
+  const n = records.length;
+  const numbers = x.plugin_alloc(4 * n);
+  const hgd = x.plugin_alloc(12 * n);
+  const offsets = x.plugin_alloc(4 * (n + 1));
+  const names = x.plugin_alloc(stream.length);
+  assert.equal(x.kepler_small_describe_sbd_stream(p, stream.length, n, numbers, hgd, offsets, names, stream.length), n);
+  const num = new Uint32Array(x.memory.buffer, numbers, n);
+  const f = new Float32Array(x.memory.buffer, hgd, 3 * n);
+  const off = new Uint32Array(x.memory.buffer, offsets, n + 1);
+  const bytes = new Uint8Array(x.memory.buffer, names, off[n]);
+  const nameAt = (i) => new TextDecoder().decode(bytes.subarray(off[i], off[i + 1]));
+  records.forEach((r, i) => {
+    assert.equal(num[i], r.number);
+    assert.equal(nameAt(i), r.name);
+    if (r.h != null) assert.ok(Math.abs(f[3 * i] - r.h) < 1e-5, `${r.number} H`);
+  });
 });
 
 test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (double and float32 snapshot)", async () => {
   const { x, copyIn } = await load();
-  x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   // The conic itself, far from the epoch: widen the validity span for this test.
   assert.equal(x.kepler_small_set_validity(500 * SECONDS_PER_DAY), 500 * SECONDS_PER_DAY);
   const n = records.length;
@@ -102,7 +120,7 @@ test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (do
       // float32 rows: within float32 rounding of the double state
       const f = Math.hypot(rows[4 * i] - s[0], rows[4 * i + 1] - s[1], rows[4 * i + 2] - s[2]);
       worstSnapshotRelative = Math.max(worstSnapshotRelative, f / Math.hypot(s[0], s[1], s[2]));
-      assert.ok(Number.isNaN(rows[4 * i + 3]), "V is NaN without an observer and photometry");
+      assert.ok(Number.isNaN(rows[4 * i + 3]), "V is NaN without an observer");
     }
   }
   console.log(`oracle: ${n} rows x 5 epochs, worst |dr| ${worst.toExponential(2)} m; float32 snapshot worst relative ${worstSnapshotRelative.toExponential(2)}`);
@@ -112,7 +130,7 @@ test("A8: every row within 1 m of the two-body oracle at +-30 and +-400 days (do
 
 test("A8: against JPL Horizons 30 days either side of the element epoch, median within 10,000 km", async () => {
   const { x, copyIn } = await load();
-  x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   const index = new Map(records.map((r, i) => [r.number, i]));
   const out = x.plugin_alloc(48);
   const errors = [];
@@ -128,17 +146,10 @@ test("A8: against JPL Horizons 30 days either side of the element epoch, median 
   assert.ok(median < 10000, `median ${median} km`);
 });
 
-test("V from H, G and the observer: brighter when nearer, NaN without photometry", async () => {
+test("V from the record's H and G and the observer: brighter when nearer", async () => {
   const { x, copyIn } = await load();
-  x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   const n = records.length;
-  const hg = new Float32Array(2 * n);
-  records.forEach((r, i) => {
-    hg[2 * i] = r.h ?? NaN;
-    hg[2 * i + 1] = r.g ?? NaN;
-  });
-  const hgPtr = copyIn(new Uint8Array(hg.buffer));
-  assert.equal(x.kepler_small_set_photometry(0, n, hgPtr), 0);
   const et = (2461300.5 - 2451545.0) * SECONDS_PER_DAY;
   const obs = x.plugin_alloc(24);
   const snap = x.plugin_alloc(16 * n);
@@ -162,7 +173,7 @@ test("refusals are named: a truncated stream, a record not centred on the Sun", 
   const { x, copyIn } = await load();
   // Truncated: the first size prefix promises more bytes than there are.
   const cut = stream.subarray(0, 100);
-  assert.equal(x.kepler_small_ingest_omm_stream(copyIn(cut), cut.length), -4);
+  assert.equal(x.kepler_small_ingest_sbd_stream(copyIn(cut), cut.length), -4);
   assert.equal(x.kepler_small_failed_record(), 0);
   assert.equal(x.kepler_small_count(), 0, "all or nothing");
   // A record whose CENTER_NAME is not SUN: patch "SUN" to "EAR" in a copy.
@@ -170,7 +181,7 @@ test("refusals are named: a truncated stream, a record not centred on the Sun", 
   const one = Uint8Array.from(stream.subarray(0, 4 + first));
   const text = Buffer.from(one).indexOf("SUN");
   one.set(Buffer.from("EAR"), text);
-  assert.equal(x.kepler_small_ingest_omm_stream(copyIn(one), one.length), -7);
+  assert.equal(x.kepler_small_ingest_sbd_stream(copyIn(one), one.length), -7);
   assert.equal(x.kepler_small_diameter_from_h(3.34, 0.09) > 9e5, true);
 });
 
@@ -179,7 +190,7 @@ test("outside 60 days of the element epoch a row is refused, never drawn at a tw
   // 111,299 km from the geocentre instead of 38,011 km by two-body from a
   // 2026 epoch. The default span refuses it.
   const { x, copyIn } = await load();
-  x.kepler_small_ingest_omm_stream(copyIn(stream), stream.length);
+  x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   const n = records.length;
   const range = x.plugin_alloc(32);
   assert.equal(x.kepler_small_validity_range(range), 0);
