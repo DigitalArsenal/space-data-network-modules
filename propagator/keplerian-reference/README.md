@@ -123,7 +123,7 @@ thousands of Sun-centred rows.
 | `kepler_small_set_photometry(first, count, hg)` | float32 H, G pairs |
 | `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer; NaN outside the validity span |
 | `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF; -10 outside the validity span |
-| `kepler_small_set_validity(seconds)` | the span either side of each row's element epoch in which it is drawn (default 60 days; measured two-body error against JPL Horizons: ~2,200 km worst at 26 days, 13,000-384,000 km at one year). Outside it a snapshot row is NaN and a state is refused |
+| `kepler_small_set_validity(seconds)` | the span either side of each row's element epoch in which it is drawn (default 60 days; measured two-body error against JPL Horizons: ~2,200 km worst at 26 days; at the 60-day edge up to 14,600 km, about 3 arcseconds seen from the Earth, for (10) Hygiea and (16) Psyche; 13,000-384,000 km at one year). Outside it a snapshot row is NaN and a state is refused |
 | `kepler_small_validity_range(out)` | four doubles: the epochs between which every row is valid, and between which any row is |
 | `kepler_small_diameter_from_h(h, albedo)` | equivalent-sphere diameter, m |
 | `kepler_small_count()`, `kepler_small_clear()` | |
