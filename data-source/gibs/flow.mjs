@@ -32,10 +32,10 @@ export function gibsCatalogFlow({ node, edge, http, storage, packageDir }) {
   return {
     flow: {
       programId: "com.digitalarsenal.flows.gibs-layer-catalog-ingest", name: "NASA GIBS layer catalog", version: "0.1.0", engineLinkage: "bridge",
-      description: "Every NASA GIBS visualization layer, twice a day: the EPSG:3857, EPSG:3413 and EPSG:3031 WMTS Capabilities documents, the GIBS layer metadata of every layer and the full time domain of every layer whose Capabilities time list is truncated, merged in WASM into one WMTS 1.0.0 Capabilities document, added to the node's IPFS and announced as one $PNM (provider nasa-gibs, source layer-catalog); the configured SDN auto-publisher signs and announces it. Disabled cycles emit status only.",
+      description: "Every NASA GIBS visualization layer, twice a day: the EPSG:3857, EPSG:3413 and EPSG:3031 WMTS Capabilities documents, the GIBS layer metadata of every layer and the full time domain of every layer whose Capabilities time list is truncated (subdaily domains in pages, kept as their coverage), merged in WASM into one WMTS 1.0.0 Capabilities document, added to the node's IPFS and announced as one $PNM (provider nasa-gibs, source layer-catalog); the configured SDN auto-publisher signs and announces it. Disabled cycles emit status only.",
       nodes, edges,
       triggers: [{ triggerId: "twice-daily", kind: "timer", source: "host-cron", defaultIntervalMs: 12 * 3600000,
-        description: "One catalog retrieval every twelve hours (about 1,400 small requests to GIBS per cycle)." }],
+        description: "One catalog retrieval every twelve hours (about 1,450 requests to GIBS per cycle)." }],
       triggerBindings: [{ triggerId: "twice-daily", targetNodeId: "prepare", targetPortId: "tick", backpressurePolicy: "queue", queueDepth: 1 }],
       requiredPlugins: [adapter, source, http, storage],
     },

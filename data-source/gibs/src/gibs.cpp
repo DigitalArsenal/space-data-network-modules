@@ -22,7 +22,8 @@
 //     instrument, or the third-party credit), period, ongoing, day/night and
 //     the CMR collections the imagery is made from;
 //   - DescribeDomains, for a layer whose Time dimension stops at the 100
-//     values a Capabilities document lists: the full time domain.
+//     values a Capabilities document lists: the full time domain (a subdaily
+//     one in pages, kept as its coverage; see "subdaily time domains").
 //
 // Stages (the flow chains them; every HTTP response arrives in request order):
 //   plan_capabilities  the three Capabilities documents;
@@ -341,6 +342,140 @@ bool readCapabilities(std::string_view body, const Projection& p, Json& layers, 
   return true;
 }
 
+// ── subdaily time domains ──────────────────────────────────────────────────
+// GIBS answers a request inside [value, value + period) with that value's
+// imagery, so a subdaily domain is its coverage: intervals [start, end +
+// period), touching ones joined. DescribeDomains answers at most kDomainPage
+// values (oldest first); the rest of a domain is a further page from the last
+// value. A layer keeps at most kRunsKept runs: the kRunsExact newest exactly,
+// the older ones by joining across their shortest gaps (a time inside a joined
+// gap asks GIBS for imagery it lacks and draws nothing). Every run is written
+// on the layer's dominant period: "start/last step/period".
+constexpr size_t kDomainPage = 25000;
+constexpr size_t kRunsKept = 300;
+constexpr size_t kRunsExact = 100;
+constexpr size_t kDomainsPerBatch = 8;
+using Runs = std::vector<std::pair<int64_t, int64_t>>;
+
+int64_t daysFromCivil(int64_t y, int m, int d) {
+  y -= m <= 2;
+  const int64_t era = (y >= 0 ? y : y - 399) / 400;
+  const int64_t yoe = y - era * 400;
+  const int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+// "2024-05-03T19:08:35Z" or "2024-05-03" -> seconds since 1970 UTC; -1 when malformed.
+int64_t isoSeconds(const std::string& s) {
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0, se = 0;
+  const bool dateTime = s.size() >= 20 && s[10] == 'T' && std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &se) == 6;
+  if (!dateTime && !(s.size() == 10 && std::sscanf(s.c_str(), "%4d-%2d-%2d", &y, &mo, &d) == 3)) return -1;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 60) return -1;
+  return daysFromCivil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se;
+}
+std::string isoText(int64_t sec) {
+  const int64_t day = (sec >= 0 ? sec : sec - 86399) / 86400, rem = sec - day * 86400;
+  const int64_t z = day + 719468, era = (z >= 0 ? z : z - 146096) / 146097;
+  const unsigned doe = unsigned(z - era * 146097), yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+  const unsigned dd = doy - (153 * mp + 2) / 5 + 1, mm = mp < 10 ? mp + 3 : mp - 9;
+  const int64_t yy = int64_t(yoe) + era * 400 + (mm <= 2);
+  char when[32];
+  std::snprintf(when, sizeof when, "%04lld-%02u-%02uT%02lld:%02lld:%02lldZ", (long long)yy, mm, dd, (long long)(rem / 3600),
+                (long long)(rem % 3600 / 60), (long long)(rem % 60));
+  return when;
+}
+// "PT1H2M10S", "PT10M", "P1DT6H" -> seconds; 0 for a calendar period (months, years) or anything else.
+int64_t periodSeconds(const std::string& p) {
+  if (p.size() < 3 || p[0] != 'P') return 0;
+  int64_t total = 0, n = -1;
+  bool time = false;
+  for (size_t i = 1; i < p.size(); ++i) {
+    const char c = p[i];
+    if (c == 'T') { if (time || n >= 0) return 0; time = true; continue; }
+    if (c >= '0' && c <= '9') { n = (n < 0 ? 0 : n * 10) + (c - '0'); if (n > 100000000) return 0; continue; }
+    if (n < 0) return 0;
+    if (!time && c == 'D') total += n * 86400;
+    else if (!time && c == 'W') total += n * 7 * 86400;
+    else if (time && c == 'H') total += n * 3600;
+    else if (time && c == 'M') total += n * 60;
+    else if (time && c == 'S') total += n;
+    else return 0;
+    n = -1;
+  }
+  return n < 0 ? total : 0;
+}
+std::string periodText(int64_t sec) {
+  if (sec % 86400 == 0) return "P" + std::to_string(sec / 86400) + "D";
+  std::string out = "P";
+  if (sec >= 86400) out += std::to_string(sec / 86400) + "D";
+  out += "T";
+  sec %= 86400;
+  if (sec / 3600) out += std::to_string(sec / 3600) + "H";
+  if (sec % 3600 / 60) out += std::to_string(sec % 3600 / 60) + "M";
+  if (sec % 60) out += std::to_string(sec % 60) + "S";
+  return out;
+}
+Runs runsOf(const Json& j) {
+  Runs out;
+  if (j.is_array()) for (const auto& r : j) out.push_back({r[0].get<int64_t>(), r[1].get<int64_t>()});
+  return out;
+}
+Json runsJson(const Runs& runs) {
+  Json out = Json::array();
+  for (const auto& [a, e] : runs) out.push_back({a, e});
+  return out;
+}
+// Sort, join touching intervals, then join the older ones across their
+// shortest gaps until at most kRunsKept remain (the kRunsExact newest untouched).
+void keepRuns(Runs& iv) {
+  std::sort(iv.begin(), iv.end());
+  Runs out;
+  for (const auto& [a, e] : iv) {
+    if (!out.empty() && a <= out.back().second) out.back().second = std::max(out.back().second, e);
+    else out.push_back({a, e});
+  }
+  if (out.size() > kRunsKept) {
+    const size_t older = out.size() - kRunsExact, joins = out.size() - kRunsKept;
+    std::vector<std::pair<int64_t, size_t>> gaps;  // gap i lies between out[i] and out[i + 1], both older
+    for (size_t i = 0; i + 1 < older; ++i) gaps.push_back({out[i + 1].first - out[i].second, i});
+    std::nth_element(gaps.begin(), gaps.begin() + std::ptrdiff_t(joins - 1), gaps.end());
+    std::vector<char> join(out.size(), 0);
+    for (size_t k = 0; k < joins; ++k) join[gaps[k].second] = 1;
+    Runs joined;
+    for (size_t i = 0; i < out.size(); ++i) {
+      if (i > 0 && join[i - 1]) joined.back().second = out[i].second;
+      else joined.push_back(out[i]);
+    }
+    out.swap(joined);
+  }
+  iv.swap(out);
+}
+// A subdaily layer's coverage (its DescribeDomains pages and its own newest
+// Capabilities values, so a page that failed never drops the newest) as Time values.
+Json subdailyValues(const Json& entry, const Json& capabilityValues) {
+  Runs iv = runsOf(entry["iv"]);
+  std::map<int64_t, int64_t> pc;
+  for (const auto& [p, c] : entry["pc"].items()) pc[std::strtoll(p.c_str(), nullptr, 10)] += c.get<int64_t>();
+  for (const auto& v : capabilityValues) {
+    const std::string s = v.get<std::string>();
+    const size_t s1 = s.find('/'), s2 = s.rfind('/');
+    if (s1 == std::string::npos || s2 == s1) continue;
+    const int64_t a = isoSeconds(s.substr(0, s1)), b = isoSeconds(s.substr(s1 + 1, s2 - s1 - 1)), p = periodSeconds(s.substr(s2 + 1));
+    if (a < 0 || b < a || p <= 0) continue;
+    iv.push_back({a, b + p});
+    ++pc[p];
+  }
+  keepRuns(iv);
+  int64_t period = 0, best = 0;
+  for (const auto& [p, c] : pc) if (c > best) { best = c; period = p; }
+  Json out = Json::array();
+  if (period <= 0) return out;
+  const std::string step = periodText(period);
+  for (const auto& [a, e] : iv) out.push_back(isoText(a) + "/" + isoText(a + std::max<int64_t>(0, (e - a - 1) / period) * period) + "/" + step);
+  return out;
+}
+
 // ── catalog vocabulary ─────────────────────────────────────────────────────
 // The GIBS period a layer steps by: "P1D" out of "2000-02-24/2026-10-13/P1D".
 std::string periodOf(const std::string& value) {
@@ -474,7 +609,8 @@ void writeLayer(std::string& out, const Json& l, const Json& meta, const Json& d
   }
   out += "</Style>";
   element(out, "Format", l.value("format", std::string("image/png")));
-  const Json& values = domain.is_array() && domain.size() > l.value("values", Json::array()).size() ? domain : l.value("values", Json::array());
+  // The DescribeDomains domain (whole, or a subdaily layer's coverage) when there is one; else what Capabilities lists.
+  const Json& values = domain.is_array() && !domain.empty() ? domain : l.value("values", Json::array());
   if (l.contains("values")) {
     out += "<Dimension><ows:Identifier>Time</ows:Identifier><ows:UOM>ISO8601</ows:UOM>";
     element(out, "Default", l.value("default", std::string()));
@@ -491,33 +627,77 @@ void writeLayer(std::string& out, const Json& l, const Json& meta, const Json& d
 }
 
 // ── stage state ────────────────────────────────────────────────────────────
-// The detail queue in kBatches non-empty batches: batch b is [b*n/K, (b+1)*n/K).
-std::pair<size_t, size_t> batchRange(size_t n, int b) { return {size_t(b) * n / kBatches, size_t(b + 1) * n / kBatches}; }
-
+// Two queues: domain pages ("dq": a daily-or-longer domain "d", a subdaily
+// domain page "s"; a page that fills kDomainPage queues the next page) and
+// layer metadata ("mq"). A batch takes up to kDomainsPerBatch domain pages
+// first (a subdaily page is about 1.2 MB) and an even share of the metadata
+// left over the batches left, so every batch is non-empty and the last one
+// takes the rest. "inflight" is the batch out, in request order.
 bool emitBatch(Json& state, int batch) {
-  const auto& queue = state["queue"];
-  const auto [from, to] = batchRange(queue.size(), batch);
-  NEED(to > from && to - from <= maxFrames, "A detail batch is empty or over the runtime's frame budget.");
-  for (size_t i = from; i < to; ++i) {
-    const auto& q = queue[i];
-    NEED(output("request", request(q["u"], maxDetailBytes, 60000)) >= 0, "Could not emit a request.");
-  }
+  auto& dq = state["dq"];
+  auto& mq = state["mq"];
+  const size_t left = size_t(kBatches - batch);
+  const size_t nd = std::min(dq.size(), kDomainsPerBatch), nm = (mq.size() + left - 1) / left;
+  Json inflight = Json::array();
+  for (size_t i = 0; i < nd; ++i) inflight.push_back(dq[i]);
+  for (size_t i = 0; i < nm; ++i) inflight.push_back(mq[i]);
+  dq.erase(dq.begin(), dq.begin() + std::ptrdiff_t(nd));
+  mq.erase(mq.begin(), mq.begin() + std::ptrdiff_t(nm));
+  if (inflight.empty()) inflight.push_back({{"k", "x"}, {"id", ""}, {"u", state["dummy"]}});
+  NEED(inflight.size() <= maxFrames, "A detail batch is over the runtime's frame budget.");
+  for (const auto& q : inflight) NEED(output("request", request(q["u"], maxDetailBytes, 60000)) >= 0, "Could not emit a request.");
+  state["inflight"] = std::move(inflight);
   state["batch"] = batch;
   NEED(output("state", state) >= 0, "Could not emit the stage state.");
   return true;
 }
 
+// One subdaily DescribeDomains page into the layer's coverage; a full page
+// queues the next one, from its last value.
+void absorbSubdaily(Json& state, const Json& q, std::string_view all) {
+  const std::string id = q["id"];
+  Json& entry = state["ds"][id];
+  if (!entry.is_object()) entry = {{"iv", Json::array()}, {"pc", Json::object()}};
+  Runs iv = runsOf(entry["iv"]);
+  std::map<int64_t, int64_t> pc;
+  int64_t lastStart = -1;
+  size_t n = 0;
+  for (size_t at = 0; at < all.size();) {
+    size_t comma = all.find(',', at);
+    if (comma == std::string_view::npos) comma = all.size();
+    const std::string v = trim(all.substr(at, comma - at));
+    at = comma + 1;
+    if (v.empty()) continue;
+    ++n;
+    const size_t s1 = v.find('/'), s2 = v.rfind('/');
+    if (s1 == std::string::npos || s2 == s1) continue;
+    const int64_t a = isoSeconds(v.substr(0, s1)), b = isoSeconds(v.substr(s1 + 1, s2 - s1 - 1)), p = periodSeconds(v.substr(s2 + 1));
+    if (a < 0 || b < a || p <= 0) continue;
+    iv.push_back({a, b + p});
+    ++pc[p];
+    lastStart = std::max(lastStart, a);
+  }
+  for (const auto& [p, c] : pc) entry["pc"][std::to_string(p)] = entry["pc"].value(std::to_string(p), int64_t(0)) + c;
+  keepRuns(iv);
+  entry["iv"] = runsJson(iv);
+  if (n >= kDomainPage && lastStart > q.value("from", int64_t(-1))) {
+    const std::string u = q["u"];
+    const size_t cut = u.find("/all/");
+    state["dq"].push_back({{"k", "s"}, {"id", id}, {"from", lastStart},
+                           {"u", u.substr(0, cut) + "/all/" + isoText(lastStart) + "--2100-01-01.xml"}});
+    state["counts"]["domainPages"] = state["counts"].value("domainPages", 0) + 1;
+  }
+}
+
 // Read one batch's responses into the state: metadata fields and time domains.
 bool absorbBatch(Json& state) {
-  const int batch = state["batch"];
-  const auto& queue = state["queue"];
-  const auto [from, to] = batchRange(queue.size(), batch);
+  const Json queue = state["inflight"];
   std::vector<Response> rs;
-  NEED(responses(to - from, maxDetailBytes, rs), error);
+  NEED(responses(queue.size(), maxDetailBytes, rs), error);
   auto& counts = state["counts"];
-  for (size_t i = from; i < to; ++i) {
+  for (size_t i = 0; i < queue.size(); ++i) {
     const auto& q = queue[i];
-    const Response& r = rs[i - from];
+    const Response& r = rs[i];
     const std::string kind = q["k"], id = q["id"];
     if (kind == "x") continue;
     if (r.status != 200) { counts[kind == "m" ? "metadataMissing" : "domainsMissing"] = counts.value(kind == "m" ? "metadataMissing" : "domainsMissing", 0) + 1; continue; }
@@ -552,6 +732,7 @@ bool absorbBatch(Json& state) {
       const XNode* domains = kid(d, d.nodes[0], "Domains");
       const XNode* dim = domains ? kid(d, *domains, "DimensionDomain") : nullptr;
       const std::string all = dim ? text(d, *dim, "Domain") : std::string();
+      if (kind == "s") { absorbSubdaily(state, q, all); continue; }
       Json values = Json::array();
       for (size_t at = 0; at < all.size();) {
         size_t comma = all.find(',', at);
@@ -635,24 +816,23 @@ extern "C" int plan_details() {
   }
   CHECK(!layers.empty(), "GIBS listed no layers; the published catalog stays.");
   // Metadata for every layer; the whole time domain where Capabilities stops at 100 values.
-  Json queue = Json::array();
+  Json dq = Json::array(), mq = Json::array();
   size_t truncated = 0;
   for (const auto& l : layers) {
     const std::string id = l["id"];
-    queue.push_back({{"k", "m"}, {"id", id}, {"u", std::string(kGibs) + "/layer-metadata/v1.0/" + id + ".json"}});
-    // Subdaily layers keep the 100 newest values GIBS lists (months of
-    // 10-minute or hourly steps); their full domains run to tens of thousands
-    // of values each, and GIBS snaps a request inside a step to that step.
-    const std::string kind = timeKind(l);
-    if (l.contains("values") && l["values"].size() >= 100 && l.contains("domains") && kind != "SUBDAILY" && kind != "GRANULE") {
-      queue.push_back({{"k", "d"}, {"id", id}, {"u", l["domains"]}});
+    mq.push_back({{"k", "m"}, {"id", id}, {"u", std::string(kGibs) + "/layer-metadata/v1.0/" + id + ".json"}});
+    if (l.contains("values") && l["values"].size() >= 100 && l.contains("domains")) {
+      // A subdaily layer's domain runs to tens of thousands of values in pages
+      // (absorbSubdaily keeps its coverage); a daily-or-longer one is one answer.
+      const std::string kind = timeKind(l);
+      dq.push_back({{"k", kind == "SUBDAILY" || kind == "GRANULE" ? "s" : "d"}, {"id", id}, {"u", l["domains"]}});
       ++truncated;
     }
   }
-  while (queue.size() < size_t(kBatches)) queue.push_back({{"k", "x"}, {"id", ""}, {"u", queue[0]["u"]}});
-  CHECK((queue.size() + kBatches - 1) / kBatches <= maxFrames, "More detail requests than the stages can carry; raise kBatches.");
-  Json state = {{"stage", "details"}, {"layers", layers}, {"tms", tmsOut}, {"queue", queue}, {"meta", Json::object()},
-                {"dd", Json::object()}, {"counts", {{"layers", layers.size()}, {"truncatedTime", truncated}, {"undefinedTileMatrixSets", undefinedSets}}}};
+  CHECK(!mq.empty() && (mq.size() + kBatches - 1) / kBatches + kDomainsPerBatch <= maxFrames, "More detail requests than the stages can carry; raise kBatches.");
+  Json state = {{"stage", "details"}, {"layers", layers}, {"tms", tmsOut}, {"dq", dq}, {"mq", mq}, {"dummy", mq[0]["u"]},
+                {"meta", Json::object()}, {"dd", Json::object()}, {"ds", Json::object()},
+                {"counts", {{"layers", layers.size()}, {"truncatedTime", truncated}, {"undefinedTileMatrixSets", undefinedSets}}}};
   size_t polarOnly = 0;
   for (const auto& l : layers) if (l["crs"] != "3857") ++polarOnly;
   state["counts"]["polarOnly"] = polarOnly;
@@ -696,7 +876,8 @@ extern "C" int build_catalog() {
   for (const auto& l : layers) {
     const std::string id = l["id"];
     const Json& meta = state["meta"].contains(id) ? state["meta"][id] : none;
-    const Json& domain = state["dd"].contains(id) ? state["dd"][id] : none;
+    const Json domain = state["ds"].contains(id) ? subdailyValues(state["ds"][id], l.value("values", Json::array()))
+                        : state["dd"].contains(id) ? state["dd"][id] : none;
     writeLayer(xml, l, meta, domain);
   }
   for (const auto& [id, definition] : state["tms"].items()) xml += definition.get<std::string>();
@@ -715,7 +896,8 @@ extern "C" int build_catalog() {
         "Could not emit the catalog file.");
   auto counts = state["counts"];
   counts["metadata"] = state["meta"].size();
-  counts["extendedTime"] = state["dd"].size();
+  counts["extendedTime"] = state["dd"].size() + state["ds"].size();
+  if (!state["dq"].empty()) counts["domainPagesUnfetched"] = state["dq"].size();
   const Json job = {{"provider_id", providerId}, {"source_name", sourceName},
                     {"files", Json::array({{{"file", catalogFile}, {"bytes", xml.size()}, {"sha256", sha}}})}, {"counts", counts}};
   return output("job", job) < 0 ? 1 : 0;
@@ -735,15 +917,7 @@ extern "C" int announce_catalog() {
   const auto& file = job["files"][0];
   CHECK(a.value("bytes", int64_t(-1)) == file["bytes"].get<int64_t>(), "The added file's length differs from the built file.");
   const int64_t ms = receipt["retrieved_at_ms"].get<int64_t>();
-  const int64_t sec = ms / 1000, day = sec / 86400, rem = sec % 86400;
-  const int64_t z = day + 719468, era = (z >= 0 ? z : z - 146096) / 146097;
-  const unsigned doe = unsigned(z - era * 146097), yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-  const unsigned dd = doy - (153 * mp + 2) / 5 + 1, mm = mp < 10 ? mp + 3 : mp - 9;
-  const int64_t yy = int64_t(yoe) + era * 400 + (mm <= 2);
-  char when[32];
-  std::snprintf(when, sizeof when, "%04lld-%02u-%02uT%02lld:%02lld:%02lldZ", (long long)yy, mm, dd, (long long)(rem / 3600),
-                (long long)(rem % 3600 / 60), (long long)(rem % 60));
+  const std::string when = isoText(ms / 1000);
   const std::string cid = a["cid"], sha = file["sha256"];
   flatbuffers::FlatBufferBuilder b(256);
   const auto address = b.CreateString("/ipfs/" + cid);

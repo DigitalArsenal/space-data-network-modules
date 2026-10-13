@@ -15,8 +15,8 @@ the `$PNM` names. Tiles stream from GIBS's public WMTS and WMS endpoints.
 | Stage | Asks for |
 | --- | --- |
 | `plan_capabilities` | the EPSG:3857, EPSG:3413 and EPSG:3031 WMTS Capabilities documents |
-| `plan_details` | (parses them) the first of 30 batches: `layer-metadata/v1.0/<id>.json` for every layer, DescribeDomains for each daily or longer layer whose Capabilities time list stops at 100 values |
-| `advance` ×29 | absorbs a batch, asks for the next |
+| `plan_details` | (parses them) the first of 30 batches: `layer-metadata/v1.0/<id>.json` for every layer, DescribeDomains for each layer whose Capabilities time list stops at 100 values |
+| `advance` ×29 | absorbs a batch, asks for the next (a subdaily domain page that fills GIBS's 25,000-value answer queues the next page) |
 | `build_catalog` | nothing: absorbs the last batch and writes the merged document |
 | `announce_catalog` | nothing: one `$PNM` from the host adapter's IPFS add result |
 
@@ -27,10 +27,15 @@ polar templates. What GIBS states outside the WMTS vocabulary rides in
 `https://spacedatanetwork.org/def/gibs-catalog` for the derived role, time kind,
 analysis kind and polar marks) and `ows:Metadata` (xlink:role = licence,
 attribution, citation, CMR collection, the WMS endpoint that draws a vector
-layer as PNG). Subdaily layers keep the 100 newest values GIBS lists.
+layer as PNG). A subdaily or granule layer's domain is read in pages
+(DescribeDomains answers at most 25,000 values, oldest first) and kept as its
+coverage, since GIBS answers a time inside [value, value + period) with that
+value: at most 300 runs, the 100 newest exactly as GIBS states them, older
+ones joined across their shortest gaps, each on the layer's dominant period.
 
 Live run 2026-10-13: 1,356 layers (1,330 drawable on the globe, 26 polar-only),
-1,352 with metadata, 21 time domains extended, 6.4 MB, about 1,415 requests.
+1,352 with metadata, 59 time domains extended (21 daily or longer, 38 subdaily
+or granule, 29 further pages), 6.9 MB, 1,447 requests.
 
 Licence: NASA Earth science data and imagery are open with no restrictions on
 use, sale or redistribution; GIBS asks for its acknowledgment ("We acknowledge

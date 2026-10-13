@@ -9,8 +9,10 @@ import { validateArtifactWithStandards } from "space-data-module-sdk/compliance"
 
 // Fixtures are GIBS's own documents of 2026-10-13, trimmed to ten layers: the
 // three WMTS Capabilities documents, each layer's layer-metadata JSON and the
-// NDVI 16-day DescribeDomains answer (its Capabilities list stops at 100
-// values, the domain starts in 2012). The ten cover every branch the merge
+// NDVI 16-day and GOES-East red-visible DescribeDomains answers (each
+// Capabilities list stops at 100 values; the domains start in 2012 and 2019).
+// The TEMPO granule layer's domain is two pages built in GIBS's form (a real
+// page is 1.2 MB): GIBS answers at most 25,000 values, oldest first. The ten cover every branch the merge
 // takes: a JPEG base layer, a 10-minute geostationary layer, a truncated
 // 16-day layer, a monthly layer, two OpenStreetMap-derived reference layers, a
 // vector (Mapbox Vector Tile) layer, a polar-only layer, a granule layer and a
@@ -34,11 +36,30 @@ function serve(url) {
     const file = path.join(fixtures, "layer-metadata", `${meta[1]}.json`);
     return fs.existsSync(file) ? fs.readFileSync(file) : null;
   }
-  if (url.includes("/VIIRS_SNPP_L3_NDVI_16Day/") && url.endsWith("/all/1900-01-01--2100-01-01.xml")) {
-    return fs.readFileSync(path.join(fixtures, "domains-VIIRS_SNPP_L3_NDVI_16Day.xml"));
+  for (const id of ["VIIRS_SNPP_L3_NDVI_16Day", "GOES-East_ABI_Band2_Red_Visible_1km"]) {
+    if (url.includes(`/${id}/`) && url.endsWith("/all/1900-01-01--2100-01-01.xml")) return fs.readFileSync(path.join(fixtures, `domains-${id}.xml`));
+  }
+  if (url.includes(`/${TEMPO}/`)) {
+    const page = /\/all\/(.+)--2100-01-01\.xml$/.exec(url)?.[1];
+    if (page === "1900-01-01") return domains(tempoInstants(Date.UTC(2023, 7, 2, 12), 25_000));
+    if (page === TEMPO_PAGE_2) return domains(tempoInstants(Date.parse(TEMPO_PAGE_2), 600));
   }
   return null;
 }
+// TEMPO's daylight scans: 120 six-minute instants a day from 12:00Z, each "t/t/PT6M".
+const TEMPO = "TEMPO_L2_NO2_Vertical_Column_Troposphere_Granule";
+function tempoInstants(from, n) {
+  const out = [];
+  for (let day = from - (from % 86_400_000); out.length < n; day += 86_400_000) {
+    for (let k = 0; k < 120 && out.length < n; k++) {
+      const t = day + 12 * 3_600_000 + k * 360_000;
+      if (t >= from) out.push(`${new Date(t).toISOString().slice(0, 19)}Z`);
+    }
+  }
+  return out;
+}
+const TEMPO_PAGE_2 = tempoInstants(Date.UTC(2023, 7, 2, 12), 25_000).at(-1);
+const domains = (instants) => Buffer.from(`<Domains xmlns:ows='http://www.opengis.net/ows/1.1'><DimensionDomain><ows:Identifier>time</ows:Identifier><Domain>${instants.map((t) => `${t}/${t}/PT6M`).join(",")}</Domain><Size>${instants.length}</Size></DimensionDomain></Domains>`);
 function respond(request, status = null) {
   const header = Buffer.alloc(8);
   header.write("$HRB");
@@ -95,7 +116,7 @@ test("the artifact satisfies the SDK contract", async () => {
 test("the merged document lists every layer of the three projections, with GIBS's metadata and full time domains", async (t) => {
   const { name, xml, job, asked } = await runAll(await harness(t));
   assert.equal(name, "gibs-wmts-capabilities.xml");
-  assert.deepEqual(job.counts, { layers: 10, drawable: 9, polarOnly: 1, truncatedTime: 1, undefinedTileMatrixSets: 0, metadata: 10, extendedTime: 1 });
+  assert.deepEqual(job.counts, { layers: 10, drawable: 9, polarOnly: 1, truncatedTime: 3, undefinedTileMatrixSets: 0, metadata: 10, extendedTime: 3, domainPages: 1 });
   // One metadata request per layer and one domain request, each its own URL with its own validator.
   const urls = asked.map((r) => r.url);
   assert.equal(new Set(urls.filter((u) => u.includes("/layer-metadata/"))).size, 10);
@@ -111,10 +132,25 @@ test("the merged document lists every layer of the three projections, with GIBS'
   assert.deepEqual(keyword(ndvi, "analysis"), ["INDEX"]);
   assert.deepEqual(keyword(ndvi, "measurement"), ["Vegetation Indices"]);
 
-  // A 10-minute layer keeps GIBS's own hundred newest values.
+  // A 10-minute layer carries its coverage back to 2019: 2,350 GIBS runs kept
+  // as 300, the hundred newest exactly as GIBS states them.
   const goes = layer(xml, "GOES-East_ABI_Band2_Red_Visible_1km");
-  assert.equal([...goes.matchAll(/<Value>/g)].length, 100);
+  const goesValues = [...goes.matchAll(/<Value>([^<]+)<\/Value>/g)].map((m) => m[1]);
+  assert.equal(goesValues.length, 300);
+  assert.equal(goesValues[0].slice(0, 20), "2019-08-06T00:00:00Z");
+  assert.ok(goesValues.every((v) => v.endsWith("/PT10M")));
+  const gibsRuns = /<Domain>([^<]+)<\/Domain>/.exec(fs.readFileSync(path.join(fixtures, "domains-GOES-East_ABI_Band2_Red_Visible_1km.xml"), "utf8"))[1].split(",");
+  assert.deepEqual(goesValues.slice(-90), gibsRuns.slice(-90));
   assert.deepEqual(keyword(goes, "timeKind"), ["SUBDAILY"]);
+
+  // A domain longer than one DescribeDomains answer is read in pages: the
+  // second asked from the first page's last value; the coverage spans both.
+  const tempoPages = urls.filter((u) => u.includes(`/${TEMPO}/`) && u.includes("/all/"));
+  assert.deepEqual(tempoPages.map((u) => u.slice(u.indexOf("/all/"))), ["/all/1900-01-01--2100-01-01.xml", `/all/${TEMPO_PAGE_2}--2100-01-01.xml`]);
+  const tempo = [...layer(xml, TEMPO).matchAll(/<Value>([^<]+)<\/Value>/g)].map((m) => m[1]);
+  assert.equal(tempo.length, 300);
+  assert.ok(tempo[0].startsWith("2023-08-02T12:00:00Z/") && tempo.every((v) => v.endsWith("/PT6M")));
+  assert.ok(tempo.some((v) => v.startsWith(TEMPO_PAGE_2.slice(0, 10))));
 
   // JPEG -> a base layer; its CMR collections are linked.
   const modis = layer(xml, "MODIS_Terra_CorrectedReflectance_TrueColor");
