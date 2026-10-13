@@ -816,12 +816,45 @@ struct SmallBody {
   float g = 0.15f;
 };
 
-std::vector<SmallBody>* g_small = nullptr;
+/// The rows, in blocks of 65,536: a catalog grows shard by shard without the
+/// reallocations (and the transient double copy) of one contiguous vector,
+/// whose high-water mark a module's linear memory keeps for good (multi-body
+/// round 2: the console's desktop memory budget with every numbered asteroid).
+class SmallStore {
+ public:
+  static constexpr uint32_t kBlockShift = 16;
+  static constexpr uint32_t kBlockRows = 1u << kBlockShift;
+  size_t size() const { return size_; }
+  bool empty() const { return size_ == 0; }
+  SmallBody& operator[](size_t i) { return blocks_[i >> kBlockShift][i & (kBlockRows - 1)]; }
+  const SmallBody& operator[](size_t i) const { return blocks_[i >> kBlockShift][i & (kBlockRows - 1)]; }
+  void push_back(const SmallBody& b) {
+    if ((size_ >> kBlockShift) >= blocks_.size()) blocks_.push_back(new SmallBody[kBlockRows]);
+    (*this)[size_++] = b;
+  }
+  /// Drops rows past n (a refused ingest leaves the store as it was).
+  void truncate(size_t n) {
+    if (n >= size_) return;
+    size_ = n;
+    const size_t keep = (n + kBlockRows - 1) >> kBlockShift;
+    while (blocks_.size() > keep) {
+      delete[] blocks_.back();
+      blocks_.pop_back();
+    }
+  }
+  ~SmallStore() { truncate(0); }
+
+ private:
+  std::vector<SmallBody*> blocks_;
+  size_t size_ = 0;
+};
+
+SmallStore* g_small = nullptr;
 int32_t g_small_failed_record = -1;
 
-std::vector<SmallBody>& small_bodies() {
+SmallStore& small_bodies() {
   if (g_small == nullptr) {
-    g_small = new std::vector<SmallBody>();
+    g_small = new SmallStore();
   }
   return *g_small;
 }
@@ -1351,31 +1384,37 @@ bool small_apparent_row(const SmallBody& b, double et, const double* observer, f
 /// a negative code (the failing record's index in kepler_small_failed_record).
 int32_t ingest_small_stream(const uint8_t* data, uint32_t length) {
   g_small_failed_record = -1;
-  std::vector<SmallBody> parsed;
+  SmallStore& store = small_bodies();
+  const size_t before = store.size();
   uint32_t offset = 0;
   int32_t record = 0;
+  // Rows go straight into the store; a refused record takes every row of
+  // this stream back out (all or nothing).
   while (offset < length) {
-    if (offset + 4 > length) return kErrBadInput;
+    if (offset + 4 > length) {
+      store.truncate(before);
+      return kErrBadInput;
+    }
     uint32_t size = 0;
     std::memcpy(&size, data + offset, sizeof(size));
     offset += 4;
     if (size == 0 || offset + size > length) {
       g_small_failed_record = record;
+      store.truncate(before);
       return kErrBadInput;
     }
     SmallBody body;
     const int32_t code = decode_small_body(data + offset, size, &body);
     if (code != kOk) {
       g_small_failed_record = record;
+      store.truncate(before);
       return code;
     }
-    parsed.push_back(body);
+    store.push_back(body);
     offset += size;
     ++record;
   }
-  std::vector<SmallBody>& store = small_bodies();
-  store.insert(store.end(), parsed.begin(), parsed.end());
-  return static_cast<int32_t>(parsed.size());
+  return static_cast<int32_t>(store.size() - before);
 }
 
 }  // namespace
@@ -1444,7 +1483,8 @@ int32_t kepler_small_describe_sbd_stream(const uint8_t* data, uint32_t length, u
 /// none). A host's size-band and class filter for the small-body catalog
 /// (owner 2026-10-13: the rest of the numbered asteroids load by size band
 /// and class), the records unchanged. Returns the bytes written, or a negative
-/// error code (-4 a malformed stream, -11 `out` too small).
+/// error code (-4 a malformed stream, -11 `out` too small). `out` may be
+/// `data` (the selection is made in place).
 ORBPRO_ABI_EXPORT("kepler_small_select_sbd_stream")
 int32_t kepler_small_select_sbd_stream(const uint8_t* data, uint32_t length, uint32_t class_mask, double h_min,
                                        double h_max, const uint8_t* exclude, uint32_t exclude_bits, uint8_t* out,
@@ -1476,7 +1516,9 @@ int32_t kepler_small_select_sbd_stream(const uint8_t* data, uint32_t length, uin
     }
     if (keep) {
       if (written + 4 + size > capacity) return -11;
-      std::memcpy(out + written, data + offset, 4 + size);
+      // memmove: `out` may be `data` itself (an in-place selection; kept
+      // records only ever move toward the start).
+      std::memmove(out + written, data + offset, 4 + size);
       written += 4 + size;
     }
     offset += 4 + size;
@@ -1504,7 +1546,7 @@ void kepler_small_clear(void) {
 /// span from `et`, is NaN. Returns the number of failed rows.
 ORBPRO_ABI_EXPORT("kepler_small_snapshot")
 int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const double* observer, float* out) {
-  std::vector<SmallBody>& store = small_bodies();
+  SmallStore& store = small_bodies();
   if (out == nullptr) return kErrNullOutput;
   if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
   int32_t failed = 0;
@@ -1526,7 +1568,7 @@ int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const d
 /// number of failed rows.
 ORBPRO_ABI_EXPORT("kepler_small_snapshot_apparent")
 int32_t kepler_small_snapshot_apparent(double et, uint32_t first, uint32_t count, const double* observer, float* out) {
-  std::vector<SmallBody>& store = small_bodies();
+  SmallStore& store = small_bodies();
   if (out == nullptr || observer == nullptr) return kErrNullOutput;
   if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
   double at[9];
@@ -1546,7 +1588,7 @@ int32_t kepler_small_snapshot_apparent(double et, uint32_t first, uint32_t count
 /// ssb_apparent_offsets to a planet, so the body sits where its point was.
 ORBPRO_ABI_EXPORT("kepler_small_apparent_offset")
 int32_t kepler_small_apparent_offset(double et, uint32_t index, const double* observer, double* out) {
-  std::vector<SmallBody>& store = small_bodies();
+  SmallStore& store = small_bodies();
   if (out == nullptr || observer == nullptr) return kErrNullOutput;
   if (index >= store.size()) return kErrBadEntityIndex;
   if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
@@ -1562,7 +1604,7 @@ int32_t kepler_small_apparent_offset(double et, uint32_t index, const double* ob
 /// heliocentric ICRF, at `et`.
 ORBPRO_ABI_EXPORT("kepler_small_state")
 int32_t kepler_small_state(double et, uint32_t index, double* out) {
-  std::vector<SmallBody>& store = small_bodies();
+  SmallStore& store = small_bodies();
   if (out == nullptr) return kErrNullOutput;
   if (index >= store.size()) return kErrBadEntityIndex;
   if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
@@ -1583,11 +1625,12 @@ double kepler_small_set_validity(double seconds) {
 /// common end, any start, any end). Returns kErrNotInitialized without rows.
 ORBPRO_ABI_EXPORT("kepler_small_validity_range")
 int32_t kepler_small_validity_range(double* out) {
-  std::vector<SmallBody>& store = small_bodies();
+  SmallStore& store = small_bodies();
   if (out == nullptr) return kErrNullOutput;
   if (store.empty()) return kErrNotInitialized;
   double lo = -INFINITY, hi = INFINITY, any_lo = INFINITY, any_hi = -INFINITY;
-  for (const SmallBody& b : store) {
+  for (size_t i = 0; i < store.size(); ++i) {
+    const SmallBody& b = store[i];
     lo = std::max(lo, b.epoch_et - g_small_validity);
     hi = std::min(hi, b.epoch_et + g_small_validity);
     any_lo = std::min(any_lo, b.epoch_et - g_small_validity);

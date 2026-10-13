@@ -121,7 +121,7 @@ thousands of Sun-centred rows.
 |---|---|
 | `kepler_small_ingest_sbd_stream(data, len)` | size-prefixed SDS `$SBD` small-body records (asteroids and comets are never `$OMM`): `CENTER_NAME` SUN, `REF_FRAME` ECLIPJ2000 or ICRF / EME2000 / J2000, `TIME_SYSTEM` TDB or TT, `SEMI_MAJOR_AXIS` km and `MEAN_ANOMALY` (or a comet's `PERICENTER_DISTANCE` and `PERICENTER_EPOCH`), `GM` km³/s² (default DE440 Sun), `ABSOLUTE_MAGNITUDE` (H) and `SLOPE_PARAMETER` (G). All or nothing; named refusals (-4 bad input, -6 unphysical, -7 centre, -8 frame, -9 time system) with `kepler_small_failed_record()` |
 | `kepler_small_describe_sbd_stream(data, len, count, numbers, hgd, offsets, names, capacity)` | the display fields of the same stream without storing it: uint32 NUMBER, float32 H, G, DIAMETER per record, and NAME (else DESIGNATION) packed as UTF-8 with byte offsets |
-| `kepler_small_select_sbd_stream(data, len, class_mask, h_min, h_max, exclude, exclude_bits, out, capacity)` | the records of a stream a selection keeps, unchanged and size-prefixed: ORBIT_CLASS bit in `class_mask` (0 = any), H in [h_min, h_max) (NaN = open), NUMBER not set in the `exclude` bitmap; the console's size-band and class filter |
+| `kepler_small_select_sbd_stream(data, len, class_mask, h_min, h_max, exclude, exclude_bits, out, capacity)` | the records of a stream a selection keeps, unchanged and size-prefixed: ORBIT_CLASS bit in `class_mask` (0 = any), H in [h_min, h_max) (NaN = open), NUMBER not set in the `exclude` bitmap; the console's size-band and class filter. `out` may be `data` (in place) |
 | `kepler_small_snapshot(et, first, count, observer, out)` | four float32 per row: x, y, z (m, heliocentric ICRF) and V (H-G, Bowell et al. 1989) from the observer; NaN outside the validity span |
 | `kepler_small_snapshot_apparent(et, first, count, observer, out)` | as `kepler_small_snapshot`, but each row is where the body is SEEN: light time (three iterations) and first-order stellar aberration, NAIF LT+S, the correction `propagator/solar-system-bodies` applies to planets. `observer` is 10 doubles: heliocentric position (m), barycentric velocity (m/s), the Sun's barycentric velocity (m/s), and the TDB epoch (s past J2000) they hold at; the module moves the observer on to `et` with its heliocentric velocity, so a host passes its frame's camera as it is; the row is observer + apparent vector, so a host draws it like a geometric row. Against JPL Horizons LT+S (tests/small-bodies-apparent.e2e.test.mjs): (1), (3), (4), (7), (16), (433), (1036), (1862), (4179), (99942), (101955) within 0.79" at the element epoch and ±30, ±45 and ±59.5 days; the geometric rows are 2.6-33.5" off |
 | `kepler_small_state(et, index, out)` | one row in double precision: position and velocity, heliocentric ICRF; -10 outside the validity span |
@@ -132,7 +132,9 @@ thousands of Sun-centred rows.
 
 `et` is TDB seconds past J2000; TT epochs are taken as TDB (at most 1.7 ms).
 Rows are independent, so a host shards them across its own workers, as for
-`plugin_propagate_batch`.
+`plugin_propagate_batch`. The rows are kept in blocks of 65,536 (no
+reallocation as a catalog grows shard by shard: a module's linear memory keeps
+its high-water mark), and an ingest writes rows straight into the store.
 
 **Perturbed paths (1.6.0).** Osculating elements are a conic only at their
 epoch; the planets pull a body off it (two-body alone put (16) Psyche 1.44"

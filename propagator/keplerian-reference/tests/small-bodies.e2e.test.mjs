@@ -261,6 +261,10 @@ test("kepler_small_select_sbd_stream keeps records by class, H band and an exclu
   // An excluded number is left out (Ceres and Eros).
   const kept = select(0, NaN, NaN, [1, 433]);
   assert.equal(kept.length, all.length - 2);
+  // In place (out = data): the same records, so a host needs no second buffer.
+  const inPlace = copyIn(stream);
+  const written = x.kepler_small_select_sbd_stream(inPlace, stream.length, 0, 12, 15, 0, 0, inPlace, stream.length);
+  assert.deepEqual(frames(new Uint8Array(x.memory.buffer, inPlace, written).slice()), band);
   // Too small an output is refused, never truncated.
   assert.equal(x.kepler_small_select_sbd_stream(p, stream.length, 0, NaN, NaN, 0, 0, out, 16), -11);
 });
