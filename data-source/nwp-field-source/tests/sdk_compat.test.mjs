@@ -186,6 +186,18 @@ test("select_messages: a lead the run lacks is reported, not invented; a count m
   assert.equal(mismatch.errorCode, "job-response-count-mismatch");
 });
 
+// A run planned again (a node restart forgets the plan): the host presents the inventories' validators from its retrieval
+// ledger and NOAA answers 304 - nothing fetched, nothing reported missing, and the node's unchanged notice once.
+test("select_messages: an unchanged inventory (304) fetches nothing and says unchanged, not missing", async (t) => {
+  const harness = await createHarness(t, {});
+  const job = { product: "gfs-0p25-sea", url: `${GFS}/gfs.t00z.pgrb2.0p25.f003`, run: "20261006T00", lead: 3, heights_to: 12 };
+  const response = await harness.invoke({ methodId: "select_messages", inputs: [jsonInput("idx_jobs", job), jsonInput("idx_jobs", job),
+    bytesInput("inventories", rawResponseFrame(new Uint8Array(0), 304)), bytesInput("inventories", rawResponseFrame(new Uint8Array(0), 304))] });
+  assert.deepEqual(framesOn(response, "status"), [{ inventories_unchanged: 2, status: 304, unchanged: true }]);
+  assert.equal(framesOn(response, "requests").length, 0);
+  assert.equal(framesOn(response, "jobs").length, 0);
+});
+
 test("publish_request: one POST when nwp_publish_url is set, nothing otherwise", async (t) => {
   const result = jsonInput("result", { schema: "WXF.fbs", inserted: 18, batch_id: "c".repeat(64) });
   const meta = jsonInput("meta", { schema: "WXF.fbs", provider_id: "noaa-ncep", source_name: "gfs-1p00-motion", batch_id: "c".repeat(64) });

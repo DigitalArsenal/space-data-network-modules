@@ -671,6 +671,7 @@ int select_messages(void) {
     const std::string config = load_config();
     const long timeout = static_cast<long>(config_number(config, "nwp_grib_timeout_ms", kDefaultGribTimeoutMs));
     std::string missing;
+    int unchanged = 0;
     for (size_t k = 0; k < jobs.size(); k++) {
         const std::string job = frame_string(jobs[k]);
         std::string product_id, url, run;
@@ -689,6 +690,10 @@ int select_messages(void) {
                                           (static_cast<uint32_t>(r->payload[6]) << 16) | (static_cast<uint32_t>(r->payload[7]) << 24));
             body.assign(reinterpret_cast<const char*>(r->payload + 8), r->payload_length - 8);
         }
+        // 304: the host presented the inventory's validators (the retrieval ledger keeps them across restarts) and the
+        // publisher has nothing new - a lead already ingested, e.g. a run planned again after a node restart. Nothing to
+        // fetch, and not a missing lead: counted, and said once below as the node's unchanged notice.
+        if (p && status == 304) { unchanged++; continue; }
         if (!p || status != 200) {
             missing += std::string(missing.empty() ? "" : ",") + "{\"inventory\":\"" + json_escape(url + ".idx") + "\",\"http_status\":" + std::to_string(status) + "}";
             continue;
@@ -731,6 +736,9 @@ int select_messages(void) {
         flush();
     }
     if (!missing.empty() && push_json("status", "{\"missing\":[" + missing + "]}") < 0) return 500;
+    // (the node reads it only when the run landed nothing: then a success without a batch, not a failure - flowrt
+    // egressReportsUnchanged)
+    if (unchanged > 0 && push_json("status", "{\"inventories_unchanged\":" + std::to_string(unchanged) + ",\"status\":304,\"unchanged\":true}") < 0) return 500;
     return emit_from(g_select_backlog, g_select_next, 1, "requests", "jobs");
 }
 
