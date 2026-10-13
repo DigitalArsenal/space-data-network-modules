@@ -175,6 +175,34 @@ test("Ceres reads as Lowell publishes it, brightest band first, with the attribu
 // and rank by H at albedo 0.14 (206 km, 174 km: in); (19) Fortuna, H 7.49, is
 // 113 km and stays out with (5) Astraea 119.1, (8) Flora 135.9, (12) Victoria
 // 112.8, (17) Thetis 90.0 and (18) Melpomene 140.6 km.
+// Four real NEO rows of the same file (433 Eros, 4179 Toutatis, 99942 Apophis,
+// 101955 Bennu). Their Earth MOIDs are checked against JPL SBDB's
+// (ssd.jpl.nasa.gov/tools/sbdb_lookup, moid): 0.149, 0.0061, 0.0002 and
+// 0.0032 AU. The module's MOID is against the Earth's mean orbit at the row's
+// epoch, so it agrees within 1e-3 AU, far inside the 0.05 AU PHA threshold.
+const neoRows = fs.readFileSync(new URL("./fixtures/astorb-2026-10-12-neo.dat", import.meta.url), "latin1").split("\n").filter(Boolean);
+test("every NEO carries its Earth MOID and PHA (MOID <= 0.05 AU and H <= 22); other rows carry neither", async (t) => {
+  const h = await harness(t);
+  const filler = head[19];
+  const lines = [...head, ...neoRows];
+  for (let n = 1; n <= 120000; n++) lines.push(String(500000 + n).padStart(6, " ") + filler.slice(6));
+  const result = await parse(h, ranges(zlib.gzipSync(Buffer.from(lines.join("\n") + "\n", "latin1"))));
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  const rows = records(result);
+  const by = (n) => rows.find((r) => r.NUMBER === n);
+  const sbdb = { 433: 0.149, 4179: 0.0061, 99942: 0.0002, 101955: 0.0032 };
+  for (const [n, moid] of Object.entries(sbdb)) {
+    const r = by(Number(n));
+    assert.equal(r.NEO, true, n);
+    assert.ok(Math.abs(r.EARTH_MOID - moid) < 1e-3, `${n}: MOID ${r.EARTH_MOID} against SBDB ${moid}`);
+  }
+  assert.equal(by(433).PHA, false, "Eros passes 0.149 AU from the Earth's orbit");
+  for (const n of [4179, 99942, 101955]) assert.equal(by(n).PHA, true, `${n} is a PHA`);
+  assert.equal(by(1).NEO, false);
+  assert.ok(Number.isNaN(by(1).EARTH_MOID), "a main-belt row carries no MOID");
+  assert.equal(by(1).PHA, false);
+});
+
 test("the largest tenth is ceil(N/10) rows ranked by size, ties by number, as its own lane", async (t) => {
   const h = await harness(t);
   const result = await parse(h, ranges(catalog()));

@@ -1,7 +1,7 @@
 {
  "pluginId": "com.digitalarsenal.data-source.lowell-astorb",
  "name": "Numbered asteroids (Lowell astorb)",
- "version": "0.3.0",
+ "version": "0.4.0",
  "description": "Retrieval nodes for every numbered asteroid in Lowell Observatory's astorb.dat: plan_astorb emits three ranged GETs for the generic HTTP host (the file is about 112 MB; the host refuses a body over 100 MB), parse_astorb joins them and validates the complete gzip (CRC-32, length, fixed columns) and emits one size-prefixed $SBD small-body record per asteroid, brightest H band first, then the largest tenth of them (ranked by the IRAS diameter, else the diameter from H at geometric albedo 0.14; ties by number) and two $EGP groups that list both lanes on the network (osculating heliocentric elements with CCSDS OPM keywords: CENTER_NAME SUN, REF_FRAME ECLIPJ2000, TIME_SYSTEM TDB, km, DE440 GM; H, G, IRAS diameter, orbit class, orbit arc, observations and CEU; PVN provenance). Storage, publication and the schedule belong to the host; the node's auto-publisher announces the SBD.fbs lanes lowell-astorb/astorb-numbered and lowell-astorb/astorb-largest-10pct and the EGP.fbs lane lowell-astorb/astorb-groups.",
  "pluginFamily": "data_source",
  "capabilities": [],

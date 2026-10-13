@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.lowell-astorb-host",
   "name": "Lowell astorb scheduled source adapter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Host side of the asteroid retrieval flow: generic host configuration (plugin.getConfig: lowell_astorb_enabled, lowell_astorb_producer_peer_id, lowell_astorb_source), the retrieval receipt, and ingest_astorb, which validates the whole download (gzip CRC-32 and length, fixed columns) and then streams the $SBD records into the node's store in ~12 MiB parts through the storage_ingest capability (storage.ingest_with_source), so the node never holds the 372 MB batch at once; then the largest tenth of them under their own lane (astorb-largest-10pct) and the two $EGP groups that list both lanes (astorb-groups). Parsing is the portable core's own (astorb_core.hpp). SDN auto-publishes the configured lanes once each batch has settled.",
   "pluginFamily": "data_source",
   "capabilities": [

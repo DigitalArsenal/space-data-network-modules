@@ -49,7 +49,8 @@ astorb.dat, its URL and SHA-256), the licence and the attribution.
 - Records, brightest H band first (H < 12, 12-15, 15-17, the rest), then by
   number: `NUMBER`; `NAME`, or `DESIGNATION` when the name columns hold a
   provisional designation; `ORBIT_CLASS` (JPL SBDB classes from a and e) and
-  `NEO` (q < 1.3 AU); the orbit with the CCSDS OPM keywords, `CENTER_NAME`
+  `NEO` (q < 1.3 AU); for a NEO, `EARTH_MOID` (AU) and `PHA` (Earth MOID
+  <= 0.05 AU and H <= 22; see below); the orbit with the CCSDS OPM keywords, `CENTER_NAME`
   SUN, `REF_FRAME` ECLIPJ2000 (mean ecliptic and equinox of J2000),
   `TIME_SYSTEM` TDB, `EPOCH`, `SEMI_MAJOR_AXIS` km, `ECCENTRICITY`,
   `INCLINATION`, `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER`, `MEAN_ANOMALY`
@@ -57,7 +58,18 @@ astorb.dat, its URL and SHA-256), the licence and the attribution.
   `DIAMETER` (IRAS, km); orbit quality `ORBIT_ARC` (days), `OBSERVATION_COUNT`,
   `CEU`, `CEU_RATE`, `CEU_EPOCH`; `PROVENANCE` (PVN: provider lowell-astorb,
   originator Lowell Observatory, licence class Reproducible). Values astorb
-  does not give (albedo, rotation period, Earth MOID) are left out (NaN).
+  does not give (albedo, rotation period) are left out (NaN).
+- **Earth MOID and PHA.** astorb.dat has no Earth MOID or hazard flag, so the
+  module computes the minimum orbit intersection distance of every NEO against
+  the Earth's orbit at the row's epoch (the Earth-Moon barycentre's mean orbit
+  from Standish's JPL SSD table, 1800-2050; a MOID needs the orbit, not the
+  place, and the table moves a MOID by under 1e-4 AU): a 360 x 180
+  eccentric-anomaly grid, then a pattern search from its four lowest minima to
+  1e-10 rad. A non-NEO cannot pass within 0.05 AU of the Earth's orbit and
+  carries no MOID (its PHA is false). On the 2026-10-12 file: 3,873 NEOs,
+  976 PHAs; Eros 0.1489, Icarus 0.0338, Toutatis 0.0065, Itokawa 0.0130,
+  Ryugu 0.0009, Bennu 0.0028, Apophis 0.0001 AU (JPL SBDB: 0.148, 0.0339,
+  0.0061, 0.0131, 0.0009, 0.0032, 0.0002).
 - Lowell keeps every epoch of osculation within 50 days of the present (a new
   epoch every 100 days), so the flow's 72 h cadence keeps rows inside
   `propagator/keplerian-reference`'s 60-day window.

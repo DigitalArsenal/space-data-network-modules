@@ -247,6 +247,102 @@ void chooseLargest(std::vector<RankedRow>& rows, Largest& out) {
   }
 }
 
+// ── Earth MOID and PHA ──────────────────────────────────────────────────────
+// astorb.dat carries no Earth MOID or hazard flag (its integer codes give the
+// planet-crossing class only), so the module computes the minimum orbit
+// intersection distance against the Earth's orbit at the row's epoch for every
+// NEO (q < 1.3 AU; no other orbit can come within 0.05 AU of the Earth's,
+// whose aphelion is 1.0167 AU). The Earth's orbit is the Earth-Moon
+// barycentre's mean orbit, mean ecliptic and equinox of J2000 (Standish,
+// "Keplerian Elements for Approximate Positions of the Major Planets", JPL SSD,
+// Table 1, 1800-2050): its orbit, not its place, is all a MOID needs, and the
+// table's error (tens of arcseconds) moves a MOID by under 1e-4 AU. PHA (JPL/MPC
+// definition): Earth MOID <= 0.05 AU and H <= 22.
+constexpr double moidPhaAu = 0.05;
+constexpr double phaMaxH = 22.0;
+constexpr double degToRad = 3.14159265358979323846 / 180.0;
+constexpr double twoPi = 2.0 * 3.14159265358979323846;
+struct Conic { double a, e, p[3], q[3]; };
+Conic conic(double aAu, double e, double incDeg, double nodeDeg, double argDeg) {
+  const double cn = std::cos(nodeDeg * degToRad), sn = std::sin(nodeDeg * degToRad);
+  const double ci = std::cos(incDeg * degToRad), si = std::sin(incDeg * degToRad);
+  const double cw = std::cos(argDeg * degToRad), sw = std::sin(argDeg * degToRad);
+  return {aAu, e, {cn * cw - sn * sw * ci, sn * cw + cn * sw * ci, sw * si}, {-cn * sw - sn * cw * ci, -sn * sw + cn * cw * ci, cw * si}};
+}
+void conicPoint(const Conic& c, double ecc, double out[3]) {
+  const double x = c.a * (std::cos(ecc) - c.e), y = c.a * std::sqrt(1.0 - c.e * c.e) * std::sin(ecc);
+  for (int k = 0; k < 3; ++k) out[k] = x * c.p[k] + y * c.q[k];
+}
+// The Earth's (EMB) orbit at a "YYYY-MM-DDT00:00:00" TDB epoch.
+Conic earthOrbit(const std::string& epoch) {
+  const int y = std::atoi(epoch.substr(0, 4).c_str()), m = std::atoi(epoch.substr(5, 2).c_str()), d = std::atoi(epoch.substr(8, 2).c_str());
+  // Julian date at 0h (Fliegel & Van Flandern), centuries from J2000.
+  const long jdn = (1461L * (y + 4800 + (m - 14) / 12)) / 4 + (367L * (m - 2 - 12 * ((m - 14) / 12))) / 12 -
+                   (3L * ((y + 4900 + (m - 14) / 12) / 100)) / 4 + d - 32075;
+  const double t = (double(jdn) - 0.5 - 2451545.0) / 36525.0;
+  const double a = 1.00000261 + 0.00000562 * t, e = 0.01671123 - 0.00004392 * t;
+  const double inc = -0.00001531 - 0.01294668 * t, varpi = 102.93768193 + 0.32327364 * t, node = 0.0;
+  return conic(a, e, inc, node, varpi - node);
+}
+double distance2(const double a[3], const double b[3]) {
+  const double x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2];
+  return x * x + y * y + z * z;
+}
+// Minimum distance (AU) between two confocal elliptic orbits: a 360 x 180
+// eccentric-anomaly grid, then a pattern search from each of the grid's
+// four lowest local minima down to 1e-10 rad (the two orbits can have up to
+// four local minima; the grid finds every basin wider than a cell).
+double moidAu(const Conic& body, const Conic& earth) {
+  constexpr int nb = 360, ne = 180;
+  static std::vector<double> earthPts;
+  static Conic cached{};
+  if (earthPts.empty() || std::memcmp(&cached, &earth, sizeof(Conic)) != 0) {
+    earthPts.resize(3 * ne);
+    for (int j = 0; j < ne; ++j) conicPoint(earth, twoPi * j / ne, &earthPts[3 * j]);
+    cached = earth;
+  }
+  std::vector<double> grid(size_t(nb) * ne);
+  double pb[3];
+  for (int i = 0; i < nb; ++i) {
+    conicPoint(body, twoPi * i / nb, pb);
+    for (int j = 0; j < ne; ++j) grid[size_t(i) * ne + j] = distance2(pb, &earthPts[3 * j]);
+  }
+  struct Seed { double d2; int i, j; };
+  std::vector<Seed> seeds;
+  for (int i = 0; i < nb; ++i)
+    for (int j = 0; j < ne; ++j) {
+      const double v = grid[size_t(i) * ne + j];
+      bool minimum = true;
+      for (int di = -1; di <= 1 && minimum; ++di)
+        for (int dj = -1; dj <= 1; ++dj) {
+          if (!di && !dj) continue;
+          if (grid[size_t((i + di + nb) % nb) * ne + (j + dj + ne) % ne] < v) { minimum = false; break; }
+        }
+      if (minimum) seeds.push_back({v, i, j});
+    }
+  std::sort(seeds.begin(), seeds.end(), [](const Seed& x, const Seed& y) { return x.d2 < y.d2; });
+  if (seeds.size() > 4) seeds.resize(4);
+  double best = seeds.empty() ? *std::min_element(grid.begin(), grid.end()) : seeds[0].d2;
+  double pe[3];
+  const auto at = [&](double u, double v) { conicPoint(body, u, pb); conicPoint(earth, v, pe); return distance2(pb, pe); };
+  for (const auto& seed : seeds) {
+    double u = twoPi * seed.i / nb, v = twoPi * seed.j / ne, d2 = seed.d2;
+    double step = twoPi / ne;
+    while (step > 1e-10) {
+      bool moved = false;
+      for (int du = -1; du <= 1; ++du)
+        for (int dv = -1; dv <= 1; ++dv) {
+          if (!du && !dv) continue;
+          const double t = at(u + du * step, v + dv * step);
+          if (t < d2) { d2 = t; u += du * step; v += dv * step; moved = true; }
+        }
+      if (!moved) step *= 0.5;
+    }
+    best = std::min(best, d2);
+  }
+  return std::sqrt(best);
+}
+
 // One $SBD: the catalog's osculating heliocentric elements as published
 // (CENTER_NAME SUN, REF_FRAME ECLIPJ2000: the mean ecliptic and equinox of
 // J2000; TIME_SYSTEM TDB, the epoch of osculation; angles in degrees,
@@ -268,11 +364,18 @@ void buildRecord(const Row& r, flatbuffers::FlatBufferBuilder& b) {
   const auto epoch = b.CreateString(r.epoch);
   const auto ceuEpoch = r.ceuEpoch.empty() ? 0 : b.CreateString(r.ceuEpoch);
   const double q = r.aAu * (1.0 - r.e);
+  // Earth MOID for a NEO (the only orbits that can be hazardous), and PHA.
+  const bool neo = q < 1.3;
+  const double moid = neo ? moidAu(conic(r.aAu, r.e, r.inc, r.node, r.w), earthOrbit(r.epoch)) : NAN;
   SBDBuilder sbd(b);
   sbd.add_NUMBER(uint32_t(r.number));
   if (name.o) { if (designation) sbd.add_DESIGNATION(name); else sbd.add_NAME(name); }
   sbd.add_ORBIT_CLASS(orbitClass(r.aAu, r.e));
-  sbd.add_NEO(q < 1.3);
+  sbd.add_NEO(neo);
+  if (neo) {
+    sbd.add_EARTH_MOID(moid);
+    sbd.add_PHA(moid <= moidPhaAu && r.hasH && r.h <= phaMaxH);
+  }
   sbd.add_CENTER_NAME(center);
   sbd.add_REF_FRAME(frameName);
   sbd.add_TIME_SYSTEM(timeSystem);
