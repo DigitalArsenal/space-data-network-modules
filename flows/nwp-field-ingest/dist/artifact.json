@@ -83,7 +83,7 @@
       "dependencyId": "com.digitalarsenal.data-source.nwp-field-source",
       "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
       "version": "0.2.0",
-      "sha256": "8961b5af541f80e9598e58e8d775efe7c18beaec06faef31bc7c5a565e1f6627",
+      "sha256": "e3bf1ce57bfaa8d75a50d2f6316e268f9a89c812cd0c5d48102e1dfea453ace4",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
