@@ -175,7 +175,7 @@ extern "C" int ingest_astorb() {
   }
   CHECK(largest==s.largest.count,"The largest-10% pass disagrees with the validation pass.");
   // The catalog listing: the two $EGP groups (lane astorb-groups).
-  meta=astorb::ingestMeta(sourceSha,peer,astorb::groupsSourceName).dump();
+  meta=astorb::ingestMeta(sourceSha,peer,astorb::groupsSourceName,retrieved).dump();
   meta.insert(meta.size()-1,",\"records\":{\"$bin\":0}");
   part=astorb::groupRecords(s,sourceSha,retrieved);
   flush();

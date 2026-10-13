@@ -278,7 +278,8 @@ test("ingest_astorb stores the parse_astorb records in parts of about 12 MiB, af
   assert.equal(metas.length, parts.length);
   const meta = decode(parsed, "meta");
   for (const m of metas) {
-    assert.equal(m.batch_id, meta.batch_id);
+    // The groups' batch adds the retrieval time (a re-pull retires the versions it replaces).
+    assert.equal(m.batch_id, m.source_name === "astorb-groups" ? `${meta.batch_id}@${receipt.retrieved_at_ms}` : meta.batch_id);
     assert.equal(m.provider_id, "lowell-astorb");
     assert.ok(["astorb-numbered", "astorb-largest-10pct", "astorb-groups"].includes(m.source_name), m.source_name);
     assert.equal(m.schema, m.source_name === "astorb-groups" ? "EGP.fbs" : "SBD.fbs");

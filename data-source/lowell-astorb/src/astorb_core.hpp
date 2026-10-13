@@ -460,11 +460,16 @@ bool survey(const GzipInput& gz, Survey& out) {
 
 // The storage meta of one lane: astorb-numbered (every numbered asteroid),
 // astorb-largest-10pct (the largest tenth, $SBD) or astorb-groups (the two
-// $EGP groups that list them). One batch per retrieval: the file's SHA-256.
-Json ingestMeta(const std::string& sourceSha, const std::string& peer, const char* lane = sourceName) {
+// $EGP groups that list them). The record lanes' batch is the file's SHA-256
+// (the same file twice is the same records). The groups carry the retrieval
+// time, so a re-pull of the same file writes new group versions: their batch
+// is the file's SHA-256 and that time, and reconcile "current" retires the
+// versions it replaces (one pair of groups on the lane, never one per pull).
+Json ingestMeta(const std::string& sourceSha, const std::string& peer, const char* lane = sourceName, int64_t retrieved = 0) {
   const bool groups = std::strcmp(lane, groupsSourceName) == 0;
   const bool largest = std::strcmp(lane, largestSourceName) == 0;
-  return {{"schema", groups ? "EGP.fbs" : "SBD.fbs"}, {"batch_id", sourceSha}, {"provider_id", providerId},
+  const std::string batch = groups ? sourceSha + "@" + std::to_string(retrieved) : sourceSha;
+  return {{"schema", groups ? "EGP.fbs" : "SBD.fbs"}, {"batch_id", batch}, {"provider_id", providerId},
           {"source_name", lane}, {"source_url", sourceUrl}, {"source_peer", peer},
           {"reconcile", "current"}, {"origin_id", "lowell.edu"}, {"origin_name", "Lowell Observatory astorb"},
           {"dataset_id", groups ? "lowell-astorb/groups" : largest ? "lowell-astorb/numbered-largest-10pct" : "lowell-astorb/numbered"},
