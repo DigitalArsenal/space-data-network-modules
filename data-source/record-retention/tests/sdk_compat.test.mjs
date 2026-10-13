@@ -69,7 +69,7 @@ test("default: WXF from noaa-ncep, the window 72 h before the host clock, one st
   const response = await invoke(t, stub);
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.deepEqual(stub.expires(), [{ schema: "WXF.fbs", provider_id: "noaa-ncep", before_ms: FIXED_NOW_MS - 72 * HOUR_MS, batch: 500, max_deletes: 100000 }]);
-  assert.deepEqual(report(response), { window_hours: 72, cutoff_ms: FIXED_NOW_MS - 72 * HOUR_MS, deleted: 4608, not_held: 0, capped: false });
+  assert.deepEqual(report(response), { window_hours: 72, cutoff_ms: FIXED_NOW_MS - 72 * HOUR_MS, deleted: 4608, not_held: 0, capped: false, unchanged: true });
 });
 
 test("config: window, batch, budget; one call a source, the budget carried across them; totals summed", async (t) => {
@@ -85,7 +85,7 @@ test("config: window, batch, budget; one call a source, the budget carried acros
     { schema: "WXF.fbs", provider_id: "noaa-ncep", source_name: "goes19-world", before_ms: cutoff, batch: 100, max_deletes: 700 },
     { schema: "OMM.fbs", source_name: "celestrak-gp", before_ms: cutoff, batch: 100, max_deletes: 500 },
   ]);
-  assert.deepEqual(report(response), { window_hours: 24, cutoff_ms: cutoff, deleted: 507, not_held: 3, capped: false });
+  assert.deepEqual(report(response), { window_hours: 24, cutoff_ms: cutoff, deleted: 507, not_held: 3, capped: false, unchanged: true });
 });
 
 test("a target naming no lane is refused before any deletion; a host failure fails the pass", async (t) => {

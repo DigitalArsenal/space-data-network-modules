@@ -272,10 +272,14 @@ int expire(void) {
             if (!expire_lane(t, source, cutoff_ms, batch, max_deletes, &totals)) return 502;
         }
     }
-    // The report (an intra-flow control frame, JSON): what this pass did.
+    // The report (an intra-flow control frame, JSON): what this pass did. A
+    // retention pass never lands a batch; "unchanged" is the node's notice for
+    // a run with nothing to land that is not a failure (internal/flowrt
+    // cronmount egressReportsUnchanged) - without it every pass widens the
+    // flow's retrieval window (6 h, 12 h, 24 h) and the window stops moving.
     char report[256];
     const int n = std::snprintf(report, sizeof(report),
-        "{\"window_hours\":%.6g,\"cutoff_ms\":%.0f,\"deleted\":%ld,\"not_held\":%ld,\"capped\":%s}",
+        "{\"window_hours\":%.6g,\"cutoff_ms\":%.0f,\"deleted\":%ld,\"not_held\":%ld,\"capped\":%s,\"unchanged\":true}",
         window_hours, cutoff_ms, totals.deleted, totals.missing, totals.capped ? "true" : "false");
     if (n > 0 && plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
                                        reinterpret_cast<const uint8_t*>(report), static_cast<uint32_t>(n)) < 0) {
