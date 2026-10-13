@@ -210,3 +210,50 @@ test("outside 60 days of the element epoch a row is refused, never drawn at a tw
   assert.equal(x.kepler_small_state(anyHi + 1, 0, out), -10);
   assert.equal(x.kepler_small_set_validity(0), 60 * SECONDS_PER_DAY, "non-positive restores the default");
 });
+
+// Owner 2026-10-13: the rest of the numbered asteroids load only when turned
+// on, by size band and class. The module selects the records (the host never
+// reads one): the kept records come back unchanged and in stream order.
+test("kepler_small_select_sbd_stream keeps records by class, H band and an excluded-number bitmap", async () => {
+  const { x, copyIn } = await load();
+  const p = copyIn(stream);
+  const out = x.plugin_alloc(stream.length);
+  const frames = (bytes) => {
+    const list = [];
+    for (let o = 0; o < bytes.length;) {
+      const n = new DataView(bytes.buffer, bytes.byteOffset + o, 4).getUint32(0, true);
+      list.push(Buffer.from(bytes.subarray(o, o + 4 + n)).toString("hex"));
+      o += 4 + n;
+    }
+    return list;
+  };
+  const all = frames(stream);
+  const select = (mask, hMin, hMax, exclude = null) => {
+    let ex = 0, bits = 0;
+    if (exclude) {
+      bits = Math.max(...exclude) + 1;
+      const bitmap = new Uint8Array((bits + 7) >> 3);
+      for (const n of exclude) bitmap[n >> 3] |= 1 << (n & 7);
+      ex = copyIn(bitmap);
+    }
+    const written = x.kepler_small_select_sbd_stream(p, stream.length, mask, hMin, hMax, ex, bits, out, stream.length);
+    assert.ok(written >= 0, `select refused (${written})`);
+    return frames(new Uint8Array(x.memory.buffer, out, written).slice());
+  };
+  // No selection keeps everything, byte for byte.
+  assert.deepEqual(select(0, NaN, NaN), all);
+  // An H band: exactly the records whose H lies in it, in stream order.
+  const band = records.map((r, i) => [r, all[i]]).filter(([r]) => r.h != null && r.h >= 12 && r.h < 15).map(([, f]) => f);
+  assert.ok(band.length > 10 && band.length < records.length);
+  assert.deepEqual(select(0, 12, 15), band);
+  // Classes partition the stream: main belt (MBA = 7) and everything else.
+  const mba = select(1 << 7, NaN, NaN);
+  const rest = select(~(1 << 7) >>> 0, NaN, NaN);
+  assert.ok(mba.length > 0 && rest.length > 0);
+  assert.equal(mba.length + rest.length, all.length);
+  // An excluded number is left out (Ceres and Eros).
+  const kept = select(0, NaN, NaN, [1, 433]);
+  assert.equal(kept.length, all.length - 2);
+  // Too small an output is refused, never truncated.
+  assert.equal(x.kepler_small_select_sbd_stream(p, stream.length, 0, NaN, NaN, 0, 0, out, 16), -11);
+});

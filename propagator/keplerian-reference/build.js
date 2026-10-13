@@ -165,6 +165,7 @@ const SBD_FIELDS = [
   "NUMBER",
   "DESIGNATION",
   "NAME",
+  "ORBIT_CLASS",
   "CENTER_NAME",
   "REF_FRAME",
   "TIME_SYSTEM",

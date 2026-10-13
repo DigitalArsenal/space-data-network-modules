@@ -1213,6 +1213,55 @@ int32_t kepler_small_describe_sbd_stream(const uint8_t* data, uint32_t length, u
   return static_cast<int32_t>(record);
 }
 
+/// The records of a size-prefixed $SBD stream that a selection keeps, copied
+/// size-prefixed and in stream order into `out` (`capacity` bytes): the
+/// record's ORBIT_CLASS bit set in `class_mask` (bit n = sbdOrbitClass n; 0 =
+/// every class), its ABSOLUTE_MAGNITUDE within [`h_min`, `h_max`) (a NaN
+/// bound is open; a record without H fails a bounded range), and its NUMBER
+/// not set in `exclude` (a bitmap by number, `exclude_bits` bits; null =
+/// none). A host's size-band and class filter for the small-body catalog
+/// (owner 2026-10-13: the rest of the numbered asteroids load by size band
+/// and class), the records unchanged. Returns the bytes written, or a negative
+/// error code (-4 a malformed stream, -11 `out` too small).
+ORBPRO_ABI_EXPORT("kepler_small_select_sbd_stream")
+int32_t kepler_small_select_sbd_stream(const uint8_t* data, uint32_t length, uint32_t class_mask, double h_min,
+                                       double h_max, const uint8_t* exclude, uint32_t exclude_bits, uint8_t* out,
+                                       uint32_t capacity) {
+  if (data == nullptr || out == nullptr) return kErrNullOutput;
+  uint32_t offset = 0, written = 0;
+  while (offset < length) {
+    if (offset + 4 > length) return kErrBadInput;
+    uint32_t size = 0;
+    std::memcpy(&size, data + offset, sizeof(size));
+    if (size == 0 || offset + 4 + size > length || !has_sbd_file_identifier(data + offset + 4, size)) return kErrBadInput;
+    const uint8_t* buffer = data + offset + 4;
+    uint32_t root_offset = 0;
+    std::memcpy(&root_offset, buffer, sizeof(root_offset));
+    const FlatTable sbd(buffer, size, root_offset);
+    if (!sbd.valid()) return kErrBadInput;
+    bool keep = true;
+    if (class_mask != 0) {
+      const uint8_t cls = sbd.read_uint8(ORBPRO_SBD_VT_ORBIT_CLASS, 0);
+      keep = cls < 32 && (class_mask >> cls & 1u) != 0;
+    }
+    if (keep && (!std::isnan(h_min) || !std::isnan(h_max))) {
+      const double h = sbd.read_double(ORBPRO_SBD_VT_ABSOLUTE_MAGNITUDE, NAN);
+      keep = !std::isnan(h) && (std::isnan(h_min) || h >= h_min) && (std::isnan(h_max) || h < h_max);
+    }
+    if (keep && exclude != nullptr) {
+      const uint32_t number = sbd.read_uint32(ORBPRO_SBD_VT_NUMBER, 0);
+      keep = !(number < exclude_bits && (exclude[number >> 3] >> (number & 7) & 1u) != 0);
+    }
+    if (keep) {
+      if (written + 4 + size > capacity) return -11;
+      std::memcpy(out + written, data + offset, 4 + size);
+      written += 4 + size;
+    }
+    offset += 4 + size;
+  }
+  return static_cast<int32_t>(written);
+}
+
 /// Index of the record the last refused ingest stopped at, or -1.
 ORBPRO_ABI_EXPORT("kepler_small_failed_record")
 int32_t kepler_small_failed_record(void) { return g_small_failed_record; }
