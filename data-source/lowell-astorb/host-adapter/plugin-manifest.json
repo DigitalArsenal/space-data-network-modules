@@ -1,241 +1,526 @@
 {
- "pluginId": "com.digitalarsenal.data-source.lowell-astorb-host",
- "name": "Lowell astorb scheduled source adapter",
- "version": "0.1.0",
- "description": "Generic host configuration and retrieval receipt for the asteroid retrieval flow. Requires an SDK host supplying plugin.getConfig (keys lowell_astorb_enabled, lowell_astorb_producer_peer_id, lowell_astorb_source); parsing stays in the portable core. SDN auto-publishes the configured source lane after successful ingestion.",
- "pluginFamily": "data_source",
- "capabilities": [],
- "externalInterfaces": [],
- "invokeSurfaces": [
-  "direct",
-  "command"
- ],
- "runtimeTargets": [
-  "browser",
-  "wasmedge"
- ],
- "sequentialJustification": {
-  "kind": "pure-transform",
-  "detail": "Reads generic host configuration and the clock once per scheduled cycle; HTTP, signing, IPFS and persistence remain in existing host capability nodes. No threads."
- },
- "methods": [
-  {
-   "methodId": "prepare_scheduled",
-   "displayName": "Prepare scheduled astorb retrieval",
-   "inputPorts": [
+  "pluginId": "com.digitalarsenal.data-source.lowell-astorb-host",
+  "name": "Lowell astorb scheduled source adapter",
+  "version": "0.2.0",
+  "description": "Host side of the asteroid retrieval flow: generic host configuration (plugin.getConfig: lowell_astorb_enabled, lowell_astorb_producer_peer_id, lowell_astorb_source), the retrieval receipt, and ingest_astorb, which validates the whole download (gzip CRC-32 and length, fixed columns) and then streams the $OMM records into the node's store in ~12 MiB parts through the storage_ingest capability (storage.ingest_with_source), so the node never holds the 372 MB batch at once. Parsing is the portable core's own (astorb_core.hpp). SDN auto-publishes the configured lane once the batch has settled.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "storage_ingest"
+  ],
+  "externalInterfaces": [
     {
-     "portId": "tick",
-     "acceptedTypeSets": [
-      {
-       "setId": "tick-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
-       }
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "The validated astorb records, in parts, through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
       }
-     ],
-     "minStreams": 1,
-     "maxStreams": 1,
-     "required": true,
-     "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
     }
-   ],
-   "outputPorts": [
-    {
-     "portId": "config",
-     "acceptedTypeSets": [
-      {
-       "setId": "config-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "The source configuration for plan_astorb."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "The source configuration for plan_astorb."
-    },
-    {
-     "portId": "status",
-     "acceptedTypeSets": [
-      {
-       "setId": "status-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-    }
-   ],
-   "maxBatch": 1,
-   "drainPolicy": "single-shot"
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One configuration read per cycle; ingest_astorb inflates and parses serially and makes one storage.ingest_with_source host call per part; the host owns I/O and persistence. No threads."
   },
-  {
-   "methodId": "receipt_scheduled",
-   "displayName": "Attach retrieval receipt",
-   "inputPorts": [
+  "methods": [
     {
-     "portId": "job",
-     "acceptedTypeSets": [
-      {
-       "setId": "job-v1",
-       "allowedTypes": [
+      "methodId": "prepare_scheduled",
+      "displayName": "Prepare scheduled astorb retrieval",
+      "inputPorts": [
         {
-         "acceptsAnyFlatbuffer": true
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
         }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "The astorb retrieval plan emitted by plan_astorb."
-       }
-      }
-     ],
-     "minStreams": 1,
-     "maxStreams": 1,
-     "required": true,
-     "description": "The astorb retrieval plan emitted by plan_astorb."
+      ],
+      "outputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source configuration for plan_astorb."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The source configuration for plan_astorb."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
-     "portId": "response",
-     "acceptedTypeSets": [
-      {
-       "setId": "response-v1",
-       "allowedTypes": [
+      "methodId": "plan_astorb",
+      "displayName": "Plan the astorb.dat retrieval",
+      "inputPorts": [
         {
-         "acceptsAnyFlatbuffer": true
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Source configuration from the host adapter; only the canonical Lowell URL is accepted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Source configuration from the host adapter; only the canonical Lowell URL is accepted."
         }
-       ],
-       "wildcardJustification": {
-        "kind": "foreign-wire-format",
-        "mediaType": "application/vnd.sdn.http-raw-body-v1",
-        "detail": "The raw-body-v1 HTTP response carrying the astorb.dat.gz bytes."
-       }
-      }
-     ],
-     "minStreams": 1,
-     "maxStreams": 1,
-     "required": true,
-     "description": "The raw-body-v1 HTTP response carrying the astorb.dat.gz bytes."
+      ],
+      "outputPorts": [
+        {
+          "portId": "request0",
+          "acceptedTypeSets": [
+            {
+              "setId": "request0-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request descriptor for byte range 0 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/http-request descriptor for byte range 0 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+        },
+        {
+          "portId": "request1",
+          "acceptedTypeSets": [
+            {
+              "setId": "request1-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request descriptor for byte range 1 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/http-request descriptor for byte range 1 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+        },
+        {
+          "portId": "request2",
+          "acceptedTypeSets": [
+            {
+              "setId": "request2-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request descriptor for byte range 2 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/http-request descriptor for byte range 2 of astorb.dat.gz (48 MiB windows, raw-body-v1)."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The canonical retrieval plan; parse_astorb refuses any other."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The canonical retrieval plan; parse_astorb refuses any other."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "receipt_scheduled",
+      "displayName": "Attach retrieval receipt",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The astorb retrieval plan emitted by plan_astorb."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The astorb retrieval plan emitted by plan_astorb."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "The raw-body-v1 HTTP response carrying the astorb.dat.gz bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The raw-body-v1 HTTP response carrying the astorb.dat.gz bytes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The retrieval plan, forwarded."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The retrieval plan, forwarded."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "The raw-body-v1 HTTP response, forwarded."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The raw-body-v1 HTTP response, forwarded."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "retrieved_at_ms and the producer peer ID."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "retrieved_at_ms and the producer peer ID."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Not-modified or skipped cycle; never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Not-modified or skipped cycle; never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_astorb",
+      "displayName": "Store astorb.dat as $OMM, in parts",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The unmodified plan emitted by plan_astorb."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The unmodified plan emitted by plan_astorb."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+        },
+        {
+          "portId": "response0",
+          "acceptedTypeSets": [
+            {
+              "setId": "response0-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 response for byte range 0: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "raw-body-v1 response for byte range 0: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+        },
+        {
+          "portId": "response1",
+          "acceptedTypeSets": [
+            {
+              "setId": "response1-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 response for byte range 1: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "raw-body-v1 response for byte range 1: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+        },
+        {
+          "portId": "response2",
+          "acceptedTypeSets": [
+            {
+              "setId": "response2-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 response for byte range 2: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "raw-body-v1 response for byte range 2: $HRB, int32 status (206, or 416 past the end), the gzip bytes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The ingest report: records, parts, inserted, bands, epochs, source SHA-256."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The ingest report: records, parts, inserted, bands, epochs, source SHA-256."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
-   ],
-   "outputPorts": [
+  ],
+  "schemasUsed": [
     {
-     "portId": "job",
-     "acceptedTypeSets": [
-      {
-       "setId": "job-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "The retrieval plan, forwarded."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "The retrieval plan, forwarded."
-    },
-    {
-     "portId": "response",
-     "acceptedTypeSets": [
-      {
-       "setId": "response-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "foreign-wire-format",
-        "mediaType": "application/vnd.sdn.http-raw-body-v1",
-        "detail": "The raw-body-v1 HTTP response, forwarded."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "The raw-body-v1 HTTP response, forwarded."
-    },
-    {
-     "portId": "receipt",
-     "acceptedTypeSets": [
-      {
-       "setId": "receipt-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "retrieved_at_ms and the producer peer ID."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "retrieved_at_ms and the producer peer ID."
-    },
-    {
-     "portId": "status",
-     "acceptedTypeSets": [
-      {
-       "setId": "status-v1",
-       "allowedTypes": [
-        {
-         "acceptsAnyFlatbuffer": true
-        }
-       ],
-       "wildcardJustification": {
-        "kind": "intra-flow-control-frame",
-        "mediaType": "application/json",
-        "detail": "Not-modified or skipped cycle; never a data record."
-       }
-      }
-     ],
-     "minStreams": 0,
-     "maxStreams": 1,
-     "required": false,
-     "description": "Not-modified or skipped cycle; never a data record."
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
     }
-   ],
-   "maxBatch": 1,
-   "drainPolicy": "single-shot"
-  }
- ]
+  ]
 }

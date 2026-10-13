@@ -147,3 +147,53 @@ test("refuses a file of fewer than 100,000 numbered asteroids and a failed range
   assert.notEqual(refused.statusCode, 0);
   assert.equal(refused.outputs.length, 0);
 });
+
+// Coordinator D3 (multi-body round 2): on a node the host adapter's
+// ingest_astorb streams the SAME records into the store in ~12 MiB parts
+// (storage.ingest_with_source, one call per part), so the node never holds
+// the 372 MB batch at once. Here the host is a recording stand-in for the
+// node's storage capability; the parts must join to exactly what
+// parse_astorb emits, every part carrying the same batch meta.
+test("ingest_astorb stores the parse_astorb records in parts of about 12 MiB, after validating the whole file", async (t) => {
+  const adapterWasm = fs.readFileSync(fileURLToPath(new URL("../host-adapter/dist/isomorphic/module.wasm", import.meta.url)));
+  const adapterManifest = JSON.parse(fs.readFileSync(new URL("../host-adapter/plugin-manifest.json", import.meta.url)));
+  const parts = [];
+  const metas = [];
+  const hostcallDispatch = (operation, params) => {
+    assert.equal(operation, "storage.ingest_with_source");
+    metas.push(params);
+    const records = params.records instanceof Uint8Array ? params.records : new Uint8Array(params.records);
+    parts.push(Buffer.from(records));
+    return { inserted: records.length > 0 ? 1 : 0 };
+  };
+  const adapter = await createBrowserModuleHarness({ wasmSource: adapterWasm, manifest: adapterManifest, surface: "direct", hostcallDispatch });
+  t.after(() => adapter.destroy());
+  const core = await harness(t);
+  const gz = catalog(160000);
+  const inputs = [input("job", job), input("receipt", receipt), ...ranges(gz).map((r, i) => input(`response${i}`, r))];
+  const parsed = await core.invoke({ methodId: "parse_astorb", inputs });
+  assert.equal(parsed.statusCode, 0, parsed.errorMessage);
+  const expected = Buffer.from(parsed.outputs.find((f) => f.portId === "records").payload);
+  const stored = await adapter.invoke({ methodId: "ingest_astorb", inputs });
+  assert.equal(stored.statusCode, 0, stored.errorMessage);
+  const report = decode(stored, "result");
+  assert.equal(report.records, 160020);
+  assert.equal(report.parts, parts.length);
+  assert.ok(parts.length >= 4, `${parts.length} parts`);
+  for (const part of parts) assert.ok(part.length <= 12 * 1024 * 1024 + 4096, `part of ${part.length} bytes`);
+  assert.ok(Buffer.concat(parts).equals(expected), "the parts join to exactly the parse_astorb records");
+  const meta = decode(parsed, "meta");
+  for (const m of metas) {
+    assert.equal(m.batch_id, meta.batch_id);
+    assert.equal(m.provider_id, "lowell-astorb");
+    assert.equal(m.source_name, "astorb-numbered");
+    assert.equal(m.reconcile, "current");
+  }
+  // A broken download stores nothing: the validation pass runs first.
+  parts.length = 0;
+  const corrupt = ranges(gz);
+  corrupt[0][5000] ^= 0xff; // inside the deflate stream: the CRC check fails
+  const refused = await adapter.invoke({ methodId: "ingest_astorb", inputs: [input("job", job), input("receipt", receipt), ...corrupt.map((r, i) => input(`response${i}`, r))] });
+  assert.notEqual(refused.statusCode, 0);
+  assert.equal(parts.length, 0, "no part stored from a corrupt download");
+});
