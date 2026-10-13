@@ -1007,6 +1007,121 @@ bool small_snapshot_row(const SmallBody& b, double et, const double* observer, f
   return true;
 }
 
+/// The speed of light (m/s, SI defining constant): light time only.
+constexpr double kSpeedOfLight = 299792458.0;
+
+/// Newton on Kepler's equation from a seed close to the answer (the
+/// geometric solve's eccentric anomaly moved by the light time): one or two
+/// steps to 1e-12 rad.
+bool small_position_from(const SmallBody& b, double t, double seed, double r[3], double* ecc_out) {
+  if (!small_in_validity(b, t)) return false;
+  const double m = b.m0 + b.n * (t - b.epoch_et);
+  double ecc = seed;
+  bool converged = false;
+  for (int i = 0; i < 20; ++i) {
+    const double f = ecc - b.e * std::sin(ecc) - m;
+    const double d = f / (1.0 - b.e * std::cos(ecc));
+    ecc -= d;
+    if (std::fabs(d) < 1e-12) {
+      converged = true;
+      break;
+    }
+  }
+  if (!converged) return false;
+  const double ce = std::cos(ecc), se = std::sin(ecc);
+  const double x = b.a * (ce - b.e);
+  const double y = b.a * std::sqrt(1.0 - b.e * b.e) * se;
+  for (int c = 0; c < 3; ++c) r[c] = x * b.p[c] + y * b.q[c];
+  *ecc_out = ecc;
+  return true;
+}
+
+/// Where a body is SEEN from an observer, with the same corrections the
+/// bodies module applies to planets (NAIF LT+S, see
+/// propagator/solar-system-bodies apparent_offset): the light-time position
+/// (three iterations) and the classical first-order stellar aberration
+/// u' = u + v/c - u (u.v/c), normalised, at the light-time distance.
+///
+/// observer: 9 doubles, ICRF: [0..2] the observer's position relative to the
+/// Sun (m) at `et`; [3..5] the observer's velocity relative to the solar
+/// system barycentre (m/s, for aberration); [6..8] the Sun's velocity
+/// relative to the barycentre (m/s): the body's barycentric place at
+/// et - tau is the Sun's place then plus the heliocentric row, and the Sun
+/// moves about 13 m/s about the barycentre (its acceleration over a light
+/// time is below a millimetre).
+///
+/// Out: `seen` the apparent vector from the observer (m), `geometric` the
+/// geometric one at `et`, `light_time_place` the heliocentric row at et - tau.
+bool small_apparent_place(const SmallBody& b, double et, const double* observer, double seen[3],
+                          double geometric[3], double light_time_place[3]) {
+  double r[3];
+  if (!small_in_validity(b, et)) return false;
+  double ecc = 0.0;
+  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.epoch_et), b.e, &ecc) ||
+      !small_position_from(b, et, ecc, r, &ecc)) {
+    return false;
+  }
+  const double* o = observer;
+  double p[3] = {r[0] - o[0], r[1] - o[1], r[2] - o[2]};
+  for (int c = 0; c < 3; ++c) geometric[c] = p[c];
+  double tau = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]) / kSpeedOfLight;
+  for (int it = 0; it < 3; ++it) {
+    const double seed = ecc - b.n * tau / (1.0 - b.e * std::cos(ecc));
+    double e2 = 0.0;
+    if (!small_position_from(b, et - tau, seed, r, &e2)) return false;
+    for (int c = 0; c < 3; ++c) p[c] = r[c] - o[6 + c] * tau - o[c];
+    tau = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]) / kSpeedOfLight;
+  }
+  const double d = tau * kSpeedOfLight;
+  if (!(d > 0.0)) return false;
+  const double u[3] = {p[0] / d, p[1] / d, p[2] / d};
+  const double v[3] = {o[3] / kSpeedOfLight, o[4] / kSpeedOfLight, o[5] / kSpeedOfLight};
+  const double uv = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  double a[3];
+  for (int c = 0; c < 3; ++c) a[c] = u[c] + v[c] - u[c] * uv;
+  const double an = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+  for (int c = 0; c < 3; ++c) {
+    seen[c] = a[c] / an * d;
+    light_time_place[c] = r[c];
+  }
+  return true;
+}
+
+/// The 9-double observer at `et` from the 10 doubles a host passes: the
+/// first nine as for small_apparent_place, given at observer[9] (TDB seconds
+/// past J2000), the frame the host last placed its camera in. The position
+/// moves on with the observer's heliocentric velocity (barycentric velocity
+/// minus the Sun's) to `et`; over the few minutes a snapshot leads the frame
+/// its acceleration is below a metre.
+void small_observer_at(const double* observer, double et, double out[9]) {
+  const double dt = et - observer[9];
+  for (int c = 0; c < 9; ++c) out[c] = observer[c];
+  for (int c = 0; c < 3; ++c) out[c] += (observer[3 + c] - observer[6 + c]) * dt;
+}
+
+/// One APPARENT snapshot row: x, y, z = observer + apparent vector (m,
+/// heliocentric ICRF, so the host draws the row exactly as a geometric one)
+/// and V from H and G at the light-time place.
+bool small_apparent_row(const SmallBody& b, double et, const double* observer, float* out) {
+  double seen[3], geometric[3], r[3];
+  if (!small_apparent_place(b, et, observer, seen, geometric, r)) {
+    out[0] = out[1] = out[2] = out[3] = NAN;
+    return false;
+  }
+  for (int c = 0; c < 3; ++c) out[c] = static_cast<float>(observer[c] + seen[c]);
+  if (std::isnan(b.h)) {
+    out[3] = NAN;
+    return true;
+  }
+  // Phase angle at the light-time place: Sun - body against observer - body.
+  const double d = std::sqrt(seen[0] * seen[0] + seen[1] * seen[1] + seen[2] * seen[2]);
+  const double rr = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  double cosa = (rr > 0.0 && d > 0.0) ? (r[0] * seen[0] + r[1] * seen[1] + r[2] * seen[2]) / (rr * d) : 1.0;
+  cosa = cosa > 1.0 ? 1.0 : (cosa < -1.0 ? -1.0 : cosa);
+  out[3] = static_cast<float>(hg_magnitude(b.h, b.g, rr / kAuMeters, d / kAuMeters, std::acos(cosa)));
+  return true;
+}
+
 /// Size-prefixed $OMM stream -> rows appended. Returns the count appended or
 /// a negative code (the failing record's index in kepler_small_failed_record).
 int32_t ingest_small_stream(const uint8_t* data, uint32_t length) {
@@ -1090,6 +1205,47 @@ int32_t kepler_small_snapshot(double et, uint32_t first, uint32_t count, const d
     if (!small_snapshot_row(store[first + i], et, observer, out + 4 * i)) ++failed;
   }
   return failed;
+}
+
+/// An APPARENT frame snapshot of rows [first, first + count) at `et` (TDB
+/// seconds past J2000): four float32 per row, x, y, z (m, heliocentric ICRF)
+/// of the place where the body is SEEN from the observer (light time and
+/// stellar aberration, NAIF LT+S, as the bodies module draws planets) and V.
+/// `observer` is 10 doubles: heliocentric position, barycentric velocity, the
+/// Sun's barycentric velocity (see small_apparent_place) and the TDB epoch
+/// they hold at; the module moves the observer on to `et`
+/// (small_observer_at). NaN rows as for kepler_small_snapshot. Returns the
+/// number of failed rows.
+ORBPRO_ABI_EXPORT("kepler_small_snapshot_apparent")
+int32_t kepler_small_snapshot_apparent(double et, uint32_t first, uint32_t count, const double* observer, float* out) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (out == nullptr || observer == nullptr) return kErrNullOutput;
+  if (static_cast<uint64_t>(first) + count > store.size()) return kErrBadEntityIndex;
+  double at[9];
+  small_observer_at(observer, et, at);
+  int32_t failed = 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!small_apparent_row(store[first + i], et, at, out + 4 * i)) ++failed;
+  }
+  return failed;
+}
+
+/// One row's light-time and aberration shift in double precision: the
+/// apparent vector minus the geometric one from the same observer (m, ICRF;
+/// observer as for kepler_small_snapshot_apparent). A host adds it to the
+/// geometric place of a selected body, exactly as it adds the bodies module's
+/// ssb_apparent_offsets to a planet, so the body sits where its point was.
+ORBPRO_ABI_EXPORT("kepler_small_apparent_offset")
+int32_t kepler_small_apparent_offset(double et, uint32_t index, const double* observer, double* out) {
+  std::vector<SmallBody>& store = small_bodies();
+  if (out == nullptr || observer == nullptr) return kErrNullOutput;
+  if (index >= store.size()) return kErrBadEntityIndex;
+  if (!small_in_validity(store[index], et)) return kErrOutsideValidity;
+  double seen[3], geometric[3], r[3], at[9];
+  small_observer_at(observer, et, at);
+  if (!small_apparent_place(store[index], et, at, seen, geometric, r)) return kErrNotConverged;
+  for (int c = 0; c < 3; ++c) out[c] = seen[c] - geometric[c];
+  return kOk;
 }
 
 /// One row's state in double precision: position (m) and velocity (m/s),
