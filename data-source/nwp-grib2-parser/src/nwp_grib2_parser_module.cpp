@@ -35,7 +35,7 @@
 namespace {
 
 constexpr const char* kContentKeyID = "public";
-constexpr const char* kParserVersion = "nwp-grib2-parser/v1";
+constexpr const char* kParserVersion = "nwp-grib2-parser/v2";
 
 // ---------------------------------------------------------------------------
 // String / JSON / base64 / SHA-256 / date helpers, frame IO and the hostcap/http-request response decoder: the same
@@ -748,6 +748,9 @@ bool map_field(const grib2mini::Message& m, Mapped* out, std::string* why) {
         {0, 3, 196, "boundary_layer_height", wxfVariable_Unspecified, "m", 1},
         {0, 7, 6, "convective_available_potential_energy", wxfVariable_Unspecified, "J kg-1", 1},
         {0, 3, 1, "mean_sea_level_pressure", wxfVariable_MeanSeaLevelPressure, "Pa", 1},
+        // the air at the surface (the sea product): the instantaneous precipitation rate, the post-processor's visibility
+        {0, 1, 7, "precipitation_rate", wxfVariable_Unspecified, "kg m-2 s-1", 1},
+        {0, 19, 0, "visibility", wxfVariable_Unspecified, "m", 1},
     };
     const Quantity* q = nullptr;
     for (const Quantity& k : kQuantities) if (k.d == d && k.c == c && k.n == n) q = &k;
@@ -770,6 +773,8 @@ bool map_field(const grib2mini::Message& m, Mapped* out, std::string* why) {
         out->level = wxfLevelKind_Surface; out->name = stem + "_surface";
     } else if (lt == 101) {                            // mean sea level
         out->level = wxfLevelKind_MeanSeaLevel; out->name = stem;
+    } else if (lt == 215) {                            // cloud ceiling (the ceiling's height: missing where there is none)
+        out->level = wxfLevelKind_EntireAtmosphere; out->name = stem + "_cloud_ceiling";
     } else if (lt == 10 || lt == 200 || lt == 214 || lt == 224 || lt == 234) {   // entire atmosphere; low/middle/high cloud layer
         out->level = wxfLevelKind_EntireAtmosphere; out->name = stem;
     } else {
@@ -787,6 +792,7 @@ struct GribJob {
     std::string url, product, model_key, model_id, model_class, run;
     int64_t lead = 0;
     int stride = 1, band_rows = 0, ensemble_size = 0;
+    double tile_deg = 0;   // > 0: level-4 style tiles of this many degrees, one batch a tile (the sea product)
     bool spread = false;
     std::string license_id;
     Attribution attribution;
@@ -805,11 +811,16 @@ bool read_grib_job(const std::string& json, GribJob* job, std::string* err) {
     if (json_number_field(json, "stride", &v)) job->stride = static_cast<int>(v);
     if (json_number_field(json, "band_rows", &v)) job->band_rows = static_cast<int>(v);
     if (json_number_field(json, "ensemble_size", &v)) job->ensemble_size = static_cast<int>(v);
+    if (json_number_field(json, "tile_deg", &v)) job->tile_deg = v;
     json_bool_field(json, "spread", &job->spread);
     read_attribution(json, &job->attribution);
     if (job->url.empty() || job->product.empty() || job->model_key.empty() || job->run.empty()) { *err = "a GRIB job needs url, product, model_key and run"; return false; }
     if (job->stride < 1 || job->stride > 8) { *err = "stride must be 1..8"; return false; }
     if (job->band_rows < 0) { *err = "band_rows must be 0 (whole field) or a row count"; return false; }
+    if (job->tile_deg < 0 || (job->tile_deg > 0 && (std::fabs(360.0 / job->tile_deg - std::round(360.0 / job->tile_deg)) > 1e-9 ||
+                                                    std::fabs(180.0 / job->tile_deg - std::round(180.0 / job->tile_deg)) > 1e-9))) {
+        *err = "tile_deg must divide 360 and 180"; return false;
+    }
     return true;
 }
 
@@ -823,8 +834,20 @@ wxfModelClass model_class_named(const std::string& name) {
 // One message -> its record(s): the packing integers, rows south to north, every `stride`-th point, whole or in bands.
 // ---------------------------------------------------------------------------
 
+// A tiled job's records, a batch a tile (job.tile_deg): key "<x>:<y>", x from 180 W, y from the north pole - the
+// world-clouds demo's level-4 tiles (Cesium_Weather seaStateWorker.js tiled), read a tile at a time through the node's
+// record index by batch.
+struct TileBatch {
+    int x = 0, y = 0, lead = 0;
+    std::vector<uint8_t> stream;
+    Sha256 normalized;
+    int count = 0;
+};
+using TileSinks = std::map<std::string, TileBatch>;
+
 bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::Message& m, const grib2mini::Message* previous_bitmap,
-                     int64_t retrieved_ms, std::vector<uint8_t>* stream, Sha256* normalized, int* count, std::string* code, std::string* message) {
+                     int64_t retrieved_ms, std::vector<uint8_t>* stream, Sha256* normalized, int* count, std::string* code, std::string* message,
+                     TileSinks* tiles) {
     Mapped f;
     std::string why;
     if (!map_field(m, &f, &why)) { *code = "unsupported-field"; *message = job.url + ": " + why + " is not one this parser publishes"; return false; }
@@ -868,11 +891,9 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
     const int64_t init_ms = m.referenceTimeMs, lead = m.forecastHours();
     if (lead < 0) { *code = "grib2-unreadable"; *message = job.url + ": " + f.name + ": time unit " + std::to_string(m.timeUnit) + " unsupported"; return false; }
     const std::string name = f.name + (job.spread ? "_spread" : "");
-    const uint32_t band = job.band_rows > 0 ? static_cast<uint32_t>(job.band_rows) : nj;
-    const uint32_t bands = (nj + band - 1) / band;
-    for (uint32_t b = 0; b < bands; b++) {
-        const uint32_t r0 = b * band, rows = std::min(band, nj - r0);
-        std::vector<uint16_t> part(codes.begin() + static_cast<ptrdiff_t>(r0) * ni, codes.begin() + static_cast<ptrdiff_t>(r0 + rows) * ni);
+    // one record: the codes of a part of the field (rows south to north) on its own grid
+    auto build = [&](const std::vector<uint16_t>& part, double glat0, double glon0, uint32_t grows, uint32_t gcols, bool gperiodic,
+                     uint32_t tile_index, uint32_t tile_count, const std::string& id_suffix) {
         double plo = 0, phi = 0; bool pany = false; uint32_t pmiss = 0;
         for (uint16_t c : part) {
             if (c == 65535) { pmiss++; continue; }
@@ -881,74 +902,110 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
             if (!pany || v > phi) phi = v;
             pany = true;
         }
-        const std::vector<uint8_t> chunk = encode_chunk_u16(part);
-        ::flatbuffers::FlatBufferBuilder fbb(1024 + chunk.size());
-        const auto field_id = fbb.CreateString(job.model_key + ":" + job.run + ":f" + std::to_string(lead) + ":" + name);
-        const auto model_id = fbb.CreateString(job.model_id);
-        const auto model_version = fbb.CreateString(kParserVersion);
-        const auto variable_name = fbb.CreateString(name);
-        const auto units = fbb.CreateString(f.units);
-        const auto values = fbb.CreateVector(chunk);
-        const auto chunk_dtype = fbb.CreateString("uint16");
-        const auto chunk_codecs = fbb.CreateVectorOfStrings(std::vector<std::string>{"delta", "zigzag", "shuffle"});
-        const auto origin = fbb.CreateString(job.attribution.origin_id);
-        const auto dataset = fbb.CreateString(job.attribution.dataset_id);
-        const auto source_url = fbb.CreateString(job.url);
-        const auto license_url = fbb.CreateString(job.attribution.license_url);
-        const auto citation = fbb.CreateString(job.attribution.citation);
-        WXFGridBuilder grid(fbb);
-        grid.add_KIND(wxfGridKind_RegularLatLon);
-        grid.add_LAT0(lat0 + r0 * dlat);
-        grid.add_LON0(m.lo1);
-        grid.add_DLAT(dlat);
-        grid.add_DLON(dlon);
-        grid.add_NLAT(rows);
-        grid.add_NLON(ni);
-        grid.add_PERIODIC_LON(periodic);
-        const auto grid_off = grid.Finish();
-        WXFBuilder r(fbb);
-        r.add_FIELD_ID(field_id);
-        r.add_MODEL_CLASS(model_class_named(job.model_class));
-        r.add_MODEL_ID(model_id);
-        r.add_MODEL_VERSION(model_version);
-        r.add_TIME_BASIS(wxfTimeBasis_Initialization);
-        r.add_INIT_TIME_MS(static_cast<uint64_t>(init_ms));
-        r.add_LEAD_HOURS(static_cast<float>(lead));
-        r.add_VALID_TIME_MS(static_cast<uint64_t>(init_ms + lead * 3600000));
-        r.add_MEMBER_KIND(job.spread ? wxfMemberKind_StandardDeviation : wxfMemberKind_Unspecified);
-        if (job.ensemble_size > 0) r.add_ENSEMBLE_SIZE(static_cast<uint16_t>(job.ensemble_size));
-        r.add_VARIABLE(f.variable);
-        r.add_VARIABLE_NAME(variable_name);
-        r.add_UNITS(units);
-        r.add_LEVEL_KIND(f.level);
-        r.add_LEVEL_VALUE(f.level_value);
-        r.add_TEMPORAL_KIND(wxfTemporalKind_Instantaneous);
-        r.add_GRID(grid_off);
-        r.add_TILE_INDEX(b);
-        r.add_TILE_COUNT(bands);
-        r.add_VALUES_ENCODING(wxfValuesEncoding_InlineEncodedChunk);
-        r.add_QUANTIZED_U8(values);
-        r.add_CHUNK_DTYPE(chunk_dtype);
-        r.add_CHUNK_CODECS(chunk_codecs);
-        r.add_CHUNK_BYTE_LENGTH(static_cast<uint64_t>(chunk.size()));
-        r.add_SCALE_FACTOR(scale);
-        r.add_ADD_OFFSET(offset);
-        r.add_VALUE_MIN(static_cast<float>(plo));
-        r.add_VALUE_MAX(static_cast<float>(phi));
-        r.add_MISSING_COUNT(pmiss);
-        r.add_ORIGIN_ID(origin);
-        r.add_DATASET_ID(dataset);
-        r.add_SOURCE_URL(source_url);
-        r.add_RETRIEVED_AT(static_cast<uint64_t>(retrieved_ms));
-        r.add_LICENSE_CLASS(wxfLicenseClass_OpenAttribution);
-        r.add_LICENSE_URL(license_url);
-        r.add_CITATION(citation);
-        const auto root = r.Finish();
-        FinishSizePrefixedWXFBuffer(fbb, root);
-        const std::vector<uint8_t> record = finished_unprefixed(fbb);
-        append_size_prefixed(stream, record);
-        normalized_hash_record(normalized, "WXF.fbs", record);
-        (*count)++;
+            const std::vector<uint8_t> chunk = encode_chunk_u16(part);
+            ::flatbuffers::FlatBufferBuilder fbb(1024 + chunk.size());
+            const auto field_id = fbb.CreateString(job.model_key + ":" + job.run + ":f" + std::to_string(lead) + ":" + name + id_suffix);
+            const auto model_id = fbb.CreateString(job.model_id);
+            const auto model_version = fbb.CreateString(kParserVersion);
+            const auto variable_name = fbb.CreateString(name);
+            const auto units = fbb.CreateString(f.units);
+            const auto values = fbb.CreateVector(chunk);
+            const auto chunk_dtype = fbb.CreateString("uint16");
+            const auto chunk_codecs = fbb.CreateVectorOfStrings(std::vector<std::string>{"delta", "zigzag", "shuffle"});
+            const auto origin = fbb.CreateString(job.attribution.origin_id);
+            const auto dataset = fbb.CreateString(job.attribution.dataset_id);
+            const auto source_url = fbb.CreateString(job.url);
+            const auto license_url = fbb.CreateString(job.attribution.license_url);
+            const auto citation = fbb.CreateString(job.attribution.citation);
+            WXFGridBuilder grid(fbb);
+            grid.add_KIND(wxfGridKind_RegularLatLon);
+            grid.add_LAT0(glat0);
+            grid.add_LON0(glon0);
+            grid.add_DLAT(dlat);
+            grid.add_DLON(dlon);
+            grid.add_NLAT(grows);
+            grid.add_NLON(gcols);
+            grid.add_PERIODIC_LON(gperiodic);
+            const auto grid_off = grid.Finish();
+            WXFBuilder r(fbb);
+            r.add_FIELD_ID(field_id);
+            r.add_MODEL_CLASS(model_class_named(job.model_class));
+            r.add_MODEL_ID(model_id);
+            r.add_MODEL_VERSION(model_version);
+            r.add_TIME_BASIS(wxfTimeBasis_Initialization);
+            r.add_INIT_TIME_MS(static_cast<uint64_t>(init_ms));
+            r.add_LEAD_HOURS(static_cast<float>(lead));
+            r.add_VALID_TIME_MS(static_cast<uint64_t>(init_ms + lead * 3600000));
+            r.add_MEMBER_KIND(job.spread ? wxfMemberKind_StandardDeviation : wxfMemberKind_Unspecified);
+            if (job.ensemble_size > 0) r.add_ENSEMBLE_SIZE(static_cast<uint16_t>(job.ensemble_size));
+            r.add_VARIABLE(f.variable);
+            r.add_VARIABLE_NAME(variable_name);
+            r.add_UNITS(units);
+            r.add_LEVEL_KIND(f.level);
+            r.add_LEVEL_VALUE(f.level_value);
+            r.add_TEMPORAL_KIND(wxfTemporalKind_Instantaneous);
+            r.add_GRID(grid_off);
+            r.add_TILE_INDEX(tile_index);
+            r.add_TILE_COUNT(tile_count);
+            r.add_VALUES_ENCODING(wxfValuesEncoding_InlineEncodedChunk);
+            r.add_QUANTIZED_U8(values);
+            r.add_CHUNK_DTYPE(chunk_dtype);
+            r.add_CHUNK_CODECS(chunk_codecs);
+            r.add_CHUNK_BYTE_LENGTH(static_cast<uint64_t>(chunk.size()));
+            r.add_SCALE_FACTOR(scale);
+            r.add_ADD_OFFSET(offset);
+            r.add_VALUE_MIN(static_cast<float>(plo));
+            r.add_VALUE_MAX(static_cast<float>(phi));
+            r.add_MISSING_COUNT(pmiss);
+            r.add_ORIGIN_ID(origin);
+            r.add_DATASET_ID(dataset);
+            r.add_SOURCE_URL(source_url);
+            r.add_RETRIEVED_AT(static_cast<uint64_t>(retrieved_ms));
+            r.add_LICENSE_CLASS(wxfLicenseClass_OpenAttribution);
+            r.add_LICENSE_URL(license_url);
+            r.add_CITATION(citation);
+            const auto root = r.Finish();
+            FinishSizePrefixedWXFBuffer(fbb, root);
+            return finished_unprefixed(fbb);
+    };
+    if (job.tile_deg > 0 && tiles) {
+        // tiles of tile_deg (x from 180 W, y from the north pole), both edges carried (a point on an edge in both tiles),
+        // longitudes wrapping on a periodic grid
+        if (!periodic) { *code = "grid-unsupported"; *message = job.url + ": " + f.name + ": tiles need a periodic global grid"; return false; }
+        const int nx = static_cast<int>(std::lround(360.0 / job.tile_deg)), ny = static_cast<int>(std::lround(180.0 / job.tile_deg));
+        const uint32_t tp = static_cast<uint32_t>(std::lround(job.tile_deg / dlat)) + 1, tq = static_cast<uint32_t>(std::lround(job.tile_deg / dlon)) + 1;
+        for (int ty = 0; ty < ny; ty++) {
+            const double south = 90.0 - (ty + 1) * job.tile_deg;
+            const uint32_t r0 = static_cast<uint32_t>(std::lround((south - lat0) / dlat)), rows = std::min(tp, nj - r0);
+            for (int tx = 0; tx < nx; tx++) {
+                const double west = -180.0 + tx * job.tile_deg;
+                const double west0 = std::fmod(std::fmod(west - m.lo1, 360.0) + 360.0, 360.0);
+                const uint32_t c0 = static_cast<uint32_t>(std::lround(west0 / dlon));
+                std::vector<uint16_t> part(static_cast<size_t>(rows) * tq);
+                for (uint32_t j = 0; j < rows; j++)
+                    for (uint32_t i = 0; i < tq; i++) part[static_cast<size_t>(j) * tq + i] = codes[static_cast<size_t>(r0 + j) * ni + (c0 + i) % ni];
+                const std::string key = std::to_string(tx) + ":" + std::to_string(ty);
+                const std::vector<uint8_t> record = build(part, lat0 + r0 * dlat, west, rows, tq, false, static_cast<uint32_t>(ty * nx + tx),
+                                                          static_cast<uint32_t>(nx * ny), ":s4:" + key);
+                TileBatch& t = (*tiles)[key];
+                t.x = tx; t.y = ty; t.lead = static_cast<int>(lead);
+                append_size_prefixed(&t.stream, record);
+                normalized_hash_record(&t.normalized, "WXF.fbs", record);
+                t.count++;
+                (*count)++;
+            }
+        }
+    } else {
+        const uint32_t band = job.band_rows > 0 ? static_cast<uint32_t>(job.band_rows) : nj;
+        const uint32_t bands = (nj + band - 1) / band;
+        for (uint32_t b = 0; b < bands; b++) {
+            const uint32_t r0 = b * band, rows = std::min(band, nj - r0);
+            std::vector<uint16_t> part(codes.begin() + static_cast<ptrdiff_t>(r0) * ni, codes.begin() + static_cast<ptrdiff_t>(r0 + rows) * ni);
+            const std::vector<uint8_t> record = build(part, lat0 + r0 * dlat, m.lo1, rows, ni, periodic, b, bands, "");
+            append_size_prefixed(stream, record);
+            normalized_hash_record(normalized, "WXF.fbs", record);
+            (*count)++;
+        }
     }
     (void)missing; (void)lo; (void)hi; (void)any;
     return true;
@@ -962,9 +1019,112 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
 
 extern "C" {
 
+// A tiled parse's batches, handed out one an invocation (the rest yielded as backlog: the compiled runtime resumes a
+// yielded node without input) - storage-ingest takes one meta + one record stream at a time. The runtime hands a node
+// its queued frames on EVERY invocation, a resumed one too: a lead-file arriving while a lead's tiles are still going
+// out is kept as its raw GRIB bytes (a few MB, not its ~20 MB of tile records) and cut when the tiles before it are out -
+// nothing dropped, the memory one lead's tiles plus the waiting leads' bytes. (A whole-field or banded batch is parsed
+// and emitted at once, as before.)
+struct PendingBatch { std::string meta; std::vector<uint8_t> stream; };
+struct PendingInput { std::vector<GribJob> jobs; std::vector<HttpResponse> responses; };
+std::vector<PendingBatch> g_tile_backlog;
+size_t g_tile_next = 0;
+std::vector<PendingInput> g_raw_pending;
+size_t g_raw_next = 0;
+uint32_t g_tiles_per_lead = 512;
+
+void set_backlog_state() {
+    const uint32_t tiles = static_cast<uint32_t>(g_tile_backlog.size() - g_tile_next);
+    const uint32_t raw = static_cast<uint32_t>(g_raw_pending.size() - g_raw_next);
+    const uint32_t remaining = tiles + raw * g_tiles_per_lead;
+    plugin_set_backlog_remaining(remaining);
+    plugin_set_yielded(remaining > 0 ? 1 : 0);
+}
+
+// One input's records: a tiled job's into the tile backlog (tiled true), else the batch's meta + record stream.
+// Returns 0, or the failing status with the error set.
+int parse_input(const PendingInput& in, bool* tiled, std::string* meta_out, std::vector<uint8_t>* stream) {
+    Sha256 batch, normalized;
+    int count = 0;
+    TileSinks tiles;
+    for (size_t k = 0; k < in.jobs.size(); k++) {
+        const std::vector<uint8_t>& body = in.responses[k].body;
+        batch.update(body.data(), body.size());
+        std::vector<grib2mini::Message> messages;
+        std::string err;
+        if (!grib2mini::parse(body.data(), body.size(), messages, err)) {
+            plugin_set_error("grib2-unreadable", (in.jobs[k].url + ": " + err).c_str());
+            return 422;
+        }
+        if (messages.empty()) {
+            plugin_set_error("grib2-unreadable", (in.jobs[k].url + ": the range holds no GRIB2 message").c_str());
+            return 422;
+        }
+        const grib2mini::Message* previous_bitmap = nullptr;
+        for (const grib2mini::Message& m : messages) {
+            std::string code, message;
+            if (!message_records(in.jobs[k], body.data(), m, previous_bitmap, retrieved_at_ms(in.responses[k]), stream, &normalized, &count, &code, &message, &tiles)) {
+                plugin_set_error(code.c_str(), message.c_str());
+                return 422;
+            }
+            if (m.bitmapIndicator == 0) previous_bitmap = &m;
+        }
+    }
+    const std::string batch_id = batch.hex_digest();
+    const GribJob& first = in.jobs[0];
+    const HttpResponse& response = in.responses[0];
+    const int64_t retrieved = retrieved_at_ms(response);
+    *tiled = !tiles.empty();
+    if (*tiled) {
+        g_tiles_per_lead = static_cast<uint32_t>(tiles.size());
+        for (auto& [key, t] : tiles) {
+            char lead[8];
+            std::snprintf(lead, sizeof(lead), "%03d", t.lead);
+            const std::string tile_batch = first.model_key + ":" + first.run + ":f" + lead + ":s4:" + key;
+            const std::string tile_provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id,
+                                                                      t.normalized.hex_digest(), t.count, "{\"WXF.fbs\":" + std::to_string(t.count) + "}", retrieved);
+            g_tile_backlog.push_back({build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, tile_batch, tile_provenance), std::move(t.stream)});
+        }
+        return 0;
+    }
+    const std::string provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id, normalized.hex_digest(), count,
+                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
+    *meta_out = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, batch_id, provenance);
+    return 0;
+}
+
+// The next tile batch out - cutting the next waiting lead when the tiles before it are all out. Returns 0 (with or
+// without a batch out), or the failing status.
+int emit_next_tile_batch() {
+    if (g_tile_next >= g_tile_backlog.size()) {
+        g_tile_backlog.clear(); g_tile_next = 0;
+        while (g_tile_backlog.empty() && g_raw_next < g_raw_pending.size()) {
+            PendingInput in = std::move(g_raw_pending[g_raw_next++]);
+            if (g_raw_next >= g_raw_pending.size()) { g_raw_pending.clear(); g_raw_next = 0; }
+            bool tiled = false;
+            std::string unused_meta;
+            std::vector<uint8_t> unused_stream;
+            const int status = parse_input(in, &tiled, &unused_meta, &unused_stream);
+            if (status != 0) return status;
+        }
+        if (g_tile_backlog.empty()) return 0;
+    }
+    PendingBatch b = std::move(g_tile_backlog[g_tile_next++]);
+    if (push_json("wxf_meta", b.meta) < 0) return 500;
+    if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", b.stream) < 0) return 500;
+    if (g_tile_next >= g_tile_backlog.size()) { g_tile_backlog.clear(); g_tile_next = 0; }
+    return 0;
+}
+
 // parse: jobs[k] + responses[k] (paired by position; each response whole GRIB2 messages of one byte range) ->
-// wxf_meta + wxf_records (one batch for the invocation).
+// wxf_meta + wxf_records (one batch for the invocation). A tiled job (tile_deg) -> one batch a tile, batch_id
+// <model>:<run>:f<LLL>:s4:<x>:<y>, handed out one an invocation; resumed without input, the next.
 int parse(void) {
+    if (plugin_get_input_count() == 0) {
+        const int status = emit_next_tile_batch();
+        set_backlog_state();
+        return status;
+    }
     const std::vector<const plugin_input_frame_t*> job_frames = frames_on("jobs");
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
     if (job_frames.empty()) {
@@ -977,57 +1137,41 @@ int parse(void) {
         plugin_set_error("job-response-count-mismatch", msg.c_str());
         return 400;
     }
-    std::vector<GribJob> jobs(job_frames.size());
-    std::vector<HttpResponse> responses(response_frames.size());
-    for (size_t k = 0; k < jobs.size(); k++) {
+    PendingInput in;
+    in.jobs.resize(job_frames.size());
+    in.responses.resize(response_frames.size());
+    bool tiled_job = false;
+    for (size_t k = 0; k < in.jobs.size(); k++) {
         std::string err;
-        if (!read_grib_job(frame_text(job_frames[k]), &jobs[k], &err)) {
+        if (!read_grib_job(frame_text(job_frames[k]), &in.jobs[k], &err)) {
             plugin_set_error("invalid-grib-job", ("GRIB job " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
-        if (!decode_http_response(response_frames[k], &responses[k], &err)) {
+        if (!decode_http_response(response_frames[k], &in.responses[k], &err)) {
             plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
-        if (responses[k].status != 200 && responses[k].status != 206) {
-            plugin_set_error("fetch-failed", (jobs[k].url + " returned HTTP status " + std::to_string(responses[k].status)).c_str());
+        if (in.responses[k].status != 200 && in.responses[k].status != 206) {
+            plugin_set_error("fetch-failed", (in.jobs[k].url + " returned HTTP status " + std::to_string(in.responses[k].status)).c_str());
             return 502;
         }
+        if (in.jobs[k].tile_deg > 0) tiled_job = true;
     }
-    Sha256 batch, normalized;
+    if (tiled_job) {
+        // (kept raw until the tiles before it are out; then cut, and the next tile batch out)
+        g_raw_pending.push_back(std::move(in));
+        const int status = emit_next_tile_batch();
+        set_backlog_state();
+        return status;
+    }
+    bool tiled = false;
+    std::string meta;
     std::vector<uint8_t> stream;
-    int count = 0;
-    for (size_t k = 0; k < jobs.size(); k++) {
-        const std::vector<uint8_t>& body = responses[k].body;
-        batch.update(body.data(), body.size());
-        std::vector<grib2mini::Message> messages;
-        std::string err;
-        if (!grib2mini::parse(body.data(), body.size(), messages, err)) {
-            plugin_set_error("grib2-unreadable", (jobs[k].url + ": " + err).c_str());
-            return 422;
-        }
-        if (messages.empty()) {
-            plugin_set_error("grib2-unreadable", (jobs[k].url + ": the range holds no GRIB2 message").c_str());
-            return 422;
-        }
-        const grib2mini::Message* previous_bitmap = nullptr;
-        for (const grib2mini::Message& m : messages) {
-            std::string code, message;
-            if (!message_records(jobs[k], body.data(), m, previous_bitmap, retrieved_at_ms(responses[k]), &stream, &normalized, &count, &code, &message)) {
-                plugin_set_error(code.c_str(), message.c_str());
-                return 422;
-            }
-            if (m.bitmapIndicator == 0) previous_bitmap = &m;
-        }
-    }
-    const std::string batch_id = batch.hex_digest();
-    const GribJob& first = jobs[0];
-    const int64_t retrieved = retrieved_at_ms(responses[0]);
-    const std::string provenance = build_provenance_json(kParserVersion, first.url, responses[0].status, responses[0], batch_id, normalized.hex_digest(), count,
-                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
-    const std::string meta = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, batch_id, provenance);
+    const int status = parse_input(in, &tiled, &meta, &stream);
+    if (status != 0) return status;
     if (push_json("wxf_meta", meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", stream) < 0) return 500;
+    set_backlog_state();   // (tiles still going out: yielded, resumed for them)
     return 0;
 }
 

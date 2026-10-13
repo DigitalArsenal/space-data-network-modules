@@ -1,0 +1,162 @@
+{
+  "pluginId": "com.digitalarsenal.flows.record-retention",
+  "name": "SDN Record Retention Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which asks the node (storage.expire) to delete each configured lane's records that arrived on the node more than window_hours ago (module config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
+  "capabilities": [
+    "storage_write"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.record-retention",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "record-expiry",
+      "kind": "host-service",
+      "direction": "output",
+      "capability": "storage_write",
+      "resource": "storage://records",
+      "description": "storage.expire: delete one lane's records older than a cutoff, through the store's record index (sdn-server internal/storage/record_expiry.go).",
+      "properties": {
+        "hostOps": [
+          "storage.expire"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_retention",
+      "displayName": "Flow trigger timer-retention",
+      "description": "Compiled-flow ingress for trigger \"timer-retention\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Timer tick, content ignored."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cron timer tick (flows/record-retention.flow.json); a direct invoke needs none."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "retention-report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted and not held; not a data record."
+              }
+            }
+          ],
+          "description": "{window_hours, cutoff_ms, deleted, not_held, capped}"
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_record_retention-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "expire",
+      "pluginId": "com.digitalarsenal.data-source.record-retention",
+      "methodId": "expire",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "expire-report",
+      "fromNodeId": "expire",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-retention",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 3600000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-retention",
+      "targetNodeId": "expire",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

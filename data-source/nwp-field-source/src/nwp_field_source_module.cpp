@@ -19,7 +19,9 @@
  * levels, every other point), gfs-0p50-clouds (total/low/middle/high cloud cover, instantaneous), each lead 0 ..
  * nwp_max_lead by nwp_lead_step; gfs-0p25-physics (2 m temperature and dew point, 10 m wind, boundary-layer height,
  * CAPE, surface height, cloud layers, and temperature/height/wind/humidity/vertical velocity on 21 levels plus the
- * tropopause) at nwp_physics_leads. Node CONFIG through plugin.getConfig: nwp_live_access (default true), nwp_run
+ * tropopause) at nwp_physics_leads; gfs-0p25-sea (10 m wind, 2 m temperature and dew point, boundary-layer height, surface
+ * height, the instantaneous precipitation rate, visibility and the cloud ceiling's height) each lead, cut by the parser
+ * into 11.25° tiles, one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>, x from 180 W, y from the north pole). Node CONFIG through plugin.getConfig: nwp_live_access (default true), nwp_run
  * (YYYYMMDDTHH; default the latest cycle nwp_lag_hours (5) old), nwp_products, nwp_max_lead (384), nwp_lead_step (3),
  * nwp_motion_heights_to (12), nwp_physics_leads ("0,3"), timeouts, nwp_publish_url (unset: no publication).
  */
@@ -442,12 +444,16 @@ struct Product {
     const char* model_class;
     int stride, band_rows, ensemble_size;
     bool spread;
+    double tile_deg;            // > 0: the parser cuts the fields into tiles of this size, one batch a tile
 };
 const Product kProducts[] = {
-    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", "NumericalGlobalDeterministic", 1, 0, 0, false},
-    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", "NumericalGlobalEnsemble", 2, 0, 31, true},
-    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", "NumericalGlobalDeterministic", 1, 0, 0, false},
-    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 64, 0, false},
+    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
+    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", "NumericalGlobalEnsemble", 2, 0, 31, true, 0},
+    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
+    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 64, 0, false, 0},
+    // the weather at the surface the world-clouds display reads about its camera (sea state, fog, rain): 11.25° tiles,
+    // one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>), so a client fetches only the tiles it stands in
+    {"gfs-0p25-sea", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 0, 0, false, 11.25},
 };
 const Product* product_named(const std::string& id) {
     for (const Product& p : kProducts) if (id == p.id) return &p;
@@ -464,6 +470,12 @@ bool wanted(const Product& p, const std::string& var, const std::string& level, 
     if (id == "gfs-0p50-clouds")
         return (var == "TCDC" && level == "entire atmosphere") || (var == "LCDC" && level == "low cloud layer") ||
                (var == "MCDC" && level == "middle cloud layer") || (var == "HCDC" && level == "high cloud layer");
+    if (id == "gfs-0p25-sea") {
+        if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
+        if ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") return true;
+        if ((var == "HPBL" || var == "HGT" || var == "PRATE" || var == "VIS") && level == "surface") return true;
+        return var == "HGT" && level == "cloud ceiling";
+    }
     if (id == "gfs-0p25-physics") {
         if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
         if ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") return true;
@@ -549,6 +561,7 @@ bool run_time_ms(const std::string& config, int64_t* out, std::string* err) {
 
 struct Pending { std::vector<std::string> requests, jobs; };
 std::vector<Pending> g_plan_backlog, g_select_backlog;
+std::string g_planned;   // the run (and products, leads) plan() last queued - plan_key
 size_t g_plan_next = 0, g_select_next = 0;
 
 int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocation, const char* request_port, const char* job_port) {
@@ -609,6 +622,20 @@ int plan(void) {
     std::vector<int> physics_leads;
     for (const std::string& l : list_of(config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads))) physics_leads.push_back(std::atoi(l.c_str()));
     const long timeout = static_cast<long>(config_number(config, "nwp_idx_timeout_ms", kDefaultIdxTimeoutMs));
+    // A run already planned (the same run, products and leads): nothing planned again - the tick only lets the work it
+    // queued go on. A node drains a bounded number of invocations a trigger (internal/flowrt cronmount: 1000); a run of
+    // tiled leads (gfs-0p25-sea: 512 batches a lead) takes several triggers, and re-planning the same run on each would
+    // fetch and store it again (each record carries its retrieval time: new bytes, new CIDs). A new cycle plans as before.
+    const std::string plan_key = run_id + "|" + config_string(config, "nwp_products", kDefaultProducts) + "|" + std::to_string(max_lead) + "|" +
+                                 std::to_string(step) + "|" + config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads);
+    if (plan_key == g_planned) {
+        if (g_plan_next < g_plan_backlog.size()) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
+        // Nothing new upstream (the next cycle is not out yet): the node's unchanged notice (internal/flowrt cronmount
+        // egressReportsUnchanged), so a quiet tick between cycles is a success without a batch, not a failure that
+        // widens the retrieval window and holds the next cycle back.
+        return push_json("status", "{\"skipped\":\"already-planned\",\"status\":304,\"unchanged\":true}") < 0 ? 500 : 0;
+    }
+    g_planned = plan_key;
     for (const std::string& id : list_of(config_string(config, "nwp_products", kDefaultProducts))) {
         const Product* p = product_named(id);
         if (!p) { plugin_set_error("unknown-product", ("nwp_products names an unknown product: " + id).c_str()); return 400; }
@@ -644,6 +671,7 @@ int select_messages(void) {
     const std::string config = load_config();
     const long timeout = static_cast<long>(config_number(config, "nwp_grib_timeout_ms", kDefaultGribTimeoutMs));
     std::string missing;
+    int unchanged = 0;
     for (size_t k = 0; k < jobs.size(); k++) {
         const std::string job = frame_string(jobs[k]);
         std::string product_id, url, run;
@@ -662,6 +690,10 @@ int select_messages(void) {
                                           (static_cast<uint32_t>(r->payload[6]) << 16) | (static_cast<uint32_t>(r->payload[7]) << 24));
             body.assign(reinterpret_cast<const char*>(r->payload + 8), r->payload_length - 8);
         }
+        // 304: the host presented the inventory's validators (the retrieval ledger keeps them across restarts) and the
+        // publisher has nothing new - a lead already ingested, e.g. a run planned again after a node restart. Nothing to
+        // fetch, and not a missing lead: counted, and said once below as the node's unchanged notice.
+        if (p && status == 304) { unchanged++; continue; }
         if (!p || status != 200) {
             missing += std::string(missing.empty() ? "" : ",") + "{\"inventory\":\"" + json_escape(url + ".idx") + "\",\"http_status\":" + std::to_string(status) + "}";
             continue;
@@ -693,7 +725,7 @@ int select_messages(void) {
             const std::string host = url.substr(8, url.find('/', 8) - 8);
             pending.jobs.push_back(std::string("{\"url\":\"") + json_escape(url) + "\",\"product\":\"" + p->id + "\",\"model_key\":\"" + p->model_key +
                                    "\",\"model_id\":\"" + json_escape(p->model_id) + "\",\"model_class\":\"" + p->model_class + "\",\"run\":\"" + json_escape(run) +
-                                   "\",\"lead\":" + format_number(lead) + ",\"stride\":" + std::to_string(p->stride) + ",\"band_rows\":" + std::to_string(p->band_rows) +
+                                   "\",\"lead\":" + format_number(lead) + ",\"stride\":" + std::to_string(p->stride) + ",\"band_rows\":" + std::to_string(p->band_rows) + ",\"tile_deg\":" + format_number(p->tile_deg) +
                                    (p->spread ? ",\"spread\":true" : "") + (p->ensemble_size ? ",\"ensemble_size\":" + std::to_string(p->ensemble_size) : std::string()) +
                                    ",\"source_url\":\"" + json_escape(url) + "\",\"provider_id\":\"" + kProviderID + "\",\"source_name\":\"" + p->id +
                                    "\",\"origin_id\":\"" + kOriginID + "\",\"dataset_id\":\"" + json_escape(host.substr(0, host.find('.'))) +
@@ -704,6 +736,9 @@ int select_messages(void) {
         flush();
     }
     if (!missing.empty() && push_json("status", "{\"missing\":[" + missing + "]}") < 0) return 500;
+    // (the node reads it only when the run landed nothing: then a success without a batch, not a failure - flowrt
+    // egressReportsUnchanged)
+    if (unchanged > 0 && push_json("status", "{\"inventories_unchanged\":" + std::to_string(unchanged) + ",\"status\":304,\"unchanged\":true}") < 0) return 500;
     return emit_from(g_select_backlog, g_select_next, 1, "requests", "jobs");
 }
 

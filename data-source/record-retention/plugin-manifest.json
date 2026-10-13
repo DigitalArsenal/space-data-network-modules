@@ -1,0 +1,106 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.record-retention",
+  "name": "SDN Record Retention",
+  "version": "0.1.0",
+  "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it. Each target names a standard and its lane (provider and/or sources); the node's storage.expire host op deletes the lane's records that arrived on the node more than window_hours ago, paging the store's record index. Default target: WXF from provider noaa-ncep. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "storage_write"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "record-expiry",
+      "kind": "host-service",
+      "direction": "output",
+      "capability": "storage_write",
+      "resource": "storage://records",
+      "description": "storage.expire: delete one lane's records older than a cutoff, through the store's record index (sdn-server internal/storage/record_expiry.go).",
+      "properties": {
+        "hostOps": [
+          "storage.expire"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "expire",
+      "displayName": "Expire Records Outside The Window",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Timer tick, content ignored."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cron timer tick (flows/record-retention.flow.json); a direct invoke needs none."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "retention-report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted and not held; not a data record."
+              }
+            }
+          ],
+          "description": "{window_hours, cutoff_ms, deleted, not_held, capped}"
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Deletes every configured target's records older than now minus window_hours (plugin config; compiled default 72 h over WXF from provider noaa-ncep), at most max_deletes a pass, through the node's storage.expire."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "data-source-record-retention-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

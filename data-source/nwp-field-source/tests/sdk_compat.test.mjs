@@ -92,6 +92,26 @@ test("nwp-field-source imports only the hostcall bridge and WASI", async () => {
   assert.deepEqual(Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);
 });
 
+// A node drains a bounded number of invocations a trigger, so a run of tiled leads takes several ticks: a tick for the
+// run already planned plans nothing again - it hands out the queued work, then reports "already-planned" - and the sea
+// product's jobs carry its tile size.
+test("plan: a tick for the run already planned hands out its queue, never plans it twice", async (t) => {
+  const harness = await createHarness(t, { nwp_run: "20261006T00", nwp_products: "gfs-0p25-sea", nwp_max_lead: 72, nwp_lead_step: 3 });
+  const first = await harness.invoke({ methodId: "plan", inputs: [jsonInput("tick", {})] });
+  assert.equal(framesOn(first, "jobs").length, 16);
+  assert.equal(first.backlogRemaining, 25 - 16);
+  const again = await harness.invoke({ methodId: "plan", inputs: [jsonInput("tick", {})] });
+  const jobs = framesOn(again, "jobs");
+  assert.equal(jobs.length, 9, "the queued leads 48..72, not a new plan");
+  assert.deepEqual(jobs.map((j) => j.lead), [48, 51, 54, 57, 60, 63, 66, 69, 72]);
+  assert.ok(jobs.every((j) => j.product === "gfs-0p25-sea" && j.url.includes(".pgrb2.0p25.")));
+  assert.equal(again.backlogRemaining, 0);
+  const third = await harness.invoke({ methodId: "plan", inputs: [jsonInput("tick", {})] });
+  assert.equal(framesOn(third, "jobs").length, 0);
+  // the node's unchanged notice: a quiet tick between cycles is not a failed retrieval
+  assert.deepEqual(framesOn(third, "status"), [{ skipped: "already-planned", status: 304, unchanged: true }]);
+});
+
 test("plan: the run's inventories, sixteen per invocation, the rest as backlog", async (t) => {
   const harness = await createHarness(t, { nwp_run: "20261006T00" });
   const response = await harness.invoke({ methodId: "plan", inputs: [jsonInput("tick", {})] });
@@ -164,6 +184,18 @@ test("select_messages: a lead the run lacks is reported, not invented; a count m
   assert.equal(framesOn(response, "requests").length, 0);
   const mismatch = await harness.invoke({ methodId: "select_messages", inputs: [jsonInput("idx_jobs", job), jsonInput("idx_jobs", job), bytesInput("inventories", rawResponseFrame(encoder.encode("")))] });
   assert.equal(mismatch.errorCode, "job-response-count-mismatch");
+});
+
+// A run planned again (a node restart forgets the plan): the host presents the inventories' validators from its retrieval
+// ledger and NOAA answers 304 - nothing fetched, nothing reported missing, and the node's unchanged notice once.
+test("select_messages: an unchanged inventory (304) fetches nothing and says unchanged, not missing", async (t) => {
+  const harness = await createHarness(t, {});
+  const job = { product: "gfs-0p25-sea", url: `${GFS}/gfs.t00z.pgrb2.0p25.f003`, run: "20261006T00", lead: 3, heights_to: 12 };
+  const response = await harness.invoke({ methodId: "select_messages", inputs: [jsonInput("idx_jobs", job), jsonInput("idx_jobs", job),
+    bytesInput("inventories", rawResponseFrame(new Uint8Array(0), 304)), bytesInput("inventories", rawResponseFrame(new Uint8Array(0), 304))] });
+  assert.deepEqual(framesOn(response, "status"), [{ inventories_unchanged: 2, status: 304, unchanged: true }]);
+  assert.equal(framesOn(response, "requests").length, 0);
+  assert.equal(framesOn(response, "jobs").length, 0);
 });
 
 test("publish_request: one POST when nwp_publish_url is set, nothing otherwise", async (t) => {
