@@ -64,11 +64,12 @@ enum class keyMaterialAlgorithm : int8_t {
   X25519Public = 4,
   Aes256Gcm = 5,
   Opaque = 6,
+  Secp256k1Public = 7,
   MIN = Unknown,
-  MAX = Opaque
+  MAX = Secp256k1Public
 };
 
-inline const keyMaterialAlgorithm (&EnumValueskeyMaterialAlgorithm())[7] {
+inline const keyMaterialAlgorithm (&EnumValueskeyMaterialAlgorithm())[8] {
   static const keyMaterialAlgorithm values[] = {
     keyMaterialAlgorithm::Unknown,
     keyMaterialAlgorithm::Ed25519Seed,
@@ -76,13 +77,14 @@ inline const keyMaterialAlgorithm (&EnumValueskeyMaterialAlgorithm())[7] {
     keyMaterialAlgorithm::X25519Private,
     keyMaterialAlgorithm::X25519Public,
     keyMaterialAlgorithm::Aes256Gcm,
-    keyMaterialAlgorithm::Opaque
+    keyMaterialAlgorithm::Opaque,
+    keyMaterialAlgorithm::Secp256k1Public
   };
   return values;
 }
 
 inline const char * const *EnumNameskeyMaterialAlgorithm() {
-  static const char * const names[8] = {
+  static const char * const names[9] = {
     "Unknown",
     "Ed25519Seed",
     "Ed25519Public",
@@ -90,13 +92,14 @@ inline const char * const *EnumNameskeyMaterialAlgorithm() {
     "X25519Public",
     "Aes256Gcm",
     "Opaque",
+    "Secp256k1Public",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamekeyMaterialAlgorithm(keyMaterialAlgorithm e) {
-  if (::flatbuffers::IsOutRange(e, keyMaterialAlgorithm::Unknown, keyMaterialAlgorithm::Opaque)) return "";
+  if (::flatbuffers::IsOutRange(e, keyMaterialAlgorithm::Unknown, keyMaterialAlgorithm::Secp256k1Public)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNameskeyMaterialAlgorithm()[index];
 }

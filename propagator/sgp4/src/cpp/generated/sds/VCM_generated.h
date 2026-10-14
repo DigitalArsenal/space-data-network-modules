@@ -1332,7 +1332,7 @@ struct VCMT : public ::flatbuffers::NativeTable {
   VCMT &operator=(VCMT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// Vector Covariance Message
+/// DEPRECATED: use $OCM, which carries everything a VCM does. Vector Covariance Message.
 struct VCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef VCMT NativeTableType;
   typedef VCMBuilder Builder;
@@ -2313,28 +2313,42 @@ inline const VCM *GetSizePrefixedVCM(const void *buf) {
   return ::flatbuffers::GetSizePrefixedRoot<VCM>(buf);
 }
 
+inline const char *VCMIdentifier() {
+  return "$VCM";
+}
+
+inline bool VCMBufferHasIdentifier(const void *buf) {
+  return ::flatbuffers::BufferHasIdentifier(
+      buf, VCMIdentifier());
+}
+
+inline bool SizePrefixedVCMBufferHasIdentifier(const void *buf) {
+  return ::flatbuffers::BufferHasIdentifier(
+      buf, VCMIdentifier(), true);
+}
+
 template <bool B = false>
 inline bool VerifyVCMBuffer(
     ::flatbuffers::VerifierTemplate<B> &verifier) {
-  return verifier.template VerifyBuffer<VCM>(nullptr);
+  return verifier.template VerifyBuffer<VCM>(VCMIdentifier());
 }
 
 template <bool B = false>
 inline bool VerifySizePrefixedVCMBuffer(
     ::flatbuffers::VerifierTemplate<B> &verifier) {
-  return verifier.template VerifySizePrefixedBuffer<VCM>(nullptr);
+  return verifier.template VerifySizePrefixedBuffer<VCM>(VCMIdentifier());
 }
 
 inline void FinishVCMBuffer(
     ::flatbuffers::FlatBufferBuilder &fbb,
     ::flatbuffers::Offset<VCM> root) {
-  fbb.Finish(root);
+  fbb.Finish(root, VCMIdentifier());
 }
 
 inline void FinishSizePrefixedVCMBuffer(
     ::flatbuffers::FlatBufferBuilder &fbb,
     ::flatbuffers::Offset<VCM> root) {
-  fbb.FinishSizePrefixed(root);
+  fbb.FinishSizePrefixed(root, VCMIdentifier());
 }
 
 inline std::unique_ptr<VCMT> UnPackVCM(

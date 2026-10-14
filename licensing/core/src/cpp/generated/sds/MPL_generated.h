@@ -599,6 +599,40 @@ inline const char *EnumNamemplApproachAxis(mplApproachAxis e) {
   return EnumNamesmplApproachAxis()[index];
 }
 
+/// What a semi-major-axis tolerance is measured against. Append new values
+/// only; never reorder or reuse existing values.
+enum class mplToleranceBasis : uint8_t {
+  /// An absolute length, km.
+  AbsoluteKm = 0,
+  /// A fraction of the chaser's semi-major axis (dimensionless).
+  RelativeToChaserSemiMajorAxis = 1,
+  MIN = AbsoluteKm,
+  MAX = RelativeToChaserSemiMajorAxis
+};
+
+inline const mplToleranceBasis (&EnumValuesmplToleranceBasis())[2] {
+  static const mplToleranceBasis values[] = {
+    mplToleranceBasis::AbsoluteKm,
+    mplToleranceBasis::RelativeToChaserSemiMajorAxis
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesmplToleranceBasis() {
+  static const char * const names[3] = {
+    "AbsoluteKm",
+    "RelativeToChaserSemiMajorAxis",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamemplToleranceBasis(mplToleranceBasis e) {
+  if (::flatbuffers::IsOutRange(e, mplToleranceBasis::AbsoluteKm, mplToleranceBasis::RelativeToChaserSemiMajorAxis)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesmplToleranceBasis()[index];
+}
+
 /// Kind of anomaly a value is. Append new values only; never reorder or reuse
 /// existing values.
 enum class mplAnomalyKind : uint8_t {
@@ -2353,6 +2387,7 @@ struct mplPhasingRequestT : public ::flatbuffers::NativeTable {
   double ORBIT_RADIUS_KM = 0.0;
   double PHASE_ANGLE_DEG = 0.0;
   uint32_t REVOLUTIONS = 0;
+  bool HAS_REVOLUTIONS = false;
   uint32_t MAX_REVOLUTIONS = 0;
   std::unique_ptr<mplOrbitT> CHASER{};
   std::unique_ptr<mplOrbitT> TARGET{};
@@ -2360,8 +2395,12 @@ struct mplPhasingRequestT : public ::flatbuffers::NativeTable {
   double DELTA_V_BUDGET_KM_S = 0.0;
   double DELTA_V_BUDGET_FRACTION = 0.0;
   double COPLANAR_TOLERANCE_DEG = 0.0;
+  bool HAS_COPLANAR_TOLERANCE = false;
   double ECCENTRICITY_TOLERANCE = 0.0;
-  double CO_ORBITAL_TOLERANCE_KM = 0.0;
+  bool HAS_ECCENTRICITY_TOLERANCE = false;
+  double CO_ORBITAL_TOLERANCE = 0.0;
+  mplToleranceBasis CO_ORBITAL_TOLERANCE_BASIS = mplToleranceBasis::AbsoluteKm;
+  bool HAS_CO_ORBITAL_TOLERANCE = false;
   mplPhasingRequestT() = default;
   mplPhasingRequestT(const mplPhasingRequestT &o);
   mplPhasingRequestT(mplPhasingRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2377,15 +2416,20 @@ struct mplPhasingRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_ORBIT_RADIUS_KM = 4,
     VT_PHASE_ANGLE_DEG = 6,
     VT_REVOLUTIONS = 8,
-    VT_MAX_REVOLUTIONS = 10,
-    VT_CHASER = 12,
-    VT_TARGET = 14,
-    VT_DIRECTION = 16,
-    VT_DELTA_V_BUDGET_KM_S = 18,
-    VT_DELTA_V_BUDGET_FRACTION = 20,
-    VT_COPLANAR_TOLERANCE_DEG = 22,
-    VT_ECCENTRICITY_TOLERANCE = 24,
-    VT_CO_ORBITAL_TOLERANCE_KM = 26
+    VT_HAS_REVOLUTIONS = 10,
+    VT_MAX_REVOLUTIONS = 12,
+    VT_CHASER = 14,
+    VT_TARGET = 16,
+    VT_DIRECTION = 18,
+    VT_DELTA_V_BUDGET_KM_S = 20,
+    VT_DELTA_V_BUDGET_FRACTION = 22,
+    VT_COPLANAR_TOLERANCE_DEG = 24,
+    VT_HAS_COPLANAR_TOLERANCE = 26,
+    VT_ECCENTRICITY_TOLERANCE = 28,
+    VT_HAS_ECCENTRICITY_TOLERANCE = 30,
+    VT_CO_ORBITAL_TOLERANCE = 32,
+    VT_CO_ORBITAL_TOLERANCE_BASIS = 34,
+    VT_HAS_CO_ORBITAL_TOLERANCE = 36
   };
   /// Phasing: radius of the chaser's circular orbit, km.
   double ORBIT_RADIUS_KM() const {
@@ -2395,13 +2439,19 @@ struct mplPhasingRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   double PHASE_ANGLE_DEG() const {
     return GetField<double>(VT_PHASE_ANGLE_DEG, 0.0);
   }
-  /// Revolutions on the phasing orbit; 0 = recommend the smallest count that
-  /// neither clamps to the floor nor exceeds the budget.
+  /// Revolutions on the phasing orbit; read only when HAS_REVOLUTIONS.
   uint32_t REVOLUTIONS() const {
     return GetField<uint32_t>(VT_REVOLUTIONS, 0);
   }
+  /// True when REVOLUTIONS is stated (0 is then a real request for zero
+  /// revolutions, which a planner may refuse); false = recommend the
+  /// smallest count that neither clamps to the floor nor exceeds the budget
+  /// (Phasing: the planner's default count).
+  bool HAS_REVOLUTIONS() const {
+    return GetField<uint8_t>(VT_HAS_REVOLUTIONS, 0) != 0;
+  }
   /// Largest revolution count a recommendation may use; 0 = the planner's
-  /// default.
+  /// default (a planner searches at least one revolution).
   uint32_t MAX_REVOLUTIONS() const {
     return GetField<uint32_t>(VT_MAX_REVOLUTIONS, 0);
   }
@@ -2427,18 +2477,33 @@ struct mplPhasingRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     return GetField<double>(VT_DELTA_V_BUDGET_FRACTION, 0.0);
   }
   /// Largest angle between the two orbit normals still called coplanar, deg;
-  /// 0 = default.
+  /// read only when HAS_COPLANAR_TOLERANCE (false = the planner's default).
   double COPLANAR_TOLERANCE_DEG() const {
     return GetField<double>(VT_COPLANAR_TOLERANCE_DEG, 0.0);
   }
-  /// Largest eccentricity still called near-circular; 0 = default.
+  bool HAS_COPLANAR_TOLERANCE() const {
+    return GetField<uint8_t>(VT_HAS_COPLANAR_TOLERANCE, 0) != 0;
+  }
+  /// Largest eccentricity still called near-circular; read only when
+  /// HAS_ECCENTRICITY_TOLERANCE (false = the planner's default).
   double ECCENTRICITY_TOLERANCE() const {
     return GetField<double>(VT_ECCENTRICITY_TOLERANCE, 0.0);
   }
-  /// Largest semi-major-axis difference still called co-orbital, km; 0 =
-  /// default.
-  double CO_ORBITAL_TOLERANCE_KM() const {
-    return GetField<double>(VT_CO_ORBITAL_TOLERANCE_KM, 0.0);
+  bool HAS_ECCENTRICITY_TOLERANCE() const {
+    return GetField<uint8_t>(VT_HAS_ECCENTRICITY_TOLERANCE, 0) != 0;
+  }
+  /// Largest semi-major-axis difference still called co-orbital, in the unit
+  /// CO_ORBITAL_TOLERANCE_BASIS states (km, or a fraction of the chaser's
+  /// semi-major axis); read only when HAS_CO_ORBITAL_TOLERANCE (false = the
+  /// planner's default).
+  double CO_ORBITAL_TOLERANCE() const {
+    return GetField<double>(VT_CO_ORBITAL_TOLERANCE, 0.0);
+  }
+  mplToleranceBasis CO_ORBITAL_TOLERANCE_BASIS() const {
+    return static_cast<mplToleranceBasis>(GetField<uint8_t>(VT_CO_ORBITAL_TOLERANCE_BASIS, 0));
+  }
+  bool HAS_CO_ORBITAL_TOLERANCE() const {
+    return GetField<uint8_t>(VT_HAS_CO_ORBITAL_TOLERANCE, 0) != 0;
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -2446,6 +2511,7 @@ struct mplPhasingRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            VerifyField<double>(verifier, VT_ORBIT_RADIUS_KM, 8) &&
            VerifyField<double>(verifier, VT_PHASE_ANGLE_DEG, 8) &&
            VerifyField<uint32_t>(verifier, VT_REVOLUTIONS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_REVOLUTIONS, 1) &&
            VerifyField<uint32_t>(verifier, VT_MAX_REVOLUTIONS, 4) &&
            VerifyOffset(verifier, VT_CHASER) &&
            verifier.VerifyTable(CHASER()) &&
@@ -2455,8 +2521,12 @@ struct mplPhasingRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            VerifyField<double>(verifier, VT_DELTA_V_BUDGET_KM_S, 8) &&
            VerifyField<double>(verifier, VT_DELTA_V_BUDGET_FRACTION, 8) &&
            VerifyField<double>(verifier, VT_COPLANAR_TOLERANCE_DEG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_COPLANAR_TOLERANCE, 1) &&
            VerifyField<double>(verifier, VT_ECCENTRICITY_TOLERANCE, 8) &&
-           VerifyField<double>(verifier, VT_CO_ORBITAL_TOLERANCE_KM, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_ECCENTRICITY_TOLERANCE, 1) &&
+           VerifyField<double>(verifier, VT_CO_ORBITAL_TOLERANCE, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CO_ORBITAL_TOLERANCE_BASIS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_CO_ORBITAL_TOLERANCE, 1) &&
            verifier.EndTable();
   }
   mplPhasingRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2476,6 +2546,9 @@ struct mplPhasingRequestBuilder {
   }
   void add_REVOLUTIONS(uint32_t REVOLUTIONS) {
     fbb_.AddElement<uint32_t>(mplPhasingRequest::VT_REVOLUTIONS, REVOLUTIONS, 0);
+  }
+  void add_HAS_REVOLUTIONS(bool HAS_REVOLUTIONS) {
+    fbb_.AddElement<uint8_t>(mplPhasingRequest::VT_HAS_REVOLUTIONS, static_cast<uint8_t>(HAS_REVOLUTIONS), 0);
   }
   void add_MAX_REVOLUTIONS(uint32_t MAX_REVOLUTIONS) {
     fbb_.AddElement<uint32_t>(mplPhasingRequest::VT_MAX_REVOLUTIONS, MAX_REVOLUTIONS, 0);
@@ -2498,11 +2571,23 @@ struct mplPhasingRequestBuilder {
   void add_COPLANAR_TOLERANCE_DEG(double COPLANAR_TOLERANCE_DEG) {
     fbb_.AddElement<double>(mplPhasingRequest::VT_COPLANAR_TOLERANCE_DEG, COPLANAR_TOLERANCE_DEG, 0.0);
   }
+  void add_HAS_COPLANAR_TOLERANCE(bool HAS_COPLANAR_TOLERANCE) {
+    fbb_.AddElement<uint8_t>(mplPhasingRequest::VT_HAS_COPLANAR_TOLERANCE, static_cast<uint8_t>(HAS_COPLANAR_TOLERANCE), 0);
+  }
   void add_ECCENTRICITY_TOLERANCE(double ECCENTRICITY_TOLERANCE) {
     fbb_.AddElement<double>(mplPhasingRequest::VT_ECCENTRICITY_TOLERANCE, ECCENTRICITY_TOLERANCE, 0.0);
   }
-  void add_CO_ORBITAL_TOLERANCE_KM(double CO_ORBITAL_TOLERANCE_KM) {
-    fbb_.AddElement<double>(mplPhasingRequest::VT_CO_ORBITAL_TOLERANCE_KM, CO_ORBITAL_TOLERANCE_KM, 0.0);
+  void add_HAS_ECCENTRICITY_TOLERANCE(bool HAS_ECCENTRICITY_TOLERANCE) {
+    fbb_.AddElement<uint8_t>(mplPhasingRequest::VT_HAS_ECCENTRICITY_TOLERANCE, static_cast<uint8_t>(HAS_ECCENTRICITY_TOLERANCE), 0);
+  }
+  void add_CO_ORBITAL_TOLERANCE(double CO_ORBITAL_TOLERANCE) {
+    fbb_.AddElement<double>(mplPhasingRequest::VT_CO_ORBITAL_TOLERANCE, CO_ORBITAL_TOLERANCE, 0.0);
+  }
+  void add_CO_ORBITAL_TOLERANCE_BASIS(mplToleranceBasis CO_ORBITAL_TOLERANCE_BASIS) {
+    fbb_.AddElement<uint8_t>(mplPhasingRequest::VT_CO_ORBITAL_TOLERANCE_BASIS, static_cast<uint8_t>(CO_ORBITAL_TOLERANCE_BASIS), 0);
+  }
+  void add_HAS_CO_ORBITAL_TOLERANCE(bool HAS_CO_ORBITAL_TOLERANCE) {
+    fbb_.AddElement<uint8_t>(mplPhasingRequest::VT_HAS_CO_ORBITAL_TOLERANCE, static_cast<uint8_t>(HAS_CO_ORBITAL_TOLERANCE), 0);
   }
   explicit mplPhasingRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -2520,6 +2605,7 @@ inline ::flatbuffers::Offset<mplPhasingRequest> CreatemplPhasingRequest(
     double ORBIT_RADIUS_KM = 0.0,
     double PHASE_ANGLE_DEG = 0.0,
     uint32_t REVOLUTIONS = 0,
+    bool HAS_REVOLUTIONS = false,
     uint32_t MAX_REVOLUTIONS = 0,
     ::flatbuffers::Offset<mplOrbit> CHASER = 0,
     ::flatbuffers::Offset<mplOrbit> TARGET = 0,
@@ -2527,10 +2613,14 @@ inline ::flatbuffers::Offset<mplPhasingRequest> CreatemplPhasingRequest(
     double DELTA_V_BUDGET_KM_S = 0.0,
     double DELTA_V_BUDGET_FRACTION = 0.0,
     double COPLANAR_TOLERANCE_DEG = 0.0,
+    bool HAS_COPLANAR_TOLERANCE = false,
     double ECCENTRICITY_TOLERANCE = 0.0,
-    double CO_ORBITAL_TOLERANCE_KM = 0.0) {
+    bool HAS_ECCENTRICITY_TOLERANCE = false,
+    double CO_ORBITAL_TOLERANCE = 0.0,
+    mplToleranceBasis CO_ORBITAL_TOLERANCE_BASIS = mplToleranceBasis::AbsoluteKm,
+    bool HAS_CO_ORBITAL_TOLERANCE = false) {
   mplPhasingRequestBuilder builder_(_fbb);
-  builder_.add_CO_ORBITAL_TOLERANCE_KM(CO_ORBITAL_TOLERANCE_KM);
+  builder_.add_CO_ORBITAL_TOLERANCE(CO_ORBITAL_TOLERANCE);
   builder_.add_ECCENTRICITY_TOLERANCE(ECCENTRICITY_TOLERANCE);
   builder_.add_COPLANAR_TOLERANCE_DEG(COPLANAR_TOLERANCE_DEG);
   builder_.add_DELTA_V_BUDGET_FRACTION(DELTA_V_BUDGET_FRACTION);
@@ -2541,7 +2631,12 @@ inline ::flatbuffers::Offset<mplPhasingRequest> CreatemplPhasingRequest(
   builder_.add_CHASER(CHASER);
   builder_.add_MAX_REVOLUTIONS(MAX_REVOLUTIONS);
   builder_.add_REVOLUTIONS(REVOLUTIONS);
+  builder_.add_HAS_CO_ORBITAL_TOLERANCE(HAS_CO_ORBITAL_TOLERANCE);
+  builder_.add_CO_ORBITAL_TOLERANCE_BASIS(CO_ORBITAL_TOLERANCE_BASIS);
+  builder_.add_HAS_ECCENTRICITY_TOLERANCE(HAS_ECCENTRICITY_TOLERANCE);
+  builder_.add_HAS_COPLANAR_TOLERANCE(HAS_COPLANAR_TOLERANCE);
   builder_.add_DIRECTION(DIRECTION);
+  builder_.add_HAS_REVOLUTIONS(HAS_REVOLUTIONS);
   return builder_.Finish();
 }
 
@@ -2555,7 +2650,7 @@ struct mplPhasingRequest::Traits {
 struct mplDifferentialDragT : public ::flatbuffers::NativeTable {
   typedef mplDifferentialDrag TableType;
   mplRelativeDynamics MODEL = mplRelativeDynamics::J2DragEccentric;
-  double DA_DOT_KM_S = 0.0;
+  double DA_DOT_PER_S = 0.0;
   double DEX_DOT_PER_S = 0.0;
   double DEY_DOT_PER_S = 0.0;
 };
@@ -2567,7 +2662,7 @@ struct mplDifferentialDrag FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_MODEL = 4,
-    VT_DA_DOT_KM_S = 6,
+    VT_DA_DOT_PER_S = 6,
     VT_DEX_DOT_PER_S = 8,
     VT_DEY_DOT_PER_S = 10
   };
@@ -2575,15 +2670,17 @@ struct mplDifferentialDrag FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   mplRelativeDynamics MODEL() const {
     return static_cast<mplRelativeDynamics>(GetField<uint8_t>(VT_MODEL, 3));
   }
-  /// Differential semi-major-axis drag rate, km/s.
-  double DA_DOT_KM_S() const {
-    return GetField<double>(VT_DA_DOT_KM_S, 0.0);
+  /// Differential drag rates of the dimensionless relative orbital
+  /// elements, 1/s: of the relative semi-major axis da (multiply by the
+  /// reference semi-major axis for a length rate), and of the relative
+  /// eccentricity-vector components dex and dey. DA_DOT_PER_S alone for
+  /// J2DragEccentric; all three for J2DragArbitrary.
+  double DA_DOT_PER_S() const {
+    return GetField<double>(VT_DA_DOT_PER_S, 0.0);
   }
-  /// Differential eccentricity-vector x drag rate, 1/s.
   double DEX_DOT_PER_S() const {
     return GetField<double>(VT_DEX_DOT_PER_S, 0.0);
   }
-  /// Differential eccentricity-vector y drag rate, 1/s.
   double DEY_DOT_PER_S() const {
     return GetField<double>(VT_DEY_DOT_PER_S, 0.0);
   }
@@ -2591,7 +2688,7 @@ struct mplDifferentialDrag FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_MODEL, 1) &&
-           VerifyField<double>(verifier, VT_DA_DOT_KM_S, 8) &&
+           VerifyField<double>(verifier, VT_DA_DOT_PER_S, 8) &&
            VerifyField<double>(verifier, VT_DEX_DOT_PER_S, 8) &&
            VerifyField<double>(verifier, VT_DEY_DOT_PER_S, 8) &&
            verifier.EndTable();
@@ -2608,8 +2705,8 @@ struct mplDifferentialDragBuilder {
   void add_MODEL(mplRelativeDynamics MODEL) {
     fbb_.AddElement<uint8_t>(mplDifferentialDrag::VT_MODEL, static_cast<uint8_t>(MODEL), 3);
   }
-  void add_DA_DOT_KM_S(double DA_DOT_KM_S) {
-    fbb_.AddElement<double>(mplDifferentialDrag::VT_DA_DOT_KM_S, DA_DOT_KM_S, 0.0);
+  void add_DA_DOT_PER_S(double DA_DOT_PER_S) {
+    fbb_.AddElement<double>(mplDifferentialDrag::VT_DA_DOT_PER_S, DA_DOT_PER_S, 0.0);
   }
   void add_DEX_DOT_PER_S(double DEX_DOT_PER_S) {
     fbb_.AddElement<double>(mplDifferentialDrag::VT_DEX_DOT_PER_S, DEX_DOT_PER_S, 0.0);
@@ -2631,13 +2728,13 @@ struct mplDifferentialDragBuilder {
 inline ::flatbuffers::Offset<mplDifferentialDrag> CreatemplDifferentialDrag(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     mplRelativeDynamics MODEL = mplRelativeDynamics::J2DragEccentric,
-    double DA_DOT_KM_S = 0.0,
+    double DA_DOT_PER_S = 0.0,
     double DEX_DOT_PER_S = 0.0,
     double DEY_DOT_PER_S = 0.0) {
   mplDifferentialDragBuilder builder_(_fbb);
   builder_.add_DEY_DOT_PER_S(DEY_DOT_PER_S);
   builder_.add_DEX_DOT_PER_S(DEX_DOT_PER_S);
-  builder_.add_DA_DOT_KM_S(DA_DOT_KM_S);
+  builder_.add_DA_DOT_PER_S(DA_DOT_PER_S);
   builder_.add_MODEL(MODEL);
   return builder_.Finish();
 }
@@ -2755,6 +2852,7 @@ struct mplRelativeRequestT : public ::flatbuffers::NativeTable {
   std::unique_ptr<mplElementsT> REFERENCE{};
   std::unique_ptr<ephemerisDataLineT> RELATIVE_STATE{};
   mplRelativeDynamics DYNAMICS = mplRelativeDynamics::J2;
+  mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::J2;
   std::unique_ptr<mplDifferentialDragT> DRAG{};
   double DURATION_S = 0.0;
   std::vector<double> INITIAL_ROE{};
@@ -2769,6 +2867,7 @@ struct mplRelativeRequestT : public ::flatbuffers::NativeTable {
   double MISS_DISTANCE_KM = 0.0;
   double TIME_TO_CLOSEST_APPROACH_S = 0.0;
   double MAX_DELTA_V_KM_S = 0.0;
+  bool HAS_MAX_DELTA_V = false;
   bool PREFER_RADIAL = false;
   std::unique_ptr<CDMT> CONJUNCTION{};
   mplApproachAxis APPROACH_AXIS = mplApproachAxis::VBar;
@@ -2792,26 +2891,28 @@ struct mplRelativeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_REFERENCE = 4,
     VT_RELATIVE_STATE = 6,
     VT_DYNAMICS = 8,
-    VT_DRAG = 10,
-    VT_DURATION_S = 12,
-    VT_INITIAL_ROE = 14,
-    VT_WAYPOINTS = 16,
-    VT_TARGET_VELOCITY_KM_S = 18,
-    VT_MAX_ITERATIONS = 20,
-    VT_POSITION_TOLERANCE_KM = 22,
-    VT_VELOCITY_TOLERANCE_KM_S = 24,
-    VT_LEG_TIME_LOWER_ORBITS = 26,
-    VT_LEG_TIME_UPPER_ORBITS = 28,
-    VT_SAMPLES_PER_LEG = 30,
-    VT_MISS_DISTANCE_KM = 32,
-    VT_TIME_TO_CLOSEST_APPROACH_S = 34,
-    VT_MAX_DELTA_V_KM_S = 36,
-    VT_PREFER_RADIAL = 38,
-    VT_CONJUNCTION = 40,
-    VT_APPROACH_AXIS = 42,
-    VT_APPROACH_TARGET_KM = 44,
-    VT_APPROACH_SPEED_KM_S = 46,
-    VT_CORRIDOR_HALF_WIDTH_KM = 48
+    VT_STM_DYNAMICS = 10,
+    VT_DRAG = 12,
+    VT_DURATION_S = 14,
+    VT_INITIAL_ROE = 16,
+    VT_WAYPOINTS = 18,
+    VT_TARGET_VELOCITY_KM_S = 20,
+    VT_MAX_ITERATIONS = 22,
+    VT_POSITION_TOLERANCE_KM = 24,
+    VT_VELOCITY_TOLERANCE_KM_S = 26,
+    VT_LEG_TIME_LOWER_ORBITS = 28,
+    VT_LEG_TIME_UPPER_ORBITS = 30,
+    VT_SAMPLES_PER_LEG = 32,
+    VT_MISS_DISTANCE_KM = 34,
+    VT_TIME_TO_CLOSEST_APPROACH_S = 36,
+    VT_MAX_DELTA_V_KM_S = 38,
+    VT_HAS_MAX_DELTA_V = 40,
+    VT_PREFER_RADIAL = 42,
+    VT_CONJUNCTION = 44,
+    VT_APPROACH_AXIS = 46,
+    VT_APPROACH_TARGET_KM = 48,
+    VT_APPROACH_SPEED_KM_S = 50,
+    VT_CORRIDOR_HALF_WIDTH_KM = 52
   };
   /// The reference (target, chief) orbit.
   const mplElements *REFERENCE() const {
@@ -2821,8 +2922,18 @@ struct mplRelativeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ephemerisDataLine *RELATIVE_STATE() const {
     return GetPointer<const ephemerisDataLine *>(VT_RELATIVE_STATE);
   }
+  /// Dynamics of propagation and targeting: RelativeStateTransition
+  /// propagates INITIAL_ROE with these (J2 on or off; the drag model is
+  /// DRAG); the targeting problems plan with them.
   mplRelativeDynamics DYNAMICS() const {
     return static_cast<mplRelativeDynamics>(GetField<uint8_t>(VT_DYNAMICS, 2));
+  }
+  /// RelativeStateTransition: dynamics of the state transition matrix
+  /// returned, chosen independently of DYNAMICS (e.g. a Keplerian matrix
+  /// beside a J2 propagation). J2DragEccentric and J2DragArbitrary also
+  /// return the drag columns.
+  mplRelativeDynamics STM_DYNAMICS() const {
+    return static_cast<mplRelativeDynamics>(GetField<uint8_t>(VT_STM_DYNAMICS, 2));
   }
   /// Differential drag; empty = none.
   const mplDifferentialDrag *DRAG() const {
@@ -2879,9 +2990,15 @@ struct mplRelativeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   double TIME_TO_CLOSEST_APPROACH_S() const {
     return GetField<double>(VT_TIME_TO_CLOSEST_APPROACH_S, 0.0);
   }
-  /// CollisionAvoidance: delta-v available, km/s; 0 = unlimited.
+  /// CollisionAvoidance: delta-v available, km/s; read only when
+  /// HAS_MAX_DELTA_V. When stated, 0 = unlimited.
   double MAX_DELTA_V_KM_S() const {
     return GetField<double>(VT_MAX_DELTA_V_KM_S, 0.0);
+  }
+  /// True when MAX_DELTA_V_KM_S is stated; false = the planner's default
+  /// limit.
+  bool HAS_MAX_DELTA_V() const {
+    return GetField<uint8_t>(VT_HAS_MAX_DELTA_V, 0) != 0;
   }
   /// CollisionAvoidance: prefer radial burns (they preserve the period).
   bool PREFER_RADIAL() const {
@@ -2916,6 +3033,7 @@ struct mplRelativeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyOffset(verifier, VT_RELATIVE_STATE) &&
            verifier.VerifyTable(RELATIVE_STATE()) &&
            VerifyField<uint8_t>(verifier, VT_DYNAMICS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STM_DYNAMICS, 1) &&
            VerifyOffset(verifier, VT_DRAG) &&
            verifier.VerifyTable(DRAG()) &&
            VerifyField<double>(verifier, VT_DURATION_S, 8) &&
@@ -2935,6 +3053,7 @@ struct mplRelativeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyField<double>(verifier, VT_MISS_DISTANCE_KM, 8) &&
            VerifyField<double>(verifier, VT_TIME_TO_CLOSEST_APPROACH_S, 8) &&
            VerifyField<double>(verifier, VT_MAX_DELTA_V_KM_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAX_DELTA_V, 1) &&
            VerifyField<uint8_t>(verifier, VT_PREFER_RADIAL, 1) &&
            VerifyOffset(verifier, VT_CONJUNCTION) &&
            verifier.VerifyTable(CONJUNCTION()) &&
@@ -2962,6 +3081,9 @@ struct mplRelativeRequestBuilder {
   }
   void add_DYNAMICS(mplRelativeDynamics DYNAMICS) {
     fbb_.AddElement<uint8_t>(mplRelativeRequest::VT_DYNAMICS, static_cast<uint8_t>(DYNAMICS), 2);
+  }
+  void add_STM_DYNAMICS(mplRelativeDynamics STM_DYNAMICS) {
+    fbb_.AddElement<uint8_t>(mplRelativeRequest::VT_STM_DYNAMICS, static_cast<uint8_t>(STM_DYNAMICS), 2);
   }
   void add_DRAG(::flatbuffers::Offset<mplDifferentialDrag> DRAG) {
     fbb_.AddOffset(mplRelativeRequest::VT_DRAG, DRAG);
@@ -3005,6 +3127,9 @@ struct mplRelativeRequestBuilder {
   void add_MAX_DELTA_V_KM_S(double MAX_DELTA_V_KM_S) {
     fbb_.AddElement<double>(mplRelativeRequest::VT_MAX_DELTA_V_KM_S, MAX_DELTA_V_KM_S, 0.0);
   }
+  void add_HAS_MAX_DELTA_V(bool HAS_MAX_DELTA_V) {
+    fbb_.AddElement<uint8_t>(mplRelativeRequest::VT_HAS_MAX_DELTA_V, static_cast<uint8_t>(HAS_MAX_DELTA_V), 0);
+  }
   void add_PREFER_RADIAL(bool PREFER_RADIAL) {
     fbb_.AddElement<uint8_t>(mplRelativeRequest::VT_PREFER_RADIAL, static_cast<uint8_t>(PREFER_RADIAL), 0);
   }
@@ -3039,6 +3164,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequest(
     ::flatbuffers::Offset<mplElements> REFERENCE = 0,
     ::flatbuffers::Offset<ephemerisDataLine> RELATIVE_STATE = 0,
     mplRelativeDynamics DYNAMICS = mplRelativeDynamics::J2,
+    mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::J2,
     ::flatbuffers::Offset<mplDifferentialDrag> DRAG = 0,
     double DURATION_S = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> INITIAL_ROE = 0,
@@ -3053,6 +3179,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequest(
     double MISS_DISTANCE_KM = 0.0,
     double TIME_TO_CLOSEST_APPROACH_S = 0.0,
     double MAX_DELTA_V_KM_S = 0.0,
+    bool HAS_MAX_DELTA_V = false,
     bool PREFER_RADIAL = false,
     ::flatbuffers::Offset<CDM> CONJUNCTION = 0,
     mplApproachAxis APPROACH_AXIS = mplApproachAxis::VBar,
@@ -3082,6 +3209,8 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequest(
   builder_.add_REFERENCE(REFERENCE);
   builder_.add_APPROACH_AXIS(APPROACH_AXIS);
   builder_.add_PREFER_RADIAL(PREFER_RADIAL);
+  builder_.add_HAS_MAX_DELTA_V(HAS_MAX_DELTA_V);
+  builder_.add_STM_DYNAMICS(STM_DYNAMICS);
   builder_.add_DYNAMICS(DYNAMICS);
   return builder_.Finish();
 }
@@ -3096,6 +3225,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequestDirect(
     ::flatbuffers::Offset<mplElements> REFERENCE = 0,
     ::flatbuffers::Offset<ephemerisDataLine> RELATIVE_STATE = 0,
     mplRelativeDynamics DYNAMICS = mplRelativeDynamics::J2,
+    mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::J2,
     ::flatbuffers::Offset<mplDifferentialDrag> DRAG = 0,
     double DURATION_S = 0.0,
     const std::vector<double> *INITIAL_ROE = nullptr,
@@ -3110,6 +3240,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequestDirect(
     double MISS_DISTANCE_KM = 0.0,
     double TIME_TO_CLOSEST_APPROACH_S = 0.0,
     double MAX_DELTA_V_KM_S = 0.0,
+    bool HAS_MAX_DELTA_V = false,
     bool PREFER_RADIAL = false,
     ::flatbuffers::Offset<CDM> CONJUNCTION = 0,
     mplApproachAxis APPROACH_AXIS = mplApproachAxis::VBar,
@@ -3125,6 +3256,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequestDirect(
       REFERENCE,
       RELATIVE_STATE,
       DYNAMICS,
+      STM_DYNAMICS,
       DRAG,
       DURATION_S,
       INITIAL_ROE__,
@@ -3139,6 +3271,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> CreatemplRelativeRequestDirect(
       MISS_DISTANCE_KM,
       TIME_TO_CLOSEST_APPROACH_S,
       MAX_DELTA_V_KM_S,
+      HAS_MAX_DELTA_V,
       PREFER_RADIAL,
       CONJUNCTION,
       APPROACH_AXIS,
@@ -3161,8 +3294,11 @@ struct mplRendezvousRequestT : public ::flatbuffers::NativeTable {
   double HOLD_DURATION_S = 0.0;
   double BANDWIDTH_RAD_S = 0.0;
   double DAMPING_RATIO = 0.0;
+  bool HAS_DAMPING_RATIO = false;
   double KP_PER_S2 = 0.0;
+  bool HAS_KP = false;
   double KD_PER_S = 0.0;
+  bool HAS_KD = false;
   bool FEEDFORWARD = true;
   bool COMPENSATE_CORIOLIS = true;
   bool COMPENSATE_GRAVITY_GRADIENT = true;
@@ -3194,15 +3330,18 @@ struct mplRendezvousRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_HOLD_DURATION_S = 18,
     VT_BANDWIDTH_RAD_S = 20,
     VT_DAMPING_RATIO = 22,
-    VT_KP_PER_S2 = 24,
-    VT_KD_PER_S = 26,
-    VT_FEEDFORWARD = 28,
-    VT_COMPENSATE_CORIOLIS = 30,
-    VT_COMPENSATE_GRAVITY_GRADIENT = 32,
-    VT_MAX_ACCELERATION_KM_S2 = 34,
-    VT_TIME_STEP_S = 36,
-    VT_OUTPUT_EVERY = 38,
-    VT_INCLUDE_J2 = 40
+    VT_HAS_DAMPING_RATIO = 24,
+    VT_KP_PER_S2 = 26,
+    VT_HAS_KP = 28,
+    VT_KD_PER_S = 30,
+    VT_HAS_KD = 32,
+    VT_FEEDFORWARD = 34,
+    VT_COMPENSATE_CORIOLIS = 36,
+    VT_COMPENSATE_GRAVITY_GRADIENT = 38,
+    VT_MAX_ACCELERATION_KM_S2 = 40,
+    VT_TIME_STEP_S = 42,
+    VT_OUTPUT_EVERY = 44,
+    VT_INCLUDE_J2 = 46
   };
   /// The target's orbit.
   const mplElements *REFERENCE() const {
@@ -3239,17 +3378,29 @@ struct mplRendezvousRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   double BANDWIDTH_RAD_S() const {
     return GetField<double>(VT_BANDWIDTH_RAD_S, 0.0);
   }
-  /// Closed-loop damping ratio; 0 = 1 (critically damped).
+  /// Closed-loop damping ratio; read only when HAS_DAMPING_RATIO (false = 1,
+  /// critically damped).
   double DAMPING_RATIO() const {
     return GetField<double>(VT_DAMPING_RATIO, 0.0);
   }
-  /// Proportional gain, 1/s^2; 0 = from the bandwidth.
+  bool HAS_DAMPING_RATIO() const {
+    return GetField<uint8_t>(VT_HAS_DAMPING_RATIO, 0) != 0;
+  }
+  /// Proportional gain, 1/s^2; read only when HAS_KP (false = from the
+  /// bandwidth).
   double KP_PER_S2() const {
     return GetField<double>(VT_KP_PER_S2, 0.0);
   }
-  /// Derivative gain, 1/s; 0 = from the damping ratio.
+  bool HAS_KP() const {
+    return GetField<uint8_t>(VT_HAS_KP, 0) != 0;
+  }
+  /// Derivative gain, 1/s; read only when HAS_KD (false = from the damping
+  /// ratio).
   double KD_PER_S() const {
     return GetField<double>(VT_KD_PER_S, 0.0);
+  }
+  bool HAS_KD() const {
+    return GetField<uint8_t>(VT_HAS_KD, 0) != 0;
   }
   /// Apply the reference acceleration as feedforward.
   bool FEEDFORWARD() const {
@@ -3298,8 +3449,11 @@ struct mplRendezvousRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
            VerifyField<double>(verifier, VT_HOLD_DURATION_S, 8) &&
            VerifyField<double>(verifier, VT_BANDWIDTH_RAD_S, 8) &&
            VerifyField<double>(verifier, VT_DAMPING_RATIO, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_DAMPING_RATIO, 1) &&
            VerifyField<double>(verifier, VT_KP_PER_S2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_KP, 1) &&
            VerifyField<double>(verifier, VT_KD_PER_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_KD, 1) &&
            VerifyField<uint8_t>(verifier, VT_FEEDFORWARD, 1) &&
            VerifyField<uint8_t>(verifier, VT_COMPENSATE_CORIOLIS, 1) &&
            VerifyField<uint8_t>(verifier, VT_COMPENSATE_GRAVITY_GRADIENT, 1) &&
@@ -3348,11 +3502,20 @@ struct mplRendezvousRequestBuilder {
   void add_DAMPING_RATIO(double DAMPING_RATIO) {
     fbb_.AddElement<double>(mplRendezvousRequest::VT_DAMPING_RATIO, DAMPING_RATIO, 0.0);
   }
+  void add_HAS_DAMPING_RATIO(bool HAS_DAMPING_RATIO) {
+    fbb_.AddElement<uint8_t>(mplRendezvousRequest::VT_HAS_DAMPING_RATIO, static_cast<uint8_t>(HAS_DAMPING_RATIO), 0);
+  }
   void add_KP_PER_S2(double KP_PER_S2) {
     fbb_.AddElement<double>(mplRendezvousRequest::VT_KP_PER_S2, KP_PER_S2, 0.0);
   }
+  void add_HAS_KP(bool HAS_KP) {
+    fbb_.AddElement<uint8_t>(mplRendezvousRequest::VT_HAS_KP, static_cast<uint8_t>(HAS_KP), 0);
+  }
   void add_KD_PER_S(double KD_PER_S) {
     fbb_.AddElement<double>(mplRendezvousRequest::VT_KD_PER_S, KD_PER_S, 0.0);
+  }
+  void add_HAS_KD(bool HAS_KD) {
+    fbb_.AddElement<uint8_t>(mplRendezvousRequest::VT_HAS_KD, static_cast<uint8_t>(HAS_KD), 0);
   }
   void add_FEEDFORWARD(bool FEEDFORWARD) {
     fbb_.AddElement<uint8_t>(mplRendezvousRequest::VT_FEEDFORWARD, static_cast<uint8_t>(FEEDFORWARD), 1);
@@ -3398,8 +3561,11 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> CreatemplRendezvousRequest(
     double HOLD_DURATION_S = 0.0,
     double BANDWIDTH_RAD_S = 0.0,
     double DAMPING_RATIO = 0.0,
+    bool HAS_DAMPING_RATIO = false,
     double KP_PER_S2 = 0.0,
+    bool HAS_KP = false,
     double KD_PER_S = 0.0,
+    bool HAS_KD = false,
     bool FEEDFORWARD = true,
     bool COMPENSATE_CORIOLIS = true,
     bool COMPENSATE_GRAVITY_GRADIENT = true,
@@ -3427,6 +3593,9 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> CreatemplRendezvousRequest(
   builder_.add_COMPENSATE_GRAVITY_GRADIENT(COMPENSATE_GRAVITY_GRADIENT);
   builder_.add_COMPENSATE_CORIOLIS(COMPENSATE_CORIOLIS);
   builder_.add_FEEDFORWARD(FEEDFORWARD);
+  builder_.add_HAS_KD(HAS_KD);
+  builder_.add_HAS_KP(HAS_KP);
+  builder_.add_HAS_DAMPING_RATIO(HAS_DAMPING_RATIO);
   return builder_.Finish();
 }
 
@@ -3447,8 +3616,11 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> CreatemplRendezvousRequestDir
     double HOLD_DURATION_S = 0.0,
     double BANDWIDTH_RAD_S = 0.0,
     double DAMPING_RATIO = 0.0,
+    bool HAS_DAMPING_RATIO = false,
     double KP_PER_S2 = 0.0,
+    bool HAS_KP = false,
     double KD_PER_S = 0.0,
+    bool HAS_KD = false,
     bool FEEDFORWARD = true,
     bool COMPENSATE_CORIOLIS = true,
     bool COMPENSATE_GRAVITY_GRADIENT = true,
@@ -3472,8 +3644,11 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> CreatemplRendezvousRequestDir
       HOLD_DURATION_S,
       BANDWIDTH_RAD_S,
       DAMPING_RATIO,
+      HAS_DAMPING_RATIO,
       KP_PER_S2,
+      HAS_KP,
       KD_PER_S,
+      HAS_KD,
       FEEDFORWARD,
       COMPENSATE_CORIOLIS,
       COMPENSATE_GRAVITY_GRADIENT,
@@ -3490,6 +3665,7 @@ struct mplGeometryRequestT : public ::flatbuffers::NativeTable {
   std::unique_ptr<mplOrbitT> ORBIT{};
   double AT_TRUE_ANOMALY_DEG = std::numeric_limits<double>::quiet_NaN();
   double ELAPSED_S = 0.0;
+  bool HAS_ELAPSED = false;
   std::unique_ptr<mplBurnT> BURN{};
   mplAxes TO_AXES = mplAxes::Unspecified;
   double ECCENTRICITY = 0.0;
@@ -3499,6 +3675,7 @@ struct mplGeometryRequestT : public ::flatbuffers::NativeTable {
   double TO_TRUE_ANOMALY_DEG = 0.0;
   uint32_t REVOLUTIONS = 0;
   double SWEEP_DEG = 0.0;
+  bool HAS_SWEEP = false;
   uint32_t SAMPLE_COUNT = 0;
   mplGeometryRequestT() = default;
   mplGeometryRequestT(const mplGeometryRequestT &o);
@@ -3516,29 +3693,37 @@ struct mplGeometryRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_ORBIT = 4,
     VT_AT_TRUE_ANOMALY_DEG = 6,
     VT_ELAPSED_S = 8,
-    VT_BURN = 10,
-    VT_TO_AXES = 12,
-    VT_ECCENTRICITY = 14,
-    VT_ANOMALY_DEG = 16,
-    VT_ANOMALY_KIND = 18,
-    VT_FROM_TRUE_ANOMALY_DEG = 20,
-    VT_TO_TRUE_ANOMALY_DEG = 22,
-    VT_REVOLUTIONS = 24,
-    VT_SWEEP_DEG = 26,
-    VT_SAMPLE_COUNT = 28
+    VT_HAS_ELAPSED = 10,
+    VT_BURN = 12,
+    VT_TO_AXES = 14,
+    VT_ECCENTRICITY = 16,
+    VT_ANOMALY_DEG = 18,
+    VT_ANOMALY_KIND = 20,
+    VT_FROM_TRUE_ANOMALY_DEG = 22,
+    VT_TO_TRUE_ANOMALY_DEG = 24,
+    VT_REVOLUTIONS = 26,
+    VT_SWEEP_DEG = 28,
+    VT_HAS_SWEEP = 30,
+    VT_SAMPLE_COUNT = 32
   };
   /// The orbit asked about (all but AnomalyConversion).
   const mplOrbit *ORBIT() const {
     return GetPointer<const mplOrbit *>(VT_ORBIT);
   }
   /// OrbitGeometry: evaluate at this true anomaly, deg; NaN = at the orbit's
-  /// own epoch (or after ELAPSED_S).
+  /// own epoch (or after ELAPSED_S). Not together with HAS_ELAPSED.
   double AT_TRUE_ANOMALY_DEG() const {
     return GetField<double>(VT_AT_TRUE_ANOMALY_DEG, std::numeric_limits<double>::quiet_NaN());
   }
-  /// OrbitGeometry: coast this long from the orbit's epoch first, s.
+  /// OrbitGeometry: coast this long from the orbit's epoch first, s (signed);
+  /// read only when HAS_ELAPSED.
   double ELAPSED_S() const {
     return GetField<double>(VT_ELAPSED_S, 0.0);
+  }
+  /// True when ELAPSED_S is stated (0 is then a real zero-length coast);
+  /// false = no coast.
+  bool HAS_ELAPSED() const {
+    return GetField<uint8_t>(VT_HAS_ELAPSED, 0) != 0;
   }
   /// OrbitGeometry: a burn to apply at the evaluated point;
   /// DeltaVTransform: the delta-v to rotate (its AXES is the source axes).
@@ -3572,10 +3757,14 @@ struct mplGeometryRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   uint32_t REVOLUTIONS() const {
     return GetField<uint32_t>(VT_REVOLUTIONS, 0);
   }
-  /// OrbitSampling: signed sweep from FROM_TRUE_ANOMALY_DEG, deg; 0 = one
-  /// full revolution.
+  /// OrbitSampling: signed sweep from FROM_TRUE_ANOMALY_DEG, deg, at most one
+  /// revolution; read only when HAS_SWEEP.
   double SWEEP_DEG() const {
     return GetField<double>(VT_SWEEP_DEG, 0.0);
+  }
+  /// True when SWEEP_DEG is stated; false = one full revolution forward.
+  bool HAS_SWEEP() const {
+    return GetField<uint8_t>(VT_HAS_SWEEP, 0) != 0;
   }
   /// OrbitSampling: samples, endpoints included.
   uint32_t SAMPLE_COUNT() const {
@@ -3588,6 +3777,7 @@ struct mplGeometryRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            verifier.VerifyTable(ORBIT()) &&
            VerifyField<double>(verifier, VT_AT_TRUE_ANOMALY_DEG, 8) &&
            VerifyField<double>(verifier, VT_ELAPSED_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_ELAPSED, 1) &&
            VerifyOffset(verifier, VT_BURN) &&
            verifier.VerifyTable(BURN()) &&
            VerifyField<uint8_t>(verifier, VT_TO_AXES, 1) &&
@@ -3598,6 +3788,7 @@ struct mplGeometryRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyField<double>(verifier, VT_TO_TRUE_ANOMALY_DEG, 8) &&
            VerifyField<uint32_t>(verifier, VT_REVOLUTIONS, 4) &&
            VerifyField<double>(verifier, VT_SWEEP_DEG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_SWEEP, 1) &&
            VerifyField<uint32_t>(verifier, VT_SAMPLE_COUNT, 4) &&
            verifier.EndTable();
   }
@@ -3618,6 +3809,9 @@ struct mplGeometryRequestBuilder {
   }
   void add_ELAPSED_S(double ELAPSED_S) {
     fbb_.AddElement<double>(mplGeometryRequest::VT_ELAPSED_S, ELAPSED_S, 0.0);
+  }
+  void add_HAS_ELAPSED(bool HAS_ELAPSED) {
+    fbb_.AddElement<uint8_t>(mplGeometryRequest::VT_HAS_ELAPSED, static_cast<uint8_t>(HAS_ELAPSED), 0);
   }
   void add_BURN(::flatbuffers::Offset<mplBurn> BURN) {
     fbb_.AddOffset(mplGeometryRequest::VT_BURN, BURN);
@@ -3646,6 +3840,9 @@ struct mplGeometryRequestBuilder {
   void add_SWEEP_DEG(double SWEEP_DEG) {
     fbb_.AddElement<double>(mplGeometryRequest::VT_SWEEP_DEG, SWEEP_DEG, 0.0);
   }
+  void add_HAS_SWEEP(bool HAS_SWEEP) {
+    fbb_.AddElement<uint8_t>(mplGeometryRequest::VT_HAS_SWEEP, static_cast<uint8_t>(HAS_SWEEP), 0);
+  }
   void add_SAMPLE_COUNT(uint32_t SAMPLE_COUNT) {
     fbb_.AddElement<uint32_t>(mplGeometryRequest::VT_SAMPLE_COUNT, SAMPLE_COUNT, 0);
   }
@@ -3665,6 +3862,7 @@ inline ::flatbuffers::Offset<mplGeometryRequest> CreatemplGeometryRequest(
     ::flatbuffers::Offset<mplOrbit> ORBIT = 0,
     double AT_TRUE_ANOMALY_DEG = std::numeric_limits<double>::quiet_NaN(),
     double ELAPSED_S = 0.0,
+    bool HAS_ELAPSED = false,
     ::flatbuffers::Offset<mplBurn> BURN = 0,
     mplAxes TO_AXES = mplAxes::Unspecified,
     double ECCENTRICITY = 0.0,
@@ -3674,6 +3872,7 @@ inline ::flatbuffers::Offset<mplGeometryRequest> CreatemplGeometryRequest(
     double TO_TRUE_ANOMALY_DEG = 0.0,
     uint32_t REVOLUTIONS = 0,
     double SWEEP_DEG = 0.0,
+    bool HAS_SWEEP = false,
     uint32_t SAMPLE_COUNT = 0) {
   mplGeometryRequestBuilder builder_(_fbb);
   builder_.add_SWEEP_DEG(SWEEP_DEG);
@@ -3687,8 +3886,10 @@ inline ::flatbuffers::Offset<mplGeometryRequest> CreatemplGeometryRequest(
   builder_.add_REVOLUTIONS(REVOLUTIONS);
   builder_.add_BURN(BURN);
   builder_.add_ORBIT(ORBIT);
+  builder_.add_HAS_SWEEP(HAS_SWEEP);
   builder_.add_ANOMALY_KIND(ANOMALY_KIND);
   builder_.add_TO_AXES(TO_AXES);
+  builder_.add_HAS_ELAPSED(HAS_ELAPSED);
   return builder_.Finish();
 }
 
@@ -3864,6 +4065,7 @@ struct mplPhasingSolutionT : public ::flatbuffers::NativeTable {
   double ECCENTRICITY_TOLERANCE = 0.0;
   bool CO_ORBITAL = false;
   double CO_ORBITAL_TOLERANCE_KM = 0.0;
+  double CO_ORBITAL_TOLERANCE_FRACTION = 0.0;
   uint32_t RECOMMENDED_REVOLUTIONS = 0;
   bool REVOLUTIONS_FROM_CALLER = false;
   uint32_t MAX_REVOLUTIONS = 0;
@@ -3905,11 +4107,12 @@ struct mplPhasingSolution FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_ECCENTRICITY_TOLERANCE = 46,
     VT_CO_ORBITAL = 48,
     VT_CO_ORBITAL_TOLERANCE_KM = 50,
-    VT_RECOMMENDED_REVOLUTIONS = 52,
-    VT_REVOLUTIONS_FROM_CALLER = 54,
-    VT_MAX_REVOLUTIONS = 56,
-    VT_DELTA_V_BUDGET_KM_S = 58,
-    VT_WITHIN_BUDGET = 60
+    VT_CO_ORBITAL_TOLERANCE_FRACTION = 52,
+    VT_RECOMMENDED_REVOLUTIONS = 54,
+    VT_REVOLUTIONS_FROM_CALLER = 56,
+    VT_MAX_REVOLUTIONS = 58,
+    VT_DELTA_V_BUDGET_KM_S = 60,
+    VT_WITHIN_BUDGET = 62
   };
   /// Phase angle the plan closes, deg (signed).
   double PHASE_ANGLE_DEG() const {
@@ -4000,8 +4203,13 @@ struct mplPhasingSolution FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   bool CO_ORBITAL() const {
     return GetField<uint8_t>(VT_CO_ORBITAL, 0) != 0;
   }
+  /// The co-orbital tolerance applied, as an absolute length, km, and as a
+  /// fraction of the chaser's semi-major axis (the same threshold both ways).
   double CO_ORBITAL_TOLERANCE_KM() const {
     return GetField<double>(VT_CO_ORBITAL_TOLERANCE_KM, 0.0);
+  }
+  double CO_ORBITAL_TOLERANCE_FRACTION() const {
+    return GetField<double>(VT_CO_ORBITAL_TOLERANCE_FRACTION, 0.0);
   }
   /// Recommended revolution count, and whether the count came from the
   /// caller instead.
@@ -4051,6 +4259,7 @@ struct mplPhasingSolution FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyField<double>(verifier, VT_ECCENTRICITY_TOLERANCE, 8) &&
            VerifyField<uint8_t>(verifier, VT_CO_ORBITAL, 1) &&
            VerifyField<double>(verifier, VT_CO_ORBITAL_TOLERANCE_KM, 8) &&
+           VerifyField<double>(verifier, VT_CO_ORBITAL_TOLERANCE_FRACTION, 8) &&
            VerifyField<uint32_t>(verifier, VT_RECOMMENDED_REVOLUTIONS, 4) &&
            VerifyField<uint8_t>(verifier, VT_REVOLUTIONS_FROM_CALLER, 1) &&
            VerifyField<uint32_t>(verifier, VT_MAX_REVOLUTIONS, 4) &&
@@ -4139,6 +4348,9 @@ struct mplPhasingSolutionBuilder {
   void add_CO_ORBITAL_TOLERANCE_KM(double CO_ORBITAL_TOLERANCE_KM) {
     fbb_.AddElement<double>(mplPhasingSolution::VT_CO_ORBITAL_TOLERANCE_KM, CO_ORBITAL_TOLERANCE_KM, 0.0);
   }
+  void add_CO_ORBITAL_TOLERANCE_FRACTION(double CO_ORBITAL_TOLERANCE_FRACTION) {
+    fbb_.AddElement<double>(mplPhasingSolution::VT_CO_ORBITAL_TOLERANCE_FRACTION, CO_ORBITAL_TOLERANCE_FRACTION, 0.0);
+  }
   void add_RECOMMENDED_REVOLUTIONS(uint32_t RECOMMENDED_REVOLUTIONS) {
     fbb_.AddElement<uint32_t>(mplPhasingSolution::VT_RECOMMENDED_REVOLUTIONS, RECOMMENDED_REVOLUTIONS, 0);
   }
@@ -4191,6 +4403,7 @@ inline ::flatbuffers::Offset<mplPhasingSolution> CreatemplPhasingSolution(
     double ECCENTRICITY_TOLERANCE = 0.0,
     bool CO_ORBITAL = false,
     double CO_ORBITAL_TOLERANCE_KM = 0.0,
+    double CO_ORBITAL_TOLERANCE_FRACTION = 0.0,
     uint32_t RECOMMENDED_REVOLUTIONS = 0,
     bool REVOLUTIONS_FROM_CALLER = false,
     uint32_t MAX_REVOLUTIONS = 0,
@@ -4198,6 +4411,7 @@ inline ::flatbuffers::Offset<mplPhasingSolution> CreatemplPhasingSolution(
     bool WITHIN_BUDGET = false) {
   mplPhasingSolutionBuilder builder_(_fbb);
   builder_.add_DELTA_V_BUDGET_KM_S(DELTA_V_BUDGET_KM_S);
+  builder_.add_CO_ORBITAL_TOLERANCE_FRACTION(CO_ORBITAL_TOLERANCE_FRACTION);
   builder_.add_CO_ORBITAL_TOLERANCE_KM(CO_ORBITAL_TOLERANCE_KM);
   builder_.add_ECCENTRICITY_TOLERANCE(ECCENTRICITY_TOLERANCE);
   builder_.add_COPLANAR_TOLERANCE_DEG(COPLANAR_TOLERANCE_DEG);
@@ -4240,6 +4454,7 @@ struct mplRelativeSolutionT : public ::flatbuffers::NativeTable {
   typedef mplRelativeSolution TableType;
   std::string MODEL_REFERENCE{};
   mplRelativeDynamics DYNAMICS = mplRelativeDynamics::Unspecified;
+  mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::Unspecified;
   std::vector<double> STATE_TRANSITION{};
   std::vector<double> DRAG_COLUMNS{};
   uint8_t DRAG_COLUMN_COUNT = 0;
@@ -4259,30 +4474,40 @@ struct mplRelativeSolution FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_MODEL_REFERENCE = 4,
     VT_DYNAMICS = 6,
-    VT_STATE_TRANSITION = 8,
-    VT_DRAG_COLUMNS = 10,
-    VT_DRAG_COLUMN_COUNT = 12,
-    VT_INITIAL_ROE = 14,
-    VT_PROPAGATED_ROE = 16,
-    VT_ACHIEVED_MISS_KM = 18,
-    VT_FEASIBLE = 20,
-    VT_CORRIDOR_DEVIATION_KM = 22,
-    VT_WITHIN_CORRIDOR = 24
+    VT_STM_DYNAMICS = 8,
+    VT_STATE_TRANSITION = 10,
+    VT_DRAG_COLUMNS = 12,
+    VT_DRAG_COLUMN_COUNT = 14,
+    VT_INITIAL_ROE = 16,
+    VT_PROPAGATED_ROE = 18,
+    VT_ACHIEVED_MISS_KM = 20,
+    VT_FEASIBLE = 22,
+    VT_CORRIDOR_DEVIATION_KM = 24,
+    VT_WITHIN_CORRIDOR = 26
   };
   /// Model reference, e.g. "Koenig-Guffanti-D'Amico ROE STM".
   const ::flatbuffers::String *MODEL_REFERENCE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_MODEL_REFERENCE);
   }
+  /// Dynamics INITIAL_ROE was propagated with.
   mplRelativeDynamics DYNAMICS() const {
     return static_cast<mplRelativeDynamics>(GetField<uint8_t>(VT_DYNAMICS, 0));
   }
-  /// 6x6 relative-orbital-element state transition matrix, row-major (36
-  /// values).
+  /// Dynamics of STATE_TRANSITION and DRAG_COLUMNS.
+  mplRelativeDynamics STM_DYNAMICS() const {
+    return static_cast<mplRelativeDynamics>(GetField<uint8_t>(VT_STM_DYNAMICS, 0));
+  }
+  /// 6x6 relative-orbital-element state transition matrix over DURATION_S,
+  /// row-major (36 values), dimensionless (the ROE are dimensionless).
   const ::flatbuffers::Vector<double> *STATE_TRANSITION() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATE_TRANSITION);
   }
-  /// Drag sensitivity columns, row-major 6 x DRAG_COLUMN_COUNT; empty = no
-  /// drag model.
+  /// Drag sensitivity columns, row-major 6 x DRAG_COLUMN_COUNT: entry (i, k)
+  /// is the change in ROE i at DURATION_S per unit of drag rate k, the rates
+  /// being those of mplDifferentialDrag (1/s): k = 0 da-dot, 1 dex-dot, 2
+  /// dey-dot. Unit: seconds (e.g. entry (0, 0) equals
+  /// DURATION_S). J2DragEccentric gives one column (the da-dot column of the
+  /// eccentric model), J2DragArbitrary three. Empty = no drag model.
   const ::flatbuffers::Vector<double> *DRAG_COLUMNS() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DRAG_COLUMNS);
   }
@@ -4319,6 +4544,7 @@ struct mplRelativeSolution FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            VerifyOffset(verifier, VT_MODEL_REFERENCE) &&
            verifier.VerifyString(MODEL_REFERENCE()) &&
            VerifyField<uint8_t>(verifier, VT_DYNAMICS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STM_DYNAMICS, 1) &&
            VerifyOffset(verifier, VT_STATE_TRANSITION) &&
            verifier.VerifyVector(STATE_TRANSITION()) &&
            VerifyOffset(verifier, VT_DRAG_COLUMNS) &&
@@ -4348,6 +4574,9 @@ struct mplRelativeSolutionBuilder {
   }
   void add_DYNAMICS(mplRelativeDynamics DYNAMICS) {
     fbb_.AddElement<uint8_t>(mplRelativeSolution::VT_DYNAMICS, static_cast<uint8_t>(DYNAMICS), 0);
+  }
+  void add_STM_DYNAMICS(mplRelativeDynamics STM_DYNAMICS) {
+    fbb_.AddElement<uint8_t>(mplRelativeSolution::VT_STM_DYNAMICS, static_cast<uint8_t>(STM_DYNAMICS), 0);
   }
   void add_STATE_TRANSITION(::flatbuffers::Offset<::flatbuffers::Vector<double>> STATE_TRANSITION) {
     fbb_.AddOffset(mplRelativeSolution::VT_STATE_TRANSITION, STATE_TRANSITION);
@@ -4391,6 +4620,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> CreatemplRelativeSolution(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> MODEL_REFERENCE = 0,
     mplRelativeDynamics DYNAMICS = mplRelativeDynamics::Unspecified,
+    mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::Unspecified,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> STATE_TRANSITION = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> DRAG_COLUMNS = 0,
     uint8_t DRAG_COLUMN_COUNT = 0,
@@ -4411,6 +4641,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> CreatemplRelativeSolution(
   builder_.add_WITHIN_CORRIDOR(WITHIN_CORRIDOR);
   builder_.add_FEASIBLE(FEASIBLE);
   builder_.add_DRAG_COLUMN_COUNT(DRAG_COLUMN_COUNT);
+  builder_.add_STM_DYNAMICS(STM_DYNAMICS);
   builder_.add_DYNAMICS(DYNAMICS);
   return builder_.Finish();
 }
@@ -4424,6 +4655,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> CreatemplRelativeSolutionDirec
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *MODEL_REFERENCE = nullptr,
     mplRelativeDynamics DYNAMICS = mplRelativeDynamics::Unspecified,
+    mplRelativeDynamics STM_DYNAMICS = mplRelativeDynamics::Unspecified,
     const std::vector<double> *STATE_TRANSITION = nullptr,
     const std::vector<double> *DRAG_COLUMNS = nullptr,
     uint8_t DRAG_COLUMN_COUNT = 0,
@@ -4442,6 +4674,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> CreatemplRelativeSolutionDirec
       _fbb,
       MODEL_REFERENCE__,
       DYNAMICS,
+      STM_DYNAMICS,
       STATE_TRANSITION__,
       DRAG_COLUMNS__,
       DRAG_COLUMN_COUNT,
@@ -6063,6 +6296,7 @@ inline mplPhasingRequestT::mplPhasingRequestT(const mplPhasingRequestT &o)
       : ORBIT_RADIUS_KM(o.ORBIT_RADIUS_KM),
         PHASE_ANGLE_DEG(o.PHASE_ANGLE_DEG),
         REVOLUTIONS(o.REVOLUTIONS),
+        HAS_REVOLUTIONS(o.HAS_REVOLUTIONS),
         MAX_REVOLUTIONS(o.MAX_REVOLUTIONS),
         CHASER((o.CHASER) ? new mplOrbitT(*o.CHASER) : nullptr),
         TARGET((o.TARGET) ? new mplOrbitT(*o.TARGET) : nullptr),
@@ -6070,14 +6304,19 @@ inline mplPhasingRequestT::mplPhasingRequestT(const mplPhasingRequestT &o)
         DELTA_V_BUDGET_KM_S(o.DELTA_V_BUDGET_KM_S),
         DELTA_V_BUDGET_FRACTION(o.DELTA_V_BUDGET_FRACTION),
         COPLANAR_TOLERANCE_DEG(o.COPLANAR_TOLERANCE_DEG),
+        HAS_COPLANAR_TOLERANCE(o.HAS_COPLANAR_TOLERANCE),
         ECCENTRICITY_TOLERANCE(o.ECCENTRICITY_TOLERANCE),
-        CO_ORBITAL_TOLERANCE_KM(o.CO_ORBITAL_TOLERANCE_KM) {
+        HAS_ECCENTRICITY_TOLERANCE(o.HAS_ECCENTRICITY_TOLERANCE),
+        CO_ORBITAL_TOLERANCE(o.CO_ORBITAL_TOLERANCE),
+        CO_ORBITAL_TOLERANCE_BASIS(o.CO_ORBITAL_TOLERANCE_BASIS),
+        HAS_CO_ORBITAL_TOLERANCE(o.HAS_CO_ORBITAL_TOLERANCE) {
 }
 
 inline mplPhasingRequestT &mplPhasingRequestT::operator=(mplPhasingRequestT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ORBIT_RADIUS_KM, o.ORBIT_RADIUS_KM);
   std::swap(PHASE_ANGLE_DEG, o.PHASE_ANGLE_DEG);
   std::swap(REVOLUTIONS, o.REVOLUTIONS);
+  std::swap(HAS_REVOLUTIONS, o.HAS_REVOLUTIONS);
   std::swap(MAX_REVOLUTIONS, o.MAX_REVOLUTIONS);
   std::swap(CHASER, o.CHASER);
   std::swap(TARGET, o.TARGET);
@@ -6085,8 +6324,12 @@ inline mplPhasingRequestT &mplPhasingRequestT::operator=(mplPhasingRequestT o) F
   std::swap(DELTA_V_BUDGET_KM_S, o.DELTA_V_BUDGET_KM_S);
   std::swap(DELTA_V_BUDGET_FRACTION, o.DELTA_V_BUDGET_FRACTION);
   std::swap(COPLANAR_TOLERANCE_DEG, o.COPLANAR_TOLERANCE_DEG);
+  std::swap(HAS_COPLANAR_TOLERANCE, o.HAS_COPLANAR_TOLERANCE);
   std::swap(ECCENTRICITY_TOLERANCE, o.ECCENTRICITY_TOLERANCE);
-  std::swap(CO_ORBITAL_TOLERANCE_KM, o.CO_ORBITAL_TOLERANCE_KM);
+  std::swap(HAS_ECCENTRICITY_TOLERANCE, o.HAS_ECCENTRICITY_TOLERANCE);
+  std::swap(CO_ORBITAL_TOLERANCE, o.CO_ORBITAL_TOLERANCE);
+  std::swap(CO_ORBITAL_TOLERANCE_BASIS, o.CO_ORBITAL_TOLERANCE_BASIS);
+  std::swap(HAS_CO_ORBITAL_TOLERANCE, o.HAS_CO_ORBITAL_TOLERANCE);
   return *this;
 }
 
@@ -6102,6 +6345,7 @@ inline void mplPhasingRequest::UnPackTo(mplPhasingRequestT *_o, const ::flatbuff
   { auto _e = ORBIT_RADIUS_KM(); _o->ORBIT_RADIUS_KM = _e; }
   { auto _e = PHASE_ANGLE_DEG(); _o->PHASE_ANGLE_DEG = _e; }
   { auto _e = REVOLUTIONS(); _o->REVOLUTIONS = _e; }
+  { auto _e = HAS_REVOLUTIONS(); _o->HAS_REVOLUTIONS = _e; }
   { auto _e = MAX_REVOLUTIONS(); _o->MAX_REVOLUTIONS = _e; }
   { auto _e = CHASER(); if (_e) { if(_o->CHASER) { _e->UnPackTo(_o->CHASER.get(), _resolver); } else { _o->CHASER = std::unique_ptr<mplOrbitT>(_e->UnPack(_resolver)); } } else if (_o->CHASER) { _o->CHASER.reset(); } }
   { auto _e = TARGET(); if (_e) { if(_o->TARGET) { _e->UnPackTo(_o->TARGET.get(), _resolver); } else { _o->TARGET = std::unique_ptr<mplOrbitT>(_e->UnPack(_resolver)); } } else if (_o->TARGET) { _o->TARGET.reset(); } }
@@ -6109,8 +6353,12 @@ inline void mplPhasingRequest::UnPackTo(mplPhasingRequestT *_o, const ::flatbuff
   { auto _e = DELTA_V_BUDGET_KM_S(); _o->DELTA_V_BUDGET_KM_S = _e; }
   { auto _e = DELTA_V_BUDGET_FRACTION(); _o->DELTA_V_BUDGET_FRACTION = _e; }
   { auto _e = COPLANAR_TOLERANCE_DEG(); _o->COPLANAR_TOLERANCE_DEG = _e; }
+  { auto _e = HAS_COPLANAR_TOLERANCE(); _o->HAS_COPLANAR_TOLERANCE = _e; }
   { auto _e = ECCENTRICITY_TOLERANCE(); _o->ECCENTRICITY_TOLERANCE = _e; }
-  { auto _e = CO_ORBITAL_TOLERANCE_KM(); _o->CO_ORBITAL_TOLERANCE_KM = _e; }
+  { auto _e = HAS_ECCENTRICITY_TOLERANCE(); _o->HAS_ECCENTRICITY_TOLERANCE = _e; }
+  { auto _e = CO_ORBITAL_TOLERANCE(); _o->CO_ORBITAL_TOLERANCE = _e; }
+  { auto _e = CO_ORBITAL_TOLERANCE_BASIS(); _o->CO_ORBITAL_TOLERANCE_BASIS = _e; }
+  { auto _e = HAS_CO_ORBITAL_TOLERANCE(); _o->HAS_CO_ORBITAL_TOLERANCE = _e; }
 }
 
 inline ::flatbuffers::Offset<mplPhasingRequest> CreatemplPhasingRequest(::flatbuffers::FlatBufferBuilder &_fbb, const mplPhasingRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6124,6 +6372,7 @@ inline ::flatbuffers::Offset<mplPhasingRequest> mplPhasingRequest::Pack(::flatbu
   auto _ORBIT_RADIUS_KM = _o->ORBIT_RADIUS_KM;
   auto _PHASE_ANGLE_DEG = _o->PHASE_ANGLE_DEG;
   auto _REVOLUTIONS = _o->REVOLUTIONS;
+  auto _HAS_REVOLUTIONS = _o->HAS_REVOLUTIONS;
   auto _MAX_REVOLUTIONS = _o->MAX_REVOLUTIONS;
   auto _CHASER = _o->CHASER ? CreatemplOrbit(_fbb, _o->CHASER.get(), _rehasher) : 0;
   auto _TARGET = _o->TARGET ? CreatemplOrbit(_fbb, _o->TARGET.get(), _rehasher) : 0;
@@ -6131,13 +6380,18 @@ inline ::flatbuffers::Offset<mplPhasingRequest> mplPhasingRequest::Pack(::flatbu
   auto _DELTA_V_BUDGET_KM_S = _o->DELTA_V_BUDGET_KM_S;
   auto _DELTA_V_BUDGET_FRACTION = _o->DELTA_V_BUDGET_FRACTION;
   auto _COPLANAR_TOLERANCE_DEG = _o->COPLANAR_TOLERANCE_DEG;
+  auto _HAS_COPLANAR_TOLERANCE = _o->HAS_COPLANAR_TOLERANCE;
   auto _ECCENTRICITY_TOLERANCE = _o->ECCENTRICITY_TOLERANCE;
-  auto _CO_ORBITAL_TOLERANCE_KM = _o->CO_ORBITAL_TOLERANCE_KM;
+  auto _HAS_ECCENTRICITY_TOLERANCE = _o->HAS_ECCENTRICITY_TOLERANCE;
+  auto _CO_ORBITAL_TOLERANCE = _o->CO_ORBITAL_TOLERANCE;
+  auto _CO_ORBITAL_TOLERANCE_BASIS = _o->CO_ORBITAL_TOLERANCE_BASIS;
+  auto _HAS_CO_ORBITAL_TOLERANCE = _o->HAS_CO_ORBITAL_TOLERANCE;
   return CreatemplPhasingRequest(
       _fbb,
       _ORBIT_RADIUS_KM,
       _PHASE_ANGLE_DEG,
       _REVOLUTIONS,
+      _HAS_REVOLUTIONS,
       _MAX_REVOLUTIONS,
       _CHASER,
       _TARGET,
@@ -6145,8 +6399,12 @@ inline ::flatbuffers::Offset<mplPhasingRequest> mplPhasingRequest::Pack(::flatbu
       _DELTA_V_BUDGET_KM_S,
       _DELTA_V_BUDGET_FRACTION,
       _COPLANAR_TOLERANCE_DEG,
+      _HAS_COPLANAR_TOLERANCE,
       _ECCENTRICITY_TOLERANCE,
-      _CO_ORBITAL_TOLERANCE_KM);
+      _HAS_ECCENTRICITY_TOLERANCE,
+      _CO_ORBITAL_TOLERANCE,
+      _CO_ORBITAL_TOLERANCE_BASIS,
+      _HAS_CO_ORBITAL_TOLERANCE);
 }
 
 inline mplDifferentialDragT *mplDifferentialDrag::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -6159,7 +6417,7 @@ inline void mplDifferentialDrag::UnPackTo(mplDifferentialDragT *_o, const ::flat
   (void)_o;
   (void)_resolver;
   { auto _e = MODEL(); _o->MODEL = _e; }
-  { auto _e = DA_DOT_KM_S(); _o->DA_DOT_KM_S = _e; }
+  { auto _e = DA_DOT_PER_S(); _o->DA_DOT_PER_S = _e; }
   { auto _e = DEX_DOT_PER_S(); _o->DEX_DOT_PER_S = _e; }
   { auto _e = DEY_DOT_PER_S(); _o->DEY_DOT_PER_S = _e; }
 }
@@ -6173,13 +6431,13 @@ inline ::flatbuffers::Offset<mplDifferentialDrag> mplDifferentialDrag::Pack(::fl
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const mplDifferentialDragT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _MODEL = _o->MODEL;
-  auto _DA_DOT_KM_S = _o->DA_DOT_KM_S;
+  auto _DA_DOT_PER_S = _o->DA_DOT_PER_S;
   auto _DEX_DOT_PER_S = _o->DEX_DOT_PER_S;
   auto _DEY_DOT_PER_S = _o->DEY_DOT_PER_S;
   return CreatemplDifferentialDrag(
       _fbb,
       _MODEL,
-      _DA_DOT_KM_S,
+      _DA_DOT_PER_S,
       _DEX_DOT_PER_S,
       _DEY_DOT_PER_S);
 }
@@ -6220,6 +6478,7 @@ inline mplRelativeRequestT::mplRelativeRequestT(const mplRelativeRequestT &o)
       : REFERENCE((o.REFERENCE) ? new mplElementsT(*o.REFERENCE) : nullptr),
         RELATIVE_STATE((o.RELATIVE_STATE) ? new ephemerisDataLineT(*o.RELATIVE_STATE) : nullptr),
         DYNAMICS(o.DYNAMICS),
+        STM_DYNAMICS(o.STM_DYNAMICS),
         DRAG((o.DRAG) ? new mplDifferentialDragT(*o.DRAG) : nullptr),
         DURATION_S(o.DURATION_S),
         INITIAL_ROE(o.INITIAL_ROE),
@@ -6233,6 +6492,7 @@ inline mplRelativeRequestT::mplRelativeRequestT(const mplRelativeRequestT &o)
         MISS_DISTANCE_KM(o.MISS_DISTANCE_KM),
         TIME_TO_CLOSEST_APPROACH_S(o.TIME_TO_CLOSEST_APPROACH_S),
         MAX_DELTA_V_KM_S(o.MAX_DELTA_V_KM_S),
+        HAS_MAX_DELTA_V(o.HAS_MAX_DELTA_V),
         PREFER_RADIAL(o.PREFER_RADIAL),
         CONJUNCTION((o.CONJUNCTION) ? new CDMT(*o.CONJUNCTION) : nullptr),
         APPROACH_AXIS(o.APPROACH_AXIS),
@@ -6247,6 +6507,7 @@ inline mplRelativeRequestT &mplRelativeRequestT::operator=(mplRelativeRequestT o
   std::swap(REFERENCE, o.REFERENCE);
   std::swap(RELATIVE_STATE, o.RELATIVE_STATE);
   std::swap(DYNAMICS, o.DYNAMICS);
+  std::swap(STM_DYNAMICS, o.STM_DYNAMICS);
   std::swap(DRAG, o.DRAG);
   std::swap(DURATION_S, o.DURATION_S);
   std::swap(INITIAL_ROE, o.INITIAL_ROE);
@@ -6261,6 +6522,7 @@ inline mplRelativeRequestT &mplRelativeRequestT::operator=(mplRelativeRequestT o
   std::swap(MISS_DISTANCE_KM, o.MISS_DISTANCE_KM);
   std::swap(TIME_TO_CLOSEST_APPROACH_S, o.TIME_TO_CLOSEST_APPROACH_S);
   std::swap(MAX_DELTA_V_KM_S, o.MAX_DELTA_V_KM_S);
+  std::swap(HAS_MAX_DELTA_V, o.HAS_MAX_DELTA_V);
   std::swap(PREFER_RADIAL, o.PREFER_RADIAL);
   std::swap(CONJUNCTION, o.CONJUNCTION);
   std::swap(APPROACH_AXIS, o.APPROACH_AXIS);
@@ -6282,6 +6544,7 @@ inline void mplRelativeRequest::UnPackTo(mplRelativeRequestT *_o, const ::flatbu
   { auto _e = REFERENCE(); if (_e) { if(_o->REFERENCE) { _e->UnPackTo(_o->REFERENCE.get(), _resolver); } else { _o->REFERENCE = std::unique_ptr<mplElementsT>(_e->UnPack(_resolver)); } } else if (_o->REFERENCE) { _o->REFERENCE.reset(); } }
   { auto _e = RELATIVE_STATE(); if (_e) { if(_o->RELATIVE_STATE) { _e->UnPackTo(_o->RELATIVE_STATE.get(), _resolver); } else { _o->RELATIVE_STATE = std::unique_ptr<ephemerisDataLineT>(_e->UnPack(_resolver)); } } else if (_o->RELATIVE_STATE) { _o->RELATIVE_STATE.reset(); } }
   { auto _e = DYNAMICS(); _o->DYNAMICS = _e; }
+  { auto _e = STM_DYNAMICS(); _o->STM_DYNAMICS = _e; }
   { auto _e = DRAG(); if (_e) { if(_o->DRAG) { _e->UnPackTo(_o->DRAG.get(), _resolver); } else { _o->DRAG = std::unique_ptr<mplDifferentialDragT>(_e->UnPack(_resolver)); } } else if (_o->DRAG) { _o->DRAG.reset(); } }
   { auto _e = DURATION_S(); _o->DURATION_S = _e; }
   { auto _e = INITIAL_ROE(); if (_e) { _o->INITIAL_ROE.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->INITIAL_ROE[_i] = _e->Get(_i); } } else { _o->INITIAL_ROE.resize(0); } }
@@ -6296,6 +6559,7 @@ inline void mplRelativeRequest::UnPackTo(mplRelativeRequestT *_o, const ::flatbu
   { auto _e = MISS_DISTANCE_KM(); _o->MISS_DISTANCE_KM = _e; }
   { auto _e = TIME_TO_CLOSEST_APPROACH_S(); _o->TIME_TO_CLOSEST_APPROACH_S = _e; }
   { auto _e = MAX_DELTA_V_KM_S(); _o->MAX_DELTA_V_KM_S = _e; }
+  { auto _e = HAS_MAX_DELTA_V(); _o->HAS_MAX_DELTA_V = _e; }
   { auto _e = PREFER_RADIAL(); _o->PREFER_RADIAL = _e; }
   { auto _e = CONJUNCTION(); if (_e) { if(_o->CONJUNCTION) { _e->UnPackTo(_o->CONJUNCTION.get(), _resolver); } else { _o->CONJUNCTION = std::unique_ptr<CDMT>(_e->UnPack(_resolver)); } } else if (_o->CONJUNCTION) { _o->CONJUNCTION.reset(); } }
   { auto _e = APPROACH_AXIS(); _o->APPROACH_AXIS = _e; }
@@ -6315,6 +6579,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> mplRelativeRequest::Pack(::flat
   auto _REFERENCE = _o->REFERENCE ? CreatemplElements(_fbb, _o->REFERENCE.get(), _rehasher) : 0;
   auto _RELATIVE_STATE = _o->RELATIVE_STATE ? CreateephemerisDataLine(_fbb, _o->RELATIVE_STATE.get(), _rehasher) : 0;
   auto _DYNAMICS = _o->DYNAMICS;
+  auto _STM_DYNAMICS = _o->STM_DYNAMICS;
   auto _DRAG = _o->DRAG ? CreatemplDifferentialDrag(_fbb, _o->DRAG.get(), _rehasher) : 0;
   auto _DURATION_S = _o->DURATION_S;
   auto _INITIAL_ROE = _o->INITIAL_ROE.size() ? _fbb.CreateVector(_o->INITIAL_ROE) : 0;
@@ -6329,6 +6594,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> mplRelativeRequest::Pack(::flat
   auto _MISS_DISTANCE_KM = _o->MISS_DISTANCE_KM;
   auto _TIME_TO_CLOSEST_APPROACH_S = _o->TIME_TO_CLOSEST_APPROACH_S;
   auto _MAX_DELTA_V_KM_S = _o->MAX_DELTA_V_KM_S;
+  auto _HAS_MAX_DELTA_V = _o->HAS_MAX_DELTA_V;
   auto _PREFER_RADIAL = _o->PREFER_RADIAL;
   auto _CONJUNCTION = _o->CONJUNCTION ? CreateCDM(_fbb, _o->CONJUNCTION.get(), _rehasher) : 0;
   auto _APPROACH_AXIS = _o->APPROACH_AXIS;
@@ -6340,6 +6606,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> mplRelativeRequest::Pack(::flat
       _REFERENCE,
       _RELATIVE_STATE,
       _DYNAMICS,
+      _STM_DYNAMICS,
       _DRAG,
       _DURATION_S,
       _INITIAL_ROE,
@@ -6354,6 +6621,7 @@ inline ::flatbuffers::Offset<mplRelativeRequest> mplRelativeRequest::Pack(::flat
       _MISS_DISTANCE_KM,
       _TIME_TO_CLOSEST_APPROACH_S,
       _MAX_DELTA_V_KM_S,
+      _HAS_MAX_DELTA_V,
       _PREFER_RADIAL,
       _CONJUNCTION,
       _APPROACH_AXIS,
@@ -6373,8 +6641,11 @@ inline mplRendezvousRequestT::mplRendezvousRequestT(const mplRendezvousRequestT 
         HOLD_DURATION_S(o.HOLD_DURATION_S),
         BANDWIDTH_RAD_S(o.BANDWIDTH_RAD_S),
         DAMPING_RATIO(o.DAMPING_RATIO),
+        HAS_DAMPING_RATIO(o.HAS_DAMPING_RATIO),
         KP_PER_S2(o.KP_PER_S2),
+        HAS_KP(o.HAS_KP),
         KD_PER_S(o.KD_PER_S),
+        HAS_KD(o.HAS_KD),
         FEEDFORWARD(o.FEEDFORWARD),
         COMPENSATE_CORIOLIS(o.COMPENSATE_CORIOLIS),
         COMPENSATE_GRAVITY_GRADIENT(o.COMPENSATE_GRAVITY_GRADIENT),
@@ -6395,8 +6666,11 @@ inline mplRendezvousRequestT &mplRendezvousRequestT::operator=(mplRendezvousRequ
   std::swap(HOLD_DURATION_S, o.HOLD_DURATION_S);
   std::swap(BANDWIDTH_RAD_S, o.BANDWIDTH_RAD_S);
   std::swap(DAMPING_RATIO, o.DAMPING_RATIO);
+  std::swap(HAS_DAMPING_RATIO, o.HAS_DAMPING_RATIO);
   std::swap(KP_PER_S2, o.KP_PER_S2);
+  std::swap(HAS_KP, o.HAS_KP);
   std::swap(KD_PER_S, o.KD_PER_S);
+  std::swap(HAS_KD, o.HAS_KD);
   std::swap(FEEDFORWARD, o.FEEDFORWARD);
   std::swap(COMPENSATE_CORIOLIS, o.COMPENSATE_CORIOLIS);
   std::swap(COMPENSATE_GRAVITY_GRADIENT, o.COMPENSATE_GRAVITY_GRADIENT);
@@ -6426,8 +6700,11 @@ inline void mplRendezvousRequest::UnPackTo(mplRendezvousRequestT *_o, const ::fl
   { auto _e = HOLD_DURATION_S(); _o->HOLD_DURATION_S = _e; }
   { auto _e = BANDWIDTH_RAD_S(); _o->BANDWIDTH_RAD_S = _e; }
   { auto _e = DAMPING_RATIO(); _o->DAMPING_RATIO = _e; }
+  { auto _e = HAS_DAMPING_RATIO(); _o->HAS_DAMPING_RATIO = _e; }
   { auto _e = KP_PER_S2(); _o->KP_PER_S2 = _e; }
+  { auto _e = HAS_KP(); _o->HAS_KP = _e; }
   { auto _e = KD_PER_S(); _o->KD_PER_S = _e; }
+  { auto _e = HAS_KD(); _o->HAS_KD = _e; }
   { auto _e = FEEDFORWARD(); _o->FEEDFORWARD = _e; }
   { auto _e = COMPENSATE_CORIOLIS(); _o->COMPENSATE_CORIOLIS = _e; }
   { auto _e = COMPENSATE_GRAVITY_GRADIENT(); _o->COMPENSATE_GRAVITY_GRADIENT = _e; }
@@ -6455,8 +6732,11 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> mplRendezvousRequest::Pack(::
   auto _HOLD_DURATION_S = _o->HOLD_DURATION_S;
   auto _BANDWIDTH_RAD_S = _o->BANDWIDTH_RAD_S;
   auto _DAMPING_RATIO = _o->DAMPING_RATIO;
+  auto _HAS_DAMPING_RATIO = _o->HAS_DAMPING_RATIO;
   auto _KP_PER_S2 = _o->KP_PER_S2;
+  auto _HAS_KP = _o->HAS_KP;
   auto _KD_PER_S = _o->KD_PER_S;
+  auto _HAS_KD = _o->HAS_KD;
   auto _FEEDFORWARD = _o->FEEDFORWARD;
   auto _COMPENSATE_CORIOLIS = _o->COMPENSATE_CORIOLIS;
   auto _COMPENSATE_GRAVITY_GRADIENT = _o->COMPENSATE_GRAVITY_GRADIENT;
@@ -6476,8 +6756,11 @@ inline ::flatbuffers::Offset<mplRendezvousRequest> mplRendezvousRequest::Pack(::
       _HOLD_DURATION_S,
       _BANDWIDTH_RAD_S,
       _DAMPING_RATIO,
+      _HAS_DAMPING_RATIO,
       _KP_PER_S2,
+      _HAS_KP,
       _KD_PER_S,
+      _HAS_KD,
       _FEEDFORWARD,
       _COMPENSATE_CORIOLIS,
       _COMPENSATE_GRAVITY_GRADIENT,
@@ -6491,6 +6774,7 @@ inline mplGeometryRequestT::mplGeometryRequestT(const mplGeometryRequestT &o)
       : ORBIT((o.ORBIT) ? new mplOrbitT(*o.ORBIT) : nullptr),
         AT_TRUE_ANOMALY_DEG(o.AT_TRUE_ANOMALY_DEG),
         ELAPSED_S(o.ELAPSED_S),
+        HAS_ELAPSED(o.HAS_ELAPSED),
         BURN((o.BURN) ? new mplBurnT(*o.BURN) : nullptr),
         TO_AXES(o.TO_AXES),
         ECCENTRICITY(o.ECCENTRICITY),
@@ -6500,6 +6784,7 @@ inline mplGeometryRequestT::mplGeometryRequestT(const mplGeometryRequestT &o)
         TO_TRUE_ANOMALY_DEG(o.TO_TRUE_ANOMALY_DEG),
         REVOLUTIONS(o.REVOLUTIONS),
         SWEEP_DEG(o.SWEEP_DEG),
+        HAS_SWEEP(o.HAS_SWEEP),
         SAMPLE_COUNT(o.SAMPLE_COUNT) {
 }
 
@@ -6507,6 +6792,7 @@ inline mplGeometryRequestT &mplGeometryRequestT::operator=(mplGeometryRequestT o
   std::swap(ORBIT, o.ORBIT);
   std::swap(AT_TRUE_ANOMALY_DEG, o.AT_TRUE_ANOMALY_DEG);
   std::swap(ELAPSED_S, o.ELAPSED_S);
+  std::swap(HAS_ELAPSED, o.HAS_ELAPSED);
   std::swap(BURN, o.BURN);
   std::swap(TO_AXES, o.TO_AXES);
   std::swap(ECCENTRICITY, o.ECCENTRICITY);
@@ -6516,6 +6802,7 @@ inline mplGeometryRequestT &mplGeometryRequestT::operator=(mplGeometryRequestT o
   std::swap(TO_TRUE_ANOMALY_DEG, o.TO_TRUE_ANOMALY_DEG);
   std::swap(REVOLUTIONS, o.REVOLUTIONS);
   std::swap(SWEEP_DEG, o.SWEEP_DEG);
+  std::swap(HAS_SWEEP, o.HAS_SWEEP);
   std::swap(SAMPLE_COUNT, o.SAMPLE_COUNT);
   return *this;
 }
@@ -6532,6 +6819,7 @@ inline void mplGeometryRequest::UnPackTo(mplGeometryRequestT *_o, const ::flatbu
   { auto _e = ORBIT(); if (_e) { if(_o->ORBIT) { _e->UnPackTo(_o->ORBIT.get(), _resolver); } else { _o->ORBIT = std::unique_ptr<mplOrbitT>(_e->UnPack(_resolver)); } } else if (_o->ORBIT) { _o->ORBIT.reset(); } }
   { auto _e = AT_TRUE_ANOMALY_DEG(); _o->AT_TRUE_ANOMALY_DEG = _e; }
   { auto _e = ELAPSED_S(); _o->ELAPSED_S = _e; }
+  { auto _e = HAS_ELAPSED(); _o->HAS_ELAPSED = _e; }
   { auto _e = BURN(); if (_e) { if(_o->BURN) { _e->UnPackTo(_o->BURN.get(), _resolver); } else { _o->BURN = std::unique_ptr<mplBurnT>(_e->UnPack(_resolver)); } } else if (_o->BURN) { _o->BURN.reset(); } }
   { auto _e = TO_AXES(); _o->TO_AXES = _e; }
   { auto _e = ECCENTRICITY(); _o->ECCENTRICITY = _e; }
@@ -6541,6 +6829,7 @@ inline void mplGeometryRequest::UnPackTo(mplGeometryRequestT *_o, const ::flatbu
   { auto _e = TO_TRUE_ANOMALY_DEG(); _o->TO_TRUE_ANOMALY_DEG = _e; }
   { auto _e = REVOLUTIONS(); _o->REVOLUTIONS = _e; }
   { auto _e = SWEEP_DEG(); _o->SWEEP_DEG = _e; }
+  { auto _e = HAS_SWEEP(); _o->HAS_SWEEP = _e; }
   { auto _e = SAMPLE_COUNT(); _o->SAMPLE_COUNT = _e; }
 }
 
@@ -6555,6 +6844,7 @@ inline ::flatbuffers::Offset<mplGeometryRequest> mplGeometryRequest::Pack(::flat
   auto _ORBIT = _o->ORBIT ? CreatemplOrbit(_fbb, _o->ORBIT.get(), _rehasher) : 0;
   auto _AT_TRUE_ANOMALY_DEG = _o->AT_TRUE_ANOMALY_DEG;
   auto _ELAPSED_S = _o->ELAPSED_S;
+  auto _HAS_ELAPSED = _o->HAS_ELAPSED;
   auto _BURN = _o->BURN ? CreatemplBurn(_fbb, _o->BURN.get(), _rehasher) : 0;
   auto _TO_AXES = _o->TO_AXES;
   auto _ECCENTRICITY = _o->ECCENTRICITY;
@@ -6564,12 +6854,14 @@ inline ::flatbuffers::Offset<mplGeometryRequest> mplGeometryRequest::Pack(::flat
   auto _TO_TRUE_ANOMALY_DEG = _o->TO_TRUE_ANOMALY_DEG;
   auto _REVOLUTIONS = _o->REVOLUTIONS;
   auto _SWEEP_DEG = _o->SWEEP_DEG;
+  auto _HAS_SWEEP = _o->HAS_SWEEP;
   auto _SAMPLE_COUNT = _o->SAMPLE_COUNT;
   return CreatemplGeometryRequest(
       _fbb,
       _ORBIT,
       _AT_TRUE_ANOMALY_DEG,
       _ELAPSED_S,
+      _HAS_ELAPSED,
       _BURN,
       _TO_AXES,
       _ECCENTRICITY,
@@ -6579,6 +6871,7 @@ inline ::flatbuffers::Offset<mplGeometryRequest> mplGeometryRequest::Pack(::flat
       _TO_TRUE_ANOMALY_DEG,
       _REVOLUTIONS,
       _SWEEP_DEG,
+      _HAS_SWEEP,
       _SAMPLE_COUNT);
 }
 
@@ -6672,6 +6965,7 @@ inline mplPhasingSolutionT::mplPhasingSolutionT(const mplPhasingSolutionT &o)
         ECCENTRICITY_TOLERANCE(o.ECCENTRICITY_TOLERANCE),
         CO_ORBITAL(o.CO_ORBITAL),
         CO_ORBITAL_TOLERANCE_KM(o.CO_ORBITAL_TOLERANCE_KM),
+        CO_ORBITAL_TOLERANCE_FRACTION(o.CO_ORBITAL_TOLERANCE_FRACTION),
         RECOMMENDED_REVOLUTIONS(o.RECOMMENDED_REVOLUTIONS),
         REVOLUTIONS_FROM_CALLER(o.REVOLUTIONS_FROM_CALLER),
         MAX_REVOLUTIONS(o.MAX_REVOLUTIONS),
@@ -6704,6 +6998,7 @@ inline mplPhasingSolutionT &mplPhasingSolutionT::operator=(mplPhasingSolutionT o
   std::swap(ECCENTRICITY_TOLERANCE, o.ECCENTRICITY_TOLERANCE);
   std::swap(CO_ORBITAL, o.CO_ORBITAL);
   std::swap(CO_ORBITAL_TOLERANCE_KM, o.CO_ORBITAL_TOLERANCE_KM);
+  std::swap(CO_ORBITAL_TOLERANCE_FRACTION, o.CO_ORBITAL_TOLERANCE_FRACTION);
   std::swap(RECOMMENDED_REVOLUTIONS, o.RECOMMENDED_REVOLUTIONS);
   std::swap(REVOLUTIONS_FROM_CALLER, o.REVOLUTIONS_FROM_CALLER);
   std::swap(MAX_REVOLUTIONS, o.MAX_REVOLUTIONS);
@@ -6745,6 +7040,7 @@ inline void mplPhasingSolution::UnPackTo(mplPhasingSolutionT *_o, const ::flatbu
   { auto _e = ECCENTRICITY_TOLERANCE(); _o->ECCENTRICITY_TOLERANCE = _e; }
   { auto _e = CO_ORBITAL(); _o->CO_ORBITAL = _e; }
   { auto _e = CO_ORBITAL_TOLERANCE_KM(); _o->CO_ORBITAL_TOLERANCE_KM = _e; }
+  { auto _e = CO_ORBITAL_TOLERANCE_FRACTION(); _o->CO_ORBITAL_TOLERANCE_FRACTION = _e; }
   { auto _e = RECOMMENDED_REVOLUTIONS(); _o->RECOMMENDED_REVOLUTIONS = _e; }
   { auto _e = REVOLUTIONS_FROM_CALLER(); _o->REVOLUTIONS_FROM_CALLER = _e; }
   { auto _e = MAX_REVOLUTIONS(); _o->MAX_REVOLUTIONS = _e; }
@@ -6784,6 +7080,7 @@ inline ::flatbuffers::Offset<mplPhasingSolution> mplPhasingSolution::Pack(::flat
   auto _ECCENTRICITY_TOLERANCE = _o->ECCENTRICITY_TOLERANCE;
   auto _CO_ORBITAL = _o->CO_ORBITAL;
   auto _CO_ORBITAL_TOLERANCE_KM = _o->CO_ORBITAL_TOLERANCE_KM;
+  auto _CO_ORBITAL_TOLERANCE_FRACTION = _o->CO_ORBITAL_TOLERANCE_FRACTION;
   auto _RECOMMENDED_REVOLUTIONS = _o->RECOMMENDED_REVOLUTIONS;
   auto _REVOLUTIONS_FROM_CALLER = _o->REVOLUTIONS_FROM_CALLER;
   auto _MAX_REVOLUTIONS = _o->MAX_REVOLUTIONS;
@@ -6815,6 +7112,7 @@ inline ::flatbuffers::Offset<mplPhasingSolution> mplPhasingSolution::Pack(::flat
       _ECCENTRICITY_TOLERANCE,
       _CO_ORBITAL,
       _CO_ORBITAL_TOLERANCE_KM,
+      _CO_ORBITAL_TOLERANCE_FRACTION,
       _RECOMMENDED_REVOLUTIONS,
       _REVOLUTIONS_FROM_CALLER,
       _MAX_REVOLUTIONS,
@@ -6833,6 +7131,7 @@ inline void mplRelativeSolution::UnPackTo(mplRelativeSolutionT *_o, const ::flat
   (void)_resolver;
   { auto _e = MODEL_REFERENCE(); if (_e) _o->MODEL_REFERENCE = _e->str(); }
   { auto _e = DYNAMICS(); _o->DYNAMICS = _e; }
+  { auto _e = STM_DYNAMICS(); _o->STM_DYNAMICS = _e; }
   { auto _e = STATE_TRANSITION(); if (_e) { _o->STATE_TRANSITION.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->STATE_TRANSITION[_i] = _e->Get(_i); } } else { _o->STATE_TRANSITION.resize(0); } }
   { auto _e = DRAG_COLUMNS(); if (_e) { _o->DRAG_COLUMNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DRAG_COLUMNS[_i] = _e->Get(_i); } } else { _o->DRAG_COLUMNS.resize(0); } }
   { auto _e = DRAG_COLUMN_COUNT(); _o->DRAG_COLUMN_COUNT = _e; }
@@ -6854,6 +7153,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> mplRelativeSolution::Pack(::fl
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const mplRelativeSolutionT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _MODEL_REFERENCE = _o->MODEL_REFERENCE.empty() ? 0 : _fbb.CreateString(_o->MODEL_REFERENCE);
   auto _DYNAMICS = _o->DYNAMICS;
+  auto _STM_DYNAMICS = _o->STM_DYNAMICS;
   auto _STATE_TRANSITION = _o->STATE_TRANSITION.size() ? _fbb.CreateVector(_o->STATE_TRANSITION) : 0;
   auto _DRAG_COLUMNS = _o->DRAG_COLUMNS.size() ? _fbb.CreateVector(_o->DRAG_COLUMNS) : 0;
   auto _DRAG_COLUMN_COUNT = _o->DRAG_COLUMN_COUNT;
@@ -6867,6 +7167,7 @@ inline ::flatbuffers::Offset<mplRelativeSolution> mplRelativeSolution::Pack(::fl
       _fbb,
       _MODEL_REFERENCE,
       _DYNAMICS,
+      _STM_DYNAMICS,
       _STATE_TRANSITION,
       _DRAG_COLUMNS,
       _DRAG_COLUMN_COUNT,

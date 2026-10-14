@@ -10,7 +10,7 @@
   "devDependencies": {
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.9.3",
-    "spacedatastandards.org": "file:../../../spacedatastandards.org"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   }
 }

@@ -142,7 +142,7 @@ struct PNVEntryT : public ::flatbuffers::NativeTable {
   std::vector<uint8_t> PUBLISHER_KEY{};
   pnvKeySource KEY_SOURCE = pnvKeySource::None;
   std::string REASON{};
-  std::vector<uint8_t> PNM{};
+  std::vector<uint8_t> PNM_BYTES{};
 };
 
 /// One received notice and the verdict on it.
@@ -168,7 +168,7 @@ struct PNVEntry FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PUBLISHER_KEY = 32,
     VT_KEY_SOURCE = 34,
     VT_REASON = 36,
-    VT_PNM = 38
+    VT_PNM_BYTES = 38
   };
   /// Content identifier of the $PNM the verdict is about.
   const ::flatbuffers::String *PNM_CID() const {
@@ -238,8 +238,8 @@ struct PNVEntry FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   /// The notice itself as received, a size-prefixed $PNM, so a reader can
   /// verify the signature on its own instead of trusting this verdict.
-  const ::flatbuffers::Vector<uint8_t> *PNM() const {
-    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PNM);
+  const ::flatbuffers::Vector<uint8_t> *PNM_BYTES() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PNM_BYTES);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -273,8 +273,8 @@ struct PNVEntry FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_KEY_SOURCE, 1) &&
            VerifyOffset(verifier, VT_REASON) &&
            verifier.VerifyString(REASON()) &&
-           VerifyOffset(verifier, VT_PNM) &&
-           verifier.VerifyVector(PNM()) &&
+           VerifyOffset(verifier, VT_PNM_BYTES) &&
+           verifier.VerifyVector(PNM_BYTES()) &&
            verifier.EndTable();
   }
   PNVEntryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -337,8 +337,8 @@ struct PNVEntryBuilder {
   void add_REASON(::flatbuffers::Offset<::flatbuffers::String> REASON) {
     fbb_.AddOffset(PNVEntry::VT_REASON, REASON);
   }
-  void add_PNM(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PNM) {
-    fbb_.AddOffset(PNVEntry::VT_PNM, PNM);
+  void add_PNM_BYTES(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PNM_BYTES) {
+    fbb_.AddOffset(PNVEntry::VT_PNM_BYTES, PNM_BYTES);
   }
   explicit PNVEntryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -370,11 +370,11 @@ inline ::flatbuffers::Offset<PNVEntry> CreatePNVEntry(
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PUBLISHER_KEY = 0,
     pnvKeySource KEY_SOURCE = pnvKeySource::None,
     ::flatbuffers::Offset<::flatbuffers::String> REASON = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PNM = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PNM_BYTES = 0) {
   PNVEntryBuilder builder_(_fbb);
   builder_.add_RECEIVED_AT_MS(RECEIVED_AT_MS);
   builder_.add_PUBLISHED_AT_MS(PUBLISHED_AT_MS);
-  builder_.add_PNM(PNM);
+  builder_.add_PNM_BYTES(PNM_BYTES);
   builder_.add_REASON(REASON);
   builder_.add_PUBLISHER_KEY(PUBLISHER_KEY);
   builder_.add_SIGNATURE(SIGNATURE);
@@ -417,7 +417,7 @@ inline ::flatbuffers::Offset<PNVEntry> CreatePNVEntryDirect(
     const std::vector<uint8_t> *PUBLISHER_KEY = nullptr,
     pnvKeySource KEY_SOURCE = pnvKeySource::None,
     const char *REASON = nullptr,
-    const std::vector<uint8_t> *PNM = nullptr) {
+    const std::vector<uint8_t> *PNM_BYTES = nullptr) {
   auto PNM_CID__ = PNM_CID ? _fbb.CreateString(PNM_CID) : 0;
   auto PUBLISHER_PEER_ID__ = PUBLISHER_PEER_ID ? _fbb.CreateString(PUBLISHER_PEER_ID) : 0;
   auto RECEIVED_FROM_PEER_ID__ = RECEIVED_FROM_PEER_ID ? _fbb.CreateString(RECEIVED_FROM_PEER_ID) : 0;
@@ -430,7 +430,7 @@ inline ::flatbuffers::Offset<PNVEntry> CreatePNVEntryDirect(
   auto SIGNATURE__ = SIGNATURE ? _fbb.CreateVector<uint8_t>(*SIGNATURE) : 0;
   auto PUBLISHER_KEY__ = PUBLISHER_KEY ? _fbb.CreateVector<uint8_t>(*PUBLISHER_KEY) : 0;
   auto REASON__ = REASON ? _fbb.CreateString(REASON) : 0;
-  auto PNM__ = PNM ? _fbb.CreateVector<uint8_t>(*PNM) : 0;
+  auto PNM_BYTES__ = PNM_BYTES ? _fbb.CreateVector<uint8_t>(*PNM_BYTES) : 0;
   return CreatePNVEntry(
       _fbb,
       PNM_CID__,
@@ -450,7 +450,7 @@ inline ::flatbuffers::Offset<PNVEntry> CreatePNVEntryDirect(
       PUBLISHER_KEY__,
       KEY_SOURCE,
       REASON__,
-      PNM__);
+      PNM_BYTES__);
 }
 
 ::flatbuffers::Offset<PNVEntry> CreatePNVEntry(::flatbuffers::FlatBufferBuilder &_fbb, const PNVEntryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -602,7 +602,7 @@ inline void PNVEntry::UnPackTo(PNVEntryT *_o, const ::flatbuffers::resolver_func
   { auto _e = PUBLISHER_KEY(); if (_e) { _o->PUBLISHER_KEY.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PUBLISHER_KEY.begin()); } }
   { auto _e = KEY_SOURCE(); _o->KEY_SOURCE = _e; }
   { auto _e = REASON(); if (_e) _o->REASON = _e->str(); }
-  { auto _e = PNM(); if (_e) { _o->PNM.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PNM.begin()); } }
+  { auto _e = PNM_BYTES(); if (_e) { _o->PNM_BYTES.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PNM_BYTES.begin()); } }
 }
 
 inline ::flatbuffers::Offset<PNVEntry> CreatePNVEntry(::flatbuffers::FlatBufferBuilder &_fbb, const PNVEntryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -630,7 +630,7 @@ inline ::flatbuffers::Offset<PNVEntry> PNVEntry::Pack(::flatbuffers::FlatBufferB
   auto _PUBLISHER_KEY = _o->PUBLISHER_KEY.size() ? _fbb.CreateVector(_o->PUBLISHER_KEY) : 0;
   auto _KEY_SOURCE = _o->KEY_SOURCE;
   auto _REASON = _o->REASON.empty() ? 0 : _fbb.CreateString(_o->REASON);
-  auto _PNM = _o->PNM.size() ? _fbb.CreateVector(_o->PNM) : 0;
+  auto _PNM_BYTES = _o->PNM_BYTES.size() ? _fbb.CreateVector(_o->PNM_BYTES) : 0;
   return CreatePNVEntry(
       _fbb,
       _PNM_CID,
@@ -650,7 +650,7 @@ inline ::flatbuffers::Offset<PNVEntry> PNVEntry::Pack(::flatbuffers::FlatBufferB
       _PUBLISHER_KEY,
       _KEY_SOURCE,
       _REASON,
-      _PNM);
+      _PNM_BYTES);
 }
 
 inline PNVT::PNVT(const PNVT &o)

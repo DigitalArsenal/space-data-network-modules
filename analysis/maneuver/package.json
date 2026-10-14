@@ -16,9 +16,10 @@
     "capture-transcripts": "node vectors/tools/capture-transcripts.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.0",
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.9.3",
-    "spacedatastandards.org": "1.203.0"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   },
   "type": "module",
   "version": "0.7.0"

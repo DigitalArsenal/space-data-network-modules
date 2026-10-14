@@ -27,7 +27,9 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "APL_generated.h"
 #include "APM_generated.h"
 #include "APP_generated.h"
+#include "APR_generated.h"
 #include "ARM_generated.h"
+#include "ASG_generated.h"
 #include "AST_generated.h"
 #include "ATD_generated.h"
 #include "ATM_generated.h"
@@ -65,6 +67,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CVP_generated.h"
 #include "CVR_generated.h"
 #include "CZM_generated.h"
+#include "DAV_generated.h"
+#include "DCL_generated.h"
 #include "DFH_generated.h"
 #include "DMG_generated.h"
 #include "DOA_generated.h"
@@ -81,12 +85,14 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "EOP_generated.h"
 #include "EPF_generated.h"
 #include "EPM_generated.h"
+#include "ERM_generated.h"
 #include "ESL_generated.h"
 #include "ETM_generated.h"
 #include "ETS_generated.h"
 #include "EVL_generated.h"
 #include "EWR_generated.h"
 #include "FCS_generated.h"
+#include "FIL_generated.h"
 #include "FPC_generated.h"
 #include "FRM_generated.h"
 #include "FSB_generated.h"
@@ -121,6 +127,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "LCF_generated.h"
 #include "LCH_generated.h"
 #include "LDM_generated.h"
+#include "LFV_generated.h"
 #include "LGR_generated.h"
 #include "LKS_generated.h"
 #include "LMO_generated.h"
@@ -131,6 +138,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "LPF_generated.h"
 #include "LWK_generated.h"
 #include "MBL_generated.h"
+#include "MDE_generated.h"
 #include "MDP_generated.h"
 #include "MDS_generated.h"
 #include "MEM_generated.h"
@@ -139,12 +147,15 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "MNF_generated.h"
 #include "MNV_generated.h"
 #include "MPE_generated.h"
+#include "MPL_generated.h"
 #include "MSL_generated.h"
 #include "MST_generated.h"
 #include "MTI_generated.h"
 #include "NAV_generated.h"
 #include "NCD_generated.h"
 #include "NDS_generated.h"
+#include "NEV_generated.h"
+#include "NHS_generated.h"
 #include "NST_generated.h"
 #include "NUM_generated.h"
 #include "OBD_generated.h"
@@ -152,6 +163,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "OCM_generated.h"
 #include "ODR_generated.h"
 #include "OEM_generated.h"
+#include "OIL_generated.h"
 #include "OMM_generated.h"
 #include "OOA_generated.h"
 #include "OOB_generated.h"
@@ -179,7 +191,9 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "PMM_generated.h"
 #include "PNL_generated.h"
 #include "PNM_generated.h"
+#include "PNV_generated.h"
 #include "PPE_generated.h"
+#include "PPS_generated.h"
 #include "PRG_generated.h"
 #include "PRR_generated.h"
 #include "PRW_generated.h"
@@ -201,15 +215,19 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "RFM_generated.h"
 #include "RFO_generated.h"
 #include "RFS_generated.h"
+#include "RND_generated.h"
 #include "ROC_generated.h"
 #include "RPC_generated.h"
 #include "RPT_generated.h"
 #include "RSD_generated.h"
 #include "SAR_generated.h"
+#include "SBC_generated.h"
+#include "SBD_generated.h"
 #include "SBM_generated.h"
 #include "SCC_generated.h"
 #include "SCM_generated.h"
 #include "SCN_generated.h"
+#include "SCR_generated.h"
 #include "SCV_generated.h"
 #include "SCX_generated.h"
 #include "SDF_generated.h"
@@ -232,6 +250,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SON_generated.h"
 #include "SPP_generated.h"
 #include "SPW_generated.h"
+#include "SRG_generated.h"
 #include "SRI_generated.h"
 #include "STF_generated.h"
 #include "STO_generated.h"
@@ -241,6 +260,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SUB_generated.h"
 #include "SWR_generated.h"
 #include "TAB_generated.h"
+#include "TBP_generated.h"
 #include "TBS_generated.h"
 #include "TCF_generated.h"
 #include "TCT_generated.h"
@@ -266,10 +286,12 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "VCM_generated.h"
 #include "VEP_generated.h"
 #include "VST_generated.h"
+#include "WHA_generated.h"
 #include "WKS_generated.h"
 #include "WPN_generated.h"
 #include "WTH_generated.h"
 #include "WXF_generated.h"
+#include "XMT_generated.h"
 #include "XTC_generated.h"
 
 struct Record;
@@ -5223,16 +5245,60 @@ enum class RecordTypeExtended : uint16_t {
   ABA = 256,
   CVR = 257,
   PVN = 258,
+  SBD = 259,
+  APR = 260,
+  ASG = 261,
+  DAV = 262,
+  DCL = 263,
+  ERM = 264,
+  FIL = 265,
+  LFV = 266,
+  MDE = 267,
+  MPL = 268,
+  NEV = 269,
+  NHS = 270,
+  OIL = 271,
+  PNV = 272,
+  PPS = 273,
+  RND = 274,
+  SBC = 275,
+  SCR = 276,
+  SRG = 277,
+  TBP = 278,
+  WHA = 279,
+  XMT = 280,
   MIN = NONE,
-  MAX = PVN
+  MAX = XMT
 };
 
-inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[4] {
+inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[26] {
   static const RecordTypeExtended values[] = {
     RecordTypeExtended::NONE,
     RecordTypeExtended::ABA,
     RecordTypeExtended::CVR,
-    RecordTypeExtended::PVN
+    RecordTypeExtended::PVN,
+    RecordTypeExtended::SBD,
+    RecordTypeExtended::APR,
+    RecordTypeExtended::ASG,
+    RecordTypeExtended::DAV,
+    RecordTypeExtended::DCL,
+    RecordTypeExtended::ERM,
+    RecordTypeExtended::FIL,
+    RecordTypeExtended::LFV,
+    RecordTypeExtended::MDE,
+    RecordTypeExtended::MPL,
+    RecordTypeExtended::NEV,
+    RecordTypeExtended::NHS,
+    RecordTypeExtended::OIL,
+    RecordTypeExtended::PNV,
+    RecordTypeExtended::PPS,
+    RecordTypeExtended::RND,
+    RecordTypeExtended::SBC,
+    RecordTypeExtended::SCR,
+    RecordTypeExtended::SRG,
+    RecordTypeExtended::TBP,
+    RecordTypeExtended::WHA,
+    RecordTypeExtended::XMT
   };
   return values;
 }
@@ -5243,6 +5309,28 @@ inline const char *EnumNameRecordTypeExtended(RecordTypeExtended e) {
     case RecordTypeExtended::ABA: return "ABA";
     case RecordTypeExtended::CVR: return "CVR";
     case RecordTypeExtended::PVN: return "PVN";
+    case RecordTypeExtended::SBD: return "SBD";
+    case RecordTypeExtended::APR: return "APR";
+    case RecordTypeExtended::ASG: return "ASG";
+    case RecordTypeExtended::DAV: return "DAV";
+    case RecordTypeExtended::DCL: return "DCL";
+    case RecordTypeExtended::ERM: return "ERM";
+    case RecordTypeExtended::FIL: return "FIL";
+    case RecordTypeExtended::LFV: return "LFV";
+    case RecordTypeExtended::MDE: return "MDE";
+    case RecordTypeExtended::MPL: return "MPL";
+    case RecordTypeExtended::NEV: return "NEV";
+    case RecordTypeExtended::NHS: return "NHS";
+    case RecordTypeExtended::OIL: return "OIL";
+    case RecordTypeExtended::PNV: return "PNV";
+    case RecordTypeExtended::PPS: return "PPS";
+    case RecordTypeExtended::RND: return "RND";
+    case RecordTypeExtended::SBC: return "SBC";
+    case RecordTypeExtended::SCR: return "SCR";
+    case RecordTypeExtended::SRG: return "SRG";
+    case RecordTypeExtended::TBP: return "TBP";
+    case RecordTypeExtended::WHA: return "WHA";
+    case RecordTypeExtended::XMT: return "XMT";
     default: return "";
   }
 }

@@ -3531,8 +3531,8 @@ struct XMTProductSelectionT : public ::flatbuffers::NativeTable {
   int64_t EPOCH_MS = 0;
   xmtSelectionReason REASON = xmtSelectionReason::Unspecified;
   bool TIE = false;
-  std::unique_ptr<XMTRecordRefT> OMM{};
-  std::unique_ptr<XMTRecordRefT> OCM{};
+  std::unique_ptr<XMTRecordRefT> OMM_REF{};
+  std::unique_ptr<XMTRecordRefT> OCM_REF{};
   xmtCovarianceOrigin COVARIANCE_ORIGIN = xmtCovarianceOrigin::Absent;
   std::unique_ptr<CVRT> COVARIANCE{};
   std::unique_ptr<XMTMeasuredErrorT> MEASURED{};
@@ -3552,8 +3552,8 @@ struct XMTProductSelection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_EPOCH_MS = 6,
     VT_REASON = 8,
     VT_TIE = 10,
-    VT_OMM = 12,
-    VT_OCM = 14,
+    VT_OMM_REF = 12,
+    VT_OCM_REF = 14,
     VT_COVARIANCE_ORIGIN = 16,
     VT_COVARIANCE = 18,
     VT_MEASURED = 20
@@ -3571,13 +3571,13 @@ struct XMTProductSelection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   bool TIE() const {
     return GetField<uint8_t>(VT_TIE, 0) != 0;
   }
-  /// The element set chosen.
-  const XMTRecordRef *OMM() const {
-    return GetPointer<const XMTRecordRef *>(VT_OMM);
+  /// The element set chosen ($OMM).
+  const XMTRecordRef *OMM_REF() const {
+    return GetPointer<const XMTRecordRef *>(VT_OMM_REF);
   }
-  /// The paired state and covariance, when there is one.
-  const XMTRecordRef *OCM() const {
-    return GetPointer<const XMTRecordRef *>(VT_OCM);
+  /// The paired state and covariance ($OCM), when there is one.
+  const XMTRecordRef *OCM_REF() const {
+    return GetPointer<const XMTRecordRef *>(VT_OCM_REF);
   }
   xmtCovarianceOrigin COVARIANCE_ORIGIN() const {
     return static_cast<xmtCovarianceOrigin>(GetField<uint8_t>(VT_COVARIANCE_ORIGIN, 0));
@@ -3598,10 +3598,10 @@ struct XMTProductSelection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            VerifyField<int64_t>(verifier, VT_EPOCH_MS, 8) &&
            VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
            VerifyField<uint8_t>(verifier, VT_TIE, 1) &&
-           VerifyOffset(verifier, VT_OMM) &&
-           verifier.VerifyTable(OMM()) &&
-           VerifyOffset(verifier, VT_OCM) &&
-           verifier.VerifyTable(OCM()) &&
+           VerifyOffset(verifier, VT_OMM_REF) &&
+           verifier.VerifyTable(OMM_REF()) &&
+           VerifyOffset(verifier, VT_OCM_REF) &&
+           verifier.VerifyTable(OCM_REF()) &&
            VerifyField<uint8_t>(verifier, VT_COVARIANCE_ORIGIN, 1) &&
            VerifyOffset(verifier, VT_COVARIANCE) &&
            verifier.VerifyTable(COVARIANCE()) &&
@@ -3630,11 +3630,11 @@ struct XMTProductSelectionBuilder {
   void add_TIE(bool TIE) {
     fbb_.AddElement<uint8_t>(XMTProductSelection::VT_TIE, static_cast<uint8_t>(TIE), 0);
   }
-  void add_OMM(::flatbuffers::Offset<XMTRecordRef> OMM) {
-    fbb_.AddOffset(XMTProductSelection::VT_OMM, OMM);
+  void add_OMM_REF(::flatbuffers::Offset<XMTRecordRef> OMM_REF) {
+    fbb_.AddOffset(XMTProductSelection::VT_OMM_REF, OMM_REF);
   }
-  void add_OCM(::flatbuffers::Offset<XMTRecordRef> OCM) {
-    fbb_.AddOffset(XMTProductSelection::VT_OCM, OCM);
+  void add_OCM_REF(::flatbuffers::Offset<XMTRecordRef> OCM_REF) {
+    fbb_.AddOffset(XMTProductSelection::VT_OCM_REF, OCM_REF);
   }
   void add_COVARIANCE_ORIGIN(xmtCovarianceOrigin COVARIANCE_ORIGIN) {
     fbb_.AddElement<uint8_t>(XMTProductSelection::VT_COVARIANCE_ORIGIN, static_cast<uint8_t>(COVARIANCE_ORIGIN), 0);
@@ -3662,8 +3662,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> CreateXMTProductSelection(
     int64_t EPOCH_MS = 0,
     xmtSelectionReason REASON = xmtSelectionReason::Unspecified,
     bool TIE = false,
-    ::flatbuffers::Offset<XMTRecordRef> OMM = 0,
-    ::flatbuffers::Offset<XMTRecordRef> OCM = 0,
+    ::flatbuffers::Offset<XMTRecordRef> OMM_REF = 0,
+    ::flatbuffers::Offset<XMTRecordRef> OCM_REF = 0,
     xmtCovarianceOrigin COVARIANCE_ORIGIN = xmtCovarianceOrigin::Absent,
     ::flatbuffers::Offset<CVR> COVARIANCE = 0,
     ::flatbuffers::Offset<XMTMeasuredError> MEASURED = 0) {
@@ -3671,8 +3671,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> CreateXMTProductSelection(
   builder_.add_EPOCH_MS(EPOCH_MS);
   builder_.add_MEASURED(MEASURED);
   builder_.add_COVARIANCE(COVARIANCE);
-  builder_.add_OCM(OCM);
-  builder_.add_OMM(OMM);
+  builder_.add_OCM_REF(OCM_REF);
+  builder_.add_OMM_REF(OMM_REF);
   builder_.add_SOURCE_ID(SOURCE_ID);
   builder_.add_COVARIANCE_ORIGIN(COVARIANCE_ORIGIN);
   builder_.add_TIE(TIE);
@@ -3691,8 +3691,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> CreateXMTProductSelectionDirec
     int64_t EPOCH_MS = 0,
     xmtSelectionReason REASON = xmtSelectionReason::Unspecified,
     bool TIE = false,
-    ::flatbuffers::Offset<XMTRecordRef> OMM = 0,
-    ::flatbuffers::Offset<XMTRecordRef> OCM = 0,
+    ::flatbuffers::Offset<XMTRecordRef> OMM_REF = 0,
+    ::flatbuffers::Offset<XMTRecordRef> OCM_REF = 0,
     xmtCovarianceOrigin COVARIANCE_ORIGIN = xmtCovarianceOrigin::Absent,
     ::flatbuffers::Offset<CVR> COVARIANCE = 0,
     ::flatbuffers::Offset<XMTMeasuredError> MEASURED = 0) {
@@ -3703,8 +3703,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> CreateXMTProductSelectionDirec
       EPOCH_MS,
       REASON,
       TIE,
-      OMM,
-      OCM,
+      OMM_REF,
+      OCM_REF,
       COVARIANCE_ORIGIN,
       COVARIANCE,
       MEASURED);
@@ -6424,8 +6424,8 @@ inline XMTProductSelectionT::XMTProductSelectionT(const XMTProductSelectionT &o)
         EPOCH_MS(o.EPOCH_MS),
         REASON(o.REASON),
         TIE(o.TIE),
-        OMM((o.OMM) ? new XMTRecordRefT(*o.OMM) : nullptr),
-        OCM((o.OCM) ? new XMTRecordRefT(*o.OCM) : nullptr),
+        OMM_REF((o.OMM_REF) ? new XMTRecordRefT(*o.OMM_REF) : nullptr),
+        OCM_REF((o.OCM_REF) ? new XMTRecordRefT(*o.OCM_REF) : nullptr),
         COVARIANCE_ORIGIN(o.COVARIANCE_ORIGIN),
         COVARIANCE((o.COVARIANCE) ? new CVRT(*o.COVARIANCE) : nullptr),
         MEASURED((o.MEASURED) ? new XMTMeasuredErrorT(*o.MEASURED) : nullptr) {
@@ -6436,8 +6436,8 @@ inline XMTProductSelectionT &XMTProductSelectionT::operator=(XMTProductSelection
   std::swap(EPOCH_MS, o.EPOCH_MS);
   std::swap(REASON, o.REASON);
   std::swap(TIE, o.TIE);
-  std::swap(OMM, o.OMM);
-  std::swap(OCM, o.OCM);
+  std::swap(OMM_REF, o.OMM_REF);
+  std::swap(OCM_REF, o.OCM_REF);
   std::swap(COVARIANCE_ORIGIN, o.COVARIANCE_ORIGIN);
   std::swap(COVARIANCE, o.COVARIANCE);
   std::swap(MEASURED, o.MEASURED);
@@ -6457,8 +6457,8 @@ inline void XMTProductSelection::UnPackTo(XMTProductSelectionT *_o, const ::flat
   { auto _e = EPOCH_MS(); _o->EPOCH_MS = _e; }
   { auto _e = REASON(); _o->REASON = _e; }
   { auto _e = TIE(); _o->TIE = _e; }
-  { auto _e = OMM(); if (_e) { if(_o->OMM) { _e->UnPackTo(_o->OMM.get(), _resolver); } else { _o->OMM = std::unique_ptr<XMTRecordRefT>(_e->UnPack(_resolver)); } } else if (_o->OMM) { _o->OMM.reset(); } }
-  { auto _e = OCM(); if (_e) { if(_o->OCM) { _e->UnPackTo(_o->OCM.get(), _resolver); } else { _o->OCM = std::unique_ptr<XMTRecordRefT>(_e->UnPack(_resolver)); } } else if (_o->OCM) { _o->OCM.reset(); } }
+  { auto _e = OMM_REF(); if (_e) { if(_o->OMM_REF) { _e->UnPackTo(_o->OMM_REF.get(), _resolver); } else { _o->OMM_REF = std::unique_ptr<XMTRecordRefT>(_e->UnPack(_resolver)); } } else if (_o->OMM_REF) { _o->OMM_REF.reset(); } }
+  { auto _e = OCM_REF(); if (_e) { if(_o->OCM_REF) { _e->UnPackTo(_o->OCM_REF.get(), _resolver); } else { _o->OCM_REF = std::unique_ptr<XMTRecordRefT>(_e->UnPack(_resolver)); } } else if (_o->OCM_REF) { _o->OCM_REF.reset(); } }
   { auto _e = COVARIANCE_ORIGIN(); _o->COVARIANCE_ORIGIN = _e; }
   { auto _e = COVARIANCE(); if (_e) { if(_o->COVARIANCE) { _e->UnPackTo(_o->COVARIANCE.get(), _resolver); } else { _o->COVARIANCE = std::unique_ptr<CVRT>(_e->UnPack(_resolver)); } } else if (_o->COVARIANCE) { _o->COVARIANCE.reset(); } }
   { auto _e = MEASURED(); if (_e) { if(_o->MEASURED) { _e->UnPackTo(_o->MEASURED.get(), _resolver); } else { _o->MEASURED = std::unique_ptr<XMTMeasuredErrorT>(_e->UnPack(_resolver)); } } else if (_o->MEASURED) { _o->MEASURED.reset(); } }
@@ -6476,8 +6476,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> XMTProductSelection::Pack(::fl
   auto _EPOCH_MS = _o->EPOCH_MS;
   auto _REASON = _o->REASON;
   auto _TIE = _o->TIE;
-  auto _OMM = _o->OMM ? CreateXMTRecordRef(_fbb, _o->OMM.get(), _rehasher) : 0;
-  auto _OCM = _o->OCM ? CreateXMTRecordRef(_fbb, _o->OCM.get(), _rehasher) : 0;
+  auto _OMM_REF = _o->OMM_REF ? CreateXMTRecordRef(_fbb, _o->OMM_REF.get(), _rehasher) : 0;
+  auto _OCM_REF = _o->OCM_REF ? CreateXMTRecordRef(_fbb, _o->OCM_REF.get(), _rehasher) : 0;
   auto _COVARIANCE_ORIGIN = _o->COVARIANCE_ORIGIN;
   auto _COVARIANCE = _o->COVARIANCE ? CreateCVR(_fbb, _o->COVARIANCE.get(), _rehasher) : 0;
   auto _MEASURED = _o->MEASURED ? CreateXMTMeasuredError(_fbb, _o->MEASURED.get(), _rehasher) : 0;
@@ -6487,8 +6487,8 @@ inline ::flatbuffers::Offset<XMTProductSelection> XMTProductSelection::Pack(::fl
       _EPOCH_MS,
       _REASON,
       _TIE,
-      _OMM,
-      _OCM,
+      _OMM_REF,
+      _OCM_REF,
       _COVARIANCE_ORIGIN,
       _COVARIANCE,
       _MEASURED);

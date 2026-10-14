@@ -11,6 +11,6 @@
     "sign": "node scripts/publish-sign.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.2"
+    "space-data-module-sdk": "0.9.5"
   }
 }
