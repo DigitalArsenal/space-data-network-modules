@@ -168,17 +168,20 @@ test("plan: live access off, or an unknown satellite/field, emits no request", a
   assert.equal(batched.errorCode, "batched-input-frames");
 });
 
-test("select_files: the hour's first scan of each field from real listings; the 143 MB band as three byte ranges; one file per invocation", async (t) => {
+test("select_files: the hour's first scan of each field from real listings; the 143 MB band as three byte ranges; one part per invocation", async (t) => {
   const { harness } = await createHarness(t, {});
   const response = await harness.invoke({ methodId: "select_files", inputs: [
     listing(listJobBytes("ABI-L2-CMIPF", "reflectance_064um,brightness_temperature_10um"), CMIPF_LISTING),
     listing(listJobBytes("ABI-L2-ACHA2KMF", "cloud_top_height"), ACHA_LISTING),
   ] });
-  const requests = requestsOf(response);
   assert.equal(noticesOf(response).length, 0, "nothing missing");
-  // first: reflectance, band 2, 142 635 609 bytes > 64 MiB -> three ranges covering the file exactly
+  // first: reflectance, band 2, 142 635 609 bytes > 64 MiB -> three ranges covering the file exactly, ONE A CALL (the parser
+  // appends them as they come: a daytime full disc is ~430 MB, held once)
   const key = "ABI-L2-CMIPF/2026/280/06/OR_ABI-L2-CMIPF-M6C02_G19_s20262800600212_e20262800609520_c20262800609576.nc";
   const url = `https://noaa-goes19.s3.amazonaws.com/${key}`;
+  assert.equal(requestsOf(response).length, 1);
+  const requests = [...requestsOf(response), ...requestsOf(await harness.invoke({ methodId: "select_files", inputs: [] })),
+    ...requestsOf(await harness.invoke({ methodId: "select_files", inputs: [] }))];
   assert.equal(requests.length, 3);
   assert.deepEqual(requests.map((r) => [r.job.SOURCE_URL, r.job.FIELD_ID, r.job.VARIABLE_NAME, r.job.TILE_INDEX, r.job.TILE_COUNT]), [0, 1, 2].map((p) => [url, "reflectance_064um", "CMI", p, 3]));
   const ranges = requests.map((r) => r.h.range.match(/^bytes=(\d+)-(\d+)$/).slice(1).map(Number));

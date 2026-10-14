@@ -9,9 +9,9 @@
  *                     hour, its list job in HREQ.CONTEXT (or one FlowNotice when skipped).
  *   select_files    : the listings, HttpResponses (HRSP) each echoing its list job in CONTEXT -> each wanted field's file
  *                     (the hour's first full-disk scan) as GET HttpRequests, byte ranges when larger than
- *                     imager_max_part_bytes, each part's file job in CONTEXT - ONE FILE PER INVOCATION, the rest yielded
- *                     as backlog, so the parser holds one file and storage-ingest gets one meta + one record stream at a
- *                     time. Missing files / failed listings -> one FlowNotice (Missing).
+ *                     imager_max_part_bytes, each part's file job in CONTEXT - ONE PART PER INVOCATION, the rest yielded
+ *                     as backlog; the parser appends a file's parts as they come, so it holds one file once and
+ *                     storage-ingest gets one meta + one record stream at a time. Missing files / failed listings -> one FlowNotice (Missing).
  *   publish_request : IngestResult (INGR) + the parser's IngestRequest (INGQ) -> the dataset-publication POST
  *                     (imager_publish_url).
  *
@@ -512,9 +512,12 @@ const Listed* pick_file(const std::vector<Listed>& listing, const std::string& s
 }
 
 // ---------------------------------------------------------------------------
-// The select backlog: one file (all its byte-range parts) is handed to the http node and the parser per invocation,
-// so the parser's memory holds one file and storage-ingest receives one meta and one record stream at a time; the
-// rest wait here and the node yields with them as its backlog (the compiled runtime resumes it without input).
+// The select backlog: ONE byte-range part is handed to the http node and the parser per invocation; the parser appends
+// a file's parts as they come and reads the file after its last, so it holds the file once and storage-ingest receives
+// one meta and one record stream at a time. The rest wait here and the node yields with them as its backlog (the
+// compiled runtime resumes it without input). (Weather node 2026-10-13: a daytime GOES 0.64 um full disc is ~430 MB
+// in 7 parts; handed over together, the part frames and the joined copy needed ~1.1 GiB, past the service's memory,
+// and the failed grow left the service landing nothing.)
 // ---------------------------------------------------------------------------
 
 struct PendingFile { std::vector<std::vector<uint8_t>> requests; };
@@ -642,7 +645,6 @@ int select_files(void) {
             }
             const std::string url = "https://" + bucket + ".s3.amazonaws.com/" + file->key;
             const int parts = file->size > max_part ? static_cast<int>(std::ceil(file->size / max_part)) : 1;
-            PendingFile pending;
             for (int p = 0; p < parts; p++) {
                 std::string range;
                 if (parts > 1) {
@@ -663,9 +665,10 @@ int select_files(void) {
                 file_job.valid_time_ms = frame_ms;
                 file_job.part = p;
                 file_job.parts = parts;
-                pending.requests.push_back(get_request(url, range, timeout, job_record(file_job)));
+                PendingFile part;
+                part.requests.push_back(get_request(url, range, timeout, job_record(file_job)));
+                g_backlog.push_back(part);
             }
-            g_backlog.push_back(pending);
         }
     }
     if (!missing.empty() && push_notice(R::flowNoticeKind_Missing, "not in the hour's listings", missing) < 0) return 500;

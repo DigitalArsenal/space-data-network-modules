@@ -23,7 +23,7 @@
  *       size-prefixed $WXF header record - FIELD_ID the field, VARIABLE_NAME the NetCDF variable, SENSOR_ID, DATASET_ID
  *       the bucket, SOURCE_URL the object's https URL (the key follows the host), ORIGIN_ID, LICENSE_URL, CITATION,
  *       VALID_TIME_MS the frame hour, TILE_INDEX / TILE_COUNT the byte-range part / parts. A file fetched as byte ranges
- *       arrives as consecutive parts 0 .. n-1 and is joined before it is read. All files of the invocation make one
+ *       arrives a part an invocation, in order, and is appended until whole (held once). All files of the invocation make one
  *       ingest batch: one IngestRequest and one record stream.
  *   The widths are node config (imager_widths, default "4096,2048,1024"), read through plugin.getConfig (SDS $PIV,
  *   the builtin; no capability). The lane's attribution the $WXF job has no field for is this family's constant: the
@@ -611,6 +611,10 @@ bool world_records(const FileJob& job, const uint8_t* bytes, size_t size, int64_
     return true;
 }
 
+// The file being assembled from its byte-range parts (one part an invocation).
+struct Assembling { std::string key; int parts = 0, next = 0; std::vector<uint8_t> bytes; };
+Assembling g_assembling;
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -619,7 +623,8 @@ bool world_records(const FileJob& job, const uint8_t* bytes, size_t size, int64_
 
 extern "C" {
 
-// parse: responses (each echoing its file job; a file's byte-range parts consecutive) -> wxf_meta + wxf_records.
+// parse: responses (each echoing its file job; a file's byte-range parts in order, a part an invocation) -> wxf_meta +
+// wxf_records once a file is whole.
 int parse(void) {
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
     if (response_frames.empty()) {
@@ -650,43 +655,44 @@ int parse(void) {
         }
     }
 
+    // A file fetched as byte ranges arrives a part an invocation (imager-observation-source select_files): the parts are
+    // appended here as they come and the file is read after its last - held once, never beside its part frames.
     Sha256 batch, normalized;
     std::vector<uint8_t> stream;
     int count = 0;
-    for (size_t k = 0; k < jobs.size();) {
-        // a file: its parts 0 .. parts - 1, consecutive
+    int first_done = -1;
+    for (size_t k = 0; k < jobs.size(); k++) {
         const FileJob& job = jobs[k];
-        if (job.part != 0 || k + job.parts > jobs.size()) {
-            plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive together, in order").c_str());
-            return 400;
-        }
-        for (int p = 1; p < job.parts; p++) {
-            if (jobs[k + p].key != job.key || jobs[k + p].part != p || jobs[k + p].parts != job.parts) {
-                plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive together, in order").c_str());
-                return 400;
-            }
-        }
         const uint8_t* bytes = bodies[k].data;
         size_t size = bodies[k].size;
-        std::vector<uint8_t> joined;
         if (job.parts > 1) {
-            for (int p = 0; p < job.parts; p++) size += p ? bodies[k + p].size : 0;
-            joined.reserve(size);
-            for (int p = 0; p < job.parts; p++) joined.insert(joined.end(), bodies[k + p].data, bodies[k + p].data + bodies[k + p].size);
-            bytes = joined.data();
+            if (job.part == 0) { g_assembling = Assembling(); g_assembling.key = job.key; g_assembling.parts = job.parts; }
+            if (g_assembling.key != job.key || g_assembling.parts != job.parts || g_assembling.next != job.part) {
+                g_assembling = Assembling();
+                plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive in order, 0 .. parts - 1").c_str());
+                return 400;
+            }
+            g_assembling.bytes.insert(g_assembling.bytes.end(), bytes, bytes + size);
+            g_assembling.next++;
+            if (job.part + 1 < job.parts) continue;   // more parts to come
+            bytes = g_assembling.bytes.data();
+            size = g_assembling.bytes.size();
         }
         batch.update(bytes, size);
         std::string code, message;
-        if (!world_records(job, bytes, size, retrieved_at_ms(bodies[k]), &stream, &normalized, &count, &code, &message)) {
+        const bool ok = world_records(job, bytes, size, retrieved_at_ms(bodies[k]), &stream, &normalized, &count, &code, &message);
+        if (job.parts > 1) g_assembling = Assembling();   // (the file's bytes released)
+        if (!ok) {
             plugin_set_error(code.c_str(), message.c_str());
             return 422;
         }
-        k += static_cast<size_t>(job.parts);
+        if (first_done < 0) first_done = static_cast<int>(k);
     }
+    if (first_done < 0) return 0;   // only leading parts of a file so far
 
     const std::string batch_id = batch.hex_digest();
-    const FileJob& first = jobs[0];
-    const Body& first_body = bodies[0];
+    const FileJob& first = jobs[static_cast<size_t>(first_done)];
+    const Body& first_body = bodies[static_cast<size_t>(first_done)];
     const std::string source_url = "s3://" + first.bucket + "/" + first.key;
     const std::string source_peer = "source:" + first.attribution.origin_id;
     const std::string normalized_sha = normalized.hex_digest();
