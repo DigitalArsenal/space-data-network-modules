@@ -89,13 +89,21 @@ inline Finished finish(State& st, const std::string& producer) {
     if (!qid.empty() && startsWith(s.id, "wikidata:") && notAFacility(qid)) { rep.dropped++; rep.droppedRows.push_back({{"id", s.id}, {"why", "not a facility (register)"}}); continue; }
     const bool placemark = startsWith(s.id, "geonames:");
     const bool organisation = organisationSet(s.catcode) && s.siteKind != "research reactor";
-    const std::string factKey = placemark ? qid : qid;
+    // A register row without an item is keyed by its own id (sdn-site:<slug>).
+    const std::string factKey = qid.empty() ? s.id : qid;
     RowResult r = placemark ? reconcilePlacemark(st, s) : reconcileRow(st, s.catcode, s.siteKind, s.evidence, factKey, organisation);
-    // NPP stations follow their tracker units as stations do (a station runs while any unit runs).
-    if (!placemark && s.catcode == "NPP" && r.decided.rule != "reviewed") {
+    // A power station follows its tracker units (a station runs while any unit runs), whichever
+    // nuclear set its item is in: a station item filed as a nuclear facility is still a station.
+    if (!placemark && reactorSet(s.catcode) && r.decided.rule != "reviewed") {
       const Ev* line = nullptr;
       for (const auto& v : r.evidence) if (v.cit.source == "gem-gnpt" && v.cit.field == "units") { line = &v; break; }
-      if (line && currentAtGem(line->status) && line->status != r.decided.status && !placemarkUnitLevel(s.name)) {
+      // An item outside the power-plant set whose own Wikidata statements close it is a unit or an
+      // older plant on a shared site (Tokai Power Station, Q11527936): it keeps its own state.
+      bool closedByItem = false;
+      if (s.catcode != "NPP")
+        for (const auto& v : r.evidence)
+          if (v.cit.source == "wikidata" && (v.status == PERMANENT_SHUTDOWN || v.status == DECOMMISSIONING || v.status == DECOMMISSIONED || v.status == CANCELLED)) closedByItem = true;
+      if (line && currentAtGem(line->status) && line->status != r.decided.status && !placemarkUnitLevel(s.name) && !closedByItem) {
         std::vector<std::string> same;
         for (const auto& v : r.evidence) if (v.status == line->status && !v.date.empty()) same.push_back(v.date);
         std::sort(same.begin(), same.end());

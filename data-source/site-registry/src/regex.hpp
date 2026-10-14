@@ -181,7 +181,8 @@ class Regex {
     Match m = search(t, from);
     groups.assign(groupCount_ + 1, {SIZE_MAX, SIZE_MAX});
     if (!m.ok) return m;
-    // Re-run at the match start to record groups.
+    // Re-run at the match start to record groups (the capture target is per thread:
+    // the stages match the same patterns on several workers at once).
     caps_ = &groups;
     size_t end = 0;
     run(t, m.begin, end);
@@ -221,7 +222,7 @@ class Regex {
   bool firstLiteral_ = false;
   bool nullable_ = true;
   std::vector<uint32_t> starts_;
-  mutable std::vector<std::pair<size_t, size_t>>* caps_ = nullptr;
+  static inline thread_local std::vector<std::pair<size_t, size_t>>* caps_ = nullptr;
 
   Node* make(Kind k) { pool_.push_back(std::make_unique<Node>()); pool_.back()->kind = k; return pool_.back().get(); }
 

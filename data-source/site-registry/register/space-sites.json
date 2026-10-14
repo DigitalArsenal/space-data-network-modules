@@ -1,5 +1,5 @@
 {
- "$comment": "Curated space sites the GeoNames gazetteer lacks or names only in the local language: launch sites, spaceports, space centres, mission control, deep-space and ground stations, space-surveillance radars. lon/lat in decimal degrees (WGS84), from published site coordinates; 'code' selects the FEATURE_CODE/FEATURE_NAME pair in build-space-sites-shard.mjs. Keep one row per site, English name first, local or common aliases in 'ascii'. Every coordinate was checked 2026-09-14 against published pad/facility positions (Wikipedia infoboxes, agency pages, OSM); owner rule: the surveyed pad or facility centre, never the town. Prince Albert, Sonmiani and Poker Flat have only coarse published values. Imported from SpaceAware-UI e0d053f. Wikidata items (wikidata) were matched 2026-10-13 by tools/match-register-qids.mjs and reviewed by hand: same name, the item's class a launch site, spaceport, space centre, ground station or test facility, and its coordinate within 5 km (or none); items typed as a settlement were left out. A site with an item takes the item's position (P625) and lifecycle each run. status/statusDate/statusUrl: a lifecycle the item does not state, with the page that states it (Hammaguir: France left in 1967; ELA-3: Ariane 5's last flight, 2023-07-05).",
+ "$comment": "Curated space sites the GeoNames gazetteer lacks or names only in the local language: launch sites, spaceports, space centres, mission control, deep-space and ground stations, space-surveillance radars. lon/lat in decimal degrees (WGS84), from published site coordinates; 'code' selects the FEATURE_CODE/FEATURE_NAME pair in build-space-sites-shard.mjs. Keep one row per site, English name first, local or common aliases in 'ascii'. Every coordinate was checked 2026-09-14 against published pad/facility positions (Wikipedia infoboxes, agency pages, OSM); owner rule: the surveyed pad or facility centre, never the town. Prince Albert, Sonmiani and Poker Flat have only coarse published values. Imported from SpaceAware-UI e0d053f. Wikidata items (wikidata) were matched 2026-10-13 by tools/match-register-qids.mjs and reviewed by hand: same name, the item's class a launch site, spaceport, space centre, ground station or test facility, and its coordinate within 5 km (or none); items typed as a settlement were left out. A site with an item takes the item's position (P625) and lifecycle each run. status/statusDate/statusUrl: a lifecycle the item does not state, with the page that states it (Hammaguir: France left in 1967; ELA-3: Ariane 5's last flight, 2023-07-05). 2026-10-13 (owner: \"It should all load over SDN\"): the GeoNames space-centre, satellite-station and launch placemarks the console bundled are rows here (geonames: the placemark id; position and name from GeoNames, CC BY 4.0); placemarks that duplicate a row (Kennedy, Guiana, Esrange, Marshall, Naro, Tanegashima, Haleakala), mislabelled ones (television transmitters, businesses, a museum rocket) and one with a wrong position (Vikram Sarabhai, placed in Pune) are not. page: the row's English Wikipedia article (en:Title), its own page when the row has no item (titles and links only).",
  "codes": {
   "S.LNCH": "launch site",
   "S.SPRT": "spaceport",
@@ -98,7 +98,8 @@
    "lat": 28.4705,
    "lon": -80.5423,
    "cc": "US",
-   "admin1": "Florida"
+   "admin1": "Florida",
+   "page": "en:Cape Canaveral Launch Complex 36"
   },
   {
    "name": "Patrick Space Force Base",
@@ -106,7 +107,8 @@
    "lat": 28.235,
    "lon": -80.61,
    "cc": "US",
-   "admin1": "Florida"
+   "admin1": "Florida",
+   "page": "en:Patrick Space Force Base"
   },
   {
    "name": "Vandenberg Space Force Base",
@@ -115,7 +117,8 @@
    "lat": 34.7513,
    "lon": -120.5202,
    "cc": "US",
-   "admin1": "California"
+   "admin1": "California",
+   "page": "en:Vandenberg Space Force Base"
   },
   {
    "name": "Space Launch Complex 4E, Vandenberg",
@@ -164,7 +167,8 @@
    "lat": 37.8337,
    "lon": -75.4881,
    "cc": "US",
-   "admin1": "Virginia"
+   "admin1": "Virginia",
+   "page": "en:Mid-Atlantic Regional Spaceport"
   },
   {
    "name": "Rocket Lab Launch Complex 2, Wallops",
@@ -239,7 +243,8 @@
    "lat": 30.2187,
    "lon": -81.8767,
    "cc": "US",
-   "admin1": "Florida"
+   "admin1": "Florida",
+   "page": "en:Cecil Airport"
   },
   {
    "name": "Houston Spaceport",
@@ -276,7 +281,8 @@
    "lat": 30.363,
    "lon": -89.6,
    "cc": "US",
-   "admin1": "Mississippi"
+   "admin1": "Mississippi",
+   "page": "en:Stennis Space Center"
   },
   {
    "name": "Michoud Assembly Facility",
@@ -451,7 +457,8 @@
    "lat": 30.572,
    "lon": -86.214,
    "cc": "US",
-   "admin1": "Florida"
+   "admin1": "Florida",
+   "page": "en:Eglin AFB Site C-6"
   },
   {
    "name": "Cavalier Space Force Station",
@@ -488,7 +495,8 @@
    "lat": 39.136,
    "lon": -121.436,
    "cc": "US",
-   "admin1": "California"
+   "admin1": "California",
+   "page": "en:PAVE PAWS"
   },
   {
    "name": "Maui Space Surveillance Complex",
@@ -497,7 +505,8 @@
    "lat": 20.708,
    "lon": -156.257,
    "cc": "US",
-   "admin1": "Hawaii"
+   "admin1": "Hawaii",
+   "page": "en:Maui Space Surveillance Complex"
   },
   {
    "name": "Socorro GEODSS",
@@ -506,7 +515,8 @@
    "lat": 33.8174,
    "lon": -106.6526,
    "cc": "US",
-   "admin1": "New Mexico"
+   "admin1": "New Mexico",
+   "page": "en:Ground-based Electro-Optical Deep Space Surveillance"
   },
   {
    "name": "Millstone Hill Radar",
@@ -515,7 +525,8 @@
    "lat": 42.617,
    "lon": -71.491,
    "cc": "US",
-   "admin1": "Massachusetts"
+   "admin1": "Massachusetts",
+   "page": "en:Millstone Hill"
   },
   {
    "name": "Pituffik Space Base",
@@ -542,7 +553,8 @@
    "lat": -7.411,
    "lon": 72.452,
    "cc": "IO",
-   "admin1": ""
+   "admin1": "",
+   "page": "en:Ground-based Electro-Optical Deep Space Surveillance"
   },
   {
    "name": "Ascension Island Tracking Station",
@@ -570,7 +582,8 @@
    "lat": 9.395,
    "lon": 167.479,
    "cc": "MH",
-   "admin1": "Kwajalein Atoll"
+   "admin1": "Kwajalein Atoll",
+   "page": "en:ARPA Long-Range Tracking And Instrumentation Radar"
   },
   {
    "name": "Omelek Island Launch Site",
@@ -579,7 +592,8 @@
    "lat": 9.0477,
    "lon": 167.7431,
    "cc": "MH",
-   "admin1": "Kwajalein Atoll"
+   "admin1": "Kwajalein Atoll",
+   "page": "en:Omelek Island"
   },
   {
    "name": "Globus Radar Vardo",
@@ -588,7 +602,8 @@
    "lat": 70.367,
    "lon": 31.127,
    "cc": "NO",
-   "admin1": "Finnmark"
+   "admin1": "Finnmark",
+   "page": "en:GLOBUS"
   },
   {
    "name": "Baikonur Cosmodrome Site 1",
@@ -657,7 +672,8 @@
    "lat": 51.094,
    "lon": 59.842,
    "cc": "RU",
-   "admin1": "Orenburg Oblast"
+   "admin1": "Orenburg Oblast",
+   "page": "en:Dombarovsky (air base)"
   },
   {
    "name": "Mission Control Center Moscow",
@@ -666,7 +682,8 @@
    "lat": 55.9129,
    "lon": 37.8097,
    "cc": "RU",
-   "admin1": "Moscow Oblast"
+   "admin1": "Moscow Oblast",
+   "page": "en:RKA Mission Control Center"
   },
   {
    "name": "Gagarin Cosmonaut Training Center",
@@ -675,7 +692,8 @@
    "lat": 55.8745,
    "lon": 38.115,
    "cc": "RU",
-   "admin1": "Moscow Oblast"
+   "admin1": "Moscow Oblast",
+   "page": "en:Yuri Gagarin Cosmonaut Training Center"
   },
   {
    "name": "Bear Lakes Ground Station",
@@ -703,7 +721,8 @@
    "lat": 45.189,
    "lon": 33.187,
    "cc": "UA",
-   "admin1": "Crimea"
+   "admin1": "Crimea",
+   "page": "en:Pluton (complex)"
   },
   {
    "name": "Guiana Space Centre",
@@ -712,7 +731,8 @@
    "lat": 5.169,
    "lon": -52.6903,
    "cc": "GF",
-   "admin1": "Guyane"
+   "admin1": "Guyane",
+   "page": "en:Guiana Space Centre"
   },
   {
    "name": "Ariane 6 Launch Complex ELA-4",
@@ -734,7 +754,8 @@
    "status": "PERMANENT_SHUTDOWN",
    "statusDate": "2023-07-05",
    "statusUrl": "https://en.wikipedia.org/wiki/Ariane_5",
-   "statusTitle": "en:Ariane 5"
+   "statusTitle": "en:Ariane 5",
+   "page": "en:ELA-3"
   },
   {
    "name": "Vega Launch Complex ELV",
@@ -743,7 +764,8 @@
    "lat": 5.236,
    "lon": -52.775,
    "cc": "GF",
-   "admin1": "Guyane"
+   "admin1": "Guyane",
+   "page": "en:Ensemble de Lancement Vega"
   },
   {
    "name": "Soyuz Launch Complex ELS",
@@ -752,7 +774,8 @@
    "lat": 5.3053,
    "lon": -52.8347,
    "cc": "GF",
-   "admin1": "Guyane"
+   "admin1": "Guyane",
+   "page": "en:Ensemble de Lancement Soyouz"
   },
   {
    "name": "Kourou Ground Station",
@@ -761,7 +784,8 @@
    "lat": 5.2517,
    "lon": -52.8047,
    "cc": "GF",
-   "admin1": "Guyane"
+   "admin1": "Guyane",
+   "page": "en:Kourou Station"
   },
   {
    "name": "European Space Operations Centre",
@@ -820,7 +844,8 @@
    "lat": 40.4528,
    "lon": -4.3676,
    "cc": "ES",
-   "admin1": "Castille and Leon"
+   "admin1": "Castille and Leon",
+   "page": "en:Cebreros Station"
   },
   {
    "name": "New Norcia Deep Space Station",
@@ -829,7 +854,8 @@
    "lat": -31.0483,
    "lon": 116.1914,
    "cc": "AU",
-   "admin1": "Western Australia"
+   "admin1": "Western Australia",
+   "page": "en:New Norcia Station"
   },
   {
    "name": "Malargue Deep Space Station",
@@ -838,7 +864,8 @@
    "lat": -35.776,
    "lon": -69.398,
    "cc": "AR",
-   "admin1": "Mendoza"
+   "admin1": "Mendoza",
+   "page": "en:Malargüe Station"
   },
   {
    "name": "Kiruna Ground Station",
@@ -856,7 +883,8 @@
    "lat": 50.002,
    "lon": 5.146,
    "cc": "BE",
-   "admin1": "Wallonia"
+   "admin1": "Wallonia",
+   "page": "en:Redu Station"
   },
   {
    "name": "Santa Maria Ground Station",
@@ -865,7 +893,8 @@
    "lat": 36.997,
    "lon": -25.136,
    "cc": "PT",
-   "admin1": "Azores"
+   "admin1": "Azores",
+   "page": "en:Santa Maria Island Station"
   },
   {
    "name": "Svalbard Satellite Station",
@@ -962,7 +991,8 @@
    "lat": -63.321,
    "lon": -57.901,
    "cc": "AQ",
-   "admin1": ""
+   "admin1": "",
+   "page": "en:German Antarctic Receiving Station"
   },
   {
    "name": "SaxaVord Spaceport",
@@ -1041,7 +1071,8 @@
    "lat": 40.072,
    "lon": 116.2571,
    "cc": "CN",
-   "admin1": "Beijing"
+   "admin1": "Beijing",
+   "page": "en:Beijing Aerospace Flight Control Center"
   },
   {
    "name": "Satish Dhawan Space Centre",
@@ -1080,7 +1111,8 @@
    "lat": 13.034,
    "lon": 77.511,
    "cc": "IN",
-   "admin1": "Karnataka"
+   "admin1": "Karnataka",
+   "page": "en:ISRO Telemetry, Tracking and Command Network"
   },
   {
    "name": "Tanegashima Space Center",
@@ -1199,7 +1231,8 @@
    "lat": 25.195,
    "lon": 66.75,
    "cc": "PK",
-   "admin1": "Balochistan"
+   "admin1": "Balochistan",
+   "page": "en:Sonmiani Flight Test Range"
   },
   {
    "name": "Alcantara Launch Center",
@@ -1208,7 +1241,8 @@
    "lat": -2.3177,
    "lon": -44.3678,
    "cc": "BR",
-   "admin1": "Maranhão"
+   "admin1": "Maranhão",
+   "page": "en:Alcântara Space Center"
   },
   {
    "name": "Barreira do Inferno Launch Center",
@@ -1324,7 +1358,8 @@
    "lat": -2.9383,
    "lon": 40.2125,
    "cc": "KE",
-   "admin1": "Kilifi"
+   "admin1": "Kilifi",
+   "page": "en:Broglio Space Center"
   },
   {
    "name": "Hammaguir",
@@ -1432,7 +1467,224 @@
    "lat": 39.6529,
    "lon": 124.7365,
    "cc": "KP",
-   "admin1": "North Pyongan"
+   "admin1": "North Pyongan",
+   "page": "en:Sohae Satellite Launching Station"
+  },
+  {
+   "name": "Baikonur Cosmodrome",
+   "ascii": "Baikonur",
+   "code": "S.SPRT",
+   "lat": 46.00573,
+   "lon": 63.30091,
+   "cc": "KZ",
+   "admin1": "Baikonur",
+   "geonames": "1537294"
+  },
+  {
+   "name": "Maspalomas Station",
+   "ascii": "Centro Espacial de Canarias",
+   "code": "S.STNS",
+   "lat": 27.76329,
+   "lon": -15.6332,
+   "cc": "ES",
+   "admin1": "Canary Islands",
+   "geonames": "6698460",
+   "wikidata": "Q4302441"
+  },
+  {
+   "name": "El Arenosillo Launch Site",
+   "ascii": "El Arenosillo Launchpad",
+   "code": "S.LNCH",
+   "lat": 37.09917,
+   "lon": -6.72986,
+   "cc": "ES",
+   "admin1": "Andalusia",
+   "geonames": "7282286",
+   "wikidata": "Q1323864"
+  },
+  {
+   "name": "Svobodny Cosmodrome",
+   "ascii": "Kosmodrom Svobodnyy",
+   "code": "S.LNCH",
+   "lat": 51.76083,
+   "lon": 128.1225,
+   "cc": "RU",
+   "admin1": "Amur Oblast",
+   "geonames": "2051129",
+   "status": "PERMANENT_SHUTDOWN",
+   "statusDate": "2007",
+   "statusUrl": "https://en.wikipedia.org/wiki/Svobodny_Cosmodrome",
+   "statusTitle": "en:Svobodny Cosmodrome",
+   "wikidata": "Q1366384"
+  },
+  {
+   "name": "Sea Launch launch position",
+   "ascii": "SeaLaunch Satellite Launching Spot",
+   "code": "S.LNCH",
+   "lat": 0.0,
+   "lon": -154.0,
+   "cc": "KI",
+   "admin1": "Line Islands",
+   "geonames": "7521907",
+   "status": "PERMANENT_SHUTDOWN",
+   "statusDate": "2014-05-26",
+   "statusUrl": "https://en.wikipedia.org/wiki/Sea_Launch",
+   "statusTitle": "en:Sea Launch"
+  },
+  {
+   "name": "Thumba Equatorial Rocket Launching Station",
+   "ascii": "TERLS",
+   "code": "S.LNCH",
+   "lat": 8.53333,
+   "lon": 76.85,
+   "cc": "IN",
+   "admin1": "Kerala",
+   "geonames": "1254563",
+   "wikidata": "Q7798824"
+  },
+  {
+   "name": "Kwajalein Defense Communication Satellite Ground Station",
+   "ascii": "Defense Communication Sat Ground Station",
+   "code": "S.STNS",
+   "lat": 8.72485,
+   "lon": 167.71626,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll",
+   "geonames": "7304562"
+  },
+  {
+   "name": "Kwajalein Defense Meteorological Satellite Ground Station",
+   "ascii": "Defense Met Sat Ground Station",
+   "code": "S.STNS",
+   "lat": 8.72474,
+   "lon": 167.71568,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll",
+   "geonames": "7304561"
+  },
+  {
+   "name": "Kwajalein GPS Ground Control Facility",
+   "ascii": "GPS Ground Control Facility",
+   "code": "S.STNS",
+   "lat": 8.72466,
+   "lon": 167.71523,
+   "cc": "MH",
+   "admin1": "Kwajalein Atoll",
+   "geonames": "7304527"
+  },
+  {
+   "name": "Utivé Earth Station",
+   "ascii": "Estación Terrena de Utivé",
+   "code": "S.STNS",
+   "lat": 9.15141,
+   "lon": -79.32173,
+   "cc": "PA",
+   "admin1": "Panamá",
+   "geonames": "12280103"
+  },
+  {
+   "name": "Finegayan Satellite Communication Station",
+   "ascii": "Finegayan SATCOM",
+   "code": "S.STNS",
+   "lat": 13.58367,
+   "lon": 144.84978,
+   "cc": "GU",
+   "admin1": "Dededo",
+   "geonames": "7871378"
+  },
+  {
+   "name": "Chinese Satellite Tracking Station, Tarawa",
+   "ascii": "frmr Chinese Satellite Tracking Station",
+   "code": "S.STNS",
+   "lat": 1.36658,
+   "lon": 173.12098,
+   "cc": "KI",
+   "admin1": "Gilbert Islands",
+   "geonames": "7601822",
+   "status": "PERMANENT_SHUTDOWN",
+   "statusDate": "2003",
+   "statusUrl": "https://en.wikipedia.org/wiki/China%E2%80%93Kiribati_relations",
+   "statusTitle": "en:China–Kiribati relations"
+  },
+  {
+   "name": "Mahdasht Satellite Station",
+   "ascii": "Istgah-e Mahvareh'i-ye Mahdasht",
+   "code": "S.STNS",
+   "lat": 35.764,
+   "lon": 50.787,
+   "cc": "IR",
+   "admin1": "Alborz Province",
+   "geonames": "6657073"
+  },
+  {
+   "name": "Kiritimati Downrange Tracking Station",
+   "ascii": "JP NASDA Satellite Downrange Tracking Station",
+   "code": "S.STNS",
+   "lat": 2.04555,
+   "lon": -157.44734,
+   "cc": "KI",
+   "admin1": "Line Islands",
+   "geonames": "7521905"
+  },
+  {
+   "name": "Mpoma Satellite Station",
+   "ascii": "Mpoma Satellite Station",
+   "code": "S.STNS",
+   "lat": 0.42777,
+   "lon": 32.7658,
+   "cc": "UG",
+   "admin1": "Central Region",
+   "geonames": "11357188"
+  },
+  {
+   "name": "Guam MRC Marlock 25 m Satellite Calibration Antenna",
+   "ascii": "MRC Marlock 25m Satellite Calibration Antenna",
+   "code": "S.STNS",
+   "lat": 13.58001,
+   "lon": 144.8363,
+   "cc": "GU",
+   "admin1": "Dededo",
+   "geonames": "7871380"
+  },
+  {
+   "name": "NASA Atmospheric Propagation Monitor, Guam",
+   "ascii": "NASA Atmospheric Propagation Monitor",
+   "code": "S.STNS",
+   "lat": 13.59157,
+   "lon": 144.84026,
+   "cc": "GU",
+   "admin1": "Dededo",
+   "geonames": "7871355"
+  },
+  {
+   "name": "Guam Remote Ground Terminal",
+   "ascii": "NASA GRGT Remotely Controlled Satellite Ground Station",
+   "code": "S.STNS",
+   "lat": 13.58777,
+   "lon": 144.84112,
+   "cc": "GU",
+   "admin1": "Dededo",
+   "geonames": "7871353"
+  },
+  {
+   "name": "Barbados Satellite Earth Station",
+   "ascii": "Satellite Earth Station",
+   "code": "S.STNS",
+   "lat": 13.1898,
+   "lon": -59.48723,
+   "cc": "BB",
+   "admin1": "Saint John",
+   "geonames": "3373539"
+  },
+  {
+   "name": "Guam Tracking Station",
+   "ascii": "USAF GTS Guam Satellite Tracking Station",
+   "code": "S.STNS",
+   "lat": 13.61567,
+   "lon": 144.85637,
+   "cc": "GU",
+   "admin1": "Dededo",
+   "geonames": "7871230"
   }
  ]
 }

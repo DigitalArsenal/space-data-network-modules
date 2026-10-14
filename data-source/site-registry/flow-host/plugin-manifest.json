@@ -1,0 +1,914 @@
+{
+ "pluginId": "com.digitalarsenal.data-source.site-registry",
+ "name": "SDN site registry",
+ "version": "0.1.0",
+ "description": "Retrieval nodes for every site the SpaceAware console shows (owner 2026-10-13: \"It should all load over SDN, that's the whole point\"): nuclear laboratories and facilities, nuclear power plants (Wikidata and the Global Energy Monitor tracker), storage sites, chemical plants, research bodies, the curated biological and chemical laboratories and storage sites, the space sites and the GeoNames nuclear placemarks, as SDS $SIT 1.1.0 records with a cited lifecycle (Wikidata P5817 and end/start dates, Wikipedia infobox facts, GEM unit status, ROR organisation status, reviewed facts), a cited description, references (record, official website, Wikipedia titles and links, registry and docket records), operators, owners, regulators and quantities; and a $GNP search projection of the current and prospective sites. Nine stages, each at most 60 requests; the stage state is the $SIT stream itself. The stages parse the answers and read the articles on four pthreads (wasi-threads) over the module's shared memory. Storage, publication and the schedule belong to the host; the node's auto-publisher announces SIT.fbs and GNP.fbs, provider sdn-site-registry, sources sites and site-places.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "schemasUsed": [
+  {
+   "schemaName": "SIT.fbs",
+   "fileIdentifier": "$SIT",
+   "rootTypeName": "SIT"
+  },
+  {
+   "schemaName": "GNP.fbs",
+   "fileIdentifier": "$GNP",
+   "rootTypeName": "GNP"
+  }
+ ],
+ "methods": [
+  {
+   "methodId": "plan",
+   "displayName": "Plan the registry run",
+   "inputPorts": [
+    {
+     "portId": "config",
+     "acceptedTypeSets": [
+      {
+       "setId": "config-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Source configuration from the host adapter (access anonymous, run_at_ms, producer_peer_id): the host connector's configuration contract."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Source configuration from the host adapter (access anonymous, run_at_ms, producer_peer_id): the host connector's configuration contract."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "entities_a",
+   "displayName": "Absorb class membership, ask for items (1/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "Wikidata class membership (SPARQL) and the register items' settlement check; asks for the first third of the Wikidata items (wbgetentities, 50 a request)."
+  },
+  {
+   "methodId": "entities_b",
+   "displayName": "Absorb items (1/3), ask for items (2/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the first third of the items; asks for the second third."
+  },
+  {
+   "methodId": "entities_c",
+   "displayName": "Absorb items (2/3), ask for items (3/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the second third of the items; asks for the last third."
+  },
+  {
+   "methodId": "parties",
+   "displayName": "Absorb items (3/3), ask for parties and registries",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the last third of the items; asks for operator, owner and regulator labels and websites (SPARQL), the country of rows no item places, the GEM tracker and the newest ROR release."
+  },
+  {
+   "methodId": "articles_a",
+   "displayName": "Absorb parties and registries, ask for articles (1/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the parties, the tracker units and the ROR release record; asks for the first third of the Wikipedia articles (50 titles a request) and the ROR data dump."
+  },
+  {
+   "methodId": "articles_b",
+   "displayName": "Absorb articles (1/3) and the ROR dump, ask for articles (2/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the first third of the articles (infobox facts, titles only) and the ROR dump (streamed); asks for the second third."
+  },
+  {
+   "methodId": "articles_c",
+   "displayName": "Absorb articles (2/3), ask for articles (3/3)",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptor (the host connector's current request contract until modules-hostcap-typed-20261013): one GET or POST per frame, its own URL and validator."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry after this stage: a size-prefixed $SIT 1.1.0 stream."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "the second third; asks for the last third."
+  },
+  {
+   "methodId": "finish",
+   "displayName": "Reconcile and write the lanes",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The registry so far: a size-prefixed $SIT 1.1.0 stream (the run time in STATUS_VERIFIED_AT while the run is under way)."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 HTTP answers ($HRB, int32 status, body), one per request the previous stage made, in order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "sites",
+     "acceptedTypeSets": [
+      {
+       "setId": "sites-records",
+       "allowedTypes": [
+        {
+         "schemaName": "SIT.fbs",
+         "fileIdentifier": "$SIT",
+         "rootTypeName": "SIT"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $SIT 1.1.0 records, one per site, sorted by ID: cited lifecycle, description, references, parties, quantities and PROVENANCE. Lane sdn-site-registry/sites."
+    },
+    {
+     "portId": "sites_meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "sites_meta-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Attribution metadata for generic storage.ingest_with_source (provider sdn-site-registry, source sites, batch = sha256 of the $SIT stream): the host connector's ingest contract."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Attribution metadata for generic storage.ingest_with_source (provider sdn-site-registry, source sites, batch = sha256 of the $SIT stream): the host connector's ingest contract."
+    },
+    {
+     "portId": "places",
+     "acceptedTypeSets": [
+      {
+       "setId": "places-records",
+       "allowedTypes": [
+        {
+         "schemaName": "GNP.fbs",
+         "fileIdentifier": "$GNP",
+         "rootTypeName": "GNP"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $GNP records of the current and prospective sites (search). Lane sdn-site-registry/site-places."
+    },
+    {
+     "portId": "places_meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "places_meta-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Attribution metadata for the $GNP lane (source site-places)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Attribution metadata for the $GNP lane (source site-places)."
+    },
+    {
+     "portId": "report",
+     "acceptedTypeSets": [
+      {
+       "setId": "report-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The run report: counts by status, network and rule, undated nuclear rows, rows without a country or a record reference, dropped rows, the review queue and reviewed facts whose article changed; never a dataset record."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The run report: counts by status, network and rule, undated nuclear rows, rows without a country or a record reference, dropped rows, the review queue and reviewed facts whose article changed; never a dataset record."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  }
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "Provider-flow variant of the threaded module (the same source with SR_THREADS 1): the SDN flow runtime bounds a threaded guest's call at 30 s and this flow's linked drain carries its HTTP requests, so the flow links this variant until scheduled drains carry a budget (sdn-flow-threaded-drain-budget-20261013). The canonical artifact, dist/isomorphic/module.wasm, parses the answers and reads the articles on four wasi-threads workers."
+ }
+}

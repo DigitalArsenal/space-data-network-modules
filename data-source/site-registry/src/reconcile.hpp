@@ -183,9 +183,14 @@ inline RowResult reconcileRow(const State& st, const std::string& category, cons
   std::vector<Ev>& ev = out.evidence;
   for (auto* list : {&wikidata, &wikipedia, &reviewed, &ror, &gem}) ev.insert(ev.end(), list->begin(), list->end());
   // One merger rule for every source: a renaming or merger is never a closure.
-  bool anyRenaming = false;
-  for (const auto& v : ev) if (v.renaming) anyRenaming = true;
-  if (organisation && anyRenaming) {
+  // An item whose own description calls it former or defunct (any language) is closed under its
+  // name even when a successor carries the work on: the successor is a record of its own.
+  bool anyRenaming = false, describedFormer = false;
+  for (const auto& v : ev) {
+    if (v.renaming) anyRenaming = true;
+    if (v.cit.source == "wikidata" && v.cit.field == "description" && v.status == PERMANENT_SHUTDOWN) describedFormer = true;
+  }
+  if (organisation && anyRenaming && !describedFormer) {
     for (auto& v : ev) {
       if (v.status != PERMANENT_SHUTDOWN || v.reviewed) continue;
       const bool wd = v.cit.source == "wikidata" && (isEndProperty(v.cit.field) || v.cit.field == "description");

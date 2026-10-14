@@ -23,13 +23,23 @@ them over bitswap; it ships no facility, status or reference data.
 | Nuclear power plants | also the Global Energy Monitor tracker's plants no Wikidata row stands for (`gem:<project id>`) |
 | Nuclear power plants | the GeoNames nuclear power placemarks (`geonames:<id>`, `register/placemarks.json`) with their reviewed item and tracker joins |
 | Bio labs, Chemical labs, Storage sites | the curated register (`register/curated.json`) |
-| Space sites | the curated register (`register/space-sites.json`), 101 of 148 with a reviewed Wikidata item |
+| Space sites | the curated register (`register/space-sites.json`): 168 rows, 105 with a reviewed Wikidata item, 36 more with their English Wikipedia article as their page (`page`), and the GeoNames space-centre, satellite-station and launch placemarks the console had bundled (`geonames`) |
 
-Run of 2026-10-13 (live sources): 7,343 sites; 6,793 search rows; lane
-10.1 MB, projection 3.8 MB. CPU: native about 12 s, the WASM module 14.9 s
-(`articles_b` 7.5 s: the prose scan of the reactor articles for the review
-queue). On a provider node the run took 6.5 minutes, most of it the spaced
-requests.
+Run of 2026-10-14 (live sources, provider node): 7,365 sites; 6,793 search
+rows; lane 10.2 MB. The module computes on wasi-threads: four pthreads over
+its shared memory parse the answers and read the articles
+(`src/parallel.hpp`; each item writes its own slot and the stage merges them
+in order, so the bytes do not depend on the thread count). CPU on the
+recorded run: native 4.7 s on four threads (articles_b 1.6 s) against 11.0 s on one; the WASM
+module 12.2 s in Node at machine load 40 (one thread 13.7 s;
+`site-registry-cpu-size-20261013` carries the 5 s gate). On a provider
+node the run takes about 6 minutes, most of it the spaced requests.
+
+The provider flow links the one-thread build of the same source
+(`flow-host/`, `node build.mjs --flow-host`, the same output bytes, tested):
+the SDN flow runtime bounds a threaded guest's call at 30 s when its caller
+gives no budget, and this flow's linked drain carries its HTTP requests
+(follow-up `sdn-flow-threaded-drain-budget-20261013`).
 
 ## Stages
 
@@ -70,11 +80,21 @@ or completed dismantling never decide: the run report lists the ones the
 decided status leaves open (the review queue), and the reviewed facts whose
 article has a newer revision.
 
-Against the audit (`tools/equivalence.mjs`, oracle SpaceAware-UI e0d053f): no
-row on the other side of the current / not-current split, no date
-difference; two status changes (Santa María de Garoña and Hinkley Point B
-are decommissioning, by reviewed facts); seven register items that are
-towns, not sites, are rows of their own.
+Round-6 corrections (2026-10-14): descriptions are read in every language
+the item has (nl "voormalig", pl "dawny", ru "бывший"; "GDR"); an item whose
+own description calls it former or defunct is closed under its name even when
+a successor carries the work on ("now called" keeps it open, "now part of"
+does not); a station item filed as a nuclear facility follows its tracker
+units unless its own statements close it (Tokai Power Station); reviewed
+facts for the US chemical depots, JACADS, the Russian destruction facilities,
+Philippine Research Reactor-1 and the resumed Ninh Thuận plants.
+
+Against the audit (`tools/equivalence.mjs`, oracle SpaceAware-UI e0d053f):
+27 rows on the other side of the current / not-current split, every one a
+round-6 correction of the oracle; no date difference; two status changes
+(Santa María de Garoña and Hinkley Point B are decommissioning, by reviewed
+facts); seven register items that are towns, not sites, are rows of their
+own.
 
 ## Sources and terms
 

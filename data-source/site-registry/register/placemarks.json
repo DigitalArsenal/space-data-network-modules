@@ -1,5 +1,5 @@
 {
- "$comment": "GeoNames power-station placemarks (PS, PSN, CTRA) the site-status audit identified as nuclear (SpaceAware-UI e0d053f, placemark-status.mjs round 5): position, names and feature code as GeoNames (CC BY 4.0) publishes them in the 2026-09 dump, the reviewed join to a Wikidata item (unitItem: the item is the placemark's own unit) and to Global Energy Monitor tracker units (unitPlant: the join is to one unit). The module reads their status each run.",
+ "$comment": "GeoNames power-station placemarks (PS, PSN, CTRA) the site-status audit identified as nuclear (SpaceAware-UI e0d053f, placemark-status.mjs round 5): position, names and feature code as GeoNames (CC BY 4.0) publishes them in the 2026-09 dump, the reviewed join to a Wikidata item (unitItem: the item is the placemark's own unit) and to Global Energy Monitor tracker units (unitPlant: the join is to one unit). The module reads their status each run. network: NUCF for the placemarks that are nuclear facilities, not power plants (a research centre, a waste dome, a production reactor, a reprocessing plant); the rest are power plants (NPP).",
  "dataset": {
   "id": "geonames",
   "name": "GeoNames",
@@ -39,7 +39,8 @@
    "unitItem": false,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "7303742",
@@ -55,7 +56,8 @@
    "unitItem": false,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "7033453",
@@ -71,7 +73,8 @@
    "unitItem": false,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "11750548",
@@ -143,7 +146,8 @@
    "unitItem": false,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "3824761",
@@ -1795,7 +1799,8 @@
    "unitItem": false,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "3365373",
@@ -3637,7 +3642,8 @@
    "unitItem": true,
    "gemUnits": [],
    "gemName": "",
-   "unitPlant": false
+   "unitPlant": false,
+   "network": "NUCF"
   },
   {
    "geonameId": "6254903",

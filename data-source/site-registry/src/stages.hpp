@@ -35,6 +35,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "parallel.hpp"
 
 namespace sr {
 using Json = nlohmann::json;
@@ -385,6 +386,15 @@ inline std::string registerUrl(const std::string& file) {
   return "https://github.com/DigitalArsenal/space-data-network-modules/blob/main/data-source/site-registry/register/" + file;
 }
 
+// A register row's own page: its English Wikipedia article ("en:Title") when the register names one
+// (the record's page; the register entry is then a registry record), else the register entry itself.
+inline void registerPages(Site& s, const char* page, const std::string& file, const std::string& name) {
+  const std::string p = page;
+  const bool article = startsWith(p, "en:") && p.size() > 3;
+  if (article) s.refs.push_back({REF_RECORD, "enwiki", p.substr(3), wikiUrl("en", p.substr(3)), p.substr(3), "en"});
+  s.refs.push_back({article ? REF_REGISTRY_RECORD : REF_RECORD, "sdn-site-register", s.id.substr(9), registerUrl(file), name, "en"});
+}
+
 inline void seedRegisterRows(State& st) {
   std::set<std::string> taken;
   // Curated facilities (one row per site: a site listed under two categories keeps the first).
@@ -411,8 +421,17 @@ inline void seedRegisterRows(State& st) {
       s.positionCitation = cite("wikidata", town, positionUrl, "", "P625", st.runAt);
     } else if (startsWith(position, "approximate")) {
       s.positionCitation = cite("spaceaware-curated", s.id, registerUrl("curated.json"), sourceVersion("spaceaware-curated"), "register:curated", st.runAt);
+    } else if (position == "register" && startsWith(positionUrl, "https://www.geonames.org/")) {
+      // A GeoNames placemark's position (CC BY 4.0).
+      s.positionCitation = cite("geonames", positionUrl.substr(25), positionUrl, sourceVersion("geonames"), "register:curated", st.runAt);
     }
-    if (qid.empty()) s.refs.push_back({REF_RECORD, "sdn-site-register", s.id.substr(9), registerUrl("curated.json"), r.name, "en"});
+    if (qid.empty() && !*r.page && position == "register" && startsWith(positionUrl, "https://www.geonames.org/")) {
+      // No item and no article: the GeoNames placemark the row comes from is its own page.
+      s.refs.push_back({REF_RECORD, "geonames", positionUrl.substr(25), positionUrl, r.name, ""});
+      s.refs.push_back({REF_REGISTRY_RECORD, "sdn-site-register", s.id.substr(9), registerUrl("curated.json"), r.name, "en"});
+    } else if (qid.empty()) {
+      registerPages(s, r.page, "curated.json", r.name);
+    }
     if (!qid.empty()) s.source = position;  // working: where the position is read (Wikidata = the item's P625)
     st.sites.push_back(std::move(s));
   }
@@ -433,9 +452,17 @@ inline void seedRegisterRows(State& st) {
     s.lon = r.lon;
     s.ctrId = numericCountry(r.cc);
     s.verifiedAt = st.runAt;
-    s.positionCitation = cite("space-sites", s.id, registerUrl("space-sites.json"), sourceVersion("space-sites"), "register:space-sites", st.runAt);
-    if (qid.empty()) s.refs.push_back({REF_RECORD, "sdn-site-register", s.id.substr(9), registerUrl("space-sites.json"), r.name, "en"});
-    else s.source = "Wikidata";  // working: the item's P625 is the position
+    const std::string geonameId = r.geonames;
+    if (!geonameId.empty()) {
+      // A GeoNames placemark's row: its position and name are GeoNames' (CC BY 4.0), and its page is the record's own.
+      const std::string page = "https://www.geonames.org/" + geonameId;
+      s.positionCitation = cite("geonames", geonameId, page, sourceVersion("geonames"), "register:space-sites", st.runAt);
+      s.refs.push_back({qid.empty() ? REF_RECORD : REF_REGISTRY_RECORD, "geonames", geonameId, page, r.name, ""});
+    } else {
+      s.positionCitation = cite("space-sites", s.id, registerUrl("space-sites.json"), sourceVersion("space-sites"), "register:space-sites", st.runAt);
+      if (qid.empty()) registerPages(s, r.page, "space-sites.json", r.name);
+    }
+    if (!qid.empty()) s.source = "Wikidata";  // working: the item's P625 is the position
     if (*r.status) s.evidence.push_back({statusFromName(r.status), r.statusDate, cite("space-sites", r.statusTitle, r.statusUrl, sourceVersion("space-sites"), "register:space-sites", st.runAt)});
     st.sites.push_back(std::move(s));
   }
@@ -447,9 +474,11 @@ inline void seedRegisterRows(State& st) {
     taken.insert(s.id);
     s.name = p.name;
     s.abbreviation = std::string(p.ascii) != p.name ? p.ascii : "";
-    s.catcode = "NPP";
-    s.network = networkName("NPP");
-    s.siteType = ST_POWER_PLANT;
+    // A research centre, waste dome, production reactor or reprocessing plant is a nuclear facility.
+    const bool facility = std::string(p.network) == "NUCF";
+    s.catcode = facility ? "NUCF" : "NPP";
+    s.network = networkName(s.catcode);
+    s.siteType = facility ? ST_INDUSTRIAL_COMPLEX : ST_POWER_PLANT;
     const std::string code = p.code;
     s.siteKind = code == "PSN" ? "nuclear power station" : code == "CTRA" ? "atomic center" : "power station";
     s.lat = p.lat;
@@ -1006,10 +1035,17 @@ inline bool absorbArticles(State& st, const std::vector<Response>& rs, const std
     if (!articleSet(s.catcode) || s.qid().empty()) continue;
     for (const auto& r : s.refs) if (r.role == REF_ENCYCLOPEDIA_ARTICLE && endsWith(r.registry, "wiki")) rowsOf[{r.registry.substr(0, r.registry.size() - 4), r.title}].push_back(i);
   }
+  // The answers, parsed on the workers (each answer is its own document).
+  std::vector<Json> docs(rs.size());
+  std::vector<std::string> errors(rs.size());
+  parallelFor(rs.size(), [&](size_t k) { parseJson(rs[k], docs[k], errors[k], asked[k].lang + ".wikipedia.org"); });
+  // The pages the rows name, in answer order.
+  struct Page { std::string lang, title, revid; std::string text; const std::vector<size_t>* rows = nullptr; bool reactorRows = false; };
+  std::vector<Page> work;
   for (size_t k = 0; k < rs.size(); ++k) {
     const std::string& lang = asked[k].lang;
-    Json j;
-    if (!parseJson(rs[k], j, error, lang + ".wikipedia.org")) return false;
+    if (!errors[k].empty()) { error = errors[k]; return false; }
+    const Json& j = docs[k];
     if (j.contains("continue")) { error = lang + ".wikipedia.org answered in parts (continue); refusing a partial read."; return false; }
     const Json* q = jget(j, "query");
     if (!q) { error = lang + ".wikipedia.org answered without pages."; return false; }
@@ -1024,32 +1060,47 @@ inline bool absorbArticles(State& st, const std::vector<Response>& rs, const std
       const Json& rev = (*revs)[0];
       const Json* slots = jget(rev, "slots");
       const Json* main = slots ? jget(*slots, "main") : nullptr;
-      const std::string text = main ? jstr(*main, "content") : "";
       const std::string title = jstr(page, "title");
       std::string askedTitle = title;
       for (int guard = 0; guard < 4 && renamed.count(askedTitle); ++guard) askedTitle = renamed[askedTitle];
-      const std::string revid = rev.contains("revid") && rev["revid"].is_number() ? std::to_string(rev["revid"].get<int64_t>()) : "";
       auto rows = rowsOf.find({lang, askedTitle});
       if (rows == rowsOf.end()) continue;
-      const std::string recordId = lang + ":" + title;
-      auto wp = [&](const std::string& field) { return cite("wikipedia", recordId, revisionUrl(lang, title, revid), revid, field, st.runAt); };
-      const Params params = infoboxParameters(text);
-      const auto evidence = infoboxEvidence(params, st.nowYear);
-      const Stated start = infoboxStart(params, st.nowYear);
-      std::vector<Statement> statements;
-      bool reactorRows = false;
-      for (size_t i : rows->second) if (reactorSet(st.sites[i].catcode)) reactorRows = true;
-      if (reactorRows) statements = articleStatements(text, st.nowYear);
-      for (size_t i : rows->second) {
-        Site& s = st.sites[i];
-        for (const auto& e : evidence) {
-          s.evidence.push_back({e.status, e.date, wp(e.field)});
-          if (!e.unitDates.empty()) s.evidence.push_back({UNSPECIFIED, "", wp(e.field)});  // working: the units shut on different dates
-        }
-        if (!start.field.empty()) s.evidence.push_back({OPERATING, start.date, wp(start.field)});
-        if (reactorSet(s.catcode))
-          for (const auto& m : statements) s.evidence.push_back({m.kind == "completed" ? DECOMMISSIONED : DECOMMISSIONING, m.date, wp("prose:" + m.phrase)});
+      Page w;
+      w.lang = lang;
+      w.title = title;
+      w.revid = rev.contains("revid") && rev["revid"].is_number() ? std::to_string(rev["revid"].get<int64_t>()) : "";
+      w.text = main ? jstr(*main, "content") : "";
+      w.rows = &rows->second;
+      for (size_t i : rows->second) if (reactorSet(st.sites[i].catcode)) w.reactorRows = true;
+      work.push_back(std::move(w));
+    }
+  }
+  docs.clear();
+  // The rules over each page's wikitext (infobox, start of operation, prose), on the workers.
+  struct Read { std::vector<InfoboxStated> evidence; Stated start; std::vector<Statement> statements; };
+  std::vector<Read> reads(work.size());
+  const int nowYear = st.nowYear;
+  parallelFor(work.size(), [&](size_t k) {
+    const Params params = infoboxParameters(work[k].text);
+    reads[k].evidence = infoboxEvidence(params, nowYear);
+    reads[k].start = infoboxStart(params, nowYear);
+    if (work[k].reactorRows) reads[k].statements = articleStatements(work[k].text, nowYear);
+  });
+  // Merged in page order.
+  for (size_t k = 0; k < work.size(); ++k) {
+    const Page& w = work[k];
+    const Read& r = reads[k];
+    const std::string recordId = w.lang + ":" + w.title;
+    auto wp = [&](const std::string& field) { return cite("wikipedia", recordId, revisionUrl(w.lang, w.title, w.revid), w.revid, field, st.runAt); };
+    for (size_t i : *w.rows) {
+      Site& s = st.sites[i];
+      for (const auto& e : r.evidence) {
+        s.evidence.push_back({e.status, e.date, wp(e.field)});
+        if (!e.unitDates.empty()) s.evidence.push_back({UNSPECIFIED, "", wp(e.field)});  // working: the units shut on different dates
       }
+      if (!r.start.field.empty()) s.evidence.push_back({OPERATING, r.start.date, wp(r.start.field)});
+      if (reactorSet(s.catcode))
+        for (const auto& m : r.statements) s.evidence.push_back({m.kind == "completed" ? DECOMMISSIONED : DECOMMISSIONING, m.date, wp("prose:" + m.phrase)});
     }
   }
   return true;

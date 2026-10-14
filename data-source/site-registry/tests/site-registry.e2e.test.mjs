@@ -106,8 +106,11 @@ const input = (portId, value) => {
 const outs = (result, port) => result.outputs.filter((f) => f.portId === port).map((f) => Buffer.from(f.payload));
 const J = (bytes) => JSON.parse(bytes.toString());
 
-async function run(t) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: "direct" });
+// The provider flow's one-thread variant (build.mjs --flow-host).
+const flowHost = { wasm: fs.readFileSync(new URL("../flow-host/dist/isomorphic/module.wasm", import.meta.url)), manifest: JSON.parse(fs.readFileSync(new URL("../flow-host/plugin-manifest.json", import.meta.url))) };
+
+async function run(t, variant = { wasm, manifest }) {
+  const h = await createBrowserModuleHarness({ wasmSource: variant.wasm, manifest: variant.manifest, surface: "direct" });
   t.after(() => h.destroy());
   let result = await h.invoke({ methodId: "plan", inputs: [input("config", { access: "anonymous", run_at_ms: RUN_AT, producer_peer_id: "16Uiu2HAmTestProducer" })] });
   assert.equal(result.statusCode, 0, result.errorMessage);
@@ -172,6 +175,18 @@ test("the named sites come out with their verified lifecycle, country, descripti
   assert.equal(STATUSES[byId.get("wikidata:Q5767271").LIFECYCLE_STATUS], "UNDER_CONSTRUCTION");
   // A research body merged into a successor stays in operation (ROR successor).
   assert.equal(STATUSES[byId.get("wikidata:Q1022865").LIFECYCLE_STATUS], "OPERATING");
+  // Round-6 verdict (2026-10-13). A description in any language closes a body: nl "voormalig"
+  // (Dr. Neher Laboratorium), "GDR" (Institute for Biotechnology, Leipzig), and an item that calls
+  // itself defunct is closed even with a successor (Royal Aircraft Establishment, dissolved 1991).
+  assert.equal(STATUSES[byId.get("wikidata:Q1994681").LIFECYCLE_STATUS], "PERMANENT_SHUTDOWN");
+  assert.equal(STATUSES[byId.get("wikidata:Q122930142").LIFECYCLE_STATUS], "PERMANENT_SHUTDOWN");
+  assert.equal(status("wikidata:Q1419175"), "PERMANENT_SHUTDOWN@1991");
+  // A station filed as a nuclear facility follows its tracker units (Kashiwazaki-Kariwa runs), but an
+  // item whose own statements close it keeps them (Tokai Power Station, retired 1998).
+  assert.equal(STATUSES[byId.get("wikidata:Q725100").LIFECYCLE_STATUS], "OPERATING");
+  assert.equal(status("wikidata:Q11527936"), "PERMANENT_SHUTDOWN@1998-03-31");
+  // Philippine Research Reactor-1: the reactor shut in 1988 (the 2022 subcritical assembly is not a reactor).
+  assert.equal(status("wikidata:Q25058143"), "PERMANENT_SHUTDOWN@1988");
 
   // Every record: an own-record reference, a provenance, no check-only or ODbL terms, statuses with citations.
   for (const s of byId.values()) {
@@ -215,9 +230,13 @@ test("the named sites come out with their verified lifecycle, country, descripti
   }
 });
 
-test("two runs on the same answers write the same bytes", async (t) => {
+test("two runs on the same answers write the same bytes, threaded or on one thread", async (t) => {
   const first = await run(t);
   const second = await run(t);
-  assert.equal(createHash("sha256").update(first.sites).digest("hex"), createHash("sha256").update(second.sites).digest("hex"));
-  assert.equal(createHash("sha256").update(first.places).digest("hex"), createHash("sha256").update(second.places).digest("hex"));
+  const single = await run(t, flowHost);
+  const sha = (b) => createHash("sha256").update(b).digest("hex");
+  assert.equal(sha(first.sites), sha(second.sites));
+  assert.equal(sha(first.places), sha(second.places));
+  assert.equal(sha(single.sites), sha(first.sites), "the flow-host variant writes the threaded module's bytes");
+  assert.equal(sha(single.places), sha(first.places));
 });

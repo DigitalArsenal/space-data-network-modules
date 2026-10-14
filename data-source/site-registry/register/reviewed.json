@@ -1459,7 +1459,7 @@
    "wiki": "en",
    "title": "Philippine Research Reactor-1",
    "revision": 1373462873,
-   "reviewedAt": "2026-10-13T16:53:57Z",
+   "reviewedAt": "2026-10-13T23:55:00Z",
    "steps": [
     {
      "status": "OPERATING",
@@ -1469,12 +1469,7 @@
     {
      "status": "PERMANENT_SHUTDOWN",
      "date": "1988",
-     "basis": "the TRIGA critical reactor shut down in 1988; the facility then lay dormant"
-    },
-    {
-     "status": "OPERATING",
-     "date": "2022",
-     "basis": "a subcritical assembly (SATER) became operational in the facility in 2022"
+     "basis": "the TRIGA reactor shut down in 1988 and never restarted; the subcritical assembly SATER that opened in the building in 2022 is not a reactor (Wikidata: defunct nuclear research reactor)"
     }
    ]
   },
@@ -4628,6 +4623,236 @@
      "status": "DECOMMISSIONING",
      "date": "2026-10-01",
      "basis": "transferred to Nuclear Restoration Services for its decommissioning programme on 1 October 2026, after defuelling"
+    }
+   ]
+  },
+  {
+   "qid": "Q909477",
+   "wiki": "en",
+   "title": "Zaporizhzhia Nuclear Power Plant",
+   "revision": 1379203837,
+   "reviewedAt": "2026-10-13T16:12:28Z",
+   "steps": [
+    {
+     "status": "LONG_TERM_SHUTDOWN",
+     "date": "2022",
+     "basis": "occupied since 2022; five units in cold shutdown and one in hot shutdown, none generating (the tracker lists the units as operating); the station item, as its placemark geonames:11839420"
+    }
+   ]
+  },
+  {
+   "qid": "Q7258429",
+   "wiki": "en",
+   "title": "Pueblo Chemical Depot",
+   "revision": 1380038221,
+   "reviewedAt": "2026-10-13T22:45:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2024-09-12",
+     "basis": "the United States Army decommissioned the depot on September 12, 2024"
+    }
+   ]
+  },
+  {
+   "qid": "Q7881197",
+   "wiki": "en",
+   "title": "Umatilla Chemical Depot",
+   "revision": 1374223387,
+   "reviewedAt": "2026-10-13T22:45:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2011-10-25",
+     "basis": "weapons disposal completed on October 25, 2011"
+    },
+    {
+     "status": "DECOMMISSIONING",
+     "date": "2013-08",
+     "basis": "dismantling of the chemical disposal facility began in August 2013; base closure operations still ongoing as of 2022"
+    }
+   ]
+  },
+  {
+   "qid": "Q7018812",
+   "wiki": "en",
+   "title": "Newport Chemical Depot",
+   "revision": 1355855346,
+   "reviewedAt": "2026-10-13T22:45:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2010-07-18",
+     "basis": "deactivation ceremony June 17, 2010; the Army officially vacated the site on July 18, 2010"
+    }
+   ]
+  },
+  {
+   "qid": "Q5263867",
+   "wiki": "en",
+   "title": "Deseret Chemical Depot",
+   "revision": 1366247929,
+   "reviewedAt": "2026-10-13T22:45:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2013-07-11",
+     "basis": "Deseret Chemical Depot officially closed July 11, 2013"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:johnston-atoll-chemical-agent-disposal-system",
+   "wiki": "en",
+   "title": "Johnston Atoll Chemical Agent Disposal System",
+   "revision": 1370444698,
+   "reviewedAt": "2026-10-13T22:45:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "2000",
+     "basis": "completed its mission and ceased operation in 2000"
+    },
+    {
+     "status": "DECOMMISSIONED",
+     "date": "2003-10",
+     "basis": "demolition of the facility took place from August to October 2003"
+    }
+   ]
+  },
+  {
+   "qid": "Q7038787",
+   "wiki": "en",
+   "title": "Ninh Thuận 1 Nuclear Power Plant",
+   "revision": 1345897967,
+   "reviewedAt": "2026-10-13T23:55:00Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "2016-11-22",
+     "basis": "the National Assembly voted to stop the Ninh Thuận nuclear projects on 22 November 2016"
+    },
+    {
+     "status": "PLANNED",
+     "date": "2024-11-30",
+     "basis": "the National Assembly resolved on 30 November 2024 to resume the project; the article's infobox and the tracker (GNPT 2026-08) list it as planned"
+    }
+   ]
+  },
+  {
+   "qid": "Q7038783",
+   "wiki": "en",
+   "title": "Ninh Thuận 2 Nuclear Power Plant",
+   "revision": 1345898722,
+   "reviewedAt": "2026-10-13T23:55:00Z",
+   "steps": [
+    {
+     "status": "CANCELLED",
+     "date": "2016-11-22",
+     "basis": "the National Assembly voted to stop the Ninh Thuận nuclear projects on 22 November 2016"
+    },
+    {
+     "status": "PLANNED",
+     "date": "2024-11-30",
+     "basis": "the National Assembly resolved on 30 November 2024 to resume the project; the article's infobox and the tracker (GNPT 2026-08) list it as planned"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:gorny-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "destruction operations at Gorny had finished by 2010"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:kambarka-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "destruction operations at Kambarka had finished by 2010"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:shchuchye-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Russia destroyed the last of its declared stockpile on 27 September 2017; the facility's destruction operations ended by then"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:maradykovsky-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Russia destroyed the last of its declared stockpile on 27 September 2017; the facility's destruction operations ended by then"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:leonidovka-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Russia destroyed the last of its declared stockpile on 27 September 2017; the facility's destruction operations ended by then"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:pochep-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Russia destroyed the last of its declared stockpile on 27 September 2017; the facility's destruction operations ended by then"
+    }
+   ]
+  },
+  {
+   "qid": "sdn-site:kizner-chemical-weapons-destruction-facility",
+   "wiki": "en",
+   "title": "Chemical weapon proliferation",
+   "revision": 1373102509,
+   "reviewedAt": "2026-10-14T01:30:00Z",
+   "steps": [
+    {
+     "status": "PERMANENT_SHUTDOWN",
+     "date": "",
+     "basis": "Russia destroyed the last of its declared stockpile on 27 September 2017; the facility's destruction operations ended by then"
     }
    ]
   }

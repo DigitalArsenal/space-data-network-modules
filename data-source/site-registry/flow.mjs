@@ -10,7 +10,9 @@ import path from "node:path";
 export const STAGES = ["entities_a", "entities_b", "entities_c", "parties", "articles_a", "articles_b", "articles_c", "finish"];
 export const PROGRAM_ID = "com.digitalarsenal.flows.site-registry-ingest";
 
-export function siteRegistryFlow({ node, edge, http, storage, packageDir }) {
+// threads: link the wasi-threads module (dist/) instead of its one-thread provider variant
+// (flow-host/dist/, build.mjs --flow-host); see build.mjs for why the provider links the variant.
+export function siteRegistryFlow({ node, edge, http, storage, packageDir, threads = false }) {
   const source = "com.digitalarsenal.data-source.site-registry", adapter = source + "-host";
   const nodes = [node("prepare", adapter, "prepare_scheduled"), node("plan", source, "plan")];
   const edges = [edge("prepare", "config", "plan", "config"), edge("prepare", "status", "egress", "result")];
@@ -35,6 +37,6 @@ export function siteRegistryFlow({ node, edge, http, storage, packageDir }) {
       triggerBindings: [{ triggerId: "weekly", targetNodeId: "prepare", targetPortId: "tick", backpressurePolicy: "queue", queueDepth: 1 }],
       requiredPlugins: [adapter, source, http, storage],
     },
-    deps: { [source]: packageDir, [adapter]: path.join(packageDir, "host-adapter") },
+    deps: { [source]: threads ? packageDir : path.join(packageDir, "flow-host"), [adapter]: path.join(packageDir, "host-adapter") },
   };
 }

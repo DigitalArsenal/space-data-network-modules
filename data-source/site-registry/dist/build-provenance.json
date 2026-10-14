@@ -4,6 +4,7 @@
     "SIT",
     "GNP"
   ],
-  "threadModel": "wasi-sequential",
+  "threadModel": "wasi-threads",
+  "workers": 4,
   "miniz": "3.1.2"
 }

@@ -103,10 +103,13 @@ inline std::string descriptionRule(const std::string& c) {
 }
 
 struct Patterns {
-  rx::Regex formerReactor{R"(\b(former|defunct|decommissioned|dismantled|shut ?down|closed)\b|\behemalig|\bstillgelegt|\bhistorisch|\bancien\b|\bdémantel|\barrêté)"};
-  rx::Regex formerStorage{R"(\b(former|disused|abandoned|ehemalige?[nrs]?|ancienne?)\s+(?:[\p{L}-]+\s+){0,3}?[\p{L}-]*?(depot|magazine|ammunition|munitions?\w*|powder|poudrière|lager|niederlage|storage|store|bunker|arsenal)|(?<!\p{L})ruins?\s+(?:[\p{L}-]+\s+){0,2}?(site|place|building|monument|military facility|ammunition magazine|magazine|district)(?!\p{L})|(?<!\p{L})(concentration camp|ghost town)(?!\p{L}))"};
-  rx::Regex formerPlant{R"((?<!\p{L})(former|disused|abandoned|derelict|defunct|demolished|dismantled|ruins?|remains|earlier|ehemalige?[nrs]?|stillgelegte?[nrs]?|abgerissene?[nrs]?|historische?[nrs]?|ancienne?|antiga|antigu[ao]|ex)(?!\p{L}))"};
-  rx::Regex formerOrganisation{R"(^(?:[\p{L}-]+\s+){0,1}?(former|defunct|disbanded|dissolved|ehemalige?[nrs]?|aufgelöste?[nrs]?)(?!\p{L})|(?<!\p{L})(?:and|und) (?:former|ehemalige?[nrs]?) (?:lab|laboratory|research|Labor|Forschung))"};
+  rx::Regex formerReactor{R"(\b(former|defunct|decommissioned|dismantled|shut ?down|closed)\b|\behemalig|\bstillgelegt|\bhistorisch|\bancien\b|\bdémantel|\barrêté|\bvoormalig|\bbuiten gebruik|(?<!\p{L})(?:défunte?|dawn[aey]|byłe?[aj]?|bývalá|bývalý|bývalé|odstaven[áéý]|antigu[ao]|antiga|desmantelad[ao]|cerrad[ao])(?!\p{L})|бывш|закрыт|выведен|колишн|закрит)"};
+  rx::Regex formerStorage{R"(\b(former|disused|abandoned|ehemalige?[nrs]?|ancienne?|voormalige?|dawn[aey]|бывш\p{L}*|колишн\p{L}*)\s+(?:[\p{L}.-]+\s+){0,5}?[\p{L}-]*?(depot|magazine|ammunition|munitions?\w*|powder|poudrière|lager|niederlage|storage|store|bunker|arsenal)|(?<!\p{L})ruins?\s+(?:[\p{L}-]+\s+){0,2}?(site|place|building|monument|military facility|ammunition magazine|magazine|district)(?!\p{L})|(?<!\p{L})(concentration camp|ghost town)(?!\p{L}))"};
+  rx::Regex formerPlant{R"((?<!\p{L})(former|disused|abandoned|derelict|defunct|demolished|dismantled|ruins?|remains|earlier|ehemalige?[nrs]?|stillgelegte?[nrs]?|abgerissene?[nrs]?|historische?[nrs]?|ancienne?|antiga|antigu[ao]|ex|voormalige?|dawn[aey]|бывш\p{L}*|колишн\p{L}*)(?!\p{L}))"};
+  rx::Regex formerOrganisation{R"(^(?:[\p{L}-]+\s+){0,1}?(former|defunct|disbanded|dissolved|ehemalige?[nrs]?|aufgelöste?[nrs]?|voormalige?|opgeheven|ancienne?|défunte?|antigu[ao]|antiga|extint[ao]|disuelt[ao]|soppress[ao]|dawn[aey]|byłe?[aj]?|zlikwidowan[aey]?|bývalá|bývalý|bývalé|zaniklá|zaniklý|zaniklé|tidigare|före detta|бывш\p{L}*|упразднённ\p{L}*|ликвидированн\p{L}*|колишн\p{L}*)(?!\p{L})|(?<!\p{L})(?:and|und) (?:former|ehemalige?[nrs]?) (?:lab|laboratory|research|Labor|Forschung)|(?<!\p{L})(?:GDR|DDR)(?!\p{L}))"};
+  // A description that gives the body's new name ("now called") does not close it; a merger
+  // ("now part of") does: the body the record names no longer exists.
+  rx::Regex organisationNow{R"((?<!\p{L})(?:now|today|currently|heute|jetzt|aujourd'hui|actuellement|désormais|nu|thans|ahora|actualmente|oggi|obecnie|nyní|dnes|сейчас|ныне|теперь|зараз|нині)\s+(?:called|named|known|renamed|genannt|benannt|umbenannt|appelée?|nommée?|renommée?|llamad[ao]|denominad[ao]|renombrad[ao]|chiamat[ao]|denominat[ao]|genaamd|hernoemd|nazywa\p{L}*|nazývá\p{L}*|называ\p{L}*|переименован\p{L}*|перейменован\p{L}*)(?!\p{L}))"};
   rx::Regex neverRan{R"((?<!\p{L})(never (?:used|built|completed|operated|realized|realised)|not realized|not realised|unrealized|unrealised|planned but not|nie (?:realisiert|gebaut|in betrieb)|nicht realisiert|jamais (?:construit|réalisé|mis en service))(?!\p{L}))"};
 
   // Wikipedia infoboxes.
@@ -195,16 +198,20 @@ inline bool test(const rx::Regex& re, const std::string& s) { return re.test(rx:
 inline std::string formerBy(const std::vector<std::pair<std::string, std::string>>& texts, const std::string& rule) {
   const auto& P = patterns();
   const rx::Regex& re = rule == "reactor" ? P.formerReactor : rule == "storage" ? P.formerStorage : rule == "plant" ? P.formerPlant : P.formerOrganisation;
-  for (const auto& [lang, text] : texts) if (test(re, text)) return lang;
+  for (const auto& [lang, text] : texts) {
+    if (!test(re, text)) continue;
+    if (rule == "organisation" && test(P.organisationNow, text)) continue;
+    return lang;
+  }
   return "";
 }
 
-// The en, de and fr descriptions in the order the item lists them (the rules
-// read only these three, as the audit's tools fetched).
+// Every description the item has in the languages read, in the order the item
+// lists them: a site's own community often says first that it has closed
+// (nl "voormalig", pl "dawny", ru "бывший").
 inline std::vector<std::pair<std::string, std::string>> ruleDescriptions(const Item& item, const std::vector<std::string>& order) {
   std::vector<std::pair<std::string, std::string>> out;
   for (const auto& lang : order) {
-    if (lang != "en" && lang != "de" && lang != "fr") continue;
     auto it = item.descriptions.find(lang);
     if (it != item.descriptions.end()) out.emplace_back(lang, it->second);
   }
@@ -269,10 +276,13 @@ inline std::vector<Stated> wikidataEvidence(const Item& e, const RowKind& row, c
   };
   bool closedBy = false;
   for (const auto& s : evidence) if (isEndProperty(s.field)) closedBy = true;
-  if (!closedBy && !rule0.empty() && !formerBy(texts(rule0), rule0).empty()) closedBy = true;
+  const std::string formerIn = rule0.empty() ? "" : formerBy(texts(rule0), rule0);
+  if (!closedBy && !formerIn.empty()) closedBy = true;
+  // The item's own description calls it former or defunct: closed under its name, successor or not.
+  const bool describedFormer = !formerIn.empty() && formerIn != "label";
   bool nonOperatingUse = false;
   for (const auto& c : claims("P5817")) { auto it = SOU.find(c.value); if (it != SOU.end() && it->second != OPERATING) nonOperatingUse = true; }
-  const bool renamed = row.organisation && closedBy && !e.successors.empty() && !nonOperatingUse;
+  const bool renamed = row.organisation && closedBy && !e.successors.empty() && !nonOperatingUse && !describedFormer;
   if (renamed) {
     const std::string property = e.successors[0].substr(0, e.successors[0].find(' '));
     evidence.push_back({OPERATING, "", property});
@@ -288,7 +298,7 @@ inline std::vector<Stated> wikidataEvidence(const Item& e, const RowKind& row, c
   const std::string rule = descriptionRule(row.category);
   bool anyStopped = false;
   for (const auto& s : evidence) if (s.status != OPERATING) anyStopped = true;
-  if (!rule.empty() && !renamed && !anyStopped) {
+  if (!rule.empty() && !renamed && (!anyStopped || describedFormer)) {
     const std::string former = formerBy(texts(rule), rule);
     if (!former.empty()) evidence.push_back({PERMANENT_SHUTDOWN, "", former == "label" ? "label" : "description"});
   }
@@ -743,6 +753,154 @@ inline std::vector<Statement> articleStatements(const std::string& text, int now
       out.push_back({"started", rx::utf8(sentence, m.begin, m.end), dates.empty() ? "" : wikiDate(dates[0].second, nowYear)});
       break;
     }
+  }
+  return out;
+}
+
+// ── Article lead (rows outside the nuclear sets that no item or register dates) ──
+// The first sentence of an article says in its tense whether the body or the
+// site still exists ("X is a laboratory" / "X was a laboratory"). It is read
+// for the rows nothing else states a lifecycle for, and decides only then.
+
+// Wikitext with every {{template}}, {|table|} and [[File:…]] removed (nested).
+inline rx::Text withoutBlocks(const rx::Text& t) {
+  rx::Text out;
+  out.reserve(t.size());
+  int braces = 0, tables = 0;
+  size_t i = 0;
+  auto at = [&](size_t k, const char* s) {
+    for (size_t j = 0; s[j]; ++j) if (k + j >= t.size() || t[k + j] != uint32_t(uint8_t(s[j]))) return false;
+    return true;
+  };
+  while (i < t.size()) {
+    if (at(i, "{{")) { ++braces; i += 2; continue; }
+    if (braces > 0 && at(i, "}}")) { --braces; i += 2; continue; }
+    if (braces == 0 && at(i, "{|")) { ++tables; i += 2; continue; }
+    if (tables > 0 && braces == 0 && at(i, "|}")) { --tables; i += 2; continue; }
+    if (braces == 0 && tables == 0) {
+      // [[File:…]], [[Image:…]] and their local names: skip to the matching ]].
+      static const char* files[] = {"[[File:", "[[Image:", "[[Datei:", "[[Bild:", "[[Fichier:", "[[Archivo:", "[[Imagen:", "[[Bestand:", "[[Plik:", "[[Soubor:",
+                                    "[[Файл:", "[[Изображение:", "[[ファイル:", "[[画像:", "[[File:", "[[Immagine:", "[[Fil:", "[[文件:", "[[檔案:"};
+      bool skipped = false;
+      for (const char* f : files) {
+        if (!at(i, f)) continue;
+        int depth = 0;
+        size_t j = i;
+        while (j < t.size()) {
+          if (at(j, "[[")) { ++depth; j += 2; continue; }
+          if (at(j, "]]")) { --depth; j += 2; if (depth == 0) break; continue; }
+          ++j;
+        }
+        i = j;
+        skipped = true;
+        break;
+      }
+      if (skipped) continue;
+      out.push_back(t[i]);
+    }
+    ++i;
+  }
+  return out;
+}
+
+// The first sentence of the article's first prose paragraph.
+inline rx::Text leadSentence(const std::string& text) {
+  const size_t cut = text.find("\n==");
+  rx::Text t = withoutBlocks(proseBody(cut == std::string::npos ? text : text.substr(0, cut)));
+  size_t start = 0;
+  while (start < t.size()) {
+    size_t end = start;
+    while (end < t.size() && t[end] != '\n') ++end;
+    rx::Text line = t.substr(start, end - start);
+    size_t b = 0;
+    while (b < line.size() && rx::isSpace(line[b])) ++b;
+    const bool prose = b < line.size() && line[b] != '*' && line[b] != '#' && line[b] != ':' && line[b] != ';' && line[b] != '|' && line[b] != '!' && line[b] != '_' &&
+                       line[b] != '<' && line[b] != '[' && line[b] != '=';
+    size_t letters = 0;
+    for (uint32_t c : line) if (rx::isLetter(c)) ++letters;
+    if (prose && letters >= 12) {
+      const auto list = sentences(line.substr(b));
+      return list.empty() ? line.substr(b) : list[0];
+    }
+    start = end + 1;
+  }
+  return {};
+}
+
+struct LeadPatterns {
+  rx::Regex present, past, presentFormer, passive;
+};
+inline const LeadPatterns* leadPatterns(const std::string& lang) {
+  static const std::map<std::string, LeadPatterns> m = [] {
+    std::map<std::string, LeadPatterns> v;
+    auto add = [&](const char* lang, const char* present, const char* past, const char* former, const char* passive) {
+      v.emplace(lang, LeadPatterns{rx::Regex(present), rx::Regex(past), rx::Regex(former), rx::Regex(passive)});
+    };
+    const char* never = R"((?!))";
+    add("en", R"((?<!\p{L})(is|are)(?!\p{L}))", R"((?<!\p{L})(was|were)\s+(a|an|the|one)(?!\p{L}))",
+        R"((?<!\p{L})(is|are)\s+(?:a|an|the)\s+(?:former|defunct|closed|disused|abandoned)(?!\p{L}))", R"((?<!\p{L})(was|were)\s+(?:the|one of the)\s+(?:first|oldest|original|earliest)(?!\p{L}))");
+    add("de", R"((?<!\p{L})(ist|sind)(?!\p{L}))", R"((?<!\p{L})(war|waren)\s+(ein|eine|einer|eines|der|die|das|von|bis|zwischen)(?!\p{L}))",
+        R"((?<!\p{L})(ist|sind)\s+(?:ein|eine|der|die|das)\s+(?:ehemalig|früher|stillgelegt|aufgelöst)\p{L}*)", R"((?<!\p{L})war\s+(?:die|der|das)\s+(?:erste|älteste)\p{L}*)");
+    add("fr", R"((?<!\p{L})(est|sont)(?!\p{L}))", R"((?<!\p{L})(était|étaient|fut|furent)\s+(un|une|le|la|les|l'|l’)(?!\p{L}))",
+        R"((?<!\p{L})(est|sont)\s+(?:un|une|le|la|l'|l’)\s*(?:ancien|ancienne|ex-|défunt)\p{L}*)", R"((?<!\p{L})(était|fut)\s+(?:le|la)\s+(?:premier|première|plus ancien)\p{L}*)");
+    add("nl", R"((?<!\p{L})(is|zijn)(?!\p{L}))", R"((?<!\p{L})(was|waren)\s+(een|het|de)(?!\p{L}))", R"((?<!\p{L})(is|zijn)\s+(?:een|het|de)\s+(?:voormalig|opgeheven)\p{L}*)", never);
+    add("es", R"((?<!\p{L})(es|son)(?!\p{L}))", R"((?<!\p{L})(fue|era|fueron|eran)\s+(un|una|el|la|los|las)(?!\p{L}))", R"((?<!\p{L})(es|son)\s+(?:un|una|el|la)\s+(?:antigu|extint|ex-)\p{L}*)", R"((?<!\p{L})(fue|era)\s+(?:el|la)\s+primer\p{L}*)");
+    add("it", R"((?<!\p{L})(è|sono)(?!\p{L}))", R"((?<!\p{L})(era|fu|erano|furono)\s+(un|una|uno|il|lo|la|l'|l’|i|gli|le)(?!\p{L}))", R"((?<!\p{L})(è|sono)\s+(?:un|una|uno|il|la|l'|l’)\s*(?:ex|antic|soppress)\p{L}*)", R"((?<!\p{L})(era|fu)\s+(?:il|la)\s+prim\p{L}*)");
+    add("sv", R"((?<!\p{L})(är)(?!\p{L}))", R"((?<!\p{L})var\s+(en|ett|den|det)(?!\p{L}))", R"((?<!\p{L})är\s+(?:en|ett)\s+(?:före detta|tidigare|nedlagd)\p{L}*)", never);
+    add("pl", R"((?<!\p{L})(jest|są|to)(?!\p{L}))", R"((?<!\p{L})(był|była|było|byli|były)(?!\p{L}))", R"((?<!\p{L})(jest|to)\s+(?:dawn|był|zlikwidowan)\p{L}*)",
+        R"((?<!\p{L})(był|była|było|byli|były)\s+(?:założon|utworzon|powołan|zbudowan|otwart|nazywan|znan)\p{L}*)");
+    add("cs", R"((?<!\p{L})(je|jsou)(?!\p{L}))", R"((?<!\p{L})(byl|byla|bylo|byli|byly)(?!\p{L}))", R"((?<!\p{L})(je|jsou)\s+(?:bývalý|bývalá|bývalé|zaniklý|zaniklá|zaniklé)(?!\p{L}))",
+        R"((?<!\p{L})(byl|byla|bylo|byli|byly)\s+(?:založen|zřízen|ustaven|vytvořen|postaven|otevřen|přejmenován)\p{L}*)");
+    add("ru", R"((?<!\p{L})(является|являются)(?!\p{L})|\s[—–]\s)", R"((?<!\p{L})(был|была|было|были|являлся|являлась|являлось|существовал|существовала|существовало)(?!\p{L}))",
+        R"(\s[—–]\s*(?:бывш|упразднённ|ликвидированн)\p{L}*)", R"((?<!\p{L})(был|была|было|были)\s+(?:основан|создан|образован|открыт|построен|переименован|организован)\p{L}*)");
+    add("uk", R"((?<!\p{L})(є)(?!\p{L})|\s[—–]\s)", R"((?<!\p{L})(був|була|було|були|існував|існувала|існувало)(?!\p{L}))", R"(\s[—–]\s*(?:колишн|ліквідован)\p{L}*)",
+        R"((?<!\p{L})(був|була|було|були)\s+(?:заснован|створен|утворен|відкрит|збудован|перейменован)\p{L}*)");
+    add("ja", never, R"((であった|だった|していた|存在した|置かれていた|あった)。?\s*$)", never, never);
+    add("zh", never, R"((曾是|曾经是|曾經是|已撤销|已撤銷|已解散|已关闭|已關閉))", never, never);
+    return v;
+  }();
+  auto it = m.find(lang);
+  return it == m.end() ? nullptr : &it->second;
+}
+
+// PERMANENT_SHUTDOWN when the lead sentence puts the site in the past, else UNSPECIFIED.
+inline int leadStatus(const std::string& text, const std::string& lang) {
+  const LeadPatterns* P = leadPatterns(lang);
+  if (!P) return UNSPECIFIED;
+  const rx::Text s = leadSentence(text);
+  if (s.empty()) return UNSPECIFIED;
+  if (P->presentFormer.test(s)) return PERMANENT_SHUTDOWN;
+  // The first copula decides; a passive past ("was founded", "byl založen") is not one.
+  size_t from = 0;
+  while (from <= s.size()) {
+    const auto past = P->past.search(s, from);
+    if (!past.ok) return UNSPECIFIED;
+    const auto passive = P->passive.search(s, past.begin);
+    if (passive.ok && passive.begin == past.begin) { from = past.end; continue; }
+    const auto present = P->present.search(s);
+    if (present.ok && present.begin < past.begin) return UNSPECIFIED;
+    return PERMANENT_SHUTDOWN;
+  }
+  return UNSPECIFIED;
+}
+
+// An organisation or site infobox's closing date ("dissolved = 1991").
+inline const std::vector<std::string>& closingKeys() {
+  static const std::vector<std::string> v{"dissolved", "defunct", "abolished", "closed", "closing_date", "date_closed", "closure", "aufgelöst", "auflösung", "auflösungsdatum",
+                                          "dissolution", "date de dissolution", "disparition", "fermeture", "date de fermeture", "disolución", "fecha de disolución", "clausura",
+                                          "scioglimento", "chiusura", "opgeheven", "nedlagd", "likwidacja", "zánik", "упразднён", "ликвидирован", "ліквідовано"};
+  return v;
+}
+inline std::vector<Stated> closingEvidence(const Params& params, int nowYear) {
+  std::vector<Stated> out;
+  for (const auto& k : closingKeys()) {
+    std::string value = trim(stripCommentsAndRefs(param(params, k)));
+    if (value.empty()) continue;
+    const std::string date = wikiDate(value, nowYear);
+    // An undated value is a closure only when it is not a "no" or a placeholder.
+    const std::string low = lower(value);
+    if (date.empty() && (low == "no" || low == "nein" || low == "non" || low == "-" || low == "—" || low == "n/a")) continue;
+    out.push_back({PERMANENT_SHUTDOWN, date, "lead-infobox:" + k});
   }
   return out;
 }

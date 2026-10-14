@@ -2,7 +2,7 @@
  "pluginId": "com.digitalarsenal.data-source.site-registry",
  "name": "SDN site registry",
  "version": "0.1.0",
- "description": "Retrieval nodes for every site the SpaceAware console shows (owner 2026-10-13: \"It should all load over SDN, that's the whole point\"): nuclear laboratories and facilities, nuclear power plants (Wikidata and the Global Energy Monitor tracker), storage sites, chemical plants, research bodies, the curated biological and chemical laboratories and storage sites, the space sites and the GeoNames nuclear placemarks, as SDS $SIT 1.1.0 records with a cited lifecycle (Wikidata P5817 and end/start dates, Wikipedia infobox facts, GEM unit status, ROR organisation status, reviewed facts), a cited description, references (record, official website, Wikipedia titles and links, registry and docket records), operators, owners, regulators and quantities; and a $GNP search projection of the current and prospective sites. Nine stages, each at most 60 requests; the stage state is the $SIT stream itself. Storage, publication and the schedule belong to the host; the node's auto-publisher announces SIT.fbs and GNP.fbs, provider sdn-site-registry, sources sites and site-places.",
+ "description": "Retrieval nodes for every site the SpaceAware console shows (owner 2026-10-13: \"It should all load over SDN, that's the whole point\"): nuclear laboratories and facilities, nuclear power plants (Wikidata and the Global Energy Monitor tracker), storage sites, chemical plants, research bodies, the curated biological and chemical laboratories and storage sites, the space sites and the GeoNames nuclear placemarks, as SDS $SIT 1.1.0 records with a cited lifecycle (Wikidata P5817 and end/start dates, Wikipedia infobox facts, GEM unit status, ROR organisation status, reviewed facts), a cited description, references (record, official website, Wikipedia titles and links, registry and docket records), operators, owners, regulators and quantities; and a $GNP search projection of the current and prospective sites. Nine stages, each at most 60 requests; the stage state is the $SIT stream itself. The stages parse the answers and read the articles on four pthreads (wasi-threads) over the module's shared memory. Storage, publication and the schedule belong to the host; the node's auto-publisher announces SIT.fbs and GNP.fbs, provider sdn-site-registry, sources sites and site-places.",
  "pluginFamily": "data_source",
  "capabilities": [],
  "externalInterfaces": [],
@@ -14,10 +14,6 @@
   "browser",
   "wasmedge"
  ],
- "sequentialJustification": {
-  "kind": "pure-transform",
-  "detail": "Bounded deterministic parsing (JSON one answer at a time, the ROR dump inflated in 32 KiB windows), rule evaluation and FlatBuffer building. No host calls, threads or network access; the host fetches."
- },
  "schemasUsed": [
   {
    "schemaName": "SIT.fbs",
@@ -910,5 +906,6 @@
    "maxBatch": 1,
    "drainPolicy": "single-shot"
   }
- ]
+ ],
+ "threadModel": "emscripten-pthreads"
 }

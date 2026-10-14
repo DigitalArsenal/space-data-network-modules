@@ -16,7 +16,7 @@ const fixtures = path.join(here, "..", "tests", "fixtures");
 mkdirSync(fixtures, { recursive: true });
 
 // The named sites the e2e test asserts (and a research body with a ROR record).
-export const NAMED = ["Q1438110", "Q1695264", "Q1536182", "Q302114", "Q1516546", "Q3664615", "Q1630042", "Q5767271", "Q757630", "Q2450052", "Q1022865", "Q105534041", "Q1076890"];
+export const NAMED = ["Q1438110", "Q1695264", "Q1536182", "Q302114", "Q1516546", "Q3664615", "Q1630042", "Q5767271", "Q757630", "Q2450052", "Q1022865", "Q105534041", "Q1076890", "Q25058143", "Q1994681", "Q122930142", "Q725100", "Q1419175", "Q11527936"];
 
 const key = (r) => createHash("sha256").update(`${r.method}\n${r.url.replace(/[?&]sdn-req=[^&]*/, "")}\n${r.bodyB64 ?? ""}`).digest("hex");
 const answer = (r) => JSON.parse(readFileSync(path.join(cacheDir, `${key(r)}.bin`)).subarray(8));

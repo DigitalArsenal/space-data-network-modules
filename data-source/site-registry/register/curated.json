@@ -1,5 +1,5 @@
 {
- "$comment": "Hand-curated facilities Wikidata does not tag: high-containment biological laboratories, chemical defence laboratories and declared chemical/nuclear weapons storage sites (owner 2026-10-04: bio, chemical and nuclear labs, storage places and research facilities, by name, in groups). One row per facility and category; a facility in two categories appears twice. 'position' says where the coordinate comes from: Wikidata (CC0), 'approximate: <what>' when only the town, road or campus is published. No containment level is claimed. Checked 2026-10-04. Imported from SpaceAware-UI e0d053f. position: where the coordinate comes from (wikidata = the item's P625, read each run; register = the row's own published coordinate with its citation). 2026-10-13: the twelve positions taken from OpenStreetMap (ODbL) were replaced: by the site's own Wikidata item where it has a coordinate (P4 Jean Mérieux, the Bundeswehr CBRN institute, the University of Marburg), else by the coordinate of its town's Wikidata item (CC0; positionUrl), marked approximate.",
+ "$comment": "Hand-curated facilities Wikidata does not tag: high-containment biological laboratories, chemical defence laboratories and declared chemical/nuclear weapons storage sites (owner 2026-10-04: bio, chemical and nuclear labs, storage places and research facilities, by name, in groups). One row per facility and category; a facility in two categories appears twice. 'position' says where the coordinate comes from: Wikidata (CC0), 'approximate: <what>' when only the town, road or campus is published. No containment level is claimed. Checked 2026-10-04. Imported from SpaceAware-UI e0d053f. position: where the coordinate comes from (wikidata = the item's P625, read each run; register = the row's own published coordinate with its citation). 2026-10-13: the twelve positions taken from OpenStreetMap (ODbL) were replaced: by the site's own Wikidata item where it has a coordinate (P4 Jean Mérieux, the Bundeswehr CBRN institute, the University of Marburg), else by the coordinate of its town's Wikidata item (CC0; positionUrl), marked approximate. page: the row's English Wikipedia article (en:Title), its own page when it has no item; titles and links only (2026-10-13). Y-12 and the Ezeiza Atomic Centre are the GeoNames atomic-centre placemarks the console had bundled.",
  "categories": {
   "BIO": "Bio labs",
   "CHEM": "Chemical labs",
@@ -146,7 +146,8 @@
    "cc": "GB",
    "lat": 51.69064,
    "lon": -0.23661,
-   "position": "approximate: Blanche Lane, South Mimms"
+   "position": "approximate: Blanche Lane, South Mimms",
+   "page": "en:National Institute for Biological Standards and Control"
   },
   {
    "name": "Robert Koch Institute",
@@ -306,7 +307,8 @@
    "cc": "CN",
    "lat": 45.75936,
    "lon": 126.62762,
-   "position": "approximate: Harbin (city)"
+   "position": "approximate: Harbin (city)",
+   "page": "en:Harbin Veterinary Research Institute"
   },
   {
    "name": "Institute of Medical Biology, Chinese Academy of Medical Sciences",
@@ -427,7 +429,8 @@
    "lon": 103.78306,
    "position": "approximate: Kent Ridge",
    "positionUrl": "https://www.wikidata.org/wiki/Q31266130",
-   "positionTitle": "Kent Ridge"
+   "positionTitle": "Kent Ridge",
+   "page": "en:DSO National Laboratories"
   },
   {
    "name": "Defence Science and Technology Laboratory, Porton Down",
@@ -446,7 +449,8 @@
    "cc": "US",
    "lat": 39.41872,
    "lon": -76.2944,
-   "position": "approximate: Edgewood"
+   "position": "approximate: Edgewood",
+   "page": "en:Edgewood Chemical Biological Center"
   },
   {
    "name": "Spiez Laboratory",
@@ -517,7 +521,8 @@
    "cc": "IN",
    "lat": 26.20372,
    "lon": 78.15736,
-   "position": "approximate: Gwalior (city)"
+   "position": "approximate: Gwalior (city)",
+   "page": "en:Defence Research and Development Establishment"
   },
   {
    "name": "Defence Research and Development Canada – Suffield",
@@ -575,7 +580,8 @@
    "cc": "SY",
    "lat": 33.55712,
    "lon": 36.32266,
-   "position": "approximate: Barzeh, Damascus"
+   "position": "approximate: Barzeh, Damascus",
+   "page": "en:Syrian Scientific Studies and Research Center"
   },
   {
    "name": "Rabta chemical weapons plant",
@@ -755,6 +761,27 @@
    "lat": 35.3116,
    "lon": -101.56,
    "position": "Wikidata"
+  },
+  {
+   "name": "Y-12 National Security Complex",
+   "category": "NUCF",
+   "kind": "nuclear weapons component plant",
+   "cc": "US",
+   "lat": 35.98634,
+   "lon": -84.25698,
+   "position": "Wikidata",
+   "wikidata": "Q2061309"
+  },
+  {
+   "name": "Ezeiza Atomic Centre",
+   "category": "NUCF",
+   "kind": "nuclear research centre",
+   "cc": "AR",
+   "lat": -34.82367,
+   "lon": -58.57422,
+   "position": "register",
+   "positionUrl": "https://www.geonames.org/11149764",
+   "positionTitle": "GeoNames 11149764"
   }
  ]
 }

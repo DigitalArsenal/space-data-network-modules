@@ -1,0 +1,10 @@
+{
+  "spacedatastandards": "1.249.0+1791921617551",
+  "schemas": [
+    "SIT",
+    "GNP"
+  ],
+  "threadModel": "wasi-sequential",
+  "workers": 1,
+  "miniz": "3.1.2"
+}
