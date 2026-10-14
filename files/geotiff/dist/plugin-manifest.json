@@ -1,7 +1,7 @@
 {
  "pluginId": "com.digitalarsenal.files.geotiff",
  "name": "GeoTIFF imagery",
- "version": "0.1.0",
+ "version": "0.2.0",
  "description": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery. describe reads the header (classic or BigTIFF, either byte order) into one SDS $GDI (format, EPSG:4326 footprint, source EPSG) and a level table; render draws a window given in EPSG:4326 as RGBA from the coarsest level at least as fine as the window's pixels, through the file's projection (EPSG:4326, Web Mercator 3857, UTM on WGS84 or GRS80). Compression none, LZW, PackBits, DEFLATE (miniz) and JPEG with JPEGTables (stb_image); 8-, 16- and 32-bit integer and 32-bit float samples with the horizontal and floating-point predictors; gray, RGB, YCbCr-in-JPEG and palette images; alpha bands, internal masks and GDAL no-data. Both methods take an SDS $NCD descriptor of the file and the byte ranges the caller has (raw), and name the ranges they still need.",
  "pluginFamily": "parser",
  "capabilities": [],
