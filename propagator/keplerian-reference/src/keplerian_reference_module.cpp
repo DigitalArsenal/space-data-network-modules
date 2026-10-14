@@ -803,18 +803,54 @@ constexpr int32_t kErrOutsideValidity = -10;
 constexpr double kDefaultSmallValiditySeconds = 60.0 * 86400.0;
 double g_small_validity = kDefaultSmallValiditySeconds;
 
+/// The perturbed path is carried on a fixed grid of checkpoints keyed to each
+/// row's element epoch, epoch_et + k * kCheckpointStep: a snapshot at et uses
+/// the conic osculating at the nearest checkpoint (at most 2 days away).
+constexpr double kCheckpointStep = 4.0 * 86400.0;
+
 struct SmallBody {
+  // The record's osculating elements at its element epoch, exactly as decoded
+  // and never changed afterwards (keplerian-reference 1.8.1: the drawn place
+  // must not depend on where the clock has been).
   double epoch_et = 0.0;        // TDB seconds past J2000: the record's element epoch (validity)
-  double osc_et = 0.0;          // the epoch the elements below osculate at (moved by small_rebase)
   double a = 0.0;               // m
   double e = 0.0;
   double n = 0.0;               // rad/s
   double m0 = 0.0;              // rad at epoch
   double p[3] = {0, 0, 0};      // perifocal x (to pericentre), ICRF
   double q[3] = {0, 0, 0};      // perifocal y, ICRF
+  // A cache of the perturbed path: the osculating elements at checkpoint k as
+  // float32 differences from the epoch elements carried there on their own
+  // conic (mean anomaly) or kept as they are (the rest). Checkpoint k is only
+  // ever reached from checkpoint k -/+ 1 through these rounded values, so its
+  // elements are the same whatever order the clock asked for them in.
+  float da = 0.0f, de = 0.0f, dn = 0.0f, dm = 0.0f;
+  float dp[3] = {0.0f, 0.0f, 0.0f};
+  float dq[3] = {0.0f, 0.0f, 0.0f};
+  int32_t k = 0;
   float h = NAN;
   float g = 0.15f;
 };
+
+/// A two-body conic: the elements a row's places are computed from.
+struct Conic {
+  double osc_et;  // the epoch the elements osculate at
+  double a, e, n, m0;
+  double p[3], q[3];
+};
+
+/// The row's conic at its cached checkpoint (the epoch elements at k = 0).
+inline void conic_of(const SmallBody& b, Conic& c) {
+  c.osc_et = b.epoch_et + b.k * kCheckpointStep;
+  c.a = b.a + b.da;
+  c.e = b.e + b.de;
+  c.n = b.n + b.dn;
+  c.m0 = b.m0 + b.n * (b.k * kCheckpointStep) + b.dm;
+  for (int i = 0; i < 3; ++i) {
+    c.p[i] = b.p[i] + b.dp[i];
+    c.q[i] = b.q[i] + b.dq[i];
+  }
+}
 
 /// The rows, in blocks of 65,536: a catalog grows shard by shard without the
 /// reallocations (and the transient double copy) of one contiguous vector,
@@ -966,7 +1002,6 @@ int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out
     p[1] = py; p[2] = pz; q[1] = qy; q[2] = qz;
   }
   out->epoch_et = (epoch_jd - kJ2000) * kSecondsPerDay;
-  out->osc_et = out->epoch_et;
   out->a = a;
   out->e = e;
   out->n = std::sqrt(gm / (a * a * a));
@@ -1003,8 +1038,8 @@ bool small_in_validity(const SmallBody& b, double et) {
   return std::fabs(et - b.epoch_et) <= g_small_validity;
 }
 
-bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
-  if (!small_in_validity(b, et)) return false;
+/// The conic's place (and velocity) at et, with no validity check.
+bool small_conic(const Conic& b, double et, double r[3], double v[3]) {
   double ecc = 0.0;
   if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc)) return false;
   const double ce = std::cos(ecc), se = std::sin(ecc);
@@ -1021,17 +1056,39 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
   return true;
 }
 
+bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
+  if (!small_in_validity(b, et)) return false;
+  Conic c;
+  conic_of(b, c);
+  return small_conic(c, et, r, v);
+}
+
 // ── Planetary perturbations ────────────────────────────────────────────────
 // Osculating elements are a two-body orbit only at their epoch: the planets
 // pull a body off the conic (Psyche 1.4" at +45 days, 3" at +60 days against
 // JPL Horizons on two-body alone). Each row is therefore carried along its
-// perturbed path: when a snapshot asks for an epoch more than kRebaseSpan from
-// the epoch its elements osculate at, the row is integrated there (Encke's
-// method: the deviation from the osculating conic, RK4) under the Sun and the
-// eight planets (Mercury, Venus, the Earth-Moon barycentre, the Mars, Jupiter,
-// Saturn, Uranus and Neptune systems; DE440 GMs) and its elements are replaced
-// by the osculating elements there. Over a snapshot's few days from them the
-// conic is exact to well under 0.1".
+// perturbed path on a fixed grid of checkpoints keyed to its element epoch
+// (kCheckpointStep): checkpoint k + 1 (or k - 1 before the epoch) is checkpoint
+// k integrated one grid step (Encke's method: the deviation from the
+// osculating conic, RK4) under the Sun and the eight planets (Mercury, Venus,
+// the Earth-Moon barycentre, the Mars, Jupiter, Saturn, Uranus and Neptune
+// systems; DE440 GMs), and its osculating elements there. A snapshot uses the
+// nearest checkpoint's conic; over the 2 days at most from it the conic is
+// exact to well under 0.1".
+//
+// The path never depends on the clock's history (1.8.0 replaced the row's
+// elements in place from wherever the clock had last been, so a row visited
+// 50 days back and then brought to its epoch was 12,886 km off for Phaethon):
+// the epoch elements are kept, a checkpoint is only ever computed from its
+// neighbour toward the epoch, and moving back toward the epoch (or across it)
+// restarts the chain from the epoch elements.
+//
+// The RK4 step is the grid step, refined near a planet (a tenth of the
+// planet's distance's crossing time at 30 km/s within 0.2 AU) and near the
+// Sun (kSunStepFraction of the body's dynamical time sqrt(r^3/GM): about
+// 0.5 day at Phaethon's 0.14 AU perihelion; one step per grid interval
+// beyond about 1 AU). 1.8.0's fixed 6-day step was twice Phaethon's
+// dynamical time at perihelion.
 //
 // The planets' heliocentric places are their mean orbits (Standish, "Keplerian
 // Elements for Approximate Positions of the Major Planets", JPL SSD, Table 1,
@@ -1039,8 +1096,7 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
 // pulling body's place to about a percent of its distance, and the table holds
 // Jupiter to about 400" (0.01 AU at 5.2 AU), which moves a two-month main-belt
 // perturbation by a few hundredths of an arcsecond.
-constexpr double kRebaseSpan = 2.0 * 86400.0;       // re-osculate past this far from osc_et
-constexpr double kRebaseStep = 6.0 * 86400.0;       // RK4 step for a body far from every planet
+constexpr double kSunStepFraction = 0.08;
 constexpr int kPlanets = 8;
 // a (AU), e, I, L, long. perihelion, long. node (deg) at J2000 and per Julian century.
 constexpr double kStandish[kPlanets][12] = {
@@ -1125,79 +1181,61 @@ void planet_acceleration(const double r[3], double et, double out[3], double* ne
   if (nearest != nullptr) *nearest = near;
 }
 
-/// The conic's place (and velocity) at et from the row's current elements,
-/// with no validity check (the integrator's own reference orbit).
-bool small_conic(const SmallBody& b, double et, double r[3], double v[3]) {
-  double ecc = 0.0;
-  if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc)) return false;
-  const double ce = std::cos(ecc), se = std::sin(ecc);
-  const double root = std::sqrt(1.0 - b.e * b.e);
-  const double x = b.a * (ce - b.e), y = b.a * root * se;
-  for (int c = 0; c < 3; ++c) r[c] = x * b.p[c] + y * b.q[c];
-  if (v != nullptr) {
-    const double edot = b.n / (1.0 - b.e * ce);
-    const double vx = -b.a * se * edot, vy = b.a * root * ce * edot;
-    for (int c = 0; c < 3; ++c) v[c] = vx * b.p[c] + vy * b.q[c];
-  }
-  return true;
-}
-
 /// Encke: the deviation's acceleration at t (the planets' pull at the body's
 /// perturbed place, plus the difference of the Sun's pull there and on the
 /// conic).
-bool encke_acceleration(const SmallBody& b, double gm, double t, const double dr[3], double out[3], double* nearest) {
+bool encke_acceleration(const Conic& b, double gm, double t, const double dr[3], double out[3], double* nearest,
+                        double* radius) {
   double rho[3];
   if (!small_conic(b, t, rho, nullptr)) return false;
   const double r[3] = {rho[0] + dr[0], rho[1] + dr[1], rho[2] + dr[2]};
   const double rho3 = std::pow(rho[0] * rho[0] + rho[1] * rho[1] + rho[2] * rho[2], 1.5);
-  const double r3 = std::pow(r[0] * r[0] + r[1] * r[1] + r[2] * r[2], 1.5);
+  const double r2 = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+  const double r3 = std::pow(r2, 1.5);
+  if (radius != nullptr) *radius = std::sqrt(r2);
   planet_acceleration(r, t, out, nearest);
   for (int c = 0; c < 3; ++c) out[c] += gm * (rho[c] / rho3 - r[c] / r3);
   return true;
 }
 
-/// The row's osculating elements at `et`, from its perturbed path since
-/// osc_et. A failed step or a non-elliptic result leaves the row as it was.
-bool small_rebase(SmallBody& b, double et) {
-  const double span = et - b.osc_et;
-  if (std::fabs(span) <= kRebaseSpan) return true;
-  const double gm = b.n * b.n * b.a * b.a * b.a;
+/// One grid step of the perturbed path: `c` (osculating at c.osc_et) is
+/// integrated to t_end and replaced by the osculating conic there. A failed
+/// step or a non-elliptic result returns false and leaves `c` as it was.
+bool advance_conic(Conic& c, double t_end) {
+  const double gm = c.n * c.n * c.a * c.a * c.a;
+  const double span = t_end - c.osc_et;
   double dr[3] = {0, 0, 0}, dv[3] = {0, 0, 0};
-  double t = b.osc_et;
-  // Rows that keep far from every planet share one step grid (their planet
-  // places are computed once per epoch for the whole catalog); a row that
-  // comes within 0.2 AU of a planet steps at a tenth of its distance's
-  // crossing time at 30 km/s.
-  const int base_steps = static_cast<int>(std::ceil(std::fabs(span) / kRebaseStep));
-  const double base_h = span / base_steps;
-  while (std::fabs(et - t) > 1e-6) {
-    double k1v[3], k2v[3], k3v[3], k4v[3], nearest = INFINITY;
-    if (!encke_acceleration(b, gm, t, dr, k1v, &nearest)) return false;
-    double h = base_h;
+  double t = c.osc_et;
+  while (std::fabs(t_end - t) > 1e-6) {
+    double k1v[3], k2v[3], k3v[3], k4v[3], nearest = INFINITY, radius = INFINITY;
+    if (!encke_acceleration(c, gm, t, dr, k1v, &nearest, &radius)) return false;
+    double h = span;
     const double close = 0.2 * kAuMeters;
     if (nearest < close) {
       const double fine = std::max(600.0, 0.1 * nearest / 30000.0);
       if (fine < std::fabs(h)) h = std::copysign(fine, span);
     }
-    if (std::fabs(et - t) < std::fabs(h) * (1.0 + 1e-9)) h = et - t;
+    const double solar = std::max(600.0, kSunStepFraction * std::sqrt(radius * radius * radius / gm));
+    if (solar < std::fabs(h)) h = std::copysign(solar, span);
+    if (std::fabs(t_end - t) < std::fabs(h) * (1.0 + 1e-9)) h = t_end - t;
     const double hh = 0.5 * h;
     double r2[3], v2[3], r3[3], v3[3], r4[3], v4[3];
-    for (int c = 0; c < 3; ++c) { r2[c] = dr[c] + hh * dv[c]; v2[c] = dv[c] + hh * k1v[c]; }
-    if (!encke_acceleration(b, gm, t + hh, r2, k2v, nullptr)) return false;
-    for (int c = 0; c < 3; ++c) { r3[c] = dr[c] + hh * v2[c]; v3[c] = dv[c] + hh * k2v[c]; }
-    if (!encke_acceleration(b, gm, t + hh, r3, k3v, nullptr)) return false;
-    for (int c = 0; c < 3; ++c) { r4[c] = dr[c] + h * v3[c]; v4[c] = dv[c] + h * k3v[c]; }
-    if (!encke_acceleration(b, gm, t + h, r4, k4v, nullptr)) return false;
-    for (int c = 0; c < 3; ++c) {
-      dr[c] += h / 6.0 * (dv[c] + 2.0 * v2[c] + 2.0 * v3[c] + v4[c]);
-      dv[c] += h / 6.0 * (k1v[c] + 2.0 * k2v[c] + 2.0 * k3v[c] + k4v[c]);
+    for (int i = 0; i < 3; ++i) { r2[i] = dr[i] + hh * dv[i]; v2[i] = dv[i] + hh * k1v[i]; }
+    if (!encke_acceleration(c, gm, t + hh, r2, k2v, nullptr, nullptr)) return false;
+    for (int i = 0; i < 3; ++i) { r3[i] = dr[i] + hh * v2[i]; v3[i] = dv[i] + hh * k2v[i]; }
+    if (!encke_acceleration(c, gm, t + hh, r3, k3v, nullptr, nullptr)) return false;
+    for (int i = 0; i < 3; ++i) { r4[i] = dr[i] + h * v3[i]; v4[i] = dv[i] + h * k3v[i]; }
+    if (!encke_acceleration(c, gm, t + h, r4, k4v, nullptr, nullptr)) return false;
+    for (int i = 0; i < 3; ++i) {
+      dr[i] += h / 6.0 * (dv[i] + 2.0 * v2[i] + 2.0 * v3[i] + v4[i]);
+      dv[i] += h / 6.0 * (k1v[i] + 2.0 * k2v[i] + 2.0 * k3v[i] + k4v[i]);
     }
     t += h;
   }
-  // The perturbed state at et, and its osculating conic.
+  // The perturbed state at t_end, and its osculating conic.
   double r[3], v[3];
-  if (!small_conic(b, et, r, v)) return false;
-  for (int c = 0; c < 3; ++c) { r[c] += dr[c]; v[c] += dv[c]; }
+  if (!small_conic(c, t_end, r, v)) return false;
+  for (int i = 0; i < 3; ++i) { r[i] += dr[i]; v[i] += dv[i]; }
   const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
   const double v2n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
   const double hv[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
@@ -1207,31 +1245,71 @@ bool small_rebase(SmallBody& b, double et) {
   const double a = 1.0 / inv_a;
   const double vxh[3] = {v[1] * hv[2] - v[2] * hv[1], v[2] * hv[0] - v[0] * hv[2], v[0] * hv[1] - v[1] * hv[0]};
   double ev[3];
-  for (int c = 0; c < 3; ++c) ev[c] = vxh[c] / gm - r[c] / rn;
+  for (int i = 0; i < 3; ++i) ev[i] = vxh[i] / gm - r[i] / rn;
   const double e = std::sqrt(ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]);
   if (!(e < 1.0)) return false;
   double p[3], m;
   if (e > 1e-10) {
-    for (int c = 0; c < 3; ++c) p[c] = ev[c] / e;
+    for (int i = 0; i < 3; ++i) p[i] = ev[i] / e;
     const double cos_e = (1.0 - rn / a) / e;
     const double sin_e = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / (e * std::sqrt(gm * a));
     const double ecc = std::atan2(sin_e, cos_e);
     m = ecc - e * std::sin(ecc);
   } else {
-    for (int c = 0; c < 3; ++c) p[c] = r[c] / rn;
+    for (int i = 0; i < 3; ++i) p[i] = r[i] / rn;
     m = 0.0;
   }
-  const double q[3] = {(hv[1] * p[2] - hv[2] * p[1]) / hn, (hv[2] * p[0] - hv[0] * p[2]) / hn,
-                       (hv[0] * p[1] - hv[1] * p[0]) / hn};
-  b.a = a;
-  b.e = e;
-  b.n = std::sqrt(gm / (a * a * a));
-  b.m0 = m;
-  for (int c = 0; c < 3; ++c) {
-    b.p[c] = p[c];
-    b.q[c] = q[c];
+  c.osc_et = t_end;
+  c.a = a;
+  c.e = e;
+  c.n = std::sqrt(gm / (a * a * a));
+  c.m0 = m;
+  for (int i = 0; i < 3; ++i) c.p[i] = p[i];
+  c.q[0] = (hv[1] * p[2] - hv[2] * p[1]) / hn;
+  c.q[1] = (hv[2] * p[0] - hv[0] * p[2]) / hn;
+  c.q[2] = (hv[0] * p[1] - hv[1] * p[0]) / hn;
+  return true;
+}
+
+/// Caches `c` as the row's checkpoint k (float32 differences from the epoch
+/// elements; the mean anomaly's from the epoch conic carried to the
+/// checkpoint, wrapped to +-pi).
+void store_checkpoint(SmallBody& b, const Conic& c, int32_t k) {
+  const double base_m = b.m0 + b.n * (k * kCheckpointStep);
+  b.da = static_cast<float>(c.a - b.a);
+  b.de = static_cast<float>(c.e - b.e);
+  b.dn = static_cast<float>(c.n - b.n);
+  b.dm = static_cast<float>(std::remainder(c.m0 - base_m, kTwoPi));
+  for (int i = 0; i < 3; ++i) {
+    b.dp[i] = static_cast<float>(c.p[i] - b.p[i]);
+    b.dq[i] = static_cast<float>(c.q[i] - b.q[i]);
   }
-  b.osc_et = et;
+  b.k = k;
+}
+
+/// The row's checkpoint nearest `et`, from its perturbed path. Continues the
+/// cached chain when `et` lies farther out on the same side of the epoch, and
+/// otherwise restarts it from the epoch elements, so the elements used at et
+/// are a function of et alone. A failed step keeps the last good checkpoint.
+bool small_rebase(SmallBody& b, double et) {
+  const double steps = (et - b.epoch_et) / kCheckpointStep;
+  if (!std::isfinite(steps) || std::fabs(steps) > 1.0e6) return false;
+  const int32_t want = static_cast<int32_t>(std::lround(steps));
+  if (want == b.k) return true;
+  const bool onward = b.k != 0 && (b.k > 0) == (want > 0) && std::abs(want) > std::abs(b.k);
+  if (!onward) {
+    b.da = b.de = b.dn = b.dm = 0.0f;
+    for (int i = 0; i < 3; ++i) b.dp[i] = b.dq[i] = 0.0f;
+    b.k = 0;
+  }
+  const int32_t dir = want > b.k ? 1 : -1;
+  Conic c;
+  while (b.k != want) {
+    conic_of(b, c);
+    const int32_t next = b.k + dir;
+    if (!advance_conic(c, b.epoch_et + next * kCheckpointStep)) return false;
+    store_checkpoint(b, c, next);
+  }
   return true;
 }
 
@@ -1282,7 +1360,7 @@ constexpr double kSpeedOfLight = 299792458.0;
 /// Newton on Kepler's equation from a seed close to the answer (the
 /// geometric solve's eccentric anomaly moved by the light time): one or two
 /// steps to 1e-12 rad.
-bool small_position_from(const SmallBody& b, double t, double seed, double r[3], double* ecc_out) {
+bool small_position_from(const Conic& b, double t, double seed, double r[3], double* ecc_out) {
   // No validity check here: the caller checked the observation epoch, and the
   // light-time place an hour or so before it belongs to that epoch (a row is
   // drawn to the very edge of its span).
@@ -1323,10 +1401,12 @@ bool small_position_from(const SmallBody& b, double t, double seed, double r[3],
 ///
 /// Out: `seen` the apparent vector from the observer (m), `geometric` the
 /// geometric one at `et`, `light_time_place` the heliocentric row at et - tau.
-bool small_apparent_place(const SmallBody& b, double et, const double* observer, double seen[3],
+bool small_apparent_place(const SmallBody& row, double et, const double* observer, double seen[3],
                           double geometric[3], double light_time_place[3]) {
   double r[3];
-  if (!small_in_validity(b, et)) return false;
+  if (!small_in_validity(row, et)) return false;
+  Conic b;
+  conic_of(row, b);
   double ecc = 0.0;
   if (!small_eccentric_anomaly(b.m0 + b.n * (et - b.osc_et), b.e, &ecc) ||
       !small_position_from(b, et, ecc, r, &ecc)) {

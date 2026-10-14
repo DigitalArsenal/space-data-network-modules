@@ -138,18 +138,39 @@ Rows are independent, so a host shards them across its own workers, as for
 reallocation as a catalog grows shard by shard: a module's linear memory keeps
 its high-water mark), and an ingest writes rows straight into the store.
 
-**Perturbed paths (1.6.0).** Osculating elements are a conic only at their
-epoch; the planets pull a body off it (two-body alone put (16) Psyche 1.44"
-from Horizons at +45 days and 3" at +60). A row is carried along its perturbed
-path: when an export asks for an epoch more than two days from the epoch its
-elements osculate at, the row is integrated there (Encke's method, RK4 steps
-of at most six days, finer within 0.2 AU of a planet) under the Sun and the
-eight planets (Mercury, Venus, the Earth-Moon barycentre, the Mars, Jupiter,
-Saturn, Uranus and Neptune systems; DE440 GMs, places from Standish's JPL SSD
-mean orbits, 1800-2050) and re-osculated. The record's own epoch still bounds
-the validity span. Cost: a snapshot that re-osculates 20,000 rows over 26 days
-takes 93 ms on one thread (11 ms without), over 73 days 203 ms; the rest are
-plain conics.
+**Perturbed paths (1.6.0; clock-independent 1.8.1).** Osculating elements are
+a conic only at their epoch; the planets pull a body off it (two-body alone put
+(16) Psyche 1.44" from Horizons at +45 days and 3" at +60). A row is carried
+along its perturbed path on a fixed grid of checkpoints keyed to its element
+epoch, every four days: checkpoint k + 1 (k - 1 before the epoch) is checkpoint
+k integrated one grid step (Encke's method, RK4) under the Sun and the eight
+planets (Mercury, Venus, the Earth-Moon barycentre, the Mars, Jupiter, Saturn,
+Uranus and Neptune systems; DE440 GMs, places from Standish's JPL SSD mean
+orbits, 1800-2050) and re-osculated, and an export at et uses the conic of the
+checkpoint nearest et (at most two days away). The RK4 step is the grid step,
+refined within 0.2 AU of a planet and near the Sun (0.08 of the body's
+dynamical time sqrt(r^3/GM): about half a day at (3200) Phaethon's 0.14 AU
+perihelion, one step per grid interval beyond about 1 AU).
+
+The record's elements are never changed: the cached checkpoint is held as
+float32 differences from them, a checkpoint is only ever reached from its
+neighbour toward the epoch (moving back toward the epoch, or across it,
+restarts the chain from the record), so a row's place at et is a function of et
+alone, bit for bit, whatever the clock visited before. 1.8.0 replaced the
+elements in place from wherever the clock had last been, with a fixed 6-day
+step (twice Phaethon's dynamical time at perihelion): Phaethon brought back to
+its epoch after a visit 50 days earlier was 12,886 km off. The record's own
+epoch still bounds the validity span.
+
+Evidence (`tests/small-history.e2e.test.mjs`): states and snapshots
+bit-identical after excursions to -50, +55 and -55/+55/-3 days; against JPL
+Horizons over +-55 days after any of those histories, Phaethon 38-102 km and
+(137924) 2000 BD19 (q 0.092 AU) 53-254 km. (329915) 2005 MB is 600-3,013 km:
+Lowell's orbit for it (computed 2025-08-02, CEU 0.46") is itself 2,192 km from
+JPL's at the element epoch, before any propagation; from JPL's own elements
+at that epoch the module follows Horizons within 50 km over +-55 days
+(Phaethon within 73 km, 2000 BD19 within 127 km). Memory: 40 bytes more per
+row (35 MB for the 895,910 numbered asteroids).
 
 Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
 within 2.7 mm of an independent two-body oracle of the record within the
