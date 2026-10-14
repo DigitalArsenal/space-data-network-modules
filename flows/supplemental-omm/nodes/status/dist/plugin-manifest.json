@@ -1,0 +1,349 @@
+{
+  "pluginId": "org.sdn.flows.supplemental-omm.status",
+  "name": "Supplemental OMM Status",
+  "version": "2.0.0",
+  "description": "The Supplemental OMM status board's counters (typed contracts 1.0: FlatBuffers only). record_event takes the ephemerides the source modules hand the OD node (SDS $OEM, one port per provider), the Starlink source's FlowNotices (objects it could not get), the OD node's FlowNotices (fitted / unfittable / fit-failed) and the flow's storage-ingest IngestResults, and emits one SDS $DSS snapshot for each route it touched: provider-<name>.dss (ephemerides' states and bytes; Starlink also its missing objects), od.dss (fitted and refused objects; the last refusal stays visible while later fits succeed), store.dss (records stored; a refused batch until the next stored one). An invocation is applied whole or refused whole. No hostcalls.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "record_event",
+      "displayName": "Record status events",
+      "inputPorts": [
+        {
+          "portId": "provider-starlink",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The starlink source's $OEM ephemerides (the frames the OD node gets)."
+        },
+        {
+          "portId": "provider-glonass",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The glonass source's $OEM ephemerides (the frames the OD node gets)."
+        },
+        {
+          "portId": "provider-intelsat",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The intelsat source's $OEM ephemerides (the frames the OD node gets)."
+        },
+        {
+          "portId": "provider-cpf",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The cpf source's $OEM ephemerides (the frames the OD node gets)."
+        },
+        {
+          "portId": "provider-iss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The iss source's $OEM ephemerides (the frames the OD node gets)."
+        },
+        {
+          "portId": "provider-starlink-notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The Starlink source's FlowNotices (Missing objects-unavailable / manifest-unavailable)."
+        },
+        {
+          "portId": "od",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The OD node's FlowNotices: Info fitted, Skipped unfittable / fit-failed."
+        },
+        {
+          "portId": "store",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "IngestResults of the flow's storage-ingest nodes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "provider-starlink.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The provider-starlink route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "provider-glonass.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The provider-glonass route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "provider-intelsat.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The provider-intelsat route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "provider-cpf.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The provider-cpf route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "provider-iss.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The provider-iss route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "od.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The od route's $DSS snapshot (not size-prefixed)."
+        },
+        {
+          "portId": "store.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dss",
+              "allowedTypes": [
+                {
+                  "schemaName": "DSS.fbs",
+                  "fileIdentifier": "$DSS",
+                  "rootTypeName": "DSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The store route's $DSS snapshot (not size-prefixed)."
+        }
+      ],
+      "maxBatch": 64,
+      "drainPolicy": "drain-until-yield"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "DSS.fbs",
+      "fileIdentifier": "$DSS",
+      "rootTypeName": "DSS"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "supplemental-omm-status-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
