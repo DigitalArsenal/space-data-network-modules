@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "solar-system-bodies 0.1.0 evaluate",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "0f4ce18e314465e744c088bd9db24fe3916d5c95a0d1d97dce079175111e5966",
-  "moduleSha256": "0f4ce18e314465e744c088bd9db24fe3916d5c95a0d1d97dce079175111e5966",
+  "artifactSha256": "acda7ea636b183fde738c488e8b765699a2b88d52a8abadbd1e467803f30ed06",
+  "moduleSha256": "acda7ea636b183fde738c488e8b765699a2b88d52a8abadbd1e467803f30ed06",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 9,
-      "durationMs": 911
+      "durationMs": 947
     },
     {
       "lane": "wasmedge",
       "runs": 9,
-      "durationMs": 306
+      "durationMs": 51908
     },
     {
       "lane": "docker-wasmedge",
       "runs": 9,
-      "durationMs": 7112
+      "durationMs": 2656
     }
   ],
   "cases": [
@@ -42,7 +42,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "69546799c01d94e1af0bdd311ded48549f075cdbea96fb11d82a1adc9c2d6ef9",
       "stdoutLength": 2320
     },
@@ -52,7 +52,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
       "stdoutLength": 1056
     },
@@ -62,7 +62,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
       "stdoutLength": 544
     },
@@ -72,7 +72,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "0a7313c0a0b9b3ddd2eccd1123eb0ffa7dedd094b679c70f93a166a84883c6cf",
       "stdoutLength": 392
     },
@@ -82,7 +82,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "39b2c43e8b5bc41a1c77635d335866e23daf84c0f708f3c086eed6af03031152",
       "stdoutLength": 1032
     },
@@ -92,7 +92,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ea7380e3b967d5ce2383386f053db45bdc6a3099bfa731700a946cbcab4d9f05",
       "stdoutLength": 128
     },
@@ -102,7 +102,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8af5dae09b63222946cd7fe5d70c795f0587ce6e5115b263570ee010c14feeed",
       "stdoutLength": 132
     },
@@ -112,7 +112,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
       "stdoutLength": 224
     },
@@ -122,7 +122,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
       "stdoutLength": 200
     },
@@ -132,7 +132,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "69546799c01d94e1af0bdd311ded48549f075cdbea96fb11d82a1adc9c2d6ef9",
       "stdoutLength": 2320
     },
@@ -142,7 +142,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
       "stdoutLength": 1056
     },
@@ -152,7 +152,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
       "stdoutLength": 544
     },
@@ -162,7 +162,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "0a7313c0a0b9b3ddd2eccd1123eb0ffa7dedd094b679c70f93a166a84883c6cf",
       "stdoutLength": 392
     },
@@ -172,7 +172,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "39b2c43e8b5bc41a1c77635d335866e23daf84c0f708f3c086eed6af03031152",
       "stdoutLength": 1032
     },
@@ -182,7 +182,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ea7380e3b967d5ce2383386f053db45bdc6a3099bfa731700a946cbcab4d9f05",
       "stdoutLength": 128
     },
@@ -192,7 +192,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8af5dae09b63222946cd7fe5d70c795f0587ce6e5115b263570ee010c14feeed",
       "stdoutLength": 132
     },
@@ -202,7 +202,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
       "stdoutLength": 224
     },
@@ -212,7 +212,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
       "stdoutLength": 200
     },
@@ -222,7 +222,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "69546799c01d94e1af0bdd311ded48549f075cdbea96fb11d82a1adc9c2d6ef9",
       "stdoutLength": 2320
     },
@@ -232,7 +232,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ce56c5c18098f9d488511d0bf176f9d99e82426f0357ea14ed830ae39d09c616",
       "stdoutLength": 1056
     },
@@ -242,7 +242,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "b9455eed6a73cb2d1c5254dc99dae6c7d0fcb170ba220e6f06951556e8408e73",
       "stdoutLength": 544
     },
@@ -252,7 +252,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "0a7313c0a0b9b3ddd2eccd1123eb0ffa7dedd094b679c70f93a166a84883c6cf",
       "stdoutLength": 392
     },
@@ -262,7 +262,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "39b2c43e8b5bc41a1c77635d335866e23daf84c0f708f3c086eed6af03031152",
       "stdoutLength": 1032
     },
@@ -272,7 +272,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "ea7380e3b967d5ce2383386f053db45bdc6a3099bfa731700a946cbcab4d9f05",
       "stdoutLength": 128
     },
@@ -282,7 +282,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8af5dae09b63222946cd7fe5d70c795f0587ce6e5115b263570ee010c14feeed",
       "stdoutLength": 132
     },
@@ -292,7 +292,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "8e34e066a1252e13f3f4993da7075b8305a6339c8236e92284844dce69f6c3f1",
       "stdoutLength": 224
     },
@@ -302,7 +302,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
-      "spawnCount": null,
+      "spawnCount": 0,
       "stdoutSha256": "d52c1f55cea912ac24574843df2b1a1d3ec60304267a6ba39b41b0172086ae5f",
       "stdoutLength": 200
     }
