@@ -254,8 +254,8 @@ extern "C" int integrate_catalog(void) {
         selected->EPOCH_MS = ms_of(win.epoch);
         selected->REASON = choice.reason;
         selected->TIE = choice.tie;
-        selected->OMM = record_ref(xmtRecordKind::Omm, win.bytes, win.length);
-        if (paired) selected->OCM = record_ref(xmtRecordKind::Ocm, paired->bytes, paired->length);
+        selected->OMM_REF = record_ref(xmtRecordKind::Omm, win.bytes, win.length);
+        if (paired) selected->OCM_REF = record_ref(xmtRecordKind::Ocm, paired->bytes, paired->length);
         covariance_of(win, paired, selected.get());
         if (choice.winner->measured) {
           selected->MEASURED = std::make_unique<XMTMeasuredErrorT>();

@@ -211,7 +211,7 @@ test("standards: one $PNV entry per notice, signatures and keys as bytes; JSON r
   assert.deepEqual(omm.PUBLISHER_KEY, [0x0a, 0x0b]);
   assert.deepEqual([omm.SIGNATURE_VERIFIED, omm.ATTRIBUTION, omm.KEY_SOURCE], [true, PNV.pnvAttribution.Direct, PNV.pnvKeySource.IdentityRecord]);
   assert.deepEqual([wxf.SIGNATURE_VERIFIED, wxf.ATTRIBUTION, wxf.KEY_SOURCE], [false, PNV.pnvAttribution.Unattributed, PNV.pnvKeySource.None]);
-  assert.deepEqual([Uint8Array.from(omm.PNM), Uint8Array.from(wxf.PNM)], PNM_FRAMES, "each received $PNM verbatim, so a reader can verify it");
+  assert.deepEqual([Uint8Array.from(omm.PNM_BYTES), Uint8Array.from(wxf.PNM_BYTES)], PNM_FRAMES, "each received $PNM verbatim, so a reader can verify it");
   assert.match(pnv.ETAG, ETAG_FORMAT);
   assert.equal(http.header("etag"), pnv.ETAG);
   const notModified = await serve("standards", typedHost(answers), { method: "GET", path: "/api/v1/standards", headers: { "If-None-Match": pnv.ETAG } });

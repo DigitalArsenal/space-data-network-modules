@@ -278,7 +278,7 @@ void render_pnv(JsonOut& j, const PNV* r) {
             J_STR(j, e, SCHEMA_NAME); J_STR(j, e, FILE_ID); J_STR(j, e, FILE_NAME); J_STR(j, e, CID);
             J_I64(j, e, PUBLISHED_AT_MS); J_I64(j, e, RECEIVED_AT_MS); J_STR(j, e, SIGNATURE_TYPE); J_HEX(j, e, SIGNATURE);
             J_BOOL(j, e, SIGNATURE_VERIFIED); J_ENUM(j, e, ATTRIBUTION, EnumNamepnvAttribution); J_HEX(j, e, PUBLISHER_KEY);
-            J_ENUM(j, e, KEY_SOURCE, EnumNamepnvKeySource); J_STR(j, e, REASON); J_HEX(j, e, PNM);
+            J_ENUM(j, e, KEY_SOURCE, EnumNamepnvKeySource); J_STR(j, e, REASON); J_HEX(j, e, PNM_BYTES);
             j.end_object();
         }
     }

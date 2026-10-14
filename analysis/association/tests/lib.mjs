@@ -113,15 +113,15 @@ export function earthOrientation(rows) {
   return { portId: 'earth_orientation', typeRef: typeRef('EOP'), payload };
 }
 
-// $ASN (the assignment problem, solution and association report) from the
-// standard's TypeScript bindings (lib/ts/ASN), bundled in memory with the
+// $ASG (the assignment problem, solution and association report) from the
+// standard's TypeScript bindings (lib/ts/ASG), bundled in memory with the
 // standards repo's own esbuild and its flatbuffers runtime.
 const esbuild = require('esbuild');
-const asnBundle = await esbuild.build({
-  stdin: { contents: 'export * from "./lib/ts/ASN/main.ts"; export * as flatbuffers from "flatbuffers";', resolveDir: root, loader: 'ts' },
+const asgBundle = await esbuild.build({
+  stdin: { contents: 'export * from "./lib/ts/ASG/main.ts"; export * as flatbuffers from "flatbuffers";', resolveDir: root, loader: 'ts' },
   bundle: true, format: 'esm', platform: 'node', write: false,
 });
-export const ASN = await import(`data:text/javascript;base64,${Buffer.from(asnBundle.outputFiles[0].contents).toString('base64')}`);
+export const ASG = await import(`data:text/javascript;base64,${Buffer.from(asgBundle.outputFiles[0].contents).toString('base64')}`);
 
 // The node config the module reads its options from (plugin.getConfig).
 async function invoke(methodId, inputs, config = {}) {
@@ -140,9 +140,9 @@ const decoders = {
 };
 
 export function decodeAsn(payload) {
-  const bb = new ASN.flatbuffers.ByteBuffer(new Uint8Array(payload));
-  if (!ASN.ASN.bufferHasIdentifier(bb)) throw new Error('not an $ASN FlatBuffer');
-  return ASN.ASN.getRootAsASN(bb).unpack();
+  const bb = new ASG.flatbuffers.ByteBuffer(new Uint8Array(payload));
+  if (!ASG.ASG.bufferHasIdentifier(bb)) throw new Error('not an $ASG FlatBuffer');
+  return ASG.ASG.getRootAsASG(bb).unpack();
 }
 
 // The report's observation in test terms: its assigned candidate (null for a UCT).
@@ -157,16 +157,16 @@ export async function associate(inputs, config = {}) {
     if (m) records[m[2]].push({ family: m[1], record: decoders[m[1]](new Uint8Array(f.payload)) });
   }
   const reportFrame = result.outputs.find((f) => f.portId === 'report');
-  if (reportFrame.typeRef?.fileIdentifier !== undefined) assert.equal(reportFrame.typeRef.fileIdentifier, '$ASN');
+  if (reportFrame.typeRef?.fileIdentifier !== undefined) assert.equal(reportFrame.typeRef.fileIdentifier, '$ASG');
   const report = decodeAsn(reportFrame.payload).ASSOCIATION_REPORT;
   return { report, records, outputs: result.outputs };
 }
 
-// An $ASN problem frame: { cost: rows of numbers (null = forbidden) } or
+// An $ASG problem frame: { cost: rows of numbers (null = forbidden) } or
 // { rows, columns, entries: [[i, j, c], ...] }, plus optional unassigned_cost
 // (a number or one per row) and objective ('Minimize' | 'Maximize').
 export function problemFrame({ cost, rows, columns, entries, unassigned_cost: unassigned, objective }) {
-  const p = new ASN.ASNProblemT();
+  const p = new ASG.ASGProblemT();
   if (cost) {
     p.ROWS = cost.length;
     p.COLUMNS = cost[0].length;
@@ -174,15 +174,15 @@ export function problemFrame({ cost, rows, columns, entries, unassigned_cost: un
   } else {
     p.ROWS = rows;
     p.COLUMNS = columns;
-    p.ENTRIES = entries.map(([i, j, c]) => Object.assign(new ASN.ASNCostEntryT(), { ROW: i, COLUMN: j, COST: c }));
+    p.ENTRIES = entries.map(([i, j, c]) => Object.assign(new ASG.ASGCostEntryT(), { ROW: i, COLUMN: j, COST: c }));
   }
   if (unassigned !== undefined) p.UNASSIGNED_COST = Array.isArray(unassigned) ? unassigned : [unassigned];
-  if (objective) p.OBJECTIVE = ASN.asnObjective[objective];
-  const a = new ASN.ASNT();
+  if (objective) p.OBJECTIVE = ASG.asgObjective[objective];
+  const a = new ASG.ASGT();
   a.PROBLEM = p;
-  const b = new ASN.flatbuffers.Builder(1 << 16);
-  b.finish(a.pack(b), '$ASN');
-  return { portId: 'problem', typeRef: typeRef('ASN'), payload: b.asUint8Array().slice() };
+  const b = new ASG.flatbuffers.Builder(1 << 16);
+  b.finish(a.pack(b), '$ASG');
+  return { portId: 'problem', typeRef: typeRef('ASG'), payload: b.asUint8Array().slice() };
 }
 
 export async function solveAssignment(problem) {

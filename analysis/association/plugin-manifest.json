@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.association",
   "name": "Observation association",
   "version": "0.3.0",
-  "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. The evidence (every candidate, d2, p-value, posterior, residuals, geometry, outcome) is one $ASN association report; the options are the node config (plugin.getConfig). Also solves general rectangular assignment problems ($ASN problem in, $ASN solution out).",
+  "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. The evidence (every candidate, d2, p-value, posterior, residuals, geometry, outcome) is one $ASG association report; the options are the node config (plugin.getConfig). Also solves general rectangular assignment problems ($ASG problem in, $ASG solution out).",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -46,9 +46,9 @@
       "rootTypeName": "EOP"
     },
     {
-      "schemaName": "ASN.fbs",
-      "fileIdentifier": "$ASN",
-      "rootTypeName": "ASN"
+      "schemaName": "ASG.fbs",
+      "fileIdentifier": "$ASG",
+      "rootTypeName": "ASG"
     }
   ],
   "methods": [
@@ -293,22 +293,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "asn-association-report",
+              "setId": "asg-association-report",
               "allowedTypes": [
                 {
-                  "schemaName": "ASN.fbs",
-                  "fileIdentifier": "$ASN",
-                  "rootTypeName": "ASN",
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "$ASN with ASSOCIATION_REPORT set."
+              "description": "$ASG with ASSOCIATION_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The association evidence: one $ASN whose ASSOCIATION_REPORT holds the options used, the chi-square gates, the counts and, per observation, its measurements and sigmas, every listed candidate (d2, p-value, posterior, residuals, predicted values, light time, geometry when the geometry option is on), the outcome (associated or UCT, with the reason) and ambiguity."
+          "description": "The association evidence: one $ASG whose ASSOCIATION_REPORT holds the options used, the chi-square gates, the counts and, per observation, its measurements and sigmas, every listed candidate (d2, p-value, posterior, residuals, predicted values, light time, geometry when the geometry option is on), the outcome (associated or UCT, with the reason) and ambiguity."
         }
       ],
       "maxBatch": 1,
@@ -323,22 +323,22 @@
           "portId": "problem",
           "acceptedTypeSets": [
             {
-              "setId": "asn-problem",
+              "setId": "asg-problem",
               "allowedTypes": [
                 {
-                  "schemaName": "ASN.fbs",
-                  "fileIdentifier": "$ASN",
-                  "rootTypeName": "ASN",
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "$ASN with PROBLEM set."
+              "description": "$ASG with PROBLEM set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One $ASN whose PROBLEM is a dense cost matrix (DENSE_COST, NaN or +Infinity = forbidden) or sparse ENTRIES (absent pairs forbidden), with optional UNASSIGNED_COST (one value, or one per row) and OBJECTIVE."
+          "description": "One $ASG whose PROBLEM is a dense cost matrix (DENSE_COST, NaN or +Infinity = forbidden) or sparse ENTRIES (absent pairs forbidden), with optional UNASSIGNED_COST (one value, or one per row) and OBJECTIVE."
         }
       ],
       "outputPorts": [
@@ -346,22 +346,22 @@
           "portId": "solution",
           "acceptedTypeSets": [
             {
-              "setId": "asn-solution",
+              "setId": "asg-solution",
               "allowedTypes": [
                 {
-                  "schemaName": "ASN.fbs",
-                  "fileIdentifier": "$ASN",
-                  "rootTypeName": "ASN",
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "$ASN with SOLUTION set."
+              "description": "$ASG with SOLUTION set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One $ASN whose SOLUTION gives the column of each row (-1 = unassigned), the total cost (assigned plus unassigned costs paid), the counts and the method."
+          "description": "One $ASG whose SOLUTION gives the column of each row (-1 = unassigned), the total cost (assigned plus unassigned costs paid), the counts and the method."
         }
       ],
       "maxBatch": 1,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ASN, assignedOf, associate } from './lib.mjs';
+import { ASG, assignedOf, associate } from './lib.mjs';
 import { gpsScenario } from './gps-scenario.mjs';
 
 // The public-data scenario of gps-scenario.mjs (its header says how the
@@ -21,7 +21,7 @@ test('GNSS observations associate with an independent catalog; uncatalogued ones
   const noradOf = Object.fromEntries(catalog.map((c) => [c.prn, c.norad]));
   const tally = { RDO: { right: 0, wrong: 0, falseUct: 0, uct: 0 }, EOO: { right: 0, wrong: 0, falseUct: 0, uct: 0 }, RFO: { right: 0, wrong: 0, ambiguousWrong: 0, falseUct: 0, uct: 0 } };
   const pValues = [];
-  const UCT = ASN.asnAssociationOutcome.Uncorrelated;
+  const UCT = ASG.asgAssociationOutcome.Uncorrelated;
   for (const o of report.OBSERVATIONS) {
     const sat = truthOf.get(o.ID), expected = noradOf[sat], c = tally[o.RECORD_TYPE], a = assignedOf(o);
     if (!expected) {

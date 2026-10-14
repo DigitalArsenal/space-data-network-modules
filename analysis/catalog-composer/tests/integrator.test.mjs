@@ -46,8 +46,8 @@ test('the source with the lowest measured median error is chosen per object and 
   assert.deepEqual([m.SOURCE_ID, m.PRODUCT, m.MEDIAN_3D_KM, m.SAMPLES, m.REGIME, m.HORIZON_DAYS], [S2, 'sgp4', 0.5, 100, 'LEO-L', 1]);
   assert.deepEqual(alpha.CANDIDATES.map((c) => [c.SOURCE_ID, c.STANDING, c.MEASURED, c.MEDIAN_3D_KM, c.SAMPLES]),
     [[S1, STANDING.NotSelected, true, 0.8, 100], [S2, STANDING.Selected, true, 0.5, 100], [S3, STANDING.NotSelected, false, 0.2, 10]]);
-  assert.equal(alpha.SELECTED.OMM.SHA256, sha256(s2a));
-  assert.equal(alpha.SELECTED.OMM.CID, cidOf(s2a));
+  assert.equal(alpha.SELECTED.OMM_REF.SHA256, sha256(s2a));
+  assert.equal(alpha.SELECTED.OMM_REF.CID, cidOf(s2a));
   assert.equal(alpha.CANDIDATES[1].RECORD.SHA256, sha256(s2a));
   assert.equal(objectOf(r, 'BRAVO').PRODUCTS[0].SELECTED.SOURCE_ID, S1);
   assert.equal(objectOf(r, 'CHARLIE').OUTCOME, OUTCOME.NoProduct);
@@ -183,12 +183,12 @@ test('the selected product\'s covariance and its label come out with it, byte fo
   assert.equal(selected.COVARIANCE.CALIBRATION, OMM.covarianceCalibration.Calibrated);
   assert.equal(selected.COVARIANCE.MEAN_D2_OVER_3, 1.73);
   assert.equal(selected.COVARIANCE.MODEL_ID, 'e14-s3-0e678383cfbd');
-  assert.equal(selected.OCM.SHA256, sha256(o2));
+  assert.equal(selected.OCM_REF.SHA256, sha256(o2));
   // A chosen set whose source gave no OCM at that epoch goes out alone, and the report reads its label from the set.
   const alone = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [s1, s2], ocms: [o1] });
   assert.equal(alone.ocm.length, 0);
   assert.equal(objectOf(alone, 'ALPHA').PRODUCTS[0].SELECTED.COVARIANCE_ORIGIN, ORIGIN.FromOmm);
-  assert.equal(objectOf(alone, 'ALPHA').PRODUCTS[0].SELECTED.OCM, null);
+  assert.equal(objectOf(alone, 'ALPHA').PRODUCTS[0].SELECTED.OCM_REF, null);
   assert.equal(alone.report.WITHOUT_OCM_COUNT, 1);
 });
 

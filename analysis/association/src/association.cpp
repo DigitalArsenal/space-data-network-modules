@@ -783,8 +783,8 @@ std::vector<uint8_t> annotated(const Observation& o, const Block* b, const Candi
 
 std::vector<double> vec(const Vec3& v) { return {v[0], v[1], v[2]}; }
 
-std::unique_ptr<ASNObjectRefT> objectRef(const Block& b) {
-  auto r = std::make_unique<ASNObjectRefT>();
+std::unique_ptr<ASGObjectRefT> objectRef(const Block& b) {
+  auto r = std::make_unique<ASGObjectRefT>();
   r->KEY = b.key;
   r->NORAD_CAT_ID = static_cast<uint32_t>(b.norad);
   r->OBJECT_ID = b.objectId;
@@ -792,19 +792,19 @@ std::unique_ptr<ASNObjectRefT> objectRef(const Block& b) {
   return r;
 }
 
-asnMeasurementKind measurementKind(Kind k) {
+asgMeasurementKind measurementKind(Kind k) {
   switch (k) {
-    case Kind::RANGE: return asnMeasurementKind::Range;
-    case Kind::RANGE_RATE: return asnMeasurementKind::RangeRate;
-    case Kind::RA: return asnMeasurementKind::RightAscension;
-    case Kind::DEC: return asnMeasurementKind::Declination;
-    case Kind::AZ: return asnMeasurementKind::Azimuth;
-    default: return asnMeasurementKind::Elevation;
+    case Kind::RANGE: return asgMeasurementKind::Range;
+    case Kind::RANGE_RATE: return asgMeasurementKind::RangeRate;
+    case Kind::RA: return asgMeasurementKind::RightAscension;
+    case Kind::DEC: return asgMeasurementKind::Declination;
+    case Kind::AZ: return asgMeasurementKind::Azimuth;
+    default: return asgMeasurementKind::Elevation;
   }
 }
 
-asnScanGrouping scanGrouping(const std::string& scan) {
-  return scan == "track" ? asnScanGrouping::Track : scan == "observation" ? asnScanGrouping::Observation : asnScanGrouping::SensorTime;
+asgScanGrouping scanGrouping(const std::string& scan) {
+  return scan == "track" ? asgScanGrouping::Track : scan == "observation" ? asgScanGrouping::Observation : asgScanGrouping::SensorTime;
 }
 
 // Measured line of sight in GCRF, when the observation has angles.
@@ -843,7 +843,7 @@ flatbuffers::Verifier::Options verifierOptions() {
   return v;
 }
 
-bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>>& outputs) {
+bool run(ASGAssociationReportT& report, std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>>& outputs) {
   Options opt;
   std::vector<Observation> obs;
   std::vector<const plugin_input_frame_t*> observationFrames;
@@ -995,7 +995,7 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
   size_t associatedCount = 0, uncorrelatedCount = 0;
   for (size_t i = 0; i < obs.size(); ++i) {
     const auto& o = obs[i];
-    auto oj = std::make_unique<ASNObservationT>();
+    auto oj = std::make_unique<ASGObservationT>();
     oj->INDEX = static_cast<uint32_t>(i);
     oj->RECORD_TYPE = typeName(o.type);
     oj->ID = o.id;
@@ -1003,7 +1003,7 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
     oj->SENSOR = o.sensorKey;
     oj->TRACK_ID = o.trackId;
     for (const auto& z : o.z) {
-      auto m = std::make_unique<ASNMeasurementT>();
+      auto m = std::make_unique<ASGMeasurementT>();
       m->KIND = measurementKind(z.kind);
       m->VALUE = display(z.kind, z.value);
       m->SIGMA = display(z.kind, z.sigma);
@@ -1014,7 +1014,7 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
     oj->GATE = o.gate;
     for (size_t k = 0; k < o.candidates.size() && (k < static_cast<size_t>(opt.maxCandidates) || o.candidates[k].inGate); ++k) {
       const auto& c = o.candidates[k];
-      auto cj = std::make_unique<ASNCandidateT>();
+      auto cj = std::make_unique<ASGCandidateT>();
       cj->OBJECT = objectRef(blocks[c.block]);
       cj->D2 = c.d2;
       cj->P_VALUE = c.pValue;
@@ -1033,10 +1033,10 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
       }
       oj->CANDIDATES.push_back(std::move(cj));
     }
-    oj->OUTCOME = o.status == "associated" ? asnAssociationOutcome::Associated : asnAssociationOutcome::Uncorrelated;
-    oj->REASON = o.reason == "no-prediction" ? asnUncorrelatedReason::NoPrediction
-               : o.reason == "outside-gate" ? asnUncorrelatedReason::OutsideGate
-               : o.reason == "lost-assignment" ? asnUncorrelatedReason::LostAssignment : asnUncorrelatedReason::Unspecified;
+    oj->OUTCOME = o.status == "associated" ? asgAssociationOutcome::Associated : asgAssociationOutcome::Uncorrelated;
+    oj->REASON = o.reason == "no-prediction" ? asgUncorrelatedReason::NoPrediction
+               : o.reason == "outside-gate" ? asgUncorrelatedReason::OutsideGate
+               : o.reason == "lost-assignment" ? asgUncorrelatedReason::LostAssignment : asgUncorrelatedReason::Unspecified;
     oj->AMBIGUOUS = o.ambiguous;
     oj->ASSIGNMENT_CONFLICT = o.conflict;
     // The candidates listed are the best few plus every in-gate one, a prefix of the sorted list, so the
@@ -1056,7 +1056,7 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
     outputs.push_back({std::string(family) + (assigned ? "_associated" : "_ucts"), {o.type, annotated(o, assigned, judged)}});
   }
   report.METHOD = "chi-square gate on S = H P H^T + R, global nearest neighbour per scan (Hungarian), gate as the non-assignment cost";
-  report.OPTIONS = std::make_unique<ASNAssociationOptionsT>();
+  report.OPTIONS = std::make_unique<ASGAssociationOptionsT>();
   report.OPTIONS->GATE_PROBABILITY = opt.gateProbability;
   report.OPTIONS->LIGHT_TIME = opt.lightTime;
   report.OPTIONS->MIN_POSTERIOR = opt.minPosterior;
@@ -1065,7 +1065,7 @@ bool run(ASNAssociationReportT& report, std::vector<std::pair<std::string, std::
   report.OPTIONS->MAX_CANDIDATES = static_cast<uint8_t>(opt.maxCandidates);
   report.OPTIONS->GEOMETRY = opt.geometry;
   for (const auto& [m, g] : gates) {
-    auto t = std::make_unique<ASNGateThresholdT>();
+    auto t = std::make_unique<ASGGateThresholdT>();
     t->DEGREES_OF_FREEDOM = static_cast<uint8_t>(m);
     t->THRESHOLD = g;
     report.GATE_THRESHOLDS.push_back(std::move(t));
@@ -1088,17 +1088,17 @@ void reset() {
 
 bool finite(double v) { return std::isfinite(v); }
 
-// One ASN problem: dense (NaN or +Infinity forbidden) or sparse (absent pairs forbidden, the lowest of repeated
+// One ASG problem: dense (NaN or +Infinity forbidden) or sparse (absent pairs forbidden, the lowest of repeated
 // pairs stands), with an optional cost of leaving a row unassigned (none, one for every row, or one per row).
 // A Maximize problem is solved as the minimum of the negated costs; TOTAL_COST is in the problem's own sign.
-bool solve(const ASNProblem* j, ASNSolutionT& out) {
+bool solve(const ASGProblem* j, ASGSolutionT& out) {
   NEED(j, "The problem frame carries no PROBLEM.");
   const size_t rows = j->ROWS(), columns = j->COLUMNS();
   const bool dense = j->DENSE_COST() && j->DENSE_COST()->size() > 0;
   const bool sparse = j->ENTRIES() && j->ENTRIES()->size() > 0;
   NEED(dense != sparse, "A problem gives DENSE_COST or ENTRIES, not both or neither.");
   NEED(rows > 0 && columns > 0 && rows * columns <= 25000000, "The problem size is out of range.");
-  const double sign = j->OBJECTIVE() == asnObjective::Maximize ? -1.0 : 1.0;
+  const double sign = j->OBJECTIVE() == asgObjective::Maximize ? -1.0 : 1.0;
   std::vector<double> cost(rows * columns, kForbidden);
   if (dense) {
     NEED(j->DENSE_COST()->size() == rows * columns, "DENSE_COST holds ROWS * COLUMNS values.");
@@ -1154,14 +1154,14 @@ bool solve(const ASNProblem* j, ASNSolutionT& out) {
   return true;
 }
 
-// One $ASN record with one arm set, as its own FlatBuffer.
-std::vector<uint8_t> asnBuffer(ASNT& asn) {
+// One $ASG record with one arm set, as its own FlatBuffer.
+std::vector<uint8_t> asgBuffer(ASGT& asg) {
   flatbuffers::FlatBufferBuilder fbb(1 << 16);
-  return finish(fbb, ASN::Pack(fbb, &asn), "$ASN");
+  return finish(fbb, ASG::Pack(fbb, &asg), "$ASG");
 }
 
 int pushAsn(const char* port, const std::vector<uint8_t>& bytes) {
-  return plugin_push_output_ex(port, "ASN.fbs", "$ASN", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "ASN", 0, 0,
+  return plugin_push_output_ex(port, "ASG.fbs", "$ASG", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "ASG", 0, 0,
                                bytes.data(), static_cast<uint32_t>(bytes.size())) < 0 ? 1 : 0;
 }
 
@@ -1169,11 +1169,11 @@ int pushAsn(const char* port, const std::vector<uint8_t>& bytes) {
 
 extern "C" int associate_observations() {
   reset();
-  ASNT report;
-  report.ASSOCIATION_REPORT = std::make_unique<ASNAssociationReportT>();
+  ASGT report;
+  report.ASSOCIATION_REPORT = std::make_unique<ASGAssociationReportT>();
   std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>> outputs;
   if (!run(*report.ASSOCIATION_REPORT, outputs)) return fail(error);
-  if (pushAsn("report", asnBuffer(report))) return 1;
+  if (pushAsn("report", asgBuffer(report))) return 1;
   for (const auto& [port, record] : outputs) {
     const char* code = typeName(record.first);
     const std::string schema = std::string(code) + ".fbs", ident = std::string("$") + code;
@@ -1189,12 +1189,12 @@ extern "C" int solve_assignment() {
   const auto* frame = index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
   if (!frame || !frame->payload || frame->payload_length == 0) return fail("A problem frame is required.");
   size_t length;
-  const uint8_t* bytes = rootOf(frame, length, "$ASN");
-  if (length < 8 || !ASNBufferHasIdentifier(bytes)) return fail("The problem port carries one $ASN FlatBuffer.");
+  const uint8_t* bytes = rootOf(frame, length, "$ASG");
+  if (length < 8 || !ASGBufferHasIdentifier(bytes)) return fail("The problem port carries one $ASG FlatBuffer.");
   flatbuffers::Verifier verifier(bytes, length, verifierOptions());
-  if (!VerifyASNBuffer(verifier)) return fail("The problem frame is not a valid $ASN FlatBuffer.");
-  ASNT out;
-  out.SOLUTION = std::make_unique<ASNSolutionT>();
-  if (!solve(GetASN(bytes)->PROBLEM(), *out.SOLUTION)) return fail(error);
-  return pushAsn("solution", asnBuffer(out));
+  if (!VerifyASGBuffer(verifier)) return fail("The problem frame is not a valid $ASG FlatBuffer.");
+  ASGT out;
+  out.SOLUTION = std::make_unique<ASGSolutionT>();
+  if (!solve(GetASG(bytes)->PROBLEM(), *out.SOLUTION)) return fail(error);
+  return pushAsn("solution", asgBuffer(out));
 }

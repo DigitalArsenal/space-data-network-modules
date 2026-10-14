@@ -25,7 +25,7 @@
  *   502 host-failed        the p2p hostcall failed
  *
  * $NST and $PNV carry an ETAG: a weak FNV-1a 64 over the record built without GENERATED_AT / ETAG, so identical
- * content carries the same tag on every call. Each PNVEntry carries the received $PNM verbatim (PNM) when the host
+ * content carries the same tag on every call. Each PNVEntry carries the received $PNM verbatim (PNM_BYTES) when the host
  * returns it. latest_dataset asks DELIVER Ref unless the request wants JSON; a host BodyRef rides DAV.BODY_REF_TOKEN /
  * BODY_REF_SIZE and no *_records frame is pushed (the responder answers it out of band).
  *
@@ -429,7 +429,7 @@ PNVT notices_of(const A::P2pPnmEntry* entries, size_t count, const std::string& 
         // The notice itself, verbatim (size-prefixed), so a reader can verify the signature on its own.
         if (e.PNM_INDEX >= 0 && static_cast<size_t>(e.PNM_INDEX) < pnms.size()) {
             const std::string_view pnm = pnms[e.PNM_INDEX];
-            entry->PNM.assign(pnm.begin(), pnm.end());
+            entry->PNM_BYTES.assign(pnm.begin(), pnm.end());
         }
         if (!e.SIGNATURE_VERIFIED) {
             const std::string a = e.ATTRIBUTION.str();

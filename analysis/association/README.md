@@ -17,7 +17,7 @@ fits, whether that is ambiguous, and which observations fit nothing
 | `earth_orientation` | in, optional | `$EOP` | Rows bracketing the observations; required for Earth-fixed sensors or predictions |
 | `radar_associated`, `optical_associated`, `rf_associated` | out | `$RDO`, `$EOO`, `$RFO` | The associated records, identity set, `UCT` false |
 | `radar_ucts`, `optical_ucts`, `rf_ucts` | out | `$RDO`, `$EOO`, `$RFO` | The uncorrelated records, `UCT` true |
-| `report` | out | `$ASN` (`ASSOCIATION_REPORT`) | The options used, the gates, the counts and, per observation, its measurements, every listed candidate's d², p-value, posterior, residuals and geometry, the outcome and the UCT reason |
+| `report` | out | `$ASG` (`ASSOCIATION_REPORT`) | The options used, the gates, the counts and, per observation, its measurements, every listed candidate's d², p-value, posterior, residuals and geometry, the outcome and the UCT reason |
 
 Every port carries one SDS FlatBuffer type; plain and size-prefixed frames are
 both read.
@@ -109,7 +109,7 @@ kind or out of range is refused; keys of other modules are ignored.
 
 ## Method `solve_assignment`
 
-The same Hungarian solver on any problem, one `$ASN` in and one out. The
+The same Hungarian solver on any problem, one `$ASG` in and one out. The
 `problem` port's `PROBLEM` is `DENSE_COST` (row-major, NaN or +Infinity =
 forbidden) or sparse `ENTRIES` (absent pairs forbidden, the lowest of
 repeated pairs stands), optional `UNASSIGNED_COST` (one value or one per row)
@@ -123,7 +123,7 @@ The association statistics are SDS fields (spacedatastandards.org 1.241.0):
 `CORR_MAHALANOBIS_SQ`, `CORR_DOF`, `CORR_GATE`, `CORR_P_VALUE` and
 `CORR_AMBIGUOUS` on `$RDO`, `$EOO` and `$RFO`, `$RDO` `CORR_QUALITY`, and
 the Doppler inputs `$RFO` `FREQUENCY_UNC` and `$RDO` `DOPPLER_FREQUENCY`.
-The `$ASN` report adds every candidate's residuals, posterior and geometry.
+The `$ASG` report adds every candidate's residuals, posterior and geometry.
 
 ## Verification
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { ASN, assignedOf, associate, block, celestial, diagonal, earthOrientation, eopRow, predictions, problemFrame, rdo, solveAssignment, OEM } from './lib.mjs';
+import { ASG, assignedOf, associate, block, celestial, diagonal, earthOrientation, eopRow, predictions, problemFrame, rdo, solveAssignment, OEM } from './lib.mjs';
 
 const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
 import { denseProblem, hungarianOptimum, sparseOptimum, sparseProblem } from './assignment-problems.mjs';
@@ -134,7 +134,7 @@ test('a radar DOPPLER of carrier DOPPLER_FREQUENCY is the two-way range rate -c 
   assert.equal(error, undefined, error);
   const [byRate, byDoppler] = ['rate', 'doppler'].map((id) => report.OBSERVATIONS.find((o) => o.ID === id));
   const d2 = (o) => o.CANDIDATES[0].D2;
-  assert.equal(byDoppler.MEASUREMENTS.find((m) => m.KIND === ASN.asnMeasurementKind.RangeRate).SOURCE_FIELD, 'DOPPLER');
+  assert.equal(byDoppler.MEASUREMENTS.find((m) => m.KIND === ASG.asgMeasurementKind.RangeRate).SOURCE_FIELD, 'DOPPLER');
   assert.ok(d2(byRate) > 0, `d2 ${d2(byRate)}`);
   assert.ok(Math.abs(d2(byDoppler) - d2(byRate)) <= 1e-9 * d2(byRate), `${d2(byDoppler)} vs ${d2(byRate)}`);
   const refused = await associate([prediction, eop, rdo({ ...base, ID: 'bare', DOPPLER: 1, DOPPLER_UNC: 1 })]);
@@ -211,7 +211,7 @@ test('an inertial sensor reports no GCRF velocity', async () => {
   assert.deepEqual(report.OBSERVATIONS[0].SENSOR_VELOCITY_GCRF_KM_S, [], 'no velocity');
 });
 
-test('the $ASN problem forms: a gated dense problem, a sparse one with repeats, a maximization, and refusals', async () => {
+test('the $ASG problem forms: a gated dense problem, a sparse one with repeats, a maximization, and refusals', async () => {
   // Rows 0 and 1, columns 0..2; null forbidden. Row 0 pays 1.5 to stay unassigned, row 1 pays 5.
   // Enumeration: r0 -> c0 (1) + r1 -> c1 (2) = 3 beats r0 unassigned (1.5) + r1 -> c0 (2) = 3.5 and r0 -> c2 (3) + r1 -> c0 (2) = 5.
   const gated = await solveAssignment({ cost: [[1, null, 3], [2, 2, null]], unassigned_cost: [1.5, 5] });
@@ -234,10 +234,10 @@ test('options come from the node config; a bad value is refused with its key', a
   const { report } = await associate(inputs, { scan: 'observation', max_candidates: 2, geometry: false, light_time: false, min_posterior: 0.5, clutter_density: 0.25 });
   const o = report.OPTIONS;
   assert.deepEqual([o.SCAN, o.MAX_CANDIDATES, o.GEOMETRY, o.LIGHT_TIME, o.MIN_POSTERIOR, o.CLUTTER_DENSITY, o.GATE_PROBABILITY],
-    [ASN.asnScanGrouping.Observation, 2, false, false, 0.5, 0.25, 0.9973]);
+    [ASG.asgScanGrouping.Observation, 2, false, false, 0.5, 0.25, 0.9973]);
   assert.deepEqual(report.OBSERVATIONS[0].CANDIDATES[0].POSITION_GCRF_KM, [], 'geometry off');
   const defaults = (await associate(inputs)).report.OPTIONS;
-  assert.deepEqual([defaults.SCAN, defaults.MAX_CANDIDATES, defaults.GEOMETRY, defaults.LIGHT_TIME], [ASN.asnScanGrouping.SensorTime, 5, true, true]);
+  assert.deepEqual([defaults.SCAN, defaults.MAX_CANDIDATES, defaults.GEOMETRY, defaults.LIGHT_TIME], [ASG.asgScanGrouping.SensorTime, 5, true, true]);
   assert.match((await associate(inputs, { gate_probability: 1.5 })).error, /gate_probability/);
   assert.match((await associate(inputs, { scan: 'sideways' })).error, /scan/);
   assert.match((await associate(inputs, { max_candidates: 2.5 })).error, /max_candidates/);

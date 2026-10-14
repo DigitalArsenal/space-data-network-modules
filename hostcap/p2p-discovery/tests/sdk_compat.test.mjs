@@ -232,8 +232,8 @@ test("standards_snapshot: one PNVEntry per notice, signatures and keys hex-decod
   assert.deepEqual([wxf.SIGNATURE_VERIFIED, wxf.ATTRIBUTION, wxf.KEY_SOURCE, wxf.PUBLISHER_KEY], [false, PNV.pnvAttribution.Unattributed, PNV.pnvKeySource.None, []]);
   assert.match(wxf.REASON, /signature not verified/);
   assert.deepEqual([omm.PNM_CID, BigInt(omm.RECEIVED_AT_MS)], [null, 0n], "no host source for the notice's own CID or its receive time");
-  assert.deepEqual(omm.PNM, Array.from(PNM_STREAM.subarray(0, 20)), "the received $PNM verbatim, size-prefixed (PNM_INDEX 0)");
-  assert.deepEqual(wxf.PNM, Array.from(PNM_STREAM.subarray(20, 40)), "PNM_INDEX 1");
+  assert.deepEqual(omm.PNM_BYTES, Array.from(PNM_STREAM.subarray(0, 20)), "the received $PNM verbatim, size-prefixed (PNM_INDEX 0)");
+  assert.deepEqual(wxf.PNM_BYTES, Array.from(PNM_STREAM.subarray(20, 40)), "PNM_INDEX 1");
   assert.match(pnv.ETAG, /^W\/"fnv1a64-[0-9a-f]{16}"$/);
 
 });

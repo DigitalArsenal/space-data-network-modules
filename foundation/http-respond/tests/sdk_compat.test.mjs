@@ -280,10 +280,10 @@ test("adopted fields: HTTP_STATUS wins; $NST / $PNV ETags give 304; RESPONSE_HEA
   assert.deepEqual([peers.json().ETAG, peers.json().NODES[0].STANDARDS], ["W/\"fnv1a64-00000000000000aa\"", ["OMM", "CAT"]]);
   const peers304 = await answer(harness, "respond", [apr({ ROUTE: "peers_list", IF_NONE_MATCH: "W/\"fnv1a64-00000000000000aa\"" }), frame("peers", "NST", nst)]);
   assert.deepEqual([peers304.status, peers304.body.length], [304, 0]);
-  const pnv = build("PNV", { ETAG: "\"p\"", ENTRIES: [Object.assign(new sds.PNV.PNVEntryT(), { STANDARD: "OMM", PNM: [9, 8, 7] })] });
+  const pnv = build("PNV", { ETAG: "\"p\"", ENTRIES: [Object.assign(new sds.PNV.PNVEntryT(), { STANDARD: "OMM", PNM_BYTES: [9, 8, 7] })] });
   assert.equal((await answer(harness, "respond", [apr({ ROUTE: "standards", IF_NONE_MATCH: "\"p\"" }), frame("notices", "PNV", pnv)])).status, 304);
   const notices = (await answer(harness, "respond", [apr({ ROUTE: "standards", ACCEPT: aprRepresentation.Json }), frame("notices", "PNV", pnv)])).json();
-  assert.deepEqual([notices.ETAG, notices.ENTRIES[0].PNM], ["\"p\"", "090807"]);
+  assert.deepEqual([notices.ETAG, notices.ENTRIES[0].PNM_BYTES], ["\"p\"", "090807"]);
 
   // RESPONSE_HEADERS: lower-cased, CR/LF stripped, computed names refused.
   const header = (NAME, VALUE) => Object.assign(new sds.APR.APRParameterT(), { NAME, VALUE });

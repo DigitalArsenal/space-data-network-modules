@@ -9,12 +9,12 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 
 // One translation unit: the SDS observation, ephemeris and EOP headers, ERFA
 // and the foundation/frames axis engine with its $EOP series reader (the one
-// Earth-orientation chain in the tree), // SDS records only: the observations, ephemerides, EOP and the $ASN problem,
+// Earth-orientation chain in the tree), // SDS records only: the observations, ephemerides, EOP and the $ASG problem,
 // solution and report; the options are the node config (plugin.getConfig, read
 // through the SDK's typedHostcall.hpp, sdm_piv::get_config).
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
-const { header, version, families } = await generateSdsHeaders(['RDO', 'EOO', 'RFO', 'OEM', 'EOP', 'ASN'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['RDO', 'EOO', 'RFO', 'OEM', 'EOP', 'ASG'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
