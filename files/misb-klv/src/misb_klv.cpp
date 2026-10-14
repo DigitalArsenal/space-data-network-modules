@@ -8,10 +8,10 @@
 // footprints  the same stream -> one SDS $GDI per ST 0601 packet (time,
 //             sensor, ground footprint as GeoJSON).
 //
-// Input (both methods): a size-prefixed SDS $NCD descriptor followed by the
-// stream's exact bytes in the same frame ([u32le n][$NCD][bytes]), the
-// pairing files/ccsds-messages reads. SOURCE_BYTE_LENGTH and SOURCE_SHA256
-// are checked when the descriptor states them.
+// Input (both methods): port "descriptor", a size-prefixed SDS $NCD, and
+// port "stream", the transport stream's exact bytes (raw, video/mp2t).
+// SOURCE_BYTE_LENGTH and SOURCE_SHA256 are checked against the stream when
+// the descriptor states them.
 //
 // The frame table (port "frames", little-endian float64): a header
 // [1, rows, epochMs, ticksPerSecond] then one row per video frame in
@@ -49,24 +49,26 @@ int32_t fail(const char* code, const char* message, int32_t status = 400) {
   return status;
 }
 
-// The stream bytes after the size-prefixed $NCD descriptor.
+const plugin_input_frame_t* inputFrame(const char* port) {
+  const int32_t index = plugin_find_input_index(port, 0);
+  return index >= 0 ? plugin_get_input_frame(uint32_t(index)) : nullptr;
+}
+
+// The stream on port "stream", checked against the $NCD on port "descriptor".
 int32_t readInput(Input* in) {
-  const int32_t index = plugin_find_input_index("video", 0);
-  const plugin_input_frame_t* frame = index >= 0 ? plugin_get_input_frame(uint32_t(index)) : nullptr;
-  if (!frame || !frame->payload || frame->payload_length < 8) return fail("missing-video-frame", "A frame on port \"video\" is required.");
-  const uint8_t* p = frame->payload;
-  const size_t n = size_t(frame->payload_length);
-  const uint32_t prefix = uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-  if (size_t(prefix) + 4 > n) return fail("malformed-video-frame", "The $NCD size prefix overruns the frame: [u32le n][$NCD][stream].");
-  const uint8_t* descriptor = p;
-  const size_t descriptorSize = size_t(prefix) + 4;
-  if (!::flatbuffers::BufferHasIdentifier(descriptor, NCDIdentifier(), true)) return fail("malformed-video-frame", "The frame does not open with a size-prefixed $NCD descriptor.");
-  ::flatbuffers::Verifier verifier(descriptor, descriptorSize);
-  if (!VerifySizePrefixedNCDBuffer(verifier)) return fail("malformed-video-frame", "The $NCD descriptor does not verify.");
+  const plugin_input_frame_t* d = inputFrame("descriptor");
+  if (!d || !d->payload || d->payload_length < 8) return fail("missing-descriptor", "A size-prefixed $NCD frame on port \"descriptor\" is required.");
+  const uint8_t* descriptor = d->payload;
+  const uint32_t prefix = uint32_t(descriptor[0]) | (uint32_t(descriptor[1]) << 8) | (uint32_t(descriptor[2]) << 16) | (uint32_t(descriptor[3]) << 24);
+  if (size_t(prefix) + 4 != size_t(d->payload_length)) return fail("malformed-descriptor", "The $NCD size prefix does not match the frame.");
+  if (!::flatbuffers::BufferHasIdentifier(descriptor, NCDIdentifier(), true)) return fail("malformed-descriptor", "The frame on port \"descriptor\" is not a size-prefixed $NCD.");
+  ::flatbuffers::Verifier verifier(descriptor, size_t(d->payload_length));
+  if (!VerifySizePrefixedNCDBuffer(verifier)) return fail("malformed-descriptor", "The $NCD descriptor does not verify.");
   const NCD* ncd = GetSizePrefixedNCD(descriptor);
-  in->data = p + descriptorSize;
-  in->size = n - descriptorSize;
-  if (in->size == 0) return fail("malformed-video-frame", "The frame carries a descriptor and no stream.");
+  const plugin_input_frame_t* frame = inputFrame("stream");
+  if (!frame || !frame->payload || frame->payload_length == 0) return fail("missing-stream", "The transport stream's bytes on port \"stream\" are required.");
+  in->data = frame->payload;
+  in->size = size_t(frame->payload_length);
   if (ncd->SOURCE_BYTE_LENGTH() != 0 && uint64_t(ncd->SOURCE_BYTE_LENGTH()) != uint64_t(in->size))
     return fail("source-length-mismatch", "SOURCE_BYTE_LENGTH does not match the stream bytes.");
   if (ncd->SOURCE_SHA256() && ncd->SOURCE_SHA256()->size() == 64) {
@@ -143,6 +145,9 @@ void appendDouble(std::vector<uint8_t>& out, double v) {
   out.insert(out.end(), b, b + 8);
 }
 
+// Raw bytes on a wildcard port (the SDK's raw lane): plugin_push_output_ex with
+// the aligned-binary wire format is the SDK's only way to emit variable-length
+// bytes with no SDS identity.
 int32_t pushBytes(const char* port, const std::vector<uint8_t>& bytes) {
   return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 8,
                                bytes.data(), uint32_t(bytes.size())) < 0
@@ -335,7 +340,7 @@ extern "C" int footprints() {
     }
     ::flatbuffers::FlatBufferBuilder fbb(1024);
     fbb.FinishSizePrefixed(CreateGDI(fbb, &gdi), GDIIdentifier());
-    if (plugin_push_output_ex("footprints", "GDI.fbs", "$GDI", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "GDI", 0, 8,
+    if (plugin_push_output_ex("footprints", "GDI.fbs", "$GDI", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "GDI", 0, 0,
                               fbb.GetBufferPointer(), uint32_t(fbb.GetSize())) < 0)
       return 500;
   }

@@ -32,27 +32,26 @@ const built = fs.existsSync(WASM);
 const fixture = (name) => new Uint8Array(fs.readFileSync(path.join(here, "fixtures", name)));
 const skip = !built && "run `npm run build` first";
 
-function frame(bytes, { declare = true } = {}) {
+function descriptor(bytes, { declare = true } = {}) {
   const builder = new flatbuffers.Builder(256);
   const sha = declare ? builder.createString(createHash("sha256").update(bytes).digest("hex")) : null;
   NCD.startNCD(builder);
   if (declare) NCD.addSourceByteLength(builder, BigInt(bytes.byteLength));
   if (sha !== null) NCD.addSourceSha256(builder, sha);
   NCD.finishSizePrefixedNCDBuffer(builder, NCD.endNCD(builder));
-  const d = builder.asUint8Array();
-  const out = new Uint8Array(d.byteLength + bytes.byteLength);
-  out.set(d, 0);
-  out.set(bytes, d.byteLength);
-  return out;
+  return builder.asUint8Array();
 }
 
 async function invoke(t, methodId, ts, options) {
   const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(WASM), manifest, surface: "direct" });
   t.after(() => harness.destroy());
-  const payload = frame(ts, options);
+  const d = descriptor(ts, options);
   return harness.invoke({
     methodId,
-    inputs: [{ portId: "video", typeRef: { schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "aligned-binary", requiredAlignment: 8, byteLength: payload.byteLength }, payload }],
+    inputs: [
+      { portId: "descriptor", typeRef: { schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "flatbuffer" }, payload: d },
+      { portId: "stream", typeRef: { acceptsAnyFlatbuffer: true, byteLength: ts.byteLength }, payload: ts },
+    ],
   });
 }
 
@@ -163,6 +162,7 @@ test("offsets: frame centre plus corner offsets; an error value leaves its packe
   assert.ok(rows.every((row) => row[1] === 1));
   // The packet whose offset carries the error value (0x8000) locates nothing.
   const g = await invoke(t, "footprints", transportStream({ units, klv }));
+  assert.ok(g.outputs.filter((o) => o.portId === "footprints").every((o) => o.wireFormat === "flatbuffer" && o.typeRef?.schemaName === "GDI.fbs"), "each footprint is a regular $GDI FlatBuffer");
   const notes = outputs(g, "footprints").map((bytes) => {
     const bb = new flatbuffers.ByteBuffer(bytes);
     bb.setPosition(4);

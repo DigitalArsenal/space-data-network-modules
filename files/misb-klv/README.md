@@ -6,8 +6,8 @@ video").
 
 | method | in | out |
 | --- | --- | --- |
-| `remux` | `video`: `[u32le n][$NCD][MPEG-2 TS bytes]` | `init` (fMP4 initialization segment), `media` (fMP4 fragments, each from a sync sample, at most 60), `frames` (per-frame footprint table) |
-| `footprints` | same | `footprints`: one size-prefixed `$GDI` per ST 0601 packet |
+| `remux` | `descriptor`: size-prefixed SDS `$NCD`; `stream`: the MPEG-2 TS bytes (raw lane, `video/mp2t`) | `init` (fMP4 initialization segment), `media` (fMP4 fragments, each from a sync sample, at most 60), `frames` (per-frame footprint table) |
+| `footprints` | same | `footprints`: one size-prefixed `$GDI` FlatBuffer per ST 0601 packet |
 
 - **Demux**: 188-byte TS and 192-byte M2TS packets; PAT and PMT; H.264
   (stream type 0x1B; HEVC and MPEG-2 video are refused by name); KLV in
