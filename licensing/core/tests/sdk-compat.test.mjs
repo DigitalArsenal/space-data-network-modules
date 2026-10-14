@@ -55,6 +55,7 @@ import { licensingGrantMessageType } from "spacedatastandards.org/lib/js/REC/lic
 import { KeyExchange } from "spacedatastandards.org/lib/js/REC/KeyExchange.js";
 import { SymmetricAlgo } from "spacedatastandards.org/lib/js/REC/SymmetricAlgo.js";
 import { KDF } from "spacedatastandards.org/lib/js/REC/KDF.js";
+import { decryptArtifactInputs } from "../../client-decrypt/index.js";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -1232,7 +1233,8 @@ async function decryptLease(t, grantBytes, privateKey, encryptedBundle) {
   });
   return clientDecrypt.invoke({
     methodId: "decrypt_artifact",
-    inputs: [{ payload: grantBytes }, { payload: privateKey }, { payload: encryptedBundle }],
+    // The typed decrypt_artifact frames: the $LGR grant, the key as $KMF, the protected bundle as $FIL.
+    inputs: decryptArtifactInputs({ grantResponseBytes: grantBytes, privateKey, encryptedBundle }),
   });
 }
 
@@ -1267,7 +1269,7 @@ test('allowed_xpubs ["*"] leases the module to a fresh wallet account, encrypted
     module.encryptedBundle,
   );
   assert.equal(opened.statusCode, 0);
-  assert.deepEqual(opened.outputs[0].payload, plaintext);
+  assert.deepEqual(decodeFileContent(opened.outputs[0].payload), plaintext);
 
   // Any other key cannot: the lease is encrypted for this session only.
   const other = await generateX25519Keypair();

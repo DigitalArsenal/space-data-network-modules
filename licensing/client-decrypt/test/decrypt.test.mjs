@@ -9,6 +9,7 @@
  * Prereqs: npm install && npm run build
  */
 
+import { decodeFileContent, decryptArtifactInputs } from "../index.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -241,13 +242,9 @@ async function decryptViaGrant(plaintext, keyExchange = "x25519") {
   try {
     const result = await shimHarness.invoke({
       methodId: "decrypt_artifact",
-      inputs: [
-        { payload: fixture.grantResponseBytes },
-        { payload: recipient.privateKey },
-        { payload: fixture.packedEncryptedBundle },
-      ],
+      inputs: decryptArtifactInputs({ grantResponseBytes: fixture.grantResponseBytes, privateKey: recipient.privateKey, encryptedBundle: fixture.packedEncryptedBundle }),
     });
-    return result.outputs?.[0]?.payload ?? null;
+    return (result.outputs?.[0] ? decodeFileContent(result.outputs[0].payload) : null);
   } finally {
     await shimHarness.destroy();
   }
@@ -320,95 +317,44 @@ await test("decrypt_artifact: wrong private key returns error", async () => {
   try {
     const result = await shimHarness.invoke({
       methodId: "decrypt_artifact",
-      inputs: [
-        { payload: fixture.grantResponseBytes },
-        { payload: wrong.privateKey },
-        { payload: fixture.packedEncryptedBundle },
-      ],
+      inputs: decryptArtifactInputs({ grantResponseBytes: fixture.grantResponseBytes, privateKey: wrong.privateKey, encryptedBundle: fixture.packedEncryptedBundle }),
     });
     const hasError =
       result.status !== 0 ||
       result.errorMessage ||
       !result.outputs?.[0]?.payload?.length ||
-      !arraysEqual(result.outputs[0].payload, plaintext);
+      !arraysEqual(decodeFileContent(result.outputs[0].payload), plaintext);
     assert.ok(hasError, "wrong key should not recover the plaintext");
   } finally {
     await shimHarness.destroy();
   }
 });
 
-await test(
-  "decrypt_artifact: consumes module-delivery GrantResponse bytes over IPFS without HTTP",
-  async () => {
-    const { publicKey, privateKey } = await generateX25519KeyPair();
-    const plaintext = new Uint8Array([
-      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-      ...crypto.getRandomValues(new Uint8Array(192)),
-    ]);
-    const fixture = await buildGrantResponseFixture(plaintext, publicKey);
-    const contentStore = new Map([
-      [fixture.bundleCid, fixture.packedEncryptedBundle],
-    ]);
-    const operations = [];
-
-    const shimHarness = await createSdkBrowserShimHarness({
-      wasmSource: wasmBytes,
-      surface: "direct",
-      maxRequestBytes: 1024 * 1024,
-      maxResponseBytes: 4 * 1024 * 1024,
-      dispatch(operation, params) {
-        operations.push(operation);
-        if (operation === "ipfs.cat") {
-          const cid = params?.cid ?? "";
-          const bytes = contentStore.get(cid);
-          if (!bytes) {
-            throw new Error(`CID not found: ${cid}`);
-          }
-          return bytes;
-        }
-        if (operation === "host.runtimeTarget") return "browser";
-        if (operation === "host.listCapabilities") return ["ipfs"];
-        if (operation === "host.hasCapability") {
-          return params?.capability === "ipfs";
-        }
-        if (operation === "host.listOperations") return ["ipfs.cat"];
-        if (operation === "clock.now") return Date.now();
-        if (operation === "random.bytes") {
-          return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
-        }
-        throw new Error(`Unsupported operation: ${operation}`);
-      },
+await test("decrypt_artifact: a grant without its protected_content is refused, and no hostcall is made", async () => {
+  const { publicKey, privateKey } = await generateX25519KeyPair();
+  const fixture = await buildGrantResponseFixture(new TextEncoder().encode("needs its bundle"), publicKey);
+  const operations = [];
+  const shimHarness = await createSdkBrowserShimHarness({
+    wasmSource: wasmBytes,
+    surface: "direct",
+    dispatch(operation) {
+      operations.push(operation);
+      throw new Error(`Unsupported operation: ${operation}`);
+    },
+  });
+  try {
+    const result = await shimHarness.invoke({
+      methodId: "decrypt_artifact",
+      inputs: decryptArtifactInputs({ grantResponseBytes: fixture.grantResponseBytes, privateKey }),
     });
-
-    try {
-      const result = await shimHarness.invoke({
-        methodId: "decrypt_artifact",
-        inputs: [
-          { payload: fixture.grantResponseBytes },
-          { payload: privateKey },
-        ],
-      });
-
-      assert.deepEqual(
-        result.outputs[0].payload,
-        plaintext,
-        "GrantResponse/IPFS flow should decrypt the packed bundle bytes",
-      );
-      assert.ok(operations.includes("ipfs.cat"));
-      assert.ok(
-        !operations.some(
-          (operation) =>
-            operation.startsWith("http.") ||
-            operation.includes("node-info") ||
-            operation.includes("orbpro"),
-        ),
-        "GrantResponse flow must stay on IPFS and not use HTTP/node-info/orbpro broker calls",
-      );
-    } finally {
-      await shimHarness.destroy();
-    }
-  },
-);
+    assert.notEqual(result.statusCode, 0);
+    assert.match(result.errorMessage ?? "", /protected_content/);
+    assert.equal(result.outputs?.length ?? 0, 0);
+    assert.deepEqual(operations, []);
+  } finally {
+    await shimHarness.destroy();
+  }
+});
 
 await test(
   "decrypt_artifact: accepts prefetched encrypted bundle bytes for awaited browser delivery",
@@ -443,15 +389,11 @@ await test(
     try {
       const result = await shimHarness.invoke({
         methodId: "decrypt_artifact",
-        inputs: [
-          { payload: fixture.grantResponseBytes },
-          { payload: privateKey },
-          { payload: fixture.packedEncryptedBundle },
-        ],
+        inputs: decryptArtifactInputs({ grantResponseBytes: fixture.grantResponseBytes, privateKey: privateKey, encryptedBundle: fixture.packedEncryptedBundle }),
       });
 
       assert.deepEqual(
-        result.outputs[0].payload,
+        decodeFileContent(result.outputs[0].payload),
         plaintext,
         "GrantResponse/prefetched bundle flow should decrypt without host IPFS access",
       );

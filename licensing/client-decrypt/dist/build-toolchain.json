@@ -1,0 +1,4 @@
+{
+  "lane": "system-em++",
+  "emscripten": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 4.0.23-git"
+}

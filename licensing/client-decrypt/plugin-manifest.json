@@ -1,0 +1,120 @@
+{
+  "pluginId": "client-decrypt",
+  "name": "Client Decrypt",
+  "version": "0.2.0",
+  "description": "Requester-side decrypt of a protected module artifact from its SDS $LGR module-delivery grant (typed contracts 1.0: every port one SDS FlatBuffer type, no JSON and no hostcalls). The grant's wrapped content key (ENC header + payload, X25519 or secp256k1 unified ECIES, HKDF-SHA256, AES-256-CTR field encryption; a REC-wrapped $KMF payload) is unwrapped with the recipient's private key, which arrives on the recipient_key port as a $KMF (ROLE DecryptKey, KEY_BYTES the 32-byte private key). The protected bundle (AES-256-GCM, or a protected publication with its $REC trailer) is the protected_content $FIL CONTENT: fetching it (the grant's MODULE_DESCRIPTOR.WASM_CID over ipfs) is the host's. The plaintext is answered as $FIL CONTENT. Nothing is stored or published.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [],
+  "protocols": [],
+  "timers": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "decrypt_artifact",
+      "displayName": "Decrypt Artifact",
+      "description": "grant_response $LGR + recipient_key $KMF + protected_content $FIL -> plaintext $FIL. A grant that is not Granted or lacks its descriptor, CID or wrapped key, a key that does not unwrap it, or a bundle that does not authenticate fails (decrypt-failed); a missing frame is missing-input.",
+      "inputPorts": [
+        {
+          "portId": "grant_response",
+          "acceptedTypeSets": [
+            {
+              "setId": "grant_response",
+              "allowedTypes": [
+                {
+                  "schemaName": "LGR.fbs",
+                  "fileIdentifier": "$LGR",
+                  "rootTypeName": "LGR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The SDS $LGR module-delivery grant (MESSAGE_TYPE Granted) naming the module (MODULE_DESCRIPTOR.WASM_CID) and carrying its wrapped content key."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The SDS $LGR module-delivery grant (MESSAGE_TYPE Granted) naming the module (MODULE_DESCRIPTOR.WASM_CID) and carrying its wrapped content key."
+        },
+        {
+          "portId": "recipient_key",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipient_key",
+              "allowedTypes": [
+                {
+                  "schemaName": "KMF.fbs",
+                  "fileIdentifier": "$KMF",
+                  "rootTypeName": "KMF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The recipient's private key as a $KMF: ROLE DecryptKey, KEY_BYTES the 32-byte X25519 or secp256k1 private key the grant was wrapped to."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The recipient's private key as a $KMF: ROLE DecryptKey, KEY_BYTES the 32-byte X25519 or secp256k1 private key the grant was wrapped to."
+        },
+        {
+          "portId": "protected_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "protected_content",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The encrypted bundle (the bytes the grant's MODULE_DESCRIPTOR.WASM_CID names, fetched by the host) as a $FIL with CONTENT."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The encrypted bundle (the bytes the grant's MODULE_DESCRIPTOR.WASM_CID names, fetched by the host) as a $FIL with CONTENT."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plaintext",
+          "acceptedTypeSets": [
+            {
+              "setId": "plaintext",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The decrypted artifact as a $FIL (KIND File, SIZE, CONTENT)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The decrypted artifact as a $FIL (KIND File, SIZE, CONTENT)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One grant is unwrapped and one bundle decrypted on the calling thread; the module creates no threads."
+  }
+}
