@@ -1,58 +1,21 @@
 {
   "pluginId": "atmosphere-model",
   "name": "Atmosphere Plugin",
-  "version": "0.1.0",
-  "description": "Atmospheric model queries exposed through a canonical SDK command bridge.",
+  "version": "0.2.0",
+  "description": "Atmospheric model queries on SDS FlatBuffers: HFC atmosphere state batches (US76 / NRLMSISE-00 with SPW space weather, HWM14 winds), HWM14 wind fields on WXF grids, and Basilisk drag acceleration from OCM to OEM.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
   "methods": [
-    {
-      "methodId": "invoke",
-      "displayName": "Invoke Atmosphere Operation",
-      "inputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "Legacy command bridge: the frame is a UTF-8 JSON operation envelope, not an SDS record.",
-                "mediaType": "application/json"
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "response",
-          "acceptedTypeSets": [
-            {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "Legacy command bridge: the frame is a UTF-8 JSON operation envelope, not an SDS record.",
-                "mediaType": "application/json"
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot"
-    },
     {
       "methodId": "query_atmosphere_state_batch",
       "displayName": "Query Atmosphere State Batch",
@@ -63,13 +26,11 @@
             {
               "setId": "hfc-atmosphere-query",
               "allowedTypes": [
-                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" },
                 {
                   "schemaName": "HFC.fbs",
                   "fileIdentifier": "$HFC",
                   "rootTypeName": "HFC",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -84,13 +45,11 @@
             {
               "setId": "spw-space-weather",
               "allowedTypes": [
-                { "schemaName": "SPW.fbs", "fileIdentifier": "$SPW", "rootTypeName": "SPW" },
                 {
                   "schemaName": "SPW.fbs",
                   "fileIdentifier": "$SPW",
                   "rootTypeName": "SPW",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -107,13 +66,11 @@
             {
               "setId": "hfc-states",
               "allowedTypes": [
-                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" },
                 {
                   "schemaName": "HFC.fbs",
                   "fileIdentifier": "$HFC",
                   "rootTypeName": "HFC",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -137,13 +94,11 @@
             {
               "setId": "wxf-wind-template",
               "allowedTypes": [
-                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
                 {
                   "schemaName": "WXF.fbs",
                   "fileIdentifier": "$WXF",
                   "rootTypeName": "WXF",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -158,13 +113,11 @@
             {
               "setId": "spw-space-weather",
               "allowedTypes": [
-                { "schemaName": "SPW.fbs", "fileIdentifier": "$SPW", "rootTypeName": "SPW" },
                 {
                   "schemaName": "SPW.fbs",
                   "fileIdentifier": "$SPW",
                   "rootTypeName": "SPW",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -181,13 +134,11 @@
             {
               "setId": "wxf-eastward-wind",
               "allowedTypes": [
-                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
                 {
                   "schemaName": "WXF.fbs",
                   "fileIdentifier": "$WXF",
                   "rootTypeName": "WXF",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -202,13 +153,11 @@
             {
               "setId": "wxf-northward-wind",
               "allowedTypes": [
-                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
                 {
                   "schemaName": "WXF.fbs",
                   "fileIdentifier": "$WXF",
                   "rootTypeName": "WXF",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -231,13 +180,11 @@
             {
               "setId": "ocm-vector-state",
               "allowedTypes": [
-                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" },
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
                   "rootTypeName": "OCM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -254,13 +201,11 @@
             {
               "setId": "oem-drag-acceleration",
               "allowedTypes": [
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }

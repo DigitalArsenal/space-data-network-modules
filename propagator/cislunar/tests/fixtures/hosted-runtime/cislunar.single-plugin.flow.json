@@ -29,5 +29,5 @@
     }
   ],
   "requiredPlugins": ["cislunar-propagator"],
-  "description": "Minimal hosted-runtime example invoking the cislunar plugin through the canonical command bridge."
+  "description": "Minimal hosted-runtime example invoking the cislunar plugin: a $TBP request on the request port, a $TBP answer on response."
 }

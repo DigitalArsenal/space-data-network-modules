@@ -21,6 +21,18 @@ struct QRPColumn;
 struct QRPColumnBuilder;
 struct QRPColumnT;
 
+struct QRPValue;
+struct QRPValueBuilder;
+struct QRPValueT;
+
+struct QRPRow;
+struct QRPRowBuilder;
+struct QRPRowT;
+
+struct QRPTable;
+struct QRPTableBuilder;
+struct QRPTableT;
+
 struct QRP;
 struct QRPBuilder;
 struct QRPT;
@@ -37,6 +49,12 @@ struct QRPT;
 /// reader never waits and never mistakes a bounded page for the whole set. An
 /// error is exactly one frame with KIND Error; the HTTP status stays honest
 /// beside it. Cursors are opaque strings issued by the serving node.
+///
+/// A request may also select by time profile (the state of each object nearest
+/// to, as of, or after an instant), bind typed parameters to its SQL, and ask
+/// for a projection: a page then carries ROWS of typed cells described by
+/// COLUMNS instead of record frames. A request for the query surface is
+/// answered with TABLES and the serving limits.
 /// Role of a frame. Append new values only; never reorder or reuse existing
 /// values.
 enum class qrpKind : int8_t {
@@ -164,6 +182,141 @@ inline const char *EnumNameqrpFilterOp(qrpFilterOp e) {
   if (::flatbuffers::IsOutRange(e, qrpFilterOp::Eq, qrpFilterOp::In)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesqrpFilterOp()[index];
+}
+
+/// How a request selects records in time when the lane holds several
+/// versions of the same object. Append new values only; never reorder or
+/// reuse existing values.
+enum class qrpTimeProfile : int8_t {
+  /// Not stated: the serving node applies its configured default.
+  Unspecified = 0,
+  /// Every record in the epoch window.
+  All = 1,
+  /// For each object, the record whose epoch is nearest PROFILE_EPOCH_MS.
+  Nearest = 2,
+  /// For each object, the latest record at or before PROFILE_EPOCH_MS (the
+  /// state as it was known then).
+  AsOf = 3,
+  /// For each object, the earliest record at or after PROFILE_EPOCH_MS.
+  Forward = 4,
+  /// For each object, its latest record.
+  Latest = 5,
+  MIN = Unspecified,
+  MAX = Latest
+};
+
+inline const qrpTimeProfile (&EnumValuesqrpTimeProfile())[6] {
+  static const qrpTimeProfile values[] = {
+    qrpTimeProfile::Unspecified,
+    qrpTimeProfile::All,
+    qrpTimeProfile::Nearest,
+    qrpTimeProfile::AsOf,
+    qrpTimeProfile::Forward,
+    qrpTimeProfile::Latest
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesqrpTimeProfile() {
+  static const char * const names[7] = {
+    "Unspecified",
+    "All",
+    "Nearest",
+    "AsOf",
+    "Forward",
+    "Latest",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameqrpTimeProfile(qrpTimeProfile e) {
+  if (::flatbuffers::IsOutRange(e, qrpTimeProfile::Unspecified, qrpTimeProfile::Latest)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesqrpTimeProfile()[index];
+}
+
+/// Representation the client asks the page in. Append new values only; never
+/// reorder or reuse existing values.
+enum class qrpRepresentation : int8_t {
+  /// The serving node's default (FlatBuffer records).
+  Default = 0,
+  /// Size-prefixed FlatBuffer records of the standard, or ROWS for a
+  /// projection.
+  FlatBuffer = 1,
+  /// JSON rendering of the same records or rows.
+  Json = 2,
+  MIN = Default,
+  MAX = Json
+};
+
+inline const qrpRepresentation (&EnumValuesqrpRepresentation())[3] {
+  static const qrpRepresentation values[] = {
+    qrpRepresentation::Default,
+    qrpRepresentation::FlatBuffer,
+    qrpRepresentation::Json
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesqrpRepresentation() {
+  static const char * const names[4] = {
+    "Default",
+    "FlatBuffer",
+    "Json",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameqrpRepresentation(qrpRepresentation e) {
+  if (::flatbuffers::IsOutRange(e, qrpRepresentation::Default, qrpRepresentation::Json)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesqrpRepresentation()[index];
+}
+
+/// Type of a QRPValue. Append new values only; never reorder or reuse
+/// existing values.
+enum class qrpValueKind : int8_t {
+  Null = 0,
+  Bool = 1,
+  Int = 2,
+  Float = 3,
+  Text = 4,
+  Bytes = 5,
+  MIN = Null,
+  MAX = Bytes
+};
+
+inline const qrpValueKind (&EnumValuesqrpValueKind())[6] {
+  static const qrpValueKind values[] = {
+    qrpValueKind::Null,
+    qrpValueKind::Bool,
+    qrpValueKind::Int,
+    qrpValueKind::Float,
+    qrpValueKind::Text,
+    qrpValueKind::Bytes
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesqrpValueKind() {
+  static const char * const names[7] = {
+    "Null",
+    "Bool",
+    "Int",
+    "Float",
+    "Text",
+    "Bytes",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameqrpValueKind(qrpValueKind e) {
+  if (::flatbuffers::IsOutRange(e, qrpValueKind::Null, qrpValueKind::Bytes)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesqrpValueKind()[index];
 }
 
 struct QRPFilterT : public ::flatbuffers::NativeTable {
@@ -396,6 +549,358 @@ inline ::flatbuffers::Offset<QRPColumn> CreateQRPColumnDirect(
 
 ::flatbuffers::Offset<QRPColumn> CreateQRPColumn(::flatbuffers::FlatBufferBuilder &_fbb, const QRPColumnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct QRPValueT : public ::flatbuffers::NativeTable {
+  typedef QRPValue TableType;
+  qrpValueKind KIND = qrpValueKind::Null;
+  bool BOOL_VALUE = false;
+  int64_t INT_VALUE = 0;
+  double FLOAT_VALUE = 0.0;
+  std::string TEXT_VALUE{};
+  std::vector<uint8_t> BYTES_VALUE{};
+};
+
+/// One typed value: a bound parameter of a request, or one cell of a row.
+/// Exactly the field named by KIND is meaningful.
+struct QRPValue FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef QRPValueT NativeTableType;
+  typedef QRPValueBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KIND = 4,
+    VT_BOOL_VALUE = 6,
+    VT_INT_VALUE = 8,
+    VT_FLOAT_VALUE = 10,
+    VT_TEXT_VALUE = 12,
+    VT_BYTES_VALUE = 14
+  };
+  qrpValueKind KIND() const {
+    return static_cast<qrpValueKind>(GetField<int8_t>(VT_KIND, 0));
+  }
+  bool BOOL_VALUE() const {
+    return GetField<uint8_t>(VT_BOOL_VALUE, 0) != 0;
+  }
+  int64_t INT_VALUE() const {
+    return GetField<int64_t>(VT_INT_VALUE, 0);
+  }
+  double FLOAT_VALUE() const {
+    return GetField<double>(VT_FLOAT_VALUE, 0.0);
+  }
+  const ::flatbuffers::String *TEXT_VALUE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TEXT_VALUE);
+  }
+  const ::flatbuffers::Vector<uint8_t> *BYTES_VALUE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_BYTES_VALUE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_KIND, 1) &&
+           VerifyField<uint8_t>(verifier, VT_BOOL_VALUE, 1) &&
+           VerifyField<int64_t>(verifier, VT_INT_VALUE, 8) &&
+           VerifyField<double>(verifier, VT_FLOAT_VALUE, 8) &&
+           VerifyOffset(verifier, VT_TEXT_VALUE) &&
+           verifier.VerifyString(TEXT_VALUE()) &&
+           VerifyOffset(verifier, VT_BYTES_VALUE) &&
+           verifier.VerifyVector(BYTES_VALUE()) &&
+           verifier.EndTable();
+  }
+  QRPValueT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(QRPValueT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<QRPValue> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPValueT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct QRPValueBuilder {
+  typedef QRPValue Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_KIND(qrpValueKind KIND) {
+    fbb_.AddElement<int8_t>(QRPValue::VT_KIND, static_cast<int8_t>(KIND), 0);
+  }
+  void add_BOOL_VALUE(bool BOOL_VALUE) {
+    fbb_.AddElement<uint8_t>(QRPValue::VT_BOOL_VALUE, static_cast<uint8_t>(BOOL_VALUE), 0);
+  }
+  void add_INT_VALUE(int64_t INT_VALUE) {
+    fbb_.AddElement<int64_t>(QRPValue::VT_INT_VALUE, INT_VALUE, 0);
+  }
+  void add_FLOAT_VALUE(double FLOAT_VALUE) {
+    fbb_.AddElement<double>(QRPValue::VT_FLOAT_VALUE, FLOAT_VALUE, 0.0);
+  }
+  void add_TEXT_VALUE(::flatbuffers::Offset<::flatbuffers::String> TEXT_VALUE) {
+    fbb_.AddOffset(QRPValue::VT_TEXT_VALUE, TEXT_VALUE);
+  }
+  void add_BYTES_VALUE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> BYTES_VALUE) {
+    fbb_.AddOffset(QRPValue::VT_BYTES_VALUE, BYTES_VALUE);
+  }
+  explicit QRPValueBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<QRPValue> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<QRPValue>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<QRPValue> CreateQRPValue(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    qrpValueKind KIND = qrpValueKind::Null,
+    bool BOOL_VALUE = false,
+    int64_t INT_VALUE = 0,
+    double FLOAT_VALUE = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> TEXT_VALUE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> BYTES_VALUE = 0) {
+  QRPValueBuilder builder_(_fbb);
+  builder_.add_FLOAT_VALUE(FLOAT_VALUE);
+  builder_.add_INT_VALUE(INT_VALUE);
+  builder_.add_BYTES_VALUE(BYTES_VALUE);
+  builder_.add_TEXT_VALUE(TEXT_VALUE);
+  builder_.add_BOOL_VALUE(BOOL_VALUE);
+  builder_.add_KIND(KIND);
+  return builder_.Finish();
+}
+
+struct QRPValue::Traits {
+  using type = QRPValue;
+  static auto constexpr Create = CreateQRPValue;
+};
+
+inline ::flatbuffers::Offset<QRPValue> CreateQRPValueDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    qrpValueKind KIND = qrpValueKind::Null,
+    bool BOOL_VALUE = false,
+    int64_t INT_VALUE = 0,
+    double FLOAT_VALUE = 0.0,
+    const char *TEXT_VALUE = nullptr,
+    const std::vector<uint8_t> *BYTES_VALUE = nullptr) {
+  auto TEXT_VALUE__ = TEXT_VALUE ? _fbb.CreateString(TEXT_VALUE) : 0;
+  auto BYTES_VALUE__ = BYTES_VALUE ? _fbb.CreateVector<uint8_t>(*BYTES_VALUE) : 0;
+  return CreateQRPValue(
+      _fbb,
+      KIND,
+      BOOL_VALUE,
+      INT_VALUE,
+      FLOAT_VALUE,
+      TEXT_VALUE__,
+      BYTES_VALUE__);
+}
+
+::flatbuffers::Offset<QRPValue> CreateQRPValue(::flatbuffers::FlatBufferBuilder &_fbb, const QRPValueT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct QRPRowT : public ::flatbuffers::NativeTable {
+  typedef QRPRow TableType;
+  std::vector<std::unique_ptr<QRPValueT>> CELLS{};
+  QRPRowT() = default;
+  QRPRowT(const QRPRowT &o);
+  QRPRowT(QRPRowT&&) FLATBUFFERS_NOEXCEPT = default;
+  QRPRowT &operator=(QRPRowT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One row of a projection, its cells in COLUMNS order.
+struct QRPRow FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef QRPRowT NativeTableType;
+  typedef QRPRowBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_CELLS = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>> *CELLS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>> *>(VT_CELLS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_CELLS) &&
+           verifier.VerifyVector(CELLS()) &&
+           verifier.VerifyVectorOfTables(CELLS()) &&
+           verifier.EndTable();
+  }
+  QRPRowT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(QRPRowT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<QRPRow> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPRowT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct QRPRowBuilder {
+  typedef QRPRow Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_CELLS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>>> CELLS) {
+    fbb_.AddOffset(QRPRow::VT_CELLS, CELLS);
+  }
+  explicit QRPRowBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<QRPRow> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<QRPRow>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<QRPRow> CreateQRPRow(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>>> CELLS = 0) {
+  QRPRowBuilder builder_(_fbb);
+  builder_.add_CELLS(CELLS);
+  return builder_.Finish();
+}
+
+struct QRPRow::Traits {
+  using type = QRPRow;
+  static auto constexpr Create = CreateQRPRow;
+};
+
+inline ::flatbuffers::Offset<QRPRow> CreateQRPRowDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<QRPValue>> *CELLS = nullptr) {
+  auto CELLS__ = CELLS ? _fbb.CreateVector<::flatbuffers::Offset<QRPValue>>(*CELLS) : 0;
+  return CreateQRPRow(
+      _fbb,
+      CELLS__);
+}
+
+::flatbuffers::Offset<QRPRow> CreateQRPRow(::flatbuffers::FlatBufferBuilder &_fbb, const QRPRowT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct QRPTableT : public ::flatbuffers::NativeTable {
+  typedef QRPTable TableType;
+  std::string NAME{};
+  std::string KIND{};
+  std::string SOURCE{};
+  int64_t RECORDS = 0;
+  std::vector<std::unique_ptr<QRPColumnT>> COLUMNS{};
+  QRPTableT() = default;
+  QRPTableT(const QRPTableT &o);
+  QRPTableT(QRPTableT&&) FLATBUFFERS_NOEXCEPT = default;
+  QRPTableT &operator=(QRPTableT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One queryable table of the serving node (the query surface).
+struct QRPTable FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef QRPTableT NativeTableType;
+  typedef QRPTableBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NAME = 4,
+    VT_KIND = 6,
+    VT_SOURCE = 8,
+    VT_RECORDS = 10,
+    VT_COLUMNS = 12
+  };
+  /// Table name as a query names it, e.g. "OMM".
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  /// What the table is, e.g. "standard" (records of one standard), "view",
+  /// "lane" (an ingest lane), "system".
+  const ::flatbuffers::String *KIND() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KIND);
+  }
+  /// Where the table's rows come from: a standard code, provider or source.
+  const ::flatbuffers::String *SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE);
+  }
+  /// Rows the table holds; -1 = unknown.
+  int64_t RECORDS() const {
+    return GetField<int64_t>(VT_RECORDS, 0);
+  }
+  /// Columns of the table.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>> *COLUMNS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>> *>(VT_COLUMNS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyOffset(verifier, VT_KIND) &&
+           verifier.VerifyString(KIND()) &&
+           VerifyOffset(verifier, VT_SOURCE) &&
+           verifier.VerifyString(SOURCE()) &&
+           VerifyField<int64_t>(verifier, VT_RECORDS, 8) &&
+           VerifyOffset(verifier, VT_COLUMNS) &&
+           verifier.VerifyVector(COLUMNS()) &&
+           verifier.VerifyVectorOfTables(COLUMNS()) &&
+           verifier.EndTable();
+  }
+  QRPTableT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(QRPTableT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<QRPTable> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPTableT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct QRPTableBuilder {
+  typedef QRPTable Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(QRPTable::VT_NAME, NAME);
+  }
+  void add_KIND(::flatbuffers::Offset<::flatbuffers::String> KIND) {
+    fbb_.AddOffset(QRPTable::VT_KIND, KIND);
+  }
+  void add_SOURCE(::flatbuffers::Offset<::flatbuffers::String> SOURCE) {
+    fbb_.AddOffset(QRPTable::VT_SOURCE, SOURCE);
+  }
+  void add_RECORDS(int64_t RECORDS) {
+    fbb_.AddElement<int64_t>(QRPTable::VT_RECORDS, RECORDS, 0);
+  }
+  void add_COLUMNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>>> COLUMNS) {
+    fbb_.AddOffset(QRPTable::VT_COLUMNS, COLUMNS);
+  }
+  explicit QRPTableBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<QRPTable> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<QRPTable>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<QRPTable> CreateQRPTable(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KIND = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE = 0,
+    int64_t RECORDS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>>> COLUMNS = 0) {
+  QRPTableBuilder builder_(_fbb);
+  builder_.add_RECORDS(RECORDS);
+  builder_.add_COLUMNS(COLUMNS);
+  builder_.add_SOURCE(SOURCE);
+  builder_.add_KIND(KIND);
+  builder_.add_NAME(NAME);
+  return builder_.Finish();
+}
+
+struct QRPTable::Traits {
+  using type = QRPTable;
+  static auto constexpr Create = CreateQRPTable;
+};
+
+inline ::flatbuffers::Offset<QRPTable> CreateQRPTableDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *NAME = nullptr,
+    const char *KIND = nullptr,
+    const char *SOURCE = nullptr,
+    int64_t RECORDS = 0,
+    const std::vector<::flatbuffers::Offset<QRPColumn>> *COLUMNS = nullptr) {
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto KIND__ = KIND ? _fbb.CreateString(KIND) : 0;
+  auto SOURCE__ = SOURCE ? _fbb.CreateString(SOURCE) : 0;
+  auto COLUMNS__ = COLUMNS ? _fbb.CreateVector<::flatbuffers::Offset<QRPColumn>>(*COLUMNS) : 0;
+  return CreateQRPTable(
+      _fbb,
+      NAME__,
+      KIND__,
+      SOURCE__,
+      RECORDS,
+      COLUMNS__);
+}
+
+::flatbuffers::Offset<QRPTable> CreateQRPTable(::flatbuffers::FlatBufferBuilder &_fbb, const QRPTableT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct QRPT : public ::flatbuffers::NativeTable {
   typedef QRP TableType;
   qrpKind KIND = qrpKind::Request;
@@ -435,6 +940,18 @@ struct QRPT : public ::flatbuffers::NativeTable {
   std::string CID{};
   std::string ARCHIVE_ID{};
   std::vector<std::unique_ptr<QRPColumnT>> COLUMNS{};
+  qrpTimeProfile TIME_PROFILE = qrpTimeProfile::Unspecified;
+  int64_t PROFILE_EPOCH_MS = 0;
+  qrpRepresentation REPRESENTATION = qrpRepresentation::Default;
+  std::vector<std::unique_ptr<QRPValueT>> PARAMETERS{};
+  std::vector<std::unique_ptr<QRPRowT>> ROWS{};
+  std::vector<std::unique_ptr<QRPTableT>> TABLES{};
+  uint32_t MAX_ELAPSED_MS = 0;
+  uint64_t MAX_ROWS = 0;
+  uint64_t MAX_BYTES = 0;
+  uint16_t HTTP_STATUS = 0;
+  uint64_t BODY_REF_TOKEN = 0;
+  uint64_t BODY_REF_SIZE = 0;
   QRPT() = default;
   QRPT(const QRPT &o);
   QRPT(QRPT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -483,7 +1000,19 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ETAG = 70,
     VT_CID = 72,
     VT_ARCHIVE_ID = 74,
-    VT_COLUMNS = 76
+    VT_COLUMNS = 76,
+    VT_TIME_PROFILE = 78,
+    VT_PROFILE_EPOCH_MS = 80,
+    VT_REPRESENTATION = 82,
+    VT_PARAMETERS = 84,
+    VT_ROWS = 86,
+    VT_TABLES = 88,
+    VT_MAX_ELAPSED_MS = 90,
+    VT_MAX_ROWS = 92,
+    VT_MAX_BYTES = 94,
+    VT_HTTP_STATUS = 96,
+    VT_BODY_REF_TOKEN = 98,
+    VT_BODY_REF_SIZE = 100
   };
   qrpKind KIND() const {
     return static_cast<qrpKind>(GetField<int8_t>(VT_KIND, 0));
@@ -624,6 +1153,60 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>> *COLUMNS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>> *>(VT_COLUMNS);
   }
+  /// How the request selects records in time.
+  qrpTimeProfile TIME_PROFILE() const {
+    return static_cast<qrpTimeProfile>(GetField<int8_t>(VT_TIME_PROFILE, 0));
+  }
+  /// Reference instant of TIME_PROFILE, Unix milliseconds; 0 = now.
+  int64_t PROFILE_EPOCH_MS() const {
+    return GetField<int64_t>(VT_PROFILE_EPOCH_MS, 0);
+  }
+  /// Representation the client asks the page in.
+  qrpRepresentation REPRESENTATION() const {
+    return static_cast<qrpRepresentation>(GetField<int8_t>(VT_REPRESENTATION, 0));
+  }
+  /// Values bound to the placeholders of SQL, in order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>> *PARAMETERS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>> *>(VT_PARAMETERS);
+  }
+  /// Rows of a projection (a query that selects columns rather than whole
+  /// records), in COLUMNS order. Whole-record pages carry their records as
+  /// frames after the header instead, and leave ROWS empty.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<QRPRow>> *ROWS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPRow>> *>(VT_ROWS);
+  }
+  /// The serving node's queryable tables, answered to a request for the query
+  /// surface.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<QRPTable>> *TABLES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<QRPTable>> *>(VT_TABLES);
+  }
+  /// Wall-clock budget the serving node applies to a query, milliseconds; 0 =
+  /// none stated.
+  uint32_t MAX_ELAPSED_MS() const {
+    return GetField<uint32_t>(VT_MAX_ELAPSED_MS, 0);
+  }
+  /// Most rows a page returns; 0 = none stated.
+  uint64_t MAX_ROWS() const {
+    return GetField<uint64_t>(VT_MAX_ROWS, 0);
+  }
+  /// Most bytes a page returns; 0 = none stated.
+  uint64_t MAX_BYTES() const {
+    return GetField<uint64_t>(VT_MAX_BYTES, 0);
+  }
+  /// Transport status the answer carries, HTTP semantics (200, 304, 400,
+  /// 406, 503 ...); 0 = derive it from STATUS and ERROR_CODE.
+  uint16_t HTTP_STATUS() const {
+    return GetField<uint16_t>(VT_HTTP_STATUS, 0);
+  }
+  /// When the page's record frames are not inline but held by the serving
+  /// node for delivery out of band: the reference token the node resolves
+  /// (single use), and the byte size of what it refers to. 0 = inline.
+  uint64_t BODY_REF_TOKEN() const {
+    return GetField<uint64_t>(VT_BODY_REF_TOKEN, 0);
+  }
+  uint64_t BODY_REF_SIZE() const {
+    return GetField<uint64_t>(VT_BODY_REF_SIZE, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -685,6 +1268,24 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_COLUMNS) &&
            verifier.VerifyVector(COLUMNS()) &&
            verifier.VerifyVectorOfTables(COLUMNS()) &&
+           VerifyField<int8_t>(verifier, VT_TIME_PROFILE, 1) &&
+           VerifyField<int64_t>(verifier, VT_PROFILE_EPOCH_MS, 8) &&
+           VerifyField<int8_t>(verifier, VT_REPRESENTATION, 1) &&
+           VerifyOffset(verifier, VT_PARAMETERS) &&
+           verifier.VerifyVector(PARAMETERS()) &&
+           verifier.VerifyVectorOfTables(PARAMETERS()) &&
+           VerifyOffset(verifier, VT_ROWS) &&
+           verifier.VerifyVector(ROWS()) &&
+           verifier.VerifyVectorOfTables(ROWS()) &&
+           VerifyOffset(verifier, VT_TABLES) &&
+           verifier.VerifyVector(TABLES()) &&
+           verifier.VerifyVectorOfTables(TABLES()) &&
+           VerifyField<uint32_t>(verifier, VT_MAX_ELAPSED_MS, 4) &&
+           VerifyField<uint64_t>(verifier, VT_MAX_ROWS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_MAX_BYTES, 8) &&
+           VerifyField<uint16_t>(verifier, VT_HTTP_STATUS, 2) &&
+           VerifyField<uint64_t>(verifier, VT_BODY_REF_TOKEN, 8) &&
+           VerifyField<uint64_t>(verifier, VT_BODY_REF_SIZE, 8) &&
            verifier.EndTable();
   }
   QRPT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -807,6 +1408,42 @@ struct QRPBuilder {
   void add_COLUMNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>>> COLUMNS) {
     fbb_.AddOffset(QRP::VT_COLUMNS, COLUMNS);
   }
+  void add_TIME_PROFILE(qrpTimeProfile TIME_PROFILE) {
+    fbb_.AddElement<int8_t>(QRP::VT_TIME_PROFILE, static_cast<int8_t>(TIME_PROFILE), 0);
+  }
+  void add_PROFILE_EPOCH_MS(int64_t PROFILE_EPOCH_MS) {
+    fbb_.AddElement<int64_t>(QRP::VT_PROFILE_EPOCH_MS, PROFILE_EPOCH_MS, 0);
+  }
+  void add_REPRESENTATION(qrpRepresentation REPRESENTATION) {
+    fbb_.AddElement<int8_t>(QRP::VT_REPRESENTATION, static_cast<int8_t>(REPRESENTATION), 0);
+  }
+  void add_PARAMETERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>>> PARAMETERS) {
+    fbb_.AddOffset(QRP::VT_PARAMETERS, PARAMETERS);
+  }
+  void add_ROWS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPRow>>> ROWS) {
+    fbb_.AddOffset(QRP::VT_ROWS, ROWS);
+  }
+  void add_TABLES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPTable>>> TABLES) {
+    fbb_.AddOffset(QRP::VT_TABLES, TABLES);
+  }
+  void add_MAX_ELAPSED_MS(uint32_t MAX_ELAPSED_MS) {
+    fbb_.AddElement<uint32_t>(QRP::VT_MAX_ELAPSED_MS, MAX_ELAPSED_MS, 0);
+  }
+  void add_MAX_ROWS(uint64_t MAX_ROWS) {
+    fbb_.AddElement<uint64_t>(QRP::VT_MAX_ROWS, MAX_ROWS, 0);
+  }
+  void add_MAX_BYTES(uint64_t MAX_BYTES) {
+    fbb_.AddElement<uint64_t>(QRP::VT_MAX_BYTES, MAX_BYTES, 0);
+  }
+  void add_HTTP_STATUS(uint16_t HTTP_STATUS) {
+    fbb_.AddElement<uint16_t>(QRP::VT_HTTP_STATUS, HTTP_STATUS, 0);
+  }
+  void add_BODY_REF_TOKEN(uint64_t BODY_REF_TOKEN) {
+    fbb_.AddElement<uint64_t>(QRP::VT_BODY_REF_TOKEN, BODY_REF_TOKEN, 0);
+  }
+  void add_BODY_REF_SIZE(uint64_t BODY_REF_SIZE) {
+    fbb_.AddElement<uint64_t>(QRP::VT_BODY_REF_SIZE, BODY_REF_SIZE, 0);
+  }
   explicit QRPBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -856,8 +1493,25 @@ inline ::flatbuffers::Offset<QRP> CreateQRP(
     ::flatbuffers::Offset<::flatbuffers::String> ETAG = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ARCHIVE_ID = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>>> COLUMNS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPColumn>>> COLUMNS = 0,
+    qrpTimeProfile TIME_PROFILE = qrpTimeProfile::Unspecified,
+    int64_t PROFILE_EPOCH_MS = 0,
+    qrpRepresentation REPRESENTATION = qrpRepresentation::Default,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPValue>>> PARAMETERS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPRow>>> ROWS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<QRPTable>>> TABLES = 0,
+    uint32_t MAX_ELAPSED_MS = 0,
+    uint64_t MAX_ROWS = 0,
+    uint64_t MAX_BYTES = 0,
+    uint16_t HTTP_STATUS = 0,
+    uint64_t BODY_REF_TOKEN = 0,
+    uint64_t BODY_REF_SIZE = 0) {
   QRPBuilder builder_(_fbb);
+  builder_.add_BODY_REF_SIZE(BODY_REF_SIZE);
+  builder_.add_BODY_REF_TOKEN(BODY_REF_TOKEN);
+  builder_.add_MAX_BYTES(MAX_BYTES);
+  builder_.add_MAX_ROWS(MAX_ROWS);
+  builder_.add_PROFILE_EPOCH_MS(PROFILE_EPOCH_MS);
   builder_.add_GENERATED_AT_MS(GENERATED_AT_MS);
   builder_.add_AS_OF_MS(AS_OF_MS);
   builder_.add_STORED(STORED);
@@ -865,6 +1519,10 @@ inline ::flatbuffers::Offset<QRP> CreateQRP(
   builder_.add_TOTAL_COUNT(TOTAL_COUNT);
   builder_.add_TO_EPOCH_MS(TO_EPOCH_MS);
   builder_.add_FROM_EPOCH_MS(FROM_EPOCH_MS);
+  builder_.add_MAX_ELAPSED_MS(MAX_ELAPSED_MS);
+  builder_.add_TABLES(TABLES);
+  builder_.add_ROWS(ROWS);
+  builder_.add_PARAMETERS(PARAMETERS);
   builder_.add_COLUMNS(COLUMNS);
   builder_.add_ARCHIVE_ID(ARCHIVE_ID);
   builder_.add_CID(CID);
@@ -889,6 +1547,9 @@ inline ::flatbuffers::Offset<QRP> CreateQRP(
   builder_.add_RETRY_AFTER_MS(RETRY_AFTER_MS);
   builder_.add_MESSAGE(MESSAGE);
   builder_.add_ERROR_CODE(ERROR_CODE);
+  builder_.add_HTTP_STATUS(HTTP_STATUS);
+  builder_.add_REPRESENTATION(REPRESENTATION);
+  builder_.add_TIME_PROFILE(TIME_PROFILE);
   builder_.add_STALE(STALE);
   builder_.add_TRUNCATED(TRUNCATED);
   builder_.add_PARTIAL(PARTIAL);
@@ -941,7 +1602,19 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
     const char *ETAG = nullptr,
     const char *CID = nullptr,
     const char *ARCHIVE_ID = nullptr,
-    const std::vector<::flatbuffers::Offset<QRPColumn>> *COLUMNS = nullptr) {
+    const std::vector<::flatbuffers::Offset<QRPColumn>> *COLUMNS = nullptr,
+    qrpTimeProfile TIME_PROFILE = qrpTimeProfile::Unspecified,
+    int64_t PROFILE_EPOCH_MS = 0,
+    qrpRepresentation REPRESENTATION = qrpRepresentation::Default,
+    const std::vector<::flatbuffers::Offset<QRPValue>> *PARAMETERS = nullptr,
+    const std::vector<::flatbuffers::Offset<QRPRow>> *ROWS = nullptr,
+    const std::vector<::flatbuffers::Offset<QRPTable>> *TABLES = nullptr,
+    uint32_t MAX_ELAPSED_MS = 0,
+    uint64_t MAX_ROWS = 0,
+    uint64_t MAX_BYTES = 0,
+    uint16_t HTTP_STATUS = 0,
+    uint64_t BODY_REF_TOKEN = 0,
+    uint64_t BODY_REF_SIZE = 0) {
   auto ERROR_CODE__ = ERROR_CODE ? _fbb.CreateString(ERROR_CODE) : 0;
   auto MESSAGE__ = MESSAGE ? _fbb.CreateString(MESSAGE) : 0;
   auto SCHEMA_NAME__ = SCHEMA_NAME ? _fbb.CreateString(SCHEMA_NAME) : 0;
@@ -961,6 +1634,9 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
   auto CID__ = CID ? _fbb.CreateString(CID) : 0;
   auto ARCHIVE_ID__ = ARCHIVE_ID ? _fbb.CreateString(ARCHIVE_ID) : 0;
   auto COLUMNS__ = COLUMNS ? _fbb.CreateVector<::flatbuffers::Offset<QRPColumn>>(*COLUMNS) : 0;
+  auto PARAMETERS__ = PARAMETERS ? _fbb.CreateVector<::flatbuffers::Offset<QRPValue>>(*PARAMETERS) : 0;
+  auto ROWS__ = ROWS ? _fbb.CreateVector<::flatbuffers::Offset<QRPRow>>(*ROWS) : 0;
+  auto TABLES__ = TABLES ? _fbb.CreateVector<::flatbuffers::Offset<QRPTable>>(*TABLES) : 0;
   return CreateQRP(
       _fbb,
       KIND,
@@ -999,7 +1675,19 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
       ETAG__,
       CID__,
       ARCHIVE_ID__,
-      COLUMNS__);
+      COLUMNS__,
+      TIME_PROFILE,
+      PROFILE_EPOCH_MS,
+      REPRESENTATION,
+      PARAMETERS__,
+      ROWS__,
+      TABLES__,
+      MAX_ELAPSED_MS,
+      MAX_ROWS,
+      MAX_BYTES,
+      HTTP_STATUS,
+      BODY_REF_TOKEN,
+      BODY_REF_SIZE);
 }
 
 ::flatbuffers::Offset<QRP> CreateQRP(::flatbuffers::FlatBufferBuilder &_fbb, const QRPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1074,6 +1762,139 @@ inline ::flatbuffers::Offset<QRPColumn> QRPColumn::Pack(::flatbuffers::FlatBuffe
       _INDEXED);
 }
 
+inline QRPValueT *QRPValue::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<QRPValueT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void QRPValue::UnPackTo(QRPValueT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = KIND(); _o->KIND = _e; }
+  { auto _e = BOOL_VALUE(); _o->BOOL_VALUE = _e; }
+  { auto _e = INT_VALUE(); _o->INT_VALUE = _e; }
+  { auto _e = FLOAT_VALUE(); _o->FLOAT_VALUE = _e; }
+  { auto _e = TEXT_VALUE(); if (_e) _o->TEXT_VALUE = _e->str(); }
+  { auto _e = BYTES_VALUE(); if (_e) { _o->BYTES_VALUE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->BYTES_VALUE.begin()); } }
+}
+
+inline ::flatbuffers::Offset<QRPValue> CreateQRPValue(::flatbuffers::FlatBufferBuilder &_fbb, const QRPValueT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return QRPValue::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<QRPValue> QRPValue::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPValueT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const QRPValueT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _KIND = _o->KIND;
+  auto _BOOL_VALUE = _o->BOOL_VALUE;
+  auto _INT_VALUE = _o->INT_VALUE;
+  auto _FLOAT_VALUE = _o->FLOAT_VALUE;
+  auto _TEXT_VALUE = _o->TEXT_VALUE.empty() ? 0 : _fbb.CreateString(_o->TEXT_VALUE);
+  auto _BYTES_VALUE = _o->BYTES_VALUE.size() ? _fbb.CreateVector(_o->BYTES_VALUE) : 0;
+  return CreateQRPValue(
+      _fbb,
+      _KIND,
+      _BOOL_VALUE,
+      _INT_VALUE,
+      _FLOAT_VALUE,
+      _TEXT_VALUE,
+      _BYTES_VALUE);
+}
+
+inline QRPRowT::QRPRowT(const QRPRowT &o) {
+  CELLS.reserve(o.CELLS.size());
+  for (const auto &CELLS_ : o.CELLS) { CELLS.emplace_back((CELLS_) ? new QRPValueT(*CELLS_) : nullptr); }
+}
+
+inline QRPRowT &QRPRowT::operator=(QRPRowT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(CELLS, o.CELLS);
+  return *this;
+}
+
+inline QRPRowT *QRPRow::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<QRPRowT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void QRPRow::UnPackTo(QRPRowT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = CELLS(); if (_e) { _o->CELLS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CELLS[_i]) { _e->Get(_i)->UnPackTo(_o->CELLS[_i].get(), _resolver); } else { _o->CELLS[_i] = std::unique_ptr<QRPValueT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CELLS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<QRPRow> CreateQRPRow(::flatbuffers::FlatBufferBuilder &_fbb, const QRPRowT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return QRPRow::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<QRPRow> QRPRow::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPRowT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const QRPRowT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _CELLS = _o->CELLS.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPValue>> (_o->CELLS.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPValue(*__va->__fbb, __va->__o->CELLS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreateQRPRow(
+      _fbb,
+      _CELLS);
+}
+
+inline QRPTableT::QRPTableT(const QRPTableT &o)
+      : NAME(o.NAME),
+        KIND(o.KIND),
+        SOURCE(o.SOURCE),
+        RECORDS(o.RECORDS) {
+  COLUMNS.reserve(o.COLUMNS.size());
+  for (const auto &COLUMNS_ : o.COLUMNS) { COLUMNS.emplace_back((COLUMNS_) ? new QRPColumnT(*COLUMNS_) : nullptr); }
+}
+
+inline QRPTableT &QRPTableT::operator=(QRPTableT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(NAME, o.NAME);
+  std::swap(KIND, o.KIND);
+  std::swap(SOURCE, o.SOURCE);
+  std::swap(RECORDS, o.RECORDS);
+  std::swap(COLUMNS, o.COLUMNS);
+  return *this;
+}
+
+inline QRPTableT *QRPTable::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<QRPTableT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void QRPTable::UnPackTo(QRPTableT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = KIND(); if (_e) _o->KIND = _e->str(); }
+  { auto _e = SOURCE(); if (_e) _o->SOURCE = _e->str(); }
+  { auto _e = RECORDS(); _o->RECORDS = _e; }
+  { auto _e = COLUMNS(); if (_e) { _o->COLUMNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COLUMNS[_i]) { _e->Get(_i)->UnPackTo(_o->COLUMNS[_i].get(), _resolver); } else { _o->COLUMNS[_i] = std::unique_ptr<QRPColumnT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COLUMNS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<QRPTable> CreateQRPTable(::flatbuffers::FlatBufferBuilder &_fbb, const QRPTableT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return QRPTable::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<QRPTable> QRPTable::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const QRPTableT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const QRPTableT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _KIND = _o->KIND.empty() ? 0 : _fbb.CreateString(_o->KIND);
+  auto _SOURCE = _o->SOURCE.empty() ? 0 : _fbb.CreateString(_o->SOURCE);
+  auto _RECORDS = _o->RECORDS;
+  auto _COLUMNS = _o->COLUMNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPColumn>> (_o->COLUMNS.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPColumn(*__va->__fbb, __va->__o->COLUMNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreateQRPTable(
+      _fbb,
+      _NAME,
+      _KIND,
+      _SOURCE,
+      _RECORDS,
+      _COLUMNS);
+}
+
 inline QRPT::QRPT(const QRPT &o)
       : KIND(o.KIND),
         STATUS(o.STATUS),
@@ -1109,11 +1930,26 @@ inline QRPT::QRPT(const QRPT &o)
         GENERATED_AT_MS(o.GENERATED_AT_MS),
         ETAG(o.ETAG),
         CID(o.CID),
-        ARCHIVE_ID(o.ARCHIVE_ID) {
+        ARCHIVE_ID(o.ARCHIVE_ID),
+        TIME_PROFILE(o.TIME_PROFILE),
+        PROFILE_EPOCH_MS(o.PROFILE_EPOCH_MS),
+        REPRESENTATION(o.REPRESENTATION),
+        MAX_ELAPSED_MS(o.MAX_ELAPSED_MS),
+        MAX_ROWS(o.MAX_ROWS),
+        MAX_BYTES(o.MAX_BYTES),
+        HTTP_STATUS(o.HTTP_STATUS),
+        BODY_REF_TOKEN(o.BODY_REF_TOKEN),
+        BODY_REF_SIZE(o.BODY_REF_SIZE) {
   FILTERS.reserve(o.FILTERS.size());
   for (const auto &FILTERS_ : o.FILTERS) { FILTERS.emplace_back((FILTERS_) ? new QRPFilterT(*FILTERS_) : nullptr); }
   COLUMNS.reserve(o.COLUMNS.size());
   for (const auto &COLUMNS_ : o.COLUMNS) { COLUMNS.emplace_back((COLUMNS_) ? new QRPColumnT(*COLUMNS_) : nullptr); }
+  PARAMETERS.reserve(o.PARAMETERS.size());
+  for (const auto &PARAMETERS_ : o.PARAMETERS) { PARAMETERS.emplace_back((PARAMETERS_) ? new QRPValueT(*PARAMETERS_) : nullptr); }
+  ROWS.reserve(o.ROWS.size());
+  for (const auto &ROWS_ : o.ROWS) { ROWS.emplace_back((ROWS_) ? new QRPRowT(*ROWS_) : nullptr); }
+  TABLES.reserve(o.TABLES.size());
+  for (const auto &TABLES_ : o.TABLES) { TABLES.emplace_back((TABLES_) ? new QRPTableT(*TABLES_) : nullptr); }
 }
 
 inline QRPT &QRPT::operator=(QRPT o) FLATBUFFERS_NOEXCEPT {
@@ -1154,6 +1990,18 @@ inline QRPT &QRPT::operator=(QRPT o) FLATBUFFERS_NOEXCEPT {
   std::swap(CID, o.CID);
   std::swap(ARCHIVE_ID, o.ARCHIVE_ID);
   std::swap(COLUMNS, o.COLUMNS);
+  std::swap(TIME_PROFILE, o.TIME_PROFILE);
+  std::swap(PROFILE_EPOCH_MS, o.PROFILE_EPOCH_MS);
+  std::swap(REPRESENTATION, o.REPRESENTATION);
+  std::swap(PARAMETERS, o.PARAMETERS);
+  std::swap(ROWS, o.ROWS);
+  std::swap(TABLES, o.TABLES);
+  std::swap(MAX_ELAPSED_MS, o.MAX_ELAPSED_MS);
+  std::swap(MAX_ROWS, o.MAX_ROWS);
+  std::swap(MAX_BYTES, o.MAX_BYTES);
+  std::swap(HTTP_STATUS, o.HTTP_STATUS);
+  std::swap(BODY_REF_TOKEN, o.BODY_REF_TOKEN);
+  std::swap(BODY_REF_SIZE, o.BODY_REF_SIZE);
   return *this;
 }
 
@@ -1203,6 +2051,18 @@ inline void QRP::UnPackTo(QRPT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = CID(); if (_e) _o->CID = _e->str(); }
   { auto _e = ARCHIVE_ID(); if (_e) _o->ARCHIVE_ID = _e->str(); }
   { auto _e = COLUMNS(); if (_e) { _o->COLUMNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COLUMNS[_i]) { _e->Get(_i)->UnPackTo(_o->COLUMNS[_i].get(), _resolver); } else { _o->COLUMNS[_i] = std::unique_ptr<QRPColumnT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COLUMNS.resize(0); } }
+  { auto _e = TIME_PROFILE(); _o->TIME_PROFILE = _e; }
+  { auto _e = PROFILE_EPOCH_MS(); _o->PROFILE_EPOCH_MS = _e; }
+  { auto _e = REPRESENTATION(); _o->REPRESENTATION = _e; }
+  { auto _e = PARAMETERS(); if (_e) { _o->PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->PARAMETERS[_i]) { _e->Get(_i)->UnPackTo(_o->PARAMETERS[_i].get(), _resolver); } else { _o->PARAMETERS[_i] = std::unique_ptr<QRPValueT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->PARAMETERS.resize(0); } }
+  { auto _e = ROWS(); if (_e) { _o->ROWS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ROWS[_i]) { _e->Get(_i)->UnPackTo(_o->ROWS[_i].get(), _resolver); } else { _o->ROWS[_i] = std::unique_ptr<QRPRowT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ROWS.resize(0); } }
+  { auto _e = TABLES(); if (_e) { _o->TABLES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TABLES[_i]) { _e->Get(_i)->UnPackTo(_o->TABLES[_i].get(), _resolver); } else { _o->TABLES[_i] = std::unique_ptr<QRPTableT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TABLES.resize(0); } }
+  { auto _e = MAX_ELAPSED_MS(); _o->MAX_ELAPSED_MS = _e; }
+  { auto _e = MAX_ROWS(); _o->MAX_ROWS = _e; }
+  { auto _e = MAX_BYTES(); _o->MAX_BYTES = _e; }
+  { auto _e = HTTP_STATUS(); _o->HTTP_STATUS = _e; }
+  { auto _e = BODY_REF_TOKEN(); _o->BODY_REF_TOKEN = _e; }
+  { auto _e = BODY_REF_SIZE(); _o->BODY_REF_SIZE = _e; }
 }
 
 inline ::flatbuffers::Offset<QRP> CreateQRP(::flatbuffers::FlatBufferBuilder &_fbb, const QRPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1250,6 +2110,18 @@ inline ::flatbuffers::Offset<QRP> QRP::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _CID = _o->CID.empty() ? 0 : _fbb.CreateString(_o->CID);
   auto _ARCHIVE_ID = _o->ARCHIVE_ID.empty() ? 0 : _fbb.CreateString(_o->ARCHIVE_ID);
   auto _COLUMNS = _o->COLUMNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPColumn>> (_o->COLUMNS.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPColumn(*__va->__fbb, __va->__o->COLUMNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _TIME_PROFILE = _o->TIME_PROFILE;
+  auto _PROFILE_EPOCH_MS = _o->PROFILE_EPOCH_MS;
+  auto _REPRESENTATION = _o->REPRESENTATION;
+  auto _PARAMETERS = _o->PARAMETERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPValue>> (_o->PARAMETERS.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPValue(*__va->__fbb, __va->__o->PARAMETERS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ROWS = _o->ROWS.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPRow>> (_o->ROWS.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPRow(*__va->__fbb, __va->__o->ROWS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _TABLES = _o->TABLES.size() ? _fbb.CreateVector<::flatbuffers::Offset<QRPTable>> (_o->TABLES.size(), [](size_t i, _VectorArgs *__va) { return CreateQRPTable(*__va->__fbb, __va->__o->TABLES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _MAX_ELAPSED_MS = _o->MAX_ELAPSED_MS;
+  auto _MAX_ROWS = _o->MAX_ROWS;
+  auto _MAX_BYTES = _o->MAX_BYTES;
+  auto _HTTP_STATUS = _o->HTTP_STATUS;
+  auto _BODY_REF_TOKEN = _o->BODY_REF_TOKEN;
+  auto _BODY_REF_SIZE = _o->BODY_REF_SIZE;
   return CreateQRP(
       _fbb,
       _KIND,
@@ -1288,7 +2160,19 @@ inline ::flatbuffers::Offset<QRP> QRP::Pack(::flatbuffers::FlatBufferBuilder &_f
       _ETAG,
       _CID,
       _ARCHIVE_ID,
-      _COLUMNS);
+      _COLUMNS,
+      _TIME_PROFILE,
+      _PROFILE_EPOCH_MS,
+      _REPRESENTATION,
+      _PARAMETERS,
+      _ROWS,
+      _TABLES,
+      _MAX_ELAPSED_MS,
+      _MAX_ROWS,
+      _MAX_BYTES,
+      _HTTP_STATUS,
+      _BODY_REF_TOKEN,
+      _BODY_REF_SIZE);
 }
 
 inline const QRP *GetQRP(const void *buf) {

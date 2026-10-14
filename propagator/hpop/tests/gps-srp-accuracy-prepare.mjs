@@ -5,6 +5,7 @@
 // parsing data-source/eop-parser's (exactly as E3 step 10).
 //   node tests/gps-srp-accuracy-prepare.mjs <orbit-accuracy-experiments checkout with E3> <modules root (canonical)> <hpop dir> <SINEX> <out dir> [--days N] [--wasm]
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 const [e3, modulesRoot, hpopDir, sinexFile, outDir] = process.argv.slice(2);
@@ -16,7 +17,18 @@ const { executionFrame, kernelFrame, decodeExecution } = await imp('harness/prw.
 const { eopFrame } = await imp('harness/eop.mjs');
 const { convertIso } = await imp('harness/time.mjs');
 const { Products } = await imp('experiments/e3-combined-catalog/truth.mjs');
-const { finalsRecords } = await imp('experiments/e3-combined-catalog/eop-finals.mjs');
+const { observedFinals } = await imp('experiments/e3-combined-catalog/eop-finals.mjs');
+// eop-parser takes the file as one $FIL on "body" (its tests' body() helper), so the finals are parsed here rather than
+// through E3's finalsRecords (which still sends the raw bytes); the same observed-rows cut, the same result shape.
+process.env.SPACE_DATA_STANDARDS_ROOT ??= path.dirname(createRequire(path.join(e3, 'package.json')).resolve('spacedatastandards.org/package.json'));
+const eopTypes = await import(path.join(modulesRoot, 'data-source/eop-parser/tests/harness.mjs'));
+async function finalsRecords(parser, file) {
+  const raw = fs.readFileSync(file);
+  const body = observedFinals(raw.toString('latin1'));
+  const response = await parser.invoke('parse_finals2000a', [eopTypes.body(body)]);
+  const records = eopTypes.decodeRecords(response).map((row) => ({ mjd: row.MJD, row }));
+  return { records, sha256: sha256(raw), observedSha256: sha256(body) };
+}
 const config = JSON.parse(fs.readFileSync(path.join(e3, 'experiments/e3-combined-catalog/config.json'), 'utf8'));
 
 const DAY = 86400000;

@@ -17,7 +17,6 @@ extern "C" __attribute__((weak)) void emscripten_notify_memory_growth(int) {}
 #include "sds/PIV/main_generated.h"
 #include "space_data_module_invoke.h"
 
-extern "C" int invoke(void);
 extern "C" int query_atmosphere_state_batch(void);
 extern "C" int query_wind_field(void);
 extern "C" int ocm_state_to_drag_acceleration_oem(void);
@@ -123,27 +122,15 @@ struct AllocationRecord {
   uint32_t size = 0;
 };
 
-static const AcceptedTypeRef kMethod_invoke_input_port_0_accepted_types[] = {
-  { true, "", "", 0u, false, "" },
-};
-static const PortRequirement kMethod_invoke_input_ports[] = {
-  { "request", true, kMethod_invoke_input_port_0_accepted_types, 1u },
-};
-static const char *kMethod_invoke_output_ports[] = {
-  "response",
-};
-
 static const AcceptedTypeRef kMethod_query_atmosphere_state_batch_input_port_0_accepted_types[] = {
   { false, "HFC.fbs", "$HFC", 0u, false, "HFC" },
-  { false, "HFC.fbs", "$HFC", 1u, true, "HFC" },
 };
 static const AcceptedTypeRef kMethod_query_atmosphere_state_batch_input_port_1_accepted_types[] = {
   { false, "SPW.fbs", "$SPW", 0u, false, "SPW" },
-  { false, "SPW.fbs", "$SPW", 1u, true, "SPW" },
 };
 static const PortRequirement kMethod_query_atmosphere_state_batch_input_ports[] = {
-  { "atmosphere", true, kMethod_query_atmosphere_state_batch_input_port_0_accepted_types, 2u },
-  { "space_weather", false, kMethod_query_atmosphere_state_batch_input_port_1_accepted_types, 2u },
+  { "atmosphere", true, kMethod_query_atmosphere_state_batch_input_port_0_accepted_types, 1u },
+  { "space_weather", false, kMethod_query_atmosphere_state_batch_input_port_1_accepted_types, 1u },
 };
 static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
   "states",
@@ -151,15 +138,13 @@ static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
 
 static const AcceptedTypeRef kMethod_query_wind_field_input_port_0_accepted_types[] = {
   { false, "WXF.fbs", "$WXF", 0u, false, "WXF" },
-  { false, "WXF.fbs", "$WXF", 1u, true, "WXF" },
 };
 static const AcceptedTypeRef kMethod_query_wind_field_input_port_1_accepted_types[] = {
   { false, "SPW.fbs", "$SPW", 0u, false, "SPW" },
-  { false, "SPW.fbs", "$SPW", 1u, true, "SPW" },
 };
 static const PortRequirement kMethod_query_wind_field_input_ports[] = {
-  { "template", true, kMethod_query_wind_field_input_port_0_accepted_types, 2u },
-  { "space_weather", false, kMethod_query_wind_field_input_port_1_accepted_types, 2u },
+  { "template", true, kMethod_query_wind_field_input_port_0_accepted_types, 1u },
+  { "space_weather", false, kMethod_query_wind_field_input_port_1_accepted_types, 1u },
 };
 static const char *kMethod_query_wind_field_output_ports[] = {
   "eastward_wind",
@@ -168,27 +153,15 @@ static const char *kMethod_query_wind_field_output_ports[] = {
 
 static const AcceptedTypeRef kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types[] = {
   { false, "OCM.fbs", "$OCM", 0u, false, "OCM" },
-  { false, "OCM.fbs", "$OCM", 1u, true, "OCM" },
 };
 static const PortRequirement kMethod_ocm_state_to_drag_acceleration_oem_input_ports[] = {
-  { "vector_state", true, kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types, 2u },
+  { "vector_state", true, kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types, 1u },
 };
 static const char *kMethod_ocm_state_to_drag_acceleration_oem_output_ports[] = {
   "drag_acceleration",
 };
 
 static const MethodDescriptor kMethodTable[] = {
-  {
-    "invoke",
-    &invoke,
-    kMethod_invoke_input_ports,
-    1u,
-    kMethod_invoke_output_ports,
-    1u,
-    true,
-    "request",
-    "response"
-  },
   {
     "query_atmosphere_state_batch",
     &query_atmosphere_state_batch,

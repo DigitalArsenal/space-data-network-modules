@@ -1,0 +1,10 @@
+VERSION:3.0
+N:;;;;
+FN:Literal Key Node
+EMAIL;type=INTERNET;type=sign:obLD1OX2obLD1OX2obLD1OX2obLD1OX2obLD1OX2obI@s
+ ign.spacedatanetwork.org
+EMAIL;type=INTERNET;type=encrypt:ssPU5fahssPU5fahssPU5fahssPU5fahssPU5fahss
+ M@encrypt.spacedatanetwork.org
+EMAIL;type=INTERNET;type=epmsig:ABEiM0RVZneImaq7zN3u_wARIjNEVWZ3iJmqu8zd7v8
+ @epmsig.spacedatanetwork.org
+END:VCARD

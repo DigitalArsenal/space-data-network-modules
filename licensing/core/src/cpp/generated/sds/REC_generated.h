@@ -63,6 +63,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CTR_generated.h"
 #include "CVG_generated.h"
 #include "CVP_generated.h"
+#include "CVR_generated.h"
 #include "CZM_generated.h"
 #include "DFH_generated.h"
 #include "DMG_generated.h"
@@ -184,6 +185,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "PRW_generated.h"
 #include "PSS_generated.h"
 #include "PUR_generated.h"
+#include "PVN_generated.h"
 #include "QEM_generated.h"
 #include "QRP_generated.h"
 #include "RAF_generated.h"
@@ -5219,14 +5221,18 @@ bool VerifyRecordTypeVector(::flatbuffers::VerifierTemplate<B> &verifier, const 
 enum class RecordTypeExtended : uint16_t {
   NONE = 0,
   ABA = 256,
+  CVR = 257,
+  PVN = 258,
   MIN = NONE,
-  MAX = ABA
+  MAX = PVN
 };
 
-inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[2] {
+inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[4] {
   static const RecordTypeExtended values[] = {
     RecordTypeExtended::NONE,
-    RecordTypeExtended::ABA
+    RecordTypeExtended::ABA,
+    RecordTypeExtended::CVR,
+    RecordTypeExtended::PVN
   };
   return values;
 }
@@ -5235,6 +5241,8 @@ inline const char *EnumNameRecordTypeExtended(RecordTypeExtended e) {
   switch (e) {
     case RecordTypeExtended::NONE: return "NONE";
     case RecordTypeExtended::ABA: return "ABA";
+    case RecordTypeExtended::CVR: return "CVR";
+    case RecordTypeExtended::PVN: return "PVN";
     default: return "";
   }
 }

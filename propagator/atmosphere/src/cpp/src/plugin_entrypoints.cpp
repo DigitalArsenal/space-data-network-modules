@@ -1,4 +1,3 @@
-#include "atmosphere/plugin_runtime.h"
 
 #include "atmosphere/models.h"
 #include "atmosphere/space_weather.h"
@@ -215,10 +214,6 @@ const plugin_input_frame_t* find_frame(const char* port_id) {
     return nullptr;
 }
 
-const plugin_input_frame_t* find_request_frame() {
-    return find_frame("request");
-}
-
 ::flatbuffers::Offset<::flatbuffers::String> copy_optional_string(
         ::flatbuffers::FlatBufferBuilder& builder,
         const ::flatbuffers::String* value) {
@@ -308,22 +303,6 @@ bool select_hfc_model(const ATM* atmosphere, HfcModelSelection& selection) {
         return true;
     }
     return false;
-}
-
-int emit_json_response(const char* port_id, const atmosphere::PluginInvokeResult& result) {
-    if (!result.ok) {
-        plugin_set_error(result.error_code.c_str(), result.error_message.c_str());
-        return 1;
-    }
-
-    const auto* payload = reinterpret_cast<const uint8_t*>(result.json.data());
-    if (plugin_push_output(port_id, nullptr, nullptr, payload,
-                           static_cast<uint32_t>(result.json.size())) < 0) {
-        plugin_set_error("emit-failed", "Failed to emit response frame.");
-        return 1;
-    }
-
-    return 0;
 }
 
 // $OEM carrying the input state and its drag acceleration, at the OCM epoch,
@@ -1051,24 +1030,6 @@ uint32_t plugin_get_manifest_flatbuffer_size(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int invoke(void) {
-    plugin_reset_output_state();
-
-    const auto* frame = find_request_frame();
-    if (!frame || !frame->payload) {
-        plugin_set_error("missing-request-input", "Input port \"request\" is required.");
-        return 1;
-    }
-
-    const auto result = atmosphere::invoke_json_request(
-        std::string_view(
-            reinterpret_cast<const char*>(frame->payload),
-            frame->payload_length));
-
-    return emit_json_response("response", result);
-}
-
-EMSCRIPTEN_KEEPALIVE
 int query_atmosphere_state_batch(void) {
     plugin_reset_output_state();
 
@@ -1082,14 +1043,8 @@ int query_atmosphere_state_batch(void) {
     if (hfc_result >= 0) {
         return hfc_result;
     }
-
-    const std::string request =
-        std::string("{\"operation\":\"queryAtmosphereStateBatch\",\"params\":") +
-        std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length) +
-        "}";
-    const auto result = atmosphere::invoke_json_request(request);
-
-    return emit_json_response("states", result);
+    plugin_set_error("invalid-hfc-buffer", "Input atmosphere frame is not an SDS $HFC FlatBuffer.");
+    return 1;
 }
 
 EMSCRIPTEN_KEEPALIVE

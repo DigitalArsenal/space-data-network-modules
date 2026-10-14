@@ -79,13 +79,13 @@ target_compile_definitions(
 )
 
 get_filename_component(SDN_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../common" ABSOLUTE)
-get_filename_component(SDM_HOST_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../node_modules/space-data-module-sdk/src/host/cpp" ABSOLUTE)
 
 add_library(
     licensing_core STATIC
     src/key_server.cpp
     src/grant_quota.cpp
     src/license_client.cpp
+    src/licensing_hostcalls.cpp
     "${DA_FLATBUFFERS_ROOT}/src/encryption.cpp"
     "${SDN_COMMON_DIR}/jcs/jcs.cpp"
     "${SDN_COMMON_DIR}/epm/epm_content.cpp"
@@ -101,12 +101,11 @@ target_compile_definitions(
 target_include_directories(
     licensing_core PUBLIC
     include
+    generated/typed
     generated
     generated/sds
-    generated/keybroker
     "${SDN_COMMON_DIR}"
     "${SDN_COMMON_DIR}/epm"
-    "${SDM_HOST_CPP_DIR}"
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${DA_FLATBUFFERS_ROOT}/include"
 )
@@ -115,14 +114,14 @@ target_link_libraries(licensing_core PUBLIC cryptopp)
 add_executable(
     licensing_wasm
     wasm_api.cpp
-    src/plugin_invoke_bridge.cpp
+    generated/typed/plugin_invoke_glue.cpp
 )
 target_include_directories(
     licensing_wasm PRIVATE
     include
+    generated/typed
     generated
     generated/sds
-    generated/keybroker
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${DA_FLATBUFFERS_ROOT}/include"
 )

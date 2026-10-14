@@ -16,6 +16,7 @@ import {
   createSdkBrowserShimHarness,
   createSdkBrowserShimSyncHarness,
 } from "./lib/sdkBrowserShimHarness.mjs";
+import { loadStandard } from "./lib/sds_bindings.mjs";
 import {
   decodeLicensingGrant,
   encryptBytesForRecipient,
@@ -58,6 +59,34 @@ import { KDF } from "spacedatastandards.org/lib/js/REC/KDF.js";
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const MODULE_DELIVERY_PROTOCOL_ID = "/space-data-network/module-delivery/1.0.0";
+
+const { FIL } = await loadStandard("FIL");
+
+// A $FIL carrying `content` verbatim: the typed form of the ciphertext / plaintext ports.
+function encodeFile(content) {
+  const builder = new flatbuffers.Builder(content.length + 64);
+  const contentOffset = FIL.createContentVector(builder, content);
+  FIL.startFIL(builder);
+  FIL.addContent(builder, contentOffset);
+  FIL.finishFILBuffer(builder, FIL.endFIL(builder));
+  return builder.asUint8Array();
+}
+function decodeFileContent(bytes) {
+  const bb = new flatbuffers.ByteBuffer(bytes);
+  assert.ok(FIL.bufferHasIdentifier(bb), "the frame is a $FIL");
+  const file = FIL.getRootAsFIL(bb);
+  assert.equal(Number(file.SIZE()), file.contentLength());
+  return file.contentArray();
+}
+
+// The requester's signing seed reaches client_request_grant only through secrets.get, by the ID its config names.
+const REQUESTER_SIGNING_SECRET_ID = "licensing/requester-signing";
+function requesterSecrets(seed = randomBytes(32)) {
+  return {
+    config: { requester_signing_secret_id: REQUESTER_SIGNING_SECRET_ID },
+    secrets: new Map([[REQUESTER_SIGNING_SECRET_ID, seed]]),
+  };
+}
 
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 // The requester-side decrypt module the console unwraps grants with.
@@ -185,45 +214,32 @@ function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = n
       return randomBytes(params?.length ?? 32);
     }
     if (operation === "keyslot.sign") {
-      // Host-side crypto oracle mock, matching
-      // sdn-server/internal/modulert/caps/keyslot.go (handleKeyslotSign):
-      // the slot's raw key material never leaves this dispatch function —
-      // only the resulting signature, base64-encoded, crosses back to the
-      // wasm guest as a plain JSON string field.
+      // Host-side crypto oracle, matching sdn-server/internal/modulert/caps/keyslot.go (handleKeyslotSign): the
+      // slot's raw key material never leaves this dispatch function; only the signature crosses back, on the typed
+      // answer's raw "data" frame. ALGORITHM is HostOps cryptoAlgorithm (Ed25519 = 1).
       const slotId = String(params?.slotId ?? "");
       const keyBytes = keySlots.get(slotId);
       if (!keyBytes) {
         throw new Error(`keyslot.sign missing slot: ${slotId}`);
       }
-      const algorithm = params?.algorithm || "ed25519";
-      if (algorithm !== "ed25519") {
-        throw new Error(`Unsupported keyslot.sign algorithm: ${algorithm}`);
+      if (params?.algorithm !== 1) {
+        throw new Error(`Unsupported keyslot.sign algorithm: ${params?.algorithm}`);
       }
       const payload =
         params?.payload instanceof Uint8Array
           ? params.payload
           : new Uint8Array();
-      const signature = wallet.curves.ed25519.sign(payload, keyBytes);
-      return {
-        signature: Buffer.from(signature).toString("base64"),
-        algorithm: "ed25519",
-      };
+      return wallet.curves.ed25519.sign(payload, keyBytes);
     }
     if (operation === "ipfs.add") {
-      // Copy: hostcall segments are views into wasm guest memory.
-      const raw =
-        params?.content instanceof Uint8Array
-          ? Buffer.from(params.content)
-          : null;
+      // typed: raw "data" in, IpfsResult {CID, SIZE} out. Copy: hostcall frames are views into wasm memory.
+      const raw = params?.data instanceof Uint8Array ? Buffer.from(params.data) : null;
       if (!raw) {
-        throw new Error("ipfs.add requires content bytes");
+        throw new Error("ipfs.add requires data bytes");
       }
       const cid = `bafy-lic-${createHash("sha256").update(raw).digest("hex").slice(0, 24)}`;
       contentStore.set(cid, raw);
-      return {
-        Hash: cid,
-        Size: raw.length,
-      };
+      return { cid, size: raw.length };
     }
     throw new Error(`Unsupported operation: ${operation}`);
   };
@@ -346,10 +362,7 @@ function createProtocolDispatch(serverHarness, contentStore = new Map(), wallet 
 
     if (params?.protocolId === MODULE_DELIVERY_PROTOCOL_ID) {
       const fileIdentifier = detectFlatbufferFileIdentifier(payload);
-      const response = serverHarness.invokeSync({
-        methodId: "server_handle_message",
-        inputs: [{ portId: "request", fileIdentifier, payload }],
-      });
+      const response = handleServerMessage(serverHarness, fileIdentifier, payload);
       if (response.statusCode !== 0 || response.outputs.length === 0) {
         throw new Error(`server_handle_message failed with status ${response.statusCode}`);
       }
@@ -468,16 +481,22 @@ function encryptProtectedContent(plaintext, contentKey) {
   return Buffer.concat([iv, ciphertext, tag]);
 }
 
+// The content key reaches the key server only through secrets.get: config content_keys maps the descriptor's KEY_ID
+// to the secret's ID and the key's algorithm.
 function publishModuleSync(
   serverHarness,
   descriptorBytes,
   protectedContent,
   contentKey,
-  {
-    role = keyMaterialRole.PublicationContent,
-    algorithm = keyMaterialAlgorithm.Aes256Gcm,
-  } = {},
+  { algorithm = "aes-256-gcm" } = {},
 ) {
+  const descriptor = decodeModuleDescriptor(descriptorBytes);
+  const keyId = descriptor.KEY_ID() || `${descriptor.PLUGIN_ID()}:${descriptor.VERSION()}`;
+  const secretId = `licensing/content/${keyId}`;
+  serverHarness.secrets.set(secretId, contentKey);
+  const entries = (serverHarness.config.content_keys ?? []).filter((entry) => entry.key_id !== keyId);
+  entries.push({ key_id: keyId, secret_id: secretId, algorithm });
+  serverHarness.config.content_keys = entries;
   const response = serverHarness.invokeSync({
     methodId: "server_publish_module",
     inputs: [
@@ -488,22 +507,12 @@ function publishModuleSync(
       },
       {
         portId: "protected_content",
-        payload: protectedContent,
-      },
-      {
-        portId: "content_key",
-        fileIdentifier: "$KMF",
-        payload: buildKeyMaterialFrame({
-          keyId: "publication-content-key",
-          role,
-          algorithm,
-          encoding: keyMaterialEncoding.RawBytes,
-          keyBytes: contentKey,
-        }),
+        fileIdentifier: "$FIL",
+        payload: encodeFile(protectedContent),
       },
     ],
   });
-  assert.equal(response.statusCode, 0);
+  assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1);
   assert.equal(response.outputs[0].portId, "response");
   return response.outputs[0].payload;
@@ -544,16 +553,14 @@ test("server publishes REC-protected artifacts using X25519 decrypt-key material
     descriptorBytes,
     protectedContent,
     recipient.privateKey,
-    {
-      role: keyMaterialRole.DecryptKey,
-      algorithm: keyMaterialAlgorithm.X25519Private,
-    },
+    { algorithm: "x25519" },
   );
 
   const clientHarness = await createSdkBrowserShimHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
     dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
     surface: "direct",
+    ...requesterSecrets(),
   });
   t.after(async () => {
     await clientHarness.destroy();
@@ -575,17 +582,6 @@ test("server publishes REC-protected artifacts using X25519 decrypt-key material
           providerPeerId: "provider.orbpro.test",
         }),
       },
-      {
-        portId: "requester_signing_key",
-        fileIdentifier: "$KMF",
-        payload: buildKeyMaterialFrame({
-          keyId: "requester-signing-key",
-          role: keyMaterialRole.RequesterSigning,
-          algorithm: keyMaterialAlgorithm.Ed25519Seed,
-          encoding: keyMaterialEncoding.Seed32,
-          keyBytes: randomBytes(32),
-        }),
-      }
     ],
   });
 
@@ -686,6 +682,7 @@ test("republishing a module preserves WASM_CID in the granted descriptor", async
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
     dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
     surface: "direct",
+    ...requesterSecrets(),
   });
   t.after(async () => {
     await clientHarness.destroy();
@@ -705,17 +702,6 @@ test("republishing a module preserves WASM_CID in the granted descriptor", async
           requesterXpub: "xpub-test-requester",
           requesterDomain: "app.orbpro.test",
           providerPeerId: "provider.orbpro.test",
-        }),
-      },
-      {
-        portId: "requester_signing_key",
-        fileIdentifier: "$KMF",
-        payload: buildKeyMaterialFrame({
-          keyId: "requester-signing-key",
-          role: keyMaterialRole.RequesterSigning,
-          algorithm: keyMaterialAlgorithm.Ed25519Seed,
-          encoding: keyMaterialEncoding.Seed32,
-          keyBytes: randomBytes(32),
         }),
       },
     ],
@@ -759,6 +745,7 @@ test("client and server role entrypoints interoperate inside the unified licensi
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
     dispatch: createProtocolDispatch(serverHarness, new Map(), wallet),
     surface: "direct",
+    ...requesterSecrets(),
   });
   t.after(async () => {
     await clientHarness.destroy();
@@ -780,17 +767,6 @@ test("client and server role entrypoints interoperate inside the unified licensi
           providerPeerId: "provider.orbpro.test",
         }),
       },
-      {
-        portId: "requester_signing_key",
-        fileIdentifier: "$KMF",
-        payload: buildKeyMaterialFrame({
-          keyId: "requester-signing-key",
-          role: keyMaterialRole.RequesterSigning,
-          algorithm: keyMaterialAlgorithm.Ed25519Seed,
-          encoding: keyMaterialEncoding.Seed32,
-          keyBytes: randomBytes(32),
-        }),
-      }
     ],
   });
 
@@ -848,6 +824,7 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
     dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
     surface: "direct",
+    ...requesterSecrets(),
   });
   t.after(async () => {
     await clientHarness.destroy();
@@ -869,17 +846,6 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
           providerPeerId: "provider.orbpro.test",
         }),
       },
-      {
-        portId: "requester_signing_key",
-        fileIdentifier: "$KMF",
-        payload: buildKeyMaterialFrame({
-          keyId: "requester-signing-key",
-          role: keyMaterialRole.RequesterSigning,
-          algorithm: keyMaterialAlgorithm.Ed25519Seed,
-          encoding: keyMaterialEncoding.Seed32,
-          keyBytes: randomBytes(32),
-        }),
-      }
     ],
   });
   assert.equal(grantResponse.statusCode, 0);
@@ -896,7 +862,8 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
   });
 
   assert.equal(decryptResponse.statusCode, 0);
-  assert.deepEqual(decryptResponse.outputs[0].payload, plaintext);
+  assert.equal(decryptResponse.outputs[0].portId, "plaintext");
+  assert.deepEqual(decodeFileContent(decryptResponse.outputs[0].payload), plaintext);
 });
 
 // ---------------------------------------------------------------------------
@@ -1129,11 +1096,18 @@ function buildLeaseChallengeRequest({
   return builder.asUint8Array();
 }
 
+// The module-delivery stream carries $LCH requests and $LPF proofs; each has its own typed port, and the answer
+// comes back on "challenge" ($LCH) or "grant" ($LGR).
 function handleServerMessage(serverHarness, fileIdentifier, payload) {
-  return serverHarness.invokeSync({
+  const portId = fileIdentifier === "$LPF" ? "proof" : "request";
+  const response = serverHarness.invokeSync({
     methodId: "server_handle_message",
-    inputs: [{ portId: "request", fileIdentifier, payload }],
+    inputs: [{ portId, fileIdentifier, payload }],
   });
+  for (const output of response.outputs ?? []) {
+    assert.equal(output.portId, detectFlatbufferFileIdentifier(output.payload) === "$LGR" ? "grant" : "challenge");
+  }
+  return response;
 }
 
 // The requester's two round trips (challenge, then proof), as sdn-js runs them.
@@ -1698,4 +1672,208 @@ test("a flood of unanswered grant requests stays bounded, strands no live handsh
   }
   clock.ms += CHALLENGE_TTL_MS;
   assert.equal(outcome(leaseAt(serverHarness, wallet, clock, await signInAt(wallet, clock), module)), "granted");
+});
+
+// ---------------------------------------------------------------------------
+// Typed contracts 1.0: the wire itself.
+// ---------------------------------------------------------------------------
+
+test("every hostcall is an SDS $PIV invocation, and keys reach the module only through secrets.get", async (t) => {
+  const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => serverHarness.destroy());
+  configureServerSync(serverHarness, runtimeConfig);
+
+  const moduleDek = randomBytes(32);
+  const plaintext = textEncoder.encode("typed hostcalls end to end");
+  publishModuleSync(
+    serverHarness,
+    buildModuleDescriptor({ moduleId: "orbpro.typed.module", version: "1.0.0" }),
+    encryptProtectedContent(plaintext, moduleDek),
+    moduleDek,
+  );
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
+    surface: "direct",
+    ...requesterSecrets(),
+  });
+  t.after(async () => clientHarness.destroy());
+
+  const grantResponse = await clientHarness.invoke({
+    methodId: "client_request_grant",
+    inputs: [{
+      portId: "request",
+      fileIdentifier: "$LCH",
+      payload: buildGrantRequest({
+        requestId: "grant-req-typed",
+        moduleId: "orbpro.typed.module",
+        moduleVersion: "1.0.0",
+        requesterPeerId: "requester.orbpro.test",
+        requesterXpub: "xpub-test-requester",
+        requesterDomain: "app.orbpro.test",
+      }),
+    }],
+  });
+  assert.equal(grantResponse.statusCode, 0, grantResponse.errorMessage);
+  const decrypted = await clientHarness.invoke({
+    methodId: "client_fetch_and_decrypt",
+    inputs: [{ portId: "grant_response", fileIdentifier: "$LGR", payload: grantResponse.outputs[0].payload }],
+  });
+  assert.equal(decrypted.statusCode, 0, decrypted.errorMessage);
+  assert.deepEqual(decodeFileContent(decrypted.outputs[0].payload), plaintext);
+
+  const serverCalls = serverHarness.hostcalls;
+  const clientCalls = clientHarness.hostcalls;
+  assert.ok(serverCalls.length > 0 && clientCalls.length > 0);
+  assert.ok([...serverCalls, ...clientCalls].every((call) => call.typed), "no JSON-envelope hostcall");
+  const ops = (calls) => new Set(calls.map((call) => call.op));
+  for (const op of ["plugin.getConfig", "secrets.get", "ipfs.add", "clock.now", "random.bytes", "keyslot.sign", "crypto.ed25519.verify"]) {
+    assert.ok(ops(serverCalls).has(op), `server calls ${op}`);
+  }
+  for (const op of ["plugin.getConfig", "secrets.get", "protocol.request", "crypto.ed25519.sign", "ipfs.cat"]) {
+    assert.ok(ops(clientCalls).has(op), `client calls ${op}`);
+  }
+  // The secrets asked for are exactly the IDs the configs name.
+  assert.deepEqual(
+    serverCalls.filter((call) => call.op === "secrets.get").map((call) => call.params.ID),
+    ["licensing/content/orbpro.typed.module:1.0.0"],
+  );
+  assert.deepEqual(
+    [...new Set(clientCalls.filter((call) => call.op === "secrets.get").map((call) => call.params.ID))],
+    [REQUESTER_SIGNING_SECRET_ID],
+  );
+  // The provider's key stays host-side: keyslot.sign names the slot, never the key.
+  const keyslotCall = serverCalls.find((call) => call.op === "keyslot.sign");
+  assert.equal(keyslotCall.params.SLOT_ID, runtimeConfig.signingSlotId);
+  assert.deepEqual(keyslotCall.raw, ["payload"]);
+});
+
+test("server_publish_module refuses a descriptor whose KEY_ID the config maps to no 32-byte secret", async (t) => {
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => serverHarness.destroy());
+  configureServerSync(serverHarness, runtimeConfig);
+
+  const publish = () => serverHarness.invokeSync({
+    methodId: "server_publish_module",
+    inputs: [
+      { portId: "module_descriptor", fileIdentifier: "$PLG", payload: buildModuleDescriptor({ moduleId: "orbpro.nokey", version: "1.0.0" }) },
+      { portId: "protected_content", fileIdentifier: "$FIL", payload: encodeFile(textEncoder.encode("ciphertext")) },
+    ],
+  });
+  let response = publish();
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "invalid-content-key");
+  assert.equal(response.outputs.length, 0);
+
+  serverHarness.config.content_keys = [{ key_id: "orbpro.nokey:1.0.0", secret_id: "short", algorithm: "aes-256-gcm" }];
+  serverHarness.secrets.set("short", randomBytes(16));
+  response = publish();
+  assert.equal(response.errorCode, "invalid-content-key");
+
+  serverHarness.secrets.set("short", randomBytes(32));
+  response = publish();
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs[0].portId, "response");
+});
+
+test("typed ports refuse a record on the wrong port and a frame without its type", async (t) => {
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => serverHarness.destroy());
+  configureServerSync(serverHarness, runtimeConfig);
+  const request = buildGrantRequest({
+    requestId: "typed-port",
+    moduleId: "orbpro.any",
+    moduleVersion: "1.0.0",
+    requesterPeerId: "requester.orbpro.test",
+    requesterXpub: "xpub",
+    requesterDomain: "app.orbpro.test",
+  });
+
+  const wrongPort = serverHarness.invokeSync({
+    methodId: "server_handle_message",
+    inputs: [{ portId: "proof", fileIdentifier: "$LCH", payload: request }],
+  });
+  assert.notEqual(wrongPort.statusCode, 0);
+  assert.equal(wrongPort.outputs.length, 0);
+
+  const untyped = serverHarness.invokeSync({
+    methodId: "server_handle_message",
+    inputs: [{ portId: "request", payload: request }],
+  });
+  assert.notEqual(untyped.statusCode, 0);
+  assert.equal(untyped.outputs.length, 0);
+
+  const both = serverHarness.invokeSync({
+    methodId: "server_handle_message",
+    inputs: [{ portId: "request", fileIdentifier: "$LCH", payload: request }, { portId: "proof", fileIdentifier: "$LPF", payload: request }],
+  });
+  assert.notEqual(both.statusCode, 0);
+});
+
+// decrypt_and_verify's input is AES-256-GCM(iv | ciphertext | tag) of content | Ed25519 signature | u32le length.
+function signAndEncrypt(wallet, content, seed, dek) {
+  const signature = wallet.curves.ed25519.sign(content, seed);
+  const length = Buffer.alloc(4);
+  length.writeUInt32LE(content.length);
+  return encryptProtectedContent(Buffer.concat([Buffer.from(content), Buffer.from(signature), length]), dek);
+}
+
+test("decrypt_and_verify decrypts with the DEK from secrets.get and verifies the signer", async (t) => {
+  const wallet = await getWasmWallet();
+  const dek = randomBytes(32);
+  const signerSeed = randomBytes(32);
+  const signerPublic = wallet.curves.ed25519.publicKeyFromSeed(signerSeed);
+  const harness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createDefaultHostDispatch(wallet),
+    config: { dek_secret_id: "licensing/dek" },
+    secrets: new Map([["licensing/dek", dek]]),
+  });
+  t.after(() => harness.destroy());
+  const content = textEncoder.encode("signed module bytes");
+  const signerKey = (publicKey) => buildKeyMaterialFrame({
+    keyId: "module-signer",
+    role: keyMaterialRole.VerificationKey,
+    algorithm: keyMaterialAlgorithm.Ed25519Public,
+    encoding: keyMaterialEncoding.PublicKey32,
+    keyBytes: publicKey,
+  });
+  const run = (protectedContent, publicKey) => harness.invokeSync({
+    methodId: "decrypt_and_verify",
+    inputs: [
+      { portId: "protected_content", fileIdentifier: "$FIL", payload: encodeFile(protectedContent) },
+      { portId: "signer_key", fileIdentifier: "$KMF", payload: signerKey(publicKey) },
+    ],
+  });
+
+  const ok = run(signAndEncrypt(wallet, content, signerSeed, dek), signerPublic);
+  assert.equal(ok.statusCode, 0, ok.errorMessage);
+  assert.equal(ok.outputs[0].portId, "plaintext");
+  assert.deepEqual(decodeFileContent(ok.outputs[0].payload), content);
+  assert.ok(harness.hostcalls.every((call) => call.typed));
+  assert.deepEqual(harness.hostcalls.filter((call) => call.op === "secrets.get").map((call) => call.params.ID), ["licensing/dek"]);
+
+  const otherSigner = wallet.curves.ed25519.publicKeyFromSeed(randomBytes(32));
+  const forged = run(signAndEncrypt(wallet, content, signerSeed, dek), otherSigner);
+  assert.notEqual(forged.statusCode, 0);
+  assert.equal(forged.outputs.length, 0);
+
+  const wrongDek = run(signAndEncrypt(wallet, content, signerSeed, randomBytes(32)), signerPublic);
+  assert.notEqual(wrongDek.statusCode, 0);
 });

@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import createFlatc from "flatc-wasm/module";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
-const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
+// SPACE_DATA_STANDARDS_ROOT (a spacedatastandards.org checkout) wins over the installed package.
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const outDir = path.join(packageRoot, "src", "cpp", "generated", "sds");
 const ROOT_FAMILIES = ["HFC", "SPW", "OCM", "OEM", "WXF"];
 

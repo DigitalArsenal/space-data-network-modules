@@ -428,11 +428,23 @@ enum class hostCapabilityKind : uint16_t {
   /// single record without source attribution. Hosts gate
   /// storage.ingest_with_source on this capability specifically.
   STORAGE_INGEST = 36,
+  /// Read the node's view of its peer-to-peer network: known peers, the
+  /// publication notices it has received and verified, and the latest
+  /// dataset of a lane (p2p.* host operations).
+  P2P_READ = 37,
+  /// Read the node's own health: uptime, service state, storage and network
+  /// figures (node_status_read.status).
+  NODE_STATUS_READ = 38,
+  /// Read the node's event log (node_activity_read.activity).
+  NODE_ACTIVITY_READ = 39,
+  /// Read and write operator-held secrets by identifier (credentials for
+  /// upstream sources); the secret value is never persisted in a record.
+  SECRETS = 40,
   MIN = CLOCK,
-  MAX = STORAGE_INGEST
+  MAX = SECRETS
 };
 
-inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[37] {
+inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[41] {
   static const hostCapabilityKind values[] = {
     hostCapabilityKind::CLOCK,
     hostCapabilityKind::RANDOM,
@@ -470,13 +482,17 @@ inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[37] {
     hostCapabilityKind::CRYPTO_KEY_AGREEMENT,
     hostCapabilityKind::CRYPTO_KDF,
     hostCapabilityKind::SCHEDULE_CRON,
-    hostCapabilityKind::STORAGE_INGEST
+    hostCapabilityKind::STORAGE_INGEST,
+    hostCapabilityKind::P2P_READ,
+    hostCapabilityKind::NODE_STATUS_READ,
+    hostCapabilityKind::NODE_ACTIVITY_READ,
+    hostCapabilityKind::SECRETS
   };
   return values;
 }
 
 inline const char * const *EnumNameshostCapabilityKind() {
-  static const char * const names[38] = {
+  static const char * const names[42] = {
     "CLOCK",
     "RANDOM",
     "LOGGING",
@@ -514,13 +530,17 @@ inline const char * const *EnumNameshostCapabilityKind() {
     "CRYPTO_KDF",
     "SCHEDULE_CRON",
     "STORAGE_INGEST",
+    "P2P_READ",
+    "NODE_STATUS_READ",
+    "NODE_ACTIVITY_READ",
+    "SECRETS",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamehostCapabilityKind(hostCapabilityKind e) {
-  if (::flatbuffers::IsOutRange(e, hostCapabilityKind::CLOCK, hostCapabilityKind::STORAGE_INGEST)) return "";
+  if (::flatbuffers::IsOutRange(e, hostCapabilityKind::CLOCK, hostCapabilityKind::SECRETS)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNameshostCapabilityKind()[index];
 }

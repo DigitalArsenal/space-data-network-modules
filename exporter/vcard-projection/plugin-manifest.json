@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.exporter.vcard-projection",
   "name": "vCard Projection",
-  "version": "0.1.0",
-  "description": "Pure WASM vCard 3.0 projection of $EPM (\u00a721 literal-key): card_full (full contact card + verification chain + photo), card_compact (QR-density card: sign/encrypt/epmsig only), card_parse (vCard \u2192 EPM fields). No capabilities: this module performs no I/O, no signing, no key derivation \u2014 it projects record bytes to text.",
+  "version": "0.2.0",
+  "description": "Pure WASM vCard 3.0 projection of $EPM (§21 literal-key), typed contracts 1.0: card_full (full contact card + verification chain + photo) and card_compact (QR-density card: sign/encrypt/epmsig only) emit one $VCF whose CARD is the vCard text verbatim; card_parse reads a $VCF's CARD and emits one $EPM carrying the recovered fields. Every frame is a size-prefixed SDS FlatBuffer. No capabilities: this module performs no I/O, no signing, no key derivation.",
   "pluginFamily": "exporter",
   "capabilities": [],
   "externalInterfaces": [],
@@ -18,7 +18,7 @@
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "vCard 3.0 text projection of $EPM \u2014 stateless byte-to-text transform, no host calls, no threading"
+    "detail": "vCard 3.0 text projection of $EPM to $VCF and back — stateless record transform, no host calls, no threading"
   },
   "buildArtifacts": [
     {
@@ -42,7 +42,8 @@
                 {
                   "schemaName": "EPM.fbs",
                   "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM"
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $EPM FlatBuffer record (the node's signed identity record)."
@@ -59,16 +60,14 @@
           "portId": "vcard",
           "acceptedTypeSets": [
             {
-              "setId": "vcard-text",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
-                "mediaType": "text/vcard"
-              },
-              "description": "UTF-8 vCard 3.0 text (the full contact card with verification chain + photo).",
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF: FORM FULL, CARD = the UTF-8 vCard 3.0 text verbatim (CRLF, 75-octet folding), MEDIA_TYPE text/vcard, CONFORMANCE {VERSION 3.0, LINE_ENDING CRLF, FOLD_OCTET_WIDTH 75, BYTE_LENGTH}.",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -76,7 +75,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The projected vCard 3.0 text."
+          "description": "The projected card as one $VCF record."
         }
       ],
       "maxBatch": 1,
@@ -95,7 +94,8 @@
                 {
                   "schemaName": "EPM.fbs",
                   "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM"
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $EPM FlatBuffer record."
@@ -112,16 +112,14 @@
           "portId": "vcard",
           "acceptedTypeSets": [
             {
-              "setId": "vcard-text",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
-                "mediaType": "text/vcard"
-              },
-              "description": "UTF-8 vCard 3.0 text (the compact QR card: sign/encrypt/epmsig aliases only, \u22641200 bytes).",
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF: FORM COMPACT, CARD = the UTF-8 vCard 3.0 text verbatim (CRLF, 75-octet folding), MEDIA_TYPE text/vcard, CONFORMANCE {VERSION 3.0, LINE_ENDING CRLF, FOLD_OCTET_WIDTH 75, BYTE_LENGTH, BYTE_BUDGET 1200, WITHIN_BYTE_BUDGET}.",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -129,7 +127,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The compact vCard 3.0 text."
+          "description": "The projected card as one $VCF record."
         }
       ],
       "maxBatch": 1,
@@ -143,16 +141,14 @@
           "portId": "vcard",
           "acceptedTypeSets": [
             {
-              "setId": "vcard-text",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
-                "mediaType": "text/vcard"
-              },
-              "description": "UTF-8 vCard 3.0 text to parse.",
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF; its CARD (vCard 3.0 text) is parsed.",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -160,7 +156,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The vCard text to parse back into EPM fields."
+          "description": "The $VCF card to parse back into EPM fields."
         }
       ],
       "outputPorts": [
@@ -168,16 +164,14 @@
           "portId": "epm_fields",
           "acceptedTypeSets": [
             {
-              "setId": "epm-fields-json",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "detail": "UTF-8 JSON of recovered EPM fields \u2014 not a FlatBuffer record; a control-frame projection for the flow runtime",
-                "mediaType": "application/json"
-              },
-              "description": "UTF-8 JSON of the EPM fields recovered from the vCard.",
+              "setId": "epm-record",
+              "description": "Size-prefixed $EPM carrying only the recovered fields: DN (FN), LEGAL_NAME (ORG), JOB_TITLE (TITLE), EMAIL (contact EMAIL), TELEPHONE (TEL), FAMILY_NAME / GIVEN_NAME (N), and KEYS {PUBLIC_KEY = lower-case hex of the sign / encrypt alias's b64url local part, KEY_TYPE Signing / Encryption}. Unsigned: SIGNATURE is not recovered.",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -185,7 +179,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The recovered EPM fields as JSON."
+          "description": "The recovered EPM fields as one $EPM record."
         }
       ],
       "maxBatch": 1,

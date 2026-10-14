@@ -43,7 +43,6 @@ import {
   assertSuccessfulResponse,
   createStandaloneHarness,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -295,6 +294,20 @@ function decodeHfcResponse(response) {
   return HFC.getRootAsHFC(bb);
 }
 
+async function queryUs76(harness, altitudesM) {
+  const response = await harness.invoke({
+    methodId: "query_atmosphere_state_batch",
+    inputs: [hfcInput(encodeHfcAtmosphereRequest({ altitudesM }))],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  return decodeHfcResponse(response);
+}
+
+function relClose(a, b, tol, label) {
+  const rel = Math.abs(a - b) / Math.abs(b);
+  assert.ok(rel <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
+}
+
 function decodeDragOemResponse(response) {
   const payload = assertSuccessfulResponse(response, { outputPortId: "drag_acceleration" });
   const [frame] = response.outputs.filter((entry) => entry.portId === "drag_acceleration");
@@ -305,6 +318,21 @@ function decodeDragOemResponse(response) {
   assert.equal(OEM.bufferHasIdentifier(bb), true);
   return OEM.getRootAsOEM(bb);
 }
+
+test("manifest names one concrete FlatBuffer type on every port and no untyped method", () => {
+  const manifest = readManifest();
+  assert.deepEqual(manifest.methods.map((m) => m.methodId),
+    ["query_atmosphere_state_batch", "query_wind_field", "ocm_state_to_drag_acceleration_oem"]);
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, `${method.methodId}.${port.portId}`);
+      const types = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(types.length, 1, `${method.methodId}.${port.portId}`);
+      assert.equal(types[0].wireFormat, "flatbuffer");
+      assert.ok(types[0].fileIdentifier && !types[0].acceptsAnyFlatbuffer);
+    }
+  }
+});
 
 test("manifest declares Basilisk atmospheric drag direct OCM/OEM surface", () => {
   const manifest = readManifest();
@@ -370,22 +398,6 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(response.errorCode, "missing-space-weather-day");
   });
 
-  test(`JSON queryWind reproduces the NRL HWM14 check values on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) return;
-    t.after(async () => { await harness.destroy(); });
-    const base = {
-      altitudeM: WIND_ANCHOR.altitudeM,
-      position: { latitudeDeg: WIND_ANCHOR.latitudeDeg, longitudeDeg: WIND_ANCHOR.longitudeDeg },
-      epoch: { year: 1995, dayOfYear: 150, secondOfDay: 43200 },
-    };
-    const total = await invokeJsonRequest(harness, { operation: "queryWind", params: { ...base, ap3h: 80 } });
-    assertWind(total.northMps, total.eastMps, WIND_ANCHOR.total, "json total");
-    const quiet = await invokeJsonRequest(harness, { operation: "queryWind", params: { ...base, ap3h: -1 } });
-    assertWind(quiet.northMps, quiet.eastMps, WIND_ANCHOR.quiet, "json quiet");
-    assert.match(quiet.model, /quiet time only/);
-  });
-
   test(`query_wind_field fills a WXF grid that matches point queries on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) return;
@@ -405,22 +417,28 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.match(u.VARIABLE_NAME, /DWM07 disturbance, 3-hour ap 80/);
     assert.equal(u.VALUES.length, 12);
     assertWind(v.VALUES[0], u.VALUES[0], WIND_ANCHOR.total, "grid cell (-45, -85)");
-    // Every cell is exactly the point value (both are float32 HWM14 output).
+    // Every cell is exactly the HFC point value at the same place and time
+    // (both are the float32 HWM14 output).
+    const cells = [];
     for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 4; j++) {
-        const point = await invokeJsonRequest(harness, {
-          operation: "queryWind",
-          params: {
-            altitudeM: WIND_ANCHOR.altitudeM,
-            position: { latitudeDeg: -45 + 45 * i, longitudeDeg: -85 + 90 * j },
-            epoch: { year: 1995, dayOfYear: 150, secondOfDay: 43200 },
-            ap3h: 80,
-          },
-        });
-        assert.equal(u.VALUES[i * 4 + j], Math.fround(point.eastMps), `east cell ${i},${j}`);
-        assert.equal(v.VALUES[i * 4 + j], Math.fround(point.northMps), `north cell ${i},${j}`);
-      }
+      for (let j = 0; j < 4; j++) cells.push([-45 + 45 * i, -85 + 90 * j]);
     }
+    const points = decodeHfcResponse(await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [
+        hfcInput(encodeHfcAtmosphereRequest({
+          sampleEpochs: cells.map(() => WIND_ANCHOR.epoch),
+          latitudesDeg: cells.map(([lat]) => lat),
+          longitudesDeg: cells.map(([, lon]) => lon),
+          altitudesM: cells.map(() => WIND_ANCHOR.altitudeM),
+        })),
+        ...spwInputs([windAnchorSpw()]),
+      ],
+    }));
+    cells.forEach(([lat, lon], k) => {
+      assert.equal(u.VALUES[k], Math.fround(points.WIND_EAST_M_PER_S(k)), `east cell ${lat},${lon}`);
+      assert.equal(v.VALUES[k], Math.fround(points.WIND_NORTH_M_PER_S(k)), `north cell ${lat},${lon}`);
+    });
     const quiet = await harness.invoke({ methodId: "query_wind_field", inputs: windFieldInputs(encodeWindTemplate()) });
     const uq = decodeWindField(quiet, "eastward_wind");
     const vq = decodeWindField(quiet, "northward_wind");
@@ -444,108 +462,30 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(huge.errorCode, "grid-too-large");
   });
 
-  test(`version request returns the package version on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(harness, {
-      operation: "version",
-      params: {},
-    });
-    assert.equal(result.version, "0.1.0");
-  });
-
   test(`US76 sea-level and 10 km values stay near standard atmosphere on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const seaLevel = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: 0, model: "US76" },
-    });
-    const tenKm = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: 10_000, model: "US76" },
-    });
-
-    assert.ok(Math.abs(seaLevel.state.density - 1.225) < 0.001);
-    assert.ok(Math.abs(seaLevel.state.pressure - 101_325) < 0.1);
-    assert.ok(Math.abs(seaLevel.state.temperature - 288.15) < 1e-9);
-
-    assert.ok(Math.abs(tenKm.state.density - 0.4135) < 0.002);
-    assert.ok(tenKm.state.temperature > 223 && tenKm.state.temperature < 224);
-    assert.ok(tenKm.state.soundSpeed < seaLevel.state.soundSpeed);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const hfc = await queryUs76(harness, [0, 10_000]);
+    assert.ok(Math.abs(hfc.DENSITY_KG_PER_M3(0) - 1.225) < 0.001);
+    assert.ok(Math.abs(hfc.PRESSURE_PA(0) - 101_325) < 0.1);
+    assert.ok(Math.abs(hfc.TEMPERATURE_K(0) - 288.15) < 1e-9);
+    assert.ok(Math.abs(hfc.DENSITY_KG_PER_M3(1) - 0.4135) < 0.002);
+    assert.ok(hfc.TEMPERATURE_K(1) > 223 && hfc.TEMPERATURE_K(1) < 224);
+    assert.ok(hfc.SPEED_OF_SOUND_M_PER_S(1) < hfc.SPEED_OF_SOUND_M_PER_S(0));
   });
 
-  test(`batch altitude queries preserve ordering and monotonic density on ${runtimeKind}`, async (t) => {
+  test(`HFC batch preserves sample order and monotonic density on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(harness, {
-      operation: "queryAltitudes",
-      params: {
-        altitudesM: [0, 10_000, 20_000],
-        model: "US76",
-      },
-    });
-
-    assert.equal(result.count, 3);
-    assert.deepEqual(
-      result.results.map((entry) => entry.altitudeM),
-      [0, 10_000, 20_000],
-    );
-    assert.ok(result.results[0].state.density > result.results[1].state.density);
-    assert.ok(result.results[1].state.density > result.results[2].state.density);
-    assert.ok(result.results[0].state.pressure > result.results[1].state.pressure);
-    assert.ok(result.results[1].state.pressure > result.results[2].state.pressure);
-  });
-
-  test(`atmosphere state batch exposes the provider contract on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(harness, {
-      operation: "queryAtmosphereStateBatch",
-      params: {
-        model: "US76",
-        samples: [
-          { id: "sea-level", altitudeM: 0 },
-          { id: "ten-km", altitudeM: 10_000 },
-        ],
-      },
-    });
-
-    assert.equal(result.provider, "atmosphere-model");
-    assert.equal(result.model, "US76");
-    assert.equal(result.count, 2);
-    assert.deepEqual(
-      result.states.map((entry) => entry.id),
-      ["sea-level", "ten-km"],
-    );
-    assert.ok(Math.abs(result.states[0].densityKgM3 - 1.225) < 0.001);
-    assert.ok(Math.abs(result.states[0].pressurePa - 101_325) < 0.1);
-    assert.ok(Math.abs(result.states[1].densityKgM3 - 0.4135) < 0.002);
-    assert.ok(result.states[1].soundSpeedMps < result.states[0].soundSpeedMps);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const hfc = await queryUs76(harness, [0, 10_000, 20_000]);
+    assert.equal(hfc.ATMOSPHERE_PROVIDER(), "atmosphere-model");
+    assert.deepEqual(Array.from(hfc.altitudeMArray()), [0, 10_000, 20_000]);
+    assert.ok(hfc.DENSITY_KG_PER_M3(0) > hfc.DENSITY_KG_PER_M3(1));
+    assert.ok(hfc.DENSITY_KG_PER_M3(1) > hfc.DENSITY_KG_PER_M3(2));
+    assert.ok(hfc.PRESSURE_PA(0) > hfc.PRESSURE_PA(1));
+    assert.ok(hfc.PRESSURE_PA(1) > hfc.PRESSURE_PA(2));
   });
 
   test(`direct atmosphere batch method uses fixed provider method id on ${runtimeKind}`, async (t) => {
@@ -581,62 +521,17 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(result.DENSITY_KG_PER_M3(0) - 0.4135) < 0.002);
   });
 
-  test(`direct atmosphere JSON fallback rejects the fixed provider method id on ${runtimeKind}`, async (t) => {
+  test(`atmosphere port refuses anything but an SDS $HFC on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    // The legacy JSON request this port once fell back to is refused now.
+    const response = await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(Buffer.from(JSON.stringify({ model: "US76", samples: [{ id: "ten-km", altitudeM: 10_000 }] }), "utf8"))],
     });
-
-    await assert.rejects(
-      () => invokeJsonRequest(
-        harness,
-        {
-          model: "US76",
-          samples: [{ id: "ten-km", altitudeM: 10_000 }],
-        },
-        {
-          methodId: "query_atmosphere_state_batch",
-          inputPortId: "atmosphere",
-          outputPortId: "states",
-        },
-      ),
-      /WASI exit|exited with code 1/,
-    );
-  });
-
-  test(`generic atmosphere invoke method still accepts JSON batch requests on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      {
-        operation: "queryAtmosphereStateBatch",
-        params: {
-          model: "US76",
-          samples: [{ id: "ten-km", altitudeM: 10_000 }],
-        },
-      },
-      {
-        methodId: "invoke",
-        inputPortId: "request",
-        outputPortId: "response",
-      },
-    );
-
-    assert.equal(result.provider, "atmosphere-model");
-    assert.equal(result.model, "US76");
-    assert.equal(result.count, 1);
-    assert.equal(result.states[0].id, "ten-km");
-    assert.ok(Math.abs(result.states[0].densityKgM3 - 0.4135) < 0.002);
+    assert.notEqual(response.statusCode, 0);
+    assert.equal(response.errorCode, "invalid-hfc-buffer");
   });
 
   test(`US76 reproduces published 1976 Standard Atmosphere values on ${runtimeKind}`, async (t) => {
@@ -654,87 +549,18 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     //   Z = 10 km geom: T = 223.252 K, P = 26500 Pa, rho = 0.41351 kg/m^3
     //   H = 20 km geopotential (Z = 20063.1 m): T = 216.65 K, P = 5474.9 Pa
     //   H = 47 km geopotential (Z = 47350.1 m): T = 270.65 K
-    const relClose = (a, b, tol, label) => {
-      const rel = Math.abs(a - b) / Math.abs(b);
-      assert.ok(rel <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
-    };
-
-    const sea = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: 0, model: "US76" },
-    });
-    relClose(sea.state.temperature, 288.15, 1e-3, "T 0 km");
-    relClose(sea.state.pressure, 101325, 1e-3, "P 0 km");
-    relClose(sea.state.density, 1.225, 1e-3, "rho 0 km");
-
-    const tenKm = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: 10_000, model: "US76" },
-    });
-    relClose(tenKm.state.temperature, 223.252, 1e-3, "T 10 km geometric");
-    relClose(tenKm.state.pressure, 26500, 1e-3, "P 10 km geometric");
-    relClose(tenKm.state.density, 0.41351, 1e-3, "rho 10 km geometric");
-
-    // 20 km geopotential -> geometric Z = r0*H/(r0-H), r0 = 6 356 766 m
-    const z20 = (6356766 * 20000) / (6356766 - 20000);
-    const twentyKm = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: z20, model: "US76" },
-    });
-    relClose(twentyKm.state.temperature, 216.65, 1e-3, "T 20 km geopotential");
-    relClose(twentyKm.state.pressure, 5474.9, 1e-3, "P 20 km geopotential");
-
+    const z20 = (6356766 * 20000) / (6356766 - 20000);  // geometric Z = r0*H/(r0-H), r0 = 6 356 766 m
     const z47 = (6356766 * 47000) / (6356766 - 47000);
-    const fortySevenKm = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: { altitudeM: z47, model: "US76" },
-    });
-    relClose(fortySevenKm.state.temperature, 270.65, 1e-3, "T 47 km geopotential");
-  });
-
-  test(`NRLMSISE00 reproduces the canonical published test vector on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    // Canonical case 1 of the 17-case output table distributed with the
-    // NRLMSISE-00 C reference package (release 20041227, Brodowski port of
-    // Picone/Hedin/Drob; DOCUMENTATION file, also at
-    // https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION):
-    //   doy=172, sec=29000 s UT, alt=400 km, lat=60, lon=-70, lst=16 h,
-    //   F107A=150, F107=150, ap=4
-    //   -> TINF = 1250.54 K, TG = 1241.42 K, RHO(gtd7) = 4.075e-15 g/cm^3,
-    //      HE = 6.665e+05, O = 1.139e+08, N2 = 1.998e+07 [1/cm^3]
-    // This module reports the gtd7d drag-effective density; at 400 km the
-    // anomalous-oxygen contribution is < 0.1%, hence the 2e-3 tolerance on
-    // mass density and 1e-3 elsewhere.
-    const result = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        position: { latitudeDeg: 60, longitudeDeg: -70 },
-        epoch: { year: 0, dayOfYear: 172, secondOfDay: 29_000 },
-        localSolarTimeHours: 16,
-        solar: { F107: 150, F107A: 150, Ap: [4, 4, 4, 4, 4, 4, 4] },
-      },
-    });
-
-    const relClose = (a, b, tol, label) => {
-      const rel = Math.abs(a - b) / Math.abs(b);
-      assert.ok(rel <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
-    };
-
-    relClose(result.state.exosphericTemp, 1250.54, 1e-3, "TINF");
-    relClose(result.state.temperature, 1241.42, 1e-3, "TG");
-    relClose(result.state.density, 4.075e-15 * 1000, 2e-3, "rho kg/m^3");
-    relClose(result.state.numDensityHe, 6.665e5 * 1e6, 1e-3, "He 1/m^3");
-    relClose(result.state.numDensityO, 1.139e8 * 1e6, 1e-3, "O 1/m^3");
-    relClose(result.state.numDensityN2, 1.998e7 * 1e6, 1e-3, "N2 1/m^3");
+    const hfc = await queryUs76(harness, [0, 10_000, z20, z47]);
+    relClose(hfc.TEMPERATURE_K(0), 288.15, 1e-3, "T 0 km");
+    relClose(hfc.PRESSURE_PA(0), 101325, 1e-3, "P 0 km");
+    relClose(hfc.DENSITY_KG_PER_M3(0), 1.225, 1e-3, "rho 0 km");
+    relClose(hfc.TEMPERATURE_K(1), 223.252, 1e-3, "T 10 km geometric");
+    relClose(hfc.PRESSURE_PA(1), 26500, 1e-3, "P 10 km geometric");
+    relClose(hfc.DENSITY_KG_PER_M3(1), 0.41351, 1e-3, "rho 10 km geometric");
+    relClose(hfc.TEMPERATURE_K(2), 216.65, 1e-3, "T 20 km geopotential");
+    relClose(hfc.PRESSURE_PA(2), 5474.9, 1e-3, "P 20 km geopotential");
+    relClose(hfc.TEMPERATURE_K(3), 270.65, 1e-3, "T 47 km geopotential");
   });
 
   test(`direct drag method computes Basilisk atmosphericDrag acceleration from OCM spacecraft state on ${runtimeKind}`, async (t) => {
@@ -786,109 +612,19 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
   test(`NRLMSISE00 responds to solar activity at 400 km on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const place = {
-      position: { latitudeDeg: 60, longitudeDeg: -70 },
-      epoch: { year: 2024, dayOfYear: 172, secondOfDay: 29_000 },
-    };
-    const lowSolar = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        ...place,
-        solar: { F107: 70, F107A: 70, Ap: [0] },
-      },
-    });
-    const highSolar = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        ...place,
-        solar: { F107: 200, F107A: 180, Ap: [50] },
-      },
-    });
-
-    assert.ok(highSolar.state.exosphericTemp > lowSolar.state.exosphericTemp);
-    assert.ok(highSolar.state.temperature > lowSolar.state.temperature);
-    assert.ok(highSolar.state.density > lowSolar.state.density);
-  });
-
-  test(`NRLMSISE00 JSON requests without place, time or weather are refused on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const complete = {
-      altitudeM: 400_000,
-      model: "NRLMSISE00",
-      position: { latitudeDeg: 60, longitudeDeg: -70 },
-      epoch: { year: 2024, dayOfYear: 172, secondOfDay: 29_000 },
-      solar: { F107: 150, F107A: 150, Ap: [4] },
-    };
-    const expectJsonRefusal = async (params, code, label) => {
-      const response = await harness.invoke({
-        methodId: "invoke",
-        inputs: [{
-          portId: "request",
-          typeRef: null,
-          payload: Buffer.from(JSON.stringify({ operation: "queryAltitude", params }), "utf8"),
-        }],
-      });
-      assert.notEqual(response.statusCode, 0, `${label}: expected a refusal`);
-      assert.equal(response.errorCode, code, `${label}: ${response.errorMessage}`);
-    };
-    for (const missing of ["position", "epoch", "solar"]) {
-      const params = { ...complete };
-      delete params[missing];
-      await expectJsonRefusal(params, "missing-nrlmsise-input", `${missing} must be required`);
-    }
-    await expectJsonRefusal({ ...complete, altitudeM: 1_200_000 }, "altitude-out-of-range", "1200 km");
-    await expectJsonRefusal({ ...complete, model: "JB2008" }, "unsupported-atmosphere-model", "unknown model");
-  });
-
-  test(`NRLMSISE00 JSON ap history reproduces published case 16 on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    // NRLMSISE-00 C package DOCUMENTATION, case 16: case-1 inputs with
-    // switch 9 = -1 and ap_a[0..6] = 100. Published (7 significant digits):
-    // TINF 1.426412E+03 K, TG 1.408608E+03 K, O 1.274494E+08 1/cm^3.
-    // https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION
-    const result = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        position: { latitudeDeg: 60, longitudeDeg: -70 },
-        epoch: { year: 0, dayOfYear: 172, secondOfDay: 29_000 },
-        localSolarTimeHours: 16,
-        apHistory: true,
-        solar: { F107: 150, F107A: 150, Ap: [100, 100, 100, 100, 100, 100, 100] },
-      },
-    });
-    const relClose = (a, b, tol, label) => {
-      assert.ok(Math.abs(a - b) / Math.abs(b) <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
-    };
-    relClose(result.state.exosphericTemp, 1426.412, 1e-5, "TINF");
-    relClose(result.state.temperature, 1408.608, 1e-5, "TG");
-    relClose(result.state.numDensityO, 1.274494e8 * 1e6, 1e-5, "O 1/m^3");
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const weather = (f107, f107a, ap) => ["2024-06-20", "2024-06-21"].map((date) => encodeSpwRecord({
+      date, f107Obs: f107, f107ObsCenter81: f107a, ap,
+    }));
+    const query = async (spw) => decodeHfcResponse(await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(nrlmsiseHfcRequest()), ...spwInputs(spw)],
+    }));
+    const low = await query(weather(70, 70, 0));
+    const high = await query(weather(200, 180, 50));
+    assert.ok(high.TEMPERATURE_K(0) > low.TEMPERATURE_K(0));
+    assert.ok(high.DENSITY_KG_PER_M3(0) > low.DENSITY_KG_PER_M3(0));
   });
 
   test(`HFC NRLMSISE00 selects observed previous-day flux and epoch-relative ap history on ${runtimeKind}`, async (t) => {
@@ -917,22 +653,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     //   ap now, -3 h, -6 h, -9 h = 06-21 bins 4, 3, 2, 1   = 35, 34, 33, 32
     //   mean 12-33 h before = 31, 28, 27, 26, 25, 24, 23, 22 -> 206 / 8
     //   mean 36-57 h before = 21, 18, 17, 16, 15, 14, 13, 12 -> 126 / 8
-    // The same model evaluated through the JSON surface with exactly these
-    // inputs must give the same density: this checks the selection, while the
-    // published vectors check the model.
-    const expected = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        position: { latitudeDeg: 45, longitudeDeg: -100 },
-        epoch: { year: 2024, dayOfYear: 173, secondOfDay: 45_000 },
-        apHistory: true,
-        solar: { F107: 120, F107A: 143, Ap: [8, 35, 34, 33, 32, 206 / 8, 126 / 8] },
-      },
-    });
-    assert.equal(hfc.DENSITY_KG_PER_M3(0), expected.state.density);
-    assert.equal(hfc.TEMPERATURE_K(0), expected.state.temperature);
+    // The same model evaluated with exactly these inputs stated directly
+    // (switch 9 = -1, 400 km, 45 N 100 W, day 173, 45000 s UT) gives the
+    // values below, recorded from the retired JSON surface of 0.1.0. Equality
+    // checks the selection; the native published vectors check the model.
+    assert.equal(hfc.DENSITY_KG_PER_M3(0), 2.4114616569297282e-12);
+    assert.equal(hfc.TEMPERATURE_K(0), 1154.2710897873123);
   });
 
   test(`HFC NRLMSISE00 uses daily Ap when the ap history is incomplete and reports forecasts on ${runtimeKind}`, async (t) => {
@@ -957,17 +683,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(assumptions.some((line) => line.includes("3-hour ap history for 0 of 1 samples")), assumptions.join(" | "));
     assert.ok(assumptions.some((line) => line.includes("Forecast F10.7")), assumptions.join(" | "));
 
-    const expected = await invokeJsonRequest(harness, {
-      operation: "queryAltitude",
-      params: {
-        altitudeM: 400_000,
-        model: "NRLMSISE00",
-        position: { latitudeDeg: 45, longitudeDeg: -100 },
-        epoch: { year: 2024, dayOfYear: 173, secondOfDay: 45_000 },
-        solar: { F107: 120, F107A: 143, Ap: [8] },
-      },
-    });
-    assert.equal(hfc.DENSITY_KG_PER_M3(0), expected.state.density);
+    // Daily-Ap evaluation with F10.7 120, F10.7A 143, Ap 8 stated directly,
+    // recorded from the retired JSON surface of 0.1.0.
+    assert.equal(hfc.DENSITY_KG_PER_M3(0), 2.0043441114325766e-12);
   });
 
   test(`HFC NRLMSISE00 refuses missing weather, time, position and range on ${runtimeKind}`, async (t) => {
@@ -1028,13 +746,10 @@ for (const [label, wasmPath] of [["isomorphic", WASM_PATH], ["browser", BROWSER_
       await harness.destroy();
     });
     for (let call = 0; call < 2; call += 1) {
-      const seaLevel = await invokeJsonRequest(harness, {
-        operation: "queryAltitude",
-        params: { altitudeM: 0, model: "US76" },
-      });
-      assert.ok(Math.abs(seaLevel.state.density - 1.225) < 0.001);
-      assert.ok(Math.abs(seaLevel.state.pressure - 101_325) < 0.1);
-      assert.ok(Math.abs(seaLevel.state.temperature - 288.15) < 1e-9);
+      const seaLevel = await queryUs76(harness, [0]);
+      assert.ok(Math.abs(seaLevel.DENSITY_KG_PER_M3(0) - 1.225) < 0.001);
+      assert.ok(Math.abs(seaLevel.PRESSURE_PA(0) - 101_325) < 0.1);
+      assert.ok(Math.abs(seaLevel.TEMPERATURE_K(0) - 288.15) < 1e-9);
     }
   });
 }
