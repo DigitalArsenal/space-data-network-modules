@@ -1,8 +1,8 @@
 {
   "pluginId": "org.sdn.flows.supplemental-omm.od",
-  "name": "Supplemental OMM Native Orbit Determination",
-  "version": "1.0.1",
-  "description": "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits the complete ephemeris with the OD core, and emits multiple epoch-specific OMM, OCM, and OBD record streams.",
+  "name": "Supplemental OMM Orbit Determination",
+  "version": "2.0.0",
+  "description": "Supplemental OMM orbit determination (typed contracts 1.0: FlatBuffers only, no JSON and no FSB/FSO transport). fit: the flow's source modules' SDS $OEM (one object per frame, on the port of its provider: starlink, glonass, intelsat, cpf, iss) -> the frozen complete-arc OD core's epoch-specific $OMM, $OCM and $OBD, plus an SGP4-XP $OMM and $OBD for each full-day window of the ephemeris (propagator/sgp4-xp, the US Space Force Sgp4Prop joined in), each standard one size-prefixed record stream with the IngestRequest (INGQ) hostcap/storage-ingest files it by; one object an invocation, the rest yielded as backlog. Position-only sources (GLONASS SP3, Intelsat ECF, CPF) are fitted from positions alone in their own axes (Earth-fixed or EME2000; analysis/od refuses Earth-fixed frames), and an arc the core cannot fit is refused before it. FlowNotice (FNTC) on status: Info fitted (per object, the completion message), Skipped unfittable / fit-failed. publish_request: the IngestResult (INGR) storage-ingest answers + the IngestRequest it stored -> the dataset-publication POST (HttpRequest, HREQ; config omm_publish_url, nothing when unset or when the batch was refused). No capabilities but plugin.getConfig (publish_request).",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,193 +16,284 @@
   "methods": [
     {
       "methodId": "fit",
-      "displayName": "Fit complete provider-native ephemerides",
+      "displayName": "Fit source ephemerides",
+      "description": "Source $OEM in -> one object fitted per invocation -> $OMM/$OCM/$OBD record streams, each with its IngestRequest, and a FlowNotice.",
       "inputPorts": [
         {
           "portId": "starlink",
           "acceptedTypeSets": [
             {
-              "setId": "fsb-dual",
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one object per frame.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
-          "description": "Ordered complete native MEME response chunks."
+          "description": "data-source/spacex-starlink-source emit: one $OEM per Starlink object (compact, EME2000, UTC, with velocities)."
         },
         {
           "portId": "glonass",
           "acceptedTypeSets": [
             {
-              "setId": "fsb-dual",
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one object per frame.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
-          "description": "Ordered complete native SP3 response chunks."
+          "description": "data-source/glonass-source emit: one position-only $OEM per GLONASS satellite (Earth-fixed, GPS time)."
         },
         {
           "portId": "intelsat",
           "acceptedTypeSets": [
             {
-              "setId": "fsb-dual",
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one object per frame.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
-          "description": "Ordered complete native ECF response chunks."
+          "description": "data-source/intelsat-source emit: one position-only $OEM (Earth-fixed, UTC)."
         },
         {
           "portId": "cpf",
           "acceptedTypeSets": [
             {
-              "setId": "fsb-dual",
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one object per frame.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
-          "description": "Ordered complete native CPF response chunks."
+          "description": "data-source/cpf-source emit: one position-only $OEM in the CPF's declared frame (Earth-fixed or EME2000, UTC)."
         },
         {
           "portId": "iss",
           "acceptedTypeSets": [
             {
-              "setId": "fsb-dual",
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one object per frame.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
-          "description": "Ordered complete native CCSDS OEM KVN response chunks."
+          "description": "data-source/iss-source emit: one $OEM (verbose, EME2000, UTC, with velocities)."
         }
       ],
       "outputPorts": [
         {
-          "portId": "control",
+          "portId": "omm_meta",
           "acceptedTypeSets": [
             {
-              "setId": "fso-dual",
+              "setId": "sdn-runtime-ingest-request",
+              "description": "IngestRequest (INGQ) filing the stream beside it.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSO.fbs",
-                  "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
-                  "rootTypeName": "FSO",
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
                   "wireFormat": "flatbuffer"
-                },
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The IngestRequest for the omm stream: SCHEMA OMM.fbs, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME the provider (spacex-starlink, glonass, intelsat, cpf, iss), BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public; PROVENANCE PARSER and NORMALIZED_SHA256/COUNT."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-record-stream",
+              "description": "Size-prefixed $OMM records back to back.",
+              "allowedTypes": [
                 {
-                  "schemaName": "FSO.fbs",
-                  "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
-                  "rootTypeName": "FSO",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 361648,
-                  "requiredAlignment": 8
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The object's $OMM records: the OD core's SGP4 set for each local epoch of the arc, then an SGP4-XP set (MEAN_ELEMENT_THEORY SGP4XP) per full-day window."
+        },
+        {
+          "portId": "ocm_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "description": "IngestRequest (INGQ) filing the stream beside it.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The IngestRequest for the ocm stream: SCHEMA OCM.fbs, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME the provider (spacex-starlink, glonass, intelsat, cpf, iss), BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public; PROVENANCE PARSER and NORMALIZED_SHA256/COUNT."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-record-stream",
+              "description": "Size-prefixed $OCM records back to back.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The object's $OCM records: the OD core's state and fit covariance for each local epoch."
+        },
+        {
+          "portId": "obd_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "description": "IngestRequest (INGQ) filing the stream beside it.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The IngestRequest for the obd stream: SCHEMA OBD.fbs, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME the provider (spacex-starlink, glonass, intelsat, cpf, iss), BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public; PROVENANCE PARSER and NORMALIZED_SHA256/COUNT."
+        },
+        {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd-record-stream",
+              "description": "Size-prefixed $OBD records back to back.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The object's $OBD records: the OD core's fit diagnostics for each local epoch, then one per SGP4-XP window."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "description": "FlowNotice (FNTC): Info fitted (ITEMS the completion message, COUNT the $OMM records, BATCH_ID the $OMM batch), Skipped unfittable / fit-failed (ITEMS the reason).",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "One notice per object."
+        }
+      ],
+      "maxBatch": 4096,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Publish a stored batch",
+      "description": "IngestResult + IngestRequest -> the dataset-publication POST (omm_publish_url); nothing when unset or refused.",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "description": "IngestResult (INGR) from hostcap/storage-ingest.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -210,155 +301,77 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM/OBD table bindings."
+          "description": "What the host stored."
         },
         {
-          "portId": "status",
+          "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "fso-dual",
+              "setId": "sdn-runtime-ingest-request",
+              "description": "The IngestRequest the batch was stored by.",
               "allowedTypes": [
                 {
-                  "schemaName": "FSO.fbs",
-                  "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
-                  "rootTypeName": "FSO",
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSO.fbs",
-                  "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
-                  "rootTypeName": "FSO",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 361648,
-                  "requiredAlignment": 8
                 }
               ]
             }
           ],
-          "minStreams": 0,
-          "maxStreams": 4096,
-          "required": false,
-          "description": "One typed OD outcome for each consumed complete provider response or fitted logical object."
-        },
-        {
-          "portId": "omm",
-          "acceptedTypeSets": [
-            {
-              "setId": "fsb-dual",
-              "allowedTypes": [
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 100000,
-          "required": false,
-          "description": "Size-prefixed canonical OMM records in FSB record streams."
-        },
-        {
-          "portId": "ocm",
-          "acceptedTypeSets": [
-            {
-              "setId": "fsb-dual",
-              "allowedTypes": [
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 100000,
-          "required": false,
-          "description": "Size-prefixed canonical OCM records in FSB record streams."
-        },
-        {
-          "portId": "obd",
-          "acceptedTypeSets": [
-            {
-              "setId": "fsb-dual",
-              "allowedTypes": [
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.164.0",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 100000,
-          "required": false,
-          "description": "Size-prefixed canonical OBD records in FSB record streams."
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The batch's IngestRequest."
         }
       ],
-      "maxBatch": 4096,
-      "drainPolicy": "drain-until-yield"
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "description": "HttpRequest (HREQ) for hostcap/http-request: POST omm_publish_url, BODY the IngestResult, content-type application/octet-stream.",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The publication POST."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [
     {
-      "schemaName": "FSB.fbs",
-      "fileIdentifier": "$FSB",
-      "schemaVersion": "1.164.0",
-      "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-      "rootTypeName": "FSB"
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
     },
     {
-      "schemaName": "FSO.fbs",
-      "fileIdentifier": "$FSO",
-      "schemaVersion": "1.164.0",
-      "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
-      "rootTypeName": "FSO"
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD"
     }
   ],
   "buildArtifacts": [
