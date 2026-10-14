@@ -10,27 +10,37 @@ const sourcePath = path.join(packageRoot, "src", "http_route_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-// SDK-owned HTTP envelope ABI headers (schemas/HttpRequestAbi.fbs -> $HTQ);
-// generated flatbuffers-25.x-compatible and inline-able next to SDS headers.
-const sdkHttpCppRoot = fileURLToPath(
-  new URL("../../node_modules/space-data-module-sdk/src/generated/http/cpp/", import.meta.url),
-);
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
-// Per-schema bulk-route parsing (src/bulk_route.h). The compiler takes ONE
-// translation unit, so this is prepended exactly like the SDK ABI header above.
-// It is a separate file so the routing rule can be compiled and tested natively
-// (tests/bulk_route.test.mjs) without the wasm toolchain.
+// SDK-owned HTTP envelope ABI header (schemas/HttpRequestAbi.fbs -> $HTQ), resolved through the SDK package itself.
+const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve("space-data-module-sdk/compiler"))), "..", "..");
+const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
+
+// The decisions are SDS standards: APR ($APR, API Request) for the non-query routes and QRP ($QRP, Query Page) for the
+// query/data routes. The SDK compiler stages only its runtime headers, so each standard's own generated C++ header
+// (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) is inlined: its include guard renamed (every SDS header is
+// "main_generated.h") and its flatc version static_assert relaxed, as hostcap/clock does.
+async function sdsHeader(code) {
+  const header = await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", code, "main_generated.h"), "utf8");
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
+}
+
+// Per-schema bulk-route parsing (src/bulk_route.h): a separate file so the routing rule compiles and tests natively
+// (tests/bulk_route.test.mjs) without the wasm toolchain; the compiler takes ONE translation unit, so it is prepended.
 const bulkRoutePath = path.join(packageRoot, "src", "bulk_route.h");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const [httpRequestHeader, bulkRouteHeader, implementationSource] = await Promise.all([
-  fs.readFile(path.join(sdkHttpCppRoot, "HttpRequestAbi_generated.h"), "utf8"),
-  fs.readFile(bulkRoutePath, "utf8"),
-  fs.readFile(sourcePath, "utf8"),
-]);
-const sourceCode = [httpRequestHeader, bulkRouteHeader, implementationSource].join("\n\n");
+const sourceCode = [
+  await fs.readFile(path.join(sdkHttpCppRoot, "HttpRequestAbi_generated.h"), "utf8"),
+  await sdsHeader("APR"),
+  await sdsHeader("QRP"),
+  await fs.readFile(bulkRoutePath, "utf8"),
+  await fs.readFile(sourcePath, "utf8"),
+].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

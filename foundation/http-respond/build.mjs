@@ -10,14 +10,27 @@ const sourcePath = path.join(packageRoot, "src", "http_respond_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-// SDK-owned HTTP envelope ABI headers ($HTQ request declares the shared
-// HttpHeader table; $HTR response includes it). Both are generated
-// flatbuffers-25.x-compatible and inline-able next to SDS headers.
-const sdkHttpCppRoot = fileURLToPath(
-  new URL("../../node_modules/space-data-module-sdk/src/generated/http/cpp/", import.meta.url),
-);
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+
+// SDK-owned HTTP envelope ABI headers ($HTQ declares the shared HttpHeader table; $HTR includes it), resolved through
+// the SDK package itself.
+const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve("space-data-module-sdk/compiler"))), "..", "..");
+const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
+
+// The decisions and answers are SDS standards: APR / QRP (decisions), NHS NEV NST PNV DAV (answers), OMM (the records
+// this node renders as JSON) with the standards OMM includes (RFM TIM MET CVR PVN), in dependency order. Each
+// standard's own generated C++ header (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) is inlined: its include
+// guard renamed (every SDS header is "main_generated.h"), its schema-include lines dropped (inlined here instead) and its
+// flatc version static_assert relaxed, as hostcap/clock does.
+const SDS = ["APR", "QRP", "NHS", "NEV", "NST", "PNV", "DAV", "RFM", "TIM", "MET", "CVR", "PVN", "OMM"];
+async function sdsHeader(code) {
+  const header = await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", code, "main_generated.h"), "utf8");
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
+}
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const [httpRequestHeader, httpResponseHeader, implementationSource] = await Promise.all([
@@ -25,12 +38,12 @@ const [httpRequestHeader, httpResponseHeader, implementationSource] = await Prom
   fs.readFile(path.join(sdkHttpCppRoot, "HttpResponseAbi_generated.h"), "utf8"),
   fs.readFile(sourcePath, "utf8"),
 ]);
-// The response header pulls in the request header (shared HttpHeader table)
-// by file name; both are inlined here, so drop the nested include. The two
-// include guards are distinct and stay.
+// The response header pulls in the request header (shared HttpHeader table) by file name; both are inlined here, so
+// the nested include is dropped. The two include guards are distinct and stay.
 const sourceCode = [
   httpRequestHeader,
   httpResponseHeader.replace(/#include "HttpRequestAbi_generated\.h"\s*\n/g, ""),
+  ...(await Promise.all(SDS.map(sdsHeader))),
   implementationSource,
 ].join("\n\n");
 
