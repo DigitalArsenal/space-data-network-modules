@@ -1398,6 +1398,21 @@ void small_prework(SmallBody& b) {
   }
   b.work_k = static_cast<int16_t>(k);
   keep_anchor(b, b.work, k);
+  if (std::abs(target) - std::abs(k) == 2) {
+    // Two short of the target: an anchor slot the run toward the epoch has
+    // left behind (beyond the target, on the other side, or empty) keeps this
+    // checkpoint, so the target after next is ready and the one after that a
+    // step away (a run toward the epoch costs 1.2 steps a crossing instead of
+    // 2 with spacing 5).
+    for (int i = 0; i < kAnchors; ++i) {
+      const int32_t ak = b.anchor_k[i];
+      if (ak == 0 || (ak > 0) != (target > 0) || std::abs(ak) > std::abs(target)) {
+        b.anchor[i] = b.work;
+        b.anchor_k[i] = static_cast<int16_t>(k);
+        break;
+      }
+    }
+  }
 }
 
 /// The row's checkpoint nearest `et`, from its perturbed path: continued from
