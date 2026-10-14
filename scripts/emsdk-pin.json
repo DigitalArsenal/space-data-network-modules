@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The pin for the RAW EM++ LANE \u2014 the fourteen modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
+  "note": "The pin for the RAW EM++ LANE \u2014 the modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
   "pin": {
     "id": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
@@ -43,16 +43,9 @@
   },
   "laneModules": [
     "analysis/catalog-synthesis",
-    "analysis/od/fit-pipeline",
-    "data-source/bond-attestation-source",
     "data-source/celestrak-supgp",
-    "data-source/cpf-source",
-    "data-source/glonass-source",
     "data-source/gps-source",
-    "data-source/intelsat-source",
-    "data-source/iss-source",
     "data-source/oneweb-source",
-    "data-source/spacex-starlink-source",
     "delivery/plugin-delivery",
     "flows/supplemental-omm/nodes/flatsql",
     "licensing/client-decrypt"
@@ -64,55 +57,20 @@
       "confidence": "strong",
       "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
     },
-    "analysis/od/fit-pipeline": {
-      "toolchain": "em-5.0.5",
-      "confidence": "strong",
-      "evidence": "build.mjs resolves ../deps/emsdk = analysis/od/deps/emsdk, 5.0.5 installed 2026-04-29/05-14. Artifact committed 2026-07-13."
-    },
-    "data-source/bond-attestation-source": {
-      "toolchain": null,
-      "confidence": "none",
-      "evidence": "build.mjs resolves ONLY its own deps/emsdk, which is absent from this machine. Artifact committed 2026-08-03 by an emsdk that was cloned at build time and has since been deleted. Unrecoverable."
-    },
     "data-source/celestrak-supgp": {
       "toolchain": null,
       "confidence": "none",
       "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
-    },
-    "data-source/cpf-source": {
-      "toolchain": "em-6.0.1",
-      "confidence": "strong",
-      "evidence": "Own deps/emsdk carries 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
-    },
-    "data-source/glonass-source": {
-      "toolchain": "em-6.0.1",
-      "confidence": "strong",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-19."
     },
     "data-source/gps-source": {
       "toolchain": null,
       "confidence": "none",
       "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
     },
-    "data-source/intelsat-source": {
-      "toolchain": "em-6.0.1",
-      "confidence": "strong",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
-    },
-    "data-source/iss-source": {
-      "toolchain": "em-6.0.1",
-      "confidence": "proven",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed the same day. PROVEN by reconstruction 2026-08-09: rebuilding committed source under em-6.0.1 emits a wasm whose type, import, function, table, memory, global, export, elem and datacount sections are BYTE-IDENTICAL to the committed artifact \u2014 same 29 types, 6 imports, 112 functions, 9 exports \u2014 with the code section differing by 3 bytes in 56,304. A different Emscripten does not land on the same function count and section bytes by accident. The artifact as a whole is NOT byte-identical, and the reason is not the toolchain: see scripts/artifact-provenance.json unreproducibleReasons."
-    },
     "data-source/oneweb-source": {
       "toolchain": null,
       "confidence": "none",
       "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
-    },
-    "data-source/spacex-starlink-source": {
-      "toolchain": "em-6.0.1",
-      "confidence": "strong",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
     },
     "delivery/plugin-delivery": {
       "toolchain": "em-5.0.7",
@@ -143,6 +101,7 @@
       "tag": "CRYPTOPP_8_9_0",
       "upstream": "https://github.com/weidai11/cryptopp.git",
       "consumers": [
+        "common/epm/tests",
         "delivery/plugin-delivery",
         "licensing/client-decrypt"
       ],

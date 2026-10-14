@@ -96,7 +96,7 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-// THE RAW EM++ LANE. Fourteen modules never reach the SDK compiler; they drive a
+// THE RAW EM++ LANE. Some modules never reach the SDK compiler; they drive a
 // repo-local Emscripten directly, so `generatedBy` — which describes the SDK
 // toolchain — says nothing about their bytes. Their toolchain is recorded per
 // module, at build time, in dist/build-toolchain.json (see
@@ -440,7 +440,7 @@ async function writeLedger({ superRepo, withRebuild }) {
     // spacedatastandards.org, never by argument.
     eraPinReproductions: loadLedger()?.eraPinReproductions ?? {},
     // The raw-em++ lane, which the fields above cannot describe: those record the
-    // SDK toolchain, and these fourteen modules never touch it. `unknownToolchain`
+    // SDK toolchain, and these lane modules never touch it. `unknownToolchain`
     // is a RATCHET — artifacts of a lane module that shipped before the pin
     // existed and therefore carry no build-time toolchain record. It may shrink
     // (rebuild a module under the pin and its sidecar lands) but never grow.
