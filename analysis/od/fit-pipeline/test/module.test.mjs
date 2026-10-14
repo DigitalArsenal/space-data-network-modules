@@ -19,10 +19,6 @@ import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const MANIFEST_PATH = here("../plugin-manifest.json");
 const WASM_PATH = here("../dist/isomorphic/module.wasm");
-// The browser-declared test build of the same source (build.mjs): the shipped artifact targets the node (wasmedge,
-// storage_query) and the SDK's in-process harness is the browser leg.
-const TEST_WASM_PATH = here("../dist/test-browser/module.wasm");
-const TEST_MANIFEST_PATH = here("../dist/test-browser/plugin-manifest.json");
 const OD_WASM_PATH = here("../../dist/isomorphic/module.wasm");
 const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? here("../../node_modules/spacedatastandards.org/");
 
@@ -82,7 +78,7 @@ async function run(t, stub, inputs = [tickFrame()]) {
   };
   t.after(() => { WebAssembly.instantiate = instantiate; });
   const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(TEST_WASM_PATH), manifest: JSON.parse(fs.readFileSync(TEST_MANIFEST_PATH, "utf8")),
+    wasmSource: fs.readFileSync(WASM_PATH), manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "command", hostcallDispatch: stub.dispatch,
   });
   t.after(() => harness.destroy());
@@ -117,7 +113,7 @@ async function odFit(t, bytes, config) {
   return { omm: response.outputs.find((o) => o.portId === "omm").payload, obd: response.outputs.find((o) => o.portId === "obd").payload };
 }
 
-test("the shipped artifact passes SDK compliance: typed ports, the storage_query capability, the 2 h timer", async () => {
+test("the shipped artifact passes SDK compliance: typed ports, browser and wasmedge, storage_query and timers, the 2 h timer", async () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const result = await validateArtifactWithStandards({ manifest, wasmPath: WASM_PATH, standardsRoot: STANDARDS_ROOT });
   assert.equal(result.ok, true, JSON.stringify(result.issues, null, 2));
@@ -129,6 +125,7 @@ test("the shipped artifact passes SDK compliance: typed ports, the storage_query
   });
   assert.deepEqual(ports, [["tick", ["TICK"]], ["omm", ["$OMM"]], ["obd", ["$OBD"]], ["status", ["FNTC"]]]);
   assert.deepEqual(manifest.capabilities, ["storage_query", "timers"]);
+  assert.deepEqual(manifest.runtimeTargets, ["browser", "wasmedge"]);
   assert.deepEqual(manifest.timers, [{ timerId: "od-fit-pull", methodId: "fit_pipeline", defaultIntervalMs: 7_200_000, description: manifest.timers[0].description }]);
   const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
   assert.deepEqual([...new Set(inspection.imports.map((entry) => entry.module))].sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);

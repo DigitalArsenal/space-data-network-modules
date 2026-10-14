@@ -13,9 +13,8 @@
  * build-driver.mjs is the SDK's compiler hook: it adds -ffast-math (as analysis/od compiles the fitter) and the Eigen
  * include to the module's compile.
  *
- * Output: dist/isomorphic/module.wasm (wasmedge, storage_query), dist/guest-link/, and dist/test-browser/ - the
- * same source declared for the browser with no capability, which the SDK's in-process harness loads with a stub
- * host (test/module.test.mjs). The test build is never shipped.
+ * Output: dist/isomorphic/module.wasm (browser and wasmedge; storage_query, timers) and dist/guest-link/. The tests
+ * load that artifact itself in the SDK's in-process harness with a stub host (test/module.test.mjs).
  */
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
@@ -106,16 +105,6 @@ await fs.writeFile(path.join(guestLinkDir, "metadata.json"), `${JSON.stringify({
   methodSymbols: compilation.guestLink.methodSymbols, capabilities: manifest.capabilities,
 }, null, 2)}\n`);
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
-
-// The test build: the same source, declared for the browser with no capability (the SDK harness's stub host answers
-// plugin.getConfig and storage.query). Never shipped.
-const { timers: _timers, ...untimed } = manifest;
-const testManifest = { ...untimed, runtimeTargets: ["browser", "wasmedge"], capabilities: [] };
-const testDir = path.join(distRoot, "test-browser");
-await fs.mkdir(testDir, { recursive: true });
-await fs.writeFile(path.join(testDir, "plugin-manifest.json"), `${JSON.stringify(testManifest, null, 2)}\n`);
-const testCompilation = await compile(testManifest, path.join(testDir, "module.wasm"));
-if (!testCompilation.report?.ok) throw new Error(`Test build failed SDK validation:\n${JSON.stringify(testCompilation.report?.issues ?? [], null, 2)}`);
 
 const wasm = await fs.readFile(outputPath);
 console.log(`Built ${path.relative(root, outputPath)} (${wasm.length} bytes) sha256 ${createHash("sha256").update(wasm).digest("hex")}`);

@@ -67,9 +67,8 @@ node --test test/*.test.mjs
 `build.mjs` compiles one translation unit through the SDK compiler (thread model `wasi-sequential`):
 `src/fit_pipeline.cpp` and the analysis/od sources it calls, read in place from `../src/cpp` with analysis/od's SDS
 headers. `build-driver.mjs`, the SDK's compiler hook, adds `-ffast-math` (as analysis/od compiles the fitter) and the
-Eigen include. `dist/test-browser/` is the same source declared for the browser without capabilities, for the SDK's
-in-process harness; it is not shipped.
+Eigen include. The artifact targets the browser and WasmEdge.
 
-The test runs the pass in the SDK harness with a stub host that answers `storage.query` with real `$OEM` records: the
+The test runs the shipped artifact in the SDK harness with a stub host that answers `storage.query` with real `$OEM` records: the
 SpaceX Starlink records data-source/spacex-starlink-source emits and the NASA ISS records data-source/oem-source-iss
 emits, plus records that must be refused. Each fit is compared with analysis/od's `fit` artifact on the same `$OEM`.
