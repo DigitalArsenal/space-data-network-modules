@@ -162,10 +162,10 @@ test("NEGATIVE CONTROL: a thread model the compiler does not understand FAILS", 
 test("the artifact inspector reads the module, not the appended signature", () => {
   // signModuleArtifact APPENDS a detached payload after the last wasm section.
   // A walker that keeps going reads garbage section ids and eventually runs off
-  // the end — measured on catalog-synthesis.wasm, where the module proper is the
+  // the end — measured on catalog-synthesis.wasm (since converted), where the module proper was the
   // first 162,920 of 163,884 bytes.
-  const signed = path.join(REPO_ROOT, "analysis/catalog-synthesis/dist/catalog-synthesis.wasm");
-  const unsigned = path.join(REPO_ROOT, "analysis/catalog-synthesis/dist/isomorphic/module.wasm");
+  const signed = path.join(REPO_ROOT, "data-source/gps-source/dist/gps-source.wasm");
+  const unsigned = path.join(REPO_ROOT, "data-source/gps-source/dist/isomorphic/module.wasm");
   const signedFacts = inspectWasmThreading(signed);
   const unsignedFacts = inspectWasmThreading(unsigned);
   assert.ok(signedFacts.trailingBytes > 0, "the signed artifact must carry a detached payload");

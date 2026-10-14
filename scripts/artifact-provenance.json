@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-16d70bca3cb711c2",
+  "generatedBy": "tc-e9860ab536832370",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -205,15 +205,15 @@
     "analysis/lambert-izzo": "build-failed"
   },
   "unreproducibleReasons": {
-    "foundation/time": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) \u2014 both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
-    "foundation/frames": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) \u2014 both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
-    "foundation/numerics": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) \u2014 both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
-    "foundation/math-bspline": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) \u2014 both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
-    "foundation/attitude-math": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) \u2014 both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/time": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/frames": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/numerics": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/math-bspline": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/attitude-math": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
     "analysis/lambert-izzo": "Manifest-contract move blocks it at the CURRENT pin: its allowedTypes carry fileIdentifier \"LMS\"/\"LMO\" (3 bytes) and no rootTypeName, and the SDK now requires exactly four printable ASCII bytes plus a rootTypeName (invalid-file-identifier, missing-canonical-root-type-name). The oldest artifact in the repo (recorded pin 5a054283, 2026-05-05). The thread model is declared and is no longer the obstacle; the manifest is a contract change, not a reproducibility repair.",
-    "flows/supplemental-omm/nodes/*": "NOT a thread-model problem \u2014 all seven declare, and their declarations agree with the shipped bytes. They shell out to a NATIVE flatc at <parent-of-repo>/flatbuffers/build/flatc, reached by a hard-coded ../../../../. repos/main-packages/flatbuffers is checked out but has NO build/ directory, so the binary does not exist on this machine at all and the build dies with ENOENT before it reaches a compiler. Of no recorded version even when present. Filed as modules-supplemental-omm-unpinned-native-flatc.",
-    "data-source/iss-source (raw-em++ lane)": "MEASURED 2026-08-09 under the em-6.0.1 pin, from committed source at 17888ee, with no network access: rebuilt ee4bf0b757ef vs committed 332e3a3728c9 (62,969 B vs 61,542 B). The toolchain is NOT the cause and the section diff says so: type/import/function/table/memory/global/export/elem/datacount are byte-identical (29 types, 6 imports, 112 functions, 9 exports both sides) and code differs by 3 bytes in 56,304. The whole +1,424 B lives in the data section, in segments 3-5, which hold the embedded $PLG manifest. That manifest is encoded by the SDK, not by em++: the era manifest-exports.cpp committed alongside the artifact at 473162f3 declares plugin_get_manifest_flatbuffer_size() = 1,800, and encodePlgManifest at the current SDK (0.8.12) emits 3,232 \u2014 a +1,432 B growth that accounts for the +1,424 B observed to within array padding. So the raw-em++ lane has TWO build inputs, and this task pinned one of them: the compiler is now pinned and recorded, and the residual is SDK build-input version drift, the class already proven and recorded by modules-dist-not-reproducible-at-sdk-pin. Reproducing these bytes exactly needs the era SDK as well as the era compiler, which is the shipped-artifact re-sign wave's decision, not this one's.",
-    "raw-emcc lane (7 modules)": "NOT a thread-model problem \u2014 all seven declare a THREAD_MODEL and assert it against the emitted wasm. They drive a vendored Emscripten directly, and the toolchain is NOT COMMITTED: only the emsdk bootstrap repo is tracked (137 files, no upstream/emscripten), so in a clean checkout build.mjs git-clones emsdk and runs `emsdk install 6.0.1` FROM THE NETWORK at build time. \"6.0.1\" pins emscripten but nothing records which emsdk build was fetched, and nothing records it in the artifact. Modules: analysis/catalog-synthesis, data-source/{celestrak-supgp,gps-source,oneweb-source}, delivery/plugin-delivery, licensing/client-decrypt, flows/supplemental-omm/nodes/flatsql. Filed as modules-raw-emcc-lane-unpinned-toolchain."
+    "flows/supplemental-omm/nodes/*": "NOT a thread-model problem — all seven declare, and their declarations agree with the shipped bytes. They shell out to a NATIVE flatc at <parent-of-repo>/flatbuffers/build/flatc, reached by a hard-coded ../../../../. repos/main-packages/flatbuffers is checked out but has NO build/ directory, so the binary does not exist on this machine at all and the build dies with ENOENT before it reaches a compiler. Of no recorded version even when present. Filed as modules-supplemental-omm-unpinned-native-flatc.",
+    "data-source/iss-source (raw-em++ lane)": "MEASURED 2026-08-09 under the em-6.0.1 pin, from committed source at 17888ee, with no network access: rebuilt ee4bf0b757ef vs committed 332e3a3728c9 (62,969 B vs 61,542 B). The toolchain is NOT the cause and the section diff says so: type/import/function/table/memory/global/export/elem/datacount are byte-identical (29 types, 6 imports, 112 functions, 9 exports both sides) and code differs by 3 bytes in 56,304. The whole +1,424 B lives in the data section, in segments 3-5, which hold the embedded $PLG manifest. That manifest is encoded by the SDK, not by em++: the era manifest-exports.cpp committed alongside the artifact at 473162f3 declares plugin_get_manifest_flatbuffer_size() = 1,800, and encodePlgManifest at the current SDK (0.8.12) emits 3,232 — a +1,432 B growth that accounts for the +1,424 B observed to within array padding. So the raw-em++ lane has TWO build inputs, and this task pinned one of them: the compiler is now pinned and recorded, and the residual is SDK build-input version drift, the class already proven and recorded by modules-dist-not-reproducible-at-sdk-pin. Reproducing these bytes exactly needs the era SDK as well as the era compiler, which is the shipped-artifact re-sign wave's decision, not this one's.",
+    "raw-emcc lane (7 modules)": "NOT a thread-model problem — all seven declare a THREAD_MODEL and assert it against the emitted wasm. They drive a vendored Emscripten directly, and the toolchain is NOT COMMITTED: only the emsdk bootstrap repo is tracked (137 files, no upstream/emscripten), so in a clean checkout build.mjs git-clones emsdk and runs `emsdk install 6.0.1` FROM THE NETWORK at build time. \"6.0.1\" pins emscripten but nothing records which emsdk build was fetched, and nothing records it in the artifact. Modules: analysis/catalog-synthesis, data-source/{celestrak-supgp,gps-source,oneweb-source}, delivery/plugin-delivery, licensing/client-decrypt, flows/supplemental-omm/nodes/flatsql. Filed as modules-raw-emcc-lane-unpinned-toolchain."
   },
   "eraPinReproductions": {
     "hostcap/clock": {
@@ -256,8 +256,8 @@
   "emsdkLane": {
     "pin": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
-    "modules": 7,
-    "unknownToolchainBaseline": 12
+    "modules": 4,
+    "unknownToolchainBaseline": 6
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
@@ -390,51 +390,15 @@
         "inferenceHazard": false
       }
     },
-    "analysis/catalog-synthesis/dist/catalog-synthesis.wasm": {
-      "sha256": "463ea35d3e3ad48e39e89325a616b4f09a0a0db3b849d03a5658c27913b13f27",
-      "bytes": 163884,
-      "module": "analysis/catalog-synthesis",
-      "lastCommit": "83dc81d463a83d00fe13eb80aa3af695c8dc3797",
-      "lastCommitDate": "2026-07-13T22:14:56-04:00",
-      "provenance": "inferred",
-      "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "dcfa3d772903e307026e4ac21adab25c9a36c165",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
-      "declaration": {
-        "declares": true,
-        "threadModels": [
-          "single-thread"
-        ],
-        "unknownThreadModels": [],
-        "emitsWasm": true,
-        "runtimeTargets": [
-          "browser",
-          "wasmedge"
-        ],
-        "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-5.0.7",
-        "confidence": "strong",
-        "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
-      }
-    },
     "analysis/catalog-synthesis/dist/isomorphic/module.wasm": {
-      "sha256": "20271803dfefc3aa3fe62d8e3ef189acbda4ab0acc7968d104b12f5a964345ef",
-      "bytes": 162920,
+      "sha256": "00dde60e01fad9f831d5adea79ca0e99f3b2c2cc147ef612c4681499574f9632",
+      "bytes": 215189,
       "module": "analysis/catalog-synthesis",
-      "lastCommit": "83dc81d463a83d00fe13eb80aa3af695c8dc3797",
-      "lastCommitDate": "2026-07-13T22:14:56-04:00",
+      "lastCommit": "b22d34ed309155a75907d8357248f8a8a1925073",
+      "lastCommitDate": "2026-10-14T15:22:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "dcfa3d772903e307026e4ac21adab25c9a36c165",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -447,13 +411,6 @@
           "wasmedge"
         ],
         "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-5.0.7",
-        "confidence": "strong",
-        "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
       }
     },
     "analysis/conjunction-assessment/dist/isomorphic/module.wasm": {
@@ -1204,51 +1161,15 @@
         "inferenceHazard": false
       }
     },
-    "data-source/celestrak-supgp/dist/celestrak-supgp.wasm": {
-      "sha256": "db9a509a7ee2625827453c375b1fc91dd8ab6e5a0eb2ac7eff5fdc404c57af6e",
-      "bytes": 123898,
-      "module": "data-source/celestrak-supgp",
-      "lastCommit": "7bc83262fa1588549086d24384ba8fc23d4e6968",
-      "lastCommitDate": "2026-07-13T22:12:48-04:00",
-      "provenance": "inferred",
-      "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "dcfa3d772903e307026e4ac21adab25c9a36c165",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
-      "declaration": {
-        "declares": true,
-        "threadModels": [
-          "single-thread"
-        ],
-        "unknownThreadModels": [],
-        "emitsWasm": true,
-        "runtimeTargets": [
-          "browser",
-          "wasmedge"
-        ],
-        "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": null,
-        "confidence": "none",
-        "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
-      }
-    },
     "data-source/celestrak-supgp/dist/isomorphic/module.wasm": {
-      "sha256": "b6efbb2519793cb898dc288e7301c3052027442d7406dac3c3d042ab9e102595",
-      "bytes": 122934,
+      "sha256": "a474385d711932488f302a4129a96d883e5846f0d119e862dca5d23f72c98e60",
+      "bytes": 171709,
       "module": "data-source/celestrak-supgp",
-      "lastCommit": "7bc83262fa1588549086d24384ba8fc23d4e6968",
-      "lastCommitDate": "2026-07-13T22:12:48-04:00",
+      "lastCommit": "f4c385ec43995e6e420d22ed7508583d3d0f7cc7",
+      "lastCommitDate": "2026-10-14T15:22:33-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "dcfa3d772903e307026e4ac21adab25c9a36c165",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1261,13 +1182,6 @@
           "wasmedge"
         ],
         "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": null,
-        "confidence": "none",
-        "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/cell-tower-credentials/dist/isomorphic/module.wasm": {
@@ -4168,48 +4082,15 @@
         "inferenceHazard": false
       }
     },
-    "licensing/client-decrypt/dist/client-decrypt.wasm": {
-      "sha256": "4ac3c6016f301b0b02f35811de169ddc1051c374e87da32470e2a24d5259f6bd",
-      "bytes": 1113013,
-      "module": "licensing/client-decrypt",
-      "lastCommit": "5077850398d02149c5ad118a4d64016596f0f4e5",
-      "lastCommitDate": "2026-08-07T13:54:29-04:00",
-      "provenance": "inferred",
-      "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c9fa41453462f28d93ccd690fc921b8a8791439c",
-        "sdkCommit": "24b5a7234f996485c63868aff5cdbd97fad8da1b"
-      },
-      "declaration": {
-        "declares": true,
-        "threadModels": [
-          "single-thread"
-        ],
-        "unknownThreadModels": [],
-        "emitsWasm": true,
-        "runtimeTargets": [],
-        "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-5.0.7",
-        "confidence": "strong",
-        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20 and never replaced; artifact committed 2026-08-07."
-      }
-    },
     "licensing/client-decrypt/dist/isomorphic/module.wasm": {
-      "sha256": "4ac3c6016f301b0b02f35811de169ddc1051c374e87da32470e2a24d5259f6bd",
-      "bytes": 1113013,
+      "sha256": "84581cf6306c5223d95a2205f0fd1158f752fe64e5ebdf7096c60e1b78976fd5",
+      "bytes": 1485538,
       "module": "licensing/client-decrypt",
-      "lastCommit": "5077850398d02149c5ad118a4d64016596f0f4e5",
-      "lastCommitDate": "2026-08-07T13:54:29-04:00",
+      "lastCommit": "b8973329212f8af56c227d3d7f879eddace3a8f6",
+      "lastCommitDate": "2026-10-14T15:35:05-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c9fa41453462f28d93ccd690fc921b8a8791439c",
-        "sdkCommit": "24b5a7234f996485c63868aff5cdbd97fad8da1b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -4217,15 +4098,11 @@
         ],
         "unknownThreadModels": [],
         "emitsWasm": true,
-        "runtimeTargets": [],
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
         "inferenceHazard": false
-      },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-5.0.7",
-        "confidence": "strong",
-        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20 and never replaced; artifact committed 2026-08-07."
       }
     },
     "licensing/core/dist/browser/module.wasm": {

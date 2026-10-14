@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-14T19:04:22.443Z",
-  "moduleCount": 122,
+  "generatedAt": "2026-10-14T19:35:48.446Z",
+  "moduleCount": 123,
   "parityScopeModuleCount": 47,
-  "isomorphicWasmCount": 121,
+  "isomorphicWasmCount": 122,
   "missingIsomorphicWasm": [
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 116,
+  "browserWasmEdgeTargetCount": 117,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -214,7 +214,7 @@
       "pluginId": "com.orbpro.catalog-synthesis",
       "name": "Supplemental Catalog Synthesis",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "synthesize_catalog"
       ],
@@ -1741,9 +1741,10 @@
       "pluginId": "com.orbpro.celestrak-supgp",
       "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
-        "pull"
+        "parse",
+        "request"
       ],
       "runtimeTargets": [
         "browser",
@@ -4671,6 +4672,41 @@
       ],
       "testFiles": [
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "licensing/client-decrypt",
+      "pluginId": "client-decrypt",
+      "name": "Client Decrypt",
+      "pluginFamily": "infrastructure",
+      "version": "0.2.0",
+      "methodIds": [
+        "decrypt_artifact"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/client_decrypt.cpp"
+      ],
+      "testFiles": [
+        "test/api.test.mjs",
+        "test/decrypt.test.mjs",
+        "test/e2e-roundtrip.test.mjs",
+        "test/lib/sdkBrowserShimHarness.mjs",
+        "test/protected-publication-trailer.test.mjs"
       ]
     },
     {
