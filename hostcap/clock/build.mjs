@@ -14,7 +14,15 @@ const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+// The "time" port carries the SDS standard TIM ($TIM). The SDK compiler stages only its runtime headers, so the
+// standard's own generated C++ header (spacedatastandards.org lib/cpp/TIM/main_generated.h) is inlined in place of
+// `#include "TIM_generated.h"`: its include guard is renamed (the SDK's sds/PIV and sds/TAB headers are also
+// "main_generated.h") and its flatc version static_assert relaxed, as the SDK does for its runtime headers.
+const timHeaderPath = path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", "TIM", "main_generated.h");
+const timHeader = (await fs.readFile(timHeaderPath, "utf8"))
+  .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_SDS_TIM_MAIN_H_")
+  .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "");
+const sourceCode = (await fs.readFile(sourcePath, "utf8")).replace(/^#include "TIM_generated\.h".*$/m, () => timHeader);
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

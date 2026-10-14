@@ -1,10 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
   "name": "SDN Host Storage Ingest Node",
-  "version": "0.1.0",
-  "description": "Capability node wrapping the host storage.ingest_with_source hostcall (loop C.8a): joins the parser's ingest meta JSON (schema + SourceTags provider/source/batch attribution, reconcile mode, archive naming, provenance) with the size-prefixed FlatBuffer record stream and the optional raw payload, forwards them as hostcall binary segments ({\"$bin\":0} records, {\"$bin\":1} archive raw), and emits the host's result JSON. Host-side behavior is policy-mediated by the dedicated storage_ingest capability grant (disk guardrail, batch store with source tags, source-batch reconcile, raw/provenance archiving).",
+  "version": "0.2.0",
+  "description": "Host storage.ingest_with_source connector (typed contracts 1.0). Method \"ingest\": the parser's IngestRequest (INGQ, module-sdk runtime type: SCHEMA, TAGS SourceTags, RECONCILE, ARCHIVE, PROVENANCE) on \"meta\", the batch's size-prefixed SDS record stream on the \"<code>_records\" port of its standard (one port per standard, since a typed port names one type: omm, mpe, cat, spw, eop, csm, egp, sit, lcc, tbs, gnp, wxf, cnp, rfb, iqc, tct, dtt, ldm) and, optionally, the HttpResponse (HRSP) the batch was made from on \"raw\" become ONE storage.ingest_with_source hostcall, sent as an SDS $PIV invocation: the StorageIngestParams aligned record (flat source tags, RECONCILE, ARCHIVE_SOURCE/ARCHIVE_NAME), raw \"records\", raw \"archive\" (the HttpResponse BODY, only when the request names an ARCHIVE target) and list \"provenance\" (one Provenance aligned record). It answers ONE IngestResult (INGR) on \"result\". Aligned strings are bounded (SOURCE_URL 255, BATCH_ID 128, ...): a value that does not fit is never truncated - the batch is answered with REFUSED naming the field, and nothing is stored. A host refusal (policy, disk guardrail, capability grant) is answered the same way; any other host failure fails the node. No JSON and no base64. Host-side behavior is policy-mediated by the dedicated storage_ingest capability grant (disk guardrail, batch store with source tags, source-batch reconcile, raw/provenance archiving).",
   "pluginFamily": "infrastructure",
-  "capabilities": ["storage_ingest"],
+  "capabilities": [
+    "storage_ingest"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "host-storage-ingest",
@@ -12,14 +14,22 @@
       "direction": "bidirectional",
       "capability": "storage_ingest",
       "resource": "sdn://storage/ingest",
-      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
       "properties": {
-        "hostOps": ["storage.ingest_with_source"]
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "ingest",
@@ -29,43 +39,421 @@
           "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON storage.ingest_with_source meta authored by the parser node."
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (module-sdk runtime type INGQ): SCHEMA (the records' standard, e.g. \"WXF.fbs\"), TAGS (SourceTags: PROVIDER_ID, SOURCE_NAME, BATCH_ID, SOURCE_URL, CONTENT_KEY_ID, SOURCE_PEER, LICENSE, LICENSE_URL, CITATION, SHARE_ALIKE), RECONCILE (Duplicates default | None | Current), optional ARCHIVE (SOURCE, NAME) and PROVENANCE."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Ingest meta (attribution, reconcile, archive naming, provenance)."
+          "description": "The batch's ingest request (attribution, reconcile mode, archive naming, provenance), authored by the parser node."
         },
         {
-          "portId": "records",
+          "portId": "omm_records",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-record-stream",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Size-prefixed FlatBuffer record stream."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The record batch."
-        },
-        {
-          "portId": "raw",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-raw-payload",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Optional raw source payload; archived by the host when the meta names an archive target."
+              "setId": "sdn-record-stream-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $OMM FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional raw payload for archiving."
+          "description": "The record batch when the IngestRequest's SCHEMA is OMM.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "mpe_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-mpe",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $MPE FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is MPE.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "cat_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-cat",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CAT FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is CAT.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "spw_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SPW FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is SPW.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "eop_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EOP FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is EOP.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "csm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-csm",
+              "allowedTypes": [
+                {
+                  "schemaName": "CSM.fbs",
+                  "fileIdentifier": "$CSM",
+                  "rootTypeName": "CSM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CSM FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is CSM.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "egp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-egp",
+              "allowedTypes": [
+                {
+                  "schemaName": "EGP.fbs",
+                  "fileIdentifier": "$EGP",
+                  "rootTypeName": "EGP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EGP FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is EGP.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "sit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-sit",
+              "allowedTypes": [
+                {
+                  "schemaName": "SIT.fbs",
+                  "fileIdentifier": "$SIT",
+                  "rootTypeName": "SIT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SIT FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is SIT.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "lcc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-lcc",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCC.fbs",
+                  "fileIdentifier": "$LCC",
+                  "rootTypeName": "LCC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $LCC FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is LCC.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "tbs_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-tbs",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is TBS.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "gnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-gnp",
+              "allowedTypes": [
+                {
+                  "schemaName": "GNP.fbs",
+                  "fileIdentifier": "$GNP",
+                  "rootTypeName": "GNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $GNP FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is GNP.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-wxf",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is WXF.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "cnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-cnp",
+              "allowedTypes": [
+                {
+                  "schemaName": "CNP.fbs",
+                  "fileIdentifier": "$CNP",
+                  "rootTypeName": "CNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CNP FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is CNP.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "rfb_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-rfb",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFB.fbs",
+                  "fileIdentifier": "$RFB",
+                  "rootTypeName": "RFB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $RFB FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is RFB.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "iqc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-iqc",
+              "allowedTypes": [
+                {
+                  "schemaName": "IQC.fbs",
+                  "fileIdentifier": "$IQC",
+                  "rootTypeName": "IQC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $IQC FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is IQC.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "tct_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-tct",
+              "allowedTypes": [
+                {
+                  "schemaName": "TCT.fbs",
+                  "fileIdentifier": "$TCT",
+                  "rootTypeName": "TCT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TCT FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is TCT.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "dtt_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-dtt",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $DTT FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is DTT.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "ldm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-ldm",
+              "allowedTypes": [
+                {
+                  "schemaName": "LDM.fbs",
+                  "fileIdentifier": "$LDM",
+                  "rootTypeName": "LDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $LDM FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is LDM.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "OPTIONAL HttpResponse (module-sdk runtime type HRSP) the batch was made from; its BODY is the raw document, archived by the host when the IngestRequest names an ARCHIVE target (ignored otherwise; an ARCHIVE target without a body archives nothing)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional raw source document (as the HttpResponse that fetched it) for archiving."
         }
       ],
       "outputPorts": [
@@ -73,20 +461,27 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-result-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Ingest result summary."
+          "description": "EXACTLY ONE IngestResult per invocation."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Persists one provenance-attributed record batch through the policy-mediated storage.ingest_with_source hostcall. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. Merging is NOT the safe reading for this node: the meta frame carries POSITIONAL binary references (records is {\"$bin\":0}, the optional raw archive is segment 1) plus counts computed over exactly those bytes, so appending a second records frame would make the meta describe bytes it was never computed over."
+      "description": "Persists one provenance-attributed record batch through the policy-mediated storage.ingest_with_source hostcall (typed: SDS $PIV). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. Merging is NOT the safe reading for this node: the IngestRequest's batch id, archive naming and provenance were computed over exactly one records stream and one raw document, so a second records frame would make the request describe bytes it was never computed over."
     }
   ],
   "buildArtifacts": [

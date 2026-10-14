@@ -1,11 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
   "name": "SDN Host P2P Discovery",
-  "version": "0.3.0",
-  "description": "Capability node for the host p2p_read discovery hostcalls (gateway loops G.2 + G.3 + G.4). Four methods, one hostcall each: 'peers_snapshot' forwards the routing-decision JSON as {\"peer_id\"?} to p2p.peers_snapshot (the host's peerstore/DHT/registry view: per-peer addrs, connectedness, agent version, published standards, and stored $EPM profiles as an aligned size-prefixed stream segment); 'standards_snapshot' forwards to p2p.standards_snapshot (newest signed $PNM per (peer, standard) with per-entry attribution); 'pnm_history' forwards {\"peer_id\",\"limit\"} to p2p.pnm_history (the peer's stored signed $PNM publications, newest first; the HOST attributes by Ed25519 SIGNATURE against the peer's publication keys because the store's recorded peer id is only the gossip-delivering peer — entries carry signature_verified/attribution/publisher_key so provenance is never overstated; limit arrives pre-clamped by the route node). 'latest_dataset' forwards {\"peer_id\",\"standard\",\"deliver\":\"ref\" unless format=json} to p2p.latest_dataset (gateway loop G.4: the provider's newest published dataset batch when the host's OPT-IN gateway.pin covers the pair or the peer is the node itself AND the batch is fully materialized locally; otherwise known/pinned flags plus the newest signed-PNM pointer for the honest 404/503 — never a silent proxy fetch; stream delivery is a hostcall-bridge body reference except on the json path, where the bytes arrive as the inline segment). Each method re-emits the incoming decision frame verbatim on the 'decision' port (linear flow chaining) and pushes the RAW hostcall response envelope ([u32le metaLen][{\"ok\":..,\"result\":..} JSON][u32le segCount][[u32le segLen][bytes]]*) on the 'snapshot' port; segment 0 carries the $EPM/$PNM stream referenced as {\"$bin\":0} in the result. A decision with route=not_found short-circuits: no hostcall, an empty-result envelope is emitted.",
+  "version": "0.4.0",
+  "description": "Capability node for the host p2p_read discovery hostcalls (typed contracts 1.0; gateway loops G.2-G.4). Each method takes the $APR routing decision from foundation/http-route discover on \"decision\", makes one SDS $PIV hostcall and answers the $APR (verbatim when served, with STATUS / ERROR_CODE / ERROR_MESSAGE when refused) beside a typed body for foundation/http-respond: peers_snapshot (peers_list, peer_get) -> p2p.peers_snapshot -> \"peers\" $NST (peer rows; identity fields from each peer's stored $EPM); standards_snapshot (standards) -> p2p.standards_snapshot -> \"notices\" $PNV (one verdict per newest signed $PNM per peer and standard); pnm_history (pnm_history) -> p2p.pnm_history -> \"notices\" $PNV (the peer's signed publications, newest first, attributed by signature on the host); latest_dataset (latest_dataset) -> p2p.latest_dataset -> \"availability\" $DAV + the batch on the standard's \"<code>_records\" port, or (DELIVER Ref, asked unless the request wants JSON) the host's body reference on DAV.BODY_REF_TOKEN / BODY_REF_SIZE. $NST and $PNV carry a content ETAG; each PNVEntry carries the received $PNM verbatim (PNM). A decision that already carries a STATUS, or a route the method does not own, passes on with no hostcall (the latter as 404 no-route). Hostcall failures answer 502 host-failed; a peerId or standard longer than the hostcall record holds answers 400 invalid-parameter, never truncated. No JSON and no base64 anywhere.",
   "pluginFamily": "infrastructure",
   "capabilities": [
-    "p2p_read"
+    "p2p_read",
+    "clock"
   ],
   "externalInterfaces": [
     {
@@ -14,13 +15,27 @@
       "direction": "bidirectional",
       "capability": "p2p_read",
       "resource": "sdn://p2p/discovery",
-      "description": "Policy-mediated read-only host discovery snapshots (peerstore + DHT + EPM registry + stored PNMs).",
+      "description": "Policy-mediated read-only host discovery snapshots (peerstore + DHT + EPM registry + stored PNMs) as SDS $PIV hostcalls; node.peerId (ungated) names the verifier.",
       "properties": {
         "hostOps": [
           "p2p.peers_snapshot",
           "p2p.standards_snapshot",
           "p2p.pnm_history",
-          "p2p.latest_dataset"
+          "p2p.latest_dataset",
+          "node.peerId"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now stamps NST.GENERATED_AT / PNV.GENERATED_AT_MS (0 when the clock is refused). Built-in on the Go node; capability-gated on the SDK hosts.",
+      "properties": {
+        "hostOps": [
+          "clock.now"
         ]
       }
     }
@@ -39,22 +54,25 @@
       "displayName": "Peers Snapshot",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract); \"peerId\" narrows the snapshot to one peer."
+              "description": "$APR (SDS API Request): METHOD, PATH, ROUTE, PARAMETERS (peerId, limit, standard), IF_NONE_MATCH, ACCEPT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One routing-decision JSON frame per request."
+          "description": "One $APR routing decision from foundation/http-route discover. Served routes: peers_list, peer_get (param peerId). An APR that already carries a STATUS, or names another route, passes on with no hostcall."
         }
       ],
       "outputPorts": [
@@ -62,64 +80,73 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The incoming decision frame re-emitted verbatim (linear chaining; no host round-trip)."
+              "description": "$APR passed on beside the body (or refused) so foundation/http-respond has both the request and the outcome."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Decision passthrough."
+          "description": "The decision: the input $APR VERBATIM when the request is served; otherwise a copy with STATUS / ERROR_CODE / ERROR_MESSAGE set (400 invalid-parameter, 404 no-route / peer-unknown / no-publications / not-published / not-served, 502 host-failed, 503 dataset-unavailable)."
         },
         {
-          "portId": "snapshot",
+          "portId": "peers",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcall-envelope",
+              "setId": "sds-nst-peers",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "NST.fbs",
+                  "fileIdentifier": "$NST",
+                  "rootTypeName": "NST",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Verbatim p2p.peers_snapshot hostcall response envelope: meta JSON {\"ok\",\"result\":{\"self\",\"peers\":[{\"peer_id\",\"addrs\",\"connected\",\"self\",\"agent_version\",\"standards\",\"epm_index\"}],\"records\":{\"$bin\":0}}} + segment 0 = aligned size-prefixed $EPM stream (stored profiles only; epm_index -1 = none)."
+              "description": "$NST (SDS Node Status Record): one NSTNode per peer the host reports (peer_get: the one peer) - PEER_ID, AGENT_VERSION, MULTIFORMAT_ADDRESS (peer_addresses), STANDARDS (peer_standards), IS_ONLINE (connected), IS_SELF, SOURCE \"connected\" for a live connection (the host states no config/pinned provenance), and from the peer's stored $EPM profile DN, ORGANIZATION (LEGAL_NAME), SIGNING_PUBLIC_KEY / ENCRYPTION_PUBLIC_KEY (KEYS by KEY_TYPE); SOURCE_PEER_ID = the host's SELF; GENERATED_AT = clock.now; ETAG = weak FNV-1a 64 over the record built without its GENERATED_AT stamp and ETAG (a content tag: the same content keeps its tag on every call; the responder answers 304 on it)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One snapshot envelope per request."
+          "required": false,
+          "description": "The node's peer board as one $NST (absent when the decision is refused)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\"?} to the p2p.peers_snapshot hostcall and emits the raw response envelope plus the decision passthrough. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Serves peers_list / peer_get through one p2p.peers_snapshot hostcall (SDS $PIV: P2pParams {PEER_ID for peer_get, DELIVER Inline} -> P2pSummary, lists peers / peer_addresses / peer_standards, raw records = the stored $EPM profiles) and answers the $APR decision beside one $NST. peer_get for a peer the node does not know answers 404 peer-unknown. BATCHING: the \"decision\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second decision frame in one invocation is refused with error code \"batched-input-frames\", naming the port and the count, rather than answered from another request's hostcall or destroyed (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "standards_snapshot",
       "displayName": "Standards Snapshot",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract)."
+              "description": "$APR (SDS API Request): METHOD, PATH, ROUTE, PARAMETERS (peerId, limit, standard), IF_NONE_MATCH, ACCEPT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One routing-decision JSON frame per request."
+          "description": "One $APR routing decision from foundation/http-route discover. Served routes: standards. An APR that already carries a STATUS, or names another route, passes on with no hostcall."
         }
       ],
       "outputPorts": [
@@ -127,64 +154,73 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The incoming decision frame re-emitted verbatim (linear chaining; no host round-trip)."
+              "description": "$APR passed on beside the body (or refused) so foundation/http-respond has both the request and the outcome."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Decision passthrough."
+          "description": "The decision: the input $APR VERBATIM when the request is served; otherwise a copy with STATUS / ERROR_CODE / ERROR_MESSAGE set (400 invalid-parameter, 404 no-route / peer-unknown / no-publications / not-published / not-served, 502 host-failed, 503 dataset-unavailable)."
         },
         {
-          "portId": "snapshot",
+          "portId": "notices",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcall-envelope",
+              "setId": "sds-pnv-notices",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Verbatim p2p.standards_snapshot hostcall response envelope: meta JSON {\"ok\",\"result\":{\"entries\":[{\"peer_id\",\"standard\",\"schema\",\"file_id\",\"file_name\",\"cid\",\"publish_timestamp\",\"pnm_index\"}],\"records\":{\"$bin\":0}}} + segment 0 = aligned size-prefixed $PNM stream (newest per (peer, standard), entry order)."
+              "description": "$PNV (SDS Publication Verification): per notice PUBLISHER_PEER_ID, RECEIVED_FROM_PEER_ID (the gossip-delivering peer), STANDARD, SCHEMA_NAME, FILE_ID, FILE_NAME, CID, PUBLISHED_AT_MS, SIGNATURE_TYPE, SIGNATURE and PUBLISHER_KEY (hex-decoded), SIGNATURE_VERIFIED, ATTRIBUTION (host \"signature\": Direct when the publisher delivered it, Relayed otherwise, OwnNode for this node; \"gossip\": Unattributed), KEY_SOURCE (epm-directory: IdentityRecord), REASON when not verified, PNM = the received $PNM frame verbatim (size-prefixed, from raw records at PNM_INDEX) so a reader can verify the signature itself; VERIFIER_PEER_ID, GENERATED_AT_MS (clock.now); ETAG = weak FNV-1a 64 over the record built without its GENERATED_AT stamp and ETAG (a content tag: the same content keeps its tag on every call; the responder answers 304 on it)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One snapshot envelope per request."
+          "required": false,
+          "description": "The verdicts as one $PNV (absent when the decision is refused)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards to the p2p.standards_snapshot hostcall and emits the raw response envelope plus the decision passthrough. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Serves /standards through one p2p.standards_snapshot hostcall (SDS $PIV: P2pParams -> list entries P2pPnmEntry, the newest signed $PNM per (peer, standard)) and answers the $APR decision beside one $PNV, one PNVEntry per notice. VERIFIER_PEER_ID = node.peerId. BATCHING: the \"decision\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second decision frame in one invocation is refused with error code \"batched-input-frames\", naming the port and the count, rather than answered from another request's hostcall or destroyed (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "pnm_history",
       "displayName": "PNM Publication History",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract, route=pnm_history); \"peerId\" selects the publisher, \"limit\" bounds the newest-first history (clamped [1,100] by the route node)."
+              "description": "$APR (SDS API Request): METHOD, PATH, ROUTE, PARAMETERS (peerId, limit, standard), IF_NONE_MATCH, ACCEPT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One routing-decision JSON frame per request."
+          "description": "One $APR routing decision from foundation/http-route discover. Served routes: pnm_history (params peerId, limit). An APR that already carries a STATUS, or names another route, passes on with no hostcall."
         }
       ],
       "outputPorts": [
@@ -192,64 +228,73 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The incoming decision frame re-emitted verbatim (linear chaining; no host round-trip)."
+              "description": "$APR passed on beside the body (or refused) so foundation/http-respond has both the request and the outcome."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Decision passthrough."
+          "description": "The decision: the input $APR VERBATIM when the request is served; otherwise a copy with STATUS / ERROR_CODE / ERROR_MESSAGE set (400 invalid-parameter, 404 no-route / peer-unknown / no-publications / not-published / not-served, 502 host-failed, 503 dataset-unavailable)."
         },
         {
-          "portId": "snapshot",
+          "portId": "notices",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcall-envelope",
+              "setId": "sds-pnv-notices",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Verbatim p2p.pnm_history hostcall response envelope: meta JSON {\"ok\",\"result\":{\"peer_id\",\"publisher_key_available\",\"gossip_only_excluded\",\"entries\":[{\"publisher_peer_id\",\"gossip_peer_id\",\"standard\",\"schema\",\"file_id\",\"file_name\",\"cid\",\"publish_timestamp\",\"signature_type\",\"signature\",\"signature_verified\",\"attribution\",\"publisher_key\"?,\"publisher_key_source\"?,\"pnm_index\"}],\"records\":{\"$bin\":0}}} + segment 0 = aligned size-prefixed $PNM stream (the signed publications VERBATIM — signatures intact, newest first, entry order)."
+              "description": "$PNV (SDS Publication Verification): per notice PUBLISHER_PEER_ID, RECEIVED_FROM_PEER_ID (the gossip-delivering peer), STANDARD, SCHEMA_NAME, FILE_ID, FILE_NAME, CID, PUBLISHED_AT_MS, SIGNATURE_TYPE, SIGNATURE and PUBLISHER_KEY (hex-decoded), SIGNATURE_VERIFIED, ATTRIBUTION (host \"signature\": Direct when the publisher delivered it, Relayed otherwise, OwnNode for this node; \"gossip\": Unattributed), KEY_SOURCE (epm-directory: IdentityRecord), REASON when not verified, PNM = the received $PNM frame verbatim (size-prefixed, from raw records at PNM_INDEX) so a reader can verify the signature itself; VERIFIER_PEER_ID, GENERATED_AT_MS (clock.now); ETAG = weak FNV-1a 64 over the record built without its GENERATED_AT stamp and ETAG (a content tag: the same content keeps its tag on every call; the responder answers 304 on it)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One snapshot envelope per request."
+          "required": false,
+          "description": "The verdicts as one $PNV (absent when the decision is refused)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\",\"limit\"} to the p2p.pnm_history hostcall and emits the raw response envelope plus the decision passthrough. The host returns the peer's stored signed $PNM publications newest first, attributed to the PUBLISHER by Ed25519 signature verification (not by the gossip-delivering peer recorded in the store). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Serves /peers/{peerId}/pnm through one p2p.pnm_history hostcall (SDS $PIV: P2pParams {PEER_ID, LIMIT = ?limit clamped [1,100], default 1} -> P2pSummary + list entries, the peer's stored signed $PNM publications newest first, attributed to the PUBLISHER by signature on the host) and answers the $APR decision beside one $PNV. No entries answers 404 no-publications. BATCHING: the \"decision\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second decision frame in one invocation is refused with error code \"batched-input-frames\", naming the port and the count, rather than answered from another request's hostcall or destroyed (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "latest_dataset",
-      "displayName": "Latest Published Dataset",
+      "displayName": "Provider Latest Dataset",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract, route=latest_dataset); \"peerId\" selects the provider, \"standard\" the SDS standard segment; format controls stream delivery (body reference unless json)."
+              "description": "$APR (SDS API Request): METHOD, PATH, ROUTE, PARAMETERS (peerId, limit, standard), IF_NONE_MATCH, ACCEPT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One routing-decision JSON frame per request."
+          "description": "One $APR routing decision from foundation/http-route discover. Served routes: latest_dataset (params peerId, standard). An APR that already carries a STATUS, or names another route, passes on with no hostcall."
         }
       ],
       "outputPorts": [
@@ -257,42 +302,405 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The incoming decision frame re-emitted verbatim (linear chaining; no host round-trip)."
+              "description": "$APR passed on beside the body (or refused) so foundation/http-respond has both the request and the outcome."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Decision passthrough."
+          "description": "The decision: the input $APR VERBATIM when the request is served; otherwise a copy with STATUS / ERROR_CODE / ERROR_MESSAGE set (400 invalid-parameter, 404 no-route / peer-unknown / no-publications / not-published / not-served, 502 host-failed, 503 dataset-unavailable)."
         },
         {
-          "portId": "snapshot",
+          "portId": "availability",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcall-envelope",
+              "setId": "sds-dav-availability",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "DAV.fbs",
+                  "fileIdentifier": "$DAV",
+                  "rootTypeName": "DAV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Verbatim p2p.latest_dataset hostcall response envelope: meta JSON {\"ok\",\"result\":{\"known\",\"pinned\",\"self\",\"standard\",\"schema\",\"reason\"?,\"pnm\":{newest publication pointer}?,\"fresh\"?,\"serving\":{\"batch_id\",\"provider_id\",\"source_name\",\"record_count\",\"byte_count\",\"parts\",\"published_at\",\"etag_fnv1a64\",\"pnm\":{served batch pointer},\"ref\":{token,size,frames,fnv1a64}?|\"stream\":{\"$bin\":0}?}?}} + segment 0 = the batch's aligned size-prefixed record stream when delivered inline."
+              "description": "$DAV (SDS Dataset Availability): STANDARD, SCHEMA_NAME, PROVIDER_ID, SOURCE_NAME, KNOWN, AVAILABLE, UNAVAILABLE_REASON (NotPublished when unknown; not-pinned / not-materialized: NotHeld; stale, unverified, not-entitled), SELF_PUBLISHED, PINNED, FRESH, BATCH_ID, RECORD_COUNT, BYTE_COUNT, PARTS, PUBLISHED_AT_MS, the newest notice (PNM_CID, PNM_FILE_ID, PNM_PUBLISHED_AT_MS, PNM_SIGNATURE_VERIFIED), PUBLISHER_PEER_ID (the requested peer), ETAG W/\"fnv1a64-<host hash>\", BODY_REF_TOKEN / BODY_REF_SIZE when the batch stays with the host (out-of-band delivery)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One snapshot envelope per request."
+          "required": false,
+          "description": "The dataset's availability as one $DAV, beside a served batch and beside the 404 / 503 refusals (absent for 400 / 502 and pass-through)."
+        },
+        {
+          "portId": "omm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-omm-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $OMM FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is OMM: the host's size-prefixed $OMM record stream verbatim."
+        },
+        {
+          "portId": "mpe_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mpe-mpe-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $MPE FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is MPE: the host's size-prefixed $MPE record stream verbatim."
+        },
+        {
+          "portId": "cat_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cat-cat-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CAT FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is CAT: the host's size-prefixed $CAT record stream verbatim."
+        },
+        {
+          "portId": "spw_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-spw-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SPW FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is SPW: the host's size-prefixed $SPW record stream verbatim."
+        },
+        {
+          "portId": "eop_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-eop-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EOP FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is EOP: the host's size-prefixed $EOP record stream verbatim."
+        },
+        {
+          "portId": "csm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-csm-csm-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "CSM.fbs",
+                  "fileIdentifier": "$CSM",
+                  "rootTypeName": "CSM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CSM FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is CSM: the host's size-prefixed $CSM record stream verbatim."
+        },
+        {
+          "portId": "egp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-egp-egp-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "EGP.fbs",
+                  "fileIdentifier": "$EGP",
+                  "rootTypeName": "EGP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EGP FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is EGP: the host's size-prefixed $EGP record stream verbatim."
+        },
+        {
+          "portId": "sit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-sit-sit-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "SIT.fbs",
+                  "fileIdentifier": "$SIT",
+                  "rootTypeName": "SIT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SIT FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is SIT: the host's size-prefixed $SIT record stream verbatim."
+        },
+        {
+          "portId": "lcc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lcc-lcc-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCC.fbs",
+                  "fileIdentifier": "$LCC",
+                  "rootTypeName": "LCC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $LCC FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is LCC: the host's size-prefixed $LCC record stream verbatim."
+        },
+        {
+          "portId": "tbs_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tbs-tbs-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is TBS: the host's size-prefixed $TBS record stream verbatim."
+        },
+        {
+          "portId": "gnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gnp-gnp-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "GNP.fbs",
+                  "fileIdentifier": "$GNP",
+                  "rootTypeName": "GNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $GNP FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is GNP: the host's size-prefixed $GNP record stream verbatim."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-wxf-wxf-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is WXF: the host's size-prefixed $WXF record stream verbatim."
+        },
+        {
+          "portId": "cnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cnp-cnp-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "CNP.fbs",
+                  "fileIdentifier": "$CNP",
+                  "rootTypeName": "CNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CNP FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is CNP: the host's size-prefixed $CNP record stream verbatim."
+        },
+        {
+          "portId": "rfb_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rfb-rfb-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFB.fbs",
+                  "fileIdentifier": "$RFB",
+                  "rootTypeName": "RFB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $RFB FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is RFB: the host's size-prefixed $RFB record stream verbatim."
+        },
+        {
+          "portId": "iqc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-iqc-iqc-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "IQC.fbs",
+                  "fileIdentifier": "$IQC",
+                  "rootTypeName": "IQC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $IQC FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is IQC: the host's size-prefixed $IQC record stream verbatim."
+        },
+        {
+          "portId": "tct_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tct-tct-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "TCT.fbs",
+                  "fileIdentifier": "$TCT",
+                  "rootTypeName": "TCT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TCT FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is TCT: the host's size-prefixed $TCT record stream verbatim."
+        },
+        {
+          "portId": "dtt_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-dtt-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $DTT FlatBuffer record stream (one port per standard, since a typed port names one type)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The served batch when the requested standard is DTT: the host's size-prefixed $DTT record stream verbatim."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\",\"standard\"(,\"deliver\":\"ref\")} to the p2p.latest_dataset hostcall and emits the raw response envelope plus the decision passthrough. The host serves the newest publication batch whose signed PNM verifies under the peer's publication keys AND whose shard content is fully materialized locally — gated by the OPT-IN gateway.pin config (a node's own publications are always servable). Unpinned/unmaterialized answers carry the newest PNM pointer instead of bytes. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Serves /peers/{peerId}/{standard}/latest through one p2p.latest_dataset hostcall (SDS $PIV: P2pParams {PEER_ID, STANDARD, DELIVER Ref, or Inline when the APR ACCEPT is Json} -> P2pLatestDataset + raw stream). The host serves the newest publication batch whose signed PNM verifies AND whose content is materialized locally, gated by the OPT-IN gateway.pin config (a node's own publications are always servable); never a silent proxy fetch. Served: the decision verbatim, the $DAV (AVAILABLE) and the batch on the standard's <code>_records port. Unknown lane: 404 not-published + $DAV. Known but not servable (REASON): 503 dataset-unavailable + $DAV carrying the newest PNM pointer. A standard with no record port here: 404 not-served + $DAV. Delivery: a host that honours Ref keeps the batch and answers its BodyRef, which rides DAV.BODY_REF_TOKEN / BODY_REF_SIZE with no *_records frame (http-respond answers it out of band through the $HTR body reference); a JSON request asks Inline, because the responder must render the bytes; a host that ignores Ref answers inline as before. BATCHING: the \"decision\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second decision frame in one invocation is refused with error code \"batched-input-frames\", naming the port and the count, rather than answered from another request's hostcall or destroyed (graph task modules-guest-nodes-drop-batched-frames)."
     }
   ],
   "schemasUsed": [

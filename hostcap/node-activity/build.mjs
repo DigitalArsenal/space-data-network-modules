@@ -12,9 +12,23 @@ const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+const SDS_CODES = ["APR", "NEV"];
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+// The ports carry SDS standards APR ($APR) and NEV ($NEV). The SDK compiler stages only its runtime headers, so each
+// standard's own generated C++ header (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) is inlined in place of
+// `#include "<CODE>_generated.h"`: its include guard renamed (every SDS header is "main_generated.h"), its flatc
+// version static_assert relaxed, as hostcap/clock does for TIM.
+const sdsHeader = async (code) =>
+  (await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", code, "main_generated.h"), "utf8"))
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
+let sourceCode = await fs.readFile(sourcePath, "utf8");
+for (const code of SDS_CODES) {
+  const header = await sdsHeader(code);
+  sourceCode = sourceCode.replace(new RegExp(`^#include "${code}_generated\\.h".*$`, "m"), () => header);
+}
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
