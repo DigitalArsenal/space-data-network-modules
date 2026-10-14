@@ -6,7 +6,7 @@
 // (verifier, 2026-10-14). Now the perturbed path runs on checkpoints keyed to
 // the element epoch, each reached only from its neighbour toward the epoch,
 // with the step refined near the Sun. 1.8.2 caches anchor checkpoints on the
-// way out, so a run back toward the epoch restarts from the nearest one.
+// way out and a work slot readied ahead of a clock running toward the epoch.
 //   1. Bit-identical states and snapshots whatever the clock visited first
 //      (the 1,004-row astorb sample and three low-perihelion asteroids).
 //   2. The low-perihelion rows against JPL Horizons (geometric heliocentric
@@ -94,7 +94,7 @@ test("a snapshot of the 1,004-row astorb sample is bit-identical after a -50 day
   assert.deepEqual(back, fresh);
 });
 
-test("a clock run back toward the epoch and across it draws what a fresh catalog draws at every epoch (1.8.2 anchored restarts)", () => {
+test("a clock run back toward the epoch and across it draws what a fresh catalog draws at every epoch (1.8.2 anchors and work slot)", () => {
   const n = ingest(sample);
   const days = [];
   for (let d = 58; d >= -58; d -= 1.5) days.push(d);

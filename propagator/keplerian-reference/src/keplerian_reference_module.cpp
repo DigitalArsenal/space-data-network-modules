@@ -808,14 +808,20 @@ double g_small_validity = kDefaultSmallValiditySeconds;
 /// the conic osculating at the nearest checkpoint (at most 2 days away).
 constexpr double kCheckpointStep = 4.0 * 86400.0;
 
-/// Checkpoints cached on the way out from the element epoch so that a move
-/// back toward it restarts from the nearest one instead of from the epoch
-/// elements (keplerian-reference 1.8.2: 1.8.1 re-ran the whole chain at every
-/// grid crossing toward the epoch, 117 ms against 1.8.0's 42 ms for a 56-day
-/// sweep of 1,004 rows; 1.0-1.9 s snapshot spikes for 806k rows in the
-/// console). The anchors split the validity span into kAnchors + 1 equal
-/// parts, so a step toward the epoch costs at most a few grid steps.
-constexpr int kAnchors = 3;
+/// Checkpoints kept besides the current one (keplerian-reference 1.8.2).
+/// 1.8.1 re-ran the whole chain from the record at every grid crossing toward
+/// the epoch: 117 ms against 1.8.0's 42 ms for a 56-day sweep of 1,004 rows,
+/// and 1.0-1.9 s snapshot spikes for 806k rows in the console. Now:
+///  - kAnchors anchors, the checkpoints at the validity span's grid split in
+///    kAnchors + 1 parts, cached on the way out: a move toward the epoch
+///    restarts from the nearest one;
+///  - a work slot: the checkpoint one nearer the epoch than the current one,
+///    kept on the way out; while the clock runs toward the epoch, each
+///    snapshot that needs no step carries it one step toward the next
+///    checkpoint the clock will need, so a crossing finds it ready.
+/// A snapshot of a clock running either way therefore costs at most one grid
+/// step, as in 1.8.0 (a jump costs the steps from the nearest cached one).
+constexpr int kAnchors = 2;
 
 /// A checkpoint's elements as float32 differences from the epoch elements
 /// (see SmallBody).
@@ -839,19 +845,18 @@ struct SmallBody {
   // A cache of the perturbed path: the osculating elements at checkpoint k as
   // float32 differences from the epoch elements carried there on their own
   // conic (mean anomaly) or kept as they are (the rest). Checkpoint k is only
-  // ever reached from checkpoint k -/+ 1 through these rounded values, so its
-  // elements are the same whatever order the clock asked for them in.
-  float da = 0.0f, de = 0.0f, dn = 0.0f, dm = 0.0f;
-  float dp[3] = {0.0f, 0.0f, 0.0f};
-  float dq[3] = {0.0f, 0.0f, 0.0f};
+  // ever computed from checkpoint k -/+ 1 through these rounded values, so its
+  // elements are the same whatever order the clock asked for them in, and any
+  // cached copy of it (an anchor, the work slot) is as good as the chain.
+  CheckpointDelta cur;
   int32_t k = 0;
   float h = NAN;
   float g = 0.15f;
-  // Copies of checkpoints anchor_k[i] (0: empty) of the same chain. They are
-  // values of the path at fixed grid points, so restarting from one gives the
-  // same elements as restarting from the epoch.
-  int16_t anchor_k[kAnchors] = {0, 0, 0};
+  int16_t anchor_k[kAnchors] = {0, 0};  // 0: empty
+  int16_t work_k = 0;                   // 0: empty
+  int8_t toward = 0;                    // the clock's last move was toward the epoch
   CheckpointDelta anchor[kAnchors];
+  CheckpointDelta work;
 };
 
 /// A two-body conic: the elements a row's places are computed from.
@@ -861,18 +866,21 @@ struct Conic {
   double p[3], q[3];
 };
 
-/// The row's conic at its cached checkpoint (the epoch elements at k = 0).
-inline void conic_of(const SmallBody& b, Conic& c) {
-  c.osc_et = b.epoch_et + b.k * kCheckpointStep;
-  c.a = b.a + b.da;
-  c.e = b.e + b.de;
-  c.n = b.n + b.dn;
-  c.m0 = b.m0 + b.n * (b.k * kCheckpointStep) + b.dm;
+/// The row's conic at checkpoint k, from the cached differences d.
+inline void conic_at(const SmallBody& b, const CheckpointDelta& d, int32_t k, Conic& c) {
+  c.osc_et = b.epoch_et + k * kCheckpointStep;
+  c.a = b.a + d.da;
+  c.e = b.e + d.de;
+  c.n = b.n + d.dn;
+  c.m0 = b.m0 + b.n * (k * kCheckpointStep) + d.dm;
   for (int i = 0; i < 3; ++i) {
-    c.p[i] = b.p[i] + b.dp[i];
-    c.q[i] = b.q[i] + b.dq[i];
+    c.p[i] = b.p[i] + d.dp[i];
+    c.q[i] = b.q[i] + d.dq[i];
   }
 }
+
+/// The row's conic at its cached checkpoint (the epoch elements at k = 0).
+inline void conic_of(const SmallBody& b, Conic& c) { conic_at(b, b.cur, b.k, c); }
 
 /// The rows, in blocks of 65,536: a catalog grows shard by shard without the
 /// reallocations (and the transient double copy) of one contiguous vector,
@@ -1293,103 +1301,144 @@ bool advance_conic(Conic& c, double t_end) {
   return true;
 }
 
-/// Caches `c` as the row's checkpoint k (float32 differences from the epoch
-/// elements; the mean anomaly's from the epoch conic carried to the
-/// checkpoint, wrapped to +-pi).
-void store_checkpoint(SmallBody& b, const Conic& c, int32_t k) {
+/// `c` as checkpoint k's float32 differences from the epoch elements (the
+/// mean anomaly's from the epoch conic carried to the checkpoint, wrapped to
+/// +-pi).
+void delta_of(const SmallBody& b, const Conic& c, int32_t k, CheckpointDelta& d) {
   const double base_m = b.m0 + b.n * (k * kCheckpointStep);
-  b.da = static_cast<float>(c.a - b.a);
-  b.de = static_cast<float>(c.e - b.e);
-  b.dn = static_cast<float>(c.n - b.n);
-  b.dm = static_cast<float>(std::remainder(c.m0 - base_m, kTwoPi));
+  d.da = static_cast<float>(c.a - b.a);
+  d.de = static_cast<float>(c.e - b.e);
+  d.dn = static_cast<float>(c.n - b.n);
+  d.dm = static_cast<float>(std::remainder(c.m0 - base_m, kTwoPi));
   for (int i = 0; i < 3; ++i) {
-    b.dp[i] = static_cast<float>(c.p[i] - b.p[i]);
-    b.dq[i] = static_cast<float>(c.q[i] - b.q[i]);
+    d.dp[i] = static_cast<float>(c.p[i] - b.p[i]);
+    d.dq[i] = static_cast<float>(c.q[i] - b.q[i]);
   }
-  b.k = k;
 }
 
-/// The row's checkpoint nearest `et`, from its perturbed path. Continues the
-/// cached chain when `et` lies farther out on the same side of the epoch, and
-/// otherwise restarts it from the epoch elements, so the elements used at et
-/// are a function of et alone. A failed step keeps the last good checkpoint.
 /// The grid spacing of the anchors: the validity span's checkpoints split
-/// into kAnchors + 1 parts (4 for the default 60 days: anchors at 16, 32 and
-/// 48 days, so a step toward the epoch costs at most 3 grid steps).
+/// into kAnchors + 1 parts (5 for the default 60 days: anchors at 20 and 40
+/// days).
 inline int32_t anchor_spacing() {
   const double kmax = std::ceil(g_small_validity / kCheckpointStep);
   const double s = std::ceil(kmax / (kAnchors + 1));
   return (std::isfinite(s) && s >= 1.0) ? static_cast<int32_t>(std::min(s, 8192.0)) : 1;
 }
 
-inline void load_delta(SmallBody& b, const CheckpointDelta& d, int32_t k) {
-  b.da = d.da;
-  b.de = d.de;
-  b.dn = d.dn;
-  b.dm = d.dm;
-  for (int i = 0; i < 3; ++i) {
-    b.dp[i] = d.dp[i];
-    b.dq[i] = d.dq[i];
-  }
-  b.k = k;
+/// Keeps checkpoint k (differences d) as an anchor when it falls on one.
+inline void keep_anchor(SmallBody& b, const CheckpointDelta& d, int32_t k) {
+  const int32_t m = std::abs(k);
+  const int32_t spacing = anchor_spacing();
+  if (m == 0 || m % spacing != 0 || m > 32767) return;
+  const int32_t slot = m / spacing - 1;
+  if (slot >= kAnchors) return;
+  b.anchor[slot] = d;
+  b.anchor_k[slot] = static_cast<int16_t>(k);
 }
 
-/// Keeps the row's current checkpoint as an anchor when it falls on one.
-inline void keep_anchor(SmallBody& b, int32_t spacing) {
-  const int32_t m = std::abs(b.k);
-  if (m == 0 || m % spacing != 0) return;
-  const int32_t slot = m / spacing - 1;
-  if (slot >= kAnchors || m > 32767) return;
-  CheckpointDelta& d = b.anchor[slot];
-  d.da = b.da;
-  d.de = b.de;
-  d.dn = b.dn;
-  d.dm = b.dm;
-  for (int i = 0; i < 3; ++i) {
-    d.dp[i] = b.dp[i];
-    d.dq[i] = b.dq[i];
+/// A cached checkpoint s is a start for checkpoint `want` when it lies between
+/// the epoch and want: same side, |s| <= |want|.
+inline bool start_for(int32_t s, int32_t want) {
+  return s != 0 && (s > 0) == (want > 0) && std::abs(s) <= std::abs(want);
+}
+
+/// The nearest cached checkpoint between the epoch and `want` other than the
+/// current one: an anchor or the work slot (*d, its index), or the epoch
+/// (returns 0, *d null).
+inline int32_t nearest_cached(const SmallBody& b, int32_t want, const CheckpointDelta** d) {
+  int32_t best = 0;
+  *d = nullptr;
+  for (int i = 0; i < kAnchors; ++i) {
+    if (start_for(b.anchor_k[i], want) && std::abs(b.anchor_k[i]) > std::abs(best)) {
+      best = b.anchor_k[i];
+      *d = &b.anchor[i];
+    }
   }
-  b.anchor_k[slot] = static_cast<int16_t>(b.k);
+  if (start_for(b.work_k, want) && std::abs(b.work_k) > std::abs(best)) {
+    best = b.work_k;
+    *d = &b.work;
+  }
+  return best;
+}
+
+/// One grid step of the chain from checkpoint k (differences d) away from the
+/// epoch, in place. False when the step fails.
+inline bool step_out(const SmallBody& b, CheckpointDelta& d, int32_t& k, int32_t dir) {
+  Conic c;
+  conic_at(b, d, k, c);
+  const int32_t next = k + dir;
+  if (!advance_conic(c, b.epoch_et + next * kCheckpointStep)) return false;
+  delta_of(b, c, next, d);
+  k = next;
+  return true;
+}
+
+/// While the clock runs toward the epoch, carries the work slot one grid step
+/// toward the checkpoint the clock needs next (one nearer the epoch than the
+/// current one), from the nearest cached checkpoint below it.
+void small_prework(SmallBody& b) {
+  if (!b.toward || std::abs(b.k) < 2 || std::abs(b.k) > 32767) return;
+  const int32_t dir = b.k > 0 ? 1 : -1;
+  const int32_t target = b.k - dir;
+  for (int i = 0; i < kAnchors; ++i) {
+    if (b.anchor_k[i] == target) return;
+  }
+  if (b.work_k == target) return;
+  if (!start_for(b.work_k, target)) {
+    const CheckpointDelta* d = nullptr;
+    const int32_t base = nearest_cached(b, target, &d);
+    b.work = d != nullptr ? *d : CheckpointDelta{};
+    b.work_k = static_cast<int16_t>(base);
+    if (base == target) return;
+  }
+  int32_t k = b.work_k;
+  if (!step_out(b, b.work, k, dir)) {
+    b.work_k = 0;
+    return;
+  }
+  b.work_k = static_cast<int16_t>(k);
+  keep_anchor(b, b.work, k);
 }
 
 /// The row's checkpoint nearest `et`, from its perturbed path: continued from
-/// the cached checkpoint (the current one or an anchor) nearest `et` between
-/// the epoch and `et`, or from the epoch elements, so the elements used at et
-/// are a function of et alone. A failed step keeps the last good checkpoint.
+/// the cached checkpoint nearest `et` between the epoch and `et` (the current
+/// one, an anchor or the work slot), or from the epoch elements, so the
+/// elements used at et are a function of et alone. A failed step keeps the
+/// last good checkpoint.
 bool small_rebase(SmallBody& b, double et) {
   const double steps = (et - b.epoch_et) / kCheckpointStep;
   if (!std::isfinite(steps) || std::fabs(steps) > 1.0e6) return false;
   const int32_t want = static_cast<int32_t>(std::lround(steps));
-  if (want == b.k) return true;
-  // A cached checkpoint s is a start for `want` when it lies between the
-  // epoch and want: same side, |s| <= |want|.
-  const auto usable = [want](int32_t s) {
-    return s != 0 && (s > 0) == (want > 0) && std::abs(s) <= std::abs(want);
-  };
-  int32_t start = usable(b.k) ? b.k : 0;
-  int slot = -1;
-  for (int i = 0; i < kAnchors; ++i) {
-    const int32_t ak = b.anchor_k[i];
-    if (usable(ak) && std::abs(ak) > std::abs(start)) {
-      start = ak;
-      slot = i;
-    }
+  if (want == b.k) {
+    small_prework(b);
+    return true;
   }
-  if (slot >= 0) {
-    load_delta(b, b.anchor[slot], start);
-  } else if (start == 0) {
-    load_delta(b, CheckpointDelta{}, 0);
+  b.toward = (b.k != 0 && want != 0 && (b.k > 0) == (want > 0) && std::abs(want) < std::abs(b.k)) ? 1 : 0;
+  const CheckpointDelta* d = nullptr;
+  const int32_t cached = nearest_cached(b, want, &d);
+  if (start_for(b.k, want) && std::abs(b.k) >= std::abs(cached)) {
+    // continue from the current checkpoint
+  } else if (d != nullptr) {
+    b.cur = *d;
+    b.k = cached;
+  } else {
+    b.cur = CheckpointDelta{};
+    b.k = 0;
   }
-  if (b.k == want) return true;
-  const int32_t spacing = anchor_spacing();
+  if (b.k == want) {
+    small_prework(b);
+    return true;
+  }
   const int32_t dir = want > b.k ? 1 : -1;
-  Conic c;
   while (b.k != want) {
-    conic_of(b, c);
-    const int32_t next = b.k + dir;
-    if (!advance_conic(c, b.epoch_et + next * kCheckpointStep)) return false;
-    store_checkpoint(b, c, next);
-    keep_anchor(b, spacing);
+    if (b.k + dir == want && b.k != 0) {
+      // The checkpoint one nearer the epoch than `want` comes free on the way:
+      // the work slot keeps it, so a reversal of the clock finds it ready.
+      b.work = b.cur;
+      b.work_k = static_cast<int16_t>(b.k);
+    }
+    if (!step_out(b, b.cur, b.k, dir)) return false;
+    keep_anchor(b, b.cur, b.k);
   }
   return true;
 }

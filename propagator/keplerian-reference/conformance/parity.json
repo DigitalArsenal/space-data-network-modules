@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "keplerian-reference 1.8.2 (pthreads) ingest_omm",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "3e07e6cc4b60b0c8d5cd2f81753012d7fcd101fa11df66c37ffd779bf8426c00",
-  "moduleSha256": "3e07e6cc4b60b0c8d5cd2f81753012d7fcd101fa11df66c37ffd779bf8426c00",
+  "artifactSha256": "98bdbcce198091651f7a55541caa8606bde3ffa9b7c6b050ae02a87812b6ba3f",
+  "moduleSha256": "98bdbcce198091651f7a55541caa8606bde3ffa9b7c6b050ae02a87812b6ba3f",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 4,
-      "durationMs": 5599
+      "durationMs": 6186
     },
     {
       "lane": "wasmedge",
       "runs": 4,
-      "durationMs": 79
+      "durationMs": 83
     },
     {
       "lane": "docker-wasmedge",
       "runs": 4,
-      "durationMs": 4059
+      "durationMs": 1510
     }
   ],
   "cases": [

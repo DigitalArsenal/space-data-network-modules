@@ -157,12 +157,17 @@ float32 differences from them, a checkpoint is only ever reached from its
 neighbour toward the epoch, so a row's place at et is a function of et alone,
 bit for bit, whatever the clock visited before. Moving back toward the epoch
 restarts the chain from the nearest cached checkpoint between the epoch and et:
-the current one, one of three anchors kept on the way out (the validity span's
-grid split in four: 16, 32 and 48 days for the default 60), or the record. A
-grid crossing toward the epoch therefore costs at most three grid steps (1.8.1
-re-ran the chain from the record at each one: a 56-day sweep of 1,004 rows
-toward the epoch took 104 ms against 1.8.0's 38 ms, the slowest snapshot
-13 ms; 1.8.2 takes 35-38 ms, the slowest 3.1 ms). 1.8.0 replaced the
+the current one, one of two anchors kept on the way out (the validity span's
+grid split in three: 20 and 40 days for the default 60), a work slot, or the
+record. The work slot holds the checkpoint one nearer the epoch than the
+current one (it comes free on the way out); while the clock runs toward the
+epoch, each snapshot that needs no step carries it one step toward the next
+checkpoint the clock will need. A snapshot of a clock running either way so
+costs at most one grid step, as
+in 1.8.0 (1.8.1 re-ran the chain from the record at each crossing toward the
+epoch: a 56-day sweep of 1,004 rows toward the epoch took 101-139 ms against
+1.8.0's 34-42 ms, the slowest snapshot 12-18 ms against 1.1-3.3 ms; 1.8.2
+takes 39-55 ms, the slowest 1.3-1.9 ms). 1.8.0 replaced the
 elements in place from wherever the clock had last been, with a fixed 6-day
 step (twice Phaethon's dynamical time at perihelion): Phaethon brought back to
 its epoch after a visit 50 days earlier was 12,886 km off. The record's own
@@ -177,8 +182,8 @@ JPL's at the element epoch, before any propagation; from JPL's own elements
 at that epoch the module follows Horizons within 50 km over +-55 days
 (Phaethon within 73 km, 2000 BD19 within 127 km). A run from +58 days back
 across the epoch to -58 days draws what a fresh catalog draws at every
-1.5-day step. Memory: 168 bytes more per row than 1.8.0 (the checkpoint and
-three anchors; 150 MB for the 895,910 numbered asteroids).
+1.5-day step. Memory: 168 bytes more per row than 1.8.0 (the checkpoint, two
+anchors and the work slot; 150 MB for the 895,910 numbered asteroids).
 
 Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
 within 2.7 mm of an independent two-body oracle of the record within the
