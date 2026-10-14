@@ -87,7 +87,6 @@ const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 const REPRESENTATIVE_MODULES = Object.freeze([
   "hostcap/storage-ingest",
   "hostcap/http-request",
-  "foundation/omm-json",
   "data-source/celestrak-parser",
   "flows/supplemental-omm/nodes/timer",
   "flows/supplemental-omm/nodes/providers/starlink",

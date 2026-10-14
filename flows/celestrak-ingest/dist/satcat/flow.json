@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-satcat-ingest",
   "name": "CelesTrak SATCAT Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow (loop C.8a), SATCAT snapshot: a module cron TIMER tick enters at celestrak-request:satcat which emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv — runner dual-source parity); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into CAT record streams (batch = sha256 of each payload, reconcile mode 'current' since only the newest snapshot batch is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives per lane; the publication responses also land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow, SATCAT snapshot. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:satcat emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv - runner dual-source parity, 32 MiB budget each); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into $CAT record streams with IngestRequests (batch = sha256 of each payload, reconcile Current since only the newest snapshot batch is meaningful, archived as celestrak/satcat.txt and celestrak/satcat.csv), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source hostcall. After each store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304), publication (the publication HttpResponses). All decisions live in-wasm.",
   "nodes": [
     {
       "nodeId": "req",
@@ -98,8 +98,7 @@
       "toNodeId": "http_txt",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "req-http-csv",
@@ -108,28 +107,7 @@
       "toNodeId": "http_csv",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-txt-job",
-      "fromNodeId": "req",
-      "fromPortId": "job_txt",
-      "toNodeId": "parse_txt",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-csv-job",
-      "fromNodeId": "req",
-      "fromPortId": "job_csv",
-      "toNodeId": "parse_csv",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse-txt",
@@ -138,8 +116,7 @@
       "toNodeId": "parse_txt",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse-csv",
@@ -148,8 +125,7 @@
       "toNodeId": "parse_csv",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-txt-meta",
@@ -158,18 +134,16 @@
       "toNodeId": "ingest_txt",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-txt-records",
       "fromNodeId": "parse_txt",
       "fromPortId": "cat_records",
       "toNodeId": "ingest_txt",
-      "toPortId": "records",
+      "toPortId": "cat_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-txt-raw",
@@ -178,8 +152,7 @@
       "toNodeId": "ingest_txt",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-csv-meta",
@@ -188,18 +161,16 @@
       "toNodeId": "ingest_csv",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-csv-records",
       "fromNodeId": "parse_csv",
       "fromPortId": "cat_records",
       "toNodeId": "ingest_csv",
-      "toPortId": "records",
+      "toPortId": "cat_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-csv-raw",
@@ -208,8 +179,7 @@
       "toNodeId": "ingest_csv",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-txt-egress",
@@ -218,8 +188,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-csv-egress",
@@ -228,8 +197,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-txt-publish",
@@ -238,8 +206,7 @@
       "toNodeId": "publish_txt",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-txt-meta-publish",
@@ -248,8 +215,7 @@
       "toNodeId": "publish_txt",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-csv-publish",
@@ -258,8 +224,7 @@
       "toNodeId": "publish_csv",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-csv-meta-publish",
@@ -268,8 +233,7 @@
       "toNodeId": "publish_csv",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-txt-http",
@@ -278,8 +242,7 @@
       "toNodeId": "publish_http_txt",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-csv-http",
@@ -288,48 +251,43 @@
       "toNodeId": "publish_http_csv",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-txt-egress",
       "fromNodeId": "publish_http_txt",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-csv-egress",
       "fromNodeId": "publish_http_csv",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-txt-unchanged-egress",
       "fromNodeId": "parse_txt",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     },
     {
       "edgeId": "parse-csv-unchanged-egress",
       "fromNodeId": "parse_csv",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     }
   ],
   "triggers": [

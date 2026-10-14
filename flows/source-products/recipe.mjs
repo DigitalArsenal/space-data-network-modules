@@ -1,8 +1,11 @@
-// The recipe (version 1) that analysis/gp-error-model attach_covariance and attribute_maneuvers read for one source of
-// sources.json: who the source is, which model answers for it, and the ages the $OCM carries rows at. No record travels
-// without its source, so a source that is not in the registry has no recipe.
+// The recipe (version 1) of one source of sources.json: who the source is, which model answers for it, and the ages the
+// $OCM carries rows at. No record travels without its source, so a source that is not in the registry has no recipe.
+// A run of the flow is one source: flowConfig gives the recipe as the flow's node configuration (one ModuleConfig that
+// every node reads, each module under its own prefix) and modelsFrame its models as the $ERM MODEL records of the
+// `models` trigger.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { encode } from '../../analysis/gp-error-model/scripts/erm-codec.mjs';
 
 const here = (relative) => fileURLToPath(new URL(relative, import.meta.url));
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -39,3 +42,16 @@ export function recipeFor(id, { created = new Date().toISOString(), via, ages = 
     ...extra,
   };
 }
+
+// The flow's node configuration for a recipe: epoch-state derive_omm reads derive.ages, gp-error-model attach_covariance
+// attach.* and attribute_maneuvers attribute.*; maneuver-detection reads detect.* (none here: its defaults) and ignores the other prefixes.
+export function flowConfig(recipe) {
+  const { models, ages, ...rest } = recipe;
+  return {
+    ...(ages ? { derive: { ages } } : {}),
+    attach: rest,
+    attribute: { version: rest.version, source: rest.source, producer: rest.producer },
+  };
+}
+// The recipe's models as size-prefixed $ERM MODEL records, concatenated: the bytes of the `models` trigger.
+export const modelsBytes = (recipe) => Buffer.concat((recipe.models ?? []).map((m) => encode('model', m)));

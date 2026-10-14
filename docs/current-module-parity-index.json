@@ -1,13 +1,13 @@
 {
   "generatedAt": "2026-10-12T05:49:18.923Z",
-  "moduleCount": 124,
-  "parityScopeModuleCount": 50,
-  "isomorphicWasmCount": 122,
+  "moduleCount": 119,
+  "parityScopeModuleCount": 47,
+  "isomorphicWasmCount": 117,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 117,
+  "browserWasmEdgeTargetCount": 114,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -43,14 +43,11 @@
     "files/ccsds-messages",
     "files/orbit-products",
     "foundation/attitude-math",
-    "foundation/decision-gate",
-    "foundation/discovery-shape",
     "foundation/frames",
     "foundation/http-respond",
     "foundation/http-route",
     "foundation/math-bspline",
     "foundation/numerics",
-    "foundation/omm-json",
     "foundation/orbits",
     "foundation/time",
     "propagator/atmosphere",
@@ -3850,74 +3847,6 @@
       ]
     },
     {
-      "modulePath": "foundation/decision-gate",
-      "pluginId": "com.digitalarsenal.foundation.decision-gate",
-      "name": "SDN Decision Gate",
-      "pluginFamily": "foundation",
-      "version": "0.1.0",
-      "methodIds": [
-        "branch",
-        "dispatch"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/decision_gate_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "foundation/discovery-shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "name": "SDN Discovery Response Shaper",
-      "pluginFamily": "foundation",
-      "version": "0.3.2",
-      "methodIds": [
-        "shape_latest",
-        "shape_peers",
-        "shape_pnm",
-        "shape_standards"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/discovery_shape_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
       "modulePath": "foundation/frames",
       "pluginId": "com.digitalarsenal.foundation.frames",
       "name": "Foundation Frames",
@@ -4107,38 +4036,6 @@
       ],
       "testFiles": [
         "tests/numerics.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "foundation/omm-json",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "name": "SDN OMM JSON Encoder",
-      "pluginFamily": "foundation",
-      "version": "0.1.1",
-      "methodIds": [
-        "encode"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/omm_json_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4626,83 +4523,6 @@
         "tests/role-entrypoints.test.mjs",
         "tests/sdk-compat.test.mjs",
         "tests/sds-generated-headers.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "licensing/protection-key-server",
-      "pluginId": "protection-key-server",
-      "name": "Protection Key Server",
-      "pluginFamily": "infrastructure",
-      "version": "0.1.1",
-      "methodIds": [
-        "check_key_rotation",
-        "configure_runtime",
-        "get_public_key",
-        "handle_key_request",
-        "request_challenge"
-      ],
-      "runtimeTargets": [
-        "wasi",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 6,
-      "cSourceFileCount": 0,
-      "testFileCount": 3,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/cpp/src/fips_init.cpp",
-        "src/cpp/src/key_server.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/xpub_auth.cpp",
-        "src/cpp/wasm_api.cpp",
-        "tests/xpub_auth_test.cpp"
-      ],
-      "testFiles": [
-        "tests/run-native.sh",
-        "tests/sdk_compat.test.mjs",
-        "tests/xpub_auth_test.cpp"
-      ]
-    },
-    {
-      "modulePath": "licensing/protection-license-client",
-      "pluginId": "protection-license-client",
-      "name": "Protection License Client",
-      "pluginFamily": "infrastructure",
-      "version": "0.1.1",
-      "methodIds": [
-        "decrypt",
-        "decrypt_and_verify",
-        "get_dek",
-        "verify"
-      ],
-      "runtimeTargets": [
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 3,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/cpp/src/license_client.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/wasm_api.cpp"
-      ],
-      "testFiles": [
-        "tests/sdk_compat.test.mjs"
       ]
     },
     {

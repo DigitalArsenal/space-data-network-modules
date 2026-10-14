@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.node-status",
   "name": "SDN Node Status Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "M1 node-status flow (mount GET /api/v1/node/status): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_node_status classifies it (GET/HEAD -> route=status; anything else -> route=error status=405 — PATH is not inspected, the mount carries exactly one resource), hostcap/node-status status forwards an EMPTY payload to the policy-mediated READ-ONLY node_status_read.status hostcall (capability node_status_read; the host's capPrefixFromName has no mapping for it, so the capability name itself is the op prefix) and emits the raw hostcall result OBJECT verbatim on \"body\" (a live status snapshot — uptime, storage totals, disk, service state, bandwidth counters/history — NOT an SDS record collection, so the bare-array json convention used by the other gateway flows does not apply), and foundation/http-respond assembles the final $HTR envelope (200/405/503) delivered to the host-model egress sink. JSON-ONLY for v1: there is no SDS schema for node status (checked spacedatastandards.org/schema — no STA/HLT/NOD/SVC-style match), so a flatbuffer presentation is blocked on a future SDS schema addition rather than a hand-written table (generated-types-only rule). No ETag/conditional-GET: the snapshot changes on every call (uptime, bandwidth counters), so a conditional-GET contract would be pointless. Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs — METHOD/PATH/QUERY/HEADERS/BODY/REMOTE) carries no caller-trust field a flow can read, so the route is declared anonymous:false (operator-gated at the host's auth wall, mirroring flows/data-retrieval's POST /api/v1/data/query precedent) until the envelope carries trust information a shape node could read to serve a reduced anonymous subset.",
+  "description": "M1 node-status flow (mount GET /api/v1/node/status): a $HTQ HttpRequest enters on the http-request trigger; foundation/http-route route_node_status decides it as an $APR (GET/HEAD -> route status, anything else STATUS 405); hostcap/node-status reads the node through the policy-mediated READ-ONLY node_status_read.status hostcall (typed $PIV, capability node_status_read; node.peerId and clock.now stamp NODE_ID / GENERATED_AT_MS) and answers an $NHS beside the $APR (or the $APR with STATUS 503 when the host fails); foundation/http-respond respond renders the $HTR (200 / 405 / 503): the $NHS verbatim as FlatBuffers by default, or as JSON when the request asks for it. No ETag: the snapshot changes on every call. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",
@@ -36,7 +36,7 @@
   ],
   "edges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-status-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "status",
@@ -45,7 +45,7 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "status-decision",
+      "edgeId": "status-decision-respond-decision",
       "fromNodeId": "status",
       "fromPortId": "decision",
       "toNodeId": "respond",
@@ -54,16 +54,16 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "status-body",
+      "edgeId": "status-status-respond-status",
       "fromNodeId": "status",
-      "fromPortId": "body",
+      "fromPortId": "status",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "status",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
@@ -104,81 +104,82 @@
         "method": "GET",
         "operationId": "getNodeStatus",
         "summary": "Live node status snapshot",
-        "description": "Returns this node's current status as a single JSON object (not a record collection): process uptime, storage totals, disk usage, service state, and bandwidth counters/history. Always JSON — there is no SDS schema for node status, so no flatbuffer presentation exists (blocked on a future SDS schema addition, not a hand-written table). No ETag/If-None-Match: the snapshot changes on every call. Operator-gated (anonymous:false) at the host's auth wall; the flow itself has no access to caller-trust information to shape a reduced anonymous subset.",
+        "description": "Returns this node's current health snapshot as one $NHS (SDS Node Health Status): uptime, service state, storage totals, disk, network throughput and its recent history. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists. No ETag / If-None-Match: the snapshot changes on every call. Operator-gated (anonymous:false) at the host's auth wall.",
         "anonymous": false,
         "responses": {
           "200": {
-            "description": "Live node status object.",
+            "description": "The node's $NHS. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists.",
             "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$NHS (SDS NHS.fbs): the node health snapshot"
+                }
+              },
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "uptime_seconds": { "type": "integer", "description": "Seconds since the node process started." },
-                    "started_at": { "type": "string", "format": "date-time", "description": "RFC3339 process start timestamp." },
-                    "store": {
-                      "type": "object",
-                      "properties": {
-                        "total_bytes": { "type": "integer" },
-                        "total_records": { "type": "integer" },
-                        "storage_path": { "type": "string" }
-                      },
-                      "description": "Local record store totals."
-                    },
-                    "disk": {
-                      "type": ["object", "null"],
-                      "properties": {
-                        "capacity_bytes": { "type": "integer" },
-                        "free_bytes": { "type": "integer" },
-                        "available_bytes": { "type": "integer" }
-                      },
-                      "description": "Disk usage for the storage volume, or null when unavailable to the host."
-                    },
-                    "service": {
-                      "type": "object",
-                      "properties": {
-                        "state": { "type": "string", "enum": ["running"] },
-                        "mode": { "type": "string" },
-                        "autostart_known": { "type": "boolean" }
-                      },
-                      "description": "Service supervision state as observed by the host process."
-                    },
-                    "bandwidth": {
-                      "type": ["object", "null"],
-                      "properties": {
-                        "total_in_bytes": { "type": "integer" },
-                        "total_out_bytes": { "type": "integer" },
-                        "rate_in_bps": { "type": "number" },
-                        "rate_out_bps": { "type": "number" },
-                        "history": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ts": { "type": "string", "format": "date-time" },
-                              "total_in_bytes": { "type": "integer" },
-                              "total_out_bytes": { "type": "integer" },
-                              "rate_in_bps": { "type": "number" },
-                              "rate_out_bps": { "type": "number" }
-                            }
-                          }
-                        }
-                      },
-                      "description": "Network bandwidth totals/rates and recent history, or null when unavailable to the host."
-                    }
-                  }
-                },
-                "description": "Bare top-level JSON object (not an array): this endpoint answers one live status snapshot, not an SDS record collection."
+                  "description": "The $NHS as JSON (NODE_ID, GENERATED_AT_MS, UPTIME_S, SERVICE_STATE, STORE_TOTAL_*, DISK_*, TOTAL_IN/OUT_BYTES, RATE_IN/OUT_BPS, THROUGHPUT_HISTORY, ...)."
+                }
               }
             }
           },
           "405": {
-            "description": "Non-GET/HEAD method.",
-            "content": { "application/json": { "schema": { "type": "object" }, "description": "{\"error\": \"...\"}" } }
+            "description": "Any method other than GET/HEAD.",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           },
           "503": {
-            "description": "The node_status_read.status hostcall failed or returned no result (honest unavailability — never a silent empty body).",
-            "content": { "application/json": { "schema": { "type": "object" }, "description": "{\"error\": \"...\"}" } }
+            "description": "The node_status_read.status hostcall failed (status-unavailable).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }

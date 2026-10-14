@@ -21,8 +21,6 @@ Included package tests:
 - `analysis/od`
 - `licensing/core`
 - `licensing/client-decrypt`
-- `licensing/protection-key-server`
-- `licensing/protection-license-client`
 
 Excluded package directories:
 

@@ -1,13 +1,14 @@
 {
   "programId": "com.digitalarsenal.flows.public-query",
   "name": "SDN Public Query Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 5,
-  "edges": 8,
+  "nodes": 4,
+  "edges": 6,
   "triggers": 1,
   "capabilities": [
+    "clock",
     "storage_query"
   ],
   "engineLinkage": "bridge",
@@ -16,31 +17,29 @@
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "methodId": "route_public_query",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "q",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "methodId": "sandbox_query",
-      "dispatchModel": "linked-direct"
-    },
-    {
-      "nodeId": "tojson",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "methodId": "encode",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "methodId": "respond",
-      "dispatchModel": "linked-direct"
+      "methodId": "respond_query",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -48,8 +47,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "version": "0.7.0",
-      "sha256": "bae707c220d812218b9c0c19112628390f9e7b7a667e3b834142bfc0eae54a56",
+      "version": "0.8.0",
+      "sha256": "e7e918bc425a36ca775464b81fd8e56489638fa8f7d57dedb9dffdeeb32c25ec",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -66,8 +65,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "version": "0.2.0",
-      "sha256": "dffd8d616fefb308326bb426ca70cad2ff142cf3788fa821409417ae360a2a7e",
+      "version": "0.3.0",
+      "sha256": "3e5d6eeed33af9a61e05c881f768148a58a7fa1a0b47c6d723082c3f7078193d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -79,30 +78,17 @@
     },
     {
       "kind": "node",
-      "dependencyId": "com.digitalarsenal.foundation.omm-json",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "version": "0.1.1",
-      "sha256": "4a34dcff2384464324b6f041551c8138804e15e300b0d44caab0628e05de7e56",
-      "dispatchModel": "linked-direct",
-      "artifactPath": null,
-      "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
-      "methodSymbols": {
-        "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
-      }
-    },
-    {
-      "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "version": "0.2.1",
-      "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade",
+      "version": "0.3.0",
+      "sha256": "9f854941ca489f3fa8dc6460ed519116f7252d029f6e4f995f483bd1adf3f66f",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
       "methodSymbols": {
-        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond",
+        "respond_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond_query"
       }
     }
   ]

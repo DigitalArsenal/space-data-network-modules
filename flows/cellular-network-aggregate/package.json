@@ -1,15 +1,14 @@
 {
   "name": "@digitalarsenal/sdn-flow-cellular-network-aggregate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../cellular-network-aggregate.flow.json --deps ./deps.json",
-    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../cellular-network-aggregate.flow.json --deps ./deps.json --out ./dist",
+    "check": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../cellular-network-aggregate.flow.json --deps ./deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../../spacedatastandards.org && pwd)}\"; node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../cellular-network-aggregate.flow.json --deps ./deps.json --out ./dist",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "^1.198.0"
+    "space-data-module-sdk": "0.9.2"
   }
 }

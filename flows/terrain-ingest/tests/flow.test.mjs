@@ -26,8 +26,11 @@
  *      declares, and no more.
  *
  * The SAME compiled runtime.wasm that tools/terrain-pyramid/run.mjs executes
- * is instantiated here, with the same four host operations stubbed in the Go
- * host's dialect. Granules are synthesized per requested URL rather than
+ * is instantiated here, with the host operations answered as the Go node
+ * answers them: SDS $PIV invocations (typed contracts 1.0) - plugin.getConfig
+ * (one ModuleConfig on raw "config"), storage.flatsql_query_stream,
+ * http.request, storage.ingest_with_source and storage.write. Every frame between
+ * the nodes is a FlatBuffer. Granules are synthesized per requested URL rather than
  * fetched, so the suite is hermetic and needs no cache.
  */
 
@@ -38,6 +41,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import { decodeHostCall, decodeIngestResult, encodeHostCallResult, encodeModuleConfig, encodeTimerTick } from "space-data-module-sdk/runtime-contracts";
+
+import { decodeTileReport } from "../../../data-source/terrain-source/typed-frames.mjs";
+import { decodeIrm } from "../../../data-source/terrain-ingest/tests/typed.mjs";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -64,43 +71,6 @@ const CONFIG = {
   timeout_ms: 120000,
   regions: [{ name: "test-cell", west: 9, south: 44, east: 10, north: 45, max_level: 8, priority: 10 }],
 };
-
-// ── hostcall envelope (Go-host dialect) ────────────────────────────────────
-
-function encodeEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4 + segments.reduce((sum, s) => sum + 4 + s.length, 0);
-  const out = new Uint8Array(total);
-  const view = new DataView(out.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  out.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    out.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return out;
-}
-
-function decodeEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  let offset = 4 + metaLen;
-  const count = view.getUint32(offset, true);
-  offset += 4;
-  const segments = [];
-  for (let i = 0; i < count; i += 1) {
-    const length = view.getUint32(offset, true);
-    segments.push(Uint8Array.from(bytes.subarray(offset + 4, offset + 4 + length)));
-    offset += 4 + length;
-  }
-  return { meta, segments };
-}
 
 // ── a synthetic Copernicus granule for whatever degree square is asked for ──
 //
@@ -181,70 +151,59 @@ function granuleGeoTiff(url) {
 // ── one tick, driven the way the runner drives it ──────────────────────────
 
 async function tick({ mark = null, storedRecords = null } = {}) {
-  const observed = { urls: [], ingested: [], marksWritten: [], egress: [], queries: 0 };
+  const observed = { urls: [], ingested: [], ingestParams: [], marksWritten: [], egress: [], queries: 0 };
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
+  const answer = (r) => { response = encodeHostCallResult(r); return 0; };
 
   const imports = {
     space_data_module_host: {
       call(opPtr, opLen, payloadPtr, payloadLen) {
         const heap = new Uint8Array(memoryRef.memory.buffer);
         const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const { meta, segments } = decodeEnvelope(
-          Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)),
-        );
-        if (operation === "plugin.getConfig") {
-          response = encodeEnvelope(CONFIG);
-          return 0;
-        }
+        const call = decodeHostCall(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
+        assert.equal(call.op, operation);
+        if (operation === "plugin.getConfig") return answer({ ok: true, op: operation, raw: { config: encodeModuleConfig(CONFIG) } });
         if (operation === "storage.flatsql_query_stream") {
           observed.queries += 1;
-          response = encodeEnvelope({ ok: true }, mark ? [mark] : []);
-          return 0;
+          const stream = mark ?? new Uint8Array(0);
+          return answer({ ok: true, op: operation, result: { ROWS: mark ? 1n : 0n, COLUMNS: 1 }, raw: { stream } });
         }
         if (operation === "http.request") {
-          observed.urls.push(meta.url);
-          response = encodeEnvelope({ ok: true, status: 200, result: { status: 200, headers: {} } }, [
-            new Uint8Array(granuleGeoTiff(meta.url)),
-          ]);
-          return 0;
+          const url = decoder.decode(call.raw.url);
+          observed.urls.push(url);
+          return answer({
+            ok: true,
+            op: operation,
+            result: { STATUS: 200, RETRIEVED_MS: BigInt(Date.UTC(2026, 7, 27)) },
+            raw: { url: "", headers: "", body: new Uint8Array(granuleGeoTiff(url)) },
+          });
         }
         if (operation === "storage.ingest_with_source") {
-          const stream = Buffer.from(segments[0] ?? new Uint8Array(0));
+          const stream = Buffer.from(call.raw.records ?? new Uint8Array(0));
           const records = [];
           let offset = 0;
           while (offset + 4 <= stream.length) {
             const length = stream.readUInt32LE(offset);
             offset += 4;
-            if (length === 0 || offset + length > stream.length) break;
+            if (length === 0) continue;
+            if (offset + length > stream.length) break;
             records.push(stream.subarray(offset, offset + length));
             offset += length;
           }
           observed.ingested.push(records);
-          // `storedRecords` is how a store that ACCEPTS the call and keeps
-          // nothing is expressed — the case the mark must not advance through.
+          observed.ingestParams.push(call.params);
+          // `storedRecords` is how a store that ACCEPTS the call and keeps nothing is expressed - the case the mark
+          // must not advance through.
           const kept = storedRecords === null ? records.length : storedRecords;
-          // `inserted` is the connector's own key — hostcap/storage-ingest
-          // documents its host result as {"schema","inserted","batch_id",…} —
-          // and it is what publish_request's silent-nop guard reads. Writing
-          // `records` here instead is exactly the defect this suite found in
-          // tools/terrain-pyramid/run.mjs: under the wrong key `inserted`
-          // parses as absent, the guard can never fire, and every durable mark
-          // claims 0 records committed.
-          response = encodeEnvelope({
-            ok: true,
-            result: { ok: true, schema: meta?.schema, batch_id: meta?.batch_id, inserted: kept },
-          });
-          return 0;
+          return answer({ ok: true, op: operation, result: { SCHEMA: call.params.SCHEMA, BATCH_ID: call.params.BATCH_ID, INSERTED: BigInt(kept) } });
         }
         if (operation === "storage.write") {
-          const bytes = Buffer.from(String(meta?.data ?? ""), "base64");
-          observed.marksWritten.push({ schema: String(meta?.schema ?? ""), bytes });
-          response = encodeEnvelope({ ok: true, result: { ok: true, schema: meta?.schema, bytes: bytes.length } });
-          return 0;
+          const bytes = Buffer.from(call.raw.data ?? new Uint8Array(0));
+          observed.marksWritten.push({ schema: String(call.params?.SCHEMA ?? ""), bytes });
+          return answer({ ok: true, op: operation, result: { CID: `bafkrei${observed.marksWritten.length}` } });
         }
-        response = encodeEnvelope({ ok: false, message: `unexpected op ${operation}` });
-        return 1;
+        return answer({ ok: false, error: { code: "unsupported", message: `unexpected op ${operation}` } });
       },
       response_len() {
         return response.length;
@@ -266,26 +225,24 @@ async function tick({ mark = null, storedRecords = null } = {}) {
   memoryRef.memory = host.memory;
   host.enqueueTriggerFrame(0, {
     portId: "tick",
-    bytes: encoder.encode(JSON.stringify({ firedAt: "2026-08-27T00:00:00.000Z" })),
+    bytes: encodeTimerTick({ triggerId: "timer-terrain-ingest", firedMs: Date.UTC(2026, 7, 27) }),
   });
   await host.drain(
     {
       "sdn.flow.egress:emit": ({ frames }) => {
-        for (const frame of frames) observed.egress.push(decoder.decode(frame.bytes));
+        for (const frame of frames) observed.egress.push(Uint8Array.from(frame.bytes));
         return { statusCode: 0 };
       },
     },
     { maxIterations: 400 },
   );
-  observed.reports = observed.egress
-    .map((text) => {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  // Egress frames by type: the tile report (FlowNotice), the advanced mark ($IRM), the store result (IngestResult),
+  // the write receipt ($PNM), the mark query's status ($FSO). Anything else is a frame that is no declared type.
+  const idOf = (b) => Buffer.from(b.subarray(4, 8)).toString("latin1");
+  observed.reports = observed.egress.filter((b) => idOf(b) === "FNTC").map((b) => decodeTileReport(b));
+  observed.marks = observed.egress.filter((b) => idOf(b) === "$IRM").map((b) => decodeIrm(b));
+  observed.results = observed.egress.filter((b) => idOf(b) === "INGR").map((b) => decodeIngestResult(b));
+  for (const b of observed.egress) assert.ok(["FNTC", "$IRM", "INGR", "$PNM", "$FSO"].includes(idOf(b)), `egress frame ${idOf(b)}`);
   return observed;
 }
 
@@ -336,15 +293,15 @@ test("the resume mark is written FROM THE VERIFIED STORE RESULT, never at dispat
     "the durable mark is an $IRM record, not the JSON one that lands on egress",
   );
 
-  // …and the count it carries forward is STORAGE's answer, not the builder's
-  // hope. Under the wrong result key this was 0 on every mark ever written.
-  const markJson = good.reports.find((r) => r.next_tile_index !== undefined);
-  assert.ok(markJson, "the operator-readable mark lands on egress beside the durable one");
-  assert.equal(
-    markJson.stored_tiles_total,
-    good.ingested[0].length,
-    "the mark's cumulative committed count is what storage said it inserted",
-  );
+  // …and the count it carries forward is STORAGE's answer, not the builder's hope.
+  const written = decodeIrm(irm[0].bytes);
+  assert.equal(written.recordsCommitted, good.ingested[0].length, "the mark's cumulative committed count is what storage said it inserted");
+  assert.equal(written.nextIndex, written.firstIndex + 1, "the walk moves one cell past the one it stored");
+  // The same $IRM lands on egress for an operator to read - the durable mark, not a second format.
+  assert.equal(good.marks.length, 1);
+  assert.deepEqual(good.marks[0].record, written.record);
+  assert.deepEqual(good.ingestParams[0].SCHEMA, "DTT");
+  assert.equal(good.ingestParams[0].RECONCILE, 1, "None: a batch is a window of the pyramid, never reconciled");
 
   // The same tick against a store that accepts the call and keeps nothing.
   // Advancing here would leave a hole in the pyramid that no later run finds,
@@ -379,9 +336,12 @@ test("the compiled artifact carries exactly the capabilities the flow declares",
   // creeps into the built bundle is what a deployment actually grants.
   const artifact = JSON.parse(fs.readFileSync(fileURLToPath(ARTIFACT_JSON), "utf8"));
   const declared = [...(artifact.capabilities ?? [])].sort();
+  // `clock` arrived with typed contracts 1.0: hostcap/flatsql-query 0.3.0 declares it for the whole module (its
+  // sandbox_query resolves TIME_PROFILE epoch 0 through clock.now) and a linked flow inherits its parts'
+  // capabilities - this flow's mark read never calls it.
   assert.deepEqual(
     declared,
-    ["http", "storage_ingest", "storage_query", "storage_write"].sort(),
+    ["clock", "http", "storage_ingest", "storage_query", "storage_write"].sort(),
     "the off-fleet builder fetches, queries the mark, appends the batch and writes the mark — nothing else",
   );
   // …and the flow it was compiled from says the same thing, so the two cannot

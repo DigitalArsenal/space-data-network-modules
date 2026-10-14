@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
+import { decodeFlowNotice, decodeIngestRequest, encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 
 import { flatbuffers, OCM, assertSourceNamed, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
@@ -18,15 +19,16 @@ import { unpackTdm } from '../../../data-source/ilrs-crd-source/tests/fixtures/r
 import { ephemerisFile, keplerArc } from '../../../data-source/vimpel-source/tests/fixtures/vimpel-format.mjs';
 import { decode, encode, typeRef as estimationType } from '../../../analysis/estimation/tests/wire.mjs';
 import { recipeFor } from '../recipe.mjs';
-import { bytesOf, egressBytes, framesOf, moduleAt, runFlow } from './flow-harness.mjs';
+import { bytesOf, egressBytes, framesOf, moduleAt, runSource } from './flow-harness.mjs';
 
 // The detector is the producer of the maneuvers it writes (PROVENANCE.PRODUCER), whatever the source.
 const detectorManifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../../analysis/maneuver-detection/plugin-manifest.json', import.meta.url)), 'utf8'));
 const DETECTOR = `${detectorManifest.pluginId} ${detectorManifest.version}`;
-const textPort = (portId, text) => {
-  const payload = Buffer.from(text);
-  return { portId, payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } };
-};
+
+// What hostcap/http-request answers: an HttpResponse whose BODY is the provider's text verbatim.
+const responsePort = (url, text) => ({ portId: 'response', payload: encodeHttpResponse({ url, status: 200, headers: {}, body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 11) }),
+  typeRef: { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' } });
+const attribute = (meta, name) => meta.provenance.attributes.find((a) => a.name === name)?.value;
 
 // The designed history, written as the provider writes it.
 function designedHistory() {
@@ -38,7 +40,7 @@ function designedHistory() {
 
 async function throughFlow(id, module, omm) {
   const recipe = recipeFor(id, { created: '2026-10-11T00:00:00Z', via: module, ages: [0, 0.5] });
-  const { egress, result } = await runFlow([{ trigger: 'element_sets', portId: 'omm', bytes: omm }, { trigger: 'element_set_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
+  const { egress, result } = await runSource([{ trigger: 'element_sets', portId: 'omm', bytes: omm }], recipe);
   assert.equal(result.handlersSkipped, 0);
   return { egress, recipe };
 }
@@ -59,18 +61,18 @@ function assertNamed({ egress, recipe }, tb) {
 
 test('space-track-gp through data-source/spacetrack-source: a gp_history as the REST API serves it', async () => {
   const { tb, sets } = designedHistory();
-  const parsed = await moduleAt('data-source/spacetrack-source')('parse_gp', [textPort('source', JSON.stringify(sets.map((s) => gpRecord(s))))]);
-  assert.equal(JSON.parse(bytesOf(parsed, 'report')).rejected, 0);
+  const parsed = await moduleAt('data-source/spacetrack-source')('parse_gp', [responsePort('https://www.space-track.org/basicspacedata/query/class/gp_history', JSON.stringify(sets.map((s) => gpRecord(s))))]);
+  assert.ok(decodeFlowNotice(bytesOf(parsed, 'report')).items.includes('rejected=0'));
   assertNamed(await throughFlow('space-track-gp', 'data-source/spacetrack-source', bytesOf(parsed, 'omm')), tb);
 });
 
 test('spacemapper-aoe through data-source/spacemapper-aoe-source: AOE records, as the archive stores them', async () => {
   const { tb, sets } = designedHistory();
   const lines = sets.map((s, k) => JSON.stringify(aoeRecord({ ...s, recordId: 7000 + k }))).join('\n');
-  const parsed = await moduleAt('data-source/spacemapper-aoe-source')('parse_aoe', [textPort('source', lines)]);
-  const report = JSON.parse(bytesOf(parsed, 'report'));
-  assert.equal(report.rejected, 0);
-  assert.equal(report.emitted, sets.length);
+  const parsed = await moduleAt('data-source/spacemapper-aoe-source')('parse_aoe', [responsePort('https://spacemapper.example/aoe', lines)]);
+  const meta = decodeIngestRequest(bytesOf(parsed, 'meta'));
+  assert.equal(String(attribute(meta, 'rejected')), '0');
+  assert.equal(String(attribute(meta, 'emitted')), String(sets.length));
   assertNamed(await throughFlow('spacemapper-aoe', 'data-source/spacemapper-aoe-source', bytesOf(parsed, 'omm')), tb);
 });
 
@@ -91,11 +93,10 @@ async function odFit(oem) {
 test('vimpel through data-source/vimpel-source: a rectangular ephemeris, fitted by analysis/od, gets the pooled model\'s covariance, uncalibrated for a lineage it was not measured on', async () => {
   // Seven days of a synthetic MEO object, every 600 s, as Vimpel prints the positions (one decimal).
   const arc = keplerArc({ a: 26560, e: 0.02, inc: 55, raan: 100, w: 45, M0: 30 });
-  const read = await moduleAt('data-source/vimpel-source')('read_ephemeris', [textPort('name', '040004_20260921_000000'), textPort('source', ephemerisFile(arc))]);
+  const read = await moduleAt('data-source/vimpel-source')('read_ephemeris', [responsePort('https://spacedata.vimpel.ru/data/ephemeris/040004_20260921_000000', ephemerisFile(arc))]);
   const ephemeris = bytesOf(read, 'ephemeris');
   const recipe = recipeFor('vimpel', { created: '2026-10-11T00:00:00Z', via: 'data-source/vimpel-source', ages: [0, 1] });
-  const { egress, result } = await runFlow([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(ephemeris) }, { trigger: 'ephemeris', portId: 'operator', bytes: ephemeris },
-    { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
+  const { egress, result } = await runSource([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(ephemeris) }, { trigger: 'ephemeris', portId: 'operator', bytes: ephemeris }], recipe);
   assert.equal(result.handlersSkipped, 0);
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
   assertSourceNamed(ocm, recipe);
@@ -114,13 +115,12 @@ test('vimpel through data-source/vimpel-source: a rectangular ephemeris, fitted 
 
 test('igs-gps-precise through data-source/sp3-precise-source: the IGS final orbit of GPS week 1500 (a real SP3-c file), one satellite fitted by analysis/od', async () => {
   const file = fs.readFileSync(fileURLToPath(new URL('../../../files/orbit-products/fixtures/igs15000.3ep.sp3', import.meta.url)));
-  const read = await moduleAt('data-source/sp3-precise-source')('read_sp3', [{ portId: 'source', payload: file, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: file.length } }]);
+  const read = await moduleAt('data-source/sp3-precise-source')('read_sp3', [{ ...responsePort('https://igs.bkg.bund.de/root_ftp/IGS/products/1500/igs15000.sp3', file.toString()), portId: 'source' }]);
   const ephemerides = framesOf(read, 'oem');
   assert.equal(ephemerides.length, 32, 'one OEM per satellite');
   const g01 = ephemerides[0];
   const recipe = recipeFor('igs-gps-precise', { created: '2026-10-11T00:00:00Z', via: 'data-source/sp3-precise-source', ages: [0, 1] });
-  const { egress, result } = await runFlow([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(g01) }, { trigger: 'ephemeris', portId: 'operator', bytes: g01 },
-    { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
+  const { egress, result } = await runSource([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(g01) }, { trigger: 'ephemeris', portId: 'operator', bytes: g01 }], recipe);
   assert.equal(result.handlersSkipped, 0);
   const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
   assertSourceNamed(ocm, recipe);
@@ -144,9 +144,9 @@ test('igs-gps-precise through data-source/sp3-precise-source: the IGS final orbi
 // innovation would not be zero and the observation would be edited out.
 test('ilrs-crd through data-source/ilrs-crd-source: a real LAGEOS-1 pass (EDC, 2026-10-08), read by analysis/estimation as nine laser ranges', async () => {
   const file = fs.readFileSync(fileURLToPath(new URL('../../../data-source/ilrs-crd-source/tests/fixtures/lageos1_20261008.first-two-passes.np2', import.meta.url)));
-  const read = await moduleAt('data-source/ilrs-crd-source')('read_crd', [{ portId: 'source', payload: file, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: file.length } }]);
-  const report = JSON.parse(bytesOf(read, 'report'));
-  assert.deepEqual([report.passesRead, report.normalPointsRead], [2, 15]);
+  const read = await moduleAt('data-source/ilrs-crd-source')('read_crd', [{ ...responsePort('https://edc.dgfi.tum.de/pub/slr/data/npt_crd_v2/lageos1/2026/lageos1_20261008.np2', file.toString()), portId: 'source' }]);
+  const report = decodeFlowNotice(bytesOf(read, 'report'));
+  assert.ok(report.items.includes('passesRead=2') && report.items.includes('normalPointsRead=15'));
   const [svel] = framesOf(read, 'observations');
 
   // The numbers the file prints for the first pass: the times of flight of its normal points (record 11, field 3).

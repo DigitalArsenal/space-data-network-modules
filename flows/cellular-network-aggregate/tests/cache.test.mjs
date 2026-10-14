@@ -1,259 +1,78 @@
 /*
- * Flow-level tests for the CACHE-FIRST cellular-network-aggregate flow
- * (graph task mod-cellular-aggregate-cache; owner 2026-08-14: "we need to have
- * caching mechanisms on the SDN nodes, the cell towers should load almost
- * instantaneously").
+ * Flow-level tests for the CACHE-FIRST cellular-network-aggregate flow on the typed contracts (1.0)
+ * (graph task mod-cellular-aggregate-cache; owner 2026-08-14: "the cell towers should load almost instantaneously").
  *
- * COMPUTABLE OUTCOMES ONLY (owner law: no UI-wiring or source-pattern tests).
- * Each assertion below is a byte range, a count, or the presence/absence of a
- * host call — never a shape of the source:
+ * COMPUTABLE OUTCOMES ONLY (owner law): each assertion is a byte range, a count, a typed field, or the presence /
+ * absence of a host call.
  *
- *   1. CACHE-HIT CORRECTNESS: the bytes the flow serves as the response body
- *      are byte-identical to the bytes the default FlatSQL query returned.
- *      A cache that serves something other than the query result is the one
- *      failure mode that makes the whole feature worse than no cache.
- *   2. ZERO PROVIDER FETCHES on the cache path. This is the ~9 s the live page
- *      was paying: it is measured here as the ABSENCE of any `http.request`
- *      host call, which is stronger than a wall-clock number and does not
- *      depend on the machine the test runs on.
- *   3. THE REFRESH ESCAPE HATCH still reaches the providers, so the cache is a
- *      default and not a wall.
- *   4. HONEST STALENESS: with nothing ingested, the answer is instant AND
- *      says so — cacheState "empty", stale true, and a reason. "No fake
- *      instant-but-empty answers" is a testable property, and this is it.
- *   5. INVALIDATION: after the ingest lane advances its mark, the next request
- *      reflects the new store contents and reports the new progress.
+ *   1. CACHE-HIT CORRECTNESS: the records the flow serves are byte-identical to the stored $TBS rows the default FlatSQL
+ *      query returned (after the dataset's $DAV frame, which says what they are).
+ *   2. ZERO PROVIDER FETCHES on the cache path: the ABSENCE of any http.request hostcall.
+ *   3. THE REFRESH ESCAPE HATCH still reaches the provider lane.
+ *   4. HONEST STALENESS: nothing ingested -> instant AND says so (x-sdn-cache empty, $DAV KNOWN false / NotPublished).
+ *   5. INVALIDATION: after the ingest lane advances its mark, the next request reflects the new store and progress.
  *
- * The SAME artifact the Go host would serve is instantiated in the JS flow
- * runtime host, with the host dialect the Go node speaks ({"ok":true,
- * "result":{...}} envelopes, aligned segments for stream results).
+ * The SAME artifact the Go host would serve runs in the JS flow runtime host; every hostcall is an SDS $PIV invocation
+ * answered as the Go node answers it (typed-host.mjs).
  */
 
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
+import { Buffer } from "node:buffer";
 import test from "node:test";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 
-import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
-
-import { irmRecord, irmStream, isMarkQuery } from "./irm-fixture.mjs";
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+import {
+  configHandler,
+  createHostStub,
+  frames,
+  htqTrigger,
+  httpAnswer,
+  httpAnswerOf,
+  irmRecord,
+  isMarkQuery,
+  runFlow,
+  sds,
+  stream,
+  streamAnswer,
+  tbsSite,
+  unpack,
+} from "./typed-host.mjs";
 
 const FLOW_WASM = new URL("../dist/runtime.wasm", import.meta.url);
 
-// flatbuffers and the generated $HTQ binding live inside the module SDK, which
-// is where this package resolves them from — this repo declares no flatbuffers
-// dependency of its own.
-const sdkTestingEntry = fileURLToPath(
-  new URL(import.meta.resolve("space-data-module-sdk/testing")),
-);
-const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
-const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = sdkRequire("flatbuffers");
-const { HttpRequest } = sdkRequire(
-  path.join(sdkRoot, "src", "generated", "http", "sdn", "http", "http-request.js"),
-);
+const SITES = [
+  tbsSite({ id: "opencellid:17811", latitude: 40.7484, longitude: -73.9857 }),
+  tbsSite({ id: "opencellid:987654321", latitude: 51.5072, longitude: -0.1276 }),
+  tbsSite({ id: "opencellid:5678", latitude: 52.52, longitude: 13.405 }),
+];
+const CACHED_ROWS = stream(SITES);
 
-// ── the fixture store ──────────────────────────────────────────────────────
-//
-// A size-prefixed record stream standing in for what `storage.flatsql_query_
-// stream` returns for the default query. The CONTENT is opaque to the cache
-// lane by design — the whole point is that the bytes are forwarded verbatim —
-// so the fixture is deliberately just recognisable bytes with the right framing.
-function sizePrefixedStream(payloads) {
-  const total = payloads.reduce((sum, p) => sum + 4 + p.length, 0);
-  const out = new Uint8Array(total);
-  const view = new DataView(out.buffer);
-  let offset = 0;
-  for (const p of payloads) {
-    view.setUint32(offset, p.length, true);
-    out.set(p, offset + 4);
-    offset += 4 + p.length;
-  }
-  return out;
-}
-
-const CACHED_ROWS = sizePrefixedStream([
-  encoder.encode("cell-site-0000-manhattan"),
-  encoder.encode("cell-site-0001-london"),
-  encoder.encode("cell-site-0002-berlin"),
-]);
-
-function encodeHostcallEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total =
-    4 + metaBytes.length + 4 + segments.reduce((sum, s) => sum + 4 + s.length, 0);
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  envelope.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    envelope.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return envelope;
-}
-
-function decodeHostcallEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
-  const metaLen = view.getUint32(offset, true);
-  offset += 4;
-  const meta = JSON.parse(decoder.decode(bytes.subarray(offset, offset + metaLen)));
-  offset += metaLen;
-  const segmentCount = view.getUint32(offset, true);
-  offset += 4;
-  const segments = [];
-  for (let i = 0; i < segmentCount; i++) {
-    const segmentLen = view.getUint32(offset, true);
-    offset += 4;
-    segments.push(Uint8Array.from(bytes.subarray(offset, offset + segmentLen)));
-    offset += segmentLen;
-  }
-  return { meta, segments };
-}
-
-function htqRequest({
-  method = "POST",
-  requestPath = "/api/v1/cellular/aggregate",
-  query = "",
-  body = "",
-}) {
-  const b = new flatbuffers.Builder(1024);
-  const methodOff = b.createString(method);
-  const pathOff = b.createString(requestPath);
-  const queryOff = b.createString(query);
-  const bodyBytes = typeof body === "string" ? encoder.encode(body) : body;
-  const bodyOff = HttpRequest.createBodyVector(b, bodyBytes);
-  HttpRequest.startHttpRequest(b);
-  HttpRequest.addMethod(b, methodOff);
-  HttpRequest.addPath(b, pathOff);
-  HttpRequest.addQuery(b, queryOff);
-  HttpRequest.addBody(b, bodyOff);
-  const off = HttpRequest.endHttpRequest(b);
-  HttpRequest.finishHttpRequestBuffer(b, off);
-  return b.asUint8Array();
-}
-
-// `rows` is what the DEFAULT QUERY returns; `mark` is what the resume-mark
-// query returns (null = the ingest lane has never stored anything).
-function createHostStub({ config = {}, rows = CACHED_ROWS, mark = null } = {}) {
-  const calls = [];
-  const memoryRef = { memory: null };
-  let response = new Uint8Array(0);
-
-  const imports = {
-    space_data_module_host: {
-      call(opPtr, opLen, payloadPtr, payloadLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta } = decodeHostcallEnvelope(payload);
-        calls.push({ operation, meta });
-
-        if (operation === "plugin.getConfig") {
-          response = encodeHostcallEnvelope({ ok: true, result: config });
-          return 0;
-        }
-
-        if (operation === "storage.flatsql_query_stream") {
-          // The mark query and the records query are told apart by the SQL,
-          // exactly as the engine would.
-          // The DURABLE mark read: $IRM records out of the store's per-type
-          // table, not a bespoke bookkeeping table.
-          const isMark = isMarkQuery(meta.sql);
-          if (isMark) {
-            const segment = mark ? irmStream([mark]) : new Uint8Array(0);
-            response = encodeHostcallEnvelope({ ok: true, result: {} }, [segment]);
-            return 0;
-          }
-          response = encodeHostcallEnvelope({ ok: true, result: {} }, [rows]);
-          return 0;
-        }
-
-        if (operation === "http.request") {
-          // Only the REFRESH lane may reach this. Answering with an empty 200
-          // is enough: the assertion is that it was CALLED, not what it said.
-          response = encodeHostcallEnvelope({
-            ok: true,
-            result: { status: 200, headers: {}, body: "", body_encoding: "base64" },
-          });
-          return 0;
-        }
-
-        response = encodeHostcallEnvelope({ ok: false, message: `unexpected op ${operation}` });
-        return 1;
-      },
-      response_len() {
-        return response.length;
-      },
-      read_response(dstPtr, dstLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const length = Math.min(dstLen, response.length);
-        heap.set(response.subarray(0, length), dstPtr);
-        return length;
-      },
-    },
-  };
-  return { calls, imports, memoryRef };
-}
-
-async function runFlowOnce(stub, requestBytes) {
-  const host = await createFlowRuntimeHost({
-    wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(FLOW_WASM))),
-    extraImports: stub.imports,
-    runtimeTarget: "wasmedge",
+function hostFor({ config = {}, rows = CACHED_ROWS, mark = null } = {}) {
+  return createHostStub({
+    "plugin.getConfig": configHandler(config),
+    "storage.flatsql_query_stream": (c) => (isMarkQuery(c.sql) ? streamAnswer(mark ? stream([mark]) : new Uint8Array(0)) : streamAnswer(rows)),
+    // only the REFRESH lane may reach this; an empty 200 is enough - the assertion is that it was CALLED
+    "http.request": () => httpAnswer(200, ""),
   });
-  stub.memoryRef.memory = host.memory;
-
-  const emitted = [];
-  host.enqueueTriggerFrame(0, { portId: "request", bytes: requestBytes });
-  const startedAt = process.hrtime.bigint();
-  await host.drain({
-    "sdn.flow.egress:emit": ({ frames }) => {
-      for (const frame of frames) emitted.push(Uint8Array.from(frame.bytes));
-      return { statusCode: 0 };
-    },
-  });
-  const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-  return { emitted, elapsedMs };
 }
-
-// The $HTR the flow emits carries the body somewhere inside it; the cache-hit
-// assertion only needs to know that the exact query bytes are present, and that
-// nothing else claiming to be a body is.
-function containsSubsequence(haystack, needle) {
-  if (needle.length === 0 || needle.length > haystack.length) return false;
-  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return true;
+const queries = (stub) => stub.calls.filter((c) => c.operation === "storage.flatsql_query_stream");
+const fetches = (stub) => stub.calls.filter((c) => c.operation === "http.request");
+async function aggregate(stub, body, query = "") {
+  const { egress } = await runFlow(FLOW_WASM, stub, htqTrigger({ method: "POST", path: "/api/v1/cellular/aggregate", query, body: JSON.stringify(body) }));
+  return httpAnswerOf(egress);
+}
+// The answer of a dataset: one stream, its $DAV first, then the records verbatim. A dataset with no records is
+// answered by foundation/http-respond as its $DAV alone (one record, application/x-flatbuffers).
+function dataset(answer) {
+  assert.equal(answer.status, 200);
+  if (answer.header("content-type") === "application/x-flatbuffers") {
+    assert.equal(answer.header("x-sdn-file-identifier"), "$DAV");
+    return { dav: unpack("DAV", answer.body), records: [] };
   }
-  return false;
+  assert.equal(answer.header("content-type"), "application/vnd.sdn.flatbuffers.stream");
+  const [head, ...records] = frames(answer.body);
+  return { dav: unpack("DAV", head), records };
 }
 
-// The freshness rides as RESPONSE HEADERS (foundation/http-respond's
-// decision.headers passthrough), because the body is a verbatim FlatBuffer
-// stream that cannot carry it. Header names and values are FlatBuffer strings,
-// so they appear literally in the encoded $HTR — which is all these assertions
-// need, and is independent of the $HTR field ordering.
-function responseText(emitted) {
-  return emitted.map((bytes) => decoder.decode(bytes)).join("\n");
-}
-
-// THE DURABLE MARK, as a real $IRM record (Themis minted the standard in
-// spacedatastandards.org 1.196.0). Built with the published JS binding and read
-// by the guest through flatc's C++ output.
 const WARM_MARK = irmRecord({
   providerId: "opencellid",
   sourceUrl: "https://example.invalid/opencellid-bulk.csv",
@@ -264,120 +83,82 @@ const WARM_MARK = irmRecord({
   updatedAt: "2026-08-24T12:00:00Z",
 });
 
-test("cache hit serves exactly the default query's bytes, and contacts no provider", async () => {
-  const stub = createHostStub({ mark: WARM_MARK });
-  const { emitted, elapsedMs } = await runFlowOnce(
-    stub,
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["opencellid"], LIMIT: 2000 }) }),
-  );
+test("cache hit serves exactly the default query's records, and contacts no provider", async () => {
+  const stub = hostFor({ mark: WARM_MARK });
+  const answer = await aggregate(stub, { PROVIDERS: ["opencellid"], LIMIT: 2000 });
+  const { dav, records } = dataset(answer);
+  // (1) served records == the direct query result, byte for byte
+  assert.deepEqual(records.map((r) => Buffer.from(r).toString("hex")), SITES.map((s) => Buffer.from(s).toString("hex")));
+  assert.ok(Buffer.from(answer.body).includes(Buffer.from(CACHED_ROWS)), "the stored stream is forwarded verbatim");
+  assert.equal(answer.header("x-sdn-record-count"), "3");
+  assert.equal(dav.STANDARD, "TBS");
+  assert.equal(dav.SCHEMA_NAME, "TBS.fbs");
+  assert.equal(Number(dav.RECORD_COUNT), 3);
 
-  // (1) served blob == direct query result.
-  const all = new Uint8Array(emitted.reduce((n, e) => n + e.length, 0));
-  let at = 0;
-  for (const e of emitted) {
-    all.set(e, at);
-    at += e.length;
-  }
-  assert.ok(
-    containsSubsequence(all, CACHED_ROWS),
-    "the response must carry the default query's result bytes verbatim",
-  );
+  // (2) THE 9 SECONDS: not one provider was contacted
+  assert.equal(fetches(stub).length, 0, "the cache path must issue zero provider fetches");
 
-  // (2) THE 9 SECONDS: not one provider was contacted.
-  const httpCalls = stub.calls.filter((c) => c.operation === "http.request");
-  assert.equal(httpCalls.length, 0, "the cache path must issue zero provider fetches");
-
-  // The default query ran exactly twice: the records read and the mark read.
-  const queries = stub.calls.filter((c) => c.operation === "storage.flatsql_query_stream");
-  assert.equal(queries.length, 2);
-
-  // The caller's LIMIT is bound as a parameter, not interpolated.
-  const recordQuery = queries.find((q) => !String(q.meta.sql).includes("cell_tower_ingest_mark"));
-  assert.match(String(recordQuery.meta.sql), /\?/);
-  assert.deepEqual(recordQuery.meta.params, [{ t: "i64", v: 2000 }]);
-
-  // Reported for the record; the pass/fail above does not depend on it.
-  console.log(`cache-path flow drain: ${elapsedMs.toFixed(2)} ms`);
+  // exactly two reads - the records and the mark - and the caller's LIMIT is bound, not interpolated
+  assert.equal(queries(stub).length, 2);
+  const recordQuery = queries(stub).find((q) => !isMarkQuery(q.sql));
+  assert.match(recordQuery.sql, /\?/);
+  assert.deepEqual(recordQuery.sqlParams, [2000]);
+  assert.equal(recordQuery.sqlValues[0].t, "i64", "an int64 parameter");
 });
 
-test("a warm cache reports its provider progress instead of claiming to be current", async () => {
-  const stub = createHostStub({ mark: WARM_MARK });
-  const { emitted } = await runFlowOnce(
-    stub,
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["opencellid"] }) }),
-  );
-  const text = responseText(emitted);
-  assert.match(text, /x-sdn-cache\b/);
-  assert.match(text, /x-sdn-cache-freshness/);
-  assert.match(text, /warm/);
-  assert.match(text, /complete/);
-  assert.match(text, /providerId/);
-  assert.match(text, /3145728/);
-  assert.match(text, /x-sdn-cache-stale/);
+test("a warm, completed cache says so: x-sdn-cache headers and a FRESH $DAV stamped by the mark", async () => {
+  const answer = await aggregate(hostFor({ mark: WARM_MARK }), { PROVIDERS: ["opencellid"] });
+  const { dav } = dataset(answer);
+  assert.equal(answer.header("x-sdn-cache"), "warm");
+  assert.equal(answer.header("x-sdn-cache-freshness"), "complete");
+  assert.equal(answer.header("x-sdn-cache-stale"), "false");
+  assert.match(answer.header("x-sdn-cache-providers"), /providerId=opencellid/);
+  assert.match(answer.header("x-sdn-cache-providers"), /totalBytes=3145728/);
+  assert.deepEqual([dav.KNOWN, dav.AVAILABLE, dav.FRESH], [true, true, true]);
+  assert.equal(Number(dav.PUBLISHED_AT_MS), Date.parse("2026-08-24T12:00:00Z"));
+  assert.equal(dav.PROVIDER_ID, "opencellid");
 });
 
-test("an empty cache answers instantly AND says it is empty, with the reason", async () => {
-  const stub = createHostStub({ mark: null, rows: new Uint8Array(0) });
-  const { emitted } = await runFlowOnce(
-    stub,
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["opencellid"] }) }),
-  );
-  const text = responseText(emitted);
-  assert.match(text, /x-sdn-cache\b/);
-  assert.match(text, /empty/);
-  assert.match(text, /x-sdn-cache-stale/);
-  assert.equal(stub.calls.filter((c) => c.operation === "http.request").length, 0);
+test("an empty cache answers instantly AND says it is empty", async () => {
+  const stub = hostFor({ mark: null, rows: new Uint8Array(0) });
+  const answer = await aggregate(stub, { PROVIDERS: ["opencellid"] });
+  const { dav, records } = dataset(answer);
+  assert.equal(records.length, 0);
+  assert.equal(answer.header("x-sdn-cache"), "empty");
+  assert.equal(answer.header("x-sdn-cache-stale"), "true");
+  assert.deepEqual([dav.KNOWN, dav.AVAILABLE], [false, false]);
+  assert.equal(dav.UNAVAILABLE_REASON, sds.DAV.davUnavailableReason.NotPublished);
+  assert.equal(Number(dav.RECORD_COUNT), 0);
+  assert.equal(fetches(stub).length, 0);
 });
 
 test("REFRESH:true bypasses the cache and reaches the provider lane", async () => {
-  const stub = createHostStub({ mark: WARM_MARK });
-  await runFlowOnce(
-    stub,
-    htqRequest({
-      body: JSON.stringify({ PROVIDERS: ["opencellid"], REFRESH: true }),
-    }),
-  );
-  // The cache lane must not have run at all...
-  assert.equal(
-    stub.calls.filter((c) => c.operation === "storage.flatsql_query_stream").length,
-    0,
-    "REFRESH must not read the cache",
-  );
-  // ...and the request must have been forwarded to route, which owns the
-  // provider lane. This fixture selects a credential-gated provider, so route
-  // legitimately short-circuits with its skip reasons rather than fetching —
-  // the outcome under test is that the CACHE was bypassed and route decided,
-  // which is exactly what the absence of any flatsql read above establishes.
-  assert.ok(
-    !stub.calls.some((c) => c.operation === "storage.flatsql_query_stream"),
-    "REFRESH must reach the provider lane, not the cache",
-  );
+  const stub = hostFor({ mark: WARM_MARK });
+  const answer = await aggregate(stub, { PROVIDERS: ["openstreetmap-overpass"], BBOX: { south: 52.3, west: 13.0, north: 52.7, east: 13.8 }, REFRESH: true });
+  assert.equal(queries(stub).length, 0, "REFRESH must not read the cache");
+  assert.ok(fetches(stub).length >= 1, "REFRESH must reach the providers");
+  assert.ok(fetches(stub).every((c) => c.url.includes("interpreter?data=")), "the Overpass endpoints and mirrors");
+  const { dav } = dataset(answer);
+  assert.equal(dav.SOURCE_NAME, "cellular-aggregate", "the live lane answered, not the cache");
 });
 
-test("the /providers catalog route is passed through untouched", async () => {
-  const stub = createHostStub({ mark: WARM_MARK });
-  const { emitted } = await runFlowOnce(
-    stub,
-    htqRequest({ method: "GET", requestPath: "/api/v1/cellular/providers" }),
-  );
-  assert.equal(
-    stub.calls.filter((c) => c.operation === "storage.flatsql_query_stream").length,
-    0,
-    "the catalog route must not consult the cache",
-  );
-  assert.ok(emitted.length > 0, "the catalog route must still answer");
+test("the /providers catalog route is passed through to the provider lane, untouched by the cache", async () => {
+  const stub = createHostStub({
+    "plugin.getConfig": configHandler({}),
+    "secrets.status": () => ({ result: { ID: "", CONFIGURED: false } }),
+    "node.publicKey": () => ({ error: { code: "unsupported", message: "no key" } }),
+  });
+  const { egress } = await runFlow(FLOW_WASM, stub, htqTrigger({ method: "GET", path: "/api/v1/cellular/providers" }));
+  const answer = httpAnswerOf(egress);
+  assert.equal(answer.status, 200);
+  assert.equal(queries(stub).length, 0, "the catalog route must not consult the cache");
 });
 
 test("invalidation: new ingest state changes what the next request is served and told", async () => {
-  const first = createHostStub({ mark: null, rows: new Uint8Array(0) });
-  const a = await runFlowOnce(
-    first,
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["opencellid"] }) }),
-  );
-  assert.match(responseText(a.emitted), /empty/);
+  const a = await aggregate(hostFor({ mark: null, rows: new Uint8Array(0) }), { PROVIDERS: ["opencellid"] });
+  assert.equal(a.header("x-sdn-cache"), "empty");
 
-  // The ingest lane runs: rows land, the mark advances. Same request again.
-  const second = createHostStub({
+  const b = await aggregate(hostFor({
     mark: irmRecord({
       providerId: "opencellid",
       sourceUrl: "https://example.invalid/opencellid-bulk.csv",
@@ -388,25 +169,11 @@ test("invalidation: new ingest state changes what the next request is served and
       updatedAt: "2026-08-24T11:00:00Z",
     }),
     rows: CACHED_ROWS,
-  });
-  const b = await runFlowOnce(
-    second,
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["opencellid"] }) }),
-  );
-  const text = responseText(b.emitted);
-  assert.match(text, /warm/);
-  // Still ingesting, so it must NOT claim to be complete.
-  assert.match(text, /ingesting/);
-  assert.doesNotMatch(text, /complete/);
-
-  const all = new Uint8Array(b.emitted.reduce((n, e) => n + e.length, 0));
-  let at = 0;
-  for (const e of b.emitted) {
-    all.set(e, at);
-    at += e.length;
-  }
-  assert.ok(
-    containsSubsequence(all, CACHED_ROWS),
-    "the second request must be served the newly stored rows",
-  );
+  }), { PROVIDERS: ["opencellid"] });
+  assert.equal(b.header("x-sdn-cache"), "warm");
+  assert.equal(b.header("x-sdn-cache-freshness"), "ingesting", "still ingesting: it must NOT claim to be complete");
+  assert.equal(b.header("x-sdn-cache-stale"), "true");
+  const { dav, records } = dataset(b);
+  assert.equal(dav.FRESH, false);
+  assert.equal(records.length, 3, "the second request is served the newly stored rows");
 });

@@ -2,8 +2,10 @@
  * Flow-level test for the compiled imager-observation-ingest flow - BRIDGE mode: the SAME runtime.wasm the Go host
  * serves from its cron timer, instantiated in the JS flow runtime host (WasmEdge leg). A timer tick enters plan and the
  * whole listing -> select -> fetch -> parse -> ingest chain runs linked-direct inside the artifact's linear memory; the
- * only host crossings are the declared hostcalls, stubbed here in the Go host's dialect: plugin.getConfig,
- * http.request (S3 listings and NetCDF4 GETs, byte ranges answered 206) and storage.ingest_with_source.
+ * only host crossings are the declared hostcalls, each an SDS $PIV invocation (typed contracts 1.0), stubbed here:
+ * plugin.getConfig (one ModuleConfig on raw "config"), http.request (raw url / headers frames in; HttpResult + raw url / headers / body
+ * out: S3 listings and NetCDF4 GETs, byte ranges answered 206) and storage.ingest_with_source (StorageIngestParams +
+ * raw records). Every frame between the nodes is a typed FlatBuffer: no JSON jobs, no $HRB, no base64.
  *
  * Data: the parser's real GOES-19 mesoscale files (data-source/imager-observation-parser/tests/fixtures), listed and
  * served under the full-disk product folders the source fetches; their world codes must equal the reference
@@ -20,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import { decodeFlowNotice, decodeHostCall, decodeHttpResponse, decodeIngestResult, encodeHostCallResult, encodeModuleConfig, encodeTimerTick, identifierOf } from "space-data-module-sdk/runtime-contracts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -60,61 +63,57 @@ const listingXml = (entries) => `<?xml version="1.0" encoding="UTF-8"?>\n<ListBu
   entries.map((e) => `<Contents><Key>${e.key}</Key><LastModified>2026-10-07T06:10:00.000Z</LastModified><ETag>"x"</ETag><Size>${e.size}</Size><StorageClass>STANDARD</StorageClass></Contents>`).join("") +
   "</ListBucketResult>";
 
-function encodeEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const out = new Uint8Array(4 + metaBytes.length + 4 + segments.reduce((n, s) => n + 4 + s.length, 0));
-  const view = new DataView(out.buffer);
-  let off = 0;
-  view.setUint32(off, metaBytes.length, true); out.set(metaBytes, 4); off = 4 + metaBytes.length;
-  view.setUint32(off, segments.length, true); off += 4;
-  for (const s of segments) { view.setUint32(off, s.length, true); out.set(s, off + 4); off += 4 + s.length; }
-  return out;
-}
-function decodeEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  let off = 4 + metaLen;
-  const count = view.getUint32(off, true); off += 4;
-  const segments = [];
-  for (let i = 0; i < count; i++) { const n = view.getUint32(off, true); segments.push(Uint8Array.from(bytes.subarray(off + 4, off + 4 + n))); off += 4 + n; }
-  return { meta, segments };
-}
+const headerBlock = (bytes) => Object.fromEntries((bytes ? decoder.decode(bytes) : "").split(/\r?\n/).filter(Boolean).map((l) => [l.slice(0, l.indexOf(":")).trim().toLowerCase(), l.slice(l.indexOf(":") + 1).trim()]));
 
+// The Go host's typed hostcall dialect: each call an SDS $PIV request, each answer a $PIV response.
 function createHostStub(config) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-  const answer = (result) => { response = encodeEnvelope({ ok: true, result }); return 0; };
+  const http = (url, status, headers, body) => {
+    response = encodeHostCallResult({ ok: true, op: "http.request", result: { STATUS: status, RETRIEVED_MS: BigInt(FRAME_MS + 1200000) },
+      raw: { url, headers: Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join("\r\n"), body } });
+    return 0;
+  };
   const imports = { space_data_module_host: {
     call(opPtr, opLen, payloadPtr, payloadLen) {
-      const heap = new Uint8Array(memoryRef.memory.buffer);
-      const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-      const { meta, segments } = decodeEnvelope(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
-      calls.push({ operation, meta, segments });
-      if (operation === "plugin.getConfig") return answer(config);
-      if (operation === "http.request") {
-        if (meta.url === PUBLISH_URL) return answer({ status: 202, headers: {}, body: Buffer.from("{}").toString("base64"), body_encoding: "base64" });
-        if (LISTINGS[meta.url]) return answer({ status: 200, headers: { "content-type": "application/xml" }, body: Buffer.from(listingXml(LISTINGS[meta.url])).toString("base64"), body_encoding: "base64" });
-        const file = FILES[meta.url];
-        if (!file) return answer({ status: 404, headers: {}, body: "", body_encoding: "base64" });
-        const range = meta.headers?.Range?.match(/^bytes=(\d+)-(\d+)$/);
+      const call = decodeHostCall(new Uint8Array(memoryRef.memory.buffer, payloadPtr, payloadLen).slice());
+      const url = call.raw.url ? decoder.decode(call.raw.url) : "";
+      const headers = headerBlock(call.raw.headers);
+      calls.push({ operation: call.op, call, url, headers });
+      if (call.op === "plugin.getConfig") { response = encodeHostCallResult({ ok: true, op: call.op, raw: { config: encodeModuleConfig(config) } }); return 0; }
+      if (call.op === "http.request") {
+        if (url === PUBLISH_URL) return http(url, 202, {}, encoder.encode("{}"));
+        if (LISTINGS[url]) return http(url, 200, { "content-type": "application/xml" }, encoder.encode(listingXml(LISTINGS[url])));
+        const file = FILES[url];
+        if (!file) return http(url, 404, {}, new Uint8Array(0));
+        const range = headers.range?.match(/^bytes=(\d+)-(\d+)$/);
         const body = range ? file.body.subarray(Number(range[1]), Number(range[2]) + 1) : file.body;
-        return answer({ status: range ? 206 : 200, headers: { "content-type": "application/x-netcdf" }, body: Buffer.from(body).toString("base64"), body_encoding: "base64" });
+        return http(url, range ? 206 : 200, { "content-type": "application/x-netcdf" }, body);
       }
-      if (operation === "storage.ingest_with_source") {
-        const records = Buffer.from(segments[meta.records?.$bin ?? 0]);
+      if (call.op === "storage.ingest_with_source") {
+        const records = Buffer.from(call.raw.records);
         let count = 0;
         for (let off = 0; off < records.length;) { off += 4 + records.readUInt32LE(off); count++; }
-        return answer({ schema: meta.schema, inserted: count, batch_id: meta.batch_id });
+        response = encodeHostCallResult({ ok: true, op: call.op, result: { SCHEMA: call.params.SCHEMA, BATCH_ID: call.params.BATCH_ID, INSERTED: BigInt(count) } });
+        return 0;
       }
-      response = encodeEnvelope({ ok: false, message: `unexpected op ${operation}` });
-      return 1;
+      response = encodeHostCallResult({ ok: false, error: { code: "unsupported", message: `unexpected op ${call.op}` } });
+      return 0;
     },
     response_len() { return response.length; },
     read_response(dst, len) { const n = Math.min(len, response.length); new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, n), dst); return n; },
   } };
   return { calls, imports, memoryRef };
+}
+
+// an egress frame, decoded by its file identifier
+function egressFrame(bytes) {
+  const id = identifierOf(bytes);
+  if (id === "INGR") return { id, ...decodeIngestResult(bytes) };
+  if (id === "HRSP") return { id, ...decodeHttpResponse(bytes) };
+  if (id === "FNTC") return { id, ...decodeFlowNotice(bytes) };
+  return { id };
 }
 
 function recordCodes(r) {
@@ -136,12 +135,12 @@ test("timer tick -> listings -> one file at a time (byte ranges joined) -> world
   const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
   stub.memoryRef.memory = host.memory;
   const egress = [];
-  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-07T06:20:00Z" })) });
-  await host.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) egress.push(JSON.parse(decoder.decode(f.bytes))); return { statusCode: 0 }; } });
+  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encodeTimerTick({ triggerId: "timer-imager", scheduledMs: FRAME_MS + 1200000, firedMs: FRAME_MS + 1200000 }) });
+  await host.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) egress.push(egressFrame(Uint8Array.from(f.bytes))); return { statusCode: 0 }; } });
 
   // the listings first, then each file's GETs followed by its ingest: one file at a time
   const sequence = stub.calls.filter((c) => c.operation !== "plugin.getConfig").map((c) =>
-    c.operation === "storage.ingest_with_source" ? "ingest" : c.meta.url === PUBLISH_URL ? "publish" : LISTINGS[c.meta.url] ? "list" : FILES[c.meta.url] ? `get:${FILES[c.meta.url].field}` : `?${c.meta.url}`);
+    c.operation === "storage.ingest_with_source" ? "ingest" : c.url === PUBLISH_URL ? "publish" : LISTINGS[c.url] ? "list" : FILES[c.url] ? `get:${FILES[c.url].field}` : `?${c.url}`);
   const listings = Object.keys(LISTINGS).length;
   assert.deepEqual(sequence.slice(0, listings), Array(listings).fill("list"), sequence.join(" "));
   const afterListings = sequence.slice(listings);
@@ -157,20 +156,36 @@ test("timer tick -> listings -> one file at a time (byte ranges joined) -> world
     at += 2;
   }
   assert.equal(at, afterListings.length);
-  for (const c of stub.calls.filter((c) => c.operation === "http.request" && c.meta.url !== PUBLISH_URL)) {
-    assert.equal(c.meta.headers["If-Modified-Since"], "Thu, 01 Jan 1970 00:00:00 GMT");
+  for (const c of stub.calls.filter((c) => c.operation === "http.request" && c.url !== PUBLISH_URL)) {
+    assert.equal(c.headers["if-modified-since"], "Thu, 01 Jan 1970 00:00:00 GMT");
   }
-  const reflectanceGets = stub.calls.filter((c) => FILES[c.meta.url]?.field === "reflectance_064um");
+  const publications = stub.calls.filter((c) => c.url === PUBLISH_URL);
+  for (const c of publications) {
+    assert.equal(c.call.params.METHOD, "POST");
+    assert.equal(c.headers["content-type"], "application/octet-stream");
+    // the BODY is the stored batch's IngestResult (INGR)
+    assert.equal(identifierOf(Uint8Array.from(c.call.raw.body)), "INGR");
+    const body = decodeIngestResult(Uint8Array.from(c.call.raw.body));
+    assert.deepEqual([body.schema, body.providerId, body.sourceName, body.refused], ["WXF.fbs", "noaa-goes", "noaa-goes19-world", ""]);
+    assert.match(body.batchId, /^[0-9a-f]{64}$/);
+    assert.ok(body.inserted > 0, "the publication carries the stored count");
+  }
+  const reflectanceGets = stub.calls.filter((c) => FILES[c.url]?.field === "reflectance_064um");
   assert.equal(reflectanceGets.length, 2, "the 1.47 MB band in two 1 MiB-bounded ranges");
 
   // every ingest: one file's field, its world codes equal to the reference at every width
   const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
   assert.equal(ingests.length, FIELDS.length);
   for (const ingest of ingests) {
-    assert.equal(ingest.meta.schema, "WXF.fbs");
-    assert.equal(ingest.meta.provider_id, "noaa-goes");
-    assert.equal(ingest.meta.source_name, "noaa-goes19-world");
-    const records = Buffer.from(ingest.segments[ingest.meta.records?.$bin ?? 0]);
+    const { params } = ingest.call;
+    assert.equal(params.SCHEMA, "WXF.fbs");
+    assert.equal(params.PROVIDER_ID, "noaa-goes");
+    assert.equal(params.SOURCE_NAME, "noaa-goes19-world");
+    assert.equal(params.LICENSE, "LicenseRef-NOAA-Open-Data");
+    assert.equal(params.RECONCILE, 0, "reconcile Duplicates");
+    assert.match(params.BATCH_ID, /^[0-9a-f]{64}$/);
+    assert.equal(ingest.call.lists.provenance.length, 1);
+    const records = Buffer.from(ingest.call.raw.records);
     const byWidth = {};
     let field = null;
     for (let off = 0; off < records.length;) {
@@ -196,8 +211,10 @@ test("timer tick -> listings -> one file at a time (byte ranges joined) -> world
       assert.equal(differ, 0, `${field} ${width}: ${differ} codes differ from the reference`);
     }
   }
-  const results = egress.filter((r) => r.schema === "WXF.fbs");
+  const results = egress.filter((r) => r.id === "INGR" && r.schema === "WXF.fbs");
   assert.equal(results.length, FIELDS.length, "one ingest result per file reached the egress");
-  assert.equal(egress.filter((r) => r.missing || r.skipped).length, 0, JSON.stringify(egress));
+  assert.ok(results.every((r) => r.inserted > 0 && r.refused === ""));
+  assert.equal(egress.filter((r) => r.id === "HRSP" && r.status === 202).length, FIELDS.length, "one publication response per file");
+  assert.equal(egress.filter((r) => r.id === "FNTC").length, 0, JSON.stringify(egress));
   console.log(`runtime linear memory after the cycle: ${(host.memory.buffer.byteLength / 1048576).toFixed(0)} MiB`);
 });

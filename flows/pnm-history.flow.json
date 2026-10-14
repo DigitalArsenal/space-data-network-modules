@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.pnm-history",
   "name": "SDN PNM Publication History Flow",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "HTTP PNM-provenance flow (gateway loop G.3): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (pnm_history with peerId + in-wasm clamped limit [1,100] default 1 | not_found), hostcap/p2p-discovery pnm_history issues the policy-mediated p2p.pnm_history hostcall (the peer's stored signed $PNM publications, publisher-attributed by Ed25519 SIGNATURE on the host because the store's recorded peer id is only the gossip-delivering peer; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape shape_pnm splices the signed $PNM frames VERBATIM (signatures intact) newest-first / encodes the bare-array json presentation with the signature_verified/attribution provenance fields and the shared FNV-1a etag / rewrites empty histories to not_found, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "description": "Gateway PNM history flow (mount GET /api/v1/peers/{peerId}/pnm): foundation/http-route discover decides the request as an $APR (pnm_history + peerId + limit); hostcap/p2p-discovery pnm_history reads p2p.pnm_history (typed $PIV, capability p2p_read; the host attributes each notice to its publisher by Ed25519 signature) and answers a $PNV beside the $APR (STATUS 404 no-publications when none are recorded); foundation/http-respond respond renders the $HTR. foundation/discovery-shape is retired. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",
@@ -16,13 +16,6 @@
       "nodeId": "disc",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "methodId": "pnm_history",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_pnm",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -43,35 +36,17 @@
   ],
   "edges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-disc-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "disc",
-      "toPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "disc-decision",
-      "fromNodeId": "disc",
-      "fromPortId": "decision",
-      "toNodeId": "shape",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "disc-snapshot",
+      "edgeId": "disc-decision-respond-decision",
       "fromNodeId": "disc",
-      "fromPortId": "snapshot",
-      "toNodeId": "shape",
-      "toPortId": "snapshot",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "shape-decision",
-      "fromNodeId": "shape",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
@@ -79,34 +54,16 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-body",
-      "fromNodeId": "shape",
-      "fromPortId": "body",
+      "edgeId": "disc-notices-respond-notices",
+      "fromNodeId": "disc",
+      "fromPortId": "notices",
       "toNodeId": "respond",
-      "toPortId": "pnm_body",
+      "toPortId": "notices",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-opaque-body",
-      "fromNodeId": "shape",
-      "fromPortId": "opaque_body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "shape-etag",
-      "fromNodeId": "shape",
-      "fromPortId": "etag",
-      "toNodeId": "respond",
-      "toPortId": "etag",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
@@ -135,7 +92,6 @@
   "requiredPlugins": [
     "com.digitalarsenal.foundation.http-route",
     "com.digitalarsenal.hostcap.p2p-discovery",
-    "com.digitalarsenal.foundation.discovery-shape",
     "com.digitalarsenal.foundation.http-respond"
   ],
   "api": {
@@ -148,7 +104,7 @@
         "method": "GET",
         "operationId": "getPeerPNM",
         "summary": "The peer's newest signed PNM publications (verifiable provenance)",
-        "description": "The signed Publish Notification Messages this peer PUBLISHED, newest first (default limit=1 = the newest publication). PROVENANCE, VERIFIABLY: the default encoding is the stored $PNM FlatBuffer frames VERBATIM — signatures intact — so a cold client can verify each one end-to-end: PNM.SIGNATURE is a hex Ed25519 signature (SIGNATURE_TYPE=Ed25519) over the payload \"SDN-DPM-PNM\\0\" + FILE_ID + \"\\0\" + CID, verified against the publisher's Ed25519 publication key — the peer-id identity key and/or the key_type=signing/ed25519 entry in the publisher's EPM KEYS (fetch it from GET /api/v1/peers/{peerId}). ATTRIBUTION HONESTY: the node's store records only the GOSSIP-DELIVERING peer id for each PNM, which is not necessarily the publisher; this surface therefore attributes by SIGNATURE — an entry belongs to {peerId} iff its signature verifies under that peer's publication key (attribution=signature, signature_verified=true). Only when the node cannot resolve any key for the peer does it fall back to the stored gossip attribution, honestly marked attribution=gossip, signature_verified=false. format=json: bare array of {publisher_peer_id, gossip_peer_id, standard, schema, FILE_ID, FILE_NAME, CID, PUBLISH_TIMESTAMP, SIGNATURE_TYPE, SIGNATURE, signature_verified, attribution, publisher_key|null, publisher_key_source|null} — the same records, presentation only; PNM schema fields carry SCHEMA-EXACT IDL names, synthesized provenance/API fields stay lowercase snake_case (hard rule json-schema-capitalization-rule).",
+        "description": "The peer's stored signed publication notices, newest first (?limit clamped to [1,100], default 1), each attributed to its PUBLISHER by signature verification on the host (SDS Publication Verification). Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists. Conditional GET: the record's ETAG (a content tag, stable across calls while the content is unchanged) rides the etag header; If-None-Match equal to it answers 304.",
         "anonymous": true,
         "params": [
           {
@@ -189,33 +145,81 @@
         ],
         "responses": {
           "200": {
-            "description": "Signed publication stream, newest first. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag shared across encodings.",
-            "recordStream": true,
+            "description": "One $PNV. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists.",
             "content": {
-              "application/vnd.sdn.flatbuffers.stream": {
-                "sds": {
-                  "schemaName": "PNM.fbs",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM"
-                },
-                "description": "Aligned size-prefixed $PNM FlatBuffer frames, VERBATIM as stored (Ed25519 signatures intact), newest first."
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$PNV (SDS PNV.fbs): The peer's stored signed publication notices, newest first (?limit clamped to [1,100], default 1), each attributed to its PUBLISHER by signature verification on the host (SDS Publication Verification)."
+                }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
-                },
-                "description": "Bare top-level JSON array of publication records with provenance fields (format=json)."
+                  "type": "object",
+                  "description": "The $PNV as JSON (IDL field names)."
+                }
               }
             }
           },
           "304": {
-            "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated."
+            "description": "Not modified: If-None-Match equals the record's ETAG."
           },
           "404": {
-            "description": "Peer unknown to this node, or no signed PNM publications attributable to it are stored here."
+            "description": "No route, or no signed publications recorded for the peer (no-publications).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The p2p hostcall failed (host-failed).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }

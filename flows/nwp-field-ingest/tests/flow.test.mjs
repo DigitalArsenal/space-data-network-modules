@@ -1,9 +1,12 @@
 /*
- * Flow-level test for the compiled nwp-field-ingest flow - BRIDGE mode: the SAME runtime.wasm the Go host serves from
- * its cron timer, in the JS flow runtime host (WasmEdge leg). A timer tick enters plan and the whole inventory -> select
- * -> range fetch -> parse -> ingest chain runs linked-direct inside the artifact's linear memory; the only host
- * crossings are the declared hostcalls, stubbed in the Go host's dialect: plugin.getConfig, http.request (.idx
- * inventories, GRIB2 byte ranges answered 206) and storage.ingest_with_source.
+ * Flow-level test for the compiled nwp-field-ingest flow on the typed contracts (1.0) - BRIDGE mode: the SAME
+ * runtime.wasm the Go host serves from its cron timer, in the JS flow runtime host (WasmEdge leg). A TimerTick enters plan
+ * and the whole inventory -> select -> range fetch -> parse -> ingest chain runs linked-direct inside the artifact's linear
+ * memory, every frame a FlatBuffer (HttpRequest / HttpResponse with the job's $WXF header in CONTEXT, IngestRequest +
+ * $WXF stream, IngestResult, FlowNotice); the only host crossings are the declared hostcalls, each an SDS $PIV invocation
+ * answered here as the Go node answers it: plugin.getConfig (one ModuleConfig on raw "config"), http.request (HttpParams + raw url /
+ * headers; .idx inventories, GRIB2 byte ranges answered 206) and storage.ingest_with_source (StorageIngestParams + raw
+ * records + list provenance).
  *
  * Data: the parser's real NOAA messages (data-source/nwp-grib2-parser/tests/fixtures), served as each product's lead-24
  * file with an inventory in the real .idx format listing them; the lead-0 files are absent (404). Every ingested
@@ -20,6 +23,15 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import {
+  decodeFlowNotice,
+  decodeHostCall,
+  decodeHttpResponse,
+  decodeIngestResult,
+  encodeHostCallResult, encodeModuleConfig,
+  encodeTimerTick,
+  identifierOf,
+} from "space-data-module-sdk/runtime-contracts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -55,62 +67,68 @@ for (const s of Object.values(SERVED)) { s.file = s.files.join("+"); s.idx = s.l
 // the default products' fixtures (the sea product, gfs-0p25-sea, is asked for by name)
 const DEFAULT_FILES = Object.keys(EXPECTED).filter((f) => f !== "gfs-0p25-air.grib2");
 
-function encodeEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const out = new Uint8Array(4 + metaBytes.length + 4 + segments.reduce((n, s) => n + 4 + s.length, 0));
-  const view = new DataView(out.buffer);
-  view.setUint32(0, metaBytes.length, true); out.set(metaBytes, 4);
-  let off = 4 + metaBytes.length;
-  view.setUint32(off, segments.length, true); off += 4;
-  for (const s of segments) { view.setUint32(off, s.length, true); out.set(s, off + 4); off += 4 + s.length; }
-  return out;
-}
-function decodeEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  let off = 4 + metaLen;
-  const count = view.getUint32(off, true); off += 4;
-  const segments = [];
-  for (let i = 0; i < count; i++) { const n = view.getUint32(off, true); segments.push(Uint8Array.from(bytes.subarray(off + 4, off + 4 + n))); off += 4 + n; }
-  return { meta, segments };
-}
+const headerLines = (bytes) => Object.fromEntries(decoder.decode(bytes ?? new Uint8Array(0)).split(/\r?\n/).filter(Boolean).map((l) => [l.slice(0, l.indexOf(":")).trim(), l.slice(l.indexOf(":") + 1).trim()]));
+const RETRIEVED_MS = Date.UTC(2026, 9, 6, 5, 30);
+
+// The host side of the typed hostcall: the module's SDS $PIV request decoded, answered with a $PIV response.
 function createHostStub(config) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-  const answer = (result) => { response = encodeEnvelope({ ok: true, result }); return 0; };
-  const http = (status, body) => answer({ status, headers: {}, body: Buffer.from(body).toString("base64"), body_encoding: "base64" });
+  const answer = (r) => { response = encodeHostCallResult(r); return 0; };
+  const http = (status, body) => answer({ ok: true, op: "http.request", result: { STATUS: status, RETRIEVED_MS: BigInt(RETRIEVED_MS) }, raw: { url: "", headers: "", body: Buffer.from(body) } });
   const imports = { space_data_module_host: {
     call(opPtr, opLen, payloadPtr, payloadLen) {
       const heap = new Uint8Array(memoryRef.memory.buffer);
       const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-      const { meta, segments } = decodeEnvelope(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
-      calls.push({ operation, meta, segments });
-      if (operation === "plugin.getConfig") return answer(config);
+      const call = decodeHostCall(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
+      assert.equal(call.op, operation);
+      const c = { operation, params: call.params, lists: call.lists, raw: call.raw };
+      calls.push(c);
+      if (operation === "plugin.getConfig") return answer({ ok: true, op: operation, raw: { config: encodeModuleConfig(config) } });
       if (operation === "http.request") {
-        if (meta.url === PUBLISH_URL) return http(202, "{}");
-        if (meta.url.endsWith(".idx")) { const s = SERVED[meta.url.slice(0, -4)]; return s ? http(200, s.idx) : http(404, "<Error/>"); }
-        const s = SERVED[meta.url];
+        c.url = decoder.decode(call.raw.url);
+        c.headers = headerLines(call.raw.headers);
+        if (c.url === PUBLISH_URL) return http(202, "");
+        if (c.url.endsWith(".idx")) { const s = SERVED[c.url.slice(0, -4)]; return s ? http(200, s.idx) : http(404, "<Error/>"); }
+        const s = SERVED[c.url];
         if (!s) return http(404, "");
-        const range = meta.headers?.Range?.match(/^bytes=(\d+)-(\d*)$/);
-        assert.ok(range, `a GRIB fetch must be a byte range: ${JSON.stringify(meta.headers)}`);
+        const range = c.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
+        assert.ok(range, `a GRIB fetch must be a byte range: ${JSON.stringify(c.headers)}`);
         return http(206, s.body.subarray(Number(range[1]), range[2] ? Number(range[2]) + 1 : s.body.length));
       }
       if (operation === "storage.ingest_with_source") {
-        const records = Buffer.from(segments[meta.records?.$bin ?? 0]);
+        const records = Buffer.from(call.raw.records);
         let count = 0;
         for (let off = 0; off < records.length;) { off += 4 + records.readUInt32LE(off); count++; }
-        return answer({ schema: meta.schema, inserted: count, batch_id: meta.batch_id });
+        c.records = records;
+        return answer({ ok: true, op: operation, result: { SCHEMA: call.params.SCHEMA, BATCH_ID: call.params.BATCH_ID, INSERTED: BigInt(count) } });
       }
-      response = encodeEnvelope({ ok: false, message: `unexpected op ${operation}` });
-      return 1;
+      return answer({ ok: false, error: { code: "unsupported", message: `unexpected op ${operation}` } });
     },
     response_len() { return response.length; },
     read_response(dst, len) { const n = Math.min(len, response.length); new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, n), dst); return n; },
   } };
   return { calls, imports, memoryRef };
 }
+// Egress frames by type: IngestResult (result), FlowNotice (notice), HttpResponse (publication).
+function egressSink() {
+  const egress = { results: [], notices: [], publications: [], ports: new Set() };
+  const handler = ({ frames }) => {
+    for (const f of frames) {
+      egress.ports.add(f.portId);
+      const id = identifierOf(f.bytes);
+      if (id === "INGR") egress.results.push(decodeIngestResult(f.bytes));
+      else if (id === "FNTC") egress.notices.push(decodeFlowNotice(f.bytes));
+      else if (id === "HRSP") egress.publications.push(decodeHttpResponse(f.bytes));
+      else assert.fail(`an egress frame that is no runtime type: "${id}"`);
+    }
+    return { statusCode: 0 };
+  };
+  return { egress, handlers: { "sdn.flow.egress:emit": handler } };
+}
+const tick = () => ({ portId: "tick", bytes: encodeTimerTick({ triggerId: "timer-nwp", scheduledMs: Date.UTC(2026, 9, 6, 5), firedMs: Date.UTC(2026, 9, 6, 5) }) });
+const ingestsOf = (stub) => stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
 function recordCodes(r) {
   const b = Uint8Array.from(r.QUANTIZED_U8), n = b.length / 2, c = new Uint16Array(n);
   for (let i = 0; i < n; i++) c[i] = b[i] | (b[n + i] << 8);
@@ -124,20 +142,20 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
   const stub = createHostStub(config);
   const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
   stub.memoryRef.memory = host.memory;
-  const egress = [];
-  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-06T05:00:00Z" })) });
-  await host.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) egress.push(JSON.parse(decoder.decode(f.bytes))); return { statusCode: 0 }; } });
+  const { egress, handlers } = egressSink();
+  host.enqueueTriggerFrame(0, tick());
+  await host.drain(handlers);
 
   const http = stub.calls.filter((c) => c.operation === "http.request");
-  const idx = http.filter((c) => c.meta.url.endsWith(".idx")).map((c) => c.meta.url);
+  const idx = http.filter((c) => c.url.endsWith(".idx")).map((c) => c.url);
   // motion, spread and clouds at leads 0 and 24, physics at 24: seven inventories
   assert.equal(idx.length, 7, idx.join("\n"));
   assert.ok(idx.includes(`${GFS}/gfs.t00z.pgrb2.1p00.f000.idx`) && idx.includes(`${GFS}/gfs.t00z.pgrb2.0p25.f024.idx`));
-  for (const c of http) if (c.meta.url !== PUBLISH_URL) assert.equal(c.meta.headers["If-Modified-Since"], "Thu, 01 Jan 1970 00:00:00 GMT");
+  for (const c of http) if (c.url !== PUBLISH_URL) assert.equal(c.headers["if-modified-since"], "Thu, 01 Jan 1970 00:00:00 GMT");
 
   // the sequence after the inventories: each lead-file's ranges, then its ingest and publication
-  const sequence = stub.calls.filter((c) => c.operation !== "plugin.getConfig" && !(c.operation === "http.request" && c.meta.url.endsWith(".idx")))
-    .map((c) => c.operation === "storage.ingest_with_source" ? "ingest" : c.meta.url === PUBLISH_URL ? "publish" : `get:${SERVED[c.meta.url].file}`);
+  const sequence = stub.calls.filter((c) => c.operation !== "plugin.getConfig" && !(c.operation === "http.request" && c.url.endsWith(".idx")))
+    .map((c) => c.operation === "storage.ingest_with_source" ? "ingest" : c.url === PUBLISH_URL ? "publish" : `get:${SERVED[c.url].file}`);
   let at = 0, batches = 0;
   while (at < sequence.length) {
     const get = sequence[at];
@@ -150,9 +168,13 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
   assert.equal(batches, DEFAULT_FILES.length);
 
   // every ingest: one lead-file's fields, each field's codes equal to ecCodes' packing integers
-  for (const ingest of stub.calls.filter((c) => c.operation === "storage.ingest_with_source")) {
-    assert.equal(ingest.meta.provider_id, "noaa-ncep");
-    const records = Buffer.from(ingest.segments[ingest.meta.records?.$bin ?? 0]);
+  for (const ingest of ingestsOf(stub)) {
+    const p = ingest.params;
+    assert.deepEqual([p.SCHEMA, p.PROVIDER_ID, p.CONTENT_KEY_ID, p.LICENSE, p.RECONCILE], ["WXF.fbs", "noaa-ncep", "public", "LicenseRef-NOAA-Open-Data", 0]);
+    assert.match(p.BATCH_ID, /^[0-9a-f]{64}$/, "a whole lead-file's batch id is the content hash of its bytes");
+    assert.equal(ingest.lists.provenance.length, 1);
+    assert.deepEqual([ingest.lists.provenance[0].HTTP_STATUS, ingest.lists.provenance[0].SOURCE_SHA256, ingest.lists.provenance[0].PARSER], [206, p.BATCH_ID, "nwp-grib2-parser"]);
+    const records = ingest.records;
     const fields = new Map();
     for (let off = 0; off < records.length;) {
       const len = records.readUInt32LE(off);
@@ -172,10 +194,26 @@ test("timer tick -> inventories -> one lead-file at a time by byte range -> reco
     }
   }
   // the lead-0 files the run lacks are reported, not invented
-  const missing = egress.filter((r) => r.missing).flatMap((r) => r.missing);
+  const missing = egress.notices.filter((n) => n.kind === "missing").flatMap((n) => n.items);
   assert.equal(missing.length, 3);
-  assert.ok(missing.every((m) => m.http_status === 404 && m.inventory.includes(".f000.idx")));
-  assert.equal(egress.filter((r) => r.schema === "WXF.fbs").length, DEFAULT_FILES.length);
+  assert.ok(missing.every((m) => /\.f000\.idx: HTTP 404$/.test(m)), missing.join("\n"));
+  assert.equal(egress.results.length, DEFAULT_FILES.length);
+  assert.ok(egress.results.every((r) => r.schema === "WXF.fbs" && r.providerId === "noaa-ncep" && r.inserted > 0 && !r.refused));
+  // each stored batch published: the POST's body the IngestResult naming it
+  const posts = stub.calls.filter((c) => c.operation === "http.request" && c.url === PUBLISH_URL);
+  assert.equal(posts.length, DEFAULT_FILES.length);
+  assert.deepEqual(posts.map((c) => decodeIngestResult(c.raw.body)), egress.results);
+  assert.ok(posts.every((c) => c.params.METHOD === "POST" && c.headers["content-type"] === "application/octet-stream"));
+  assert.deepEqual(egress.publications.map((r) => r.status), posts.map(() => 202));
+  assert.deepEqual([...egress.ports].sort(), ["notice", "publication", "result"]);
+
+  // the next tick for the same run: nothing fetched again, the node's unchanged notice (a success without a batch)
+  const before = stub.calls.length;
+  egress.notices.length = 0;
+  host.enqueueTriggerFrame(0, tick());
+  await host.drain(handlers);
+  assert.deepEqual(stub.calls.slice(before).map((c) => c.operation), ["plugin.getConfig"]);
+  assert.deepEqual(egress.notices.map((n) => [n.kind, n.reason]), [["unchanged", "already-planned"]]);
   console.log(`runtime linear memory after the cycle: ${(host.memory.buffer.byteLength / 1048576).toFixed(0)} MiB`);
 });
 
@@ -187,24 +225,25 @@ test("gfs-0p25-sea: one lead-file fetched by range -> 512 tile batches through t
   const stub = createHostStub(config);
   const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
   stub.memoryRef.memory = host.memory;
-  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-06T05:00:00Z" })) });
-  await host.drain({ "sdn.flow.egress:emit": () => ({ statusCode: 0 }) });
+  const { egress, handlers } = egressSink();
+  host.enqueueTriggerFrame(0, tick());
+  await host.drain(handlers);
 
   const http = stub.calls.filter((c) => c.operation === "http.request");
-  assert.deepEqual(http.filter((c) => c.meta.url.endsWith(".idx")).map((c) => c.meta.url).sort(), [`${GFS}/gfs.t00z.pgrb2.0p25.f000.idx`, `${GFS}/gfs.t00z.pgrb2.0p25.f024.idx`]);
-  const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
+  assert.deepEqual(http.filter((c) => c.url.endsWith(".idx")).map((c) => c.url).sort(), [`${GFS}/gfs.t00z.pgrb2.0p25.f000.idx`, `${GFS}/gfs.t00z.pgrb2.0p25.f024.idx`]);
+  const ingests = ingestsOf(stub);
   assert.equal(ingests.length, 512, "32 x 16 tiles");
   const names = ["air_temperature_2m", "visibility_surface", "precipitation_rate_surface", "geopotential_height_cloud_ceiling"];
   const want = Object.fromEntries(["gfs-0p25-surface.grib2", "gfs-0p25-air.grib2"].flatMap((f) => EXPECTED[f]).map((e) => [e.name, e]));
   const all = Object.fromEntries(names.map((n) => [n, new Int32Array(want[n].nlat * want[n].nlon).fill(-1)]));
   const batches = new Set();
   for (const ingest of ingests) {
-    assert.equal(ingest.meta.provider_id, "noaa-ncep");
-    assert.equal(ingest.meta.source_name, "gfs-0p25-sea");
-    const [, x, y] = ingest.meta.batch_id.match(/^gfs:20261006T00:f024:s4:(\d+):(\d+)$/) ?? [];
-    assert.ok(x !== undefined, ingest.meta.batch_id);
-    batches.add(ingest.meta.batch_id);
-    const records = Buffer.from(ingest.segments[ingest.meta.records?.$bin ?? 0]);
+    assert.equal(ingest.params.PROVIDER_ID, "noaa-ncep");
+    assert.equal(ingest.params.SOURCE_NAME, "gfs-0p25-sea");
+    const [, x, y] = ingest.params.BATCH_ID.match(/^gfs:20261006T00:f024:s4:(\d+):(\d+)$/) ?? [];
+    assert.ok(x !== undefined, ingest.params.BATCH_ID);
+    batches.add(ingest.params.BATCH_ID);
+    const records = ingest.records;
     let n = 0;
     for (let off = 0; off < records.length; n++) {
       const len = records.readUInt32LE(off);
@@ -214,9 +253,11 @@ test("gfs-0p25-sea: one lead-file fetched by range -> 512 tile batches through t
       const c = recordCodes(r), e = want[r.VARIABLE_NAME], i0 = Math.round((r.GRID.LAT0 + 90) / 0.25), j0 = Math.round((((r.GRID.LON0 % 360) + 360) % 360) / 0.25);
       for (let i = 0; i < r.GRID.NLAT; i++) for (let j = 0; j < r.GRID.NLON; j++) all[r.VARIABLE_NAME][(i0 + i) * e.nlon + ((j0 + j) % e.nlon)] = c[i * r.GRID.NLON + j];
     }
-    assert.equal(n, names.length, `${ingest.meta.batch_id}: the four fields the fixtures carry`);
+    assert.equal(n, names.length, `${ingest.params.BATCH_ID}: the four fields the fixtures carry`);
   }
   assert.equal(batches.size, 512, "every tile its own batch");
+  assert.equal(egress.results.length, 512);
+  assert.deepEqual(egress.notices.map((n) => [n.kind, n.reason, n.items.length]), [["missing", "missing-leads", 1]], "f000 is not served");
   for (const name of names) {
     assert.ok(all[name].every((v) => v >= 0), `${name}: every point in some tile`);
     assert.equal(createHash("sha256").update(Buffer.from(Uint16Array.from(all[name]).buffer)).digest("hex"), want[name].sha256, `${name}: equal to ecCodes`);
@@ -235,13 +276,13 @@ test("gfs-0p25-sea: a second lead arriving while the first's tiles go out - all 
     const stub = createHostStub(config);
     const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
     stub.memoryRef.memory = host.memory;
-    host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-06T05:00:00Z" })) });
+    host.enqueueTriggerFrame(0, tick());
     // (the Go host drains past 1000: each pass runs the in-wasm scheduler, then again while any node is ready -
     // internal/flowrt runtime.go; the SDK host stops at its maxIterations, 1000 by default)
     await host.drain({ "sdn.flow.egress:emit": () => ({ statusCode: 0 }) }, { maxIterations: 100000 });
-    const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
+    const ingests = ingestsOf(stub);
     const byBatch = new Map();
-    for (const i of ingests) byBatch.set(i.meta.batch_id, (byBatch.get(i.meta.batch_id) ?? 0) + 1);
+    for (const i of ingests) byBatch.set(i.params.BATCH_ID, (byBatch.get(i.params.BATCH_ID) ?? 0) + 1);
     assert.equal(ingests.length, 1024, "every tile of both leads");
     assert.equal(byBatch.size, 512);
     assert.ok([...byBatch.values()].every((n) => n === 2));

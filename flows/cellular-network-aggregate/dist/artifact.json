@@ -1,13 +1,14 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 17,
-  "edges": 33,
+  "nodes": 18,
+  "edges": 38,
   "triggers": 1,
   "capabilities": [
+    "clock",
     "http",
     "secrets:cell_opencellid",
     "secrets:cell_opencellid:write",
@@ -131,6 +132,13 @@
       "resolvedFromPluginFamily": null
     },
     {
+      "nodeId": "respond_query",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond_query",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
@@ -143,8 +151,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-ingest",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
-      "version": "0.1.0",
-      "sha256": "8e293502bf7364d2632036bb0dfad8ae2bcb9857712ea9d72313ffd96b256bd5",
+      "version": "0.2.0",
+      "sha256": "b094ebf0156602559e8e0c99d399ccb3ce684679145e5ea496ff31d41cb01c92",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -152,21 +160,21 @@
       "methodSymbols": {
         "cache_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_cache_plan",
         "cache_freshness": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_cache_freshness",
+        "tile_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile_plan",
+        "tile_meta": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile_meta",
+        "tile": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile",
         "mark_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_mark_query",
         "ingest_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_ingest_plan",
         "ingest_meta": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_ingest_meta",
-        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_publish_request",
-        "tile_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile_plan",
-        "tile_meta": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile_meta",
-        "tile": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_tile"
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_publish_request"
       }
     },
     {
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "version": "0.2.0",
-      "sha256": "b8ebf6b73d3166e373ce26bf6e59e3a4f0b474b732ffcf38697d4dff4b1cbad7",
+      "version": "0.3.0",
+      "sha256": "3e5d6eeed33af9a61e05c881f768148a58a7fa1a0b47c6d723082c3f7078193d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -180,8 +188,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-source",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
-      "version": "0.1.0",
-      "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff",
+      "version": "0.2.0",
+      "sha256": "47ec42c1d879d6089e15a5d77756c910906bc3dac1c760f9155a2ca7e5c27f33",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -196,8 +204,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "version": "0.1.0",
-      "sha256": "e99fece3e3622247bb88145c1e9db78b272f500ba60e121ca6335df0836bebef",
+      "version": "0.2.0",
+      "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -210,8 +218,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-credentials",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
-      "version": "0.1.0",
-      "sha256": "5703532559fa8a11b0cd50ee018b9d17629b55b9058768551bdc8fa669eb1b31",
+      "version": "0.2.0",
+      "sha256": "7c0b253477f275d9b51296167370f98e31bbcc1d8b80bc5777bdbeef2af5f5f9",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -224,14 +232,15 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "version": "0.2.1",
-      "sha256": "ef8205cbcdeb4bb4cc29bd1a802d56d46cddba0137e737d6e651fd217ead195d",
+      "version": "0.3.0",
+      "sha256": "9f854941ca489f3fa8dc6460ed519116f7252d029f6e4f995f483bd1adf3f66f",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
       "methodSymbols": {
-        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond",
+        "respond_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond_query"
       }
     }
   ]

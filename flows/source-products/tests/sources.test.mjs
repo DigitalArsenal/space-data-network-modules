@@ -13,7 +13,7 @@ import { OCM, assertSourceNamed, fitOcm, records, unpackMnv, unpackOcm, unpackOm
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { recipeFor, registry } from '../recipe.mjs';
-import { egressBytes, flowDocument, runFlow } from './flow-harness.mjs';
+import { egressBytes, flowDocument, runSource } from './flow-harness.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -94,8 +94,10 @@ test('every module a source is given by has the method and the output port, type
           assert.ok(accepted && typesOf(accepted).includes(w.type), `${estimator.module} ${into.estimator} takes ${accepted && typesOf(accepted)}, not ${w.type}`);
           continue;
         }
+        // A record stream wrapped in a page (`unwrap`) enters the flow as the records it carries.
         const taken = flowPort(into);
-        assert.ok(typesOf(taken).includes(w.type), `the flow's ${into.trigger} (${into.port}) takes ${typesOf(taken)}, not ${w.type}`);
+        const enters = w.unwrap ?? w.type;
+        assert.ok(typesOf(taken).includes(enters), `the flow's ${into.trigger} (${into.port}) takes ${typesOf(taken)}, not ${enters}`);
         assert.equal(registry.lanes[s.kind].ingress.some((entry) => entry.split(' or ').includes(into.trigger)), true, `${into.trigger} is not an ingress of the ${s.kind} lane`);
       }
     }
@@ -165,11 +167,10 @@ for (const source of registry.sources.filter((s) => s.kind !== 'observation')) {
   for (const w of source.via) {
     test(`${source.id} through ${w.module}: the records name the source, its provider and its licence`, async () => {
       const recipe = recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module });
-      const recipeBytes = Buffer.from(JSON.stringify(recipe));
       const mpe = w.type === '$MPE';
-      const lane = source.kind === 'ephemeris' ? ['fit_omm', 'omm', 'fit_recipe'] : [mpe ? 'element_sets_mpe' : 'element_sets', mpe ? 'mpe' : 'omm', 'element_set_recipe'];
+      const lane = source.kind === 'ephemeris' ? ['fit_omm', 'omm'] : [mpe ? 'element_sets_mpe' : 'element_sets', mpe ? 'mpe' : 'omm'];
       const input = mpe ? Buffer.from(mpeStream(VALLADO.cases)) : sets;
-      const { egress, result } = await runFlow([frame(lane[0], lane[1], input), frame(lane[2], 'recipe', recipeBytes)]);
+      const { egress, result } = await runSource([frame(lane[0], lane[1], input)], recipe);
       assert.equal(result.handlersSkipped, 0);
 
       const ocms = records(egressBytes(egress, 'ocm')).map(unpackOcm);
@@ -212,7 +213,7 @@ for (const source of registry.sources.filter((s) => s.kind === 'observation')) {
       // The designed history stands for the sets fitted to successive arcs; the newest fit is the one the estimator's $OCM belongs to.
       const newest = history.rows.at(-1);
       const fit = fitOcm({ norad: newest.NORAD_CAT_ID, name: 'FIT', epoch: newest.EPOCH, x, lower });
-      const { egress, result } = await runFlow([frame('fit_omm', 'omm', sets), frame('fit', 'fit', fit), frame('fit_recipe', 'recipe', Buffer.from(JSON.stringify(recipe)))]);
+      const { egress, result } = await runSource([frame('fit_omm', 'omm', sets), frame('fit', 'fit', fit)], recipe);
       assert.equal(result.handlersSkipped, 0);
 
       const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);

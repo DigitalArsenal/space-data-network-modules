@@ -1,8 +1,8 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.3.0",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes. THE TILE LANE (2026-08-24, graph tasks sdn-cellular-density-tiles / upstream-modules-2; owner: all worldwide cell towers must reach the cellular sandcastle): a worldwide site set is millions of rows and cannot be one answer, so cache_plan now forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it, and the node serves bounded Web Mercator XYZ tiles - GET /api/v1/cellular/tiles/meta and /api/v1/cellular/tiles/{z}/{x}/{y} - out of the SAME FlatSQL read lane the cache gate uses. tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400, never a clamp, because a clamped index answers 200 with a different tile's contents under the requested key); tile_meta declares the layer's capability envelope from the resume mark alone, with no COUNT over the store; tile scans the bounded row stream, decides the mode by the tile's TRUE population (<=2048 raw points, <=4096 a deterministic stride sample, above that a 16x16 density grid) and answers an empty store as empty rather than fabricating anything. Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into respond. ZERO Go host changes and zero new capabilities: the tile lane is plugin.getConfig plus flatsql-query frames over the existing generic hooks.",
+  "version": "0.4.0",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between nodes; JSON exists only as the client's own request body and, on request, the responder's rendering). The ONE http trigger delivers the $HTQ request to cell-tower-ingest:cache_plan, which picks exactly ONE lane. THE CACHE LANE (the default for an /aggregate read): $FSO FlatSQL queries for this dataset's DEFAULT query and for the ingest resume marks; hostcap/flatsql-query answers both as $FSB chunks, and cell-tower-ingest:cache_freshness reassembles the stored $TBS rows verbatim and answers them through foundation/http-respond respond as an $APR decision (with the x-sdn-cache, -freshness, -stale and -providers headers) plus the dataset's $DAV availability (KNOWN/AVAILABLE/FRESH, published-at from the $IRM mark) and the $TBS records - the answer says honestly whether the cache is empty, ingesting or complete. One SELECT and a byte forward; no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ goes byte-for-byte to cell-tower-source:route, which reads the caller's PROVIDERS and tbsMergeMethod and fans out one HttpRequest (HREQ) per provider URL, each carrying the $APR run contract in CONTEXT; hostcap/http-request answers each with an HttpResponse (HRSP) echoing it, so attribution is by CONTEXT, never by position; parse normalizes each body into single-source $TBS reports; deconflict merges them under the caller's method and answers $APR + $DAV + the $TBS stream. Refusals are the $APR with STATUS. THE CREDENTIAL LANE: /providers builds the catalog as a $QRP projection page and /credentials/<providerId> a PUT/DELETE $APR task, both finished by cell-tower-credentials, the ONE node holding a credential capability (secrets.* and keyslot.unwrap through typed $PIV hostcalls), which answers through foundation/http-respond respond_query. THE TILE LANE (graph tasks sdn-cellular-density-tiles / upstream-modules-2): cache_plan forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it; tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400 $APR, never a clamp) and emits the tile-scoped $FSO reads; tile_meta answers the layer's capability envelope and tile ONE bounded Web Mercator XYZ tile, both as $QRP projection pages through respond_query (points: LATITUDE/LONGITUDE rows; above the 4096 budget a 16x16 density grid of lon/lat/count rows; TOTAL_COUNT the tile's true population, TRUNCATED a deterministic sample, PARTIAL a capped or unscoped read, STORED/AS_OF_MS/STALE the store's honesty block from the resume mark). Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into a responder. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes; zero new capabilities.",
   "nodes": [
     {
       "nodeId": "cache_plan",
@@ -18,7 +18,8 @@
       "methodId": "query",
       "kind": "transform",
       "capabilities": [
-        "storage_query"
+        "storage_query",
+        "clock"
       ],
       "drainPolicy": "single-shot"
     },
@@ -28,7 +29,8 @@
       "methodId": "query",
       "kind": "transform",
       "capabilities": [
-        "storage_query"
+        "storage_query",
+        "clock"
       ],
       "drainPolicy": "single-shot"
     },
@@ -54,7 +56,8 @@
       "methodId": "query",
       "kind": "transform",
       "capabilities": [
-        "storage_query"
+        "storage_query",
+        "clock"
       ],
       "drainPolicy": "single-shot"
     },
@@ -72,7 +75,8 @@
       "methodId": "query",
       "kind": "transform",
       "capabilities": [
-        "storage_query"
+        "storage_query",
+        "clock"
       ],
       "drainPolicy": "single-shot"
     },
@@ -82,7 +86,8 @@
       "methodId": "query",
       "kind": "transform",
       "capabilities": [
-        "storage_query"
+        "storage_query",
+        "clock"
       ],
       "drainPolicy": "single-shot"
     },
@@ -104,7 +109,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
+        "sha256": "47ec42c1d879d6089e15a5d77756c910906bc3dac1c760f9155a2ca7e5c27f33"
       }
     },
     {
@@ -119,7 +124,7 @@
       "artifact": {
         "path": "../hostcap/http-request/dist/isomorphic/module.wasm",
         "publisher": "../hostcap/http-request/publisher.json",
-        "sha256": "e99fece3e3622247bb88145c1e9db78b272f500ba60e121ca6335df0836bebef"
+        "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384"
       }
     },
     {
@@ -132,7 +137,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
+        "sha256": "47ec42c1d879d6089e15a5d77756c910906bc3dac1c760f9155a2ca7e5c27f33"
       }
     },
     {
@@ -145,7 +150,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
+        "sha256": "47ec42c1d879d6089e15a5d77756c910906bc3dac1c760f9155a2ca7e5c27f33"
       }
     },
     {
@@ -164,7 +169,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-credentials/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-credentials/publisher.json",
-        "sha256": "5703532559fa8a11b0cd50ee018b9d17629b55b9058768551bdc8fa669eb1b31"
+        "sha256": "7c0b253477f275d9b51296167370f98e31bbcc1d8b80bc5777bdbeef2af5f5f9"
       }
     },
     {
@@ -177,7 +182,20 @@
       "artifact": {
         "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
         "publisher": "../foundation/http-respond/publisher.json",
-        "sha256": "ef8205cbcdeb4bb4cc29bd1a802d56d46cddba0137e737d6e651fd217ead195d"
+        "sha256": "9f854941ca489f3fa8dc6460ed519116f7252d029f6e4f995f483bd1adf3f66f"
+      }
+    },
+    {
+      "nodeId": "respond_query",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond_query",
+      "kind": "responder",
+      "capabilities": [],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
+        "publisher": "../foundation/http-respond/publisher.json",
+        "sha256": "9f854941ca489f3fa8dc6460ed519116f7252d029f6e4f995f483bd1adf3f66f"
       }
     },
     {
@@ -197,8 +215,16 @@
       "toNodeId": "route",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 16,
-      "opaque": true
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "cacheplan-tile",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "tile",
+      "toNodeId": "tile_plan",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
     },
     {
       "edgeId": "cacheplan-cacheread",
@@ -207,8 +233,7 @@
       "toNodeId": "cache_read",
       "toPortId": "query",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "cacheplan-markread",
@@ -217,8 +242,7 @@
       "toNodeId": "mark_read",
       "toPortId": "query",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "cacheplan-freshness-job",
@@ -227,37 +251,52 @@
       "toNodeId": "cache_freshness",
       "toPortId": "job",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "cacheread-freshness",
+      "fromNodeId": "cache_read",
+      "fromPortId": "records",
+      "toNodeId": "cache_freshness",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
     },
     {
       "edgeId": "markread-freshness",
       "fromNodeId": "mark_read",
-      "fromPortId": "stream",
+      "fromPortId": "records",
       "toNodeId": "cache_freshness",
       "toPortId": "mark",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 16
     },
     {
-      "edgeId": "cacheread-respond",
-      "fromNodeId": "cache_read",
-      "fromPortId": "stream",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4
-    },
-    {
-      "edgeId": "freshness-respond",
+      "edgeId": "freshness-decision-respond",
       "fromNodeId": "cache_freshness",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "freshness-availability-respond",
+      "fromNodeId": "cache_freshness",
+      "fromPortId": "availability",
+      "toNodeId": "respond",
+      "toPortId": "availability",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "freshness-records-respond",
+      "fromNodeId": "cache_freshness",
+      "fromPortId": "records",
+      "toNodeId": "respond",
+      "toPortId": "tbs_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "route-http",
@@ -266,18 +305,25 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 16,
-      "opaque": true
+      "queueDepth": 16
     },
     {
-      "edgeId": "route-job-parse",
+      "edgeId": "route-decision-respond",
       "fromNodeId": "route",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "route-availability-respond",
+      "fromNodeId": "route",
+      "fromPortId": "availability",
+      "toNodeId": "respond",
+      "toPortId": "availability",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse",
@@ -286,8 +332,7 @@
       "toNodeId": "parse",
       "toPortId": "responses",
       "backpressurePolicy": "queue",
-      "queueDepth": 16,
-      "opaque": true
+      "queueDepth": 16
     },
     {
       "edgeId": "parse-job-merge",
@@ -296,8 +341,7 @@
       "toNodeId": "merge",
       "toPortId": "job",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-reports-merge",
@@ -306,37 +350,187 @@
       "toNodeId": "merge",
       "toPortId": "reports",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "merge-records-respond",
       "fromNodeId": "merge",
       "fromPortId": "records",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "tbs_records",
       "backpressurePolicy": "queue",
       "queueDepth": 4
     },
     {
-      "edgeId": "merge-summary-respond",
+      "edgeId": "merge-decision-respond",
       "fromNodeId": "merge",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
-      "edgeId": "route-reply-respond",
+      "edgeId": "merge-availability-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "availability",
+      "toNodeId": "respond",
+      "toPortId": "availability",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "route-catalog-mediator",
       "fromNodeId": "route",
-      "fromPortId": "reply",
+      "fromPortId": "catalog",
+      "toNodeId": "credentials",
+      "toPortId": "catalog",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "route-credential-mediator",
+      "fromNodeId": "route",
+      "fromPortId": "credential",
+      "toNodeId": "credentials",
+      "toPortId": "credential",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "credentials-decision-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "credentials-page-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tileplan-refusal-respond",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "refusal",
       "toNodeId": "respond",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tileplan-metamark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_mark_query",
+      "toNodeId": "tile_meta_mark",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "metamark-tilemeta",
+      "fromNodeId": "tile_meta_mark",
+      "fromPortId": "records",
+      "toNodeId": "tile_meta",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tileplan-metajob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_job",
+      "toNodeId": "tile_meta",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tilemeta-decision-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tilemeta-page-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tileplan-rowsquery",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "rows_query",
+      "toNodeId": "tile_rows",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tilerows-tile",
+      "fromNodeId": "tile_rows",
+      "fromPortId": "records",
+      "toNodeId": "tile",
+      "toPortId": "rows",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tileplan-tilemark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_mark_query",
+      "toNodeId": "tile_mark",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tilemark-tile",
+      "fromNodeId": "tile_mark",
+      "fromPortId": "records",
+      "toNodeId": "tile",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tileplan-tilejob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_job",
+      "toNodeId": "tile",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tile-decision-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tile-page-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "respond-egress",
@@ -348,171 +542,13 @@
       "queueDepth": 4
     },
     {
-      "edgeId": "route-catalog-respond",
-      "fromNodeId": "route",
-      "fromPortId": "catalog",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "route-credential-mediator",
-      "fromNodeId": "route",
-      "fromPortId": "credential",
-      "toNodeId": "credentials",
-      "toPortId": "task",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "credentials-body-respond",
-      "fromNodeId": "credentials",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "credentials-decision-respond",
-      "fromNodeId": "credentials",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "cacheplan-tile",
-      "fromNodeId": "cache_plan",
-      "fromPortId": "tile",
-      "toNodeId": "tile_plan",
-      "toPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16,
-      "opaque": true
-    },
-    {
-      "edgeId": "tileplan-metamark",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "meta_mark_query",
-      "toNodeId": "tile_meta_mark",
-      "toPortId": "query",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "metamark-tilemeta",
-      "fromNodeId": "tile_meta_mark",
-      "fromPortId": "stream",
-      "toNodeId": "tile_meta",
-      "toPortId": "mark",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tileplan-metajob",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "meta_job",
-      "toNodeId": "tile_meta",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tilemeta-body-respond",
-      "fromNodeId": "tile_meta",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
+      "edgeId": "respondquery-egress",
+      "fromNodeId": "respond_query",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
       "backpressurePolicy": "queue",
       "queueDepth": 4
-    },
-    {
-      "edgeId": "tilemeta-decision-respond",
-      "fromNodeId": "tile_meta",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tileplan-rowsquery",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "rows_query",
-      "toNodeId": "tile_rows",
-      "toPortId": "query",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tilerows-tile",
-      "fromNodeId": "tile_rows",
-      "fromPortId": "stream",
-      "toNodeId": "tile",
-      "toPortId": "rows",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4
-    },
-    {
-      "edgeId": "tileplan-tilemark",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "tile_mark_query",
-      "toNodeId": "tile_mark",
-      "toPortId": "query",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tilemark-tile",
-      "fromNodeId": "tile_mark",
-      "fromPortId": "stream",
-      "toNodeId": "tile",
-      "toPortId": "mark",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tileplan-tilejob",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "tile_job",
-      "toNodeId": "tile",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "tile-body-respond",
-      "fromNodeId": "tile",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4
-    },
-    {
-      "edgeId": "tile-decision-respond",
-      "fromNodeId": "tile",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
     }
   ],
   "triggers": [
@@ -521,7 +557,7 @@
       "kind": "http-request",
       "source": "host-http",
       "httpPath": "/api/v1/cellular/",
-      "description": "The ONE http trigger. flowrt/httpmount.go:562-570 takes the first http-request trigger and breaks, so a second trigger is unreachable rather than a second route; PATH dispatch happens in-wasm, which is also what HttpRequestAbi.fbs mandates."
+      "description": "The ONE http trigger: one $HTQ HttpRequest envelope per exchange. flowrt/httpmount.go takes the first http-request trigger and breaks, so a second trigger is unreachable rather than a second route; PATH dispatch happens in-wasm (cache_plan, route, tile_plan)."
     }
   ],
   "triggerBindings": [
@@ -550,7 +586,7 @@
         "method": "POST",
         "operationId": "aggregateCellularSites",
         "summary": "Aggregate and deconflict cellular base-station sites across providers",
-        "description": "Takes a provider set and a tbsMergeMethod and answers with a size-prefixed $TBS record stream. ANONYMOUS is requested deliberately: every provider reachable without a credential publishes open data under an attribution licence, the answer carries that attribution in $TBS.SOURCES, and this is a public read that changes no node state. The host still decides; gateway.anonymous.deny overrides this request.",
+        "description": "Takes a provider set and a tbsMergeMethod (the client's JSON body: PROVIDERS, METHOD, LIMIT, FULL_POPULATION, BBOX, REFRESH) and answers application/vnd.sdn.flatbuffers.stream: the dataset's $DAV availability frame followed by the size-prefixed $TBS records (served from the store unless REFRESH:true; the cache's age rides as x-sdn-cache* headers and in the $DAV). ANONYMOUS is requested deliberately: every provider reachable without a credential publishes open data under an attribution licence, the answer carries that attribution in $TBS.SOURCES, and this is a public read that changes no node state. The host still decides; gateway.anonymous.deny overrides this request. format=json answers 406: the responder renders JSON for $OMM records only.",
         "anonymous": true
       },
       {
@@ -558,7 +594,7 @@
         "method": "GET",
         "operationId": "listCellularProviders",
         "summary": "The provider catalog this node's module can reach",
-        "description": "Provider ids, access posture and whether a credential is currently held. Anonymous for the same reason as aggregate: it is a public read of open-data source metadata and reveals no secret. Credential VALUES are never exposed by any route.",
+        "description": "Provider ids, access posture and whether a credential is currently held, as a $QRP projection page (one row per provider; format=json renders a bare array of objects, the key slot's public key as base64). Anonymous for the same reason as aggregate: it is a public read of open-data source metadata and reveals no secret. Credential VALUES are never exposed by any route.",
         "anonymous": true
       },
       {
@@ -566,7 +602,7 @@
         "method": "PUT",
         "operationId": "storeCellularProviderCredential",
         "summary": "Store a browser-sealed provider credential in the node's credential store",
-        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch — a caller who cannot seal cannot store.",
+        "description": "Takes the node's own keyslot envelope (the client's JSON {slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it (keyslot.unwrap) and writes the result to the machine-bound credential store (secrets.put) under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route; the answer is a one-row $QRP projection (providerId, credentialLane, credentialConfigured, stored). NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch - a caller who cannot seal cannot store.",
         "anonymous": false,
         "params": [
           {
@@ -585,7 +621,7 @@
         "method": "DELETE",
         "operationId": "clearCellularProviderCredential",
         "summary": "Clear a stored provider credential",
-        "description": "Removes the cell_<providerId> lane from the node's credential store. Answers the same way whether or not anything was there, so a write grant does not become a presence oracle. NOT ANONYMOUS, for the same reason as the PUT.",
+        "description": "Removes the cell_<providerId> lane from the node's credential store (secrets.clear). Answers the same one-row $QRP projection whether or not anything was there, so a write grant does not become a presence oracle. NOT ANONYMOUS, for the same reason as the PUT.",
         "anonymous": false,
         "params": [
           {
@@ -604,7 +640,7 @@
         "method": "GET",
         "operationId": "getCellularTileMeta",
         "summary": "The density-tile layer's capability envelope",
-        "description": "Scheme (xyz), zoom range, the points/sample/density thresholds, the density grid size and the store's own honesty block (cacheState, records, epoch, stale). The client fetches this once and fails hard if it drifts, so it is the server's binding declaration of the contract every tile then honours. Anonymous for the same reason as /aggregate: a public read of open-data metadata that changes no node state.",
+        "description": "The density-tile layer's capability envelope as a one-row $QRP projection page: scheme (xyz), zoom range, the points/sample/density thresholds, the density grid size, the latitude clamp, the tile URL template and the store's honesty block (cacheState, records, epoch, stale; also STORED/AS_OF_MS/STALE on the page header). Anonymous for the same reason as /aggregate: a public read of open-data metadata that changes no node state.",
         "anonymous": true
       },
       {
@@ -612,7 +648,7 @@
         "method": "GET",
         "operationId": "getCellularDensityTile",
         "summary": "One bounded, pre-deconflicted Web Mercator XYZ tile",
-        "description": "Answers from the node store only. The MODE IS THE SERVER'S: a tile holding at most 2048 sites ships every site, at most 4096 ships a deterministic stride sample, and above that ships a 16x16 density grid; `count` is always the tile's true population, never the number of points shipped. z outside [0,18] or x/y outside [0,2^z) is refused 400 rather than clamped. An empty store answers an empty tile and says so in the dataset block; it never fabricates sites. Anonymous, same reasoning as /aggregate.",
+        "description": "Answers from the node store only, as a $QRP projection page. The MODE IS THE SERVER'S: a tile holding at most 2048 sites ships every site (LATITUDE/LONGITUDE rows), at most 4096 ships a deterministic stride sample (TRUNCATED), and above that ships a 16x16 density grid (lon/lat/count rows, empty cells omitted); TOTAL_COUNT is always the tile's true population, never the number of rows shipped. z outside [0,18] or x/y outside [0,2^z) is refused 400 rather than clamped. An empty store answers an empty page and says so (STORED 0, STALE); it never fabricates sites. Anonymous, same reasoning as /aggregate.",
         "anonymous": true,
         "params": [
           {

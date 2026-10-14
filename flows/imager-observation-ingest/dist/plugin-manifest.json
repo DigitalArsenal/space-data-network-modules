@@ -1,9 +1,9 @@
 {
   "pluginId": "com.digitalarsenal.flows.imager-observation-ingest",
   "name": "Geostationary Imager Observation Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "Hourly ingest of geostationary imager observations from NOAA Open Data Dissemination's anonymous public buckets (GOES-East and GOES-West ABI L1b/L2 NetCDF4) as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest). timer -> plan (one S3 listing per satellite and product folder of the frame hour) -> http -> select_files (the hour's first full-disk scan of each wanted field; byte ranges above 64 MiB; ONE FILE PER INVOCATION, the rest yielded as backlog) -> http -> parse (the field's world product at 4096/2048/1024 wide, 64-row band records, quantized at the instrument's precision, SDS 1.238 encodings) -> storage-ingest -> publish_request -> http (dataset publication, only when imager_publish_url is set). Nodes are listed in pipeline order: the runtime's fair ready-node cursor then carries each file through parse and storage-ingest before select_files resumes with the next, so the parser holds one file and storage-ingest receives one meta and one record stream at a time. Memory: measured 566 MiB of linear memory for a cycle with the full-disk 0.5 km band (143 MB, three ranges) - run the service with memory_pages 16384 (1 GiB); the default 1024 (64 MiB) cannot hold one full-disk file. Cadence: hourly (set retrieval_interval to 1h; the host's default window is 3 h).",
+  "description": "Hourly ingest of geostationary imager observations from NOAA Open Data Dissemination's anonymous public buckets (GOES-East and GOES-West ABI L1b/L2 NetCDF4) as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest), on typed contracts 1.0 (no JSON frames). timer (TimerTick) -> plan (one S3 listing HttpRequest per satellite and product folder of the frame hour, its list job in HREQ.CONTEXT as a $WXF header record) -> http -> select_files (the listing HttpResponses echo their jobs; the hour's first full-disk scan of each wanted field; byte ranges above 64 MiB; each part's file job in CONTEXT; ONE FILE PER INVOCATION, the rest yielded as backlog) -> http -> parse (the field's world product at the imager_widths widths, 64-row band records, quantized at the instrument's precision, SDS 1.238 encodings; an IngestRequest per batch) -> storage-ingest (wxf_records) -> publish_request -> http (dataset publication, only when imager_publish_url is set; its body is the stored batch's IngestResult (INGR)). Skips and missing files are FlowNotices at the egress. Nodes are listed in pipeline order: the runtime's fair ready-node cursor then carries each file through parse and storage-ingest before select_files resumes with the next, so the parser holds one file and storage-ingest receives one meta and one record stream at a time. Memory: measured 566 MiB of linear memory for a cycle with the full-disk 0.5 km band (143 MB, three ranges) - run the service with memory_pages 16384 (1 GiB); the default 1024 (64 MiB) cannot hold one full-disk file. Cadence: hourly (set retrieval_interval to 1h; the host's default window is 3 h).",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -11,23 +11,23 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     }
   ],
   "externalInterfaces": [
@@ -37,7 +37,7 @@
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 100 MiB response ceiling lowered per request by max_bytes (exceeding the effective bound is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
         "hostOps": [
           "http.request"
@@ -50,7 +50,7 @@
       "direction": "bidirectional",
       "capability": "storage_ingest",
       "resource": "sdn://storage/ingest",
-      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
       "properties": {
         "hostOps": [
           "storage.ingest_with_source"
@@ -68,23 +68,21 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK); its payload is not read."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Cron timer tick."
         }
       ],
@@ -93,19 +91,22 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-result-json",
+              "setId": "sdn-runtime-ingest-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Ingest result summary."
+          "description": "EXACTLY ONE IngestResult per invocation."
         }
       ],
       "maxBatch": 1,
@@ -222,26 +223,22 @@
       "toNodeId": "http_list",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "plan-select-jobs",
-      "fromNodeId": "plan",
-      "fromPortId": "jobs",
-      "toNodeId": "select",
-      "toPortId": "list_jobs",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -252,11 +249,22 @@
       "toNodeId": "select",
       "toPortId": "listings",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -267,26 +275,22 @@
       "toNodeId": "http_files",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "select-parse-jobs",
-      "fromNodeId": "select",
-      "fromPortId": "jobs",
-      "toNodeId": "parse",
-      "toPortId": "jobs",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -297,11 +301,22 @@
       "toNodeId": "parse",
       "toPortId": "responses",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -312,11 +327,22 @@
       "toNodeId": "ingest_wxf",
       "toPortId": "meta",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -325,7 +351,7 @@
       "fromNodeId": "parse",
       "fromPortId": "wxf_records",
       "toNodeId": "ingest_wxf",
-      "toPortId": "records",
+      "toPortId": "wxf_records",
       "contract": {
         "canonicalType": {
           "schemaName": "WXF.fbs",
@@ -353,11 +379,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -368,11 +405,22 @@
       "toNodeId": "publish_wxf",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -383,11 +431,22 @@
       "toNodeId": "publish_wxf",
       "toPortId": "meta",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -398,11 +457,22 @@
       "toNodeId": "publish_http_wxf",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -413,11 +483,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -428,11 +509,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -443,11 +535,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     }

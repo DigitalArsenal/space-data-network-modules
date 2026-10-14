@@ -45,24 +45,39 @@ trigger goes to every node port bound to it.
 
 | Trigger | Content | For |
 | --- | --- | --- |
-| `element_sets`, `element_set_recipe` | A source's element-set history (`$OMM`, one frame) and its recipe (JSON) | element-set source |
+| `element_sets` | A source's element-set history (`$OMM`, one frame) | element-set source |
+| `models` | The orbit error models of rules 3 and 4 (`$ERM` MODEL records, size-prefixed, in one frame): `analysis/gp-error-model` `data/e14-s3-kc.erm` with `SOURCES` and `POOLED` set (`recipe.mjs` `modelsBytes`) | every source |
 | `element_sets_mpe` | The same history as the GP history archive stores it (`$MPE`, one frame); `omm_from_mpe` converts it and the `$OMM` takes the lane of `element_sets` | element-set source that stores `$MPE` |
 | `fit_omm` | The SGP4 sets fitted to the ephemeris or the estimated arc (`$OMM`; the newest fit is the product, the history is screened for maneuvers) | ephemeris and observation sources |
 | `ephemeris` | The operator's ephemeris (`$OEM`, one object); its covariance lines are rule 1 | ephemeris source |
 | `ephemeris_versions`, `planned_maneuvers` | The versions of the ephemeris (`$OEM`, one frame each) and the planned maneuvers (`$MNV`) | ephemeris source |
 | `fit` | The estimate's state and formal covariance (`$OCM`) | observation source |
-| `fit_recipe` | The recipe (JSON) | ephemeris and observation sources |
 
 Egress, one sink `sdn.flow.egress` with ports `ocm`, `omm`, `mnv` (the
-products) and `covariance_report`, `derive_report`, `mpe_report`, `detect_report`,
-`propagation_report`, `compare_report`, `attribute_report` (provenance: the
-rule per object, why earlier rules did not apply, every row's verdict, the
-SHA-256 of each record, the licence).
+products) and the typed reports: `covariance_report` and `attribute_report` (`$ERM`
+ATTACH_REPORT: the rule per object, why earlier rules did not apply, every row's
+verdict, the SHA-256 of each record, the licence), `derive_report` and `mpe_report`
+(FlowNotice), `propagation_report` (`$PRW` WINDOW_REPORT), `detect_report` and
+`compare_report` (`$MDE`).
 
-The recipe (`analysis/gp-error-model` README) also carries `ages`: the days
-after each set's epoch at which the OCM gets a state and its covariance
-(default `[0]`; `recipe.mjs` sets E14's horizons, 0 to 7 days). `data/e14-s3-kc.json` in
-`analysis/gp-error-model` is the model and its verdicts.
+## The recipe is the node configuration
+
+A run of the flow is one source. Its recipe is the flow's node configuration
+(`plugin.getConfig`, one ModuleConfig that every node of the compiled flow reads),
+each module under its own prefix (`recipe.mjs` `flowConfig`):
+
+| Key | Read by |
+| --- | --- |
+| `derive.ages` | epoch-state `derive_omm` (`s_derive`, `f_derive`): the days after each set's epoch at which the OCM gets a state and its covariance (default `[0]`; `recipe.mjs` sets E14's horizons, 0 to 7 days) |
+| `attach.*` (`version`, `source.*`, `producer`, `created`, `latestOnly`, `maxOperatorRows`, `realism`) | gp-error-model `attach_covariance` (`s_attach`, `f_attach`) |
+| `attribute.*` (`version`, `source.*`, `producer`) | gp-error-model `attribute_maneuvers` (`s_attribute`, `f_attribute`) |
+| root keys | maneuver-detection's options (none set: its defaults) |
+
+Nodes of the same module share their prefix, so one configuration cannot hold two
+sources' recipes: run the flow once per source. The models are not configuration
+but records, on the `models` trigger. `data/e14-s3-kc.json` in
+`analysis/gp-error-model` is the model and its verdicts (`data/e14-s3-kc.erm` the
+same as an `$ERM`).
 
 ## The fit stage
 
@@ -83,11 +98,12 @@ where it enters the flow; `recipe.mjs` (`recipeFor(id, { created, via, ages })`)
 makes the recipe of a registered source: its originator, lineage and licence,
 the provider (the plugin id of the module that gave the records), the E14 model
 (rule 3 for the sources E14 measured, rule 4 pooled for the others) and the ages
-of E14's horizons.
+of E14's horizons; `flowConfig(recipe)` and `modelsBytes(recipe)` give it as the
+flow's node configuration and its `models` frame.
 
 | | Modules |
 | --- | --- |
-| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `sp3-precise-source` (IGS and BKG GPS, ESA GLONASS and ESA POD orbits as SP3, fitted by `analysis/od`); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration); `ilrs-crd-source` (ILRS normal points in CRD version 2 as `$TDM` laser ranges, the observation source: `analysis/estimation` takes them on `tracking_data`) |
+| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (a `$QRP` page whose records are `$OMM`; a host drops the page header) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `sp3-precise-source` (IGS and BKG GPS, ESA GLONASS and ESA POD orbits as SP3, fitted by `analysis/od`); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration); `ilrs-crd-source` (ILRS normal points in CRD version 2 as `$TDM` laser ranges, the observation source: `analysis/estimation` takes them on `tracking_data`) |
 | Cannot yet | `celestrak-supgp` (pull-only), `gps-source` (almanac elements, not SGP4; GPS precise orbits are `sp3-precise-source`'s), `oneweb-source` (the LTEF is not decoded): the reason and the task are in the file |
 | Describe or identify | `celestrak-request`, `ephemeris-source`, `catalog-source`, `spk-source` |
 
