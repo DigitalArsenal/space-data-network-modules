@@ -530,6 +530,37 @@
       ]
     },
     {
+      "id": "celestrak-supgp",
+      "registry": [],
+      "kind": "element-set",
+      "originator": "CelesTrak",
+      "lineage": "celestrak-supgp",
+      "licence": {
+        "class": "cite-only",
+        "id": "celestrak"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/celestrak-supgp",
+          "method": "parse",
+          "port": "omm_records",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "CelesTrak's supplemental GP: SGP4 sets CelesTrak fits to operator ephemerides (SES, Planet, Iridium, Telesat, Kuiper, AST SpaceMobile, the China Space Station), one source name per provider (ses, planet, iridium, telesat, kuiper, ast-spacemobile, css). NON-INDEPENDENT: they are CelesTrak's fits, not this network's and not the operator's product (USER_DEFINED SDN_INDEPENDENT false, CelesTrak's RMS kept as SDN_CELESTRAK_RMS).",
+        "request turns the trigger into one HttpRequest per provider token (the job a $ICN in CONTEXT); hostcap/http-request fetches it; parse gives the $OMM records, their IngestRequest and the raw document for hostcap/storage-ingest. A token not answered 200 is a FlowNotice Missing.",
+        "E14 measured only the Space-Track lineage, so the pooled model answers (rule 4), uncalibrated."
+      ]
+    },
+    {
       "id": "igs-gps-precise",
       "registry": [
         "gps-precise"
@@ -723,13 +754,6 @@
     }
   ],
   "refused": [
-    {
-      "module": "data-source/celestrak-supgp",
-      "registry": [],
-      "check": "no-orbit-output",
-      "reason": "Pull-only: it parses CelesTrak's supplemental GP of SES, Planet, Iridium, Telesat, Kuiper, AST and the China Space Station inside `pull` and stores each object. No method gives the $OMM records to a flow.",
-      "task": "modules-celestrak-supgp-emit-20261011"
-    },
     {
       "module": "data-source/gps-source",
       "registry": [],
