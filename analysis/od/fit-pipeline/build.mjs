@@ -1,208 +1,121 @@
 #!/usr/bin/env node
 /**
- * Build the OD Fit Pipeline WASM module (App 2, A2.3) with a repo-local emsdk.
+ * Build the OD Fit Pipeline (typed contracts 1.0) through the SDK compiler.
  *
- * It compiles the pipeline orchestration (src/fit_pipeline.cpp) together with the
- * EXISTING OD fit library sources — reused, not forked — so the fit is
- * byte-for-byte the same code the OD `fit` module runs:
- *   ../src/cpp/src/sgp4_fitter.cpp   (od::fit_sgp4_series, elements_to_json)
- *   ../src/cpp/src/meme_parser.cpp   (od::iso_to_jd, EphemerisPoint, jd<->iso)
- *   ../src/cpp/src/frame_transform.cpp (od::eci_j2000_to_teme)
- *   ../src/cpp/deps/vallado-sgp4/SGP4.cpp (Vallado SGP4 propagator)
- * plus the host-capability skeleton from common/provider_source.hpp
- * (storage.write / keyslot.sign / pubsub.publish) and the SDK keyslot client.
+ * One translation unit: src/fit_pipeline.cpp and the analysis/od fit library it calls, read in place from
+ * ../src/cpp (never copied): the $OEM reader, the SGP4 fitter, the $OMM / $OBD builders, the frame and time
+ * transforms and Vallado SGP4. Their SDS headers are analysis/od's (licensing/core/src/cpp/generated/sds), the same
+ * ones analysis/od's `fit` compiles, so the records are byte-for-byte that module's for the same fit. The SDK
+ * compiler stages the PIV bridge, the runtime types (TimerTick, FlowNotice, HostOps) and typedHostcall.hpp.
  *
- * Usage: node build.mjs
- * Output: dist/od-fit-pipeline.wasm (signed), dist/isomorphic/module.wasm (loadable)
+ *   SDN_OD_EIGEN_DIR=<dir holding Eigen/Dense> node build.mjs
  *
- * Environment:
- *   SDN_LOCAL_EMSDK_DIR         — repo-local emsdk root override
- *   SDN_EIGEN_INCLUDE_DIR       — Eigen headers dir override (has Eigen/Dense)
- *   SDN_MODULE_SIGNING_KEYPAIR  — dev module signing keypair path override
+ * build-driver.mjs is the SDK's compiler hook: it adds -ffast-math (as analysis/od compiles the fitter) and the Eigen
+ * include to the module's compile.
+ *
+ * Output: dist/isomorphic/module.wasm (wasmedge, storage_query), dist/guest-link/, and dist/test-browser/ - the
+ * same source declared for the browser with no capability, which the SDK's in-process harness loads with a stub
+ * host (test/module.test.mjs). The test build is never shipped.
  */
-import { execFileSync, execSync } from "node:child_process";
-import fs from "node:fs";
+import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
-import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
-import createOdFitPipelinePluginManifest from "./manifest.js";
+
+import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { assertArtifactThreadModel } from "../../../scripts/lib/thread-model.mjs";
-import { activateLaneToolchain, recordLaneToolchain } from "../../../scripts/lib/emsdk-toolchain.mjs";
 
-// THREAD MODEL — declared, never inferred (full rationale in
-// scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
-//
-// This build does NOT go through the SDK compiler — it drives a vendored
-// Emscripten `em++` directly — so `resolveThreadModel` never runs and there is no
-// `compileModuleFromSource` argument to carry a declaration. The module therefore
-// read as "undeclared" in the artifact-reproducibility census with no way to
-// answer, which is a reporting defect, not a build defect: the lane here is fixed
-// by the command line, `-sSTANDALONE_WASM=1 -sPURE_WASI=1` and no `-pthread`.
-//
-// Truth of the SHIPPED artifact 15b7ace70066…: unshared linear memory, no
-// `wasi.thread-spawn` import, no `wasi_thread_start` export.
-//
-// `assertArtifactThreadModel` re-reads the EMITTED wasm at the end of this build
-// and refuses the declaration if the bytes ever contradict it. A declaration
-// nothing verifies is a comment.
-const THREAD_MODEL = "single-thread";
+// THREAD MODEL - declared, never inferred (scripts/lib/thread-model.mjs): one pass fits object after object on the
+// calling thread and spawns nothing; the SDK's wasm32-wasip1-threads toolchain builds it without threads, as it
+// builds analysis/od. The manifest's sequentialJustification says why.
+const THREAD_MODEL = "wasi-sequential";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../../..");           // space-data-network-modules
-const OD_SRC = path.resolve(__dirname, "../src/cpp");            // analysis/od/src/cpp
-const EMSDK_DIR = path.resolve(
-  process.env.SDN_LOCAL_EMSDK_DIR ||
-    (fs.existsSync(path.join(__dirname, "..", "deps", "emsdk", "emsdk_env.sh"))
-      ? path.join(__dirname, "..", "deps", "emsdk")
-      : path.join(REPO_ROOT, "licensing", "core", "deps", "emsdk")),
-);
-const EM_CACHE_DIR = path.join(__dirname, ".emcache");
-const BUILD_DIR = path.join(__dirname, ".build");
-const DIST_DIR = path.join(__dirname, "dist");
-const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
-const SRC_DIR = path.join(__dirname, "src");
+const root = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(root, "../../..");
+const odCpp = path.resolve(root, "../src/cpp");
+const sdsDir = path.join(repo, "licensing/core/src/cpp/generated/sds");
+const includeRoots = [path.join(odCpp, "include"), path.join(odCpp, "include/od"), path.join(odCpp, "deps/vallado-sgp4"), sdsDir];
+// Headers the SDK compiler stages itself.
+const staged = new Set(["space_data_module_invoke.h", "typedHostcall.hpp", "FlowNotice_generated.h", "TimerTick_generated.h"]);
 
-const SDN_COMMON_DIR = path.join(REPO_ROOT, "common");
-const SDM_HOST_CPP_DIR = path.join(REPO_ROOT, "node_modules", "space-data-module-sdk", "src", "host", "cpp");
-const OD_INCLUDE_DIR = path.join(OD_SRC, "include");
-const VALLADO_DIR = path.join(OD_SRC, "deps", "vallado-sgp4");
-
-const MODULE_SIGNING_KEYPAIR_PATH =
-  process.env.SDN_MODULE_SIGNING_KEYPAIR ||
-  path.resolve(REPO_ROOT, "../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
-
-// OD fit library sources reused verbatim (no orbit_determination.cpp / no
-// oem_parser.cpp — the pipeline consumes JSON OEM records, not KVN, and does not
-// use the IOD path, which keeps <iostream> out of the PURE_WASI link).
-const OD_LIB_SOURCES = [
-  path.join(OD_SRC, "src", "sgp4_fitter.cpp"),
-  path.join(OD_SRC, "src", "meme_parser.cpp"),
-  path.join(OD_SRC, "src", "frame_transform.cpp"),
-  path.join(VALLADO_DIR, "SGP4.cpp"),
-];
-
-function run(cmd, opts = {}) {
-  console.log(`  $ ${cmd}`);
-  execSync(cmd, { stdio: "inherit", ...opts });
-}
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+function resolveEigen() {
+  const candidates = [process.env.SDN_OD_EIGEN_DIR, process.env.EIGEN3_INCLUDE_DIR, "/opt/homebrew/include/eigen3",
+    "/opt/homebrew/opt/eigen/include/eigen3", "/usr/local/include/eigen3", "/usr/include/eigen3"].filter(Boolean);
+  const found = candidates.find((dir) => fsSync.existsSync(path.join(dir, "Eigen/Dense")));
+  if (!found) throw new Error("Eigen headers not found: set SDN_OD_EIGEN_DIR to the directory holding Eigen/Dense.");
+  return found;
 }
 
-function resolveEigenInclude() {
-  const candidates = [
-    process.env.SDN_EIGEN_INCLUDE_DIR,
-    "/opt/homebrew/include/eigen3",
-    "/opt/homebrew/opt/eigen/include/eigen3",
-    "/usr/local/include/eigen3",
-    "/usr/local/opt/eigen/include/eigen3",
-  ].filter(Boolean);
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, "Eigen", "Dense"))) return dir;
+// Inline a source's local includes (each once), so the SDK compiler gets one translation unit. The SDS headers lose
+// the flatc version static_assert (the SDK stages its own flatbuffers runtime), as hostcap/clock does.
+const emitted = new Set();
+async function inline(file) {
+  file = path.resolve(file);
+  if (emitted.has(file)) return "";
+  emitted.add(file);
+  let text = await fs.readFile(file, "utf8");
+  if (file.startsWith(sdsDir)) text = text.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "");
+  const lines = [];
+  for (const line of text.split("\n")) {
+    const match = /^\s*#\s*include\s+"([^"]+)"/.exec(line);
+    if (!match || staged.has(match[1]) || match[1].startsWith("flatbuffers/")) {
+      lines.push(line);
+      continue;
+    }
+    const candidate = [path.dirname(file), ...includeRoots].map((dir) => path.resolve(dir, match[1])).find((p) => fsSync.existsSync(p));
+    if (!candidate) throw new Error(`Unresolved include "${match[1]}" in ${path.relative(repo, file)}`);
+    lines.push(await inline(candidate));
   }
-  throw new Error("Eigen headers not found. Set SDN_EIGEN_INCLUDE_DIR=/path/to/eigen3 (must contain Eigen/Dense).");
+  return `\n// Source: ${path.relative(repo, file)}\n${lines.join("\n")}\n`;
 }
 
-async function signBuiltModule(wasmPath) {
-  if (!fs.existsSync(MODULE_SIGNING_KEYPAIR_PATH)) {
-    throw new Error(`Module signing keypair not found: ${MODULE_SIGNING_KEYPAIR_PATH}`);
-  }
-  const keypair = JSON.parse(fs.readFileSync(MODULE_SIGNING_KEYPAIR_PATH, "utf8"));
-  const signed = await signModuleArtifact(fs.readFileSync(wasmPath), {
-    privateKeySeedHex: keypair.privateKeySeedHex,
-    keyId: keypair.keyId ?? null,
-  });
-  fs.writeFileSync(wasmPath, signed.wasmBytes);
-  await verifyModuleArtifact(signed.wasmBytes, { trustedPublicKeys: [keypair.publicKeyHex], requireSignature: true });
-  console.log(`  Signed module artifact: ${wasmPath}`);
+const odSources = ["meme_parser", "frame_transform", "oem_fb_reader", "omm_fb_builder", "obd_fb_builder", "sgp4_fitter"]
+  .map((name) => path.join(odCpp, "src", `${name}.cpp`));
+const pieces = [];
+for (const file of [path.join(root, "src/fit_pipeline.cpp"), ...odSources, path.join(odCpp, "deps/vallado-sgp4/SGP4.cpp")]) {
+  pieces.push(await inline(file));
 }
+// The fit library's defines (analysis/od: -DNDEBUG -DEIGEN_DONT_PARALLELIZE; -O3 is the SDK's, -ffast-math build-driver.mjs's).
+const sourceCode = ["#define NDEBUG 1", "#define EIGEN_DONT_PARALLELIZE 1", ...pieces].join("\n");
 
-async function main() {
-  console.log("SDN Plugin Build — od-fit-pipeline");
-  const laneToolchain = activateLaneToolchain({
-    moduleDir: "analysis/od/fit-pipeline",
-    extraCandidates: [EMSDK_DIR],
-    emCache: EM_CACHE_DIR,
-  });
-  fs.mkdirSync(BUILD_DIR, { recursive: true });
-  fs.mkdirSync(DIST_DIR, { recursive: true });
-  fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
+// The SDK compiler hook (build-driver.mjs) adds -ffast-math (analysis/od's fitter flags) and the Eigen headers to
+// the module's compile; it runs the clang the SDK would have run.
+process.env.FIT_PIPELINE_EIGEN_DIR = resolveEigen();
+process.env.FIT_PIPELINE_CLANGXX = process.env.SDN_WASI_CLANGXX || "wasm32-wasi-clang++";
+process.env.SDN_WASI_CLANGXX = path.join(root, "build-driver.mjs");
 
-  const eigenInclude = resolveEigenInclude();
+const manifestPath = path.join(root, "plugin-manifest.json");
+const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+const distRoot = path.join(root, "dist");
+await fs.rm(distRoot, { recursive: true, force: true });
+const outputPath = path.join(distRoot, "isomorphic/module.wasm");
+await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
-  // Embed the real manifest (methods + host caps + TIMERS) via the SDK $PLG encoder.
-  const manifestBytes = encodePlgManifest(legacyManifestToPlg(createOdFitPipelinePluginManifest()));
-  const manifestIdentifier = new TextDecoder().decode(manifestBytes.slice(4, 8));
-  if (manifestIdentifier !== "$PLG") {
-    throw new Error(`Embedded manifest is not a $PLG buffer (identifier: ${JSON.stringify(manifestIdentifier)})`);
-  }
-  const byteList = Array.from(manifestBytes)
-    .map((b) => "0x" + b.toString(16).padStart(2, "0"))
-    .join(",");
-  const manifestExportsPath = path.join(DIST_DIR, "manifest-exports.cpp");
-  fs.writeFileSync(
-    manifestExportsPath,
-    `#include <stddef.h>
-#include <stdint.h>
-static const uint8_t g_manifest[] = {${byteList}};
-extern "C" {
-__attribute__((visibility("default"))) const uint8_t* plugin_get_manifest_flatbuffer() { return g_manifest; }
-__attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_size() { return ${manifestBytes.length}; }
-}
-`,
-  );
-  console.log(`  Embedded manifest: ${manifestBytes.length} bytes`);
+const compile = (m, out) => compileModuleFromSource({ manifest: m, sourceCode, language: "c++", outputPath: out, threadModel: THREAD_MODEL, allowUndefinedImports: true });
+const compilation = await compile(manifest, outputPath);
+if (!compilation.report?.ok) throw new Error(`SDK validation failed:\n${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`);
+assertArtifactThreadModel(outputPath, THREAD_MODEL, "analysis/od/fit-pipeline");
 
-  if (!fs.existsSync(path.join(SDN_COMMON_DIR, "sdm_hostcall_wire.hpp"))) {
-    throw new Error(`sdm_hostcall_wire.hpp not found under ${SDN_COMMON_DIR}`);
-  }
-  if (!fs.existsSync(path.join(SDM_HOST_CPP_DIR, "keyslotClient.hpp"))) {
-    throw new Error(`keyslotClient.hpp not found under ${SDM_HOST_CPP_DIR} (expected the space-data-module-sdk node_modules symlink at the workspace root)`);
-  }
-  for (const src of OD_LIB_SOURCES) {
-    if (!fs.existsSync(src)) throw new Error(`reused OD source missing: ${src}`);
-  }
+const guestLinkDir = path.join(distRoot, "guest-link");
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
+await fs.writeFile(path.join(guestLinkDir, "metadata.json"), `${JSON.stringify({
+  version: 1, format: compilation.guestLink.format, language: compilation.guestLink.language,
+  threadModel: compilation.guestLink.threadModel, symbolPrefix: compilation.guestLink.symbolPrefix,
+  methodSymbols: compilation.guestLink.methodSymbols, capabilities: manifest.capabilities,
+}, null, 2)}\n`);
+await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 
-  const srcPath = path.join(SRC_DIR, "fit_pipeline.cpp");
-  const outWasm = path.join(DIST_DIR, "od-fit-pipeline.wasm");
-  const emxx = path.join(EMSDK_DIR, "upstream", "emscripten", "em++");
+// The test build: the same source, declared for the browser with no capability (the SDK harness's stub host answers
+// plugin.getConfig and storage.query). Never shipped.
+const { timers: _timers, ...untimed } = manifest;
+const testManifest = { ...untimed, runtimeTargets: ["browser", "wasmedge"], capabilities: [] };
+const testDir = path.join(distRoot, "test-browser");
+await fs.mkdir(testDir, { recursive: true });
+await fs.writeFile(path.join(testDir, "plugin-manifest.json"), `${JSON.stringify(testManifest, null, 2)}\n`);
+const testCompilation = await compile(testManifest, path.join(testDir, "module.wasm"));
+if (!testCompilation.report?.ok) throw new Error(`Test build failed SDK validation:\n${JSON.stringify(testCompilation.report?.issues ?? [], null, 2)}`);
 
-  const includes = [
-    `-I${shellQuote(OD_INCLUDE_DIR)}`,
-    `-I${shellQuote(VALLADO_DIR)}`,
-    `-I${shellQuote(eigenInclude)}`,
-    `-I${shellQuote(SDN_COMMON_DIR)}`,
-    `-I${shellQuote(SDM_HOST_CPP_DIR)}`,
-    `-I${shellQuote(SRC_DIR)}`,
-  ];
-
-  const sources = [srcPath, ...OD_LIB_SOURCES, manifestExportsPath].map(shellQuote).join(" ");
-
-  // Fit-fidelity flags match the OD library's CMake WASM build (-O3 -ffast-math
-  // -DEIGEN_DONT_PARALLELIZE -DNDEBUG) so the fitted elements match the OD `fit`
-  // module. PURE_WASI standalone + host-import tolerance (like the adapters).
-  run(
-    `${shellQuote(emxx)} -O3 -std=c++17 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 ` +
-      `-DSDN_WASI_PLUGIN=1 -DEIGEN_DONT_PARALLELIZE -DNDEBUG -ffast-math ` +
-      `${includes.join(" ")} ${sources} ` +
-      `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH=1 ` +
-      `-sFILESYSTEM=0 -sERROR_ON_UNDEFINED_SYMBOLS=0 ` +
-      `-sEXPORTED_FUNCTIONS="['_plugin_invoke_stream','_plugin_alloc','_plugin_free','_plugin_get_manifest_flatbuffer','_plugin_get_manifest_flatbuffer_size']" ` +
-      `--no-entry -o ${shellQuote(outWasm)}`,
-  );
-
-  // dist/isomorphic/module.wasm is the loadable (unsigned) runtime artifact.
-  // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
-  assertArtifactThreadModel(outWasm, THREAD_MODEL, "analysis/od/fit-pipeline");
-  recordLaneToolchain(DIST_DIR, laneToolchain);
-  fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
-  await signBuiltModule(outWasm);
-  console.log(`  Runtime artifact (loadable, unsigned): ${path.join(ISOMORPHIC_DIST_DIR, "module.wasm")}`);
-  console.log(`\n✓ Build complete: ${outWasm}`);
-}
-
-main().catch((err) => {
-  console.error("\nBuild failed:", err.message);
-  process.exit(1);
-});
+const wasm = await fs.readFile(outputPath);
+console.log(`Built ${path.relative(root, outputPath)} (${wasm.length} bytes) sha256 ${createHash("sha256").update(wasm).digest("hex")}`);

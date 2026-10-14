@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-sequential",
+  "symbolPrefix": "sdm_guest_636f6d2e6f726270726f2e6f642d6669742d706970656c696e65_",
+  "methodSymbols": {
+    "fit_pipeline": "sdm_guest_636f6d2e6f726270726f2e6f642d6669742d706970656c696e65_fit_pipeline"
+  },
+  "capabilities": [
+    "storage_query",
+    "timers"
+  ]
+}
