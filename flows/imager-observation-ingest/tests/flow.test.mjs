@@ -81,6 +81,7 @@ function decodeEnvelope(bytes) {
   return { meta, segments };
 }
 
+const MARKS = new Set();
 function createHostStub(config) {
   const calls = [];
   const memoryRef = { memory: null };
@@ -96,6 +97,14 @@ function createHostStub(config) {
       if (operation === "http.request") {
         if (meta.url === PUBLISH_URL) return answer({ status: 202, headers: {}, body: Buffer.from("{}").toString("base64"), body_encoding: "base64" });
         if (LISTINGS[meta.url]) return answer({ status: 200, headers: { "content-type": "application/xml" }, body: Buffer.from(listingXml(LISTINGS[meta.url])).toString("base64"), body_encoding: "base64" });
+        const url = new URL(meta.url);
+        if (url.searchParams.get("sdn-ingest") === "landed") {
+          // the host's validator ledger: the mark's ETag once it was fetched (2xx); a probe without validators gets them added
+          const has = meta.headers?.["If-None-Match"] || meta.headers?.["If-Modified-Since"];
+          if (!has && MARKS.has(meta.url)) return answer({ status: 304, headers: {}, body: "", body_encoding: "base64" });
+          if (meta.headers?.Range === "bytes=0-0") { MARKS.add(meta.url); return answer({ status: 206, headers: { etag: '"x"' }, body: "AA==", body_encoding: "base64" }); }
+          return answer({ status: 416, headers: {}, body: "", body_encoding: "base64" });
+        }
         const file = FILES[meta.url];
         if (!file) return answer({ status: 404, headers: {}, body: "", body_encoding: "base64" });
         const range = meta.headers?.Range?.match(/^bytes=(\d+)-(\d+)$/);
@@ -129,41 +138,41 @@ function recordCodes(r) {
   return c;
 }
 
-test("timer tick -> listings -> one file at a time (byte ranges joined) -> world bands equal to the reference, one ingest per file", async () => {
+test("timer tick -> listings -> one job at a time (landed-mark probe, byte ranges appended) -> world bands equal to the reference, one ingest and one landed mark per field; a second instance finds them landed", async () => {
   const config = { imager_frame_time: "2026-10-07T06:00:00Z", imager_satellites: "goes-east", imager_fields: FIELDS.join(","),
     imager_max_part_bytes: 1048576, imager_publish_url: PUBLISH_URL };
-  const stub = createHostStub(config);
-  const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
-  stub.memoryRef.memory = host.memory;
-  const egress = [];
-  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-07T06:20:00Z" })) });
-  await host.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) egress.push(JSON.parse(decoder.decode(f.bytes))); return { statusCode: 0 }; } });
-
-  // the listings first, then each file's GETs followed by its ingest: one file at a time
-  const sequence = stub.calls.filter((c) => c.operation !== "plugin.getConfig").map((c) =>
-    c.operation === "storage.ingest_with_source" ? "ingest" : c.meta.url === PUBLISH_URL ? "publish" : LISTINGS[c.meta.url] ? "list" : FILES[c.meta.url] ? `get:${FILES[c.meta.url].field}` : `?${c.meta.url}`);
+  const run = async () => {
+    const stub = createHostStub(config);
+    const host = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(RUNTIME)), extraImports: stub.imports, runtimeTarget: "wasmedge" });
+    stub.memoryRef.memory = host.memory;
+    const egress = [];
+    host.enqueueTriggerFrame(0, { portId: "tick", bytes: encoder.encode(JSON.stringify({ firedAt: "2026-10-07T06:20:00Z" })) });
+    await host.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) { const t = decoder.decode(f.bytes); if (!t.startsWith("$HRB")) egress.push(JSON.parse(t)); } return { statusCode: 0 }; } });
+    return { stub, host, egress };
+  };
+  const { stub, host, egress } = await run();
+  const kind = (c) => c.operation === "storage.ingest_with_source" ? "ingest" : c.meta.url === PUBLISH_URL ? "publish"
+    : LISTINGS[c.meta.url] ? "list" : /sdn-ingest=landed/.test(c.meta.url) ? (c.meta.headers.Range === "bytes=0-0" ? "mark" : "probe") : FILES[c.meta.url] ? `get:${FILES[c.meta.url].field}` : `?${c.meta.url}`;
+  const sequence = stub.calls.filter((c) => c.operation !== "plugin.getConfig").map(kind);
   const listings = Object.keys(LISTINGS).length;
   assert.deepEqual(sequence.slice(0, listings), Array(listings).fill("list"), sequence.join(" "));
-  const afterListings = sequence.slice(listings);
-  const files = afterListings.filter((s) => s.startsWith("get:"));
-  assert.equal(new Set(files).size, FIELDS.length, "every field's file fetched");
-  // each file's parts back to back, then its ingest and its publication, before the next file is fetched
+  // each job: its probe, its file's parts back to back, then its ingest, landed mark and publication, before the next
+  const after = sequence.slice(listings);
   let at = 0;
-  for (const get of new Set(files)) {
-    const field = get.slice(4);
-    while (afterListings[at] === get) at++;
-    assert.equal(afterListings[at], "ingest", `${field}: ingested before the next file (${afterListings.join(" ")})`);
-    assert.equal(afterListings[at + 1], "publish", `${field}: published after its ingest`);
-    at += 2;
+  for (let k = 0; k < FIELDS.length; k++) {
+    assert.equal(after[at++], "probe", after.join(" "));
+    const get = after[at];
+    assert.match(get, /^get:/, after.join(" "));
+    while (after[at] === get) at++;
+    assert.deepEqual(after.slice(at, at + 3).sort(), ["ingest", "mark", "publish"], after.join(" "));
+    at += 3;
   }
-  assert.equal(at, afterListings.length);
-  for (const c of stub.calls.filter((c) => c.operation === "http.request" && c.meta.url !== PUBLISH_URL)) {
-    assert.equal(c.meta.headers["If-Modified-Since"], "Thu, 01 Jan 1970 00:00:00 GMT");
-  }
-  const reflectanceGets = stub.calls.filter((c) => FILES[c.meta.url]?.field === "reflectance_064um");
+  assert.equal(at, after.length);
+  const reflectanceGets = stub.calls.filter((c) => FILES[c.meta?.url]?.field === "reflectance_064um");
   assert.equal(reflectanceGets.length, 2, "the 1.47 MB band in two 1 MiB-bounded ranges");
+  for (const c of stub.calls.filter((c) => FILES[c.meta?.url])) assert.equal(c.meta.headers["If-Modified-Since"], "Thu, 01 Jan 1970 00:00:00 GMT");
 
-  // every ingest: one file's field, its world codes equal to the reference at every width
+  // every ingest: one field, its world codes equal to the reference at every width
   const ingests = stub.calls.filter((c) => c.operation === "storage.ingest_with_source");
   assert.equal(ingests.length, FIELDS.length);
   for (const ingest of ingests) {
@@ -197,7 +206,14 @@ test("timer tick -> listings -> one file at a time (byte ranges joined) -> world
     }
   }
   const results = egress.filter((r) => r.schema === "WXF.fbs");
-  assert.equal(results.length, FIELDS.length, "one ingest result per file reached the egress");
-  assert.equal(egress.filter((r) => r.missing || r.skipped).length, 0, JSON.stringify(egress));
+  assert.equal(results.length, FIELDS.length, "one ingest result per field reached the egress");
+  assert.equal(egress.filter((r) => r.failed || r.missing).length, 0, JSON.stringify(egress));
   console.log(`runtime linear memory after the cycle: ${(host.memory.buffer.byteLength / 1048576).toFixed(0)} MiB`);
+
+  // a restarted node (a new instance, the host's ledger kept): every field's mark answers 304 - nothing fetched again,
+  // and the run is the node's unchanged notice
+  const second = await run();
+  const again = second.stub.calls.filter((c) => c.operation !== "plugin.getConfig").map(kind);
+  assert.deepEqual(again.filter((k) => k !== "list"), Array(FIELDS.length).fill("probe"), again.join(" "));
+  assert.ok(second.egress.some((r) => r.unchanged === true && r.status === 304 && r.landed_before === FIELDS.length), JSON.stringify(second.egress));
 });

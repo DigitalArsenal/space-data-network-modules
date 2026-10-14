@@ -39,7 +39,7 @@ if (!/add_CHUNK_CODECS|add_QUANTIZED_U8/.test(wxf)) {
   throw new Error(`${standardsRoot} predates SDS 1.238.0 ($WXF imager fields): set SPACE_DATA_STANDARDS_ROOT`);
 }
 const localHeaders = await Promise.all(
-  ["hdf5mini.hpp", "imagerworld.hpp", "fixedgridread.hpp"].map((name) => fs.readFile(path.join(packageRoot, "src", name), "utf8")),
+  ["hdf5mini.hpp", "imagerworld.hpp", "fixedgridread.hpp", "viewimagery.hpp", "grib2mini.hpp"].map((name) => fs.readFile(path.join(packageRoot, "src", name), "utf8")),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
 // miniz first (the readers inflate with tinfl_*), then the generated $WXF header, the readers and the module.

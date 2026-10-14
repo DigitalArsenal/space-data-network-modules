@@ -1,22 +1,27 @@
 /*
  * data-source/imager-observation-source.
  *
- * Request-builder flow nodes for geostationary imager observations in NOAA Open Data Dissemination's anonymous public
- * buckets (GOES-East noaa-goes19, GOES-West noaa-goes18: ABI L1b/L2 NetCDF4 under <product>/<YYYY>/<DDD>/<HH>/). No
- * credentials and no capabilities beyond the node config: the http connector does the fetching.
+ * Request-builder flow nodes for imager observations - raw per-satellite fields (owner 2026-10-07: SDN carries raw
+ * per-satellite fields; the world-clouds display derives the rest) from public sources, no credentials:
+ *   GOES-East / GOES-West  NOAA Open Data Dissemination (noaa-goes19 / noaa-goes18): ABI L1b/L2 NetCDF4
+ *   Himawari-9             NOAA Open Data Dissemination (noaa-himawari9): AHI ISatSS tiles (NetCDF4), L2 clouds (HDF5)
+ *   Meteosat-12, Meteosat-9 IODC, Metop-B/C   EUMETSAT's public view service (WMS)
+ * The http connector does the fetching; the parser sibling (data-source/imager-observation-parser) fetches each file's
+ * bytes through it and builds the $WXF records.
  *
- *   plan            : timer tick -> one S3 ListObjectsV2 request per (satellite, product folder) of the frame hour
- *                     + a list job each (or one status frame when skipped).
- *   select_files    : listings + list jobs -> each wanted field's file (the hour's first full-disk scan) as GET
- *                     requests, byte ranges when larger than imager_max_part_bytes, with a parse job per part - ONE FILE
- *                     PER INVOCATION, the rest yielded as backlog, so the parser holds one file and storage-ingest gets
- *                     one meta + one record stream at a time. Missing files / failed listings -> status.
- *   publish_request : storage-ingest result + parser meta -> the dataset-publication POST (imager_publish_url).
+ *   plan            : timer tick -> per satellite, the frame hours of the window not yet landed: an S3 listing request
+ *                     per product folder (+ its list job), or a view work job straight to the parser.
+ *   select_files    : listings + list jobs -> one parser work job per file (or per band of tiles).
+ *   note            : the parser's notices (landed marks found, view frames missing) -> the module's landed set.
+ *   publish_request : storage-ingest result + parser meta -> the field's landed mark (a one-byte GET the node's HTTP
+ *                     validator ledger remembers) and the dataset-publication POST (imager_publish_url).
  *
- * Node CONFIG (plugin.getConfig): imager_live_access (default true), imager_satellites ("goes-east,goes-west"),
- * imager_fields (the five the world-clouds display reads), imager_widths ("4096,2048,1024"), imager_frame_time (ISO or
- * Unix ms; default the latest hour imager_lag_minutes (20) old), imager_max_part_bytes (64 MiB),
- * imager_list_timeout_ms (60000), imager_file_timeout_ms (300000), imager_publish_url (unset: no publication).
+ * Node CONFIG (plugin.getConfig): imager_live_access (default true), imager_satellites ("goes-east,goes-west"; also
+ * himawari, meteosat, meteosat-iodc, metop), imager_fields (the five the world-clouds display reads), imager_widths
+ * ("4096,2048,1024"), imager_backfill_hours (72: the ledger satellites' window), imager_view_backfill_hours (0),
+ * imager_frame_time (one fixed hour, ISO or Unix ms), imager_lag_minutes / imager_lag_minutes_<satellite> (per
+ * satellite: ABI/AHI 20, Meteosat 40, Metop 360), imager_max_part_bytes (64 MiB), imager_list_timeout_ms (60000),
+ * imager_file_timeout_ms (300000), imager_publish_url (unset: no publication).
  */
 #include <algorithm>
 #include <cctype>
@@ -275,8 +280,6 @@ int64_t now_unix_ms() {
     return static_cast<int64_t>(tv.tv_sec) * 1000 + static_cast<int64_t>(tv.tv_usec / 1000);
 }
 
-// The previous synoptic cycle (00/06/12/18Z) at least one hour before now.
-
 // ---------------------------------------------------------------------------
 // Hostcall wire: u32 metaLen | meta JSON | u32 segCount | (u32 len | bytes)*.
 // Response: u32 metaLen | {"ok":bool,"result":...}. Mirrors
@@ -408,53 +411,110 @@ bool find_batched_input_port(char* message, size_t message_len) {
 }
 
 // ---------------------------------------------------------------------------
-// Satellites and fields. A field is one variable of one product of the imager's L1b/L2 NetCDF4 files in the
-// satellite's public bucket, under <product>/<YYYY>/<DDD>/<HH>/ (NOAA Open Data Dissemination layout).
+// Satellites. A satellite is one imager's raw fields from one public source:
+//   ABI   - NOAA Open Data Dissemination's GOES buckets: ABI L1b/L2 NetCDF4 under <product>/<YYYY>/<DDD>/<HH>/.
+//   AHI   - noaa-himawari9: the full disc's sectorized CMI tiles (AHI-L2-FLDK-ISatSS/<YYYY>/<MM>/<DD>/<HHMM>/, NetCDF4,
+//           88 tiles a band) and NOAA's cloud retrievals (AHI-L2-FLDK-Clouds/.../<HHMM>/, HDF5, read by byte range).
+//   VIEW  - EUMETSAT's public view service (WMS GetMap): Meteosat-12 FCI (0 degrees) and Meteosat-9 SEVIRI over the
+//           Indian Ocean (45.5 E), geostationary discs; Metop-B/C AVHRR, the polar caps.
+// Each satellite publishes under its provider and source (sdn/PROTOCOL.md in DigitalArsenal/Cesium_Weather:
+// <dataset>-world), with the reference producer's licence and citation (raw_satellite.py LICENSE).
 // ---------------------------------------------------------------------------
 
-struct Satellite { const char* id; const char* bucket; const char* sensor; };
-const Satellite kSatellites[] = {
-    {"goes-east", "noaa-goes19", "GOES-19 ABI"},
-    {"goes-west", "noaa-goes18", "GOES-18 ABI"},
+enum Kind { kABI, kAHI, kViewGeo, kViewPolar };
+
+struct Satellite {
+    const char* id; Kind kind; const char* provider; const char* dataset; const char* sensor;
+    const char* origin; const char* license_id; const char* license_url; const char* citation;
+    double lag_minutes;   // the frame hour's products are out this long after the hour (default; imager_lag_minutes overrides)
 };
 
-struct FieldSource { const char* field; const char* product; const char* band; const char* variable; };
-const FieldSource kFieldSources[] = {
-    {"brightness_temperature_10um", "ABI-L2-CMIPF", "C13", "CMI"},
-    {"reflectance_064um", "ABI-L2-CMIPF", "C02", "CMI"},
-    {"cloud_top_height", "ABI-L2-ACHA2KMF", "", "HT"},
-    {"cloud_mask", "ABI-L2-ACMF", "", "ACM"},
-    {"cloud_phase", "ABI-L2-ACTPF", "", "Phase"},
-    {"cloud_optical_depth", "ABI-L2-COD2KMF", "", "COD"},
-    {"cloud_effective_radius", "ABI-L2-CPSF", "", "CPS"},
-    {"rain_rate", "ABI-L2-RRQPEF", "", "RRQPE"},
+constexpr const char* kNoaaOrigin = "NOAA Open Data Dissemination (AWS)";
+constexpr const char* kViewOrigin = "EUMETSAT view service (public WMS)";
+constexpr const char* kNoaaLicense = "LicenseRef-NOAA-Open-Data";
+constexpr const char* kGoesLicenseURL = "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C01502";
+constexpr const char* kHimawariLicenseURL = "https://registry.opendata.aws/noaa-himawari/";
+constexpr const char* kEumetsatLicense = "LicenseRef-EUMETSAT-Data-Policy";
+constexpr const char* kEumetsatLicenseURL = "https://www.eumetsat.int/eumetsat-data-licensing";
+
+const Satellite kSatellites[] = {
+    {"goes-east", kABI, "noaa-goes", "noaa-goes19", "GOES-19 ABI", kNoaaOrigin, kNoaaLicense, kGoesLicenseURL,
+     "GOES-19 ABI data courtesy of NOAA via NOAA Open Data Dissemination", 20},
+    {"goes-west", kABI, "noaa-goes", "noaa-goes18", "GOES-18 ABI", kNoaaOrigin, kNoaaLicense, kGoesLicenseURL,
+     "GOES-18 ABI data courtesy of NOAA via NOAA Open Data Dissemination", 20},
+    {"himawari", kAHI, "noaa-himawari", "noaa-himawari9", "Himawari-9 AHI", kNoaaOrigin, kNoaaLicense, kHimawariLicenseURL,
+     "Himawari-9 AHI data courtesy of NOAA and JMA via NOAA Open Data Dissemination", 20},
+    {"meteosat", kViewGeo, "eumetsat", "eumetsat-msg-0deg", "Meteosat-12 FCI", kViewOrigin, kEumetsatLicense, kEumetsatLicenseURL,
+     "Meteosat-12 FCI: contains modified EUMETSAT data", 40},
+    {"meteosat-iodc", kViewGeo, "eumetsat", "eumetsat-msg-iodc", "Meteosat-9 SEVIRI", kViewOrigin, kEumetsatLicense, kEumetsatLicenseURL,
+     "Meteosat-9 SEVIRI (Indian Ocean): contains modified EUMETSAT data", 40},
+    // (the view service's Metop orbits arrive 3-5 hours after they are flown, measured 2026-10-14)
+    {"metop", kViewPolar, "eumetsat", "eumetsat-metop", "Metop-B/C AVHRR", kViewOrigin, kEumetsatLicense, kEumetsatLicenseURL,
+     "Metop-B/C AVHRR: contains modified EUMETSAT data", 360},
 };
 
 const Satellite* satellite_for(const std::string& id) {
     for (const Satellite& s : kSatellites) if (id == s.id) return &s;
     return nullptr;
 }
+
+// ---------------------------------------------------------------------------
+// Fields: where each satellite's value comes from. ABI: (product folder, band token, NetCDF variable). AHI: ISatSS band
+// or (cloud product, HDF5 variable). VIEW: the parser derives them from the view imagery (raw_satellite.py
+// mtgview_fields / polarview_fields), so only which fields a view satellite has.
+// ---------------------------------------------------------------------------
+
+struct FieldSource { const char* field; const char* abi_product; const char* abi_band; const char* abi_variable;
+                     int ahi_band; const char* ahi_product; const char* ahi_variable; };
+const FieldSource kFieldSources[] = {
+    {"brightness_temperature_10um", "ABI-L2-CMIPF", "C13", "CMI", 13, "", ""},
+    {"reflectance_064um", "ABI-L2-CMIPF", "C02", "CMI", 3, "", ""},
+    {"cloud_top_height", "ABI-L2-ACHA2KMF", "", "HT", 0, "CHGT", "CldTopHght"},
+    {"cloud_mask", "ABI-L2-ACMF", "", "ACM", 0, "CMSK", "CloudMask"},
+    {"cloud_phase", "ABI-L2-ACTPF", "", "Phase", 0, "CPHS", "CloudPhase"},
+    {"cloud_optical_depth", "ABI-L2-COD2KMF", "", "COD", 0, "CHGT", "CldOptDpth"},
+    {"cloud_effective_radius", "ABI-L2-CPSF", "", "CPS", 0, "", ""},
+    {"rain_rate", "ABI-L2-RRQPEF", "", "RRQPE", 0, "", ""},
+    {"cloud_top_emissivity", "", "", "", 0, "CHGT", "CldTopEmss"},
+};
+
 const FieldSource* field_source(const std::string& field) {
     for (const FieldSource& f : kFieldSources) if (field == f.field) return &f;
     return nullptr;
 }
 
+// Whether a satellite has a field (the reference producer's per-imager fields).
+bool has_field(const Satellite& sat, const FieldSource& f) {
+    const std::string name = f.field;
+    switch (sat.kind) {
+        case kABI: return f.abi_product[0] != 0;
+        case kAHI: return f.ahi_band != 0 || f.ahi_product[0] != 0;
+        case kViewGeo:
+            if (name == "reflectance_064um") return std::string(sat.id) == "meteosat";   // GeoColour: the 0-degree disc only
+            return name == "brightness_temperature_10um" || name == "cloud_mask" || name == "cloud_top_height";
+        case kViewPolar: return name == "brightness_temperature_10um" || name == "cloud_mask" || name == "cloud_top_height";
+    }
+    return false;
+}
+bool ledger_kind(const Satellite& sat) { return sat.kind == kABI || sat.kind == kAHI; }
+
 constexpr const char* kDefaultSatellites = "goes-east,goes-west";
 // the fields the world-clouds display reads (cloud cover, optical depth, daylight brightness, temperature, top height)
 constexpr const char* kDefaultFields = "cloud_mask,cloud_optical_depth,reflectance_064um,brightness_temperature_10um,cloud_top_height";
 constexpr const char* kDefaultWidths = "4096,2048,1024";
-constexpr double kDefaultLagMinutes = 20;          // the hour's first full-disk scan and its L2 products are out by then
+constexpr double kDefaultBackfillHours = 72;      // the node's retention window (record-retention's default)
+constexpr double kDefaultViewBackfillHours = 0;   // (view imagery has no landed ledger: see plan)
 constexpr double kDefaultListTimeoutMs = 60000;
 constexpr double kDefaultFileTimeoutMs = 300000;
 constexpr double kDefaultMaxPartBytes = 64.0 * 1024 * 1024;   // each response well under the host's 100 MiB cap
-constexpr const char* kProviderID = "noaa-goes";
-constexpr const char* kOriginID = "NOAA Open Data Dissemination (AWS)";
-constexpr const char* kLicenseID = "LicenseRef-NOAA-Open-Data";
-constexpr const char* kLicenseURL = "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C01502";
+constexpr uint32_t kPlanBatch = 32;                           // listing requests / work jobs per invocation
 // The host adds the validators of the last 2xx for a URL to a GET (If-None-Match / If-Modified-Since) unless the
-// request sets one; a repeat listing or a second byte range of the same object could then come back 304, empty.
-// An If-Modified-Since at the epoch is always satisfied, so S3 answers 200 / 206 with the body.
+// request sets one; a repeat listing could then come back 304, empty. An If-Modified-Since at the epoch is always
+// satisfied, so S3 answers 200 with the body.
 constexpr const char* kNoValidators = "\"If-Modified-Since\":\"Thu, 01 Jan 1970 00:00:00 GMT\"";
+// The landed mark (see publish_request): a byte of the source object under a query S3 ignores, fetched once the field's
+// batch is stored, so the node's HTTP validator ledger holds the object's ETag under this URL.
+constexpr const char* kLandedQuery = "sdn-ingest=landed";
 
 std::string trim_copy(std::string s) {
     while (!s.empty() && is_ws(s.back())) s.pop_back();
@@ -472,24 +532,21 @@ std::vector<std::string> list_of(const std::string& text) {
     return out;
 }
 
-// The UTC hour the cycle publishes: imager_frame_time (ISO 8601 or Unix ms) when set, else the latest hour whose first
-// scan is imager_lag_minutes old.
-bool frame_time_ms(const std::string& config, int64_t* out, std::string* err) {
+int64_t floor_hour(int64_t ms) { return ms - ((ms % 3600000) + 3600000) % 3600000; }
+
+// imager_frame_time (ISO 8601 or Unix ms): one fixed hour; 0 when unset.
+bool fixed_frame_ms(const std::string& config, int64_t* out, std::string* err) {
+    *out = 0;
     std::string set;
     if (json_string_field(config, "imager_frame_time", &set) && !set.empty()) {
         int64_t ms = 0;
         if (std::all_of(set.begin(), set.end(), ::isdigit)) ms = std::atoll(set.c_str());
         else if (!parse_iso_ms(set, &ms)) { *err = "imager_frame_time is neither ISO 8601 nor Unix ms: " + set; return false; }
-        *out = ms - ms % 3600000;
+        *out = floor_hour(ms);
         return true;
     }
     double n = 0;
-    if (json_number_field(config, "imager_frame_time", &n) && n > 0) { const int64_t ms = static_cast<int64_t>(n); *out = ms - ms % 3600000; return true; }
-    const int64_t now = now_unix_ms();
-    if (now <= 0) { *err = "no clock"; return false; }
-    const int64_t lag = static_cast<int64_t>(config_number(config, "imager_lag_minutes", kDefaultLagMinutes) * 60000.0);
-    const int64_t t = now - lag;
-    *out = t - ((t % 3600000) + 3600000) % 3600000;
+    if (json_number_field(config, "imager_frame_time", &n) && n > 0) *out = floor_hour(static_cast<int64_t>(n));
     return true;
 }
 
@@ -509,14 +566,26 @@ void civil(int64_t ms, int* year, int* doy, int* hour) {
     *hour = static_cast<int>((ms % 86400000) / 3600000);
 }
 
+void civil_ymd(int64_t ms, int* year, int* month, int* day) {
+    int64_t z = ms / 86400000 + 719468;
+    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const int64_t doe = z - era * 146097;
+    const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const int64_t mp = (5 * doy + 2) / 153;
+    *day = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+    *month = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+    *year = static_cast<int>(yoe + era * 400 + (*month <= 2 ? 1 : 0));
+}
+
 std::string pad(int v, int width) {
     std::string s = std::to_string(v);
     while (static_cast<int>(s.size()) < width) s = "0" + s;
     return s;
 }
 
-std::string get_request(const std::string& url, const std::string& extra_headers, long timeout_ms) {
-    return "{\"method\":\"GET\",\"url\":\"" + json_escape(url) + "\",\"headers\":{" + kNoValidators + extra_headers + "}" +
+std::string get_request(const std::string& url, const std::string& headers, long timeout_ms) {
+    return "{\"method\":\"GET\",\"url\":\"" + json_escape(url) + "\",\"headers\":{" + headers + "}" +
            ",\"timeoutMs\":" + std::to_string(timeout_ms) + ",\"responseWire\":\"raw-body-v1\"}";
 }
 
@@ -548,9 +617,9 @@ std::vector<Listed> parse_listing(const std::string& xml) {
     return out;
 }
 
-// The hour's first scan of a field: the key whose scan start stamp is _s<YYYY><DDD><HH>0 (minutes 00-09) and, for a
-// multi-band product, whose mode-and-channel token is -M<n>C<band>_.
-const Listed* pick_file(const std::vector<Listed>& listing, const std::string& stamp, const std::string& band) {
+// ABI: the hour's first scan of a field: the key whose scan start stamp is _s<YYYY><DDD><HH>0 (minutes 00-09) and, for
+// a multi-band product, whose mode-and-channel token is -M<n>C<band>_.
+const Listed* pick_abi_file(const std::vector<Listed>& listing, const std::string& stamp, const std::string& band) {
     const Listed* best = nullptr;
     for (const Listed& l : listing) {
         if (l.key.find(stamp) == std::string::npos) continue;
@@ -564,24 +633,48 @@ const Listed* pick_file(const std::vector<Listed>& listing, const std::string& s
 }
 
 // ---------------------------------------------------------------------------
-// The select backlog: one file (all its byte-range parts) is handed to the http node and the parser per invocation,
-// so the parser's memory holds one file and storage-ingest receives one meta and one record stream at a time; the
-// rest wait here and the node yields with them as its backlog (the compiled runtime resumes it without input).
+// Module state (one instance per flow service; it lives as long as the node keeps the flow loaded).
+//   g_landed      - "<satellite>|<frameMs>|<field>" the node holds: from storage-ingest results (publish_request) and
+//                   the parser's landed notices (a probe of the landed mark answered 304). Lost on a restart; the
+//                   ledger satellites (ABI, AHI) learn it again from their marks, cheaply, on the first tick.
+//   g_view_tried  - view satellites' frames planned by this instance (no ledger: planned once, retried only when the
+//                   parser reports them missing).
 // ---------------------------------------------------------------------------
 
-struct PendingFile { std::vector<std::string> requests, jobs; };
-std::vector<PendingFile> g_backlog;
-size_t g_backlog_next = 0;
+std::vector<std::string> g_landed;
+std::vector<std::string> g_view_tried, g_view_retry;
+constexpr int kViewRetryHours = 12;   // a view frame the service did not have is tried again while it is this new
+struct Pending { std::string port_a, a, port_b, b; };   // one or two frames (a request and its list job, or a work job)
+std::vector<Pending> g_plan_backlog, g_select_backlog;
+size_t g_plan_next = 0, g_select_next = 0;
 
-int emit_next_file() {
-    if (g_backlog_next >= g_backlog.size()) { g_backlog.clear(); g_backlog_next = 0; plugin_set_backlog_remaining(0); plugin_set_yielded(0); return 0; }
-    const PendingFile& f = g_backlog[g_backlog_next++];
-    for (size_t k = 0; k < f.requests.size(); k++) {
-        if (push_json("requests", f.requests[k]) < 0) return 500;
-        if (push_json("jobs", f.jobs[k]) < 0) return 500;
+bool contains(const std::vector<std::string>& v, const std::string& k) { return std::find(v.begin(), v.end(), k) != v.end(); }
+void add_unique(std::vector<std::string>& v, const std::string& k) { if (!contains(v, k)) v.push_back(k); }
+void remove_key(std::vector<std::string>& v, const std::string& k) { v.erase(std::remove(v.begin(), v.end(), k), v.end()); }
+std::string landed_key(const std::string& sat, int64_t frame_ms, const std::string& field) {
+    return sat + "|" + std::to_string(frame_ms) + "|" + field;
+}
+// (landed keys older than the window are forgotten: the set stays the window's size)
+void forget_before(int64_t horizon_ms) {
+    auto old = [&](const std::string& k) {
+        const size_t a = k.find('|'), b = k.find('|', a + 1);
+        return a != std::string::npos && b != std::string::npos && std::atoll(k.substr(a + 1, b - a - 1).c_str()) < horizon_ms;
+    };
+    g_landed.erase(std::remove_if(g_landed.begin(), g_landed.end(), old), g_landed.end());
+    g_view_tried.erase(std::remove_if(g_view_tried.begin(), g_view_tried.end(), old), g_view_tried.end());
+    g_view_retry.erase(std::remove_if(g_view_retry.begin(), g_view_retry.end(), old), g_view_retry.end());
+}
+
+int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocation) {
+    uint32_t emitted = 0;
+    while (next < backlog.size() && emitted < per_invocation) {
+        const Pending& p = backlog[next++];
+        if (push_json(p.port_a.c_str(), p.a) < 0) return 500;
+        if (!p.port_b.empty() && push_json(p.port_b.c_str(), p.b) < 0) return 500;
+        emitted++;
     }
-    const uint32_t remaining = static_cast<uint32_t>(g_backlog.size() - g_backlog_next);
-    if (remaining == 0) { g_backlog.clear(); g_backlog_next = 0; }
+    const uint32_t remaining = static_cast<uint32_t>(backlog.size() - next);
+    if (remaining == 0) { backlog.clear(); next = 0; }
     plugin_set_backlog_remaining(remaining);
     plugin_set_yielded(remaining > 0 ? 1 : 0);
     return 0;
@@ -601,13 +694,37 @@ std::string frame_string(const plugin_input_frame_t* f) {
     return f && f->payload ? std::string(reinterpret_cast<const char*>(f->payload), f->payload_length) : std::string();
 }
 
+// The attribution every job carries to the parser (and on to the records and the ingest meta).
+std::string attribution_json(const Satellite& sat) {
+    return std::string("\"satellite\":\"") + sat.id + "\",\"sensor\":\"" + json_escape(sat.sensor) + "\",\"provider_id\":\"" + sat.provider +
+           "\",\"source_name\":\"" + sat.dataset + "-world\",\"dataset_id\":\"" + sat.dataset + "\",\"origin_id\":\"" + json_escape(sat.origin) +
+           "\",\"license\":\"" + sat.license_id + "\",\"license_class\":\"OpenAttribution\",\"license_url\":\"" + json_escape(sat.license_url) +
+           "\",\"citation\":\"" + json_escape(sat.citation) + "\"";
+}
+
+std::string fields_json(const std::vector<std::string>& fields) {
+    std::string out = "[";
+    for (size_t k = 0; k < fields.size(); k++) out += std::string(k ? "," : "") + "\"" + fields[k] + "\"";
+    return out + "]";
+}
+
 }  // namespace
 
 extern "C" {
 
-// plan: timer tick -> one S3 listing request per (satellite, product folder) of the frame hour, with a list job each;
-// or one status frame when the cycle is skipped.
+// plan: timer tick -> for every satellite, the frame hours of the window not yet landed: S3 kinds a listing request per
+// product folder with its list job; view kinds a work job straight to the parser. kPlanBatch frames per invocation, the
+// rest yielded as backlog (a resume without input hands out the next). When nothing is left to fetch: the node's
+// unchanged notice.
+//
+// The window. A ledger satellite (ABI, AHI: S3 objects with ETags) plans every hour of the last imager_backfill_hours
+// (default 72, the retention window) that this instance has not seen landed; the parser first probes each file's
+// landed mark (publish_request) and skips what the node already holds, so a restart re-learns the window from the
+// node's HTTP validator ledger instead of fetching it again. A view satellite (no ETags, no mark) plans the newest hour,
+// the hours it was told were missing, and imager_view_backfill_hours (default 0) - set that once to fill a new node, then
+// clear it: on a restart it would fetch those hours again (new retrieval times, new records).
 int plan(void) {
+    if (plugin_get_input_count() == 0) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch);
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
@@ -615,52 +732,105 @@ int plan(void) {
     }
     const std::string config = load_config();
     if (!config_bool(config, "imager_live_access", true)) return push_status("live-access-disabled");
-    int64_t frame_ms = 0;
+    int64_t fixed = 0;
     std::string err;
-    if (!frame_time_ms(config, &frame_ms, &err)) { plugin_set_error("invalid-frame-time", err.c_str()); return 400; }
+    if (!fixed_frame_ms(config, &fixed, &err)) { plugin_set_error("invalid-frame-time", err.c_str()); return 400; }
     const std::vector<std::string> satellites = list_of(config_string(config, "imager_satellites", kDefaultSatellites));
     const std::vector<std::string> fields = list_of(config_string(config, "imager_fields", kDefaultFields));
     const std::string widths = config_string(config, "imager_widths", kDefaultWidths);
     for (const std::string& f : fields) {
         if (!field_source(f)) { plugin_set_error("unknown-field", ("imager_fields names an unknown field: " + f).c_str()); return 400; }
     }
-    int year = 0, doy = 0, hour = 0;
-    civil(frame_ms, &year, &doy, &hour);
-    const std::string folder = std::to_string(year) + "/" + pad(doy, 3) + "/" + pad(hour, 2) + "/";
     const long timeout = static_cast<long>(config_number(config, "imager_list_timeout_ms", kDefaultListTimeoutMs));
-    int emitted = 0;
+    const int backfill = std::max(1, static_cast<int>(config_number(config, "imager_backfill_hours", kDefaultBackfillHours)));
+    const int view_backfill = std::max(1, static_cast<int>(config_number(config, "imager_view_backfill_hours", kDefaultViewBackfillHours)));
+    const int64_t now = now_unix_ms();
+    if (now <= 0 && !fixed) { plugin_set_error("invalid-frame-time", "no clock"); return 400; }
+    forget_before(floor_hour(now) - static_cast<int64_t>(std::max(backfill, view_backfill) + 24) * 3600000);
+    // (a tick re-plans from scratch: what the last one queued and did not hand out yet is replaced)
+    g_plan_backlog.clear(); g_plan_next = 0;
     for (const std::string& id : satellites) {
         const Satellite* sat = satellite_for(id);
         if (!sat) { plugin_set_error("unknown-satellite", ("imager_satellites names an unknown satellite: " + id).c_str()); return 400; }
-        std::vector<std::string> products;
-        for (const std::string& f : fields) {
-            const std::string product = field_source(f)->product;
-            if (std::find(products.begin(), products.end(), product) == products.end()) products.push_back(product);
-        }
-        for (const std::string& product : products) {
-            std::vector<std::string> wanted;
-            for (const std::string& f : fields) if (product == field_source(f)->product) wanted.push_back(f);
-            const std::string prefix = product + "/" + folder;
-            const std::string url = std::string("https://") + sat->bucket + ".s3.amazonaws.com/?list-type=2&max-keys=1000&prefix=" + prefix;
-            std::string job = std::string("{\"satellite\":\"") + sat->id + "\",\"sensor\":\"" + sat->sensor + "\",\"bucket\":\"" + sat->bucket +
-                              "\",\"prefix\":\"" + json_escape(prefix) + "\",\"frame_time_ms\":" + std::to_string(frame_ms) +
-                              ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":\"";
-            for (size_t k = 0; k < wanted.size(); k++) job += (k ? "," : "") + wanted[k];
-            job += "\"}";
-            if (push_json("requests", get_request(url, "", timeout)) < 0 || push_json("jobs", job) < 0) return 500;
-            emitted++;
+        std::vector<std::string> wanted;
+        for (const std::string& f : fields) if (has_field(*sat, *field_source(f))) wanted.push_back(f);
+        if (wanted.empty()) continue;
+        const double lag = config_number(config, (std::string("imager_lag_minutes_") + sat->id).c_str(),
+                                         config_number(config, "imager_lag_minutes", sat->lag_minutes));
+        const int64_t latest = fixed ? fixed : floor_hour(now - static_cast<int64_t>(lag * 60000.0));
+        const int hours = fixed ? 1 : ledger_kind(*sat) ? backfill : std::max(view_backfill, kViewRetryHours);
+        for (int h = 0; h < hours; h++) {
+            const int64_t frame = latest - static_cast<int64_t>(h) * 3600000;
+            std::vector<std::string> todo;
+            for (const std::string& f : wanted) if (!contains(g_landed, landed_key(sat->id, frame, f))) todo.push_back(f);
+            if (todo.empty()) continue;
+            if (!ledger_kind(*sat)) {
+                // the newest hour and the backfill window once each, and an hour again when the parser reported it missing
+                const std::string tried = sat->id + std::string("|") + std::to_string(frame) + "|";
+                if (contains(g_view_retry, tried)) remove_key(g_view_retry, tried);
+                else if (h >= view_backfill || contains(g_view_tried, tried)) continue;
+                add_unique(g_view_tried, tried);
+                Pending p;
+                p.port_a = "work";
+                p.a = std::string("{\"kind\":\"view\",") + attribution_json(*sat) + ",\"frame_time_ms\":" + std::to_string(frame) +
+                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":" + fields_json(todo) + "}";
+                g_plan_backlog.push_back(p);
+                continue;
+            }
+            int year = 0, doy = 0, hour = 0, month = 0, day = 0;
+            civil(frame, &year, &doy, &hour);
+            civil_ymd(frame, &year, &month, &day);
+            // listings: (prefix, what the select step takes from it)
+            std::vector<std::pair<std::string, std::string>> listings;
+            for (const std::string& f : todo) {
+                const FieldSource& src = *field_source(f);
+                std::string prefix, what;
+                if (sat->kind == kABI) {
+                    prefix = std::string(src.abi_product) + "/" + std::to_string(year) + "/" + pad(doy, 3) + "/" + pad(hour, 2) + "/";
+                    what = "abi";
+                } else if (src.ahi_band) {
+                    // the band's 88 tiles only (a whole minute folder holds over a thousand keys: one listing page)
+                    prefix = "AHI-L2-FLDK-ISatSS/" + std::to_string(year) + "/" + pad(month, 2) + "/" + pad(day, 2) + "/" + pad(hour, 2) +
+                             "00/OR_HFD-" + (src.ahi_band == 3 ? "005-B11" : "020-B12") + "-M1C" + pad(src.ahi_band, 2) + "-";
+                    what = "ahi-tiles";
+                } else {
+                    prefix = "AHI-L2-FLDK-Clouds/" + std::to_string(year) + "/" + pad(month, 2) + "/" + pad(day, 2) + "/" + pad(hour, 2) + "00/";
+                    what = "ahi-clouds";
+                }
+                bool merged = false;
+                for (auto& l : listings) if (l.first == prefix) { l.second += "," + f; merged = true; }
+                if (!merged) listings.push_back({prefix, what + ":" + f});
+            }
+            for (const auto& l : listings) {
+                const size_t colon = l.second.find(':');
+                const std::string what = l.second.substr(0, colon), list_fields = l.second.substr(colon + 1);
+                const std::string url = std::string("https://") + sat->dataset + ".s3.amazonaws.com/?list-type=2&max-keys=1000&prefix=" + l.first;
+                Pending p;
+                p.port_a = "requests"; p.a = get_request(url, kNoValidators, timeout);
+                p.port_b = "jobs";
+                p.b = std::string("{\"what\":\"") + what + "\"," + attribution_json(*sat) + ",\"bucket\":\"" + sat->dataset +
+                      "\",\"prefix\":\"" + json_escape(l.first) + "\",\"frame_time_ms\":" + std::to_string(frame) +
+                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":\"" + list_fields + "\"}";
+                g_plan_backlog.push_back(p);
+            }
         }
     }
-    return emitted ? 0 : push_status("nothing-to-list");
+    if (g_plan_backlog.empty()) {
+        // every frame of the window landed (or tried, for view imagery): nothing new upstream - the node's unchanged
+        // notice (internal/flowrt cronmount egressReportsUnchanged), not a failure that widens the retrieval window
+        return push_json("status", "{\"skipped\":\"all-landed\",\"status\":304,\"unchanged\":true}") < 0 ? 500 : 0;
+    }
+    return emit_from(g_plan_backlog, g_plan_next, kPlanBatch);
 }
 
-// select: listing responses + list jobs (paired by position) -> each field's file as GET requests (byte ranges when it is
-// larger than one response may be) with a parse job each, one file per invocation; the rest yielded as backlog. A
-// resume without input frames emits the next file. Missing files and failed listings are reported on status.
+// select_files: listing responses + list jobs (paired by position) -> one work job per file the parser fetches (ABI: the
+// hour's first full-disk scan of each field; AHI: a band's tiles as one job, a cloud product's file as one job naming
+// the fields read from it). kPlanBatch per invocation, the rest yielded. Files not (yet) published are reported on
+// status as the node's unchanged notice: nothing new upstream for them.
 int select_files(void) {
     const std::vector<const plugin_input_frame_t*> jobs = frames_on("list_jobs");
     const std::vector<const plugin_input_frame_t*> listings = frames_on("listings");
-    if (jobs.empty() && listings.empty()) return emit_next_file();   // resumed with backlog
+    if (jobs.empty() && listings.empty()) return emit_from(g_select_backlog, g_select_next, kPlanBatch);   // resumed
     if (jobs.size() != listings.size()) {
         const std::string msg = "select received " + std::to_string(jobs.size()) + " list jobs but " + std::to_string(listings.size()) +
                                 " listing responses; they pair by position, so a mismatch cannot be attributed and is refused.";
@@ -672,17 +842,20 @@ int select_files(void) {
     double max_part = config_number(config, "imager_max_part_bytes", kDefaultMaxPartBytes);
     if (max_part < 1024 * 1024) max_part = 1024 * 1024;
     std::string missing;
+    auto note_missing = [&](const std::string& what) { missing += std::string(missing.empty() ? "" : ",") + what; };
     for (size_t k = 0; k < jobs.size(); k++) {
         const std::string job = frame_string(jobs[k]);
-        std::string satellite, sensor, bucket, prefix, fields, widths;
+        std::string what, satellite, bucket, prefix, fields, widths;
         double frame_ms = 0;
+        json_string_field(job, "what", &what);
         json_string_field(job, "satellite", &satellite);
-        json_string_field(job, "sensor", &sensor);
         json_string_field(job, "bucket", &bucket);
         json_string_field(job, "prefix", &prefix);
         json_string_field(job, "fields", &fields);
         json_string_field(job, "widths", &widths);
         json_number_field(job, "frame_time_ms", &frame_ms);
+        const Satellite* sat = satellite_for(satellite);
+        if (!sat) { plugin_set_error("unknown-satellite", ("list job names an unknown satellite: " + satellite).c_str()); return 400; }
         const plugin_input_frame_t* r = listings[k];
         long status = 0;
         std::string body;
@@ -691,90 +864,145 @@ int select_files(void) {
                                           (static_cast<uint32_t>(r->payload[6]) << 16) | (static_cast<uint32_t>(r->payload[7]) << 24));
             body.assign(reinterpret_cast<const char*>(r->payload + 8), r->payload_length - 8);
         }
-        if (status != 200) {
-            missing += std::string(missing.empty() ? "" : ",") + "{\"listing\":\"" + json_escape(bucket + "/" + prefix) + "\",\"http_status\":" + std::to_string(status) + "}";
-            continue;
-        }
+        if (status != 200) { note_missing("{\"listing\":\"" + json_escape(bucket + "/" + prefix) + "\",\"http_status\":" + std::to_string(status) + "}"); continue; }
         const std::vector<Listed> listing = parse_listing(body);
-        int year = 0, doy = 0, hour = 0;
-        civil(static_cast<int64_t>(frame_ms), &year, &doy, &hour);
-        const std::string stamp = "_s" + std::to_string(year) + pad(doy, 3) + pad(hour, 2) + "0";
-        for (const std::string& field : list_of(fields)) {
-            const FieldSource* src = field_source(field);
-            if (!src) continue;
-            const Listed* file = pick_file(listing, stamp, src->band);
-            if (!file) {
-                missing += std::string(missing.empty() ? "" : ",") + "{\"field\":\"" + field + "\",\"satellite\":\"" + json_escape(satellite) + "\",\"prefix\":\"" + json_escape(prefix) + "\"}";
-                continue;
+        const std::string common = std::string("\"bucket\":\"") + json_escape(bucket) + "\"," + attribution_json(*sat) +
+                                   ",\"frame_time_ms\":" + format_number(frame_ms) + ",\"widths\":\"" + json_escape(widths) +
+                                   "\",\"timeout_ms\":" + std::to_string(timeout) + ",\"max_part_bytes\":" + format_number(max_part);
+        auto queue_work = [&](const std::string& work) { Pending p; p.port_a = "work"; p.a = work; g_select_backlog.push_back(p); };
+        auto missing_field = [&](const std::string& field) {
+            note_missing("{\"field\":\"" + field + "\",\"satellite\":\"" + json_escape(satellite) + "\",\"frame_time_ms\":" + format_number(frame_ms) + "}");
+        };
+        if (what == "abi") {
+            int year = 0, doy = 0, hour = 0;
+            civil(static_cast<int64_t>(frame_ms), &year, &doy, &hour);
+            const std::string stamp = "_s" + std::to_string(year) + pad(doy, 3) + pad(hour, 2) + "0";
+            for (const std::string& field : list_of(fields)) {
+                const FieldSource* src = field_source(field);
+                if (!src) continue;
+                const Listed* file = pick_abi_file(listing, stamp, src->abi_band);
+                if (!file) { missing_field(field); continue; }
+                queue_work("{\"kind\":\"abi\"," + common + ",\"key\":\"" + json_escape(file->key) + "\",\"size\":" + format_number(file->size) +
+                           ",\"variable\":\"" + src->abi_variable + "\",\"field\":\"" + field + "\"}");
             }
-            const std::string url = "https://" + bucket + ".s3.amazonaws.com/" + file->key;
-            const int parts = file->size > max_part ? static_cast<int>(std::ceil(file->size / max_part)) : 1;
-            PendingFile pending;
-            for (int p = 0; p < parts; p++) {
-                std::string range;
-                if (parts > 1) {
-                    const long long a = static_cast<long long>(std::floor(file->size * p / parts));
-                    const long long b = static_cast<long long>(std::floor(file->size * (p + 1) / parts)) - 1;
-                    range = ",\"Range\":\"bytes=" + std::to_string(a) + "-" + std::to_string(b) + "\"";
+        } else if (what == "ahi-tiles") {
+            // one band: every tile of the minute folder's first full-disk scan (keys sorted by tile number)
+            for (const std::string& field : list_of(fields)) {
+                std::vector<const Listed*> tiles;
+                for (const Listed& l : listing) if (l.key.compare(0, prefix.size(), prefix) == 0 && l.key.find(".nc") != std::string::npos) tiles.push_back(&l);
+                std::sort(tiles.begin(), tiles.end(), [](const Listed* a, const Listed* b) { return a->key < b->key; });
+                if (tiles.empty()) { missing_field(field); continue; }
+                std::string keys = "[", sizes = "[";
+                for (size_t t = 0; t < tiles.size(); t++) {
+                    keys += std::string(t ? "," : "") + "\"" + json_escape(tiles[t]->key) + "\"";
+                    sizes += std::string(t ? "," : "") + format_number(tiles[t]->size);
                 }
-                pending.requests.push_back(get_request(url, range, timeout));
-                pending.jobs.push_back(std::string("{\"satellite\":\"") + json_escape(satellite) + "\",\"sensor\":\"" + json_escape(sensor) +
-                                       "\",\"bucket\":\"" + json_escape(bucket) + "\",\"key\":\"" + json_escape(file->key) +
-                                       "\",\"variable\":\"" + src->variable + "\",\"field\":\"" + field +
-                                       "\",\"frame_time_ms\":" + format_number(frame_ms) + ",\"part\":" + std::to_string(p) +
-                                       ",\"parts\":" + std::to_string(parts) + ",\"widths\":\"" + json_escape(widths) +
-                                       "\",\"source_url\":\"" + json_escape(url) + "\",\"provider_id\":\"" + kProviderID +
-                                       "\",\"source_name\":\"" + json_escape(bucket) + "-world\",\"origin_id\":\"" + kOriginID +
-                                       "\",\"dataset_id\":\"" + json_escape(bucket) + "\",\"license\":\"" + kLicenseID +
-                                       "\",\"license_class\":\"OpenAttribution\",\"license_url\":\"" + kLicenseURL +
-                                       "\",\"citation\":\"" + json_escape(sensor) + " data courtesy of NOAA via NOAA Open Data Dissemination\"}");
+                queue_work("{\"kind\":\"ahi-tiles\"," + common + ",\"keys\":" + keys + "],\"sizes\":" + sizes + "],\"field\":\"" + field +
+                           "\",\"band\":" + std::to_string(field_source(field)->ahi_band) + "}");
             }
-            g_backlog.push_back(pending);
+        } else if (what == "ahi-clouds") {
+            // each cloud product file once, naming the fields (and their HDF5 variables) read from it
+            std::vector<std::string> products;
+            for (const std::string& field : list_of(fields)) {
+                const std::string product = field_source(field)->ahi_product;
+                if (std::find(products.begin(), products.end(), product) == products.end()) products.push_back(product);
+            }
+            for (const std::string& product : products) {
+                const Listed* file = nullptr;
+                for (const Listed& l : listing) if (l.key.find("/AHI-" + product + "_") != std::string::npos && (!file || l.key < file->key)) file = &l;
+                std::vector<std::string> from_file, variables;
+                for (const std::string& field : list_of(fields)) if (product == field_source(field)->ahi_product) { from_file.push_back(field); variables.push_back(field_source(field)->ahi_variable); }
+                if (!file) { for (const std::string& f : from_file) missing_field(f); continue; }
+                queue_work("{\"kind\":\"ahi-h5\"," + common + ",\"key\":\"" + json_escape(file->key) + "\",\"size\":" + format_number(file->size) +
+                           ",\"fields\":" + fields_json(from_file) + ",\"variables\":" + fields_json(variables) + "}");
+            }
+        } else {
+            plugin_set_error("unknown-list-job", ("list job of unknown kind: " + what).c_str());
+            return 400;
         }
     }
-    if (!missing.empty() && push_json("status", "{\"missing\":[" + missing + "]}") < 0) return 500;
-    return emit_next_file();
+    // (not published, or not yet: nothing new upstream for these - the node's unchanged notice, so an hour whose
+    // products are late does not widen the retrieval window; a later tick lists it again)
+    if (!missing.empty() && push_json("status", "{\"missing\":[" + missing + "],\"status\":304,\"unchanged\":true}") < 0) return 500;
+    return emit_from(g_select_backlog, g_select_next, kPlanBatch);
 }
 
-// publish_request: the storage-ingest result + the parser's ingest meta -> the dataset-publication POST for the node's
-// loopback admin endpoint (imager_publish_url); nothing when it is unset (absence of configuration is not permission).
+// note: the parser's notices - {"satellite","frame_time_ms","field","state"}: "landed" (its landed mark answered 304:
+// the node holds it), "missing" (a view frame the service did not have yet: plan tries it again next tick, while it is
+// kViewRetryHours new).
+int note(void) {
+    for (const plugin_input_frame_t* f : frames_on("notices")) {
+        const std::string n = frame_string(f);
+        std::string satellite, field, state;
+        double frame_ms = 0;
+        json_string_field(n, "satellite", &satellite);
+        json_string_field(n, "field", &field);
+        json_string_field(n, "state", &state);
+        json_number_field(n, "frame_time_ms", &frame_ms);
+        const int64_t frame = static_cast<int64_t>(frame_ms);
+        if (state == "landed") add_unique(g_landed, landed_key(satellite, frame, field));
+        else if (state == "missing") add_unique(g_view_retry, satellite + "|" + std::to_string(frame) + "|");
+    }
+    return 0;
+}
+
+// publish_request: the storage-ingest result + the parser's ingest meta -> (1) the field is landed (plan skips it from
+// now on); (2) its landed mark: a one-byte GET of the source object under ?sdn-ingest=landed&field=<field>, forced to
+// 206 by an epoch If-Modified-Since, so the node's HTTP validator ledger keeps the object's ETag under that URL - the
+// parser's probe of the same URL (validators added by the host) is then answered 304 even after a restart; (3) the
+// dataset-publication POST for the node's loopback admin endpoint, when imager_publish_url is set. A result that
+// stored nothing (refused, or zero records) marks nothing.
 int publish_request(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
-    }
-    const plugin_input_frame_t* result_frame = frame_for("result");
-    if (!result_frame || !result_frame->payload || result_frame->payload_length == 0) {
-        plugin_set_error("missing-result-frame", "publish_request requires the storage-ingest result frame.");
-        return 400;
-    }
-    const plugin_input_frame_t* meta_frame = frame_for("meta");
-    if (!meta_frame || !meta_frame->payload || meta_frame->payload_length == 0) {
-        plugin_set_error("missing-meta-frame", "publish_request requires the parser ingest meta frame.");
-        return 400;
-    }
+    // Results pair with metas by batch id: a meta whose ingest failed (no result) is left behind, never paired with
+    // the next batch's result.
+    const std::vector<const plugin_input_frame_t*> results = frames_on("result"), metas = frames_on("meta");
     const std::string config = load_config();
-    std::string url;
-    if (!json_string_field(config, "imager_publish_url", &url) || url.empty()) return 0;
-    const std::string result = frame_string(result_frame), meta = frame_string(meta_frame);
-    std::string schema, batch_id, provider, source;
-    if (!json_string_field(result, "schema", &schema) || schema.empty()) json_string_field(meta, "schema", &schema);
-    if (!json_string_field(result, "batch_id", &batch_id) || batch_id.empty()) json_string_field(meta, "batch_id", &batch_id);
-    json_string_field(meta, "provider_id", &provider);
-    json_string_field(meta, "source_name", &source);
-    if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
-        plugin_set_error("incomplete-publication-identity", "publish_request needs schema, batchId, providerId and sourceName.");
-        return 400;
-    }
-    const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\",\"providerId\":\"" + json_escape(provider) +
-                             "\",\"sourceName\":\"" + json_escape(source) + "\",\"batchId\":\"" + json_escape(batch_id) + "\"}";
     const long timeout = static_cast<long>(config_number(config, "imager_list_timeout_ms", kDefaultListTimeoutMs));
-    const std::string request = std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(url) + "\"" +
-                                ",\"headers\":{\"content-type\":\"application/json\"},\"bodyB64\":\"" +
-                                base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
-                                ",\"timeoutMs\":" + std::to_string(timeout) + "}";
-    return push_json("request", request) < 0 ? 500 : 0;
+    std::string url;
+    const bool publish = json_string_field(config, "imager_publish_url", &url) && !url.empty();
+    for (const plugin_input_frame_t* rf : results) {
+        const std::string result = frame_string(rf);
+        std::string batch_id, meta;
+        json_string_field(result, "batch_id", &batch_id);
+        for (const plugin_input_frame_t* mf : metas) {
+            const std::string m = frame_string(mf);
+            std::string id;
+            if (json_string_field(m, "batch_id", &id) && id == batch_id) { meta = m; break; }
+        }
+        if (meta.empty()) {
+            plugin_set_error("missing-meta-frame", ("publish_request has no parser meta for the ingest result of batch " + batch_id).c_str());
+            return 400;
+        }
+        std::string schema, provider, source;
+        if (!json_string_field(result, "schema", &schema) || schema.empty()) json_string_field(meta, "schema", &schema);
+        json_string_field(meta, "provider_id", &provider);
+        json_string_field(meta, "source_name", &source);
+        double inserted = -1;
+        json_number_field(result, "inserted", &inserted);
+        if (inserted > 0) {
+            std::string satellite, field, mark;
+            double frame_ms = 0;
+            json_string_field(meta, "satellite", &satellite);
+            json_string_field(meta, "field", &field);
+            json_string_field(meta, "landed_mark", &mark);
+            json_number_field(meta, "frame_time_ms", &frame_ms);
+            if (!satellite.empty() && !field.empty()) add_unique(g_landed, landed_key(satellite, static_cast<int64_t>(frame_ms), field));
+            if (!mark.empty() && push_json("mark", get_request(mark, std::string(kNoValidators) + ",\"Range\":\"bytes=0-0\"", timeout)) < 0) return 500;
+        }
+        if (!publish) continue;
+        if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
+            plugin_set_error("incomplete-publication-identity", "publish_request needs schema, batchId, providerId and sourceName.");
+            return 400;
+        }
+        const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\",\"providerId\":\"" + json_escape(provider) +
+                                 "\",\"sourceName\":\"" + json_escape(source) + "\",\"batchId\":\"" + json_escape(batch_id) + "\"}";
+        const std::string request = std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(url) + "\"" +
+                                    ",\"headers\":{\"content-type\":\"application/json\"},\"bodyB64\":\"" +
+                                    base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
+                                    ",\"timeoutMs\":" + std::to_string(timeout) + "}";
+        if (push_json("request", request) < 0) return 500;
+    }
+    return 0;
 }
 
 }  // extern "C"

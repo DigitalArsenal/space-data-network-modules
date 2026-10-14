@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
   "name": "Geostationary Imager Observation Parser Node",
-  "version": "0.1.0",
-  "description": "Parser flow node for geostationary imager observations from the anonymous public open-data buckets (GOES ABI L1b/L2 NetCDF4, NOAA Open Data Dissemination). parse turns each fetched file into its field's world product: the area mean of the native fixed-grid pixels in each cell of a 4096 x 2048 latitude/longitude grid (limb cells the field sampled at the cell centre; cloud phase the pixel nearest the cell centre), at 4096, 2048 and 1024 wide, one size-prefixed $WXF record per 64-row band, quantized at the instrument's precision and coded as SDS 1.238 defines (InlineEncodedChunk delta/zigzag/shuffle for the smooth fields, InlineQuantizedUint16/Uint8 otherwise), with sensor, channel, platform and scan-time fields. One satellite's fields, never blended or corrected (owner 2026-10-07: SDN carries raw per-satellite fields; the display derives the rest). NetCDF4 is read by the vendored hdf5mini (deflate via the vendored miniz 3.1.2, shuffle) with netCDF4's mask-and-scale; a 0.5 km band is reduced to its 2 km block means chunk by chunk. A file fetched as byte ranges arrives as consecutive parts and is joined first. Values match the reference producer (Cesium_Weather tools/raw_satellite.py) in every float and code on full-disk GOES-18/19 files; tests hold its output for real mesoscale files. capabilities: none, so the node runs in the browser and on WasmEdge alike.",
+  "version": "0.2.0",
+  "description": "A parser and fetch-engine flow node (capabilities: none: every byte comes through the flow's http connector) for imager observations: GOES-East/West ABI NetCDF4, Himawari-9 AHI ISatSS tiles and L2 cloud HDF5 files (byte ranges), and EUMETSAT's view-service imagery (Meteosat-12 FCI, Meteosat-9 SEVIRI IODC, Metop-B/C AVHRR). Each field becomes its world product - the area mean of the native pixels in each 4096 x 2048 cell, holes sampled at the cell centre - at 4096, 2048 and/or 1024 wide, as size-prefixed $WXF records (one per 64-row band) quantized at the instrument's precision with the SDS 1.238 encodings, the reference producer's formulas (Cesium_Weather raw_satellite.py).",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,37 +15,37 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "parse is a single-pass transform over the frames the flow hands it: each file is read once, chunk by chunk, into one field and its world product, and each band becomes one record. No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across files is the flow's, through the http connector node. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "parse runs one job at a time in a single thread: its state between invocations is the job queue, the active job's bytes (one file, one band or one view frame) and the requests in flight, matched to the connector's responses in order. No worker pool, no threads."
   },
   "externalInterfaces": [],
   "methods": [
     {
       "methodId": "parse",
-      "displayName": "Parse Imager Files into $WXF World Bands",
-      "description": "Each file job and its HTTP response (paired by position; byte-range parts of one file consecutive) -> the field's world product at the requested widths as size-prefixed $WXF band records, plus one storage.ingest_with_source meta for the batch. A count mismatch, a missing part, a non-200 (206 for a ranged part) status or an unreadable file is refused with a named error, never guessed.",
+      "displayName": "Fetch and Parse Imager Observations into $WXF World Bands",
+      "description": "Work jobs + the http connector's responses to this node's requests -> requests, $WXF batches (one field's world product at every width: wxf_meta + wxf_records, one batch per invocation), notices and status. One job is fetched at a time: GOES ABI NetCDF4 files whole (byte ranges appended), Himawari AHI ISatSS tiles assembled and L2 cloud HDF5 files by range (header, chunk B-tree, chunks), EUMETSAT view-service WMS blocks with the GFS skin temperature. GOES and Himawari fields are probed first by their landed mark (304: the node holds them; skipped and noticed). The node yields while work remains that needs no response.",
       "inputPorts": [
         {
-          "portId": "jobs",
+          "portId": "work",
           "acceptedTypeSets": [
             {
-              "setId": "imager-file-job-json",
+              "setId": "imager-work-job-json",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON file job: satellite, sensor, bucket, key, variable, field, frame_time_ms, part/parts, widths, attribution.",
+              "description": "UTF-8 JSON work job.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Per-file fetch-job attribution (satellite, sensor, bucket, key, variable, field, frame time, byte-range part, widths, licence and citation) emitted by the imager-observation-source select node inside the same flow; ingest bookkeeping, never persisted as a record."
+                "detail": "Per-file work job emitted by imager-observation-source (select_files, plan) inside the same flow: kind abi | ahi-tiles | ahi-h5 | view, the satellite's attribution, frame time, widths, object keys and sizes or the view frame, the fields; never persisted."
               }
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 32,
-          "required": true,
-          "description": "One file job per request frame the select node emitted, in emission order."
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Work jobs (queued; one fetched at a time)."
         },
         {
           "portId": "responses",
@@ -65,13 +65,36 @@
               }
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 32,
-          "required": true,
-          "description": "One HTTP response per file job, positionally aligned."
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "hostcap/http-request responses to this node's own requests, in request order."
         }
       ],
       "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Request descriptor for the generic http connector node inside this flow (byte ranges of the job's files, landed-mark probes, WMS GetMap blocks, the GFS skin-temperature message); its shape is defined by that connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The fetch engine's requests."
+        },
         {
           "portId": "wxf_meta",
           "acceptedTypeSets": [
@@ -90,9 +113,9 @@
               }
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "WXF ingest meta."
         },
         {
@@ -111,13 +134,59 @@
               "description": "Size-prefixed $WXF FlatBuffer record stream, one record per world band (64 rows) per width per field."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "WXF record stream."
+        },
+        {
+          "portId": "notices",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON notice.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-field notice for imager-observation-source note inside the same flow ({satellite, frame_time_ms, field, state: landed | missing}); never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Landed marks found, view frames missing."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-status-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON status frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch status for the flow egress ({failed}, {missing ... unchanged}, {landed_before ... unchanged}); never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Job failures, missing frames and the node's unchanged notice."
         }
       ],
-      "maxBatch": 1,
+      "maxBatch": 64,
       "drainPolicy": "drain-until-yield"
     }
   ],

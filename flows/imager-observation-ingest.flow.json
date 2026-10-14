@@ -1,16 +1,16 @@
 {
   "programId": "com.digitalarsenal.flows.imager-observation-ingest",
   "name": "Geostationary Imager Observation Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Hourly ingest of geostationary imager observations from NOAA Open Data Dissemination's anonymous public buckets (GOES-East and GOES-West ABI L1b/L2 NetCDF4) as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest). timer -> plan (one S3 listing per satellite and product folder of the frame hour) -> http -> select_files (the hour's first full-disk scan of each wanted field; byte ranges above 64 MiB; ONE FILE PER INVOCATION, the rest yielded as backlog) -> http -> parse (the field's world product at 4096/2048/1024 wide, 64-row band records, quantized at the instrument's precision, SDS 1.238 encodings) -> storage-ingest -> publish_request -> http (dataset publication, only when imager_publish_url is set). Nodes are listed in pipeline order: the runtime's fair ready-node cursor then carries each file through parse and storage-ingest before select_files resumes with the next, so the parser holds one file and storage-ingest receives one meta and one record stream at a time. Memory: measured 566 MiB of linear memory for a cycle with the full-disk 0.5 km band (143 MB, three ranges) - run the service with memory_pages 16384 (1 GiB); the default 1024 (64 MiB) cannot hold one full-disk file. Cadence: hourly (set retrieval_interval to 1h; the host's default window is 3 h).",
+  "description": "Hourly ingest of imager observations as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest), kept for the node's retention window: GOES-East/West ABI (NOAA Open Data Dissemination's noaa-goes19/18), Himawari-9 AHI (noaa-himawari9: ISatSS tiles and the L2 cloud HDF5 files) and EUMETSAT's public view service (Meteosat-12 FCI, Meteosat-9 SEVIRI IODC, Metop-B/C AVHRR). timer -> plan (per satellite the frame hours of the window not yet landed: S3 listings, or view work jobs) -> http -> select_files (one work job per file or band of tiles) -> parse (the fetch engine: ONE job at a time; landed-mark probes first for GOES and Himawari, then the job's bytes through http_fetch, a sanctioned feedback cycle; one field's world product at 4096/2048/1024 wide per batch, 64-row band records quantized at the instrument's precision, SDS 1.238 encodings) -> storage-ingest -> publish_request (the field's landed mark, a one-byte GET the node's HTTP validator ledger remembers, so a restart does not fetch the window again; the dataset publication when imager_publish_url is set). Memory: one GOES-19 daytime 0.64 um full disc is ~430 MB (2026-10-14); the job holds it once (parts appended as they come) - run the service with memory_pages 24576 (1.5 GiB). Version 0.1.0 joined the parts beside the part frames and needed ~1.1 GiB, past its 16384 pages: the grow failed mid-run and the service landed nothing after. Cadence: hourly (retrieval_interval 1h); a tick drains at most 1000 invocations, so a fresh window's backfill takes several ticks.",
   "nodes": [
     {
       "nodeId": "plan",
       "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
       "methodId": "plan",
       "kind": "transform",
-      "drainPolicy": "single-shot"
+      "drainPolicy": "drain-until-yield"
     },
     {
       "nodeId": "http_list",
@@ -27,18 +27,18 @@
       "drainPolicy": "drain-until-yield"
     },
     {
-      "nodeId": "http_files",
-      "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "methodId": "request",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
       "methodId": "parse",
       "kind": "transform",
       "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "http_fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
     },
     {
       "nodeId": "ingest_wxf",
@@ -55,9 +55,23 @@
       "drainPolicy": "single-shot"
     },
     {
+      "nodeId": "http_mark",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
       "nodeId": "publish_http_wxf",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "note",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+      "methodId": "note",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -91,6 +105,16 @@
       "opaque": true
     },
     {
+      "edgeId": "plan-parse-work",
+      "fromNodeId": "plan",
+      "fromPortId": "work",
+      "toNodeId": "parse",
+      "toPortId": "work",
+      "backpressurePolicy": "queue",
+      "queueDepth": 128,
+      "opaque": true
+    },
+    {
       "edgeId": "http-list-select",
       "fromNodeId": "http_list",
       "fromPortId": "response",
@@ -101,34 +125,35 @@
       "opaque": true
     },
     {
-      "edgeId": "select-http-files",
+      "edgeId": "select-parse-work",
       "fromNodeId": "select",
+      "fromPortId": "work",
+      "toNodeId": "parse",
+      "toPortId": "work",
+      "backpressurePolicy": "queue",
+      "queueDepth": 128,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-http-fetch",
+      "fromNodeId": "parse",
       "fromPortId": "requests",
-      "toNodeId": "http_files",
+      "toNodeId": "http_fetch",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 32,
+      "queueDepth": 128,
       "opaque": true
     },
     {
-      "edgeId": "select-parse-jobs",
-      "fromNodeId": "select",
-      "fromPortId": "jobs",
-      "toNodeId": "parse",
-      "toPortId": "jobs",
-      "backpressurePolicy": "queue",
-      "queueDepth": 32,
-      "opaque": true
-    },
-    {
-      "edgeId": "http-files-parse",
-      "fromNodeId": "http_files",
+      "edgeId": "http-fetch-parse",
+      "fromNodeId": "http_fetch",
       "fromPortId": "response",
       "toNodeId": "parse",
       "toPortId": "responses",
       "backpressurePolicy": "queue",
-      "queueDepth": 32,
-      "opaque": true
+      "queueDepth": 128,
+      "opaque": true,
+      "_comment": "The sanctioned feedback cycle (allowCycles): the parser fetches its jobs' bytes through the connector and reads the responses in request order; bounded by queueDepth, and the parser keeps at most 64 requests in flight."
     },
     {
       "edgeId": "parse-wxf-meta",
@@ -152,13 +177,23 @@
       "_comment": "NOT opaque: both ports resolve the concrete $WXF identity, so the record type is declared on the wire rather than signed away."
     },
     {
-      "edgeId": "ingest-wxf-egress",
-      "fromNodeId": "ingest_wxf",
-      "fromPortId": "result",
-      "toNodeId": "egress",
-      "toPortId": "result",
+      "edgeId": "parse-wxf-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "publish_wxf",
+      "toPortId": "meta",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-notices",
+      "fromNodeId": "parse",
+      "fromPortId": "notices",
+      "toNodeId": "note",
+      "toPortId": "notices",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
       "opaque": true
     },
     {
@@ -172,11 +207,21 @@
       "opaque": true
     },
     {
-      "edgeId": "parse-wxf-meta-publish",
-      "fromNodeId": "parse",
-      "fromPortId": "wxf_meta",
-      "toNodeId": "publish_wxf",
-      "toPortId": "meta",
+      "edgeId": "ingest-wxf-egress",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-wxf-mark",
+      "fromNodeId": "publish_wxf",
+      "fromPortId": "mark",
+      "toNodeId": "http_mark",
+      "toPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -187,6 +232,16 @@
       "fromPortId": "request",
       "toNodeId": "publish_http_wxf",
       "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "mark-egress",
+      "fromNodeId": "http_mark",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -220,6 +275,16 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "parse-status-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -245,5 +310,6 @@
     "com.digitalarsenal.hostcap.http-request",
     "com.digitalarsenal.data-source.imager-observation-parser",
     "com.digitalarsenal.hostcap.storage-ingest"
-  ]
+  ],
+  "allowCycles": true
 }

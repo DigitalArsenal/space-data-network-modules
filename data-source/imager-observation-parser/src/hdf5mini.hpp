@@ -26,6 +26,41 @@ namespace hdf5mini {
 
 using Inflate = std::function<bool(const uint8_t*, size_t, uint8_t*, size_t)>;
 
+// The file's bytes: one buffer (a whole file), or the parts of a file read by byte range (segments at their file
+// offsets). A read outside every segment yields zeros and is remembered (missingAt): the caller fetches those bytes and
+// opens again.
+struct Segment { uint64_t at; const uint8_t* p; uint64_t n; };
+class Bytes {
+ public:
+  Bytes(const uint8_t* p, size_t n) { segs_.push_back({0, p, uint64_t(n)}); }
+  explicit Bytes(std::vector<Segment> segs) : segs_(std::move(segs)) { std::sort(segs_.begin(), segs_.end(), [](const Segment& a, const Segment& b) { return a.at < b.at; }); }
+  bool has(uint64_t at, uint64_t len) const {
+    const Segment* s = find(at);
+    if (s && len <= s->at + s->n - at) return true;
+    if (s && at + len > s->at + s->n) miss(s->at + s->n); else if (!s) miss(at);
+    return false;
+  }
+  const uint8_t* operator+(uint64_t x) const { const Segment* s = find(x); if (!s) { miss(x); return zeros(); } return s->p + (x - s->at); }
+  uint8_t operator[](uint64_t x) const { const Segment* s = find(x); if (!s) { miss(x); return 0; } return s->p[x - s->at]; }
+  uint64_t missingAt() const { return miss_; }
+ private:
+  std::vector<Segment> segs_;
+  mutable size_t last_ = 0;
+  mutable uint64_t miss_ = UINT64_MAX;
+  void miss(uint64_t x) const { if (miss_ == UINT64_MAX) miss_ = x; }
+  static const uint8_t* zeros() { static const uint8_t z[4096] = {0}; return z; }
+  const Segment* find(uint64_t x) const {
+    if (last_ < segs_.size() && x >= segs_[last_].at && x - segs_[last_].at < segs_[last_].n) return &segs_[last_];
+    size_t lo = 0, hi = segs_.size();
+    while (lo < hi) { const size_t mid = (lo + hi) / 2; if (segs_[mid].at <= x) lo = mid + 1; else hi = mid; }
+    if (lo == 0) return nullptr;
+    const Segment& s = segs_[lo - 1];
+    if (x - s.at >= s.n) return nullptr;
+    last_ = lo - 1;
+    return &s;
+  }
+};
+
 struct Datatype { int cls = -1; size_t size = 0; bool bigEndian = false, isSigned = false; };   // cls 0 fixed point, 1 float
 struct Filter { int id = 0; std::vector<uint32_t> values; };
 struct Attribute { std::string name; Datatype type; std::vector<uint64_t> dims; std::vector<uint8_t> data; };
@@ -44,7 +79,9 @@ struct Dataset {
 
 class File {
  public:
-  File(const uint8_t* bytes, size_t n) : b_(bytes), n_(n) {}
+  File(const uint8_t* bytes, size_t n) : b_(bytes, n) {}
+  explicit File(std::vector<Segment> segments) : b_(std::move(segments)) {}
+  uint64_t missingAt() const { return b_.missingAt(); }      // the first byte a read wanted and the segments lack
   bool open();                                              // reads the superblock and walks every group
   const std::vector<Dataset>& datasets() const { return datasets_; }
   const Dataset* find(const std::string& path) const { for (auto& d : datasets_) if (d.path == path) return &d; return nullptr; }
@@ -62,13 +99,13 @@ class File {
   static std::vector<double> attrNumbers(const Dataset& d, const std::string& name);
 
  private:
-  const uint8_t* b_; size_t n_;
+  Bytes b_;
   int sbVersion_ = -1, offSize_ = 8, lenSize_ = 8; uint64_t base_ = 0;
   std::vector<Dataset> datasets_; std::string err_; std::string log_;
   std::vector<uint64_t> visited_;
 
   bool fail(const std::string& m) { if (err_.empty()) err_ = m; return false; }
-  bool in(uint64_t at, uint64_t len) const { return at <= n_ && len <= n_ - at; }
+  bool in(uint64_t at, uint64_t len) const { return b_.has(at, len); }
   uint64_t u(uint64_t at, int bytes) const { uint64_t v = 0; for (int i = 0; i < bytes; i++) v |= uint64_t(b_[at + i]) << (8 * i); return v; }
   uint64_t addr(uint64_t at) const { uint64_t v = u(at, offSize_); return v == (offSize_ == 8 ? UINT64_MAX : (uint64_t(1) << (8 * offSize_)) - 1) ? UINT64_MAX : v + base_; }
   bool undefined(uint64_t a) const { return a == UINT64_MAX; }
@@ -147,8 +184,8 @@ inline bool File::objectMessages(uint64_t at, std::vector<Message>& out) {
   }
   for (size_t bi = 0; bi < blocks.size(); bi++) {
     uint64_t p = blocks[bi].first, end = p + blocks[bi].second;
-    if (v2 && bi > 0) { if (memcmp(b_ + p, "OCHK", 4)) return fail("bad continuation block"); p += 4; end -= 4; }
     if (!in(blocks[bi].first, blocks[bi].second)) return fail("object header block out of range");
+    if (v2 && bi > 0) { if (memcmp(b_ + p, "OCHK", 4)) return fail("bad continuation block"); p += 4; end -= 4; }
     while (p + (v2 ? 4 : 8) <= end) {
       int type; uint64_t size;
       if (v2) {

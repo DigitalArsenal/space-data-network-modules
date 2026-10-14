@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
   "name": "Geostationary Imager Observation Request Builder Nodes",
-  "version": "0.1.0",
-  "description": "Request-builder flow nodes for geostationary imager observations in NOAA Open Data Dissemination's anonymous public buckets (GOES-East noaa-goes19 and GOES-West noaa-goes18: ABI L1b/L2 NetCDF4 under <product>/<YYYY>/<DDD>/<HH>/). plan turns a timer tick into one S3 ListObjectsV2 request per (satellite, product folder) of the frame hour; select_files takes the listings and emits, for each wanted field, the hour's first full-disk scan as GET requests - byte ranges when a file is larger than imager_max_part_bytes, each response well under the host's 100 MiB cap - with a parse job per part, ONE FILE PER INVOCATION, yielding the rest as backlog so the parser holds one file and storage-ingest receives one meta and one record stream at a time; publish_request turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (nothing when imager_publish_url is unset). Every request sets If-Modified-Since at the epoch so the host never turns a repeat listing or a second byte range into an empty 304. Node CONFIG through plugin.getConfig: imager_live_access (default true), imager_satellites, imager_fields (default the five the world-clouds display reads), imager_widths, imager_frame_time (default the latest hour imager_lag_minutes old), imager_max_part_bytes, timeouts, imager_publish_url. No credentials: capabilities none.",
+  "version": "0.2.0",
+  "description": "Request-builder flow nodes for imager observations from public sources, no credentials: GOES-East/West ABI (NOAA noaa-goes19/18 NetCDF4), Himawari-9 AHI (NOAA noaa-himawari9: ISatSS tiles and the L2 cloud HDF5 files) and EUMETSAT's public view service (Meteosat-12 FCI, Meteosat-9 SEVIRI IODC, Metop-B/C AVHRR, WMS). plan turns a timer tick into, per satellite, the frame hours of the window not yet landed: one S3 ListObjectsV2 request per product folder (with its list job), or a view work job straight to the parser; select_files turns the listings into one parser work job per file or band of tiles; note takes the parser's notices; publish_request turns a storage-ingest result plus the parser's ingest meta into the field's landed mark (a one-byte GET of the source object under ?sdn-ingest=landed, so the node's HTTP validator ledger remembers it across restarts) and, when imager_publish_url is set, the dataset-publication POST. Node CONFIG through plugin.getConfig: imager_live_access, imager_satellites, imager_fields, imager_widths, imager_backfill_hours (72), imager_view_backfill_hours (0), imager_frame_time, imager_lag_minutes[_<satellite>], imager_max_part_bytes, timeouts, imager_publish_url. No credentials: capabilities none.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,14 +15,14 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Each method turns its control frames into request/job frames in one pass: plan reads the node config once and emits listing requests, select_files parses the listings and queues one entry per file, publish_request pairs one result with one meta. The only state is select_files's queue of pending files, drained one per invocation as the compiled runtime resumes the yielded node; no worker pool and no thread."
+    "detail": "Each method turns its control frames into request/job frames in one pass. The module keeps a small state between invocations: the landed set (satellite|frame|field, the retention window's size), the view frames tried, and plan's and select_files's queues of pending frames, handed out kPlanBatch per invocation as the compiled runtime resumes the yielded node; no worker pool and no thread."
   },
   "externalInterfaces": [],
   "methods": [
     {
       "methodId": "plan",
       "displayName": "Imager Listing Plan",
-      "description": "Timer tick -> one S3 ListObjectsV2 GET per (satellite, product folder) of the frame hour, each with a list job naming the satellite, sensor, bucket, prefix, frame time, fields and widths; one status frame when live access is off. One tick per invocation (a surplus is refused as batched-input-frames).",
+      "description": "Timer tick -> per satellite, the frame hours of the window not yet landed (ledger satellites: imager_backfill_hours; view satellites: the newest hour, imager_view_backfill_hours and frames reported missing): one S3 ListObjectsV2 GET per product folder with its list job, or a view work job to the parser; 32 frames per invocation, the rest yielded as backlog. When nothing is left: the node's unchanged notice on status. One tick per invocation (a surplus is refused as batched-input-frames).",
       "inputPorts": [
         {
           "portId": "tick",
@@ -96,6 +96,29 @@
           "description": "One list job per listing request, in the same order."
         },
         {
+          "portId": "work",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-work-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON parser work job.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-file work job for the imager-observation-parser inside the same flow (kind abi | ahi-tiles | ahi-h5 | view; satellite attribution, frame time, widths, the object keys and sizes or the view frame, the fields); never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One parser work job per file, band of tiles or view frame."
+        },
+        {
           "portId": "status",
           "acceptedTypeSets": [
             {
@@ -120,12 +143,12 @@
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "drain-until-yield"
     },
     {
       "methodId": "select_files",
       "displayName": "Imager File Selection",
-      "description": "Listing responses + list jobs (paired by position) -> for each wanted field the hour's first full-disk scan (scan stamp _s<YYYY><DDD><HH>0, band -M<n>C<band>_ for imagery) as GET requests, byte ranges when the listed size exceeds imager_max_part_bytes, with a parse job per part. One file per invocation; the node yields with the rest as backlog and the runtime resumes it without input. Missing files and failed listings are reported on status; a count mismatch is refused.",
+      "description": "Listing responses + list jobs (paired by position) -> one parser work job per file: ABI the hour's first full-disk scan of each field (scan stamp _s<YYYY><DDD><HH>0, band -M<n>C<band>_ for imagery), AHI a band's ISatSS tiles as one job and each L2 cloud product file as one job naming the fields read from it. 32 per invocation, the rest yielded. Files not (yet) published and failed listings are reported on status as the node's unchanged notice; a count mismatch is refused.",
       "inputPorts": [
         {
           "portId": "list_jobs",
@@ -176,50 +199,27 @@
       ],
       "outputPorts": [
         {
-          "portId": "requests",
+          "portId": "work",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "imager-work-job-json",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "description": "UTF-8 JSON parser work job.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+                "detail": "Per-file work job for the imager-observation-parser inside the same flow (kind abi | ahi-tiles | ahi-h5 | view; satellite attribution, frame time, widths, the object keys and sizes or the view frame, the fields); never persisted."
               }
             }
           ],
           "minStreams": 0,
-          "maxStreams": 32,
+          "maxStreams": 1,
           "required": false,
-          "description": "The GET request(s) of one file (one per byte-range part)."
-        },
-        {
-          "portId": "jobs",
-          "acceptedTypeSets": [
-            {
-              "setId": "imager-file-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON file job, one per request.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-file parse job (satellite, sensor, bucket, key, variable, field, frame time, part, widths, attribution) consumed by imager-observation-parser inside the same flow; never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 32,
-          "required": false,
-          "description": "One parse job per file request, in the same order."
+          "description": "One parser work job per file, band of tiles or view frame."
         },
         {
           "portId": "status",
@@ -249,9 +249,42 @@
       "drainPolicy": "drain-until-yield"
     },
     {
+      "methodId": "note",
+      "displayName": "Imager Landed Notices",
+      "description": "The parser's notices ({satellite, frame_time_ms, field, state}: landed - its landed-mark probe answered 304; missing - a view frame the service did not have yet) into the module's landed set and view retry set. No outputs.",
+      "inputPorts": [
+        {
+          "portId": "notices",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON parser notice.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-field notice from the imager-observation-parser inside the same flow (landed mark found, view frame missing); never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Parser notices."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 64,
+      "drainPolicy": "single-shot"
+    },
+    {
       "methodId": "publish_request",
       "displayName": "Imager Dataset Publication Request",
-      "description": "A storage-ingest result + the parser's ingest meta -> one dataset-publication POST ({schema, providerId, sourceName, batchId}) to imager_publish_url; nothing when it is unset. One pair per invocation.",
+      "description": "A storage-ingest result + the parser's ingest meta -> the field landed in the module's set, its landed mark (a one-byte GET the node's HTTP validator ledger remembers: the parser's probe of the same URL is then answered 304, also after a restart), and one dataset-publication POST ({schema, providerId, sourceName, batchId}) to imager_publish_url when set. A result that stored nothing marks nothing. Results pair with metas by batch id (a meta whose ingest failed is left behind).",
       "inputPorts": [
         {
           "portId": "result",
@@ -272,7 +305,7 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 64,
           "required": true,
           "description": "Storage-ingest result."
         },
@@ -295,12 +328,35 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 64,
           "required": true,
           "description": "The parser's ingest meta."
         }
       ],
       "outputPorts": [
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The field's landed mark: a one-byte GET (If-Modified-Since at the epoch, Range bytes=0-0) of the source object under ?sdn-ingest=landed&field=<field>."
+        },
         {
           "portId": "request",
           "acceptedTypeSets": [
@@ -325,7 +381,7 @@
           "description": "The publication POST, or nothing."
         }
       ],
-      "maxBatch": 1,
+      "maxBatch": 64,
       "drainPolicy": "single-shot"
     }
   ],
