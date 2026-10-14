@@ -14,11 +14,11 @@
 //          eop                the same rows as size-prefixed $EOP records;
 //          ocm                the $OCM, which carries everything the message
 //                             states (common/ocm_fb_builder.hpp);
-//          report             JSON: every field read, the transformed
+//          report             FlowNotice Info: every field read, the transformed
 //                             covariance, and the UVW sigmas recomputed from it
 //                             beside the ones the VCM states.
 // ocm:   a $PRW EXECUTION_RESULT whose FINAL_SAMPLE is in EME2000 with a
-//        covariance over the state and DYNAMIC_PARAMETERS, plus a JSON header
+//        covariance over the state and DYNAMIC_PARAMETERS, plus the header (node config table "header")
 //        (identity and model lines) -> the $OCM.
 // write: an $OCM (and the $EOP records of its day) -> VCM text, for the
 //        systems that still read it.
@@ -79,6 +79,8 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "FlowNotice_generated.h"
 
 namespace {
 
@@ -280,21 +282,6 @@ std::string fmt(double x, const char* spec = "%.17g") {
     std::snprintf(b, sizeof b, spec, x);
     return b;
 }
-void jsonString(std::string& out, const std::string& s) {
-    out += '"';
-    for (unsigned char c : s) {
-        if (c == '"' || c == '\\') { out += '\\'; out += char(c); }
-        else if (c < 0x20) { char e[8]; std::snprintf(e, sizeof e, "\\u%04x", c); out += e; }
-        else out += char(c);
-    }
-    out += '"';
-}
-void jsonArray(std::string& out, const double* v, size_t n) {
-    out += '[';
-    for (size_t i = 0; i < n; ++i) { if (i) out += ','; out += fmt(v[i]); }
-    out += ']';
-}
-
 // ---------------------------------------------------------------------------
 // Time: "yyyy ddd (dd mmm) hh:mm:ss.sss" (UTC).
 struct Utc {
@@ -515,7 +502,7 @@ std::string parseVcm(const std::string& text, Vcm& m) {
 }
 
 // ---------------------------------------------------------------------------
-// Options (a flat JSON object; unknown keys are refused).
+// Read options (node config table "read"; unknown keys are refused).
 struct Options {
     double nScale = 1000.0;              // elements carry n in rad per nScale s
     std::string meanMotionUnit = "fraction";
@@ -525,43 +512,6 @@ struct Options {
     std::string ephemerisSource = "JPL_SPK";
     bool fractionalParameterRows = true;
 };
-// A minimal reader for {"key": value, ...} with string, number and boolean
-// values.
-bool readFlatJson(const std::string& text, std::vector<std::pair<std::string, std::string>>& out, std::string& error) {
-    size_t i = 0;
-    auto ws = [&] { while (i < text.size() && (text[i] == ' ' || text[i] == '\n' || text[i] == '\r' || text[i] == '\t')) ++i; };
-    auto str = [&](std::string& s) {
-        if (i >= text.size() || text[i] != '"') return false;
-        ++i;
-        while (i < text.size() && text[i] != '"') {
-            if (text[i] == '\\' && i + 1 < text.size()) { ++i; }
-            s += text[i++];
-        }
-        if (i >= text.size()) return false;
-        ++i;
-        return true;
-    };
-    ws();
-    if (i >= text.size() || text[i] != '{') { error = "options must be a JSON object"; return false; }
-    ++i; ws();
-    if (i < text.size() && text[i] == '}') return true;
-    for (;;) {
-        std::string key, value;
-        ws();
-        if (!str(key)) { error = "options: expected a key"; return false; }
-        ws();
-        if (i >= text.size() || text[i] != ':') { error = "options: expected ':'"; return false; }
-        ++i; ws();
-        if (i < text.size() && text[i] == '"') { if (!str(value)) { error = "options: bad string"; return false; } value = "\"" + value; }
-        else { while (i < text.size() && text[i] != ',' && text[i] != '}') value += text[i++]; value = trim(value); }
-        out.push_back({key, value});
-        ws();
-        if (i < text.size() && text[i] == ',') { ++i; continue; }
-        if (i < text.size() && text[i] == '}') return true;
-        error = "options: expected ',' or '}'";
-        return false;
-    }
-}
 const std::string* lookup(const std::vector<std::pair<std::string, std::string>>& kv, const char* key) {
     for (const auto& p : kv) if (p.first == key) return &p.second;
     return nullptr;
@@ -591,11 +541,39 @@ bool meanMotionRow(const std::string& unit, double& scale, bool& fraction) {
     else return false;
     return true;
 }
-std::string parseOptions(const plugin_input_frame_t* frame, Options& o) {
-    if (!frame || !frame->payload || frame->payload_length == 0) return "";
+// Node config (plugin.getConfig, one ModuleConfig): the settings of one method are the entries of one table,
+// "read", "header" (ocm) or "write", flattened into the key/value form the readers below take: a string as
+// "\"text", a number in its shortest round-tripping decimal (strtod gives the same double back), a boolean as
+// true / false. Anything else is refused.
+std::string shortest(double x) {
+    char b[48];
+    for (int p = 1; p <= 17; ++p) {
+        std::snprintf(b, sizeof b, "%.*g", p, x);
+        if (std::strtod(b, nullptr) == x) break;
+    }
+    return b;
+}
+std::string configTable(const char* table, std::vector<std::pair<std::string, std::string>>& out) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return std::string("config-unavailable: ") + config.error_message();
+    if (!config.has(table)) return "";
+    if (config.kind(table) != sdn::runtime::configValueKind_TableList || config.count(table) != 1) return std::string("config: ") + table + " must be one table";
+    const sdm_piv::ConfigTable t = config.table(table);
+    if (!t.entries()) return "";
+    for (const auto* e : *t.entries()) {
+        const std::string key = e->KEY() ? e->KEY()->str() : "";
+        switch (e->KIND()) {
+            case sdn::runtime::configValueKind_String: out.push_back({key, "\"" + (e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string())}); break;
+            case sdn::runtime::configValueKind_Number: out.push_back({key, shortest(e->NUMBER_VALUE())}); break;
+            case sdn::runtime::configValueKind_Bool: out.push_back({key, e->BOOL_VALUE() ? "true" : "false"}); break;
+            default: return std::string("config: ") + table + "." + key + " must be a string, number or boolean";
+        }
+    }
+    return "";
+}
+std::string parseOptions(Options& o) {
     std::vector<std::pair<std::string, std::string>> kv;
-    std::string error;
-    if (!readFlatJson(std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length), kv, error)) return "invalid-options: " + error;
+    if (std::string error = configTable("read", kv); !error.empty()) return "invalid-options: " + error;
     for (const auto& p : kv) {
         const std::string& k = p.first;
         const std::string& v = p.second;
@@ -1107,17 +1085,20 @@ int read(void) {
     const int32_t messageIndex = plugin_find_input_index("message", 0);
     const plugin_input_frame_t* frame = messageIndex >= 0 ? plugin_get_input_frame(uint32_t(messageIndex)) : nullptr;
     if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-message", "read requires the VCM text on port \"message\".");
+        plugin_set_error("missing-message", "read requires the VCM text as a $FIL on port \"message\".");
         return 400;
     }
+    ::flatbuffers::Verifier filVerifier(frame->payload, frame->payload_length);
+    if (!VerifyFILBuffer(filVerifier)) { plugin_set_error("invalid-message", "Port \"message\" is not a $FIL FlatBuffer."); return 400; }
+    const FIL* file = GetFIL(frame->payload);
+    if (!file->CONTENT() || file->CONTENT()->size() == 0) { plugin_set_error("missing-message", "read requires the VCM text in the $FIL's CONTENT."); return 400; }
     Options o;
-    const int32_t optionsIndex = plugin_find_input_index("options", 0);
-    if (std::string error = parseOptions(optionsIndex >= 0 ? plugin_get_input_frame(uint32_t(optionsIndex)) : nullptr, o); !error.empty()) {
+    if (std::string error = parseOptions(o); !error.empty()) {
         plugin_set_error("invalid-options", error.c_str());
         return 400;
     }
     Vcm m;
-    if (std::string error = parseVcm(std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length), m); !error.empty()) {
+    if (std::string error = parseVcm(std::string(reinterpret_cast<const char*>(file->CONTENT()->data()), file->CONTENT()->size()), m); !error.empty()) {
         plugin_set_error("invalid-vcm", error.c_str());
         return 400;
     }
@@ -1355,68 +1336,99 @@ int read(void) {
         ocmBytes = ocmOf(s);
     }
 
-    // ---- report ----
-    std::string r = "{\"satellite\":";
-    jsonString(r, m.satellite);
-    r += ",\"internationalDesignator\":"; jsonString(r, m.intDes);
-    r += ",\"commonName\":"; jsonString(r, m.name);
-    r += ",\"center\":"; jsonString(r, m.center);
-    r += ",\"epochUtc\":"; jsonString(r, iso(m.epoch));
-    r += ",\"targetUtc\":"; jsonString(r, iso(target));
-    r += ",\"j2kPositionKm\":"; jsonArray(r, m.j2kPos, 3);
-    r += ",\"j2kVelocityKmS\":"; jsonArray(r, m.j2kVel, 3);
-    r += ",\"geopotential\":"; jsonString(r, m.geopotential);
-    r += ",\"zonals\":" + std::to_string(m.zonals) + ",\"tesserals\":" + std::to_string(m.tesserals);
-    r += ",\"drag\":"; jsonString(r, m.drag);
-    r += std::string(",\"lunarSolar\":") + (m.lunarSolar ? "true" : "false") + ",\"solarRadiationPressure\":" + (m.srp ? "true" : "false") +
-         ",\"solidEarthTides\":" + (m.solidTides ? "true" : "false") + ",\"inTrackThrust\":" + (m.inTrackThrust ? "true" : "false");
-    r += ",\"ballisticCoefficientM2Kg\":" + fmt(m.b) + ",\"bdotM2KgS\":" + fmt(m.bdot) + ",\"agomM2Kg\":" + fmt(m.agom) +
-         ",\"thrustAccelerationMS2\":" + fmt(m.thrust) + ",\"edrWKg\":" + fmt(m.edr) + ",\"centerOfMassOffsetM\":" + fmt(m.cmOffset);
-    r += ",\"f10\":" + fmt(m.f10) + ",\"averageF10\":" + fmt(m.avgF10) + ",\"averageAp\":" + fmt(m.avgAp);
-    r += ",\"taiMinusUtcS\":" + fmt(m.taiUtc) + ",\"ut1MinusUtcS\":" + fmt(m.ut1Utc) + ",\"ut1RateMsPerDay\":" + fmt(m.ut1RateMsPerDay) +
-         ",\"polarMotionArcsec\":[" + fmt(m.polarX) + "," + fmt(m.polarY) + "],\"nutationTerms\":" + std::to_string(m.nutationTerms);
-    r += ",\"leapSecondUtc\":"; jsonString(r, m.leap.ok ? iso(m.leap) : "");
-    r += ",\"integrator\":{\"mode\":"; jsonString(r, m.integratorMode);
-    r += ",\"coordinateSystem\":"; jsonString(r, m.coordSys);
-    r += ",\"partials\":"; jsonString(r, m.partials);
-    r += ",\"initialStepS\":" + fmt(m.initialStep) + ",\"errorControl\":" + fmt(m.errorControl) + "}";
-    r += ",\"gmKm3S2\":" + fmt(mu) + ",\"retrogradeFactor\":" + std::to_string(fr) + ",\"meanMotionUnit\":";
-    jsonString(r, o.meanMotionUnit);
-    r += ",\"equinoctial\":"; jsonArray(r, elements, 6);
-    r += ",\"equinoctialRoundTripKm\":" + fmt(roundTrip);
-    r += ",\"covarianceSize\":" + std::to_string(m.n) + ",\"weightedRms\":" + fmt(m.weightedRms);
-    r += std::string(",\"covarianceScaledByWeightedRms\":") + (o.scaleByWeightedRms ? "true" : "false") + ",\"covarianceScale\":" + fmt(variance);
-    r += ",\"equinoctialMeanMotionUnit\":\"rad/ks\"";
-    r += ",\"dynamicParameters\":[";
-    for (size_t i = 0; i < kept.size(); ++i) { if (i) r += ','; jsonString(r, EnumNameprwDynamicParameter(kept[i])); }
-    r += "],\"parameterRows\":";
-    jsonString(r, o.fractionalParameterRows ? "fractional" : "absolute");
-    r += ",\"parameterSigmas\":[";
+    // ---- report: a FlowNotice Info. ITEMS are "key=value" lines: text as read, numbers as %.17g, lists of numbers
+    // space-separated, booleans true / false; REASON joins the notes. SOURCE_NAME is the satellite number,
+    // COUNT the covariance size.
+    std::vector<std::string> items;
+    auto put = [&](const char* key, const std::string& value) { items.push_back(std::string(key) + "=" + value); };
+    auto list = [&](const double* v, size_t n) { std::string out; for (size_t i = 0; i < n; ++i) { if (i) out += ' '; out += fmt(v[i]); } return out; };
+    auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
+    put("satellite", m.satellite);
+    put("internationalDesignator", m.intDes);
+    put("commonName", m.name);
+    put("center", m.center);
+    put("epochUtc", iso(m.epoch));
+    put("targetUtc", iso(target));
+    put("j2kPositionKm", list(m.j2kPos, 3));
+    put("j2kVelocityKmS", list(m.j2kVel, 3));
+    put("geopotential", m.geopotential);
+    put("zonals", std::to_string(m.zonals));
+    put("tesserals", std::to_string(m.tesserals));
+    put("drag", m.drag);
+    put("lunarSolar", flag(m.lunarSolar));
+    put("solarRadiationPressure", flag(m.srp));
+    put("solidEarthTides", flag(m.solidTides));
+    put("inTrackThrust", flag(m.inTrackThrust));
+    put("ballisticCoefficientM2Kg", fmt(m.b));
+    put("bdotM2KgS", fmt(m.bdot));
+    put("agomM2Kg", fmt(m.agom));
+    put("thrustAccelerationMS2", fmt(m.thrust));
+    put("edrWKg", fmt(m.edr));
+    put("centerOfMassOffsetM", fmt(m.cmOffset));
+    put("f10", fmt(m.f10));
+    put("averageF10", fmt(m.avgF10));
+    put("averageAp", fmt(m.avgAp));
+    put("taiMinusUtcS", fmt(m.taiUtc));
+    put("ut1MinusUtcS", fmt(m.ut1Utc));
+    put("ut1RateMsPerDay", fmt(m.ut1RateMsPerDay));
+    put("polarMotionArcsec", fmt(m.polarX) + " " + fmt(m.polarY));
+    put("nutationTerms", std::to_string(m.nutationTerms));
+    put("leapSecondUtc", m.leap.ok ? iso(m.leap) : "");
+    put("integrator.mode", m.integratorMode);
+    put("integrator.coordinateSystem", m.coordSys);
+    put("integrator.partials", m.partials);
+    put("integrator.initialStepS", fmt(m.initialStep));
+    put("integrator.errorControl", fmt(m.errorControl));
+    put("gmKm3S2", fmt(mu));
+    put("retrogradeFactor", std::to_string(fr));
+    put("meanMotionUnit", o.meanMotionUnit);
+    put("equinoctial", list(elements, 6));
+    put("equinoctialRoundTripKm", fmt(roundTrip));
+    put("covarianceSize", std::to_string(m.n));
+    put("weightedRms", fmt(m.weightedRms));
+    put("covarianceScaledByWeightedRms", flag(o.scaleByWeightedRms));
+    put("covarianceScale", fmt(variance));
+    put("equinoctialMeanMotionUnit", "rad/ks");
     {
+        std::string names;
+        for (size_t i = 0; i < kept.size(); ++i) { if (i) names += ' '; names += EnumNameprwDynamicParameter(kept[i]); }
+        put("dynamicParameters", names);
+    }
+    put("parameterRows", o.fractionalParameterRows ? "fractional" : "absolute");
+    {
+        // one item per parameter row: "parameterSigma=<name> <unit> <value> <sigma>"
         const char* names[4] = {"B", "BDOT", "AGOM", "T"};
         const double values[4] = {m.b, m.bdot, m.agom, m.thrust};
         const char* units[4] = {"m2/kg", "m2/kg/s", "m2/kg", "m/s2"};
         for (unsigned k = 0; k < np; ++k) {
             const unsigned slot = parameters.rows[k] - 6;
-            if (k) r += ',';
-            r += "{\"name\":"; jsonString(r, names[slot]);
-            r += ",\"unit\":"; jsonString(r, units[slot]);
-            r += ",\"value\":" + fmt(values[slot]) + ",\"sigma\":" + fmt(parameterSigma[k]) + "}";
+            put("parameterSigma", std::string(names[slot]) + " " + units[slot] + " " + fmt(values[slot]) + " " + fmt(parameterSigma[k]));
         }
     }
-    r += "],\"cartesianCovarianceKm\":";
-    if (cartesian.empty()) r += "null"; else jsonArray(r, cartesian.data(), cartesian.size());
-    r += ",\"statedUvwSigmasKm\":"; jsonArray(r, m.sigmas, 6);
-    r += ",\"recomputedUvwSigmasKm\":"; jsonArray(r, recomputed, 6);
-    r += ",\"notes\":[";
-    for (size_t i = 0; i < notes.size(); ++i) { if (i) r += ','; jsonString(r, notes[i]); }
-    r += "]}";
+    put("cartesianCovarianceKm", cartesian.empty() ? std::string() : list(cartesian.data(), cartesian.size()));
+    put("statedUvwSigmasKm", list(m.sigmas, 6));
+    put("recomputedUvwSigmasKm", list(recomputed, 6));
+    std::string reason;
+    for (size_t i = 0; i < notes.size(); ++i) { if (i) reason += "; "; reason += notes[i]; put("note", notes[i]); }
+    std::vector<uint8_t> reportBytes;
+    {
+        sdn::runtime::FlowNoticeT notice;
+        notice.KIND = sdn::runtime::flowNoticeKind_Info;
+        notice.SCHEMA = "OCM.fbs";
+        notice.SOURCE_NAME = m.satellite;
+        notice.COUNT = m.n;
+        notice.REASON = reason;
+        notice.ITEMS = std::move(items);
+        ::flatbuffers::FlatBufferBuilder b(4096);
+        sdn::runtime::FinishFlowNoticeBuffer(b, sdn::runtime::FlowNotice::Pack(b, &notice));
+        reportBytes.assign(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    }
 
     if (plugin_push_output_ex("request", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0, requestBytes.data(), uint32_t(requestBytes.size())) < 0) return 500;
     if (plugin_push_output_ex("earth_orientation", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0, earthOrientationBytes.data(), uint32_t(earthOrientationBytes.size())) < 0) return 500;
     if (plugin_push_output_ex("eop", "EOP.fbs", "$EOP", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "EOP", 0, 0, eopBytes.data(), uint32_t(eopBytes.size())) < 0) return 500;
     if (plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0, ocmBytes.data(), uint32_t(ocmBytes.size())) < 0) return 500;
-    if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(r.data()), uint32_t(r.size())) < 0) return 500;
+    if (plugin_push_output_ex("report", "FlowNotice.fbs", sdn::runtime::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0, reportBytes.data(), uint32_t(reportBytes.size())) < 0) return 500;
     return 0;
 }
 
@@ -1450,10 +1462,7 @@ int ocm(void) {
     // Header options.
     std::vector<std::pair<std::string, std::string>> h;
     {
-        const int32_t headerIndex = plugin_find_input_index("header", 0);
-        const plugin_input_frame_t* hf = headerIndex >= 0 ? plugin_get_input_frame(uint32_t(headerIndex)) : nullptr;
-        std::string error;
-        if (hf && hf->payload && hf->payload_length && !readFlatJson(std::string(reinterpret_cast<const char*>(hf->payload), hf->payload_length), h, error)) {
+        if (std::string error = configTable("header", h); !error.empty()) {
             plugin_set_error("invalid-header", error.c_str());
             return 400;
         }
@@ -1591,12 +1600,9 @@ int write(void) {
     bool fractionalParameterRows = s.fractionalParameterRows;
     double covarianceScale = s.covarianceScale;
     {
-        const int32_t optionsIndex = plugin_find_input_index("options", 0);
-        const plugin_input_frame_t* of = optionsIndex >= 0 ? plugin_get_input_frame(uint32_t(optionsIndex)) : nullptr;
-        if (of && of->payload && of->payload_length) {
+        {
             std::vector<std::pair<std::string, std::string>> kv;
-            std::string error;
-            if (!readFlatJson(std::string(reinterpret_cast<const char*>(of->payload), of->payload_length), kv, error)) { plugin_set_error("invalid-options", error.c_str()); return 400; }
+            if (std::string error = configTable("write", kv); !error.empty()) { plugin_set_error("invalid-options", error.c_str()); return 400; }
             for (const auto& p : kv) {
                 const std::string value = p.second.empty() || p.second[0] != '"' ? p.second : p.second.substr(1);
                 if (p.first == "meanMotionUnit") meanMotionUnit = value;
@@ -1618,7 +1624,19 @@ int write(void) {
     std::string error;
     const std::string message = vcmTextOf(s, eop, meanMotionUnit, fractionalParameterRows, covarianceScale, error);
     if (!error.empty()) { plugin_set_error(error.substr(0, error.find(':')).c_str(), error.c_str()); return 400; }
-    if (plugin_push_output_ex("message", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(message.data()), uint32_t(message.size())) < 0) return 500;
+    // The text as a $FIL: NAME <satellite>.vcm, MEDIA_TYPE text/plain, CONTENT the message.
+    ::flatbuffers::FlatBufferBuilder fb(message.size() + 256);
+    const auto content = fb.CreateVector(reinterpret_cast<const uint8_t*>(message.data()), message.size());
+    const auto name = fb.CreateString((s.satellite.empty() ? std::string("message") : s.satellite) + ".vcm");
+    const auto media = fb.CreateString("text/plain");
+    FILBuilder fil(fb);
+    fil.add_NAME(name);
+    fil.add_KIND(filEntryKind::File);
+    fil.add_MEDIA_TYPE(media);
+    fil.add_SIZE(message.size());
+    fil.add_CONTENT(content);
+    FinishFILBuffer(fb, fil.Finish());
+    if (plugin_push_output_ex("message", "FIL.fbs", "$FIL", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FIL", 0, 0, fb.GetBufferPointer(), fb.GetSize()) < 0) return 500;
     return 0;
 }
 

@@ -1,4 +1,5 @@
 #include "space_data_module_invoke.h"
+#include "FlowNotice_generated.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -26,7 +27,7 @@
 // cell; every liftoff time of a candidate cell is then minimised over tau.
 
 namespace {
-using Json = nlohmann::json;
+namespace R = sdn::runtime;
 using Vec3 = std::array<double, 3>;
 constexpr double kWgsA = 6378137.0;                 // WGS 84 semi-major axis, m
 constexpr double kWgsF = 1.0 / 298.257223563;       // WGS 84 flattening
@@ -300,7 +301,7 @@ struct Approach {
   Eval eval;
 };
 
-bool screen(const CQRLaunchRequest* request, flatbuffers::FlatBufferBuilder& out, std::string& reportJson) {
+bool screen(const CQRLaunchRequest* request, flatbuffers::FlatBufferBuilder& out, R::FlowNoticeT& notice) {
   NEED(request, "The CQR frame carries no LAUNCH_REQUEST.");
   const auto* frame = request->EVALUATION_FRAME();
   NEED(frame && frame->AXIS_TYPE() == rfmAxisType::BODY_FIXED && frame->AXIS_REFERENCE_BODY_ID() == 399,
@@ -610,7 +611,7 @@ bool screen(const CQRLaunchRequest* request, flatbuffers::FlatBufferBuilder& out
     return CreateTIMInstant(out, timingStandard::UTC, timEpochRepresentation::ISO8601, 0, 0, out.CreateString(isoMs(t)));
   };
   std::vector<flatbuffers::Offset<CQRLaunchClosure>> closureOffsets;
-  Json intervals = Json::array();
+  std::vector<std::string> intervals;
   for (const auto& c : merged) {
     std::vector<std::string> ids(c.objects.begin(), c.objects.end()), segs(c.segments.begin(), c.segments.end());
     const auto objectIds = out.CreateVectorOfStrings(ids), segmentIds = out.CreateVectorOfStrings(segs);
@@ -653,11 +654,13 @@ bool screen(const CQRLaunchRequest* request, flatbuffers::FlatBufferBuilder& out
   root.add_LAUNCH_RESULT(result);
   FinishCQRBuffer(out, root.Finish());
 
-  size_t screenedSegments = 0;
-  for (const auto& s : segments) screenedSegments += !s.screened.empty();
-  reportJson = Json{{"liftoff_times", liftoffs.size()}, {"closures", intervals}, {"violations", violations},
-    {"approaches", approaches.size()}, {"segments_screened", screenedSegments}, {"objects", objects.size()},
-    {"objects_prefiltered", prefiltered / std::max<size_t>(1, segments.size())}}.dump();
+  // The launch notice: closure intervals as ISO 8601 text; COUNT the violating approaches (rendezvous excluded).
+  // Liftoff count, approaches, objects and prefilter counts are in the $CQR result.
+  notice.KIND = R::flowNoticeKind_Info;
+  notice.SCHEMA = "$CQR";
+  notice.REASON = "launch-window-screened";
+  notice.COUNT = violations;
+  notice.ITEMS = std::move(intervals);
   return true;
 }
 }  // namespace
@@ -676,10 +679,12 @@ extern "C" int screen_launch_window() {
   flatbuffers::Verifier verifier(bytes, length, options);
   if (!VerifyCQRBuffer(verifier)) return fail("The request is not a valid $CQR FlatBuffer.");
   flatbuffers::FlatBufferBuilder out(1 << 16);
-  std::string report;
-  if (!screen(GetCQR(bytes)->LAUNCH_REQUEST(), out, report)) return fail(error);
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-        reinterpret_cast<const uint8_t*>(report.data()), report.size()) < 0) return 1;
+  R::FlowNoticeT notice;
+  if (!screen(GetCQR(bytes)->LAUNCH_REQUEST(), out, notice)) return fail(error);
+  flatbuffers::FlatBufferBuilder nb(256);
+  R::FinishFlowNoticeBuffer(nb, R::FlowNotice::Pack(nb, &notice));
+  if (plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+        "FlowNotice", 0, 0, nb.GetBufferPointer(), static_cast<uint32_t>(nb.GetSize())) < 0) return 1;
   return plugin_push_output_ex("result", "CQR.fbs", "$CQR", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CQR", 0, 0,
     out.GetBufferPointer(), out.GetSize()) < 0 ? 1 : 0;
 }

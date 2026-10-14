@@ -1,7 +1,7 @@
 // The $CAT integrator. One call takes the composed catalog and every source's products and gives the catalog, the
 // product chosen for each object, and the report that says how (catalog pipeline C3, graph/programs/catalog-pipeline.md).
 //
-//   recipe        JSON   asOf, the identity links, the selection policy with its measured table, the maneuver policy
+//   recipe        $XMT   INTEGRATE_RECIPE: asOf, the identity links, the selection policy with its measured table, the maneuver policy
 //   catalog       $CAT   the composed catalog (compose's output, or one snapshot): each object once
 //   ephemerides   $OEM   the normalized trajectories of the identity candidates, in candidate order
 //   omm_products  $OMM   every source's element sets, each naming its source in PROVENANCE as analysis/gp-error-model writes it
@@ -11,7 +11,7 @@
 //      omm        $OMM   per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte
 //      ocm        $OCM   the selected product's state and covariance with its realism, byte for byte
 //      mnv        $MNV   the maneuvers of every source, merged within the policy's tolerances
-//      report     JSON   per object every candidate, why one was chosen or none, the covariance's realism, record CIDs
+//      report     $XMT   INTEGRATE_REPORT: per object every candidate, why one was chosen or none, the covariance's realism, record CIDs
 //
 // The steps, in order: identity (a source's own names join objects only through links the trajectories supported),
 // maneuvers (merged; MANEUVERABLE; a burn after a product's epoch retires it), selection (the lowest measured median
@@ -42,50 +42,25 @@ Link link_of(const Identity& who, const std::string& source, const Index& index,
   *object = *found.begin();
   return Link::Found;
 }
-Json who_json(const Identity& who) {
-  Json out = Json::object();
-  if (who.norad) out["norad"] = who.norad;
-  if (!who.cospar.empty()) out["cospar"] = who.cospar;
-  if (!who.native.empty()) out["native"] = who.native;
-  return out;
-}
-
 struct PerObject {
   std::vector<const Omm*> omms;
   std::vector<const Ocm*> ocms;
   std::vector<const Mnv*> mnvs;
 };
 
-std::string instant_text(int64_t micros) {
-  int64_t days = micros / 86400000000LL, rem = micros % 86400000000LL;
-  if (rem < 0) { rem += 86400000000LL; --days; }
-  // civil_from_days (Hinnant)
-  const int64_t z = days + 719468;
-  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-  const unsigned doe = static_cast<unsigned>(z - era * 146097);
-  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  const int64_t y = static_cast<int64_t>(yoe) + era * 400;
-  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-  const unsigned mp = (5 * doy + 2) / 153;
-  const unsigned d = doy - (153 * mp + 2) / 5 + 1;
-  const unsigned m = mp < 10 ? mp + 3 : mp - 9;
-  char buffer[48];
-  std::snprintf(buffer, sizeof(buffer), "%04lld-%02u-%02uT%02lld:%02lld:%02lld.%06lldZ", static_cast<long long>(y + (m <= 2)), m, d, static_cast<long long>(rem / 3600000000LL),
-                static_cast<long long>(rem / 60000000LL % 60), static_cast<long long>(rem / 1000000LL % 60), static_cast<long long>(rem % 1000000LL));
-  return buffer;
-}
+// Microseconds to Unix milliseconds, rounded down (the report's instants are milliseconds).
+int64_t ms_of(int64_t micros) { return micros >= 0 ? micros / 1000 : -((-micros + 999) / 1000); }
 
 // The label a product carries for its covariance: from its $OCM when it has one, else from its $OMM.
-Json covariance_of(const Omm& omm, const Ocm* ocm) {
-  Json out = {{"from", ocm ? "ocm" : omm.label.is_null() ? "none" : "omm"}};
+void covariance_of(const Omm& omm, const Ocm* ocm, XMTProductSelectionT* out) {
   if (ocm) {
-    out["calibration"] = ocm->calibration;
-    out["label"] = ocm->label;
-  } else if (!omm.label.is_null()) {
-    out["calibration"] = field(omm.label, "calibration");
-    out["label"] = omm.label;
+    out->COVARIANCE_ORIGIN = xmtCovarianceOrigin::FromOcm;
+    if (ocm->label) out->COVARIANCE.reset(ocm->label->UnPack());
+    else { out->COVARIANCE = std::make_unique<CVRT>(); out->COVARIANCE->CALIBRATION = ocm->calibration; }
+  } else if (omm.label) {
+    out->COVARIANCE_ORIGIN = xmtCovarianceOrigin::FromOmm;
+    out->COVARIANCE.reset(omm.label->UnPack());
   }
-  return out;
 }
 
 }  // namespace integrate
@@ -110,17 +85,16 @@ extern "C" int integrate_catalog(void) {
     else if (port == "mnv_products") mnv_frames.push_back(frame);
     else return refuse("invalid-integration-input", "Unknown input port.");
   }
-  if (!recipe_frame || !recipe_frame->payload || recipe_frame->payload_length > 32 * 1024 * 1024) return bad_recipe("A bounded recipe frame is required.");
   if (!catalog_frame) return refuse("invalid-integration-input", "A catalog frame is required.");
-  const Json recipe = Json::parse(recipe_frame->payload, recipe_frame->payload + recipe_frame->payload_length, nullptr, false);
-  if (recipe.is_discarded() || number(field(recipe, "version")) != 1) return bad_recipe("The integration recipe is version 1.");
-  const double as_of_seconds = number(field(recipe, "asOf"));
-  if (!std::isfinite(as_of_seconds) || as_of_seconds <= 0) return bad_recipe("Specify asOf as positive finite Unix seconds.");
-  const int64_t as_of = static_cast<int64_t>(std::llround(as_of_seconds * 1e6));
+  const XMT* message = read_xmt(recipe_frame, 32 * 1024 * 1024);
+  const XMTIntegrateRecipe* recipe = message ? message->INTEGRATE_RECIPE() : nullptr;
+  if (!recipe) return bad_recipe("A bounded $XMT INTEGRATE_RECIPE frame is required.");
+  if (recipe->AS_OF_MS() <= 0) return bad_recipe("Specify AS_OF_MS as positive Unix milliseconds.");
+  const int64_t as_of = recipe->AS_OF_MS() * 1000;
   std::string error;
   SelectionPolicy selection;
   ManeuverPolicy maneuvers;
-  if (!parse_selection_policy(field(recipe, "selection"), &selection, &error) || !parse_maneuver_policy(field(recipe, "maneuvers"), &maneuvers, &error)) return bad_recipe(error);
+  if (!parse_selection_policy(recipe->SELECTION(), &selection, &error) || !parse_maneuver_policy(recipe->MANEUVERS(), &maneuvers, &error)) return bad_recipe(error);
 
   // The records.
   std::vector<CatObject> catalog;
@@ -145,9 +119,8 @@ extern "C" int integrate_catalog(void) {
   }
 
   // Identity.
-  Json identity_report = Json();
-  const auto& identity = field(recipe, "identity");
-  if (!identity.is_null()) {
+  std::unique_ptr<XMTMatchReportT> identity_report;
+  if (const auto* identity = recipe->IDENTITY()) {
     Links links;
     if (!resolve_identity(identity, ephemerides, catalog_keys, &links, &error)) return refuse("invalid-integration-input", error);
     for (const auto& [native, key] : links.bound) {
@@ -155,30 +128,36 @@ extern "C" int integrate_catalog(void) {
       const std::string value = key.substr(colon + 1);
       index.native[native] = key.compare(0, colon, "norad") == 0 ? index.norad.at(static_cast<uint32_t>(std::stoul(value))) : index.cospar.at(value);
     }
-    identity_report = links.report;
+    identity_report = std::move(links.report);
   } else if (!ephemerides.empty()) {
-    return bad_recipe("Ephemerides need an identity section that names their candidates.");
+    return bad_recipe("Ephemerides need an identity section that names their trajectories.");
   }
 
   // Each product to its object.
   std::vector<PerObject> per(catalog.size());
-  Json unlinked = Json::array();
+  XMTT result;
+  result.INTEGRATE_REPORT = std::make_unique<XMTIntegrateReportT>();
+  XMTIntegrateReportT& report = *result.INTEGRATE_REPORT;
   std::map<std::string, size_t> unlinked_counts;
-  auto place = [&](const char* kind, size_t ordinal, const Identity& who, const std::string& source, auto&& attach) {
+  auto place = [&](xmtRecordKind kind, size_t ordinal, const Identity& who, const std::string& source, auto&& attach) {
     size_t object = 0;
     const Link link = link_of(who, source, index, &object);
     if (link == Link::Found) { attach(per[object]); return; }
     const char* reason = link == Link::Conflict ? "identity-conflict" : who.native.empty() || (who.norad || !who.cospar.empty()) ? "not-in-catalog" : "unbound-native-identity";
     ++unlinked_counts[reason];
-    if (unlinked.size() < 1000) unlinked.push_back({{"record", kind}, {"ordinal", ordinal}, {"source", source}, {"who", who_json(who)}, {"reason", reason}});
+    if (report.UNLINKED.size() < 1000) {
+      auto row = std::make_unique<XMTUnplacedRecordT>();
+      row->KIND = kind; row->ORDINAL = static_cast<uint32_t>(ordinal); row->SOURCE_ID = source;
+      row->NORAD_CAT_ID = who.norad; row->INTERNATIONAL_DESIGNATOR = who.cospar; row->NATIVE_ID = who.native; row->REASON = reason;
+      report.UNLINKED.push_back(std::move(row));
+    }
   };
-  for (const auto& p : omms) place("omm", p.ordinal, p.who, p.source, [&](PerObject& o) { o.omms.push_back(&p); });
-  for (const auto& p : ocms) place("ocm", p.ordinal, p.who, p.source, [&](PerObject& o) { o.ocms.push_back(&p); });
-  for (const auto& p : mnvs) place("mnv", p.ordinal, p.who, p.source, [&](PerObject& o) { o.mnvs.push_back(&p); });
+  for (const auto& p : omms) place(xmtRecordKind::Omm, p.ordinal, p.who, p.source, [&](PerObject& o) { o.omms.push_back(&p); });
+  for (const auto& p : ocms) place(xmtRecordKind::Ocm, p.ordinal, p.who, p.source, [&](PerObject& o) { o.ocms.push_back(&p); });
+  for (const auto& p : mnvs) place(xmtRecordKind::Mnv, p.ordinal, p.who, p.source, [&](PerObject& o) { o.mnvs.push_back(&p); });
 
   // Per object: maneuvers, selection, covariance.
   std::vector<uint8_t> catalog_out, omm_out, ocm_out, mnv_out;
-  Json objects = Json::array();
   size_t counts_selected = 0, counts_stale = 0, counts_no_product = 0, counts_unmeasured = 0, counts_maneuverable = 0, counts_events = 0, counts_merged = 0, counts_without_ocm = 0;
   for (const auto& object : catalog) {
     const PerObject& mine = per[object.ordinal];
@@ -199,22 +178,30 @@ extern "C" int integrate_catalog(void) {
     }
     if (maneuverable) ++counts_maneuverable;
 
-    const std::string key = object.norad ? "norad:" + std::to_string(object.norad) : !object.cospar.empty() ? "cospar:" + object.cospar : "unkeyed:" + std::to_string(object.ordinal);
-    Json row = {{"key", key}, {"norad", object.norad}, {"cospar", object.cospar},
-                {"name", object.name}, {"maneuverable", maneuverable || object.maneuverable}, {"maneuverableFromHistory", maneuverable}};
+    auto row = std::make_unique<XMTIntegratedObjectT>();
+    row->KEY = object.norad ? "norad:" + std::to_string(object.norad) : !object.cospar.empty() ? "cospar:" + object.cospar : "unkeyed:" + std::to_string(object.ordinal);
+    row->NORAD_CAT_ID = object.norad;
+    row->INTERNATIONAL_DESIGNATOR = object.cospar;
+    row->NAME = object.name;
+    row->MANEUVERABLE = maneuverable || object.maneuverable;
+    row->MANEUVERABLE_FROM_HISTORY = maneuverable;
 
-    Json event_rows = Json::array();
     for (const Event& e : events) {
       const auto record = event_record(e);
       mnv_out.insert(mnv_out.end(), record.begin(), record.end());
-      Json members = Json::array();
-      for (const Mnv* m : e.members) members.push_back({{"source", m->source}, {"status", EnumNamemaneuverStatus(m->status)}, {"id", m->id}, {"time", instant_text(m->time)}});
-      Json ids = record_ids(record.data(), record.size());
-      event_rows.push_back({{"time", instant_text(began(e))}, {"status", EnumNamemaneuverStatus(e.status)}, {"deltaVKmS", std::isfinite(e.primary->delta_v) ? Json(e.primary->delta_v) : Json()},
-                            {"members", members}, {"sha256", ids["sha256"]}, {"cid", ids["cid"]}});
+      auto event = std::make_unique<XMTManeuverEventT>();
+      event->TIME_MS = ms_of(began(e));
+      event->STATUS = e.status;
+      event->DELTA_V_KM_S = std::isfinite(e.primary->delta_v) ? e.primary->delta_v : NAN;
+      for (const Mnv* m : e.members) {
+        auto member = std::make_unique<XMTManeuverMemberT>();
+        member->SOURCE_ID = m->source; member->STATUS = m->status; member->ID = m->id; member->TIME_MS = ms_of(m->time);
+        event->MEMBERS.push_back(std::move(member));
+      }
+      event->RECORD = record_ref(xmtRecordKind::Mnv, record.data(), record.size());
+      row->MANEUVERS.push_back(std::move(event));
       if (e.members.size() > 1) ++counts_merged;
     }
-    row["maneuvers"] = event_rows;
 
     // The object's regime: the first the covariance labels of its products name, in source order.
     std::vector<const Omm*> ordered = mine.omms;
@@ -226,27 +213,30 @@ extern "C" int integrate_catalog(void) {
     });
     std::string regime;
     for (const Omm* omm : ordered) if (regime.empty()) regime = omm->regime;
-    row["regime"] = regime.empty() ? Json() : Json(regime);
+    row->REGIME = regime;
 
     std::set<std::string> kinds;
     for (const Omm* omm : mine.omms) kinds.insert(omm->product);
-    Json kind_rows = Json::array();
     bool any_selected = false;
     for (const std::string& kind : kinds) {
       std::vector<const Omm*> of_kind;
       for (const Omm* omm : mine.omms) if (omm->product == kind) of_kind.push_back(omm);
       const std::vector<Candidate> candidates = candidates_of(of_kind, regime, as_of, retiring, selection);
       const Choice choice = choose(candidates, selection);
-      Json candidate_rows = Json::array();
+      auto kind_row = std::make_unique<XMTProductChoiceT>();
+      kind_row->PRODUCT = kind;
       for (const Candidate& c : candidates) {
-        Json r = {{"source", c.omm->source}, {"epoch", instant_text(c.omm->epoch)}, {"ageDays", c.age_days},
-                  {"status", &c == choice.winner ? "selected" : std::strcmp(c.status, "eligible") == 0 ? "not-selected" : c.status}, {"measured", c.measured}};
-        if (std::isfinite(c.median)) { r["median3dKm"] = c.median; r["samples"] = c.samples; }
-        if (std::strcmp(c.status, "retired") == 0 && retiring) r["retiredBy"] = instant_text(began(*retiring));
-        r["sha256"] = record_ids(c.omm->bytes, c.omm->length)["sha256"];
-        candidate_rows.push_back(r);
+        auto r = std::make_unique<XMTProductCandidateT>();
+        r->SOURCE_ID = c.omm->source;
+        r->EPOCH_MS = ms_of(c.omm->epoch);
+        r->AGE_DAYS = c.age_days;
+        r->STANDING = &c == choice.winner ? xmtCandidateStanding::Selected : c.status;
+        r->MEASURED = c.measured;
+        if (std::isfinite(c.median)) { r->MEDIAN_3D_KM = c.median; r->SAMPLES = static_cast<uint32_t>(c.samples); }
+        if (c.status == xmtCandidateStanding::Retired && retiring) r->RETIRED_BY_MS = ms_of(began(*retiring));
+        r->RECORD = record_ref(xmtRecordKind::Omm, c.omm->bytes, c.omm->length, false);
+        kind_row->CANDIDATES.push_back(std::move(r));
       }
-      Json kind_row = {{"product", kind}, {"candidates", candidate_rows}};
       if (choice.winner) {
         const Omm& win = *choice.winner->omm;
         const Ocm* paired = nullptr;
@@ -258,43 +248,67 @@ extern "C" int integrate_catalog(void) {
         else ++counts_without_ocm;
         ++counts_selected;
         any_selected = true;
-        if (std::strcmp(choice.reason, "unmeasured-fallback-order") == 0) ++counts_unmeasured;
-        kind_row["selected"] = {{"source", win.source}, {"epoch", instant_text(win.epoch)}, {"reason", choice.reason}, {"tie", choice.tie}, {"omm", record_ids(win.bytes, win.length)},
-                                {"ocm", paired ? record_ids(paired->bytes, paired->length) : Json()}, {"covariance", covariance_of(win, paired)}};
-        if (choice.winner->measured) kind_row["selected"]["measured"] = {{"median3dKm", choice.winner->median}, {"samples", choice.winner->samples}, {"regime", regime}, {"horizonDays", selection.horizon}};
-      } else {
-        kind_row["status"] = "stale";
+        if (choice.reason == xmtSelectionReason::UnmeasuredFallbackOrder) ++counts_unmeasured;
+        auto selected = std::make_unique<XMTProductSelectionT>();
+        selected->SOURCE_ID = win.source;
+        selected->EPOCH_MS = ms_of(win.epoch);
+        selected->REASON = choice.reason;
+        selected->TIE = choice.tie;
+        selected->OMM = record_ref(xmtRecordKind::Omm, win.bytes, win.length);
+        if (paired) selected->OCM = record_ref(xmtRecordKind::Ocm, paired->bytes, paired->length);
+        covariance_of(win, paired, selected.get());
+        if (choice.winner->measured) {
+          selected->MEASURED = std::make_unique<XMTMeasuredErrorT>();
+          selected->MEASURED->SOURCE_ID = win.source;
+          selected->MEASURED->PRODUCT = kind;
+          selected->MEASURED->REGIME = regime;
+          selected->MEASURED->HORIZON_DAYS = selection.horizon;
+          selected->MEASURED->MEDIAN_3D_KM = choice.winner->median;
+          selected->MEASURED->SAMPLES = static_cast<uint32_t>(choice.winner->samples);
+        }
+        kind_row->SELECTED = std::move(selected);
       }
-      kind_rows.push_back(kind_row);
+      row->PRODUCTS.push_back(std::move(kind_row));
     }
-    row["products"] = kind_rows;
-    row["status"] = any_selected ? "selected" : mine.omms.empty() ? "no-product" : "stale";
+    row->OUTCOME = any_selected ? xmtObjectOutcome::Selected : mine.omms.empty() ? xmtObjectOutcome::NoProduct : xmtObjectOutcome::Stale;
     if (!any_selected) {
       if (mine.omms.empty()) ++counts_no_product;
       else ++counts_stale;
     }
-    objects.push_back(row);
+    report.OBJECTS.push_back(std::move(row));
   }
 
-  Json refused_rows = Json::array();
-  for (size_t i = 0; i < refused.size() && i < 1000; ++i) refused_rows.push_back({{"record", refused[i].record}, {"ordinal", refused[i].ordinal}, {"reason", refused[i].reason}});
-  const Json report = {
-      {"version", 1},
-      {"method", "integrate_catalog"},
-      {"asOf", instant_text(as_of)},
-      {"policy", {{"selection", selection_policy_json(selection)}, {"maneuvers", maneuver_policy_json(maneuvers)}}},
-      {"counts", {{"catalogRecords", catalog.size()}, {"ommRecords", omms.size()}, {"ocmRecords", ocms.size()}, {"mnvRecords", mnvs.size()}, {"selected", counts_selected}, {"stale", counts_stale},
-                  {"noProduct", counts_no_product}, {"unmeasured", counts_unmeasured}, {"withoutOcm", counts_without_ocm}, {"maneuverable", counts_maneuverable}, {"maneuverEvents", counts_events},
-                  {"mergedEvents", counts_merged}, {"unlinked", unlinked_counts}, {"refused", refused.size()}}},
-      {"identity", identity_report},
-      {"objects", objects},
-      {"unlinked", unlinked},
-      {"refused", refused_rows}};
-  const std::string dumped = report.dump();
+  for (size_t i = 0; i < refused.size() && i < 1000; ++i) {
+    auto row = std::make_unique<XMTUnplacedRecordT>();
+    row->KIND = refused[i].record; row->ORDINAL = static_cast<uint32_t>(refused[i].ordinal); row->REASON = refused[i].reason;
+    report.REFUSED.push_back(std::move(row));
+  }
+  report.AS_OF_MS = ms_of(as_of);
+  report.SELECTION = selection_policy_table(selection);
+  report.MANEUVERS = maneuver_policy_table(maneuvers);
+  report.CATALOG_RECORDS = static_cast<uint32_t>(catalog.size());
+  report.OMM_RECORDS = static_cast<uint32_t>(omms.size());
+  report.OCM_RECORDS = static_cast<uint32_t>(ocms.size());
+  report.MNV_RECORDS = static_cast<uint32_t>(mnvs.size());
+  report.SELECTED_COUNT = static_cast<uint32_t>(counts_selected);
+  report.STALE_COUNT = static_cast<uint32_t>(counts_stale);
+  report.NO_PRODUCT_COUNT = static_cast<uint32_t>(counts_no_product);
+  report.UNMEASURED_COUNT = static_cast<uint32_t>(counts_unmeasured);
+  report.WITHOUT_OCM_COUNT = static_cast<uint32_t>(counts_without_ocm);
+  report.MANEUVERABLE_COUNT = static_cast<uint32_t>(counts_maneuverable);
+  report.MANEUVER_EVENT_COUNT = static_cast<uint32_t>(counts_events);
+  report.MERGED_EVENT_COUNT = static_cast<uint32_t>(counts_merged);
+  for (const auto& [reason, count] : unlinked_counts) {
+    auto c = std::make_unique<XMTReasonCountT>();
+    c->REASON = reason; c->COUNT = static_cast<uint32_t>(count);
+    report.UNLINKED_COUNTS.push_back(std::move(c));
+  }
+  report.REFUSED_COUNT = static_cast<uint32_t>(refused.size());
+  report.IDENTITY = std::move(identity_report);
   auto push = [](const char* port, const char* schema, const char* identifier, const char* root, const std::vector<uint8_t>& data) {
     return data.empty() || plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data.data(), static_cast<uint32_t>(data.size())) >= 0;
   };
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(dumped.data()), static_cast<uint32_t>(dumped.size())) < 0) return 1;
+  if (push_report(result)) return 1;
   if (!push("catalog", "CAT.fbs", "$CAT", "CAT", catalog_out) || !push("omm", "OMM.fbs", "$OMM", "OMM", omm_out) || !push("ocm", "OCM.fbs", "$OCM", "OCM", ocm_out) ||
       !push("mnv", "MNV.fbs", "$MNV", "MNV", mnv_out)) return 1;
   return 0;

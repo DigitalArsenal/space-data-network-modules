@@ -13,9 +13,17 @@ import { generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
-// The SDS headers are generated from the pinned spacedatastandards.org package, every family the module reads or
-// writes at one release, with internal linkage (scripts/lib/sds-cpp-headers.mjs).
-const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV'], import.meta.url);
+// The SDS headers are generated from the standards' schema files, every family the module reads or writes at one
+// release, with internal linkage (scripts/lib/sds-cpp-headers.mjs). $XMT (with the $OIL, $CVR, $MNV and $PRW it
+// includes) carries the recipes, requests and reports; SPACE_DATA_STANDARDS_ROOT names the standards tree that holds it.
+const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV', 'XMT'], import.meta.url);
+const standards = process.env.SPACE_DATA_STANDARDS_ROOT;
+// The $XMT JavaScript binding (from the standards' TypeScript) for the editor and the tests: dist/sds/xmt.mjs.
+const xmtPath = path.join(root, 'dist/sds/xmt.mjs');
+await build({
+  stdin: { contents: "export * from './XMT/main.ts';", resolveDir: path.join(standards, 'lib/ts'), sourcefile: 'xmt-entry.ts', loader: 'ts' },
+  bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', outfile: xmtPath, external: ['flatbuffers'], logLevel: 'warning',
+});
 const headers = [sds.header];
 headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/sha256.hpp'),'utf8'));
 headers.push(await fs.readFile(path.join(repo,'common/sds_cid.hpp'),'utf8'));

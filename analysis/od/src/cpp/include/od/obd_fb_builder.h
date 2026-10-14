@@ -33,6 +33,13 @@ std::vector<uint8_t> build_obd_flatbuffer(const SGP4Elements& el,
                                           double fit_span_days,
                                           const std::string& method_source = "SDN-OD");
 
+/// The reference element set (a third-party GP set supplied in CONFIG) scored by the SAME SGP4 over the SAME fit
+/// points, as its own $OBD: WRMS = the reference position RMS (km), METHOD GENERAL_PERTURBATIONS, METHOD_SOURCE
+/// "reference", EFFECTIVE_FROM = the reference epoch, NUM_ITERATIONS 0 (the set is scored, not fitted).
+std::vector<uint8_t> build_reference_obd_flatbuffer(const SGP4Elements& fitted,
+                                                    const SGP4Elements& reference,
+                                                    double fit_span_days);
+
 }  // namespace od
 
 #endif  // OD_OBD_FB_BUILDER_H

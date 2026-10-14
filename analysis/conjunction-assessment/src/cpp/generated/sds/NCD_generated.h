@@ -78,6 +78,34 @@ enum class ncdContainerFormat : uint8_t {
   CCSDS_TDM_KVN = 11,
   /// CCSDS Tracking Data Message, XML.
   CCSDS_TDM_XML = 12,
+  /// CCSDS Orbit Mean-Elements Message, keyword-value notation.
+  CCSDS_OMM_KVN = 13,
+  /// CCSDS Orbit Mean-Elements Message, XML.
+  CCSDS_OMM_XML = 14,
+  /// CCSDS Orbit Parameter Message, keyword-value notation.
+  CCSDS_OPM_KVN = 15,
+  /// CCSDS Orbit Parameter Message, XML.
+  CCSDS_OPM_XML = 16,
+  /// CCSDS Orbit Comprehensive Message, keyword-value notation.
+  CCSDS_OCM_KVN = 17,
+  /// CCSDS Orbit Comprehensive Message, XML.
+  CCSDS_OCM_XML = 18,
+  /// CCSDS Conjunction Data Message, keyword-value notation.
+  CCSDS_CDM_KVN = 19,
+  /// CCSDS Conjunction Data Message, XML.
+  CCSDS_CDM_XML = 20,
+  /// CCSDS Attitude Parameter Message, keyword-value notation.
+  CCSDS_APM_KVN = 21,
+  /// CCSDS Attitude Parameter Message, XML.
+  CCSDS_APM_XML = 22,
+  /// CCSDS Attitude Comprehensive Message, keyword-value notation.
+  CCSDS_ACM_KVN = 23,
+  /// CCSDS Attitude Comprehensive Message, XML.
+  CCSDS_ACM_XML = 24,
+  /// CCSDS Reentry Data Message, keyword-value notation.
+  CCSDS_RDM_KVN = 25,
+  /// CCSDS Reentry Data Message, XML.
+  CCSDS_RDM_XML = 26,
   /// A container outside this roster. PROVIDER_DEFINED_FORMAT_NAME states
   /// which; a producer never reuses a neighbouring member instead.
   PROVIDER_DEFINED = 255,
@@ -85,7 +113,7 @@ enum class ncdContainerFormat : uint8_t {
   MAX = PROVIDER_DEFINED
 };
 
-inline const ncdContainerFormat (&EnumValuesncdContainerFormat())[14] {
+inline const ncdContainerFormat (&EnumValuesncdContainerFormat())[28] {
   static const ncdContainerFormat values[] = {
     ncdContainerFormat::UNSPECIFIED,
     ncdContainerFormat::SPK_DAF,
@@ -100,6 +128,20 @@ inline const ncdContainerFormat (&EnumValuesncdContainerFormat())[14] {
     ncdContainerFormat::CCSDS_AEM_XML,
     ncdContainerFormat::CCSDS_TDM_KVN,
     ncdContainerFormat::CCSDS_TDM_XML,
+    ncdContainerFormat::CCSDS_OMM_KVN,
+    ncdContainerFormat::CCSDS_OMM_XML,
+    ncdContainerFormat::CCSDS_OPM_KVN,
+    ncdContainerFormat::CCSDS_OPM_XML,
+    ncdContainerFormat::CCSDS_OCM_KVN,
+    ncdContainerFormat::CCSDS_OCM_XML,
+    ncdContainerFormat::CCSDS_CDM_KVN,
+    ncdContainerFormat::CCSDS_CDM_XML,
+    ncdContainerFormat::CCSDS_APM_KVN,
+    ncdContainerFormat::CCSDS_APM_XML,
+    ncdContainerFormat::CCSDS_ACM_KVN,
+    ncdContainerFormat::CCSDS_ACM_XML,
+    ncdContainerFormat::CCSDS_RDM_KVN,
+    ncdContainerFormat::CCSDS_RDM_XML,
     ncdContainerFormat::PROVIDER_DEFINED
   };
   return values;
@@ -120,6 +162,20 @@ inline const char *EnumNamencdContainerFormat(ncdContainerFormat e) {
     case ncdContainerFormat::CCSDS_AEM_XML: return "CCSDS_AEM_XML";
     case ncdContainerFormat::CCSDS_TDM_KVN: return "CCSDS_TDM_KVN";
     case ncdContainerFormat::CCSDS_TDM_XML: return "CCSDS_TDM_XML";
+    case ncdContainerFormat::CCSDS_OMM_KVN: return "CCSDS_OMM_KVN";
+    case ncdContainerFormat::CCSDS_OMM_XML: return "CCSDS_OMM_XML";
+    case ncdContainerFormat::CCSDS_OPM_KVN: return "CCSDS_OPM_KVN";
+    case ncdContainerFormat::CCSDS_OPM_XML: return "CCSDS_OPM_XML";
+    case ncdContainerFormat::CCSDS_OCM_KVN: return "CCSDS_OCM_KVN";
+    case ncdContainerFormat::CCSDS_OCM_XML: return "CCSDS_OCM_XML";
+    case ncdContainerFormat::CCSDS_CDM_KVN: return "CCSDS_CDM_KVN";
+    case ncdContainerFormat::CCSDS_CDM_XML: return "CCSDS_CDM_XML";
+    case ncdContainerFormat::CCSDS_APM_KVN: return "CCSDS_APM_KVN";
+    case ncdContainerFormat::CCSDS_APM_XML: return "CCSDS_APM_XML";
+    case ncdContainerFormat::CCSDS_ACM_KVN: return "CCSDS_ACM_KVN";
+    case ncdContainerFormat::CCSDS_ACM_XML: return "CCSDS_ACM_XML";
+    case ncdContainerFormat::CCSDS_RDM_KVN: return "CCSDS_RDM_KVN";
+    case ncdContainerFormat::CCSDS_RDM_XML: return "CCSDS_RDM_XML";
     case ncdContainerFormat::PROVIDER_DEFINED: return "PROVIDER_DEFINED";
     default: return "";
   }

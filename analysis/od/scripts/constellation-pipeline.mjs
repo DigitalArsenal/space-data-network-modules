@@ -614,33 +614,23 @@ const PREPARERS = { glonass: prepareGlonass, cpf: prepareCpf, intelsat: prepareI
 
 // ---------------------------------------------------------------- fit worker
 if (!isMainThread) {
-  const { assertSuccessfulResponse, createStandaloneHarnessOrSkip } = await import(
-    "../../../tests/lib/isomorphicHarness.mjs"
-  );
-  const harness = await createStandaloneHarnessOrSkip("browser", WASM_PATH);
+  const { createFitPoolOrSkip, createFitRequest, fitRecordFromResponse } = await import("../tests/fit_harness.mjs");
+  const harness = await createFitPoolOrSkip("browser", WASM_PATH);
   if (!harness) {
     parentPort.postMessage({ kind: "fatal", error: "no standalone runtime available" });
     process.exit(1);
   }
   const { inputFormat, dataSource } = workerData;
-  const optionBytes = new TextEncoder().encode(JSON.stringify({ inputFormat, dataSource }));
   parentPort.on("message", async (msg) => {
     if (msg.kind === "close") {
-      await harness.close?.();
+      await harness.destroy();
       process.exit(0);
     }
     const started = performance.now();
     try {
       const payload = fs.readFileSync(msg.filePath);
-      const response = await harness.invoke({
-        methodId: "fit",
-        inputs: [
-          { portId: "meme", payload },
-          { portId: "options", payload: optionBytes },
-        ],
-      });
-      const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
-      const fit = JSON.parse(new TextDecoder().decode(bytes));
+      // The text ephemeris as a $FIL, the options as node CONFIG; the fit read from its $OMM / $OBD records.
+      const fit = fitRecordFromResponse(await harness.invoke(createFitRequest(payload, { inputFormat, dataSource })));
       parentPort.postMessage({ kind: "fit", file: msg.file, ms: performance.now() - started, fit });
     } catch (error) {
       parentPort.postMessage({

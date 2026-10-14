@@ -9,6 +9,9 @@ import {
   ASOF, MNV, OCM, OMM, catRecord, cidOf, frames, integrate, labelOf, mnvRecord, ocmEpoch, ocmRecord, ommEpoch, ommRecord, records, reportEpoch, sha256, stream, unpackCat, unpackMnv,
   unpackOmm,
 } from './integrator-fixtures.mjs';
+import { x } from './xmt-recipes.mjs';
+
+const { xmtSelectionReason: REASON, xmtCandidateStanding: STANDING, xmtObjectOutcome: OUTCOME, xmtPairVerdict: VERDICT, xmtRecordKind: KIND, xmtCovarianceOrigin: ORIGIN } = x;
 
 const [S1, S2, S3] = ['space-track-gp', 'celestrak-gp', 'esa-ura'];
 const A = { norad: 90001, cospar: '2026-901A', name: 'ALPHA' };
@@ -17,11 +20,10 @@ const C = { norad: 90003, cospar: '2026-903A', name: 'CHARLIE' };
 const catalogOf = (...objects) => stream(objects.map((o) => catRecord(o)));
 const row = (source, regime, median, samples, product = 'sgp4') => ({ source, product, regime, horizonDays: 1, median3dKm: median, samples });
 const policy = (rows, extra = {}) => ({ horizonDays: 1, minSamples: 30, sourceOrder: [S1, S2, S3], table: rows, ...extra });
-const recipeOf = (selection, extra = {}) => ({ version: 1, asOf: ASOF, selection, maneuvers: { timeToleranceSeconds: 3600, deltaVToleranceKmS: 0.0005 }, ...extra });
+const recipeOf = (selection, extra = {}) => ({ asOf: ASOF, selection, maneuvers: { timeToleranceSeconds: 3600, deltaVToleranceKmS: 0.0005 }, ...extra });
 const omm = (source, who, daysBefore, extra = {}) => ommRecord({ source, ...who, epoch: ommEpoch(daysBefore), label: labelOf(extra.regime ?? 'LEO-L'), ...extra });
 const mnv = (source, who, daysBefore, extra = {}) => mnvRecord({ source, id: `${source}-${daysBefore}`, ...who, at: ocmEpoch(daysBefore), ...extra });
-const names = (r) => r.report.objects.map((o) => o.name);
-const objectOf = (r, name) => r.report.objects.find((o) => o.name === name);
+const objectOf = (r, name) => r.report.OBJECTS.find((o) => o.NAME === name);
 const sources = (omms) => omms.map((bytes) => unpackOmm(bytes).PROVENANCE.SOURCE_ID);
 const run = async (recipe, { catalog, omms = [], ocms = [], mnvs = [], ephemerides = [] }) => integrate([
   frames.recipe(recipe), frames.catalog(catalog),
@@ -37,38 +39,40 @@ test('the source with the lowest measured median error is chosen per object and 
   // ALPHA is LEO-L: CelesTrak's 0.5 km beats Space-Track's 0.8 km; ESA's 0.2 km rests on 10 samples and is not evidence. BRAVO is LEO-H: Space-Track's 0.3 km wins.
   assert.deepEqual(sources(records(r.omm)), [S2, S1]);
   assert.deepEqual(records(r.omm), [s2a, s1b], 'the selected sets are the sources\' own bytes, in catalog order');
-  const alpha = objectOf(r, 'ALPHA').products[0];
-  assert.equal(objectOf(r, 'ALPHA').regime, 'LEO-L');
-  assert.deepEqual([alpha.product, alpha.selected.source, alpha.selected.reason, alpha.selected.tie], ['sgp4', S2, 'lowest-measured-median', false]);
-  assert.deepEqual(alpha.selected.measured, { median3dKm: 0.5, samples: 100, regime: 'LEO-L', horizonDays: 1 });
-  assert.deepEqual(alpha.candidates.map((c) => [c.source, c.status, c.measured, c.median3dKm, c.samples]),
-    [[S1, 'not-selected', true, 0.8, 100], [S2, 'selected', true, 0.5, 100], [S3, 'not-selected', false, 0.2, 10]]);
-  assert.equal(alpha.selected.omm.sha256, sha256(s2a));
-  assert.equal(alpha.selected.omm.cid, cidOf(s2a));
-  assert.equal(objectOf(r, 'BRAVO').products[0].selected.source, S1);
-  assert.equal(objectOf(r, 'CHARLIE').status, 'no-product');
-  assert.deepEqual([r.report.counts.selected, r.report.counts.noProduct, r.report.counts.stale, r.report.counts.unmeasured], [2, 1, 0, 0]);
+  const alpha = objectOf(r, 'ALPHA').PRODUCTS[0];
+  assert.equal(objectOf(r, 'ALPHA').REGIME, 'LEO-L');
+  assert.deepEqual([alpha.PRODUCT, alpha.SELECTED.SOURCE_ID, alpha.SELECTED.REASON, alpha.SELECTED.TIE], ['sgp4', S2, REASON.LowestMeasuredMedian, false]);
+  const m = alpha.SELECTED.MEASURED;
+  assert.deepEqual([m.SOURCE_ID, m.PRODUCT, m.MEDIAN_3D_KM, m.SAMPLES, m.REGIME, m.HORIZON_DAYS], [S2, 'sgp4', 0.5, 100, 'LEO-L', 1]);
+  assert.deepEqual(alpha.CANDIDATES.map((c) => [c.SOURCE_ID, c.STANDING, c.MEASURED, c.MEDIAN_3D_KM, c.SAMPLES]),
+    [[S1, STANDING.NotSelected, true, 0.8, 100], [S2, STANDING.Selected, true, 0.5, 100], [S3, STANDING.NotSelected, false, 0.2, 10]]);
+  assert.equal(alpha.SELECTED.OMM.SHA256, sha256(s2a));
+  assert.equal(alpha.SELECTED.OMM.CID, cidOf(s2a));
+  assert.equal(alpha.CANDIDATES[1].RECORD.SHA256, sha256(s2a));
+  assert.equal(objectOf(r, 'BRAVO').PRODUCTS[0].SELECTED.SOURCE_ID, S1);
+  assert.equal(objectOf(r, 'CHARLIE').OUTCOME, OUTCOME.NoProduct);
+  assert.deepEqual([r.report.SELECTED_COUNT, r.report.NO_PRODUCT_COUNT, r.report.STALE_COUNT, r.report.UNMEASURED_COUNT], [2, 1, 0, 0]);
 });
 
 test('with nothing measured the recipe\'s source order decides and the report says so; an unlisted source follows the listed ones', async () => {
   const sets = [omm(S2, A, 1), omm(S1, A, 2), omm(S3, A, 0.5)];
   const r = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100)], { horizonDays: 7, sourceOrder: [S3, S1] })), { catalog: catalogOf(A), omms: sets });
   assert.equal(r.statusCode, 0, r.message);
-  const chosen = objectOf(r, 'ALPHA').products[0].selected;
-  assert.deepEqual([chosen.source, chosen.reason], [S3, 'unmeasured-fallback-order']);
-  assert.equal(r.report.counts.unmeasured, 1);
+  const chosen = objectOf(r, 'ALPHA').PRODUCTS[0].SELECTED;
+  assert.deepEqual([chosen.SOURCE_ID, chosen.REASON], [S3, REASON.UnmeasuredFallbackOrder]);
+  assert.equal(r.report.UNMEASURED_COUNT, 1);
   const r2 = await run(recipeOf(policy([], { sourceOrder: [S1] })), { catalog: catalogOf(A), omms: [omm(S3, A, 1), omm(S2, A, 1)] });
-  assert.equal(objectOf(r2, 'ALPHA').products[0].selected.source, S2, 'neither is listed: the source ID decides');
+  assert.equal(objectOf(r2, 'ALPHA').PRODUCTS[0].SELECTED.SOURCE_ID, S2, 'neither is listed: the source ID decides');
 });
 
 test('a source\'s newest set at or before asOf stands for it; a set after asOf is never chosen; an equal median goes to the earlier source and the report marks the tie', async () => {
   const older = omm(S2, A, 3), newest = omm(S2, A, 1), future = omm(S2, A, -1), s1 = omm(S1, A, 1.5);
   const r = await run(recipeOf(policy([row(S1, 'LEO-L', 0.5, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [older, future, newest, s1] });
   assert.equal(r.statusCode, 0, r.message);
-  const alpha = objectOf(r, 'ALPHA').products[0];
-  assert.equal(alpha.selected.source, S1, 'equal medians: the source listed first');
-  assert.equal(alpha.selected.tie, true);
-  assert.deepEqual(alpha.candidates.map((c) => [c.source, c.epoch]), [[S1, reportEpoch(1.5)], [S2, reportEpoch(1)]]);
+  const alpha = objectOf(r, 'ALPHA').PRODUCTS[0];
+  assert.equal(alpha.SELECTED.SOURCE_ID, S1, 'equal medians: the source listed first');
+  assert.equal(alpha.SELECTED.TIE, true);
+  assert.deepEqual(alpha.CANDIDATES.map((c) => [c.SOURCE_ID, c.EPOCH_MS]), [[S1, reportEpoch(1.5)], [S2, reportEpoch(1)]]);
   const r2 = await run(recipeOf(policy([row(S1, 'LEO-L', 0.9, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [older, future, newest, s1] });
   assert.deepEqual(records(r2.omm), [newest], 'the source\'s newest set, not its older or its future one');
 });
@@ -77,10 +81,10 @@ test('a set older than maxAgeDays is too old, and the better-measured source los
   const fresh = omm(S1, A, 1), old = omm(S2, A, 5);
   const table = [row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)];
   const r = await run(recipeOf(policy(table, { maxAgeDays: 3 })), { catalog: catalogOf(A), omms: [fresh, old] });
-  const alpha = objectOf(r, 'ALPHA').products[0];
-  assert.equal(alpha.selected.source, S1);
-  assert.equal(alpha.candidates.find((c) => c.source === S2).status, 'too-old');
-  assert.equal(Math.round(alpha.candidates.find((c) => c.source === S2).ageDays * 1000) / 1000, 5);
+  const alpha = objectOf(r, 'ALPHA').PRODUCTS[0];
+  assert.equal(alpha.SELECTED.SOURCE_ID, S1);
+  assert.equal(alpha.CANDIDATES.find((c) => c.SOURCE_ID === S2).STANDING, STANDING.TooOld);
+  assert.equal(Math.round(alpha.CANDIDATES.find((c) => c.SOURCE_ID === S2).AGE_DAYS * 1000) / 1000, 5);
   assert.deepEqual(records((await run(recipeOf(policy(table)), { catalog: catalogOf(A), omms: [fresh, old] })).omm), [old], 'without the limit the lower median wins');
 });
 
@@ -90,7 +94,7 @@ test('SGP4 and SGP4-XP sets are chosen separately, each by its own measured rows
   const table = [row(S1, 'LEO-L', 0.4, 50), row(S2, 'LEO-L', 0.6, 50), row(S1, 'LEO-L', 0.3, 50, 'sgp4xp'), row(S2, 'LEO-L', 0.1, 50, 'sgp4xp')];
   const r = await run(recipeOf(policy(table)), { catalog: catalogOf(A), omms: sets });
   assert.equal(r.statusCode, 0, r.message);
-  assert.deepEqual(objectOf(r, 'ALPHA').products.map((p) => [p.product, p.selected.source]), [['sgp4', S1], ['sgp4xp', S2]]);
+  assert.deepEqual(objectOf(r, 'ALPHA').PRODUCTS.map((p) => [p.PRODUCT, p.SELECTED.SOURCE_ID]), [['sgp4', S1], ['sgp4xp', S2]]);
   assert.deepEqual(records(r.omm).map((b) => [unpackOmm(b).MEAN_ELEMENT_THEORY, sources([b])[0]]), [[OMM.meanElementSource.SGP4, S1], [OMM.meanElementSource.SGP4XP, S2]]);
 });
 
@@ -101,9 +105,9 @@ test('a maneuver after a set\'s epoch retires it, however well its source measur
   const r = await run(recipeOf(policy(table)), { catalog: catalogOf(A, C), omms: [s1, s2, s3, omm(S1, A, 1)], mnvs: [burn] });
   assert.equal(r.statusCode, 0, r.message);
   const charlie = objectOf(r, 'CHARLIE');
-  assert.equal(charlie.products[0].selected.source, S1, 'ESA\'s 0.1 km rests on 10 samples, CelesTrak\'s set predates the burn');
-  assert.deepEqual(charlie.products[0].candidates.map((c) => [c.source, c.status]), [[S1, 'selected'], [S2, 'retired'], [S3, 'not-selected']]);
-  assert.equal(charlie.products[0].candidates.find((c) => c.source === S2).retiredBy, reportEpoch(1.5));
+  assert.equal(charlie.PRODUCTS[0].SELECTED.SOURCE_ID, S1, 'ESA\'s 0.1 km rests on 10 samples, CelesTrak\'s set predates the burn');
+  assert.deepEqual(charlie.PRODUCTS[0].CANDIDATES.map((c) => [c.SOURCE_ID, c.STANDING]), [[S1, STANDING.Selected], [S2, STANDING.Retired], [S3, STANDING.NotSelected]]);
+  assert.equal(charlie.PRODUCTS[0].CANDIDATES.find((c) => c.SOURCE_ID === S2).RETIRED_BY_MS, reportEpoch(1.5));
   assert.deepEqual(records(r.omm).map((b) => sources([b])[0]), [S1, S1]);
   const [alphaCat, charlieCat] = records(r.catalog);
   assert.deepEqual(alphaCat, catRecord(A), 'an object with no maneuver keeps its record byte for byte');
@@ -111,16 +115,16 @@ test('a maneuver after a set\'s epoch retires it, however well its source measur
   assert.equal(unpackCat(charlieCat).OBJECT_NAME, 'CHARLIE');
   assert.equal(unpackCat(charlieCat).OBJECT_ID, '2026-903A');
   assert.equal(unpackCat(charlieCat).NORAD_CAT_ID, 90003);
-  assert.deepEqual([charlie.maneuverable, charlie.maneuverableFromHistory, r.report.counts.maneuverable], [true, true, 1]);
+  assert.deepEqual([charlie.MANEUVERABLE, charlie.MANEUVERABLE_FROM_HISTORY, r.report.MANEUVERABLE_COUNT], [true, true, 1]);
 });
 
 test('an object whose every set predates a maneuver has no product and is marked stale; a planned or future burn retires nothing', async () => {
   const before = omm(S2, C, 2);
   const detected = await run(recipeOf(policy([])), { catalog: catalogOf(C), omms: [before], mnvs: [mnv(S1, C, 1.5, { dv: 0.001 })] });
   assert.equal(detected.omm.length, 0);
-  assert.equal(objectOf(detected, 'CHARLIE').status, 'stale');
+  assert.equal(objectOf(detected, 'CHARLIE').OUTCOME, OUTCOME.Stale);
   assert.equal(unpackCat(records(detected.catalog)[0]).MANEUVERABLE, true);
-  assert.equal(detected.report.counts.stale, 1);
+  assert.equal(detected.report.STALE_COUNT, 1);
   for (const extra of [{ status: MNV.maneuverStatus.PLANNED }, { status: MNV.maneuverStatus.CANCELLED }]) {
     const r = await run(recipeOf(policy([])), { catalog: catalogOf(C), omms: [before], mnvs: [mnv(S1, C, 1.5, { dv: 0.001, ...extra })] });
     assert.deepEqual(records(r.omm), [before], 'a plan is not a maneuver');
@@ -148,10 +152,11 @@ test('two sources\' reports of one burn are one event that keeps each source\'s 
   assert.deepEqual(events[0].TAGS.filter((t) => t.startsWith('member:') || t.startsWith('merged:')), [`member:${S1}=DETECTED`, `member:${S2}=CONFIRMED`, 'merged:2']);
   assert.equal(events[0].PROVENANCE.SOURCE_ID, S2, 'and keeps that member\'s provenance');
   assert.deepEqual(records(r.mnv)[1], later, 'an event of one report is that record byte for byte');
-  const merged = objectOf(r, 'CHARLIE').maneuvers[0];
-  assert.deepEqual(merged.members.map((m) => [m.source, m.status]), [[S1, 'DETECTED'], [S2, 'CONFIRMED']]);
-  assert.equal(merged.cid, cidOf(records(r.mnv)[0]));
-  assert.equal(r.report.counts.mergedEvents, 1);
+  const merged = objectOf(r, 'CHARLIE').MANEUVERS[0];
+  assert.deepEqual(merged.MEMBERS.map((m) => [m.SOURCE_ID, m.STATUS]), [[S1, MNV.maneuverStatus.DETECTED], [S2, MNV.maneuverStatus.CONFIRMED]]);
+  assert.deepEqual([merged.STATUS, merged.TIME_MS, merged.DELTA_V_KM_S], [MNV.maneuverStatus.CONFIRMED, reportEpoch(1.5), 0.0011]);
+  assert.deepEqual([merged.RECORD.KIND, merged.RECORD.CID, merged.RECORD.SHA256], [KIND.Mnv, cidOf(records(r.mnv)[0]), sha256(records(r.mnv)[0])]);
+  assert.equal(r.report.MERGED_EVENT_COUNT, 1);
 
   // Past the delta-v tolerance the reports are two events; so are two reports of one source.
   const apart = await run(recipeOf(policy([])), { catalog: catalogOf(C), mnvs: [detected, mnv(S2, C, 1.5, { dv: 0.003 })] });
@@ -172,18 +177,19 @@ test('the selected product\'s covariance and its label come out with it, byte fo
   const r = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [s1, s2], ocms: [o1, o2] });
   assert.equal(r.statusCode, 0, r.message);
   assert.deepEqual(records(r.ocm), [o2], 'the OCM of the chosen source at the chosen epoch, and only it');
-  const selected = objectOf(r, 'ALPHA').products[0].selected;
-  assert.equal(selected.covariance.from, 'ocm');
-  assert.equal(selected.covariance.calibration, 'Calibrated');
-  assert.equal(selected.covariance.label.regime, 'LEO-L');
-  assert.equal(selected.covariance.label.calibration, 'Calibrated');
-  assert.equal(selected.covariance.label.meanD2Over3, 1.73);
-  assert.equal(selected.ocm.sha256, sha256(o2));
+  const selected = objectOf(r, 'ALPHA').PRODUCTS[0].SELECTED;
+  assert.equal(selected.COVARIANCE_ORIGIN, ORIGIN.FromOcm);
+  assert.equal(selected.COVARIANCE.REGIME, 'LEO-L');
+  assert.equal(selected.COVARIANCE.CALIBRATION, OMM.covarianceCalibration.Calibrated);
+  assert.equal(selected.COVARIANCE.MEAN_D2_OVER_3, 1.73);
+  assert.equal(selected.COVARIANCE.MODEL_ID, 'e14-s3-0e678383cfbd');
+  assert.equal(selected.OCM.SHA256, sha256(o2));
   // A chosen set whose source gave no OCM at that epoch goes out alone, and the report reads its label from the set.
   const alone = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100), row(S2, 'LEO-L', 0.5, 100)])), { catalog: catalogOf(A), omms: [s1, s2], ocms: [o1] });
   assert.equal(alone.ocm.length, 0);
-  assert.equal(objectOf(alone, 'ALPHA').products[0].selected.covariance.from, 'omm');
-  assert.equal(alone.report.counts.withoutOcm, 1);
+  assert.equal(objectOf(alone, 'ALPHA').PRODUCTS[0].SELECTED.COVARIANCE_ORIGIN, ORIGIN.FromOmm);
+  assert.equal(objectOf(alone, 'ALPHA').PRODUCTS[0].SELECTED.OCM, null);
+  assert.equal(alone.report.WITHOUT_OCM_COUNT, 1);
 });
 
 // ── identity ──
@@ -191,59 +197,62 @@ const candidate = (id, provider, nativeId) => ({ id, provider, nativeId, recordI
 const thresholds = { positionToleranceKm: 1, velocityToleranceKmS: 0.01, finiteDifferenceToleranceKmS: 1e-8, minimumSpanSeconds: 8 };
 const link = (native, reference, object) => ({ native, reference, object, evidence: { source: 'datefirst', recordId: 'crosswalk-edition' } });
 const vimpelSet = (daysBefore = 0.2) => ommRecord({ source: 'vimpel', native: 'V-100', name: 'ALPHA', epoch: ommEpoch(daysBefore), label: labelOf('LEO-L') });
-const identityRun = (identity, ephemerides, extra = {}) => run(recipeOf(policy([row('vimpel', 'LEO-L', 0.1, 50), row(S1, 'LEO-L', 0.8, 100)]), { identity: { version: 1, ...thresholds, ...identity }, ...extra }),
+const identityRun = (identity, ephemerides, extra = {}) => run(recipeOf(policy([row('vimpel', 'LEO-L', 0.1, 50), row(S1, 'LEO-L', 0.8, 100)]), { identity: { ...thresholds, ...identity }, ...extra }),
   { catalog: catalogOf(A, B), omms: [vimpelSet(), omm(S1, A, 1)], ephemerides });
 const vimpelA = { candidates: [candidate('v', 'vimpel', 'V-100'), candidate('r', 'space-track', '90001')], pairs: [link('v', 'r', { norad: 90001 })] };
 
 test('a source\'s own name joins an object only through a link its trajectories supported', async () => {
   const compatible = await identityRun(vimpelA, [oem(), oem()]);
   assert.equal(compatible.statusCode, 0, compatible.message);
-  assert.deepEqual([compatible.report.identity.matches[0].status, compatible.report.identity.matches[0].bound], ['compatible', true]);
-  assert.deepEqual(compatible.report.identity.matches[0].native, { source: 'vimpel', nativeId: 'V-100' });
-  const alpha = objectOf(compatible, 'ALPHA').products[0];
-  assert.equal(alpha.selected.source, 'vimpel', 'bound: its 0.1 km median now competes');
-  assert.deepEqual(alpha.candidates.map((c) => c.source), ['space-track-gp', 'vimpel']);
-  assert.deepEqual(compatible.report.counts.unlinked, {});
+  const pair = compatible.report.IDENTITY.PAIRS[0];
+  assert.deepEqual([pair.VERDICT, pair.BOUND, pair.OBJECT_KEY, pair.LINK.STATUS], [VERDICT.Compatible, true, 'norad:90001', x.oilLinkStatus.Bound]);
+  assert.deepEqual([pair.LINK.LEFT.NAMESPACE, pair.LINK.LEFT.ID], ['vimpel', 'V-100']);
+  assert.equal(pair.LINK.EVIDENCE.SOURCE, 'datefirst');
+  assert.equal(pair.MAX_POSITION_RESIDUAL_KM, 0);
+  const alpha = objectOf(compatible, 'ALPHA').PRODUCTS[0];
+  assert.equal(alpha.SELECTED.SOURCE_ID, 'vimpel', 'bound: its 0.1 km median now competes');
+  assert.deepEqual(alpha.CANDIDATES.map((c) => c.SOURCE_ID), ['space-track-gp', 'vimpel']);
+  assert.deepEqual(compatible.report.UNLINKED_COUNTS, []);
 
   // Trajectories that disagree, or cannot be compared, bind nothing: the set is reported unlinked and the others stand.
-  for (const [arcs, status] of [[[oem(), oem({ phase: Math.PI })], 'rejected'], [[oem(), oem({ step: 2 })], 'insufficient']]) {
+  for (const [arcs, status] of [[[oem(), oem({ phase: Math.PI })], VERDICT.Rejected], [[oem(), oem({ step: 2 })], VERDICT.Insufficient]]) {
     const r = await identityRun(vimpelA, arcs);
     assert.equal(r.statusCode, 0, r.message);
-    assert.deepEqual([r.report.identity.matches[0].status, r.report.identity.matches[0].bound], [status, false]);
-    assert.equal(objectOf(r, 'ALPHA').products[0].selected.source, S1);
-    assert.deepEqual(r.report.unlinked.map((u) => [u.record, u.source, u.reason]), [['omm', 'vimpel', 'unbound-native-identity']]);
+    assert.deepEqual([r.report.IDENTITY.PAIRS[0].VERDICT, r.report.IDENTITY.PAIRS[0].BOUND], [status, false]);
+    assert.equal(objectOf(r, 'ALPHA').PRODUCTS[0].SELECTED.SOURCE_ID, S1);
+    assert.deepEqual(r.report.UNLINKED.map((u) => [u.KIND, u.SOURCE_ID, u.NATIVE_ID, u.REASON]), [[KIND.Omm, 'vimpel', 'V-100', 'unbound-native-identity']]);
   }
 });
 
 test('a link may name its object by international designator', async () => {
   const r = await identityRun({ ...vimpelA, pairs: [link('v', 'r', { cospar: '2026-901A' })] }, [oem(), oem()]);
   assert.equal(r.statusCode, 0, r.message);
-  assert.deepEqual([r.report.identity.matches[0].object, r.report.identity.matches[0].bound], ['cospar:2026-901A', true]);
-  assert.equal(objectOf(r, 'ALPHA').products[0].selected.source, 'vimpel');
-  for (const object of [{}, { norad: 0 }, { cospar: 'ALPHA' }, { norad: 1.5 }]) {
+  assert.deepEqual([r.report.IDENTITY.PAIRS[0].OBJECT_KEY, r.report.IDENTITY.PAIRS[0].BOUND], ['cospar:2026-901A', true]);
+  assert.equal(objectOf(r, 'ALPHA').PRODUCTS[0].SELECTED.SOURCE_ID, 'vimpel');
+  for (const object of [{}, { norad: 0 }, { cospar: 'ALPHA' }]) {
     assert.notEqual((await identityRun({ ...vimpelA, pairs: [link('v', 'r', object)] }, [oem(), oem()])).statusCode, 0, JSON.stringify(object));
   }
 });
 
 test('a native name proposed for two objects, or two references that both pass, binds to nothing; so does an object the catalog lacks', async () => {
   const two = await identityRun({ candidates: [...vimpelA.candidates, candidate('r2', 'other-catalog', '90002')], pairs: [link('v', 'r', { norad: 90001 }), link('v', 'r2', { norad: 90002 })] }, [oem(), oem(), oem()]);
-  assert.deepEqual(two.report.identity.matches.map((m) => [m.status, m.bound]), [['ambiguous', false], ['ambiguous', false]]);
-  assert.equal(objectOf(two, 'ALPHA').products[0].selected.source, S1);
+  assert.deepEqual(two.report.IDENTITY.PAIRS.map((m) => [m.VERDICT, m.BOUND]), [[VERDICT.Ambiguous, false], [VERDICT.Ambiguous, false]]);
+  assert.equal(objectOf(two, 'ALPHA').PRODUCTS[0].SELECTED.SOURCE_ID, S1);
 
   const twin = await identityRun({ candidates: [...vimpelA.candidates, candidate('r2', 'space-track', '90009')], pairs: [link('v', 'r', { norad: 90001 }), link('v', 'r2', { norad: 90001 })] }, [oem(), oem(), oem()]);
-  assert.deepEqual(twin.report.identity.matches.map((m) => [m.status, m.bound]), [['ambiguous', false], ['ambiguous', false]], 'two references from one provider both pass');
+  assert.deepEqual(twin.report.IDENTITY.PAIRS.map((m) => [m.VERDICT, m.BOUND]), [[VERDICT.Ambiguous, false], [VERDICT.Ambiguous, false]], 'two references from one provider both pass');
 
   const missing = await identityRun({ ...vimpelA, pairs: [link('v', 'r', { norad: 99999 })] }, [oem(), oem()]);
-  assert.deepEqual([missing.report.identity.matches[0].status, missing.report.identity.matches[0].bound], ['compatible', false]);
-  assert.match(missing.report.identity.matches[0].reason, /not in the catalog/);
+  assert.deepEqual([missing.report.IDENTITY.PAIRS[0].VERDICT, missing.report.IDENTITY.PAIRS[0].BOUND], [VERDICT.Compatible, false]);
+  assert.match(missing.report.IDENTITY.PAIRS[0].REASON, /not in the catalog/);
 });
 
 test('a name never joins: the same object name without a link is unlinked, and so is a number the catalog does not hold', async () => {
   const r = await run(recipeOf(policy([row(S1, 'LEO-L', 0.8, 100)])), { catalog: catalogOf(A),
     omms: [ommRecord({ source: S2, native: 'X-1', name: 'ALPHA', epoch: ommEpoch(1), label: labelOf('LEO-L') }), ommRecord({ source: S3, norad: 12345, name: 'ALPHA', epoch: ommEpoch(1), label: labelOf('LEO-L') }), omm(S1, A, 1)] });
   assert.equal(r.statusCode, 0, r.message);
-  assert.deepEqual(r.report.unlinked.map((u) => [u.source, u.reason]), [[S2, 'unbound-native-identity'], [S3, 'not-in-catalog']]);
-  assert.deepEqual(r.report.counts.unlinked, { 'not-in-catalog': 1, 'unbound-native-identity': 1 });
+  assert.deepEqual(r.report.UNLINKED.map((u) => [u.SOURCE_ID, u.REASON]), [[S2, 'unbound-native-identity'], [S3, 'not-in-catalog']]);
+  assert.deepEqual(r.report.UNLINKED_COUNTS.map((c) => [c.REASON, c.COUNT]), [['not-in-catalog', 1], ['unbound-native-identity', 1]]);
   assert.deepEqual(records(r.omm).length, 1);
 });
 
@@ -254,7 +263,7 @@ test('an international designator joins a set that carries no NORAD number; a nu
   const crossed = ommRecord({ source: S2, norad: 90001, cospar: '2026-902A', epoch: ommEpoch(1), label: labelOf('LEO-L') });
   const c = await run(recipeOf(policy([])), { catalog: catalogOf(A, B), omms: [crossed] });
   assert.equal(c.omm.length, 0);
-  assert.deepEqual(c.report.unlinked.map((u) => u.reason), ['identity-conflict']);
+  assert.deepEqual(c.report.UNLINKED.map((u) => u.REASON), ['identity-conflict']);
 });
 
 // ── what is refused ──
@@ -264,8 +273,9 @@ test('a record that names no source or no object is refused and counted, never s
     mnvs: [mnvRecord({ id: 'nosource', norad: 90001, at: ocmEpoch(1.5), dv: 0.001 }), mnvRecord({ source: S1, id: 'noobject', at: ocmEpoch(1.5) })],
     ocms: [ocmRecord({ source: '', norad: 90001, epoch: ocmEpoch(1), label: labelOf('LEO-L') })] });
   assert.equal(r.statusCode, 0, r.message);
-  assert.deepEqual(r.report.refused.map((x) => [x.record, x.reason]).sort(), [['mnv', 'no-object-identity'], ['mnv', 'unattributed-product'], ['ocm', 'unattributed-product'], ['omm', 'no-object-identity'], ['omm', 'unattributed-product']]);
-  assert.equal(r.report.counts.refused, 5);
+  const kind = { [KIND.Omm]: 'omm', [KIND.Ocm]: 'ocm', [KIND.Mnv]: 'mnv' };
+  assert.deepEqual(r.report.REFUSED.map((u) => [kind[u.KIND], u.REASON]).sort(), [['mnv', 'no-object-identity'], ['mnv', 'unattributed-product'], ['ocm', 'unattributed-product'], ['omm', 'no-object-identity'], ['omm', 'unattributed-product']]);
+  assert.equal(r.report.REFUSED_COUNT, 5);
   assert.equal(r.mnv.length, 0);
   assert.deepEqual(records(r.omm).length, 1);
 });
@@ -275,11 +285,10 @@ test('a malformed recipe, catalog or product stream is refused whole, with a cod
   const catalog = catalogOf(A);
   const cases = [
     ['no asOf', { ...good, asOf: undefined }, catalog, 'invalid-integration-recipe'],
-    ['version 2', { ...good, version: 2 }, catalog, 'invalid-integration-recipe'],
     ['table without a horizon', recipeOf({ table: [row(S1, 'LEO-L', 1, 50)] }), catalog, 'invalid-integration-recipe'],
     ['a repeated table row', recipeOf(policy([row(S1, 'LEO-L', 1, 50), row(S1, 'LEO-L', 2, 50)])), catalog, 'invalid-integration-recipe'],
     ['a negative median', recipeOf(policy([row(S1, 'LEO-L', -1, 50)])), catalog, 'invalid-integration-recipe'],
-    ['an unknown status', recipeOf(policy([]), { maneuvers: { timeToleranceSeconds: 3600, retiringStatuses: ['BURNING'] } }), catalog, 'invalid-integration-recipe'],
+    ['an unknown status', recipeOf(policy([]), { maneuvers: { timeToleranceSeconds: 3600, retiringStatuses: [99] } }), catalog, 'invalid-integration-recipe'],
     ['a zero time tolerance', recipeOf(policy([]), { maneuvers: { timeToleranceSeconds: 0 } }), catalog, 'invalid-integration-recipe'],
     ['ephemerides without an identity section', good, catalog, null, [oem(), oem()]],
     ['a catalog that repeats an object', good, stream([catRecord(A), catRecord({ ...A, name: 'AGAIN' })]), 'invalid-integration-input'],
@@ -301,8 +310,9 @@ test('padding between records is read, the same inputs give the same bytes, and 
   const a = await integrate([frames.recipe(recipe), frames.catalog(catalogOf(A)), frames.omm(padded)]);
   const b = await run(recipe, { catalog: catalogOf(A), omms: sets });
   assert.equal(a.statusCode, 0, a.message);
-  assert.deepEqual([a.omm, a.catalog, JSON.stringify(a.report)], [b.omm, b.catalog, JSON.stringify(b.report)]);
+  assert.deepEqual([a.omm, a.catalog, a.reportBytes], [b.omm, b.catalog, b.reportBytes]);
   const empty = await integrate([frames.recipe(recipe), frames.catalog(Buffer.alloc(0))]);
   assert.equal(empty.statusCode, 0, empty.message);
-  assert.equal(empty.report.counts.catalogRecords, 0);
+  assert.equal(empty.report.CATALOG_RECORDS, 0);
+  assert.equal(empty.report.AS_OF_MS, BigInt(ASOF * 1000));
 });

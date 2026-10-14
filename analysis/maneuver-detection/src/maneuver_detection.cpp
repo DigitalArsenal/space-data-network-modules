@@ -4,17 +4,64 @@
 //                     or per-set trajectories ($OEM) -> $MNV DETECTED
 // compare_ephemerides ephemeris versions ($OEM) and planned maneuvers ($MNV)
 //                     -> $MNV EXECUTED / CANCELLED / UNKNOWN, version changes
-// score_detections    detected $MNV against truth $MNV -> metrics (JSON)
+// score_detections    detected $MNV against truth $MNV -> metrics
+//
+// Every report is one $MDE (src/mde.cpp); the propagation queries are one $PRW
+// WINDOW_REQUEST.
 namespace {
 
 using Objects = std::map<std::string, std::vector<Block>>;
 
 const char* portOf(const plugin_input_frame_t* frame) { return frame && frame->port_id ? frame->port_id : ""; }
 
-bool readJsonFrame(const plugin_input_frame_t* frame, Json& out, const char* what) {
-  const std::string text(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-  out = Json::parse(text, nullptr, false);
-  if (out.is_discarded()) return failWith(std::string("The ") + what + " frame is not valid JSON.");
+// The node's configuration (plugin.getConfig: one ModuleConfig, MCFG) as the
+// option object the option readers check, key by key: a String is a string, a
+// Number a number, a Bool a boolean, a list an array and a TableList an array
+// of objects. Nothing travels as JSON; the readers' validation is unchanged.
+Json tableJson(const sdm_piv::ConfigEntries* entries) {
+  Json out = Json::object();
+  if (!entries) return out;
+  for (const auto* e : *entries) {
+    if (!e->KEY()) continue;
+    const std::string key = e->KEY()->str();
+    switch (e->KIND()) {
+      case sdn::runtime::configValueKind_String: out[key] = e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string(); break;
+      case sdn::runtime::configValueKind_Number: out[key] = e->NUMBER_VALUE(); break;
+      case sdn::runtime::configValueKind_Bool: out[key] = e->BOOL_VALUE(); break;
+      case sdn::runtime::configValueKind_StringList: {
+        Json list = Json::array();
+        if (e->STRINGS()) for (const auto* s : *e->STRINGS()) list.push_back(s ? s->str() : std::string());
+        out[key] = list;
+        break;
+      }
+      case sdn::runtime::configValueKind_NumberList: {
+        Json list = Json::array();
+        if (e->NUMBERS()) for (double x : *e->NUMBERS()) list.push_back(x);
+        out[key] = list;
+        break;
+      }
+      case sdn::runtime::configValueKind_TableList: {
+        Json list = Json::array();
+        if (e->TABLES()) for (const auto* t : *e->TABLES()) list.push_back(tableJson(t ? t->ENTRIES() : nullptr));
+        out[key] = list;
+        break;
+      }
+      default: break;
+    }
+  }
+  return out;
+}
+
+bool readConfig(Json& out) {
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) return failWith("plugin.getConfig failed: " + config.error_message());
+  // The node's options are the `detect` table (keys `detect.*`): a flow shares one config across its nodes, each
+  // module under its own prefix, so keys outside `detect` belong to other modules and are not read. Inside it the
+  // option readers still refuse an unknown key, so a typo is caught.
+  if (!config.has("detect")) { out = Json::object(); return true; }
+  const sdm_piv::ConfigTable detect = config.table("detect");
+  if (!detect) return failWith("Option detect must be one table (the module's options, keys detect.*)");
+  out = tableJson(detect.entries());
   return true;
 }
 
@@ -31,9 +78,13 @@ bool mnvRoots(const plugin_input_frame_t* frame, std::vector<const MNV*>& out, c
                             GetMNV, GetSizePrefixedMNV, out, what);
 }
 
-bool pushJson(const char* port, const std::string& text) {
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(text.data()), text.size()) >= 0;
+bool pushMde(const std::vector<uint8_t>& bytes) {
+  return plugin_push_output_ex("report", "MDE.fbs", "$MDE", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "MDE", 0, 0,
+                               bytes.data(), bytes.size()) >= 0;
+}
+bool pushPrw(const std::vector<uint8_t>& bytes) {
+  return plugin_push_output_ex("propagation_requests", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0,
+                               bytes.data(), bytes.size()) >= 0;
 }
 bool pushMnv(const std::vector<uint8_t>& bytes) {
   return plugin_push_output_ex("maneuvers", "MNV.fbs", "$MNV", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "MNV", 0, 0,
@@ -117,6 +168,10 @@ bool detect(Objects& objects, const std::string& creation, const Options& o, con
 
 int detectManeuvers() {
   Options options;
+  {
+    Json j;
+    if (!readConfig(j) || !readOptions(j, options)) return fail(error);
+  }
   std::vector<const OEM*> frames, answers;
   std::vector<const OMM*> sets;
   bool sawPropagation = false;
@@ -125,10 +180,7 @@ int detectManeuvers() {
     const std::string port = portOf(frame);
     if (port.empty()) return fail("An input frame has no port.");
     if (!frame->payload || frame->payload_length == 0) continue;
-    if (port == "options") {
-      Json j;
-      if (!readJsonFrame(frame, j, "options") || !readOptions(j, options)) return fail(error);
-    } else if (port == "ephemerides") {
+    if (port == "ephemerides") {
       if (!oemRoots(frame, frames, "ephemerides")) return fail(error);
     } else if (port == "element_sets") {
       if (!ommRoots(frame, sets)) return fail(error);
@@ -167,12 +219,10 @@ int detectManeuvers() {
     for (const auto& [key, list] : byObject)
       if (list.size() < 2) refused.push_back({{"object", key}, {"epoch", isoMs(list[0].epoch)}, {"reason", "a single element set"}});
     if (!sawPropagation) {
-      const std::string text = queriesJson(queries, options.propagatorPort, options.neighbours).dump();
       report["status"] = "needs-propagation";
       report["queries"] = queries.size();
-      if (!pushJson("propagation_requests", text)) return 1;
-      const std::string r = report.dump();
-      return pushJson("report", r) ? 0 : 1;
+      if (!pushPrw(encodeWindowRequest(queries, options.propagatorPort, options.neighbours))) return 1;
+      return pushMde(encodeDetectReport(report, nullptr)) ? 0 : 1;
     }
     std::vector<const ephemerisDataBlock*> blocks;
     for (const OEM* oem : answers) {
@@ -187,8 +237,7 @@ int detectManeuvers() {
   std::vector<std::vector<uint8_t>> outputs;
   report["status"] = "detected";
   if (!detect(objects, creation, options, refused, report, outputs)) return fail(error);
-  const std::string text = report.dump();
-  if (!pushJson("report", text)) return 1;
+  if (!pushMde(encodeDetectReport(report, &options))) return 1;
   for (const auto& mnv : outputs) if (!pushMnv(mnv)) return 1;
   return 0;
 }
@@ -210,6 +259,10 @@ bool plannedOf(const MNV* m, Planned& p) {
 
 int compareEphemerides() {
   CompareOptions options;
+  {
+    Json j;
+    if (!readConfig(j) || !readCompareOptions(j, options)) return fail(error);
+  }
   Objects objects;
   std::map<std::string, std::vector<Planned>> planned;
   size_t blockCount = 0;
@@ -218,10 +271,7 @@ int compareEphemerides() {
     const std::string port = portOf(frame);
     if (port.empty()) return fail("An input frame has no port.");
     if (!frame->payload || frame->payload_length == 0) continue;
-    if (port == "options") {
-      Json j;
-      if (!readJsonFrame(frame, j, "options") || !readCompareOptions(j, options)) return fail(error);
-    } else if (port == "versions") {
+    if (port == "versions") {
       std::vector<const OEM*> roots;
       if (!oemRoots(frame, roots, "versions")) return fail(error);
       for (const OEM* oem : roots) {
@@ -257,8 +307,7 @@ int compareEphemerides() {
   Json report = {{"method", "compare_ephemerides"}};
   std::vector<std::vector<uint8_t>> outputs;
   if (!runCompare(objects, planned, options, outputs, report)) return fail(error);
-  const std::string text = report.dump();
-  if (!pushJson("report", text)) return 1;
+  if (!pushMde(encodeCompareReport(report, options))) return 1;
   for (const auto& mnv : outputs) if (!pushMnv(mnv)) return 1;
   return 0;
 }
@@ -266,6 +315,10 @@ int compareEphemerides() {
 // ── score_detections ─────────────────────────────────────────────────────────────
 int scoreDetections() {
   ScoreOptions options;
+  {
+    Json j;
+    if (!readConfig(j) || !readScoreOptions(j, options)) return fail(error);
+  }
   std::vector<Scored> events, truth;
   bool sawTruth = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
@@ -273,10 +326,7 @@ int scoreDetections() {
     const std::string port = portOf(frame);
     if (port.empty()) return fail("An input frame has no port.");
     if (!frame->payload || frame->payload_length == 0) continue;
-    if (port == "options") {
-      Json j;
-      if (!readJsonFrame(frame, j, "options") || !readScoreOptions(j, options)) return fail(error);
-    } else if (port == "detected" || port == "truth") {
+    if (port == "detected" || port == "truth") {
       std::vector<const MNV*> roots;
       if (!mnvRoots(frame, roots, port.c_str())) return fail(error);
       for (const MNV* m : roots) {
@@ -292,8 +342,7 @@ int scoreDetections() {
   if (!sawTruth) return fail("score_detections needs truth $MNV on truth.");
   Json report = {{"method", "score_detections"}, {"before_s", options.before}, {"after_s", options.after}};
   runScore(events, truth, options, report);
-  const std::string text = report.dump();
-  return pushJson("report", text) ? 0 : 1;
+  return pushMde(encodeScoreReport(report, options)) ? 0 : 1;
 }
 }  // namespace
 

@@ -24,8 +24,8 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
+import { invokeOperation, probeOperation } from "./mpl_client.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MU_EARTH = 398600441800000.0;
@@ -42,7 +42,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const result = await invokeJsonRequest(harness, {
+    const result = await invokeOperation(harness, {
       operation: "computeCAM",
       params: {
         initialState: {
@@ -83,7 +83,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const result = await invokeJsonRequest(harness, {
+    const result = await invokeOperation(harness, {
       operation: "computeRoeStateTransition",
       params: {
         model: "j2",
@@ -121,7 +121,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const result = await invokeJsonRequest(harness, {
+    const result = await invokeOperation(harness, {
       operation: "simulateRendezvous",
       params: {
         chief: {
@@ -170,7 +170,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const period =
       2 * Math.PI * Math.sqrt((6_778_000 ** 3) / MU_EARTH);
     const legTof = 0.75 * period;
-    const result = await invokeJsonRequest(harness, {
+    const result = await invokeOperation(harness, {
       operation: "planRelativeWaypointMission",
       params: {
         initialState: {
@@ -238,7 +238,7 @@ test("the version operation agrees with plugin-manifest.json", async (t) => {
   const manifest = JSON.parse(
     await readFile(new URL("../plugin-manifest.json", import.meta.url), "utf8"),
   );
-  const result = await invokeJsonRequest(harness, { operation: "version", params: {} });
+  const result = await invokeOperation(harness, { operation: "version", params: {} });
   assert.equal(result.version, manifest.version);
 });
 

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.private-screening",
   "name": "Private screening decoys",
-  "version": "0.1.0",
-  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, resampled or chained histories, or copies of the target itself). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N.",
+  "version": "0.2.0",
+  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, resampled or chained histories, or copies of the target itself). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N. Typed contracts 1.0: FlatBuffers only. Histories are $LFV rows (id, target, role, generator, class) carrying their $OMM element sets; HPOP windows are one $OEM; feature rows and the distinguishing report are $LFV. Settings are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig), one table per method: decoys {generator, window, perTarget, targets, donors, neighbours, seed}, features {view, window, minPoints}, distinguish {folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks, exclude, relative}.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,9 +16,25 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Deterministic SGP4 evaluation, seeded draws and statistics over caller-supplied histories. No host calls, threads or network access."
+    "detail": "Deterministic SGP4 evaluation, seeded draws and statistics over caller-supplied histories. One plugin.getConfig hostcall (the settings); no threads or network access."
   },
-  "schemasUsed": [],
+  "schemasUsed": [
+    {
+      "schemaName": "LFV.fbs",
+      "fileIdentifier": "$LFV",
+      "rootTypeName": "LFV"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ],
   "methods": [
     {
       "methodId": "decoys",
@@ -30,45 +46,21 @@
           "portId": "population",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-histories-v1",
+              "setId": "private-screening-histories",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The real histories decoys are drawn from (the public catalog); each is also a target."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "private-screening-decoy-options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "generator (independent, rotated, resampled, chained, aligned, fleet), window [from, to) unix s, perTarget, targets [ids], donors (population or regime), neighbours, seed."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Generator settings as JSON."
+          "description": "The real histories decoys are drawn from (the public catalog), one $LFV row each (SOURCE_ID the id, optional TARGET and CLASS_LABEL) with its $OMM element sets (EPOCH, MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR); each is also a target."
         }
       ],
       "outputPorts": [
@@ -76,23 +68,21 @@
           "portId": "decoys",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-histories-v1",
+              "setId": "private-screening-histories",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry. Plus report: counts and the drag common mode per altitude band."
-              }
+              ]
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false,
-          "description": "Decoy histories, role decoy, target the real history each one hides."
+          "required": true,
+          "description": "Decoy histories as $LFV rows: ROLE Decoy, TARGET the real history each one hides, GENERATOR, and the $OMM element sets. SOURCE_COUNT the targets asked, REFERENCE_COUNT the donors (population histories with 6 element sets in the window), SKIPPED_COUNT the decoys refused for fewer than 6 sets."
         }
       ]
     },
@@ -106,45 +96,41 @@
           "portId": "histories",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-histories-v1",
+              "setId": "private-screening-histories",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry. The hpop view reads windows: [{t, samples: [[t, x, y, z, vx, vy, vz]] (GCRF m, m/s, one orbit), end: [t, ...] (the window's state at the next window's start)}] instead of element arrays."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Real and decoy histories; the real ones are the catalog."
+          "description": "Real and decoy histories as $LFV rows (SOURCE_ID, TARGET, ROLE, GENERATOR, CLASS_LABEL) with their $OMM element sets (gp view); the real ones are the catalog."
         },
         {
-          "portId": "options",
+          "portId": "ephemerides",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-feature-options-v1",
+              "setId": "private-screening-windows",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "view (gp or hpop), window [from, to) unix s, minPoints."
-              }
+              ]
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Feature settings as JSON."
+          "required": false,
+          "description": "hpop view: daily ephemeris windows, one $OEM block per window: OBJECT.OBJECT_ID the history (SOURCE_ID), START_TIME the window start, the lines up to USEABLE_STOP_TIME the samples over one orbit (GCRF km, km/s), and the line at STOP_TIME after USEABLE_STOP_TIME the state at the next window start."
         }
       ],
       "outputPorts": [
@@ -152,23 +138,21 @@
           "portId": "features",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-features-v1",
+              "setId": "private-screening-features",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "{view, names, rows: [{id, target, role, generator, cls, x}], counts}."
-              }
+              ]
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false,
-          "description": "One feature row per history."
+          "required": true,
+          "description": "One $LFV row per history with enough points: VALUES in FEATURE_NAMES order (NaN = not computable), VIEW gp or hpop, SOURCE_COUNT the histories, REFERENCE_COUNT the catalog, SKIPPED_COUNT those with too few points."
         }
       ]
     },
@@ -182,45 +166,21 @@
           "portId": "features",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-features-v1",
+              "setId": "private-screening-features",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "{names, rows: [{target, role, cls, x}]}: the real rows and one generator's decoy rows."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Feature rows from features."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "private-screening-distinguish-options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks [N], exclude [feature names], relative (features minus each target's median)."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Classifier settings as JSON."
+          "description": "Feature rows from features ($LFV): the real rows and one generator's decoy rows; ROLE Real counts as real, any other role as decoy."
         }
       ],
       "outputPorts": [
@@ -228,23 +188,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "private-screening-distinguish-report-v1",
+              "setId": "private-screening-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "LFV.fbs",
+                  "fileIdentifier": "$LFV",
+                  "rootTypeName": "LFV",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "AUC, balanced accuracy, epsilon lower bound, P(real first of N) and N_eff overall and by class, per-feature separation and gain share, and with many decoys per target the real one's rank within its own set."
-              }
+              ]
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false,
-          "description": "The distinguishing report."
+          "required": true,
+          "description": "The distinguishing report: $LFV REPORT (AUC, balanced accuracy, the held-out threshold test with its 95 % epsilon lower bound, P(real first of N) and N_eff overall and by class, per-feature separation and gain share, and with many decoys per target the real row's rank within its own group)."
         }
       ]
     }

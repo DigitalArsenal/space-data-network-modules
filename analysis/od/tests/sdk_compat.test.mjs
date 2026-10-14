@@ -12,6 +12,7 @@ import {
   materializeHarnessScenario,
 } from "space-data-module-sdk/testing";
 import { verifyModuleArtifact } from "space-data-module-sdk/bundle";
+import { filFrame } from "./fit_harness.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -43,6 +44,11 @@ function readFixtureBytes() {
   return new TextEncoder().encode(MINIMAL_MEME);
 }
 
+// The text ephemeris travels as an SDS $FIL.
+function readFixtureFile() {
+  return filFrame(readFixtureBytes()).payload;
+}
+
 function createHarnessScenario(surface) {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const plan = generateManifestHarnessPlan({
@@ -51,7 +57,7 @@ function createHarnessScenario(surface) {
       if (portId !== "meme") {
         return null;
       }
-      return readFixtureBytes();
+      return readFixtureFile();
     },
   });
   const scenario = plan.generatedCases.find((entry) => entry.surface === surface);
@@ -66,20 +72,15 @@ function createInvokeRequest() {
     // MEME is optional in the manifest (OEM is the alternative), so the
     // generated minimal request intentionally contains no input. Supply the
     // selected text fixture explicitly for this command-compatibility test.
-    inputs: [{portId: "meme", payload: readFixtureBytes()}],
+    inputs: [filFrame(readFixtureBytes())],
   };
 }
 
 function assertSuccessfulResponse(response) {
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   assert.ok(response.errorCode === "" || response.errorCode === null);
-  assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "result");
-
-  const payloadText = new TextDecoder().decode(response.outputs[0].payload);
-  const payload = JSON.parse(payloadText);
-  assert.equal(payload.error, undefined);
-  assert.equal(typeof payload.RMS, "string");
+  assert.deepEqual(response.outputs.map((frame) => frame.portId), ["omm", "ocm", "obd"]);
+  assert.deepEqual(response.outputs.map((frame) => frame.typeRef?.fileIdentifier), ["$OMM", "$OCM", "$OBD"]);
 }
 
 function isWasmEdgeAvailable() {
@@ -125,8 +126,10 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
     new Set(inspection.imports.map((entry) => entry.module)),
   ).sort();
 
-  assert.equal(inspection.profile, "standalone");
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
+  // The plugin.getConfig hostcall makes the artifact a host-ABI module.
+  assert.equal(inspection.profile, "module-host-abi");
+  // plugin.getConfig (node CONFIG) is the one hostcall: space_data_module_host.call.
+  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
   assert.ok(inspection.exports.includes("_start"));
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
@@ -228,7 +231,7 @@ for (const surface of ["direct", "command", "wasmedge"]) {
     for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
       const response = await harness.invoke({methodId: "fit", inputs: [await createOemInput(wireFormat)]});
       assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-      assert.equal(response.outputs.length, 2);
+      assert.deepEqual(response.outputs.map(x => x.portId), ["omm", "ocm", "obd"]);
       const {OCM} = await import("spacedatastandards.org/lib/js/OCM/OCM.js");
       const ocmFrame = response.outputs.find(x => x.portId === "ocm");
       assert.ok(ocmFrame);

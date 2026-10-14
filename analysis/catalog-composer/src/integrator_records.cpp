@@ -76,10 +76,14 @@ std::string hex(const uint8_t* data, size_t length) {
   return out;
 }
 // What the report cites a record by: its SHA-256 and the CID the store keys it by (CIDv1, raw, sha2-256).
-Json record_ids(const uint8_t* data, size_t length) {
+std::unique_ptr<XMTRecordRefT> record_ref(xmtRecordKind kind, const uint8_t* data, size_t length, bool with_cid = true) {
   uint8_t digest[32];
   sdn_cid::sha256_raw(data, length, digest);
-  return {{"sha256", hex(digest, 32)}, {"cid", sdn_cid::cid_v1_raw_sha256(data, length)}};
+  auto out = std::make_unique<XMTRecordRefT>();
+  out->KIND = kind;
+  out->SHA256 = hex(digest, 32);
+  if (with_cid) out->CID = sdn_cid::cid_v1_raw_sha256(data, length);
+  return out;
 }
 
 // Size-prefixed records of one frame, in order. A zero-length prefix is alignment padding between records.
@@ -114,7 +118,7 @@ struct Omm {
   std::string source, product, regime, name;
   Identity who;
   int64_t epoch;
-  Json label;
+  const CVR* label;  // the set's own COV_REALISM, or null
 };
 struct Ocm {
   size_t ordinal;
@@ -124,8 +128,8 @@ struct Ocm {
   Identity who;
   int64_t first_epoch;
   bool has_epoch;
-  std::string calibration;  // the message's COV_CALIBRATION
-  Json label;               // the realism of its first state (COV_REALISM[0])
+  covarianceCalibration calibration;  // the message's COV_CALIBRATION
+  const CVR* label;                   // the realism of its first state (COV_REALISM[0]), or null
 };
 struct Mnv {
   size_t ordinal;
@@ -139,7 +143,7 @@ struct Mnv {
   std::vector<std::string> tags;
 };
 struct Refusal {
-  const char* record;
+  xmtRecordKind record;
   size_t ordinal;
   std::string reason;
 };
@@ -151,47 +155,26 @@ std::string product_of(meanElementSource theory) { return lower(EnumNamemeanElem
 
 std::string source_of(const PVN* provenance) { return provenance ? str_of(provenance->SOURCE_ID()) : ""; }
 
-// A covariance's realism (CVR) as the report states it: the rule, the model, the cell, the numbers of its test and the verdict.
-Json realism_of(const CVR* c) {
-  if (!c) return Json();
-  Json j = {{"rule", static_cast<int>(c->RULE())}, {"ruleName", EnumNamecovarianceRule(c->RULE())},
-            {"calibration", EnumNamecovarianceCalibration(c->CALIBRATION())}, {"samples", c->SAMPLES()}, {"objects", c->OBJECTS()}};
-  const auto text_field = [&](const char* key, const flatbuffers::String* s) { if (s && s->size()) j[key] = s->str(); };
-  const auto number_field = [&](const char* key, double v) { if (std::isfinite(v)) j[key] = v; };
-  text_field("modelId", c->MODEL_ID());
-  text_field("regime", c->REGIME());
-  text_field("measuredLineage", c->MEASURED_LINEAGE());
-  text_field("testWindow", c->TEST_WINDOW());
-  text_field("evidence", c->EVIDENCE());
-  number_field("ageDays", c->AGE_DAYS());
-  number_field("horizonDays", c->HORIZON_DAYS());
-  number_field("meanD2Over3", c->MEAN_D2_OVER_3());
-  number_field("coverage95", c->COVERAGE_95());
-  number_field("scaleFactor", c->SCALE_FACTOR());
-  return j;
-}
-
 bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Omm>* out, std::vector<Refusal>* refused) {
   const auto* omm = GetSizePrefixedOMM(bytes);
-  Omm p{ordinal, bytes, length, source_of(omm->PROVENANCE()), lower(EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY())), "", str_of(omm->OBJECT_NAME()), {}, 0, Json()};
-  if (p.source.empty()) { refused->push_back({"omm", ordinal, "unattributed-product"}); return false; }
-  if (!omm->EPOCH() || !parse_instant(omm->EPOCH()->str(), &p.epoch)) { refused->push_back({"omm", ordinal, "invalid-epoch"}); return false; }
+  Omm p{ordinal, bytes, length, source_of(omm->PROVENANCE()), lower(EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY())), "", str_of(omm->OBJECT_NAME()), {}, 0, omm->COV_REALISM()};
+  if (p.source.empty()) { refused->push_back({xmtRecordKind::Omm, ordinal, "unattributed-product"}); return false; }
+  if (!omm->EPOCH() || !parse_instant(omm->EPOCH()->str(), &p.epoch)) { refused->push_back({xmtRecordKind::Omm, ordinal, "invalid-epoch"}); return false; }
   p.who.norad = omm->NORAD_CAT_ID();
   const std::string designator = trimmed(str_of(omm->OBJECT_ID()));
   if (cospar(designator)) p.who.cospar = designator;
   p.who.native = trimmed(str_of(omm->USER_DEFINED_OBJECT_DESIGNATOR()));
-  if (!p.who.any()) { refused->push_back({"omm", ordinal, "no-object-identity"}); return false; }
-  p.label = realism_of(omm->COV_REALISM());
-  p.regime = text(field(p.label, "regime"));
+  if (!p.who.any()) { refused->push_back({xmtRecordKind::Omm, ordinal, "no-object-identity"}); return false; }
+  p.regime = p.label ? str_of(p.label->REGIME()) : "";
   out->push_back(std::move(p));
   return true;
 }
 
 bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Ocm>* out, std::vector<Refusal>* refused) {
   const auto* ocm = GetSizePrefixedOCM(bytes);
-  Ocm p{ordinal, bytes, length, source_of(ocm->PROVENANCE()), {}, 0, false, EnumNamecovarianceCalibration(ocm->COV_CALIBRATION()), Json()};
-  if (ocm->COV_REALISM() && ocm->COV_REALISM()->size() > 0) p.label = realism_of(ocm->COV_REALISM()->Get(0));
-  if (p.source.empty()) { refused->push_back({"ocm", ordinal, "unattributed-product"}); return false; }
+  Ocm p{ordinal, bytes, length, source_of(ocm->PROVENANCE()), {}, 0, false, ocm->COV_CALIBRATION(), nullptr};
+  if (ocm->COV_REALISM() && ocm->COV_REALISM()->size() > 0) p.label = ocm->COV_REALISM()->Get(0);
+  if (p.source.empty()) { refused->push_back({xmtRecordKind::Ocm, ordinal, "unattributed-product"}); return false; }
   const auto* meta = ocm->METADATA();
   if (meta) {
     const std::string catalog = str_of(meta->CATALOG_NAME()), designator = trimmed(str_of(meta->OBJECT_DESIGNATOR()));
@@ -205,7 +188,7 @@ bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
     }
     if (cospar(international)) p.who.cospar = international;
   }
-  if (!p.who.any()) { refused->push_back({"ocm", ordinal, "no-object-identity"}); return false; }
+  if (!p.who.any()) { refused->push_back({xmtRecordKind::Ocm, ordinal, "no-object-identity"}); return false; }
   if (ocm->STATE_EPOCHS() && ocm->STATE_EPOCHS()->size() > 0) p.has_epoch = parse_instant(ocm->STATE_EPOCHS()->Get(0)->str(), &p.first_epoch);
   out->push_back(std::move(p));
   return true;
@@ -216,14 +199,14 @@ bool read_mnv(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
   Mnv p{ordinal, bytes, length, "", str_of(mnv->ID()), {}, 0, mnv->STATUS(), NAN, {}};
   if (mnv->TAGS()) for (const auto* tag : *mnv->TAGS()) p.tags.push_back(str_of(tag));
   p.source = source_of(mnv->PROVENANCE());
-  if (p.source.empty()) { refused->push_back({"mnv", ordinal, "unattributed-product"}); return false; }
+  if (p.source.empty()) { refused->push_back({xmtRecordKind::Mnv, ordinal, "unattributed-product"}); return false; }
   p.who.norad = mnv->SAT_NO();
   const std::string designator = trimmed(str_of(mnv->ORIG_OBJECT_ID()));
   if (cospar(designator)) p.who.cospar = designator;
   p.who.native = trimmed(str_of(mnv->ON_ORBIT()));
-  if (!p.who.any()) { refused->push_back({"mnv", ordinal, "no-object-identity"}); return false; }
+  if (!p.who.any()) { refused->push_back({xmtRecordKind::Mnv, ordinal, "no-object-identity"}); return false; }
   const std::string at = str_of(mnv->EVENT_START_TIME()).empty() ? str_of(mnv->REPORT_TIME()) : str_of(mnv->EVENT_START_TIME());
-  if (!parse_instant(at, &p.time)) { refused->push_back({"mnv", ordinal, "no-maneuver-time"}); return false; }
+  if (!parse_instant(at, &p.time)) { refused->push_back({xmtRecordKind::Mnv, ordinal, "no-maneuver-time"}); return false; }
   double dv = mnv->DELTA_VEL();
   if (!(dv > 0)) {
     const double u = mnv->DELTA_VEL_U(), v = mnv->DELTA_VEL_V(), w = mnv->DELTA_VEL_W();

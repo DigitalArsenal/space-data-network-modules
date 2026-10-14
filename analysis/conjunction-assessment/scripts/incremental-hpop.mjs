@@ -32,7 +32,7 @@ import { CQRObjectSourceT, PRWInstanceT } from 'spacedatastandards.org/lib/js/CQ
 import { createConjunctionCommandHarness } from '../tests/lib/conjunctionCommandHarness.mjs';
 import { decodeCatalogResult, prepareIndex, releaseIndex, screenWindows, windowRequest } from '../gpu/catalogScreen.mjs';
 import { mergeWindowEvents, objectKey, screenWindowsOnGpu } from '../gpu/allVsAll.mjs';
-import { ROLE, sampleWindowGrid, screenStoredWindow, spliceGridRows } from '../gpu/continuousScreen.mjs';
+import { ROLE, emptyGrid, sampleWindowGrid, screenStoredWindow, spliceGridRows } from '../gpu/continuousScreen.mjs';
 import { createHpopFarm } from './lib/hpopFarm.mjs';
 import { createOmmEncoder } from './lib/ommCatalog.mjs';
 import { elementKey, recordsCreated, utcMs } from './lib/gpHistory.mjs';
@@ -124,16 +124,6 @@ async function indexOf(records, perWindow, w, rows) {
 }
 const dropKeys = (records, perWindow) => new Set(perWindow.flatMap((x) => x.dropped.map((d) => keyOf(records[d.handle - 1]))));
 // A grid of n non-finite rows with the blocks of `like` (a window's coarse_grid output).
-function emptyGrid(like, n) {
-  return { excluded: new Map(), objects: n, blocks: like.blocks.map((b) => {
-    const v = new DataView(b.buffer, b.byteOffset), count = v.getUint32(8, true);
-    const out = new Uint8Array(16 + count * n * 32 + n * 8);
-    new Float32Array(out.buffer, 16).fill(Number.NaN);
-    out.set(b.subarray(0, 12));
-    new DataView(out.buffer).setUint32(12, n, true);
-    return out;
-  }) };
-}
 // A trajectory record's polynomial ephemeris, canonical (its instance id names the farm instance, not the orbit).
 const trajectoryOf = (frame) => JSON.stringify(PRW.getSizePrefixedRootAsPRW(new flatbuffers.ByteBuffer(frame)).DESCRIBE_RESULT().SOURCES(0).unpack().EPHEMERIS,
   (k, v) => (typeof v === 'bigint' ? v.toString() : v));

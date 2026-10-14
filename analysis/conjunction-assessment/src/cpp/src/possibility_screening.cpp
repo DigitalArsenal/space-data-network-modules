@@ -27,18 +27,16 @@
 // points screen only the encounters they sample; the enclosure question is
 // the caller's (whitepaper section 12).
 //
-// Request ("request", aligned binary): "CPQ1", f64 combined_radius_m,
-// f64 half_window_s, u32 mode, u32 count_a, u32 count_b, u32 alpha_count,
-// f64 alpha[alpha_count]; mode 0: count_a then count_b rows of 7 f64 (x y z
-// vx vy vz, SI, one inertial frame; possibility in (0, 1]); mode 1: per
-// object 6 f64 centre and 36 f64 row-major shape (count_a = count_b = 1).
-// Result ("result", aligned binary): "CPR1", f64 possibility_collision,
-// f64 necessity_collision, f64 necessity_no_collision, f64 min_miss_m,
-// f64 max_miss_m, f64 tca_min_s, f64 tca_max_s, u64 pairs,
-// u64 colliding_pairs, then per alpha level f64 min_miss_m, f64 max_miss_m,
-// f64 tca_min_s, f64 tca_max_s over the pairs (mode 0) or the alpha-cut
-// (mode 1: the encounter-plane miss range of the cut) whose joint
-// possibility is at least alpha.
+// Request ("request"): $SCR POSSIBILITY_REQUEST: COMBINED_RADIUS_M,
+// HALF_WINDOW_S, MODEL, ALPHA_LEVELS; FiniteSupport: A_POINTS then B_POINTS
+// (x y z vx vy vz, SI, one inertial frame; POSSIBILITY in (0, 1]);
+// EllipsoidalKernel: A_KERNEL and B_KERNEL (CENTRE 6, SHAPE 36 row-major).
+// Result ("result"): $SCR POSSIBILITY_RESULT: POSSIBILITY_COLLISION,
+// NECESSITY_COLLISION, NECESSITY_NO_COLLISION, MIN_MISS_M, MAX_MISS_M,
+// TCA_MIN_S, TCA_MAX_S, PAIRS, COLLIDING_PAIRS, then per alpha level
+// (ALPHA_CUTS) the miss and closest-approach ranges over the pairs
+// (FiniteSupport) or the alpha-cut (EllipsoidalKernel: the encounter-plane
+// miss range of the cut) whose joint possibility is at least alpha.
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -46,23 +44,14 @@
 #include <vector>
 
 #include "../../../../estimation/src/teag.hpp"
+#include <flatbuffers/flatbuffers.h>
+#include "SCR_generated.h"
 #include "space_data_module_invoke.h"
 
 namespace ca_possibility {
 
 using sdn::teag::Vec;
 constexpr double kInf = std::numeric_limits<double>::infinity();
-
-struct Reader {
-  const uint8_t *p = nullptr;
-  size_t n = 0, at = 0;
-  template <class T> bool get(T &v) {
-    if (at + sizeof(T) > n) return false;
-    std::memcpy(&v, p + at, sizeof(T));
-    at += sizeof(T);
-    return true;
-  }
-};
 
 int fail(const char *code, const char *message) {
   plugin_set_error(code, message);
@@ -143,27 +132,41 @@ extern "C" int possibility_of_collision() {
   using namespace ca_possibility;
   int32_t index = plugin_find_input_index("request", 0);
   const plugin_input_frame_t *f = index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
-  Reader r;
-  if (f && f->payload) { r.p = f->payload; r.n = f->payload_length; }
-  if (r.n < 4 || std::memcmp(r.p, "CPQ1", 4) != 0) return fail("invalid-request", "request must be a CPQ1 frame");
-  r.at = 4;
-  double radius = 0, window = 0;
-  uint32_t mode = 0, ca = 0, cb = 0, na = 0;
-  if (!r.get(radius) || !r.get(window) || !r.get(mode) || !r.get(ca) || !r.get(cb) || !r.get(na))
-    return fail("invalid-request", "CPQ1 header is truncated");
+  if (!f || !f->payload || f->payload_length < 8)
+    return fail("invalid-request", "request must be a $SCR POSSIBILITY_REQUEST");
+  flatbuffers::Verifier verifier(f->payload, f->payload_length);
+  if (!verifier.VerifyBuffer<SCR>("$SCR"))
+    return fail("invalid-request", "request must be a $SCR POSSIBILITY_REQUEST");
+  const SCRPossibilityRequest *q = flatbuffers::GetRoot<SCR>(f->payload)->POSSIBILITY_REQUEST();
+  if (!q) return fail("invalid-request", "request must be a $SCR POSSIBILITY_REQUEST");
+  const double radius = q->COMBINED_RADIUS_M(), window = q->HALF_WINDOW_S();
+  const uint32_t mode = static_cast<uint32_t>(q->MODEL());
+  const auto *alphas = q->ALPHA_LEVELS();
+  const uint32_t na = alphas ? alphas->size() : 0;
   if (!(radius > 0) || !std::isfinite(radius) || !(window >= 0) || !std::isfinite(window) || mode > 1 || na > 64)
-    return fail("invalid-request", "radius must be positive, half window non-negative, mode 0 or 1, at most 64 alpha levels");
+    return fail("invalid-request", "radius must be positive, half window non-negative, model FiniteSupport or EllipsoidalKernel, at most 64 alpha levels");
   std::vector<double> alpha(na);
-  for (auto &a : alpha)
-    if (!r.get(a) || !(a > 0) || a > 1) return fail("invalid-request", "alpha levels must be in (0, 1]");
+  for (uint32_t k = 0; k < na; ++k)
+    if (!((alpha[k] = alphas->Get(k)) > 0) || alpha[k] > 1) return fail("invalid-request", "alpha levels must be in (0, 1]");
   double pi_c = 0, pi_nc = 0, min_miss = kInf, max_miss = 0, tmin = kInf, tmax = -kInf;
   uint64_t pairs = 0, colliding = 0;
   std::vector<double> amin(na, kInf), amax(na, 0.0), atmin(na, kInf), atmax(na, -kInf);
   if (mode == 0) {
+    const auto *pa = q->A_POINTS(), *pb = q->B_POINTS();
+    const uint32_t ca = pa ? pa->size() : 0, cb = pb ? pb->size() : 0;
     if (ca == 0 || cb == 0 || ca > 200000 || cb > 200000) return fail("invalid-request", "each support needs 1 to 200000 points");
     std::vector<double> a(static_cast<size_t>(ca) * 7), b(static_cast<size_t>(cb) * 7);
-    for (auto &v : a) if (!r.get(v) || !std::isfinite(v)) return fail("invalid-request", "support A is truncated or not finite");
-    for (auto &v : b) if (!r.get(v) || !std::isfinite(v)) return fail("invalid-request", "support B is truncated or not finite");
+    auto rows = [](const ::flatbuffers::Vector<const SCRPossibilityPoint *> *v, std::vector<double> &out) {
+      for (uint32_t i = 0; i < v->size(); ++i) {
+        const SCRPossibilityPoint *x = v->Get(i);
+        const double row[7] = {x->X_M(), x->Y_M(), x->Z_M(), x->VX_M_S(), x->VY_M_S(), x->VZ_M_S(), x->POSSIBILITY()};
+        for (int k = 0; k < 7; ++k)
+          if (!std::isfinite(out[i * 7 + k] = row[k])) return false;
+      }
+      return true;
+    };
+    if (!rows(pa, a)) return fail("invalid-request", "support A is not finite");
+    if (!rows(pb, b)) return fail("invalid-request", "support B is not finite");
     for (uint32_t i = 0; i < ca; ++i)
       if (!(a[i * 7 + 6] > 0) || a[i * 7 + 6] > 1) return fail("invalid-request", "possibilities must be in (0, 1]");
     for (uint32_t j = 0; j < cb; ++j)
@@ -188,9 +191,14 @@ extern "C" int possibility_of_collision() {
       }
   } else {
     double center[2][6], shape[2][36];
+    const SCRPossibilityKernel *kernels[2] = {q->A_KERNEL(), q->B_KERNEL()};
     for (int o = 0; o < 2; ++o) {
-      for (double &v : center[o]) if (!r.get(v) || !std::isfinite(v)) return fail("invalid-request", "kernel centre is truncated or not finite");
-      for (double &v : shape[o]) if (!r.get(v) || !std::isfinite(v)) return fail("invalid-request", "kernel shape is truncated or not finite");
+      const auto *ce = kernels[o] ? kernels[o]->CENTRE() : nullptr;
+      const auto *sh = kernels[o] ? kernels[o]->SHAPE() : nullptr;
+      if (!ce || ce->size() != 6) return fail("invalid-request", "each kernel needs a CENTRE of 6 values");
+      if (!sh || sh->size() != 36) return fail("invalid-request", "each kernel needs a SHAPE of 36 values");
+      for (uint32_t k = 0; k < 6; ++k) if (!std::isfinite(center[o][k] = ce->Get(k))) return fail("invalid-request", "kernel centre is not finite");
+      for (uint32_t k = 0; k < 36; ++k) if (!std::isfinite(shape[o][k] = sh->Get(k))) return fail("invalid-request", "kernel shape is not finite");
     }
     Vec sa(shape[0], shape[0] + 36), sb(shape[1], shape[1] + 36), l;
     if (!sdn::teag::cholesky(sa, 6, &l) || !sdn::teag::cholesky(sb, 6, &l)) return fail("invalid-request", "kernel shapes must be positive definite");
@@ -262,15 +270,26 @@ extern "C" int possibility_of_collision() {
       amin[k] = lo; amax[k] = hi; atmin[k] = atmax[k] = t;
     }
   }
-  std::vector<uint8_t> out(4 + 7 * 8 + 2 * 8 + na * 4 * 8);
-  size_t at = 0;
-  auto put = [&](const void *v, size_t n) { std::memcpy(out.data() + at, v, n); at += n; };
-  put("CPR1", 4);
-  const double nc = 1.0 - pi_nc, nnc = 1.0 - pi_c;
-  for (double v : {pi_c, nc, nnc, min_miss, max_miss, tmin, tmax}) put(&v, 8);
-  put(&pairs, 8); put(&colliding, 8);
+  flatbuffers::FlatBufferBuilder out(256 + na * 64);
+  std::vector<flatbuffers::Offset<SCRAlphaCut>> cuts;
   for (uint32_t k = 0; k < na; ++k)
-    for (double v : {amin[k], amax[k], atmin[k], atmax[k]}) put(&v, 8);
-  return plugin_push_output_ex("result", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               out.data(), static_cast<uint32_t>(out.size())) >= 0 ? 0 : 500;
+    cuts.push_back(CreateSCRAlphaCut(out, alpha[k], amin[k], amax[k], atmin[k], atmax[k]));
+  const auto cutVector = out.CreateVector(cuts);
+  const double nc = 1.0 - pi_nc, nnc = 1.0 - pi_c;
+  SCRPossibilityResultBuilder rb(out);
+  rb.add_POSSIBILITY_COLLISION(pi_c);
+  rb.add_NECESSITY_COLLISION(nc);
+  rb.add_NECESSITY_NO_COLLISION(nnc);
+  rb.add_MIN_MISS_M(min_miss);
+  rb.add_MAX_MISS_M(max_miss);
+  rb.add_TCA_MIN_S(tmin);
+  rb.add_TCA_MAX_S(tmax);
+  rb.add_PAIRS(pairs);
+  rb.add_COLLIDING_PAIRS(colliding);
+  rb.add_ALPHA_CUTS(cutVector);
+  const auto result = rb.Finish();
+  SCRBuilder root(out);
+  root.add_POSSIBILITY_RESULT(result);
+  FinishSCRBuffer(out, root.Finish());
+  return plugin_push_output_ex("result", "SCR.fbs", "$SCR", 0, "SCR", 0, 0, out.GetBufferPointer(), out.GetSize()) >= 0 ? 0 : 500;
 }

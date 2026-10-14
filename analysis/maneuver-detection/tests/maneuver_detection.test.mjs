@@ -9,6 +9,7 @@ import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance'
 import {
   EPOCHS, LEO, MNV, MU, OEM, OMEGA, T0, add, block, burns, circular, cross, dot, eme2000, flatbuffers, gmst, gpHistory, history, iso, kepler, manifest, mul, norm, oem, planned, require, root, rtn, seconds, sma, stumpff, toFixed, unit, version, visViva, wasm, wasmPath,
 } from './fixtures.mjs';
+import { reportOf, decodeRecord } from '../study/lib/mde.mjs';
 
 // PROVENANCE.PRODUCER of every $MNV the module writes: itself and its version.
 const PRODUCER = `${manifest.pluginId} ${manifest.version}`;
@@ -17,15 +18,15 @@ const PRODUCER = `${manifest.pluginId} ${manifest.version}`;
 // a test that names its detectors runs those.
 async function detect(t, bytes, given) {
   const options = { detectors: ['D1'], ...given };
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+  // The options are the node's configuration under `detect.*`: the host serves them on plugin.getConfig as a ModuleConfig.
+  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct', hostOptions: { config: { detect: options } } });
   t.after(() => h.destroy());
   const inputs = [{ portId: 'ephemerides', payload: Buffer.from(bytes), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } }];
-  inputs.push({ portId: 'options', payload: Buffer.from(JSON.stringify(options)), typeRef: { schemaName: 'application/json' } });
   const result = await h.invoke({ methodId: 'detect_maneuvers', inputs });
   if (result.statusCode !== 0) return { error: result.errorMessage };
   const events = result.outputs.filter((f) => f.portId === 'maneuvers')
     .map((f) => MNV.MNV.getRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(f.payload))).unpack());
-  const report = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
+  const report = await reportOf(new Uint8Array(result.outputs.find((f) => f.portId === 'report').payload));
   return { events, report };
 }
 
@@ -133,6 +134,8 @@ test('a 2 m/s cross-track burn: out-of-plane, delta-V from the orbit-normal rota
   assert.ok(Math.abs(reported.raw_in_track_mps / 1000 - expectedU) < 1e-9);
   assert.equal(reported.in_track_fired, false);
   assert.equal(reported.cross_track_fired, true);
+  // The $MDE event names the $MNV it became.
+  assert.equal(reported.mnv_id, e.ID);
   assert.equal(e.CHARACTERIZATION, MNV.maneuverCharacterization.OUT_OF_PLANE);
 });
 
@@ -220,7 +223,7 @@ async function compare(t, versions, plan) {
     { portId: 'planned', payload: Buffer.from(plan), typeRef: { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' } }] });
   if (result.statusCode !== 0) return { error: result.errorMessage };
   return { checks: result.outputs.filter((f) => f.portId === 'maneuvers').map((f) => MNV.MNV.getRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(f.payload))).unpack()),
-    report: JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString()) };
+    report: await reportOf(new Uint8Array(result.outputs.find((f) => f.portId === 'report').payload)) };
 }
 
 test('compare_ephemerides: a planned burn executed and cancelled', async (t) => {
@@ -317,8 +320,18 @@ test('the propagator query port: SGP4 and an ABI provider each answer, and each 
   try {
     const { tb, rows } = gpHistory(1);
     const options = { propagator_port_id: 'test', detectors: ['D1', 'D2'] };
-    const first = await detector.invoke('detect_maneuvers', [{ portId: 'element_sets', payload: host.ommStream(rows), typeRef: host.TYPES.OMM }, host.json('options', options)]);
-    const requests = host.jsonOf(first, 'propagation_requests');
+    const first = await detector.invoke('detect_maneuvers', [{ portId: 'element_sets', payload: host.ommStream(rows), typeRef: host.TYPES.OMM }, host.config(options)]);
+    // The queries are one $PRW WINDOW_REQUEST, the report one $MDE DETECT_REPORT that says propagation is needed.
+    const [prwFrame] = host.outputsOf(first, 'propagation_requests');
+    assert.equal(Buffer.from(prwFrame.subarray(4, 8)).toString(), '$PRW');
+    const prw = await decodeRecord('PRW', prwFrame);
+    assert.equal(prw.WINDOW_REQUEST.QUERIES.length, 31);
+    assert.equal(prw.WINDOW_REQUEST.QUERIES[5].SET_INDEX, 5);
+    assert.equal(prw.WINDOW_REQUEST.QUERIES[5].STEP_SECONDS, 60);
+    assert.equal(prw.WINDOW_REQUEST.NEIGHBOUR_SETS, 2);
+    const needs = await host.reportFrom(first);
+    assert.deepEqual([needs.status, needs.queries], ['needs-propagation', 31]);
+    const requests = await host.queriesFrom(first);
     assert.equal(requests.queries.length, 31);
     assert.equal(requests.propagator_port_id, 'test');
     // Set 5's span: from set 3's epoch to set 7's.
@@ -346,7 +359,7 @@ test('the propagator query port: SGP4 and an ABI provider each answer, and each 
     const swapped = host.OEM.OEM.getRootAsOEM(new host.flatbuffers.ByteBuffer(answers[0])).unpack();
     swapped.EPHEMERIS_DATA_BLOCK.reverse();
     await assert.rejects(detector.invoke('detect_maneuvers', [{ portId: 'element_sets', payload: host.ommStream(rows), typeRef: host.TYPES.OMM },
-      host.json('options', options), { portId: 'propagation', payload: host.oemFrame(swapped.EPHEMERIS_DATA_BLOCK), typeRef: host.TYPES.OEM }]), /does not cover|span/);
+      host.config(options), { portId: 'propagation', payload: host.oemFrame(swapped.EPHEMERIS_DATA_BLOCK), typeRef: host.TYPES.OEM }]), /does not cover|span/);
   } finally {
     await detector.destroy();
   }
@@ -362,16 +375,17 @@ test('score_detections: matches, recall and false alarms per object-year', async
     MNV.MNV.finishSizePrefixedMNVBuffer(b, m.pack(b));
     return Buffer.from(b.asUint8Array());
   };
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct', hostOptions: { config: { detect: { spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 365.25 * 43200) }] } } } });
   t.after(() => h.destroy());
   const typeRef = { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' };
   const result = await h.invoke({ methodId: 'score_detections', inputs: [
     { portId: 'truth', payload: Buffer.concat([mnv({ ID: 'a', EVENT_START_TIME: iso(T0), DELTA_VEL: 0.001 }), mnv({ ID: 'b', EVENT_START_TIME: iso(T0 + 10 * 86400), DELTA_VEL: 0.002 })]), typeRef },
     { portId: 'detected', payload: Buffer.concat([mnv({ ID: 'x', EVENT_START_TIME: iso(T0 + 1800), DELTA_VEL: 0.0009 }),
-      mnv({ ID: 'y', EVENT_START_TIME: iso(T0 + 10 * 86400 + 7200), DELTA_VEL: 0.0021 }), mnv({ ID: 'z', EVENT_START_TIME: iso(T0 + 5 * 86400), DELTA_VEL: 0.0001 })]), typeRef },
-    { portId: 'options', payload: Buffer.from(JSON.stringify({ spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 365.25 * 43200) }] })), typeRef: { schemaName: 'application/json' } }] });
+      mnv({ ID: 'y', EVENT_START_TIME: iso(T0 + 10 * 86400 + 7200), DELTA_VEL: 0.0021 }), mnv({ ID: 'z', EVENT_START_TIME: iso(T0 + 5 * 86400), DELTA_VEL: 0.0001 })]), typeRef }] });
   assert.equal(result.statusCode, 0, result.errorMessage);
-  const { summary, matches } = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
+  const reportFrame = new Uint8Array(result.outputs.find((f) => f.portId === 'report').payload);
+  assert.equal(Buffer.from(reportFrame.subarray(4, 8)).toString(), '$MDE');
+  const { summary, matches } = await reportOf(reportFrame);
   assert.equal(summary.detected, 2);
   // Wilson 95 % for 2/2: [n / (n + z^2), 1] = [0.3424, 1] with z = 1.95996.
   assert.ok(Math.abs(summary.wilson95[0] - 2 / (2 + 1.959963984540054 ** 2)) < 1e-12);
@@ -379,4 +393,24 @@ test('score_detections: matches, recall and false alarms per object-year', async
   assert.ok(Math.abs(summary.false_alarms_per_object_year - 2) < 1e-12);
   assert.deepEqual(matches.map((m) => m.time_error_s), [1800, 7200]);
   assert.ok(Math.abs(matches[0].dv_ratio - 0.9) < 1e-12);
+});
+
+// A flow shares one config across its nodes, each module under its own prefix: keys outside `detect.*` are other
+// modules' and are not read; an unknown key inside `detect.*` is still refused.
+test('config: only detect.* is read, an unknown detect.* key is refused', async (t) => {
+  const run = async (config) => {
+    const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct', hostOptions: { config } });
+    t.after(() => h.destroy());
+    const typeRef = { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' };
+    const one = (() => { const b = new flatbuffers.Builder(256); MNV.MNV.finishSizePrefixedMNVBuffer(b, Object.assign(new MNV.MNVT(), { SAT_NO: 99001, ID: 'a', EVENT_START_TIME: iso(T0), DELTA_VEL: 0.001 }).pack(b)); return Buffer.from(b.asUint8Array()); })();
+    return h.invoke({ methodId: 'score_detections', inputs: [{ portId: 'truth', payload: one, typeRef }, { portId: 'detected', payload: one, typeRef }] });
+  };
+  const foreign = { attach: { version: 1, source: { id: 's' } }, attribute: { version: 1 }, derive: { ages: [1, 2] } };
+  const shared = await run({ ...foreign, detect: { before_s: 3600 } });
+  assert.equal(shared.statusCode, 0, shared.errorMessage);
+  const none = await run(foreign);
+  assert.equal(none.statusCode, 0, none.errorMessage);
+  const typo = await run({ ...foreign, detect: { befor_s: 3600 } });
+  assert.notEqual(typo.statusCode, 0);
+  assert.match(typo.errorMessage, /Unknown option: befor_s/);
 });

@@ -5,6 +5,7 @@ import { sourceLanes, loadCatalog } from './catalog-data.js';
 import { validateRecipe } from './recipe.js';
 import { coverageDesignators, primarySources } from './coverage.js';
 import { catalogSearch } from './search-runtime.js';
+import { XMT_TYPE, composeRecipe, composeView } from './xmt.js';
 
 const $ = (id) => document.getElementById(id), encoder = new TextEncoder(), decoder = new TextDecoder();
 let discovering = false, overlapsOnly = false;
@@ -116,14 +117,13 @@ async function compose(refresh = true) {
       await loadCoverage(source);
       if (!coverage.has(id)) throw new Error(coverageErrors.get(id) || 'Source coverage could not be loaded.');
     }
-    const invocation = { ...recipe, coverage: recipe.stateSources.map(id => ({ sourceId: id, head: coverage.get(id).head, objects: coverage.get(id).objects })) };
-    const payload = encoder.encode(JSON.stringify(invocation));
+    const payload = composeRecipe(recipe, recipe.stateSources.map(id => ({ sourceId: id, head: coverage.get(id).head, objects: coverage.get(id).objects })));
     const response = await module.invoke({ methodId: 'compose', inputs: [
-      { portId: 'recipe', typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length }, payload },
+      { portId: 'recipe', typeRef: XMT_TYPE, payload },
       ...recipe.layers.map(layer => ({ portId: 'catalogs', typeRef: { schemaName: 'CAT.fbs', fileIdentifier: '$CAT', rootTypeName: 'CAT' }, payload: loaded.get(layer.id).stream })),
     ] });
     if (response.statusCode !== 0) throw new Error(response.errorMessage || 'Catalog composition failed.');
-    const result = JSON.parse(decoder.decode(response.outputs.find(f => f.portId === 'report').payload));
+    const result = composeView(response.outputs.find(f => f.portId === 'report').payload);
     status('Indexing catalogs…',false,true);
     search ??= await catalogSearch();
     await search.replace(result.objects);

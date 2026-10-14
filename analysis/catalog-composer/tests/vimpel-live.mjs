@@ -7,6 +7,7 @@ import { OPM } from 'spacedatastandards.org/lib/js/OPM/OPM.js';
 import { runtime,createPropagator } from './hpop-epoch-runner.mjs';
 import { request as normalizeRequest,container } from '../../../files/orbit-products/tests/vimpel-fixture.mjs';
 import { request as fitRequest,policy,unpackOpm } from './epoch-fixture.mjs';
+import { x, reportOf } from './xmt-recipes.mjs';
 const [elementsPath,archivePath]=process.argv.slice(2);if(!elementsPath||!archivePath)throw new Error('Usage: node tests/vimpel-live.mjs ELEMENTS_FILE EPHEMERIS_RAR');
 const lines=fs.readFileSync(elementsPath,'utf8').trim().split(/\r?\n/);
 const names=execFileSync('bsdtar',['-tf',archivePath],{encoding:'utf8'}).split('\n').filter(n=>/^ephem\.\d{8}\/\d+_\d{8}_\d{6}$/.test(n));
@@ -15,7 +16,8 @@ const entries=new Map(names.map(name=>[key(name),name]));
 const rows=lines.map(line=>{const f=line.split(',').map(x=>x.trim()),e=f[3];return {line,key:`${BigInt(f[1])}_${e.slice(4,8)}${e.slice(2,4)}${e.slice(0,2)}_${e.slice(9)}`,eccentricity:Number(f[8])};}).filter(r=>entries.has(r.key));
 const selected=[rows.find(r=>r.key.startsWith('141817_')),...rows.filter(r=>r.eccentricity<.93).sort((a,b)=>b.eccentricity-a.eccentricity).slice(0,2)].filter(Boolean);
 const normalizer=await runtime('files/orbit-products'),catalog=await runtime('analysis/catalog-composer'),propagator=await createPropagator();
-const parseReport=out=>JSON.parse(new TextDecoder().decode(out.outputs.find(x=>x.portId==='report').payload));
+const STATUS={Validated:'validated',RequiresRefinement:'requires-refinement',RejectedHoldoutRegression:'rejected-holdout-regression',CandidateNeedsPropagation:'candidate-needs-propagation'};
+const parseReport=out=>{const r=reportOf(out).EPOCH_FIT_REPORT;return {status:STATUS[x.xmtFitVerdict[r.VERDICT]],trainingRmsKm:r.TRAINING_RMS_KM,holdoutRmsKm:r.HOLDOUT_RMS_KM,maximumHoldoutResidualKm:r.MAXIMUM_HOLDOUT_RESIDUAL_KM,referenceSha256:r.REFERENCE_SHA256};};
 async function checked(h,request){const out=await h.invoke(request);if(out.statusCode!==0)throw new Error(`${out.errorCode}: ${out.errorMessage}`);return out;}
 const results=[];
 try {

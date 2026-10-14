@@ -1,17 +1,27 @@
 {
   "name": "@digitalarsenal/sdn-module-analysis-vcm-adapter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
-  "exports": { "./dist/*": "./dist/*" },
-  "files": ["dist/", "plugin-manifest.json", "README.md"],
-  "scripts": { "build": "node build.mjs", "test": "node --test tests/*.test.mjs", "test:parity": "node tests/parity.mjs" },
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:parity": "node tests/parity.mjs"
+  },
   "devDependencies": {
     "esbuild": "0.25.12",
     "flatbuffers": "25.9.23",
     "flatc-wasm": "26.1.38",
-    "space-data-module-sdk": "0.8.26",
+    "space-data-module-sdk": "0.9.3",
     "spacedatastandards.org": "1.244.0"
   }
 }

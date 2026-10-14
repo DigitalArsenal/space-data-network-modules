@@ -120,23 +120,19 @@ struct AllocationRecord {
   uint32_t size = 0;
 };
 
-static const AcceptedTypeRef kMethod_fit_input_port_0_accepted_types[] = {
-  { true, "", "", 0u, false, "" },
-};
-static const AcceptedTypeRef kMethod_fit_input_port_1_accepted_types[] = {
-  { true, "", "", 0u, false, "" },
+static const AcceptedTypeRef kMethod_fit_meme_types[] = {
+  { false, "FIL.fbs", "$FIL", 0u, true, "FIL" },
 };
 static const AcceptedTypeRef kMethod_fit_oem_types[] = {
   { false, "OEM.fbs", "$OEM", 0u, true, "OEM" },
   { false, "OEM.fbs", "$OEM", 1u, true, "OEM" },
 };
 static const PortRequirement kMethod_fit_input_ports[] = {
-  { "meme", false, kMethod_fit_input_port_0_accepted_types, 1u },
-  { "options", false, kMethod_fit_input_port_1_accepted_types, 1u },
+  { "meme", false, kMethod_fit_meme_types, 1u },
   { "oem", false, kMethod_fit_oem_types, 2u },
 };
 static const char *kMethod_fit_output_ports[] = {
-  "result", "omm", "ocm",
+  "omm", "ocm", "obd", "tle",
 };
 
 static const MethodDescriptor kMethodTable[] = {
@@ -144,12 +140,12 @@ static const MethodDescriptor kMethodTable[] = {
     "fit",
     &fit,
     kMethod_fit_input_ports,
-    3u,
+    2u,
     kMethod_fit_output_ports,
     sizeof(kMethod_fit_output_ports) / sizeof(kMethod_fit_output_ports[0]),
-    true,
-    "meme",
-    "result"
+    false,
+    nullptr,
+    nullptr
   },
 };
 

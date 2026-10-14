@@ -91,7 +91,7 @@ extern "C" int common_epoch() {
   using namespace common;
   const nlohmann::json opt = json_input("options");
   if (!opt.is_object() || !opt.contains("targets") || !opt["targets"].is_array())
-    return fail("invalid-options", "options must be JSON with a targets array.");
+    return fail("invalid-options", "options must be an $ERM COMMON_EPOCH record with REQUESTS.");
   Options defaults;
   default_options(&defaults);
   Counts counts;

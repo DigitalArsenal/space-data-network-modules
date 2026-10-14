@@ -9,8 +9,9 @@ SDK module for following a launch and naming the orbit it is entering
 | `track_ascent` | Live or recorded altitude and speed samples → reconstructed ascent, instantaneous impact points and apsides, and the insertion orbit once in orbit |
 | `project_insertion` | A scheduled launch → nominal ascent and projected insertion orbit, and the liftoffs that join a reference plane |
 
-Both emit a `$LAM` plus a JSON `report` (phase, azimuth, insertion elements,
-latest sample, in-plane liftoffs).
+Both emit one `$LAM` and nothing else: PHASE, INSERTION elements and
+uncertainties, the samples and IN_PLANE_LIFTOFF_EPOCHS are fields of it
+(no JSON report since 0.2.0).
 
 ## Inputs
 

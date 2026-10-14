@@ -243,8 +243,11 @@ int main(int argc, char** argv) {
     if (!ok) return fail("fit result not bit-identical between KVN and $OEM FB paths");
 
     // ── (3) Full FlatBuffer entry: $OEM in -> fit -> $OMM out ───────────────────
-    const std::string opts =
-        "{\"dataSource\":\"ISS-E\",\"objectName\":\"ISS\",\"objectId\":\"1998-067-A\",\"noradCatId\":25544}";
+    od::FitOptions opts;
+    opts.data_source = "ISS-E";
+    opts.object_name = "ISS";
+    opts.object_id = "1998-067-A";
+    opts.norad_cat_id = 25544;
     od::PluginFitFBResult fb = od::fit_ephemeris_fb(oem_fb.data(), oem_fb.size(), opts);
     if (!fb.ok) return fail(("fit_ephemeris_fb failed: " + fb.error_message).c_str());
     if (!bits_equal(fb.rms_km, B.rms_km))

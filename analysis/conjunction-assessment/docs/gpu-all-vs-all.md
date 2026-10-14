@@ -124,22 +124,22 @@ window. A minimum strictly inside that window is reported as found.
 
 - `request`: a CQR `WINDOW_REQUEST` on an index with no primaries, with
   `ALFANO_MAXIMUM` controls;
-- `block`: `CAB1`, then u32 `first_step` and u32 `step_count` (1–256).
+- `block`: a `$SCR` BLOCK, `FIRST_STEP` and `STEP_COUNT` (1–256).
 
 It returns:
 
-- `grid`: `CAG1`, then u32 first, count and objects, then f32 states
-  `[step][object][x, y, z, D, vx, vy, vz, 0]` and f32 radius bounds
-  `[object][lo, hi]`. Excluded objects are NaN.
-- `report` (JSON): `last_step`, `objects`, and `excluded` (index, first
-  failing JD, reason).
+- `grid`: a `$SCR` GRID, `FIRST_STEP`, `STEP_COUNT`, `OBJECTS` and `STEP_S`,
+  then `STATES` `[step][object]` (x, y, z, D, vx, vy, vz, 0 as f32) and `BANDS`
+  `[object]` (lo, hi radius bounds). Excluded objects are NaN.
+- `report`: a `$SCR` SEARCH_REPORT, `LAST_STEP`, `OBJECTS`, and `EXCLUDED`
+  (index, first failing JD, reason).
 
 **`refine_candidates`** takes:
 
 - the same `request`;
-- optionally, `candidates`: `CAC1`, u32 count, then u32 (obj1, obj2, step)
-  triples;
-- optionally, `excluded`: `CAX1`, u32 count, then (u32 index, f64 JD).
+- optionally, `candidates`: a `$SCR` CANDIDATES, (OBJECT1, OBJECT2, STEP)
+  rows;
+- optionally, `excluded`: a `$SCR` EXCLUSIONS, (INDEX, FIRST_FAILURE_JD) rows.
 
 It returns `screen_catalog`'s `result` chunks, up to 1,024 events each, and
 `excluded` OMMs. Without `candidates`, it runs the CPU search below.

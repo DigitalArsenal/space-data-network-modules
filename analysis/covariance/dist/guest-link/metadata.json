@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-sequential",
+  "symbolPrefix": "sdm_guest_636f76617269616e63652d616e616c79736973_",
+  "methodSymbols": {
+    "compute_covariance": "sdm_guest_636f76617269616e63652d616e616c79736973_compute_covariance"
+  }
+}

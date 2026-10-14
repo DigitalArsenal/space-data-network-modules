@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import * as flatbuffers from 'flatbuffers';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
-import { MPE, meanElementSource } from 'spacedatastandards.org/lib/js/MPE/main.js';
-import { OEM } from 'spacedatastandards.org/lib/js/OEM/main.js';
-import { EOPT } from 'spacedatastandards.org/lib/js/EOP/main.js';
+import { S as P, call, dayOfMjd, loadStandard, mjdOfMs } from './dcl.mjs';
+
+const { flatbuffers, OEM, EOPT } = P;
+const { MPE, meanElementSource } = await loadStandard('MPE');
 
 // The decay methods against independent references:
 // - Vallado's SGP4 verification set (SGP4-VER.TLE with the t = 0 rows of
@@ -33,18 +32,7 @@ async function harnessOf(dir) {
   const manifest = JSON.parse(fs.readFileSync(dir === '.' ? here('../plugin-manifest.json') : modules(`${dir}/plugin-manifest.json`)));
   return createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct' });
 }
-async function call(method, request) {
-  const h = await harnessOf('.');
-  try {
-    const r = await h.invoke({ methodId: method, inputs: [{ portId: 'request', payload: Buffer.from(JSON.stringify(request)), typeRef: { schemaName: 'application/json' } }] });
-    if (r.statusCode !== 0) throw new Error(`${r.errorCode}: ${r.errorMessage}`);
-    return JSON.parse(Buffer.from(r.outputs[0].payload).toString('utf8'));
-  } finally {
-    await h.destroy();
-  }
-}
 const isoOfMjd = (mjd) => new Date((mjd - 40587) * 86400000).toISOString().replace('Z', '');
-const dayOfMjd = (mjd) => isoOfMjd(mjd).slice(0, 10);
 // Constant synthetic drivers over [from, to] (whole days), DTC raised by add.
 function rows(fromMjd, toMjd, add = 0) {
   const out = [];
@@ -72,18 +60,20 @@ test('SGP4 trajectory at epoch reproduces Vallado\'s verification states; mean a
   // WGS-72: ke = 60 / sqrt(Re^3 / mu) per minute, k2 = J2 / 2.
   const ke = 60 / Math.sqrt(6378.135 ** 3 / 398600.8), k2 = 0.5 * 0.001082616;
   cases.forEach((c, i) => {
-    const o = out.objects[i];
-    assert.equal(o.ok, true, `${c.satnum}`);
-    // tcppver.out prints 1e-8 km.
-    const s = o.samples[0];
-    s.temeKm.forEach((x, k) => assert.ok(Math.abs(x - c.temeR[k]) < 2e-8, `${c.satnum} r[${k}] ${x} vs ${c.temeR[k]}`));
-    s.temeKmS.forEach((x, k) => assert.ok(Math.abs(x - c.temeV[k]) < 2e-9, `${c.satnum} v[${k}] ${x} vs ${c.temeV[k]}`));
+    const o = out.OBJECTS[i];
+    assert.equal(o.OK, true, `${c.satnum}`);
+    assert.equal(o.ID, String(c.satnum));
+    // tcppver.out prints 1e-8 km. The first sample is at the set's epoch: TEME position (km) then velocity (km/s).
+    const state = o.SAMPLE_TEME_STATE.slice(0, 6);
+    state.slice(0, 3).forEach((x, k) => assert.ok(Math.abs(x - c.temeR[k]) < 2e-8, `${c.satnum} r[${k}] ${x} vs ${c.temeR[k]}`));
+    state.slice(3).forEach((x, k) => assert.ok(Math.abs(x - c.temeV[k]) < 2e-9, `${c.satnum} v[${k}] ${x} vs ${c.temeV[k]}`));
+    assert.equal(o.SAMPLE_TIME_MS.length * 6, o.SAMPLE_TEME_STATE.length);
     const n0 = c.MEAN_MOTION * 2 * Math.PI / 1440, e = c.ECCENTRICITY, ci = Math.cos(c.INCLINATION * Math.PI / 180);
     const shape = (3 * ci * ci - 1) / (1 - e * e) ** 1.5;
     const a1 = (ke / n0) ** (2 / 3), d1 = 1.5 * k2 / a1 ** 2 * shape;
     const a0 = a1 * (1 - d1 / 3 - d1 * d1 - 134 / 81 * d1 ** 3), d0 = 1.5 * k2 / a0 ** 2 * shape;
     const brouwer = a0 / (1 - d0) * 6378.135;
-    assert.ok(Math.abs(o.sets[0].aKm - brouwer) < 1e-6, `${c.satnum}: a ${o.sets[0].aKm} vs ${brouwer} km`);
+    assert.ok(Math.abs(o.SET_MEAN_SEMI_MAJOR_AXIS_KM[0] - brouwer) < 1e-6, `${c.satnum}: a ${o.SET_MEAN_SEMI_MAJOR_AXIS_KM[0]} vs ${brouwer} km`);
   });
 });
 
@@ -109,7 +99,7 @@ async function epochState(s) {
   const h = await harnessOf('analysis/epoch-state');
   try {
     const r = await h.invoke({ methodId: 'derive', inputs: [{ portId: 'elements', payload, typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE',
-      wireFormat: 'aligned-binary', requiredAlignment: 8, byteLength: payload.byteLength } }] });
+      wireFormat: 'flatbuffer' } }] });
     if (r.statusCode !== 0) throw new Error(r.errorMessage);
     const bytes = new Uint8Array(r.outputs.find((o) => o.portId === 'states').payload);
     const n = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true);
@@ -215,7 +205,7 @@ test('the drag decay of an element set matches HPOP\'s numerically integrated de
         const correction = add ? { nodesMjd: [t0 - 1, t0 + span + 1], altitudeKm: [], values: [[add], [add]] } : undefined;
         const module = await call('decay', { jb2008: { rows: rows(t0 - 8, t0 + span + 2) }, stepSeconds: 30,
           objects: [{ id: name, B, spanDays: span, sets: [s] }], ...(correction ? { correction } : {}) });
-        const rate = module.objects[0].segments[0].decayM / span;
+        const rate = module.OBJECTS[0].SEGMENT_DECAY_M[0] / span;
         const hpop = hpopRate(await hpopTrack(t0, await epochState(s), span + 8.5 * periodS / 86400, B, jb), span);
         ratios[add] = { module: rate, hpop };
         // Measured: circular 0.996, eccentric 0.984. SGP4's analytical
@@ -259,9 +249,9 @@ async function synthetic({ t0, days, objects, correction, noiseM, seed }) {
   for (let pass = 0; pass < 2; ++pass) {
     const out = await call('decay', { jb2008: { rows: rows(t0 - 8, t0 + days + 2) }, stepSeconds: 120, correction,
       objects: histories.map((h) => ({ id: h.id, B: h.B, sets: h.sets })) });
-    out.objects.forEach((o, i) => {
+    out.OBJECTS.forEach((o, i) => {
       const h = histories[i];
-      h.sets = h.sets.map((s, k) => ({ ...s, MEAN_MOTION: brouwerToKozai(h.aKm + (o.sets[k].cumulativeDecayM + noise[i][k]) / 1000, s.ECCENTRICITY, s.INCLINATION) }));
+      h.sets = h.sets.map((s, k) => ({ ...s, MEAN_MOTION: brouwerToKozai(h.aKm + (o.SET_CUMULATIVE_DECAY_M[k] + noise[i][k]) / 1000, s.ECCENTRICITY, s.INCLINATION) }));
     });
   }
   return histories;
@@ -289,9 +279,11 @@ test('calibrate_decay recovers a known correction and ballistic coefficients fro
     nodes: { fromMjd: t0, toMjd: t0 + days, stepHours: 6 }, priors: { randomWalkKPerSqrtDay: 60, meanLevelK: 200 }, sigmaFloorM: 0.5,
     objects: histories.map((h) => ({ id: h.id, sets: h.sets, ...(anchor && h.id === 'C' ? { lnBPrior: { mean: Math.log(h.B), sigma: 0.01 } } : {}) })) });
   const anchored = await call('calibrate_decay', request(true));
-  assert.equal(anchored.fit.converged, true, JSON.stringify(anchored.fit));
+  assert.equal(anchored.FIT.CONVERGED, true, JSON.stringify(anchored.FIT));
+  assert.equal(anchored.STATUS, P.dclStatus.Solved);
   const trueAt = (t) => { const d = t - t0; return d < 3 ? 30 : d < 4 ? 90 : 10; };
-  const nodes = anchored.correction.nodesMjd.map((t, j) => ({ d: t - t0, err: anchored.correction.values[j][0] - trueAt(t), sigma: anchored.correction.sigmas[j][0] }));
+  const nodeTimes = anchored.CORRECTION.NODE_TIMES_MS.map(mjdOfMs);
+  const nodes = nodeTimes.map((t, j) => ({ d: t - t0, err: anchored.CORRECTION.NODE_VALUES_K[j] - trueAt(t), sigma: anchored.CORRECTION.NODE_SIGMAS_K[j] }));
   // Away from the excursion's edges (a random walk smooths a step over about a day).
   const steady = nodes.filter(({ d }) => (d > 0.75 && d < 2.25) || (d > 5 && d < 7.25));
   const rms = (xs) => Math.sqrt(xs.reduce((a, x) => a + x * x, 0) / xs.length);
@@ -300,18 +292,19 @@ test('calibrate_decay recovers a known correction and ballistic coefficients fro
   assert.ok(rms(steady.map((x) => x.err / x.sigma)) < 2.5, `normalized error ${rms(steady.map((x) => x.err / x.sigma)).toFixed(2)}`);
   const excursion = nodes.filter(({ d }) => d >= 3.25 && d <= 3.75).map((x) => x.err + 90);
   assert.ok(Math.min(...excursion) > 60, `the 90 K excursion is seen (${excursion.map((x) => x.toFixed(1))})`);
-  const trueLevel = anchored.correction.nodesMjd.reduce((a, t) => a + trueAt(t), 0) / nodes.length;
-  const [level] = anchored.fit.level;
-  assert.ok(Math.abs(level.meanK - trueLevel) < 3 * level.sigmaK + 1, `level ${level.meanK} +- ${level.sigmaK} vs ${trueLevel}`);
-  anchored.objects.filter((o) => o.id !== 'G').forEach((o) => {
-    const B = objects.find((x) => x.id === o.id).B;
-    assert.ok(Math.abs(o.B / B - 1) < 0.01, `${o.id}: B ${o.B} vs ${B}`);
+  const trueLevel = nodeTimes.reduce((a, t) => a + trueAt(t), 0) / nodes.length;
+  const [level] = anchored.LEVELS;
+  assert.ok(Math.abs(level.MEAN_K - trueLevel) < 3 * level.SIGMA_K + 1, `level ${level.MEAN_K} +- ${level.SIGMA_K} vs ${trueLevel}`);
+  assert.equal(anchored.OBJECTS.length, objects.length, 'no object skipped');
+  anchored.OBJECTS.filter((o) => o.ID !== 'G').forEach((o) => {
+    const B = objects.find((x) => x.id === o.ID).B;
+    assert.ok(Math.abs(o.BALLISTIC_COEFFICIENT_M2_KG / B - 1) < 0.01, `${o.ID}: B ${o.BALLISTIC_COEFFICIENT_M2_KG} vs ${B}`);
   });
   // Without the anchor, B and the level trade off: the level's formal sigma
   // grows and its correlation with the mean ln B approaches -1.
   const free = await call('calibrate_decay', request(false));
-  assert.ok(free.fit.meanLevelSigmaK > 4 * anchored.fit.meanLevelSigmaK, `level sigma free ${free.fit.meanLevelSigmaK} vs anchored ${anchored.fit.meanLevelSigmaK}`);
-  assert.ok(free.fit.levelLnBCorrelation < -0.9, `correlation ${free.fit.levelLnBCorrelation}`);
+  assert.ok(free.MEAN_LEVEL_SIGMA_K > 4 * anchored.MEAN_LEVEL_SIGMA_K, `level sigma free ${free.MEAN_LEVEL_SIGMA_K} vs anchored ${anchored.MEAN_LEVEL_SIGMA_K}`);
+  assert.ok(free.LEVEL_LN_B_CORRELATION < -0.9, `correlation ${free.LEVEL_LN_B_CORRELATION}`);
 });
 
 test('a node correction in evaluate applies dT(t, h) linear in time and altitude, and a constant one equals raising DTC', async () => {
@@ -323,8 +316,8 @@ test('a node correction in evaluate applies dT(t, h) linear in time and altitude
   // At 600 km the altitude weight is one half; time weights 1/4, 1/2, 3/4.
   const at = (wt, h) => { const c = Math.max(300, Math.min(900, h)); const wa = (c - 400) / 400; return (1 - wt) * ((1 - wa) * 10 + wa * 50) + wt * ((1 - wa) * 30 + wa * 90); };
   const expected = [at(0.25, 600), at(0.5, 600), at(0.75, 600), at(0.5, 300), at(0.5, 1000), at(0.5, 200)];
-  out.deltaT.forEach((x, i) => assert.ok(Math.abs(x - expected[i]) < 1e-9, `point ${i}: ${x} vs ${expected[i]}`));
+  out.POINTS.DELTA_T_K.forEach((x, i) => assert.ok(Math.abs(x - expected[i]) < 1e-9, `point ${i}: ${x} vs ${expected[i]}`));
   const constant = await call('evaluate', { points, jb2008: { rows: rows(t0 - 8, t0 + 2) }, correction: { nodesMjd: [t0 - 1], altitudeKm: [], values: [[25]] } });
   const raised = await call('evaluate', { points, jb2008: { rows: rows(t0 - 8, t0 + 2, 25) } });
-  constant.density.forEach((rho, i) => assert.ok(Math.abs(rho / raised.density[i] - 1) < 1e-12));
+  constant.POINTS.DENSITY_KG_M3.forEach((rho, i) => assert.ok(Math.abs(rho / raised.POINTS.DENSITY_KG_M3[i] - 1) < 1e-12));
 });

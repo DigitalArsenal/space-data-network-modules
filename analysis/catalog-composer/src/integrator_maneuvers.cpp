@@ -12,45 +12,38 @@ struct ManeuverPolicy {
   std::set<int> retiring{static_cast<int>(maneuverStatus::DETECTED), static_cast<int>(maneuverStatus::CONFIRMED), static_cast<int>(maneuverStatus::EXECUTED)};
 };
 
-bool status_named(const std::string& name, maneuverStatus* out) {
-  for (int i = static_cast<int>(maneuverStatus::MIN); i <= static_cast<int>(maneuverStatus::MAX); ++i) {
-    if (name == EnumNamemaneuverStatus(static_cast<maneuverStatus>(i))) { *out = static_cast<maneuverStatus>(i); return true; }
-  }
-  return false;
-}
-bool status_set(const Json& value, std::set<int>* out, std::string* error) {
-  if (value.is_null()) return true;
-  if (!value.is_array()) { *error = "Maneuver statuses must be an array of status names."; return false; }
+using Statuses = flatbuffers::Vector<maneuverStatus>;
+// An absent or empty list keeps the default (DETECTED, CONFIRMED, EXECUTED); a list replaces it.
+bool status_set(const Statuses* value, std::set<int>* out, std::string* error) {
+  if (!value || value->size() == 0) return true;
   std::set<int> parsed;
-  for (const auto& name : value) {
-    maneuverStatus status;
-    if (!status_named(text(name), &status)) { *error = "Unknown maneuver status."; return false; }
+  for (const auto status : *value) {
+    if (static_cast<int>(status) < static_cast<int>(maneuverStatus::MIN) || static_cast<int>(status) > static_cast<int>(maneuverStatus::MAX)) { *error = "Unknown maneuver status."; return false; }
     parsed.insert(static_cast<int>(status));
   }
   *out = parsed;
   return true;
 }
-bool parse_maneuver_policy(const Json& m, ManeuverPolicy* out, std::string* error) {
-  if (m.is_null()) return true;
-  if (!m.is_object()) { *error = "The maneuvers policy must be an object."; return false; }
-  if (!field(m, "timeToleranceSeconds").is_null()) {
-    out->time_tolerance_s = number(field(m, "timeToleranceSeconds"));
-    if (!std::isfinite(out->time_tolerance_s) || out->time_tolerance_s <= 0) { *error = "timeToleranceSeconds must be positive and finite."; return false; }
+bool parse_maneuver_policy(const XMTManeuverPolicy* m, ManeuverPolicy* out, std::string* error) {
+  if (!m) return true;
+  out->time_tolerance_s = m->TIME_TOLERANCE_S();
+  if (!std::isfinite(out->time_tolerance_s) || out->time_tolerance_s <= 0) { *error = "TIME_TOLERANCE_S must be positive and finite."; return false; }
+  for (const auto& [name, value, slot] : {std::tuple<const char*, double, double*>{"DELTA_V_TOLERANCE_KM_S", m->DELTA_V_TOLERANCE_KM_S(), &out->dv_tolerance_km_s},
+                                          std::tuple<const char*, double, double*>{"DELTA_V_RELATIVE_TOLERANCE", m->DELTA_V_RELATIVE_TOLERANCE(), &out->dv_relative}}) {
+    if (std::isnan(value)) continue;
+    if (!std::isfinite(value) || value < 0) { *error = std::string(name) + " must be nonnegative and finite."; return false; }
+    *slot = value;
   }
-  for (const char* key : {"deltaVToleranceKmS", "deltaVRelativeTolerance"}) {
-    if (field(m, key).is_null()) continue;
-    const double v = number(field(m, key));
-    if (!std::isfinite(v) || v < 0) { *error = std::string(key) + " must be nonnegative and finite."; return false; }
-    (std::strcmp(key, "deltaVToleranceKmS") == 0 ? out->dv_tolerance_km_s : out->dv_relative) = v;
-  }
-  return status_set(field(m, "maneuverableStatuses"), &out->maneuverable, error) && status_set(field(m, "retiringStatuses"), &out->retiring, error);
+  return status_set(m->MANEUVERABLE_STATUSES(), &out->maneuverable, error) && status_set(m->RETIRING_STATUSES(), &out->retiring, error);
 }
-Json maneuver_policy_json(const ManeuverPolicy& p) {
-  Json maneuverable = Json::array(), retiring = Json::array();
-  for (int s : p.maneuverable) maneuverable.push_back(EnumNamemaneuverStatus(static_cast<maneuverStatus>(s)));
-  for (int s : p.retiring) retiring.push_back(EnumNamemaneuverStatus(static_cast<maneuverStatus>(s)));
-  return {{"timeToleranceSeconds", p.time_tolerance_s}, {"deltaVToleranceKmS", std::isfinite(p.dv_tolerance_km_s) ? Json(p.dv_tolerance_km_s) : Json()},
-          {"deltaVRelativeTolerance", std::isfinite(p.dv_relative) ? Json(p.dv_relative) : Json()}, {"maneuverableStatuses", maneuverable}, {"retiringStatuses", retiring}};
+std::unique_ptr<XMTManeuverPolicyT> maneuver_policy_table(const ManeuverPolicy& p) {
+  auto out = std::make_unique<XMTManeuverPolicyT>();
+  out->TIME_TOLERANCE_S = p.time_tolerance_s;
+  out->DELTA_V_TOLERANCE_KM_S = p.dv_tolerance_km_s;
+  out->DELTA_V_RELATIVE_TOLERANCE = p.dv_relative;
+  for (int s : p.maneuverable) out->MANEUVERABLE_STATUSES.push_back(static_cast<maneuverStatus>(s));
+  for (int s : p.retiring) out->RETIRING_STATUSES.push_back(static_cast<maneuverStatus>(s));
+  return out;
 }
 
 // Best first: the status a merged event takes.

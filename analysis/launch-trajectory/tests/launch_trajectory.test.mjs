@@ -72,12 +72,12 @@ async function invoke(h, methodId, portId, lam) {
   const payload = pack(lam);
   const result = await h.invoke({ methodId, inputs: [{ portId, payload, typeRef: lamType }] });
   if (result.statusCode !== 0) return { result };
-  const out = result.outputs.find((f) => f.portId !== 'report');
+  assert.equal(result.outputs.length, 1, 'one $LAM and nothing else');
+  const out = result.outputs[0];
   const bytes = out.payload;
   assert.equal(Buffer.from(bytes.slice(4, 8)).toString(), '$LAM');
   const lamOut = L.LAM.getRootAsLAM(new flatbuffers.ByteBuffer(bytes)).unpack();
-  const report = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
-  return { result, lam: lamOut, report };
+  return { result, lam: lamOut };
 }
 function truthAt(fx, seconds) {
   const s = Math.round(seconds);
@@ -96,7 +96,7 @@ test('reconstructs the CRS-16 ascent from broadcast telemetry and matches the ca
   const h = await harness(t);
   // The broadcast ends as the upper stage shuts down, so no coast confirms the
   // cutoff; SECO-1 is supplied as an event at the end of acceleration.
-  const { result, lam, report } = await invoke(h, 'track_ascent', 'telemetry', request(crs16, {
+  const { result, lam } = await invoke(h, 'track_ascent', 'telemetry', request(crs16, {
     targetOrbit: target({ INCLINATION_DEG: truthInclination(crs16), PASS_DIRECTION: L.lamPassDirection.NORTHBOUND }),
     events: [cutoffEvent(crs16.cutoff_s)],
   }));
@@ -116,7 +116,6 @@ test('reconstructs the CRS-16 ascent from broadcast telemetry and matches the ca
   assert.ok(Math.abs(ins.APOAPSIS_ALTITUDE_M / 1000 - truth.apoapsis_altitude_km) < 40);
   assert.equal(ins.RAAN_UNCERTAINTY_DEG, 0.45);
   assert.equal(lam.BURN_OUT_VECTORS.length, 1);
-  assert.equal(report.phase, 'orbit-insertion');
   // Samples run from liftoff to insertion; the insertion sample is orbital.
   const n = lam.TIME_FROM_LAUNCH_S.length;
   assert.equal(lam.TIME_FROM_LAUNCH_S[0], 0);
@@ -150,7 +149,7 @@ test('reconstructs a southbound sun-synchronous ascent (PAZ) to the catalog orbi
 
 test('tracks an ascent in progress: suborbital, with an impact point downrange, and no insertion yet', async (t) => {
   const h = await harness(t);
-  const { result, lam, report } = await invoke(h, 'track_ascent', 'telemetry', request(crs16, {
+  const { result, lam } = await invoke(h, 'track_ascent', 'telemetry', request(crs16, {
     upTo: 300,
     targetOrbit: target({ INCLINATION_DEG: truthInclination(crs16), PASS_DIRECTION: L.lamPassDirection.NORTHBOUND }),
   }));
@@ -168,7 +167,6 @@ test('tracks an ascent in progress: suborbital, with an impact point downrange, 
   const vehicle = arc(lam.LATITUDE_DEG[n - 1], lam.LONGITUDE_DEG[n - 1]);
   const impact = arc(lam.IIP_LATITUDE_DEG[n - 1], lam.IIP_LONGITUDE_DEG[n - 1]);
   assert.ok(Number.isFinite(impact) && impact > vehicle + 500, `impact ${impact} km, vehicle ${vehicle} km`);
-  assert.equal(report.cutoff_s, null);
 });
 
 test('projects the CRS-16 insertion from the CRS-14 broadcast profile', async (t) => {
@@ -227,7 +225,7 @@ test('finds the Crew-13 liftoff that joins the ISS plane', async (t) => {
       PERIAPSIS_ALTITUDE_M: 200000, APOAPSIS_ALTITUDE_M: 360000, PLANE_REFERENCE: plane,
     }),
   });
-  const { result, lam: out, report } = await invoke(h, 'project_insertion', 'request', lam);
+  const { result, lam: out } = await invoke(h, 'project_insertion', 'request', lam);
   assert.equal(result.statusCode, 0, result.errorMessage);
   assert.ok(out.IN_PLANE_LIFTOFF_EPOCHS.length >= 1);
   const net = Date.parse('2026-10-01T15:10:06Z');
@@ -236,7 +234,12 @@ test('finds the Crew-13 liftoff that joins the ISS plane', async (t) => {
   // accuracy, not a scheduling claim.
   assert.ok(nearest < 120000, `in-plane liftoff ${nearest / 1000} s from the published time`);
   assert.equal(out.LAUNCH_EPOCH, out.IN_PLANE_LIFTOFF_EPOCHS.reduce((a, e) => (Math.abs(Date.parse(e) - net) < Math.abs(Date.parse(a) - net) ? e : a)));
-  assert.ok(Math.abs(report.plane_offset_deg) < 0.01, 'the projected insertion lies in the ISS plane');
+  // The ISS node at the insertion epoch, interpolated in the reference ephemeris.
+  const s = (Date.parse(out.INSERTION.EPOCH) - Date.parse(iss.start)) / 1000 / iss.stepSeconds;
+  const k = Math.floor(s);
+  const raanAt = (i) => { const [x, y, z, vx, vy, vz] = iss.states.slice(6 * i, 6 * i + 6); return Math.atan2(y * vz - z * vy, -(z * vx - x * vz)) * 180 / Math.PI; };
+  const issRaan = raanAt(k) + wrap(raanAt(k + 1) - raanAt(k)) * (s - k);
+  assert.ok(Math.abs(wrap(out.INSERTION.RAAN_DEG - issRaan)) < 0.01, 'the projected insertion lies in the ISS plane');
 });
 
 test('refuses requests it cannot answer', async (t) => {

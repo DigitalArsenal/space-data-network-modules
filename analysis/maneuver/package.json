@@ -3,7 +3,7 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node vectors/tools/build-vectors.mjs --check && node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/vectors.test.mjs tests/ratchet.test.mjs tests/error_path.test.mjs tests/frame_and_sign.test.mjs tests/lambert_izzo_crosscheck.test.mjs tests/orbit_geometry.test.mjs",
+    "test": "node vectors/tools/build-vectors.mjs --check && node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/vectors.test.mjs tests/ratchet.test.mjs tests/error_path.test.mjs tests/frame_and_sign.test.mjs tests/lambert_izzo_crosscheck.test.mjs tests/orbit_geometry.test.mjs tests/mpl_fields.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "vectors:build": "node vectors/tools/build-vectors.mjs",
     "vectors:check": "node vectors/tools/build-vectors.mjs --check",
@@ -17,8 +17,9 @@
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.8.25",
+    "space-data-module-sdk": "0.9.3",
     "spacedatastandards.org": "1.203.0"
   },
-  "type": "module"
+  "type": "module",
+  "version": "0.7.0"
 }

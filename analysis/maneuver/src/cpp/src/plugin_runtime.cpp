@@ -19,7 +19,12 @@
 #include <vector>
 
 /**
- * THE JSON BOUNDARY.
+ * THE OPERATION BOUNDARY.
+ *
+ * The wire is $MPL (maneuver plan) since 0.7.0: mpl_bridge.cpp verifies and
+ * decodes the request, builds the parameter tree below from it (SI units), and
+ * encodes this file's answer back into the plan. The parameter tree and the
+ * answer document are internal to the module; nothing JSON crosses a port.
  *
  * Everything a hostile caller can reach goes through this file, and the rule
  * here is absolute: NO input may trap. 0.1.0 could not honour that rule even in
@@ -58,7 +63,7 @@ namespace {
 /// three releases went by without it moving because nothing compared it to
 /// anything. `tests/behavior.test.mjs` now asserts this string against the
 /// manifest, so the next release cannot forget it.
-constexpr const char* kModuleVersion = "0.6.2";
+constexpr const char* kModuleVersion = "0.7.0";
 
 std::string version() { return kModuleVersion; }
 
@@ -381,7 +386,11 @@ std::string biEllipticTransfer(const Value& params) {
         .number("totalDeltaV", result.totalDeltaV)
         .number("tof", result.tof)
         .number("aTransfer1", result.aTransfer1)
-        .number("aTransfer2", result.aTransfer2);
+        .number("aTransfer2", result.aTransfer2)
+        // The two half-ellipse times whose sum is `tof`: the plan places the
+        // intermediate burn at tof1.
+        .number("tof1", result.tof1)
+        .number("tof2", result.tof2);
     writeVec3(out, "dv1_ric", result.dv1_ric);
     writeVec3(out, "dv2_ric", result.dv2_ric);
     writeVec3(out, "dv3_ric", result.dv3_ric);
@@ -828,7 +837,9 @@ std::string phasingFromTargetState(const Value& params) {
         !json_lite::optionalNumber(params, "eccentricityTolerance", op,
                                    &options.eccentricityTolerance) ||
         !json_lite::optionalNumber(params, "coOrbitalTolerance", op,
-                                   &options.coOrbitalTolerance)) {
+                                   &options.coOrbitalTolerance) ||
+        !json_lite::optionalNumber(params, "coOrbitalToleranceMetres", op,
+                                   &options.coOrbitalToleranceMetres)) {
         return {};
     }
     // ABSENT and ZERO are different requests, and `numRevs = 0` as the
@@ -852,7 +863,7 @@ std::string phasingFromTargetState(const Value& params) {
         return {};
     }
     if (options.coplanarTolerance < 0.0 || options.eccentricityTolerance < 0.0 ||
-        options.coOrbitalTolerance < 0.0) {
+        options.coOrbitalTolerance < 0.0 || options.coOrbitalToleranceMetres < 0.0) {
         fault::raise(fault_code::INVALID_PARAMETER,
                      std::string("[") + op +
                          "]: coplanarTolerance, eccentricityTolerance and "
@@ -895,7 +906,8 @@ std::string phasingFromTargetState(const Value& params) {
         .boolean("nearCircular", result.nearCircular)
         .number("eccentricityTolerance", result.eccentricityTolerance)
         .boolean("coOrbital", result.coOrbital)
-        .number("coOrbitalTolerance", result.coOrbitalToleranceMetres);
+        .number("coOrbitalTolerance", result.coOrbitalToleranceMetres)
+        .number("coOrbitalToleranceFraction", result.coOrbitalToleranceFraction);
     // The revolution-count trade.
     out.integer("recommendedRevs", result.recommendedRevs)
         .boolean("revsFromCaller", result.revsFromCaller)
@@ -1525,57 +1537,28 @@ PluginInvokeResult errorResult(const char* code, std::string message) {
 
 }  // namespace
 
-PluginInvokeResult invoke_json_request(std::string_view request_json) {
+const char* module_version() { return kModuleVersion; }
+
+/// One operation, already decoded from the $MPL request by mpl_bridge.cpp into
+/// the parameter tree the operations read. The guarded readers, the fault latch
+/// and the physics are exactly the ones the JSON command surface ran; only the
+/// wire in front of them changed.
+PluginInvokeResult invoke_operation(const std::string& operation,
+                                    const json_lite::Value& params) {
     // A fault latched by a PREVIOUS call must never fail this one. This one
     // line is what makes "the instance is still usable for the next call" true.
     fault::reset();
 
-    if (request_json.size() > (8u << 20)) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request body exceeds the 8 MiB ceiling.");
-    }
-
-    Value request;
-    std::string parseError;
-    if (!json_lite::parse(request_json, &request, &parseError)) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request body is not valid JSON: " + parseError);
-    }
-    if (!request.isObject()) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request body must be a JSON object of the form "
-                           "{\"operation\": \"...\", \"params\": { ... }}.");
-    }
-    const Value* operationValue = request.find("operation");
-    if (operationValue == nullptr) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request is missing the required \"operation\" key.");
-    }
-    if (!operationValue->isString()) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request key \"operation\" must be a string.");
-    }
-
-    Value emptyParams;
-    emptyParams.kind = json_lite::Kind::Object;
-    const Value* paramsValue = request.find("params");
-    if (paramsValue != nullptr && !paramsValue->isNull() && !paramsValue->isObject()) {
-        return errorResult(fault_code::MALFORMED_REQUEST,
-                           "Request key \"params\" must be an object when present.");
-    }
-    const Value& params =
-        (paramsValue != nullptr && paramsValue->isObject()) ? *paramsValue : emptyParams;
-
-    const std::string body = dispatch(operationValue->text, params);
+    const std::string body = dispatch(operation, params);
     if (fault::raised()) {
         return errorResult(fault::code(), fault::message());
     }
     if (body.empty()) {
         // A dispatcher returned nothing without latching a reason. That is a
         // defect in THIS file rather than in the request, and it is reported as
-        // one instead of being emitted as an empty response body.
+        // one instead of being emitted as an empty answer.
         return errorResult("internal-error",
-                           "Operation \"" + operationValue->text +
+                           "Operation \"" + operation +
                                "\" produced no response and reported no reason. "
                                "This is a module defect, not a bad request.");
     }

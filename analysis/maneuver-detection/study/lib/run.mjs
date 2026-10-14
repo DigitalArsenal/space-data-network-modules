@@ -2,7 +2,7 @@
 // calendar months (worker threads), and scoring against truth $MNV.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadModule, json, TYPES, jsonOf, mnvRecord, MNV } from './host.mjs';
+import { loadModule, config, TYPES, reportFrom, mnvRecord, MNV } from './host.mjs';
 import { runPool, waitForLoad } from './pool.mjs';
 
 export const log = (...a) => process.stderr.write(`${a.join(' ')}\n`);
@@ -40,9 +40,9 @@ export async function scoreVariants(eventsByVariant, truth, options) {
       const r = await scorer.invoke('score_detections', [
         { portId: 'detected', payload: eventsMnv(events), typeRef: TYPES.MNV },
         { portId: 'truth', payload: truth, typeRef: TYPES.MNV },
-        json('options', options),
+        config(options),
       ]);
-      out[name] = jsonOf(r, 'report');
+      out[name] = await reportFrom(r);
     }
   } finally {
     await scorer.destroy();

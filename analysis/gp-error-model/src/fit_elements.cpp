@@ -1410,7 +1410,7 @@ nlohmann::json fit_one(uint32_t norad, Track& tr, const FitOptions& o, const Apr
 extern "C" int fit_elements() {
   using namespace omfit;
   const nlohmann::json opt = json_input("options");
-  if (!opt.is_discarded() && !opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  if (!opt.is_discarded() && !opt.is_object()) return fail("invalid-options", "options must be an $ERM ELEMENT_FITS record with OPTIONS.");
   FitOptions base;
   std::string e = read_fit_options(opt.is_object() ? opt : nlohmann::json::object(), &base);
   if (!e.empty()) return fail("invalid-options", e);
@@ -1455,7 +1455,7 @@ extern "C" int fit_elements() {
     fits.push_back(row);
   }
   if (!omms.empty() &&
-      plugin_push_output_ex("elements", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM", 0, 8, omms.data(),
+      plugin_push_output_ex("elements", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OMM", 0, 0, omms.data(),
                             static_cast<uint32_t>(omms.size())) < 0)
     return fail("output", "could not emit the fitted $OMM records.");
   nlohmann::json frames = nlohmann::json::object();
@@ -1474,7 +1474,7 @@ extern "C" int element_residuals() {
   using namespace omfit;
   const nlohmann::json opt = json_input("options");
   if (!opt.is_object() || !opt.contains("requests") || !opt["requests"].is_array())
-    return fail("invalid-options", "options must be JSON with a requests array.");
+    return fail("invalid-options", "options must be an $ERM ELEMENT_FITS record with RESIDUAL_REQUESTS.");
   const bool want_samples = opt.value("samples", false);
   Options defaults;
   default_options(&defaults);

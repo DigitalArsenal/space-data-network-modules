@@ -1,46 +1,35 @@
 # Maneuver Planning Plugin
 
-Classical orbital maneuver and ROE targeting operations packaged as a canonical `space-data-module-sdk` command-surface plugin for hosted SDN runtimes, WasmEdge, and browser runtimes.
+Orbital maneuver planning over the SDS `$MPL` (maneuver plan) standard, packaged as a `space-data-module-sdk` module for hosted SDN runtimes, WasmEdge and browser runtimes.
 
-## What it does
+## What it does (0.7.0: the `$MPL` wire)
 
-This plugin exposes maneuver computations through a single canonical SDK method:
+One method, one type in, the same type out:
 
-- `invoke`
+- method `plan`: input port `request` takes one `$MPL` (`MPL.fbs`, file identifier `$MPL`); output port `plan` carries the same `$MPL`, answered.
 
-The request payload is UTF-8 JSON with this envelope:
+A request fills `PROBLEM` and the matching `REQUEST` sub-table (`TRANSFER`, `LAMBERT`, `PHASING`, `RELATIVE`, `RENDEZVOUS` or `GEOMETRY`). The answer echoes the whole request and adds `PLANNER` (`maneuver-planner <version>`), `STATUS`, the `BURNS` (epoch offset, delta-v vector in stated `AXES`, magnitude), the `ARCS`, `TOTAL_DELTA_V_KM_S`, `TOTAL_TIME_S`, `SOLVER`, `OPTIONS` (Lambert candidates ranked, the two phasing directions), `TRAJECTORY` and the problem's detail table (`PHASING`, `RELATIVE`, `RENDEZVOUS`, `GEOMETRY`).
 
-```json
-{
-  "operation": "hohmannTransfer",
-  "params": {
-    "r1": 6778000.0,
-    "r2": 42164000.0,
-    "mu": 398600441800000.0
-  }
-}
-```
+Units are the standard's: km, km/s, km/s^2, s, degrees, km^3/s^2 (`MU_KM3_S2` 0 = Earth). The planner still computes in SI; `src/cpp/src/mpl_bridge.cpp` converts at the boundary with one IEEE operation per value (x1000, /1000, x(pi/180), x(180/pi), x1e9, /1e9), so every plan value is the 0.6.x SI answer through exactly that conversion. Fields documented "0 = default" leave the planner's own default in force.
 
-The response payload is UTF-8 JSON returned on the `response` port.
+| `PROBLEM` | 0.6.x operation (internal) |
+| --- | --- |
+| `Hohmann`, `BiElliptic`, `PlaneChange`, `CombinedTransfer` | `hohmannTransfer`, `biEllipticTransfer`, `planeChange`, `combinedManeuver` |
+| `Lambert`, `LambertMinimumDeltaV` | `solveLambert`, `solveLambertMinDV` |
+| `Phasing`, `PhasingToTarget` | `phasingManeuver`, `phasingFromTargetState` |
+| `RelativeStateTransition`, `RelativeWaypoints` | `computeRoeStateTransition`, `planRelativeWaypointMission` |
+| `CollisionAvoidance`, `ApproachCorridor`, `RendezvousSimulation` | `computeCAM`, `computeApproach`, `simulateRendezvous` |
+| `OrbitGeometry`, `AnomalyConversion`, `TimeOfFlight`, `OrbitSampling`, `DeltaVTransform` | `evaluateOrbitGeometry`, `convertOrbitAnomaly`, `orbitTimeOfFlight`, `sampleOrbitGeometry`, `transformDeltaV` |
 
-## Supported operations
+The operation names and SI parameter names below are the planner's internal vocabulary, kept because the sections that follow document each operation by them; `tests/mpl_client.mjs` is the exact mapping in both directions. The `version` operation is gone: every answer names the planner and its version in `PLANNER`.
 
-- `version`
-- `hohmannTransfer`
-- `biEllipticTransfer`
-- `solveLambert`
-- `solveLambertMinDV`
-- `phasingManeuver`
-- `phasingFromTargetState`
-- `planeChange`
-- `combinedManeuver`
-- `computeRoeStateTransition`
-- `planRelativeWaypointMission`
-- `computeCAM`
-- `computeApproach`
-- `simulateRendezvous`
+Stated-or-default fields (amended `$MPL`): each value below is read only when its `HAS_*` flag is set, so a real zero can be requested; an unset flag leaves the planner's default.
+- `PHASING.HAS_REVOLUTIONS` (a stated 0 is refused: the phasing orbit needs at least one revolution), `HAS_COPLANAR_TOLERANCE`, `HAS_ECCENTRICITY_TOLERANCE`, `HAS_CO_ORBITAL_TOLERANCE`.
+- `CO_ORBITAL_TOLERANCE_BASIS`: `RelativeToChaserSemiMajorAxis` passes straight through; `AbsoluteKm` is converted to a fraction with the chaser's semi-major axis once it is known. The answer carries the applied threshold both ways, `CO_ORBITAL_TOLERANCE_KM` and `CO_ORBITAL_TOLERANCE_FRACTION`.
+- `RELATIVE.HAS_MAX_DELTA_V`: unset = the CAM default (10 m/s); set with 0 = unlimited; set with a positive value = that limit.
+- `RENDEZVOUS.HAS_DAMPING_RATIO`, `HAS_KP`, `HAS_KD`; `GEOMETRY.HAS_ELAPSED`, `HAS_SWEEP`.
 
-These operations mirror the repo’s existing maneuver math and targeting helpers and are routed through the canonical SDK command bridge.
+Relative dynamics: `STM_DYNAMICS` (default J2) picks the state transition matrix returned by `RelativeStateTransition`; `DYNAMICS` is only J2 on or off for propagating `INITIAL_ROE` and for targeting, and `DRAG` adds the drag model. The answer echoes both (`DYNAMICS` names the drag model when one was used). Drag rates (`DA_DOT_PER_S`, `DEX_DOT_PER_S`, `DEY_DOT_PER_S`) are dimensionless ROE rates, 1/s, passed to the planner unscaled; `DRAG_COLUMNS` are in seconds and `STATE_TRANSITION` is dimensionless.
 
 ## simulateRendezvous
 
@@ -109,7 +98,7 @@ Truth model and integration (`params.integration`):
 
 ### Example
 
-See `tests/fixtures/request.rendezvous.json`:
+`tests/fixtures/request.rendezvous.mpl` is this request as a `$MPL` (`RendezvousSimulation`, km units); in the planner's SI vocabulary:
 
 ```json
 {
@@ -135,14 +124,13 @@ control acceleration per sample.
 
 ## Errors
 
-**No input traps this module.** Every refusal — an unknown operation, a missing
-or mistyped parameter, a value outside a validator's range, a malformed body, a
-geometry with no solution — comes back as a non-zero `statusCode` with a stable
-`errorCode` and a `response` frame carrying:
-
-```json
-{ "error": "[phasing]: Number of revolutions must be >= 1", "errorCode": "invalid-parameter" }
-```
+**No input traps this module.** Every refusal — an unspecified or unknown
+problem, a missing table, a value outside a validator's range, bytes that are
+not a valid `$MPL`, a geometry with no solution — comes back as a non-zero
+`statusCode` with a stable `errorCode` and (for any readable request) a `$MPL`
+answer on `plan` with `STATUS` (`InvalidRequest`, `NoSolution`, `Infeasible`,
+`SingularGeometry`, `Failed`), `ERROR_CODE` and `ERROR_MESSAGE`, e.g.
+`invalid-parameter` / `[phasing]: Orbit radius must be positive`,
 
 and **the instance keeps working**. This is worth stating plainly because it was
 not true before 0.2.0: 0.1.0 linked without exception support, so its `try`/
@@ -312,8 +300,8 @@ defect in `graph/findings/official-harness-shapes.md`).
 - Embedded manifest exports (generated by the SDK from the manifest itself):
   - `plugin_get_manifest_flatbuffer`
   - `plugin_get_manifest_flatbuffer_size`
-- Command bridge export:
-  - `plugin_invoke_stream`
+- Method export `plan`, plus the SDK's `plugin_invoke_stream` (direct surface)
+  and `_start` (command surface).
 - Runtime targets: `browser`, `wasi`, `wasmedge`
 - Imports: `wasi_snapshot_preview1` only.
 
@@ -354,6 +342,7 @@ ctest --test-dir build --output-on-failure
 ## Verification
 
 ```bash
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards checkout with schema/MPL>
 npm test                 # sdk_compat + behavior + vectors + error_path
 ```
 
@@ -367,7 +356,12 @@ npm test                 # sdk_compat + behavior + vectors + error_path
   every claimed solution must actually arrive, adjudicated by the independent
   Kepler propagator in `vectors/index.mjs`.
 - `tests/error_path.test.mjs` — every refusal is structured, the instance
-  survives, and a 698-input fuzz pass proves no input traps the module.
+  survives, and a fuzz pass (hostile values in every numeric field of every
+  problem's typed request, ~3000 inputs) proves no input traps the module.
+- `tests/mpl_fields.test.mjs` — the amended `$MPL` fields end to end: co-orbital
+  tolerance on both bases, `HAS_MAX_DELTA_V` (default, unlimited, a limit),
+  `STM_DYNAMICS` beside `DYNAMICS`, `DA_DOT_PER_S` unscaled (da grows by
+  rate x time), drag columns in seconds, and stated zeros via the `HAS_*` flags.
 - `tests/behavior.test.mjs` — the relative-motion operations no command card
   consumes yet.
 
@@ -386,15 +380,15 @@ A minimal single-plugin flow example lives at:
 
 - `tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json`
 
-It binds a manual trigger to the plugin’s canonical `request` port and invokes method `invoke`.
+It binds a manual trigger to the plugin’s `request` port and invokes method `plan`.
 
 ## Example request
 
 The fixture used by the compatibility tests lives at:
 
-- `tests/fixtures/request.hohmann.json`
+- `tests/fixtures/request.hohmann.mpl`
 
-It exercises a Hohmann transfer from LEO-like radius to GEO.
+A `$MPL` Hohmann request from a LEO-like radius to GEO.
 
 ## License
 

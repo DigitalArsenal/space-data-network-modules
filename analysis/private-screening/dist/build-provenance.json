@@ -1,4 +1,20 @@
 {
+  "spacedatastandards": "1.247.0+1791801690384",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "MET",
+    "CVR",
+    "PVN",
+    "OMM",
+    "LFV",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM"
+  ],
   "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
   "threadModel": "single-thread"
 }

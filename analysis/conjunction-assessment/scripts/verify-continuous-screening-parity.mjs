@@ -33,7 +33,8 @@ import { aotModule } from './lib/aot.mjs';
 import { syntheticGp } from '../tests/lib/syntheticCatalog.mjs';
 import { createOmmEncoder } from './lib/ommCatalog.mjs';
 import { indexInputs, sgp4Sources, windowRequest, screenWindows } from '../gpu/catalogScreen.mjs';
-import { blockFrame, candidatesFrame, control, excludedFrame, sds, sortTriples } from '../gpu/allVsAll.mjs';
+import { blockFrame, candidatesFrame, excludedFrame, sds, sortTriples } from '../gpu/allVsAll.mjs';
+import { candidateTriples, searchReport } from '../gpu/scrFrames.mjs';
 import { ROLE, rolesFrame } from '../gpu/continuousScreen.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,13 +51,13 @@ const sources = sgp4Sources(frames);
 const [window] = screenWindows(2461314.5, 1 / 24, 1);
 const controls = (workers) => ({ thresholdKm: 20, coarseStepSec: 60, workers });
 const request = (handle, workers = 1) => sds('request', 'CQR', windowRequest(handle, 'TEME', window, controls(workers)));
-const grid = (bytes) => control('grid', 'application/vnd.sdn.ca-coarse-grid', bytes);
-const block = (first, count) => control('block', 'application/vnd.sdn.ca-grid-block', blockFrame(first, count));
+const grid = (bytes) => sds('grid', 'SCR', bytes);
+const block = (first, count) => sds('block', 'SCR', blockFrame(first, count));
 const roles = new Uint8Array(frames.length);
 for (let i = 0; i < roles.length; i++) roles[i] = i % 9 === 0 ? ROLE.PRIMARY : i % 13 === 0 ? ROLE.SKIP : ROLE.SECONDARY;
-const scope = control('roles', 'application/vnd.sdn.ca-roles', rolesFrame(roles));
+const scope = sds('roles', 'SCR', rolesFrame(roles));
 const port = (response, id) => response.outputs.find((x) => x.portId === id)?.payload;
-const triples = (frame) => { const n = new DataView(frame.buffer, frame.byteOffset).getUint32(4, true); return new Uint32Array(frame.slice(8, 8 + n * 12).buffer); };
+const triples = candidateTriples;
 
 const node = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
 const steps = [], responses = [];
@@ -69,7 +70,7 @@ async function step(label, methodId, inputs, expectError = null) {
 }
 await step('prepare-catalog', 'prepare_screening_index', indexInputs(sources));          // handle 1
 const first = await step('grid-step-0', 'coarse_grid', [request(1), block(0, 1)]);
-const last = JSON.parse(new TextDecoder().decode(port(first, 'report'))).last_step;
+const last = searchReport(port(first, 'report')).last_step;
 const grids = [port(first, 'grid')];
 for (let at = 1; at <= last; at += 32) grids.push(port(await step(`grid-steps-${at}`, 'coarse_grid', [request(1), block(at, Math.min(32, last - at + 1))]), 'grid'));
 const all = [], scoped = [];
@@ -87,19 +88,19 @@ for (let q = 0; q < scopedAll.length; q += 3) { position[scopedAll[q]] = 0; posi
 for (let r = 0; r < frames.length; r++) if (position[r] === 0) { position[r] = rows.length; rows.push(r); }
 for (let q = 0; q < scopedAll.length; q += 3) { scopedAll[q] = position[scopedAll[q]]; scopedAll[q + 1] = position[scopedAll[q + 1]]; }
 const excluded = new Map();
-const report = JSON.parse(new TextDecoder().decode(port(first, 'report')));
+const report = searchReport(port(first, 'report'));
 for (const x of report.excluded) if (position[x.index] >= 0) excluded.set(position[x.index], x.first_failure_jd);
 const sorted = sortTriples(scopedAll, rows.length);
 await step('prepare-sub-index', 'prepare_screening_index', indexInputs(rows.map((r) => sources[r])));   // handle 3
-const refine = [request(3), control('candidates', 'application/vnd.sdn.ca-candidates', candidatesFrame(sorted, 0, sorted.length)),
-  control('excluded', 'application/vnd.sdn.ca-excluded', excludedFrame(excluded))];
+const refine = [request(3), sds('candidates', 'SCR', candidatesFrame(sorted, 0, sorted.length)),
+  sds('excluded', 'SCR', excludedFrame(excluded))];
 for (let chunk = 0; ; chunk++) {
   const response = await step(`refine-sub-index-${chunk}`, 'refine_candidates', refine);
   assert.equal(response.statusCode, 0, response.errorMessage);
   if (!port(response, 'result') || chunk > 64) break;
   if (CQR.getRootAsCQR(new flatbuffers.ByteBuffer(port(response, 'result'))).CATALOG_RESULT().FINAL_CHUNK()) break;
 }
-await step('refuse-roles-count', 'search_grid', [request(1), grid(grids[1]), control('roles', 'application/vnd.sdn.ca-roles', rolesFrame(roles.subarray(1)))], 'invalid-roles');
+await step('refuse-roles-count', 'search_grid', [request(1), grid(grids[1]), sds('roles', 'SCR', rolesFrame(roles.subarray(1)))], 'invalid-roles');
 await step('refuse-truncated-grid', 'search_grid', [request(1), grid(grids[1].subarray(0, grids[1].length - 4))], 'invalid-grid');
 await node.destroy?.();
 

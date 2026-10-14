@@ -5,6 +5,8 @@
 #include "constants.h"
 #include "classical.h"
 
+#include <cmath>
+#include <limits>
 #include <vector>
 
 namespace maneuver {
@@ -200,6 +202,10 @@ struct PhasingFromStateOptions {
     /// chaser's semi-major axis. Phasing only closes a gap between craft on
     /// the same orbit; two different orbits drift apart again.
     double coOrbitalTolerance = 1.0e-3;
+    /// The same threshold stated as an absolute length, metres, instead; when
+    /// finite it replaces coOrbitalTolerance (converted with the chaser's
+    /// semi-major axis). NaN = not stated.
+    double coOrbitalToleranceMetres = std::numeric_limits<double>::quiet_NaN();
     double mu = MU_EARTH;
 };
 
@@ -230,6 +236,7 @@ struct PhasingFromStateResult {
     double coplanarTolerance = 0.0;
     double eccentricityTolerance = 0.0;
     double coOrbitalToleranceMetres = 0.0;
+    double coOrbitalToleranceFraction = 0.0;
 };
 
 /// Derive the phase angle between a chaser and a target and return the phasing

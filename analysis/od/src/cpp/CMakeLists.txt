@@ -141,7 +141,6 @@ endif()
 if(EMSCRIPTEN)
     add_executable(
         od_wasm
-        src/wasm_api.cpp
         src/plugin_entrypoints.cpp
         src/plugin_invoke_bridge.cpp
         src/direct_initialize.cpp
@@ -157,9 +156,11 @@ if(EMSCRIPTEN)
     set_target_properties(od_wasm PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_parse\",\"_wasm_fit\",\"_wasm_parse_and_fit\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_FUNCTIONS='[\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
             -s MODULARIZE=1 \
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -Wl,--allow-undefined \
             -s EXPORT_NAME='ODModule' \
             -Wl,--wrap=__wasm_call_ctors \
             -s STANDALONE_WASM=1 \
@@ -175,7 +176,6 @@ if(EMSCRIPTEN)
     # while _start also supports the manifest's command/SDK CLI contract.
     add_executable(
         od_wasm_reactor
-        src/wasm_api.cpp
         src/plugin_entrypoints.cpp
         src/plugin_invoke_bridge.cpp
     )
@@ -191,7 +191,7 @@ if(EMSCRIPTEN)
     set_target_properties(od_wasm_reactor PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_parse\",\"_wasm_fit\",\"_wasm_parse_and_fit\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
             -s STANDALONE_WASM=1 \
             -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
@@ -208,7 +208,6 @@ if(EMSCRIPTEN)
 elseif(WASI_SDK)
     add_executable(
         od_standalone
-        src/wasm_api.cpp
         src/plugin_entrypoints.cpp
         src/plugin_invoke_bridge.cpp
     )

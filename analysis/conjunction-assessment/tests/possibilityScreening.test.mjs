@@ -13,28 +13,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 
-const control = (payload) => ({ portId: 'request', payload, typeRef: { wireFormat: 'flatbuffer', mediaType: 'application/vnd.sdn.ca-possibility-request' } });
+import { possibilityRequest as frame, possibilityResult } from '../scripts/lib/possibility.mjs';
 
-function frame({ radius, window = 600, mode, a, b, alpha = [] }) {
-  const doubles = mode === 0 ? [...a.flat(), ...b.flat()] : [...a.center, ...a.shape, ...b.center, ...b.shape];
-  const bytes = new ArrayBuffer(4 + 16 + 16 + 8 * alpha.length + 8 * doubles.length);
-  const v = new DataView(bytes);
-  new Uint8Array(bytes, 0, 4).set([0x43, 0x50, 0x51, 0x31]);  // CPQ1
-  let at = 4;
-  const f64 = (x) => { v.setFloat64(at, x, true); at += 8; };
-  const u32 = (x) => { v.setUint32(at, x, true); at += 4; };
-  f64(radius); f64(window); u32(mode); u32(mode === 0 ? a.length : 1); u32(mode === 0 ? b.length : 1); u32(alpha.length);
-  alpha.forEach(f64); doubles.forEach(f64);
-  return new Uint8Array(bytes);
-}
+const control = (payload) => ({ portId: 'request', payload, typeRef: { schemaName: 'SCR.fbs', fileIdentifier: '$SCR', rootTypeName: 'SCR', wireFormat: 'flatbuffer' } });
 function decode(payload, alphaCount) {
-  const v = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  assert.equal(String.fromCharCode(...payload.subarray(0, 4)), 'CPR1');
-  let at = 4;
-  const f64 = () => { const x = v.getFloat64(at, true); at += 8; return x; };
-  const u64 = () => { const x = Number(v.getBigUint64(at, true)); at += 8; return x; };
-  const r = { possibility: f64(), necessity: f64(), necessityNoCollision: f64(), minMiss: f64(), maxMiss: f64(), tcaMin: f64(), tcaMax: f64(), pairs: u64(), colliding: u64(), alpha: [] };
-  for (let k = 0; k < alphaCount; ++k) r.alpha.push({ minMiss: f64(), maxMiss: f64(), tcaMin: f64(), tcaMax: f64() });
+  const r = possibilityResult(payload);
+  assert.equal(r.alpha.length, alphaCount);
   return r;
 }
 

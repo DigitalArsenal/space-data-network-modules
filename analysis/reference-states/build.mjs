@@ -7,11 +7,10 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 
 // One translation unit: SDS headers, ERFA, the foundation/frames axis engine
 // and its EOP table reader (the same EOP handling as the frames module), and
-// nlohmann::json for the identities control frame.
+// the identities come through plugin.getConfig (typedHostcall.hpp, staged by the SDK compiler).
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
-const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OEM', 'NCD', 'EOP'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OEM', 'NCD', 'EOP', 'CVR'], import.meta.url);
 if (!header.includes('SP3_HEADER')) throw new Error(`spacedatastandards.org@${version} has no NCD SP3_HEADER.`);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
@@ -24,7 +23,6 @@ if (!parser) throw new Error('foundation/frames/src/frames_module.cpp no longer 
 // eop_table.hpp includes eop_series.hpp (since propagator/hpop 1.2.0); one translation unit inlines it.
 const eopTable = (await fs.readFile(path.join(framesSrc, 'eop_series.hpp'), 'utf8')) + '\n' +
   (await fs.readFile(path.join(framesSrc, 'eop_table.hpp'), 'utf8')).replace('#include "eop_series.hpp"', '');
-const json = await fs.readFile(jsonHeader, 'utf8');
 const source = await fs.readFile(path.join(root, 'src/reference_states.cpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
@@ -33,8 +31,6 @@ const result = await compileModuleFromSource({
   manifest,
   sourceCode: [
     '#include "space_data_module_invoke.h"',
-    '#define JSON_NOEXCEPTION 1',
-    json,
     header,
     erfa.source,
     bodyModels,
@@ -47,6 +43,8 @@ const result = await compileModuleFromSource({
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',
+  // The sync space_data_module_host hostcall bridge for plugin.getConfig; symbols resolve at instantiation.
+  allowUndefinedImports: true,
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));

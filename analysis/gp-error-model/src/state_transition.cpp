@@ -350,7 +350,7 @@ extern "C" int map_covariance() {
   using namespace stm;
   const nlohmann::json opt = json_input("options");
   if (!opt.is_object() || !opt.contains("requests") || !opt["requests"].is_array())
-    return fail("invalid-options", "options must be JSON with a requests array.");
+    return fail("invalid-options", "options must be an $ERM COVARIANCE_MAP record with REQUESTS.");
   Options defaults;
   default_options(&defaults);
   Counts counts;

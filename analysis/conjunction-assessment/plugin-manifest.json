@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -43,23 +43,21 @@
           "portId": "uncertainty_model",
           "acceptedTypeSets": [
             {
-              "setId": "uncertainty-model-v1",
+              "setId": "erm-model",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
-                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         },
         {
           "portId": "earth_orientation",
@@ -92,25 +90,6 @@
                   "schemaName": "CQR.fbs",
                   "fileIdentifier": "$CQR",
                   "rootTypeName": "CQR",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false
-        },
-        {
-          "portId": "cdm",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-cdm",
-              "allowedTypes": [
-                {
-                  "schemaName": "CDM.fbs",
-                  "fileIdentifier": "$CDM",
-                  "rootTypeName": "CDM",
                   "wireFormat": "flatbuffer"
                 }
               ]
@@ -707,23 +686,21 @@
           "portId": "uncertainty_model",
           "acceptedTypeSets": [
             {
-              "setId": "uncertainty-model-v1",
+              "setId": "erm-model",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
-                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         },
         {
           "portId": "earth_orientation",
@@ -756,25 +733,6 @@
                   "schemaName": "CQR.fbs",
                   "fileIdentifier": "$CQR",
                   "rootTypeName": "CQR",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false
-        },
-        {
-          "portId": "cdm",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-cdm",
-              "allowedTypes": [
-                {
-                  "schemaName": "CDM.fbs",
-                  "fileIdentifier": "$CDM",
-                  "rootTypeName": "CDM",
                   "wireFormat": "flatbuffer"
                 }
               ]
@@ -1056,23 +1014,21 @@
           "portId": "uncertainty_model",
           "acceptedTypeSets": [
             {
-              "setId": "uncertainty-model-v1",
+              "setId": "erm-model",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
-                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         },
         {
           "portId": "earth_orientation",
@@ -1165,23 +1121,21 @@
           "portId": "uncertainty_model",
           "acceptedTypeSets": [
             {
-              "setId": "uncertainty-model-v1",
+              "setId": "erm-model",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
-                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         },
         {
           "portId": "earth_orientation",
@@ -1351,23 +1305,21 @@
           "portId": "block",
           "acceptedTypeSets": [
             {
-              "setId": "block-v1",
+              "setId": "scr-block",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-grid-block",
-                "detail": "CAB1 tag, u32 first_step, u32 step_count (1-256): which coarse steps of the window to propagate."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "CAB1, u32 first_step, u32 step_count."
+          "description": "$SCR BLOCK: FIRST_STEP and STEP_COUNT (1-256) of the window's coarse steps."
         }
       ],
       "outputPorts": [
@@ -1375,45 +1327,41 @@
           "portId": "grid",
           "acceptedTypeSets": [
             {
-              "setId": "grid-v1",
+              "setId": "scr-grid",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-coarse-grid",
-                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, D, vx, vy, vz, 0) per step and object (index frame, km and km/s; D is the source bound on its deviation from the straight line over half a coarse step, km) and f32 radius bands per object. The GPU screen kernel input, and search_grid's."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The block of coarse states in the GPU layout, with deviation bounds and radius bands."
+          "description": "$SCR GRID: the block's coarse states (x, y, z, deviation bound, vx, vy, vz per step and object, km and km/s, in the index frame) and each object's radius band; the GPU screen kernel input, and search_grid's."
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "scr-search-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The block and the objects SGP4 cannot propagate in it (index, first failing JD, reason), to pass to refine_candidates."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the block and its exclusions."
+          "description": "$SCR SEARCH_REPORT: the block, the window's last step, the objects, and the objects SGP4 cannot propagate in the block (INDEX, FIRST_FAILURE_JD, REASON), to pass to refine_candidates."
         }
       ],
       "maxBatch": 1,
@@ -1447,23 +1395,21 @@
           "portId": "block",
           "acceptedTypeSets": [
             {
-              "setId": "block-v1",
+              "setId": "scr-block",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-grid-block",
-                "detail": "CAB1 tag, u32 first_step, u32 step_count (1-256): which coarse steps of the window to propagate."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "CAB1, u32 first_step, u32 step_count (1-65535)."
+          "description": "$SCR BLOCK: FIRST_STEP and STEP_COUNT (1-65535) of the window's coarse steps."
         }
       ],
       "outputPorts": [
@@ -1471,50 +1417,46 @@
           "portId": "candidates",
           "acceptedTypeSets": [
             {
-              "setId": "candidates-v1",
+              "setId": "scr-candidates",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-candidates",
-                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "description": "CAC1, u32 count, then u32 (obj1, obj2, step) per candidate pair-step.",
+          "description": "$SCR CANDIDATES: the (OBJECT1, OBJECT2, STEP) cells that survive the coarse filter, by step then pair.",
           "required": true
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "scr-search-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The block and the objects SGP4 cannot propagate in it (index, first failing JD, reason), to pass to refine_candidates."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the block and its exclusions."
+          "description": "$SCR SEARCH_REPORT: the block, the window's last step, the objects, the exclusions and CANDIDATE_COUNT."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "The candidates of a block of coarse steps, found in the module without a GPU: the CPU counterpart of coarse_grid plus the GPU search. Returns the CAC1 frame refine_candidates takes."
+      "description": "The candidates of a block of coarse steps, found in the module without a GPU: the CPU counterpart of coarse_grid plus the GPU search. Returns the $SCR CANDIDATES refine_candidates takes."
     },
     {
       "methodId": "search_grid",
@@ -1544,45 +1486,41 @@
           "portId": "grid",
           "acceptedTypeSets": [
             {
-              "setId": "grid-v1",
+              "setId": "scr-grid",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-coarse-grid",
-                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, D, vx, vy, vz, 0) per step and object (index frame, km and km/s; D is the source bound on its deviation from the straight line over half a coarse step, km) and f32 radius bands per object."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A block of the window as coarse_grid returned it: one row per object. Non-finite rows (objects coarse_grid excluded) are not searched."
+          "description": "$SCR GRID as coarse_grid returned it: one row per object. Non-finite rows (objects coarse_grid excluded) are not searched."
         },
         {
           "portId": "roles",
           "acceptedTypeSets": [
             {
-              "setId": "roles-v1",
+              "setId": "scr-roles",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-roles",
-                "detail": "CAR1 tag, u32 count (the grid's objects), then one byte per object: 0 secondary, 1 primary, 2 skip. A pair is searched when one member is a primary and neither is skipped."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional scope: the objects whose data changed, or a work unit's block, as primaries. Absent: every pair (all-vs-all)."
+          "description": "$SCR ROLES, one per grid object (Secondary, Primary, Skip); a pair is searched when one member is a primary and neither is skipped. Absent: every pair (all-vs-all)."
         }
       ],
       "outputPorts": [
@@ -1590,45 +1528,41 @@
           "portId": "candidates",
           "acceptedTypeSets": [
             {
-              "setId": "candidates-v1",
+              "setId": "scr-candidates",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-candidates",
-                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "description": "CAC1, u32 count, then u32 (obj1, obj2, step) per candidate pair-step.",
+          "description": "$SCR CANDIDATES in grid rows, by step then pair.",
           "required": true
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "scr-search-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The block, the window's last step, and the objects by role."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the block, its last step, roles counted and candidates."
+          "description": "$SCR SEARCH_REPORT: the block, the window's last step, the objects by role and CANDIDATE_COUNT."
         }
       ],
       "maxBatch": 1,
@@ -1663,67 +1597,61 @@
           "portId": "candidates",
           "acceptedTypeSets": [
             {
-              "setId": "candidates-v1",
+              "setId": "scr-candidates",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-candidates",
-                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Candidate pair-steps; absent scans every pair on the CPU."
+          "description": "$SCR CANDIDATES; absent scans every pair on the CPU."
         },
         {
           "portId": "excluded",
           "acceptedTypeSets": [
             {
-              "setId": "excluded-v1",
+              "setId": "scr-exclusions",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-excluded",
-                "detail": "CAX1 tag, u32 count, then (u32 index, f64 first_failure_jd) per object coarse_grid reported excluded."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Exclusions coarse_grid reported over the window."
+          "description": "$SCR EXCLUSIONS: the objects coarse_grid reported excluded over the window (INDEX, FIRST_FAILURE_JD)."
         },
         {
           "portId": "uncertainty_model",
           "acceptedTypeSets": [
             {
-              "setId": "uncertainty-model-v1",
+              "setId": "erm-model",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
-                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [
@@ -1902,23 +1830,21 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "possibility-request-v1",
+              "setId": "scr-possibility-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-possibility-request",
-                "detail": "CPQ1 tag, f64 combined_radius_m, f64 half_window_s, u32 mode (0 finite supports, 1 ellipsoidal kernels), u32 count_a, u32 count_b, u32 alpha_count, f64 alpha[]; mode 0: rows of f64 x y z vx vy vz possibility (SI, one inertial frame) for A then B; mode 1: per object f64 centre[6] and shape[36]."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Two admissible sets at a common epoch near the encounter and the combined hard-body radius."
+          "description": "$SCR POSSIBILITY_REQUEST: two admissible sets at a common epoch near the encounter (finite supports or ellipsoidal kernels, SI), the combined hard-body radius, the half window and the alpha levels."
         }
       ],
       "outputPorts": [
@@ -1926,23 +1852,21 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "possibility-result-v1",
+              "setId": "scr-possibility-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SCR.fbs",
+                  "fileIdentifier": "$SCR",
+                  "rootTypeName": "SCR",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.sdn.ca-possibility-result",
-                "detail": "CPR1 tag, f64 possibility_collision, f64 necessity_collision, f64 necessity_no_collision, f64 min_miss_m, f64 max_miss_m, f64 tca_min_s, f64 tca_max_s, u64 pairs, u64 colliding_pairs, then per alpha level f64 min_miss_m, max_miss_m, tca_min_s, tca_max_s."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Possibility and necessity of collision and the miss-distance and closest-approach-time ranges."
+          "description": "$SCR POSSIBILITY_RESULT: possibility and necessity of collision, the miss-distance and closest-approach-time ranges, and each alpha-cut's ranges."
         }
       ],
       "maxBatch": 1,

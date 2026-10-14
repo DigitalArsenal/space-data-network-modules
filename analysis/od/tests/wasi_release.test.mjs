@@ -9,6 +9,7 @@ import {createBrowserModuleHarness} from 'space-data-module-sdk/testing';
 import {encodePluginInvokeRequest,decodePluginInvokeResponse} from 'space-data-module-sdk/invoke';
 import {extractPublicationRecordCollection} from 'space-data-module-sdk/transport';
 import {assertSequentialArtifact} from 'space-data-module-sdk/compiler';
+import {filFrame} from './fit_harness.mjs';
 const artifact=process.env.OD_ARTIFACT??fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url));
 async function createOemInput(wireFormat = "flatbuffer") {
   const {Builder} = await import("flatbuffers");
@@ -46,10 +47,10 @@ test('canonical OD artifact has identical PIV outputs on three runtimes',async()
  const normalize=r=>({status:r.statusCode,error:r.errorCode??'',outputs:r.outputs.map(o=>({port:o.portId,bytes:Buffer.from(o.payload).toString('hex')}))});
  try {
   const requests=[
-   {methodId:'fit',inputs:[{portId:'meme',payload:fs.readFileSync(new URL('./fixtures/request.fit.meme',import.meta.url))}]},
+   {methodId:'fit',inputs:[filFrame(fs.readFileSync(new URL('./fixtures/request.fit.meme',import.meta.url)))]},
    {methodId:'fit',inputs:[await createOemInput()]},
    {methodId:'fit',inputs:[]},
-   {methodId:'fit',inputs:[{portId:'meme',payload:new TextEncoder().encode('invalid ephemeris')}]}
+   {methodId:'fit',inputs:[filFrame(new TextEncoder().encode('invalid ephemeris'))]}
   ];
   for(const request of requests){
    const expected=normalize(await h.invoke(request)),input=encodePluginInvokeRequest(request);

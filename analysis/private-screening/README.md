@@ -10,19 +10,36 @@ is in `../conjunction-assessment/docs/private-screening.md`.
 
 ## Methods
 
-All ports carry JSON. Histories are
-`{objects: [{id, target?, role, generator?, cls?, t, n, e, i, raan, argp, ma, bstar}]}`:
-SGP4 mean elements per element set. Units: t in unix seconds, n in rev/day,
-angles in degrees, B* in 1/earth radii.
+Typed contracts 1.0: every port carries one SDS FlatBuffer.
+
+- **Histories** are `$LFV` rows: `SOURCE_ID` the history's id, `TARGET` (empty
+  = the id), `ROLE` (`Real` or `Decoy`; `Unlabelled` reads as real),
+  `GENERATOR`, `CLASS_LABEL`, and `ELEMENT_SETS`, the history's `$OMM` element
+  sets: `EPOCH` (ISO 8601 UTC; nanosecond digits bring a unix-seconds double
+  back exactly), `MEAN_MOTION` (rev/day), `ECCENTRICITY`, `INCLINATION`,
+  `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER`, `MEAN_ANOMALY` (deg) and `BSTAR`
+  (1/earth radii).
+- **Daily ephemeris windows** (hpop view) are one `$OEM`, a block per window:
+  `OBJECT.OBJECT_ID` the history, `START_TIME` the window start, the lines up
+  to `USEABLE_STOP_TIME` the samples (GCRF km, km/s), and the line at
+  `STOP_TIME` after `USEABLE_STOP_TIME` the state at the next window's start.
+- **Feature rows** and the **distinguishing report** are `$LFV`.
+- **Settings** are node config, read with `plugin.getConfig` (one
+  ModuleConfig), one table per method: `decoys`, `features`, `distinguish`,
+  with the keys below.
+
+`tests/sds.mjs` builds and reads these frames from the history shapes the
+study uses (`{id, target, role, generator, cls, t, n, e, i, raan, argp, ma,
+bstar}`, windows `{t, samples, end}` in m and m/s).
 
 ### `decoys`
 
-Inputs:
-- `population`: real histories. Each is a target, and the others are the
-  public catalog its decoys are drawn from.
-- `options`: `generator`, `window` [from, to) (unix s), `perTarget`, `targets`,
-  `donors` (`population` or `regime`: the 50 nearest objects in a and i),
-  `seed`.
+Input `population` ($LFV): the real histories. Each is a target, and the
+others are the public catalog its decoys are drawn from.
+
+Config `decoys`: `generator`, `window` [from, to) (unix s), `perTarget`,
+`targets`, `donors` (`population` or `regime`: the `neighbours`, default 50,
+nearest objects in a and i), `seed`.
 
 Generators:
 - **`independent`**: n, e and i from three different objects, B* 0, uniform
@@ -42,18 +59,24 @@ Generators:
 - **`fleet`**: the target's own history, node rotated and epochs shifted by
   up to half a period: copies of the hidden satellite itself.
 
-Output: `decoys`, histories with role `decoy` and `target` set, plus a report
-with counts and the drag common mode per 100 km band.
+Output `decoys` ($LFV): histories with `ROLE` Decoy, `TARGET` and `GENERATOR`
+set. `SOURCE_COUNT` is the targets asked, `REFERENCE_COUNT` the donors
+(population histories with 6 element sets in the window), `SKIPPED_COUNT` the
+decoys refused for fewer than 6 sets.
 
 ### `features`
 
-Inputs: `histories` (real and decoy), and `options` `{view, window}`.
+Inputs: `histories` ($LFV, real and decoy) and, for the hpop view,
+`ephemerides` ($OEM). Config `features`: `view`, `window`, `minPoints`
+(default 6 for gp, 8 for hpop).
 
 - `view: "gp"` reads the element sets.
-- `view: "hpop"` reads `windows: [{t, samples, end}]`:
-  - `samples`: [t, x, y, z, vx, vy, vz] in GCRF m and m/s, spaced over one
-    orbit from the window start;
-  - `end`: the state at the next window's start.
+- `view: "hpop"` reads the daily windows: samples spaced over one orbit from
+  the window start, and the state at the next window's start.
+
+Output `features` ($LFV): one row per history with enough points, `VALUES` in
+`FEATURE_NAMES` order (NaN = not computable); `SOURCE_COUNT` the histories,
+`REFERENCE_COUNT` the catalog, `SKIPPED_COUNT` those with too few points.
 
 Every feature is rotation-invariant:
 - orbit: a, e, i;
@@ -71,14 +94,16 @@ The catalog is the real histories, minus the target itself.
 ### `distinguish`
 
 Inputs:
-- `features`: rows from `features`, the real rows plus one generator's
-  decoys;
-- `options` (optional): `folds`, `depth`, `rounds`, `learningRate`, `bins`,
-  `seed`, `ranks`, `exclude`, and `relative` (each feature minus its median
-  over the target's own candidates).
+- `features` ($LFV): rows from `features`, the real rows plus one generator's
+  decoys (`ROLE` Real counts as real, any other role as decoy);
+- config `distinguish` (optional): `folds`, `depth`, `rounds`, `learningRate`,
+  `lambda`, `minChildHessian`, `bins`, `seed`, `ranks`, `exclude`, and
+  `relative` (each feature minus its median over the target's own
+  candidates).
 
 The classifier is gradient-boosted trees (logistic loss), cross-validated by
-target. The report gives:
+target. The report (`report`, an `$LFV` whose `REPORT` is an `LFVTestReport`)
+gives:
 - AUC;
 - a 95 % lower bound on ε: the threshold is chosen on half the targets and
   bounded on the other half, with one-sided Clopper–Pearson limits;
@@ -110,5 +135,6 @@ committed.
 ## Build and test
 
 ```
-npm install && npm run build && npm test
+export SPACE_DATA_STANDARDS_ROOT=…   # a standards tree with LFV
+npm run build && npm test
 ```

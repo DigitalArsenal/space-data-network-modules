@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { json, call as ermCall, invoke } from './erm-harness.mjs';
 
 // common_epoch, map_covariance and screening_cases through the built artifact.
 // Expected values do not come from this module: tests/stm-reference.json is
@@ -19,8 +19,6 @@ const require = createRequire(path.join(root, 'package.json'));
 const flatbuffers = require('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(root, `lib/js/${code}/main.js`)));
 const [OMM, OEM] = await Promise.all(['OMM', 'OEM'].map(load));
-const wasm = fs.readFileSync(fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)));
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const ref = JSON.parse(fs.readFileSync(new URL('./stm-reference.json', import.meta.url)));
 
 function omm(s) {
@@ -48,14 +46,8 @@ function reference(norad, lines) {
   OEM.OEM.finishSizePrefixedOEMBuffer(b, Object.assign(new OEM.OEMT(), { EPHEMERIS_DATA_BLOCK: [block] }).pack(b));
   return { portId: 'reference', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
 }
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
-async function call(t, methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h.destroy());
-  const r = await h.invoke({ methodId, inputs });
-  assert.equal(r.statusCode, 0, r.errorMessage);
-  return JSON.parse(Buffer.from(r.outputs[0].payload).toString());
-}
+// Each port's value in its readable form; the harness sends it as the method's $ERM record and decodes the output.
+const call = (t, methodId, inputs) => ermCall(methodId, inputs);
 const frobenius = (a) => Math.sqrt(a.reduce((s, x) => s + x * x, 0));
 const relative = (a, b) => frobenius(a.map((x, i) => x - b[i])) / frobenius(b);
 const matvec = (m, x) => [0, 1, 2, 3, 4, 5].map((i) => m.slice(6 * i, 6 * i + 6).reduce((s, v, k) => s + v * x[k], 0));
@@ -281,8 +273,6 @@ test('screening_cases: Foster Pc in closed form for zero miss, and a polar-grid 
       assert.ok(Math.abs(got - mean) <= 1e-4 * mean, `${g} ${m} m: ${got} vs ${mean}`);
     });
   }
-  const h2 = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h2.destroy());
-  const bad = await h2.invoke({ methodId: 'screening_cases', inputs: [json('cases', { pairs: [{ e1, c1: [1, 2, 1, 0, 0, 1], e2, c2 }] })] });
+  const bad = await invoke('screening_cases', [json('cases', { pairs: [{ e1, c1: [1, 2, 1, 0, 0, 1], e2, c2 }] })]);
   assert.notEqual(bad.statusCode, 0, 'a covariance that is not positive definite is refused');
 });

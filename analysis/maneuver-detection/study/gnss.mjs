@@ -10,7 +10,7 @@
 // manoeuvre in that interval (across a missing day, in the gap).
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadModule, json, TYPES, iso, seconds, outputsOf, jsonOf, unpackMnv, mnvRecord, OEM, MNV, flatbuffers } from './lib/host.mjs';
+import { loadModule, config, TYPES, iso, seconds, outputsOf, unpackMnv, mnvRecord, OEM, MNV, flatbuffers } from './lib/host.mjs';
 import { detectHistories, scoreVariants, printScores, writeJson, log } from './lib/run.mjs';
 
 const [work, ...rest] = process.argv.slice(2);
@@ -60,7 +60,7 @@ for (const sat of SATELLITES) {
   if (!list.length) { log(`${sat.name}: no precise arcs`); continue; }
   const key = `NORAD:${sat.norad}`;
   const r = await compare.invoke('compare_ephemerides', [...list.map((a) => ({ portId: 'versions', payload: a.bytes, typeRef: TYPES.OEM })),
-    json('options', { unplanned_threshold_km: 0.2, within_version: true })]);
+    config({ unplanned_threshold_km: 0.2, within_version: true })]);
   const events = outputsOf(r, 'maneuvers').map(unpackMnv);
   for (const m of events) {
     truth.push(mnvRecord({ ID: m.ID, SAT_NO: sat.norad, STATUS: MNV.maneuverStatus.EXECUTED, EVENT_START_TIME: m.EVENT_START_TIME,

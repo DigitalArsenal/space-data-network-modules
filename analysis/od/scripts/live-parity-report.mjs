@@ -9,28 +9,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  assertSuccessfulResponse,
-  createStandaloneHarnessOrSkip,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+import { createFitPoolOrSkip, createFitRequest, fitRecordFromResponse } from "../tests/fit_harness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
-function fitRequest(payload, options) {
-  return {
-    methodId: "fit",
-    inputs: [
-      { portId: "meme", payload },
-      { portId: "options", payload: new TextEncoder().encode(JSON.stringify(options)) },
-    ],
-  };
-}
-
+// The text ephemeris as a $FIL, the options as node CONFIG, the fit read from its $OMM / $OBD records.
 async function fitJson(harness, payload, options) {
-  const response = await harness.invoke(fitRequest(payload, options));
-  const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return fitRecordFromResponse(await harness.invoke(createFitRequest(payload, options)));
 }
 
 function csvRows(csvPath) {
@@ -49,7 +35,7 @@ function csvRows(csvPath) {
 }
 
 const [starlinkDir, issDir] = process.argv.slice(2).map((p) => path.resolve(p));
-const harness = await createStandaloneHarnessOrSkip("browser", WASM_PATH);
+const harness = await createFitPoolOrSkip("browser", WASM_PATH);
 if (!harness) {
   console.error("no standalone runtime available");
   process.exit(1);
