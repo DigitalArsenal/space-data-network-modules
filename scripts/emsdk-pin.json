@@ -44,8 +44,7 @@
   "laneModules": [
     "data-source/gps-source",
     "data-source/oneweb-source",
-    "delivery/plugin-delivery",
-    "flows/supplemental-omm/nodes/flatsql"
+    "delivery/plugin-delivery"
   ],
   "shippedToolchainEvidence": {
     "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = rebuilt under that toolchain from committed source, with the toolchain-decided sections (type/import/function/table/memory/global/export/elem, and code to within a handful of bytes) matching the committed artifact exactly. It deliberately does NOT require whole-artifact byte-identity: these builds embed an SDK-encoded manifest, so the SDK is a second build input and a stale artifact can differ there while the compiler question is settled. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present on the build machine. `none` = the emsdk that built it no longer exists on any machine we have; unrecoverable, and recorded as such instead of guessed.",
@@ -63,11 +62,6 @@
       "toolchain": "em-5.0.7",
       "confidence": "strong",
       "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20; artifact committed 2026-07-02."
-    },
-    "flows/supplemental-omm/nodes/flatsql": {
-      "toolchain": "em-5.0.5",
-      "confidence": "strong",
-      "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
     },
     "propagator/sgp4": {
       "toolchain": "em-6.0.1",

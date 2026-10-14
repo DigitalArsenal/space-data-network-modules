@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-14T19:35:48.446Z",
-  "moduleCount": 123,
+  "generatedAt": "2026-10-14T20:17:21.075Z",
+  "moduleCount": 115,
   "parityScopeModuleCount": 47,
-  "isomorphicWasmCount": 122,
+  "isomorphicWasmCount": 114,
   "missingIsomorphicWasm": [
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 117,
+  "browserWasmEdgeTargetCount": 109,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -3702,225 +3702,14 @@
       ]
     },
     {
-      "modulePath": "flows/supplemental-omm/nodes/flatsql",
-      "pluginId": "com.digitalarsenal.flatsql.store",
-      "name": "FlatSQL Store",
-      "pluginFamily": "infrastructure",
-      "version": "2.0.2",
-      "methodIds": [
-        "append_records",
-        "compact",
-        "configure_index",
-        "configure_retention",
-        "query_records",
-        "reload",
-        "snapshot",
-        "upsert_view"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/sdn_node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
       "modulePath": "flows/supplemental-omm/nodes/od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
-      "name": "Supplemental OMM Native Orbit Determination",
+      "name": "Supplemental OMM Orbit Determination",
       "pluginFamily": "orbit_determination",
-      "version": "1.0.1",
+      "version": "2.0.0",
       "methodIds": [
-        "fit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/cpf",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
-      "name": "CPF Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/glonass",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
-      "name": "GLONASS Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/intelsat",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
-      "name": "Intelsat Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/iss",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
-      "name": "ISS Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/starlink",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
-      "name": "Starlink Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c",
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 1,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp",
-        "vendor/miniz-3.1.2/miniz.c"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/publication",
-      "pluginId": "org.sdn.flows.supplemental-omm.publication",
-      "name": "Supplemental OMM Publication",
-      "pluginFamily": "publisher",
-      "version": "1.0.0",
-      "methodIds": [
-        "publish_records"
+        "fit",
+        "publish_request"
       ],
       "runtimeTargets": [
         "browser",
@@ -3946,8 +3735,8 @@
       "modulePath": "flows/supplemental-omm/nodes/status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "name": "Supplemental OMM Status",
-      "pluginFamily": "flow",
-      "version": "1.0.0",
+      "pluginFamily": "infrastructure",
+      "version": "2.0.0",
       "methodIds": [
         "record_event"
       ],
@@ -3968,35 +3757,6 @@
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/timer",
-      "pluginId": "org.sdn.flows.supplemental-omm.timer",
-      "name": "Supplemental OMM Hourly Timer Policy",
-      "pluginFamily": "infrastructure",
-      "version": "1.0.0",
-      "methodIds": [
-        "on_wakeup"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/timer_node.cpp"
       ],
       "testFiles": []
     },
@@ -4618,7 +4378,7 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "name": "SDN Host Storage Ingest Node",
       "pluginFamily": "infrastructure",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "ingest"
       ],
