@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
   "name": "Space-Track Source",
-  "version": "0.2.0",
-  "description": "Parse Space-Track GP and GP-history JSON (omm-gp-json, Alpha-5 catalog numbers read) into canonical SDS OMM records and SATCAT JSON into CAT records. Retrieval, credentials, the request rate and storage belong to the SDN host flow.",
+  "version": "0.3.0",
+  "description": "Parse Space-Track GP and GP-history JSON (omm-gp-json, Alpha-5 catalog numbers read) into canonical SDS OMM records and SATCAT JSON into CAT records (typed contracts 1.0: FlatBuffers only, no JSON between modules). Each method takes the hostcap/http-request HttpResponse, whose BODY is the Space-Track JSON verbatim, and writes one size-prefixed record stream plus one FlowNotice report (Info: COUNT the records emitted, ITEMS the read/emitted/dropped counters and the first rejection examples as name=value). HTTP 304 gives one FlowNotice (Unchanged) on 'report' and no records; another status or a transport error is refused. No capabilities and no hostcalls: retrieval, credentials, the request rate and storage belong to the SDN host flow.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -20,27 +20,25 @@
       "displayName": "Read Space-Track GP or GP history as OMM",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/json",
-                "detail": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB."
-              }
+              "description": "The HttpResponse from hostcap/http-request for one Space-Track gp or gp_history (omm-gp-json) request: BODY the JSON array of flat text-valued objects as the REST API serves it, bounded to 256 MiB; STATUS 200, or 304 for unchanged."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One Space-Track gp or gp_history response as the REST API serves it (omm-gp-json): a JSON array of flat objects whose values are text, bounded to 256 MiB."
+          "description": "The HttpResponse from hostcap/http-request for one Space-Track gp or gp_history (omm-gp-json) request: BODY the JSON array of flat text-valued objects as the REST API serves it, bounded to 256 MiB; STATUS 200, or 304 for unchanged."
         }
       ],
       "outputPorts": [
@@ -53,7 +51,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
@@ -71,21 +70,19 @@
               "setId": "report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
-              }
+              "description": "One FlowNotice: KIND Info with COUNT the records emitted and ITEMS the counters of records read, emitted, dropped and why, and the first examples, as name=value; or KIND Unchanged (REASON not-modified) on HTTP 304. Module control metadata, not an observation."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+          "description": "One FlowNotice: KIND Info with COUNT the records emitted and ITEMS the counters of records read, emitted, dropped and why, and the first examples, as name=value; or KIND Unchanged (REASON not-modified) on HTTP 304. Module control metadata, not an observation."
         }
       ],
       "maxBatch": 1,
@@ -96,27 +93,25 @@
       "displayName": "Read Space-Track SATCAT as CAT",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/json",
-                "detail": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB."
-              }
+              "description": "The HttpResponse from hostcap/http-request for one Space-Track satcat request: BODY the JSON array of flat text-valued objects as the REST API serves it, bounded to 256 MiB; STATUS 200, or 304 for unchanged."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One Space-Track satcat response as the REST API serves it: a JSON array of flat objects whose values are text, bounded to 256 MiB."
+          "description": "The HttpResponse from hostcap/http-request for one Space-Track satcat request: BODY the JSON array of flat text-valued objects as the REST API serves it, bounded to 256 MiB; STATUS 200, or 304 for unchanged."
         }
       ],
       "outputPorts": [
@@ -129,7 +124,8 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical size-prefixed CAT records in input order, one per cataloged object."
@@ -147,21 +143,19 @@
               "setId": "report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
-              }
+              "description": "One FlowNotice: KIND Info with COUNT the records emitted and ITEMS the counters of records read, emitted, dropped and why, and the first examples, as name=value; or KIND Unchanged (REASON not-modified) on HTTP 304. Module control metadata, not an observation."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Counts of the records read, emitted, dropped and why, with the first examples; module control metadata the host keeps beside the input, not an observation."
+          "description": "One FlowNotice: KIND Info with COUNT the records emitted and ITEMS the counters of records read, emitted, dropped and why, and the first examples, as name=value; or KIND Unchanged (REASON not-modified) on HTTP 304. Module control metadata, not an observation."
         }
       ],
       "maxBatch": 1,
@@ -172,12 +166,26 @@
     {
       "schemaName": "OMM.fbs",
       "fileIdentifier": "$OMM",
-      "rootTypeName": "OMM"
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     },
     {
       "schemaName": "CAT.fbs",
       "fileIdentifier": "$CAT",
-      "rootTypeName": "CAT"
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [

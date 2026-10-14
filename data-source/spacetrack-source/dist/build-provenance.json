@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.246.0",
+  "spacedatastandards": "1.247.0+1791801690384",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -21,5 +21,5 @@
     "src/spacetrack_source.cpp"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "78399d2e1a661f9a877c095f59f65824e730f8b6613a034e2840882f37d0496c"
+  "wasmSha256": "1f7cfea287d05906f3ac7b834bd3e70e0a0f79324a54771152da796bbd22241b"
 }

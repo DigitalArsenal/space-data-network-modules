@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
-import { generateSdsHeaders, SCHEMA_FAMILIES } from "./generate-sds-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -13,25 +12,39 @@ const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const { version: sdsVersion, headers } = await generateSdsHeaders();
 
-// One translation unit: the family headers go in dependency order, so their
-// cross-family includes are dropped rather than resolved.
-const sdsHeaders = SCHEMA_FAMILIES.map((family) =>
-  headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, ""),
-);
+// The SDS standards' own generated C++ headers (SPACE_DATA_STANDARDS_ROOT
+// lib/cpp/<FAMILY>/main_generated.h), in dependency order: $MPE needs MET;
+// $CAT needs PLD (-> IDM) and LCC. They are inlined in place of
+// `#include "SDS_ARCHIVE_HEADERS.h"` as one translation unit: cross-family
+// `#include "main_generated.h"` lines are dropped (their families come first),
+// each include guard is renamed per family, and the flatc version
+// static_assert is relaxed, as hostcap/clock does.
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT;
+if (!standardsRoot) throw new Error("Set SPACE_DATA_STANDARDS_ROOT to the spacedatastandards.org checkout.");
+const SCHEMA_FAMILIES = ["MET", "MPE", "IDM", "PLD", "LCC", "CAT"];
+const sdsHeaders = [];
+for (const family of SCHEMA_FAMILIES) {
+  const header = await fs.readFile(path.join(standardsRoot, "lib", "cpp", family, "main_generated.h"), "utf8");
+  sdsHeaders.push(
+    header
+      .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${family}_MAIN_H_`)
+      .replace(/^#include "main_generated\.h"\n/gm, "")
+      .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, ""),
+  );
+}
+const sdsVersion = JSON.parse(await fs.readFile(path.join(standardsRoot, "package.json"), "utf8")).version;
 
-const implementationSource = await fs.readFile(
-  path.join(packageRoot, "src", "gp_archive_records_module.cpp"),
-  "utf8",
-);
+const implementationSource = (
+  await fs.readFile(path.join(packageRoot, "src", "gp_archive_records_module.cpp"), "utf8")
+).replace(/^#include "SDS_ARCHIVE_HEADERS\.h".*$/m, () => sdsHeaders.join("\n\n"));
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
 const compilation = await compileModuleFromSource({
   manifest,
-  sourceCode: [...sdsHeaders, implementationSource].join("\n\n"),
+  sourceCode: implementationSource,
   language: "c++",
   outputPath,
   // wasi-sequential: the sanctioned clang wasm32-wasip1-threads toolchain
@@ -74,4 +87,4 @@ execFileSync(
   { stdio: "inherit" },
 );
 
-console.log(`Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion}`);
+console.log(`Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion} (${standardsRoot})`);

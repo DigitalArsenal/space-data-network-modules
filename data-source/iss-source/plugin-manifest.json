@@ -1,25 +1,11 @@
 {
   "pluginId": "com.orbpro.iss-source",
   "name": "ISS (NASA public OEM) Data Source",
-  "version": "1.0.0",
-  "description": "Executable data-source: pulls the NASA public ISS CCSDS OEM ephemeris over HTTP on a timer, re-emits it as a schema-exact SDS OEM record, and signs + publishes a PNM pointer.",
+  "version": "1.1.0",
+  "description": "Executable data-source (typed contracts 1.0: FlatBuffers only, no JSON and no hostcalls but plugin.getConfig): request turns a TimerTick into the GET HttpRequest of NASA's public ISS ephemeris (CCSDS OEM KVN, config sourceUrl); hostcap/http-request fetches it; emit turns its HttpResponse into one SDS $OEM (verbose, explicit epochs; EME2000/UTC/EARTH as the file declares, NORAD 25544), consumed in memory by analysis/od.fit and never stored. A transport error, a status other than 200, an empty body or a file without state vectors fails closed. Nothing is stored, signed or published.",
   "pluginFamily": "data_source",
-  "capabilities": [
-    "http",
-    "storage_ingest",
-    "wallet_sign",
-    "crypto_sign",
-    "pubsub"
-  ],
+  "capabilities": [],
   "protocols": [],
-  "timers": [
-    {
-      "timerId": "iss-pull",
-      "methodId": "pull",
-      "defaultIntervalMs": 43200000,
-      "description": "Periodic ISS OEM pull (default every 12h; NASA refreshes the continuous 15-day EME2000 ephemeris a few times a week — one small file, no per-object fan-out)."
-    }
-  ],
   "invokeSurfaces": [
     "command"
   ],
@@ -29,54 +15,83 @@
   ],
   "methods": [
     {
-      "methodId": "pull",
-      "displayName": "Pull ISS Ephemeris",
-      "description": "Fetches the NASA public ISS CCSDS OEM ephemeris over HTTP, re-emits it as a schema-exact SDS OEM record, signs a PNM, and publishes it.",
-      "inputPorts": [],
-      "outputPorts": [
+      "methodId": "request",
+      "displayName": "Request the NASA ISS OEM",
+      "description": "A TimerTick -> one GET HttpRequest for the NASA ISS OEM (config sourceUrl, default NASA's public ISS.OEM_J2K_EPH.txt), for hostcap/http-request. The flow's trigger sets the cadence; the provider's suggested one is every 12 h (the former module timer iss-pull).",
+      "inputPorts": [
         {
-          "portId": "published",
-          "displayName": "Published PNMs",
-          "description": "Signed PNM pointer published for each pulled + stored ISS ephemeris.",
-          "required": false,
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "data-source.iss.pnm",
-              "description": "Signed PNM pointer for each published pull.",
+              "setId": "timer-tick",
               "allowedTypes": [
                 {
-                  "schemaName": "PNM",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM"
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
-              ]
+              ],
+              "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
             }
-          ]
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
         }
-      ]
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One GET HttpRequest (HREQ) for the NASA ISS OEM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One GET HttpRequest (HREQ) for the NASA ISS OEM."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
       "methodId": "emit",
-      "displayName": "Fetch + parse operator ephemeris and emit $OEM (OD-flow guest-link)",
-      "description": "Fetches the provider catalog via the host http connector (ps::http_get), parses to SDS $OEM in-memory, and emits one $OEM aligned-binary frame per object on the oem port. Nothing stored/signed/published.",
+      "displayName": "Parse the ISS OEM and emit $OEM",
+      "description": "The HttpResponse of the ISS OEM GET -> one $OEM.",
       "inputPorts": [
         {
-          "portId": "config",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "od-flow-config",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Optional node CONFIG (endpoints/target/objectCap); default provider endpoints otherwise."
+              "description": "The HttpResponse (HRSP) from hostcap/http-request for the ISS OEM: STATUS 200 with BODY the file verbatim."
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false,
-          "description": "Optional per-node fetch config (JSON bytes)."
+          "required": true,
+          "description": "The HttpResponse (HRSP) from hostcap/http-request for the ISS OEM: STATUS 200 with BODY the file verbatim."
         }
       ],
       "outputPorts": [
@@ -89,23 +104,17 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "SDS $OEM ephemeris (aligned-binary), one per operator object. Consumed in-memory by analysis/od.fit; never stored."
+              "description": "One SDS $OEM ephemeris (verbose; EME2000/UTC as declared) for analysis/od.fit; never stored."
             }
           ],
           "minStreams": 1,
-          "maxStreams": 100000,
+          "maxStreams": 1,
           "required": true,
-          "description": "Fetched+parsed $OEM ephemeris frames (1..N objects)."
+          "description": "One SDS $OEM ephemeris (verbose; EME2000/UTC as declared) for analysis/od.fit; never stored."
         }
       ],
       "maxBatch": 1,
@@ -116,7 +125,31 @@
     {
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
-      "rootTypeName": "OEM"
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
     }
-  ]
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one frame into the next request or the parsed ephemeris on the calling thread; the host parallelizes independent sources and this module creates no threads."
+  }
 }

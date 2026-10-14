@@ -3,14 +3,23 @@
 An SDK module that reads JSC Vimpel's public orbit data (spacedata.vimpel.ru) into canonical SDS records. Vimpel is three claims
 in the catalog paper's inventory, and the module gives one output for each:
 
-| Method | In | Out |
+| Method | In (`response`, an HttpResponse) | Out |
 | --- | --- | --- |
-| `normalize_orbits` | the osculating-element table (15 comma-separated columns, up to 20,000 rows, 8 MiB) on `source` | `states`: one `$OEM` per object, a single J2000 state at the reference epoch (UTC); `report` |
-| `read_ephemeris` | one rectangular ephemeris: its file name on `name` (`<id>_<YYYYMMDD>_<HHMMSS>`), its rows (`index, x, y, z`) on `source` | `ephemeris`: one `$OEM`, position-only (`STATE_VECTOR_SIZE` 3), 600 s apart; `report` |
-| `read_datefirst` | the datefirst file (`Nvym t_det_v Nnor t_det_n`) on `source` | `crosswalk`: candidate links from Vimpel numbers to NORAD numbers (JSON) |
+| `normalize_orbits` | BODY the osculating-element table (15 comma-separated columns, up to 20,000 rows, 8 MiB) | `states`: one `$OEM` per object, a single J2000 state at the reference epoch (UTC); `report`: the batch's IngestRequest |
+| `read_ephemeris` | BODY one rectangular ephemeris (`index, x, y, z`); the URL's last segment is its file name (`<id>_<YYYYMMDD>_<HHMMSS>`) | `ephemeris`: one `$OEM`, position-only (`STATE_VECTOR_SIZE` 3), 600 s apart; `report`: the IngestRequest |
+| `read_datefirst` | BODY the datefirst file (`Nvym t_det_v Nnor t_det_n`) | `crosswalk`: one `$OIL`, candidate links from Vimpel numbers to NORAD numbers |
+
+Typed contracts 1.0: every port is one FlatBuffers type, and the provider's text travels only inside the response BODY. HTTP 304
+gives one FlowNotice (Unchanged, REASON `not-modified`) on `unchanged` and nothing else; any other status, a transport error or a
+frame that is not an HttpResponse refuses the call. The `report` IngestRequest has SCHEMA `OEM.fbs`, SOURCE_NAME `vimpel`, BATCH_ID
+and SOURCE_SHA256 the body's SHA-256, and the response's URL, status and time; its PROVENANCE.ATTRIBUTES carry what the JSON report
+used to (for the table: kind, records, bytes, muKm3PerS2, frame, timeSystem, the column names, then `object.<n>` per object, its
+eight columns as printed, comma-joined; for an ephemeris: kind, fileName, nativeId, epoch, samples, stepSeconds, bytes, frame,
+timeSystem).
 
 Retrieval belongs to the SDN host flow: the login (Vimpel serves registered users), the RAR of ephemeris files, the schedule and the
-archive. The module sees bytes. The same artifact runs in the browser and WasmEdge, byte for byte.
+archive. A host that unpacks the ephemeris files from the RAR names each by its file name as the last segment of the response URL.
+The same artifact runs in the browser and WasmEdge, byte for byte.
 
 ## Osculating elements to a state
 
@@ -48,15 +57,19 @@ the one named `vimpel:<id>`; a host must not read 99999 as a catalog number.
 
 ## The datefirst crosswalk
 
-`datefirst` proposes a Vimpel-to-NORAD association; it does not prove it. `crosswalk` lists every pair as a **candidate**
-(`status: candidate`), with `object: {norad}` and `evidence: {source: "datefirst", recordId: <SHA-256 of the edition>}` as the
-integrator's identity recipe (`analysis/catalog-composer` `integrate_catalog`) takes them, the dates as printed (`YYYY-MM-DD`, or
-null with `datesAsPrinted` when the digits are not a calendar date, as ten rows of the provider's file are: month 95, day 91), and the
-declarations: a pair declared twice is one link with `declarations: 2`. The declarations are a graph: a Vimpel number declared
-against two NORAD numbers (an alias), or one NORAD number against two Vimpel numbers, is a conflict, every link in it is
-`ambiguous: true`, and `conflicts` names its members. Only a link the integrator tests compatible on normalized ephemerides binds an
-identity (Baietto 2022, doi:10.25394/PGS.19658076, documents a historical datefirst pairing discrepancy). An object the file does
-not map keeps `vimpel:<id>`.
+`datefirst` proposes a Vimpel-to-NORAD association; it does not prove it. `crosswalk` is one `$OIL` (object identity link
+candidates): every pair is one link with STATUS `Candidate`, LEFT the Vimpel number (namespace `vimpel`, ID without leading
+zeros, ID_AS_PRINTED as the file prints it), RIGHT the NORAD number (namespace `NORAD`, NORAD_CAT_ID), each side's FIRST_DETECTED
+(`YYYY-MM-DD`, or empty with FIRST_DETECTED_AS_PRINTED when the digits are not a calendar date, as ten rows of the provider's
+file are: month 95, day 91), and EVIDENCE: SOURCE `datefirst`, RECORD_ID the SHA-256 of the edition, LINE of its first
+declaration, DECLARATIONS (a pair declared twice is one link with 2) and DATES_DIFFER. The declarations are a graph: a Vimpel
+number declared against two NORAD numbers (an alias), or one NORAD number against two Vimpel numbers, is a conflict, every link in
+it is AMBIGUOUS, and CONFLICTS names its members (`vimpel:<id>`, `NORAD:<n>`) with their SHAPE. The set carries the edition's
+header, SHA-256, size and the counters (rows, duplicate lines, links, clean, ambiguous, Vimpel and NORAD numbers, dates that
+differ, unreadable dates); GENERATED_AT_MS stays 0, so the output depends on the file alone. The `$CAT` integrator
+(`analysis/catalog-composer` `integrate_catalog`) reads it. Only a link the integrator tests compatible on normalized
+ephemerides binds an identity (Baietto 2022, doi:10.25394/PGS.19658076, documents a historical datefirst pairing discrepancy). An
+object the file does not map keeps `vimpel:<id>`.
 
 Read for this module (local run, nothing committed): the 2026-09-21 table is 13,889 rows and the 2026-09-07 table 13,808, each
 converted in 0.26 s; the datefirst file is 986 rows, 986 links (953 one-to-one, 33 ambiguous in 16 conflicts), 15 with an unreadable date.
@@ -64,14 +77,16 @@ converted in 0.26 s; the datefirst file is 986 rows, 986 links (953 one-to-one, 
 ## Build and test
 
 ```sh
-npm ci
-npm run build          # dist/isomorphic/module.wasm and dist/guest-link (single thread, SDK 0.8.27, SDS 1.245.0)
+mkdir -p node_modules && ln -sfn <SDK 0.9.3> node_modules/space-data-module-sdk   # plus flatbuffers, flatc-wasm, esbuild from the SDK and spacedatastandards.org
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards checkout with OIL>
+npm run build          # dist/isomorphic/module.wasm and dist/guest-link (single thread, SDK 0.9.3)
 npm test               # the module through the SDK's browser harness
 npm run test:parity    # headless Chrome, native WasmEdge, Docker WasmEdge: byte-identical
 ```
 
 The tests check the states against the two-body relations (closed cases and the invariants of a general orbit: radius, vis-viva
-speed, angular momentum and its direction, the eccentricity vector), never against the module's own output.
+speed, angular momentum and its direction, the eccentricity vector), never against the module's own output. The `$OEM` records
+are byte-identical to the legacy (untyped) artifact's on the fixtures (`tests/fixtures/legacy`).
 `flows/source-products/tests/source-chain.test.mjs` runs a synthetic ephemeris through the module, `analysis/od` and the flow.
 
 ## Licence and data

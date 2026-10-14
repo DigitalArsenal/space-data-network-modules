@@ -9,7 +9,9 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "oem_source_iss_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 // The checked-in NASA ISS OEM fixture (the SAME fixture the OD RMS-parity gate
 // uses). The $OEM the node emits is built FROM this, so the fixture stays the
 // single source of truth.
@@ -17,7 +19,7 @@ const fixturePath = fileURLToPath(
   new URL("../../analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", import.meta.url),
 );
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
 // flatc emits every SDS header with the same include guard
 // (FLATBUFFERS_GENERATED_MAIN_H_) and schema includes as a self-named `#include

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ilrs-crd-source",
   "name": "ILRS CRD Source",
-  "version": "0.1.0",
-  "description": "Read ILRS Consolidated Laser Ranging Data (CRD version 2) normal points into canonical SDS tracking data messages: LASER_RANGE observations per pass for analysis/estimation, with the epoch event as the time-tag reference and the pass's meteorology. Download and station coordinates belong to the SDN host flow.",
+  "version": "0.2.0",
+  "description": "Read ILRS Consolidated Laser Ranging Data (CRD version 2) normal points into canonical SDS tracking data messages: LASER_RANGE observations per pass for analysis/estimation, with the epoch event as the time-tag reference and the pass's meteorology (typed contracts 1.0: FlatBuffers only, no JSON between modules). read_crd takes the hostcap/http-request HttpResponse, BODY the CRD text verbatim, and writes one $TDM per pass plus one FlowNotice report (Info: COUNT the $TDM emitted, ITEMS the counters, the passes and every normal point's statistics as name=value). HTTP 304 gives one FlowNotice (Unchanged) and no $TDM; another status or a transport error is refused. Download and station coordinates belong to the SDN host flow; no hostcalls.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -23,24 +23,22 @@
           "portId": "source",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/plain",
-                "detail": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB."
-              }
+              "description": "The HttpResponse (HRSP) from hostcap/http-request for one ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files): BODY the text verbatim, bounded to 64 MiB; STATUS 200, or 304 for unchanged."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB."
+          "description": "The HttpResponse (HRSP) from hostcap/http-request for one ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files): BODY the text verbatim, bounded to 64 MiB; STATUS 200, or 304 for unchanged."
         }
       ],
       "outputPorts": [
@@ -53,7 +51,8 @@
                 {
                   "schemaName": "TDM.fbs",
                   "fileIdentifier": "$TDM",
-                  "rootTypeName": "TDM"
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One canonical $TDM per pass: a segment per system configuration with LASER_RANGE observations (one-way range in metres, UTC epochs), and the pass's meteorological records as PRESSURE, TEMPERATURE and RHUMIDITY. analysis/estimation takes it on tracking_data."
@@ -68,24 +67,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report",
+              "setId": "flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation."
-              }
+              "description": "One FlowNotice (FNTC): KIND Info, SCHEMA TDM, SOURCE_NAME ilrs-crd, COUNT the $TDM emitted, ITEMS as name=value: format, sessions, passesRead, normalPointsInFile, normalPointsRead, meteorologicalRecords, speedOfLightMetresPerSecond, sessionsSkipped.<reason> (the sessions not read, by reason), unknownRecordType (one per type), per pass pass.<k>.station/sod/target/norad/start/normalPoints/configurations/epochEvent/meteorologicalRecords, and per normal point normalPoint.<k>.pass/epoch/timeOfFlightSeconds (as printed)/rawRanges/binRmsPs/windowSeconds/configuration (a statistic the record lacks has no item), from which a host takes the range's sigma; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation."
+          "description": "One FlowNotice (FNTC): KIND Info, SCHEMA TDM, SOURCE_NAME ilrs-crd, COUNT the $TDM emitted, ITEMS as name=value: format, sessions, passesRead, normalPointsInFile, normalPointsRead, meteorologicalRecords, speedOfLightMetresPerSecond, sessionsSkipped.<reason> (the sessions not read, by reason), unknownRecordType (one per type), per pass pass.<k>.station/sod/target/norad/start/normalPoints/configurations/epochEvent/meteorologicalRecords, and per normal point normalPoint.<k>.pass/epoch/timeOfFlightSeconds (as printed)/rawRanges/binRmsPs/windowSeconds/configuration (a statistic the record lacks has no item), from which a host takes the range's sigma; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
         }
       ],
       "maxBatch": 1,
@@ -96,7 +93,20 @@
     {
       "schemaName": "TDM.fbs",
       "fileIdentifier": "$TDM",
-      "rootTypeName": "TDM"
+      "rootTypeName": "TDM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
@@ -110,6 +120,6 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "One complete bounded data file is read in order into one record per pass and one control frame; the host parallelizes independent files and this parser creates no threads."
+    "detail": "One complete bounded data file is read in order into one record per pass and one FlowNotice; the host parallelizes independent files and this parser creates no threads."
   }
 }

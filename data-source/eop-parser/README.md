@@ -1,9 +1,11 @@
 # Earth orientation source parser
 
 Pure C++/WASM parser for three fixed-column EOP products. No fetch, clock,
-storage or publication runs inside this module. No JavaScript computes
-production physics. The published SDS `EOP.fbs` / `$EOP` binding is generated
-from `spacedatastandards.org@1.202.0`; no schema is added or modified.
+storage or publication runs inside this module, and it makes no hostcall. No
+JavaScript computes production physics. Typed contracts 1.0: every port is one
+FlatBuffers type, no JSON and no base64. The SDS `$EOP`, `$ICN` and `$FIL`
+headers are inlined from `$SPACE_DATA_STANDARDS_ROOT/lib/cpp`; no schema is
+added or modified.
 
 ## Invoke
 
@@ -11,26 +13,34 @@ Methods: `parse_finals2000a`, `parse_c04`, `parse_paris`.
 
 Supply exactly one of:
 
-- `body`: unmodified UTF-8/ASCII source bytes, at most 16 MiB.
-- `response`: the established hostcap/http-request JSON
-  `{status:200,bodyB64:"..."}`. HTTP 304 emits only `unchanged`; any other
-  status fails. Base64 exists only at this existing HTTP control boundary.
-
-An optional `job` from [eop-request](../eop-request/README.md) carries
-`source_url`, `series_name`, `format`. A supplied format must match the method.
-The caller may also supply `data_set_epoch` (the publication issue epoch,
-ISO 8601 UTC); it is never inferred from retrieval time or the final data row.
+- `body`: one `$FIL` whose `CONTENT` is the unmodified UTF-8/ASCII source, at
+  most 16 MiB. A non-zero `MODIFIED_AT_MS` is the publication issue epoch and
+  is written to every row's `DATA_SET_EPOCH` (RFC 3339, whole seconds, UTC);
+  it is never inferred from retrieval time or the final data row.
+- `response`: the `HttpResponse` (HRSP) from `hostcap/http-request`. HTTP 304
+  emits only `unchanged`; any other status than 200, or an empty body, fails.
+  Its `CONTEXT` is the optional job from [eop-request](../eop-request/README.md),
+  a size-prefixed `$ICN`: when present it must verify, its `DATASET_ID` must be
+  the method's format, and its `ENDPOINT_URL` is the source URL recorded in
+  the meta (else the method's default URL).
 
 Outputs:
 
 - `records`: one stream of `[uint32 little-endian length][standalone $EOP]`
   records, matching the established celestrak-parser transport. Each record
   has the canonical FlatBuffer alignment relative to its own start.
-- `meta`: source URL, fixed product/series name, format, row count, SHA-256 of
-  the **entire fetched body**, CIDv1 raw/sha2-256 in multibase base16, and count
-  of empty future finals rows. Retain this metadata with the records,
+- `meta`: one `IngestRequest` (INGQ): `SCHEMA` EOP.fbs; `TAGS.SOURCE_NAME` the
+  fixed product/series name, `SOURCE_URL`, `BATCH_ID` the SHA-256 of the
+  **entire fetched body**; `PROVENANCE` with the same URL and hash
+  (`SOURCE_SHA256`), `HTTP_STATUS` (200, or 0 for a `$FIL` body), `PARSER`
+  eop-parser, `PARSER_VERSION` the format, `NORMALIZED_COUNT` and
+  `SCHEMAS`/`SCHEMA_COUNTS` the row count, and `WARNINGS` naming the empty
+  future finals rows skipped. The CIDv1 raw/sha2-256 (multibase base16) is on
+  every row as `DATA_SET_CID`. Retain this metadata with the records,
   especially the name of an `OTHER` series.
-- `unchanged`: HTTP 304 notice, with no records or metadata replacement.
+- `unchanged`: a `FlowNotice` (FNTC) on HTTP 304 (`KIND` Unchanged, `REASON`
+  not-modified, `SOURCE_NAME` the series, `ITEMS` the source URL), with no
+  records or metadata replacement.
 
 Each row stores the dataset CID and optional issue epoch. Core values use
 both authoritative `_HP` doubles and rounded float convenience copies.
@@ -119,7 +129,8 @@ The entire 1962–now archive is not an invoke-sized frame table.
 ## Verification
 
 ```sh
-npm ci
+mkdir -p node_modules && ln -sfn <space-data-module-sdk 0.9.0 checkout> node_modules/space-data-module-sdk
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org checkout>   # default: the sibling checkout
 node build.mjs
 node --test tests/sdk_compat.test.mjs
 SDN_RUN_EOP_PARITY=1 node --test tests/*.test.mjs

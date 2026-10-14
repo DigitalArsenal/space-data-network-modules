@@ -1,13 +1,20 @@
-// Control frames follow hostcap/http-request; no network or physics in the host
-// adapter.
+// Typed frames shared by eop-request and eop-parser (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
+// The job travels as HttpRequest.CONTEXT: one size-prefixed SDS $ICN (Ingest Connector) record naming the source, which
+// hostcap/http-request echoes verbatim in the HttpResponse. No network or physics here.
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "TimerTick_generated.h"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+#include "ICN_generated.h"
 namespace eop_wire {
-using Json = nlohmann::json;
+namespace R = sdn::runtime;
 struct Source {
   const char* name;
   const char* url;
@@ -37,15 +44,30 @@ inline bool unique_inputs() {
   }
   return true;
 }
-inline Json json(const plugin_input_frame_t* f) {
-  if (!f || !f->payload) return Json::object();
-  return Json::parse(f->payload, f->payload + f->payload_length, nullptr,
-                     false);
+// The job: one size-prefixed $ICN record (CONNECTOR_ID and DATASET_ID the format, SOURCE_NAME the series name,
+// ENDPOINT_URL the file, TARGET_SCHEMA EOP.fbs, EMITS_SCHEMAS ["EOP"]).
+inline std::vector<uint8_t> job(const Source& s) {
+  flatbuffers::FlatBufferBuilder b(512);
+  auto id = b.CreateString(s.format), schema = b.CreateString("EOP.fbs"),
+       url = b.CreateString(s.url), method = b.CreateString("GET"),
+       dataset = b.CreateString(s.format), name = b.CreateString(s.name);
+  auto emits = b.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{b.CreateString("EOP")});
+  ICNBuilder icn(b);
+  icn.add_CONNECTOR_ID(id);
+  icn.add_KIND(icnConnectorKind_HttpsPull);
+  icn.add_TARGET_SCHEMA(schema);
+  icn.add_ENDPOINT_URL(url);
+  icn.add_HTTP_METHOD(method);
+  icn.add_POST_INGEST_ACTION(icnPostIngestAction_LeaveInPlace);
+  icn.add_DATASET_ID(dataset);
+  icn.add_SOURCE_NAME(name);
+  icn.add_EMITS_SCHEMAS(emits);
+  FinishSizePrefixedICNBuffer(b, icn.Finish());
+  return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
-inline int push(const char* port, const Json& value) {
-  auto s = value.dump();
-  return plugin_push_output_ex(
-      port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-      nullptr, 0, 1, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+inline int push_flatbuffer(const char* port, const char* schema, const char* id, const char* root,
+                           const uint8_t* data, size_t size) {
+  return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data,
+                               static_cast<uint32_t>(size));
 }
 }  // namespace eop_wire

@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-launch-schedule",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.8.25",
+    "space-data-module-sdk": "0.9.2",
     "spacedatastandards.org": "1.227.0"
   }
 }

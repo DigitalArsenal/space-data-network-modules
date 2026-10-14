@@ -1,50 +1,93 @@
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+#include "TimerTick_generated.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 // Upcoming-launch notices from a public launch registry (Launch Library 2,
-// https://ll.thespacedevs.com/2.3.0/, mode=normal), normalised to $LDM.
-// plan_launches builds the GET for the generic HTTP host; parse_launches
-// validates one complete response and emits one size-prefixed $LDM per
-// launch. No host calls: fetching, storage and publication are the host's.
+// https://ll.thespacedevs.com/2.3.0/, mode=normal), normalised to $LDM
+// (typed contracts 1.0: FlatBuffers only between modules).
+//
+//   plan_launches  : "tick" TimerTick (TICK; fields not read) -> node CONFIG
+//                    launch_schedule_source.access / .limit and
+//                    launch_schedule_producer_peer_id (plugin.getConfig, SDS
+//                    $PIV) -> ONE "request" HttpRequest (HREQ, GET) whose
+//                    CONTEXT is the plan: ONE size-prefixed IngestRequest
+//                    (INGQ) skeleton - SCHEMA LDM.fbs, TAGS PROVIDER_ID
+//                    launch-schedule / SOURCE_NAME upcoming / SOURCE_URL the
+//                    canonical request URL (it names the page size) /
+//                    SOURCE_PEER the producer peer id / LICENSE_URL the terms /
+//                    CITATION, RECONCILE Current.
+//   parse_launches : ONE "response" HttpResponse (HRSP; the plan echoed in
+//                    CONTEXT, RETRIEVED_MS the host's retrieval time) -> the
+//                    plan re-derived from its URL and required to be canonical
+//                    -> "records" one size-prefixed $LDM per launch, "meta" ONE
+//                    IngestRequest for hostcap/storage-ingest, "report" ONE
+//                    FlowNotice (FNTC) Info. No host call: a pure transform.
+//
+// The upstream response body is the registry's JSON - a foreign wire format
+// parsed here; nothing module-to-module is JSON.
 
 using Json = nlohmann::json;
 namespace {
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 constexpr size_t maxBytes = 4 * 1024 * 1024;
 constexpr int maxLaunches = 100;
 const char* endpoint = "https://ll.thespacedevs.com/2.3.0/launches/upcoming/";
+const char* kProvider = "launch-schedule";
+const char* kSourceName = "upcoming";
+const char* kTermsUrl = "https://thespacedevs.com/llapi";
+const char* kCitation = "Launch data from Launch Library 2 by The Space Devs (https://thespacedevs.com), free access tier.";
 const char* error = "Invalid launch registry input.";
 #define NEED(condition, message) do { if (!(condition)) { error = message; return false; } } while (0)
 #define CHECK(condition, message) do { if (!(condition)) return fail(message); } while (0)
 int fail(const char* message) { plugin_set_error("invalid-launch-schedule-input", message); return 1; }
 
+// The single frame on `port`; nullptr when absent, repeated, empty or over budget.
 const plugin_input_frame_t* frame(const char* port) {
   const plugin_input_frame_t* found = nullptr;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);
-    if (!f || !f->port_id || !f->payload || !f->payload_length || f->payload_length > maxBytes + 8) return nullptr;
+    if (!f || !f->port_id || !f->payload || !f->payload_length || f->payload_length > maxBytes + 64 * 1024) return nullptr;
     if (std::strcmp(f->port_id, port) == 0) { if (found) return nullptr; found = f; }
   }
   return found;
 }
-Json json(const char* port) {
-  const auto* f = frame(port);
-  return f ? Json::parse(f->payload, f->payload + f->payload_length, nullptr, false) : Json();
-}
-int output(const char* port, const Json& value) {
-  const auto text = value.dump();
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-    nullptr, 0, 1, reinterpret_cast<const uint8_t*>(text.data()), text.size());
+int push(const char* port, const char* schema, const char* identifier, const char* root, const uint8_t* data, size_t size) {
+  return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data, static_cast<uint32_t>(size));
 }
 bool isText(const Json& o, const char* key) { return o.is_object() && o.contains(key) && o[key].is_string(); }
 std::string text(const Json& o, const char* key) { return isText(o, key) ? o[key].get<std::string>() : std::string(); }
 const Json& child(const Json& o, const char* key) {
   static const Json none;
   return o.is_object() && o.contains(key) && o[key].is_object() ? o[key] : none;
+}
+std::string str(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+// Node CONFIG: plugin.getConfig answers one ModuleConfig (MCFG) FlatBuffer on raw "config", read in place
+// (sdm_piv::get_config(); nested objects are TableLists, reached by dotted paths).
+using Config = sdm_piv::Config;
+using ConfigValue = sdn::runtime::ConfigEntry;
+Config loadConfig() { return sdm_piv::get_config(); }
+const ConfigValue* entry(const Config& c, const std::string& key) { return c.entry(key); }
+bool isString(const ConfigValue* e) { return e && e->KIND() == sdn::runtime::configValueKind_String; }
+std::string textOf(const ConfigValue* e) { return isString(e) ? str(e->STRING_VALUE()) : std::string(); }
+// Some nested table under `key` holds at least one entry (an object, or a list of objects).
+bool hasTable(const Config& c, const char* key) {
+  for (size_t i = 0, n = c.tables(key); i < n; i++) if (c.table(key, i).size()) return true;
+  return false;
 }
 
 // ── UTC calendar (proleptic Gregorian, H. Hinnant's days_from_civil) ─────
@@ -130,17 +173,64 @@ bool launchWindow(const Json& launch, int64_t net, std::string& earliest, std::s
   return true;
 }
 
-bool plan(const Json& config, Json& job) {
-  NEED(config.is_object(), "Configuration must be an object.");
-  NEED(isText(config, "access") && config["access"] == "anonymous",
+// The plan: an explicit access tier (anonymous only) and a page size 1-100.
+struct Plan { std::string access; int limit = maxLaunches; std::string url; };
+bool canonical(Plan& plan) {
+  NEED(plan.access == "anonymous",
     "Choose access explicitly; this release supports the anonymous tier only (15 requests per hour).");
-  NEED(!config.contains("limit") || config["limit"].is_number_integer(), "limit must be an integer.");
-  const int limit = config.contains("limit") ? config["limit"].get<int>() : maxLaunches;
-  NEED(limit >= 1 && limit <= maxLaunches, "limit must be between 1 and 100.");
-  const auto url = std::string(endpoint) + "?format=json&mode=normal&limit=" + std::to_string(limit);
-  job = {{"source_url", url}, {"limit", limit}, {"access", "anonymous"}, {"provider_id", "launch-schedule"},
-    {"source_name", "upcoming"}};
+  NEED(plan.limit >= 1 && plan.limit <= maxLaunches, "limit must be between 1 and 100.");
+  plan.url = std::string(endpoint) + "?format=json&mode=normal&limit=" + std::to_string(plan.limit);
   return true;
+}
+// The plan from node CONFIG launch_schedule_source (a nested object; dotted paths).
+bool planFromConfig(const Config& c, Plan& plan) {
+  const std::string p = "launch_schedule_source.";
+  NEED(hasTable(c, "launch_schedule_source"), "Configuration must be an object.");
+  const auto* access = entry(c, p + "access");
+  NEED(textOf(access) == "anonymous",
+    "Choose access explicitly; this release supports the anonymous tier only (15 requests per hour).");
+  plan.access = textOf(access);
+  if (const auto* limit = entry(c, p + "limit")) {
+    const double n = limit->NUMBER_VALUE();
+    NEED(limit->KIND() == sdn::runtime::configValueKind_Number && std::isfinite(n) && std::floor(n) == n &&
+      std::fabs(n) < 1e9, "limit must be an integer.");
+    plan.limit = static_cast<int>(n);
+  }
+  return canonical(plan);
+}
+// The plan back from its canonical request URL (the URL names the page size).
+bool planFromUrl(const std::string& url, Plan& plan) {
+  const std::string prefix = std::string(endpoint) + "?format=json&mode=normal&limit=";
+  NEED(url.compare(0, prefix.size(), prefix) == 0, "Job differs from its canonical launch plan.");
+  const std::string digits = url.substr(prefix.size());
+  NEED(!digits.empty() && digits.size() <= 3 && digits.find_first_not_of("0123456789") == std::string::npos,
+    "Job differs from its canonical launch plan.");
+  plan.access = "anonymous";
+  plan.limit = std::atoi(digits.c_str());
+  NEED(canonical(plan) && plan.url == url, "Job differs from its canonical launch plan.");
+  return true;
+}
+
+// The plan as ONE size-prefixed IngestRequest skeleton: the request's CONTEXT.
+std::vector<uint8_t> planContext(const Plan& plan, const std::string& peer) {
+  R::IngestRequestT job;
+  job.SCHEMA = "LDM.fbs";
+  job.TAGS = std::make_unique<R::SourceTagsT>();
+  job.TAGS->PROVIDER_ID = kProvider;
+  job.TAGS->SOURCE_NAME = kSourceName;
+  job.TAGS->SOURCE_URL = plan.url;
+  job.TAGS->SOURCE_PEER = peer;
+  job.TAGS->LICENSE_URL = kTermsUrl;
+  job.TAGS->CITATION = kCitation;
+  job.RECONCILE = R::reconcileMode_Current;
+  flatbuffers::FlatBufferBuilder b(512);
+  R::FinishSizePrefixedIngestRequestBuffer(b, R::IngestRequest::Pack(b, &job));
+  return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+std::string headerOf(const R::HttpResponse& r, const char* name) {
+  if (!r.HEADERS()) return std::string();
+  for (const R::Header* h : *r.HEADERS()) if (h && h->NAME() && h->NAME()->str() == name) return str(h->VALUE());
+  return std::string();
 }
 
 // Builds one $LDM for a registry launch. Returns false with `error` set.
@@ -220,59 +310,113 @@ bool buildRecord(const Json& launch, flatbuffers::FlatBufferBuilder& b, bool& sk
 }  // namespace
 
 extern "C" int plan_launches() {
-  CHECK(plugin_get_input_count() == 1, "Exactly one configuration frame is required.");
-  Json job;
-  CHECK(plan(json("config"), job), error);
-  const Json request = {{"method", "GET"}, {"url", job["source_url"]}, {"timeoutMs", 30000}, {"maxBytes", maxBytes},
-    {"responseWire", "raw-body-v1"}};
-  if (output("request", request) < 0 || output("job", job) < 0) return 1;
-  return 0;
+  CHECK(plugin_get_input_count() == 1, "Exactly one timer tick is required.");
+  const auto* tick = frame("tick");
+  CHECK(tick, "Exactly one timer tick is required.");
+  flatbuffers::Verifier verifier(tick->payload, tick->payload_length);
+  CHECK(R::VerifyTimerTickBuffer(verifier), "The tick is not a TimerTick (TICK).");
+  const auto config = loadConfig();
+  Plan plan;
+  CHECK(planFromConfig(config, plan), error);
+  // The producer peer id (node CONFIG launch_schedule_producer_peer_id) rides the plan, so parse_launches needs no host.
+  const auto* peer = entry(config, "launch_schedule_producer_peer_id");
+  const auto context = planContext(plan, textOf(peer));
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", plan.url.c_str(), nullptr, nullptr, 30000, maxBytes, &context));
+  return push("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
 }
 
 extern "C" int parse_launches() {
-  CHECK(plugin_get_input_count() == 3, "Exactly one job, response and receipt frame are required.");
-  const Json job = json("job"), receipt = json("receipt");
-  Json expected;
-  CHECK(job.is_object() && job.contains("limit") && job["limit"].is_number_integer(), "Job is not a launch plan.");
-  CHECK(plan({{"access", job.value("access", "")}, {"limit", job["limit"]}}, expected), error);
-  CHECK(job == expected, "Job differs from its canonical launch plan.");
-  CHECK(receipt.is_object() && receipt.contains("retrieved_at_ms") && receipt["retrieved_at_ms"].is_number_integer(), "Invalid retrieval epoch.");
-  const int64_t retrieved = receipt["retrieved_at_ms"].get<int64_t>();
-  CHECK(retrieved > 0 && retrieved <= 9007199254740991LL, "Invalid retrieval epoch.");
-  const auto peer = text(receipt, "producer_peer_id");
+  CHECK(plugin_get_input_count() == 1, "Exactly one response frame is required.");
+  const auto* f = frame("response");
+  CHECK(f, "Expected one HttpResponse on \"response\".");
+  flatbuffers::Verifier verifier(f->payload, f->payload_length);
+  CHECK(R::VerifyHttpResponseBuffer(verifier), "Expected an HttpResponse (HRSP).");
+  const auto* http = R::GetHttpResponse(f->payload);
+  // The plan rides the request's CONTEXT; it must be the canonical plan of its own URL.
+  const auto* ctx = http->CONTEXT();
+  CHECK(ctx && ctx->size() > 8, "The response carries no launch plan (CONTEXT).");
+  flatbuffers::Verifier ctxVerifier(ctx->data(), ctx->size());
+  CHECK(R::VerifySizePrefixedIngestRequestBuffer(ctxVerifier), "The launch plan (CONTEXT) is not a size-prefixed IngestRequest.");
+  const auto* job = R::GetSizePrefixedIngestRequest(ctx->data());
+  const auto* tags = job->TAGS();
+  CHECK(tags && str(job->SCHEMA()) == "LDM.fbs", "Job is not a launch plan.");
+  Plan plan;
+  CHECK(planFromUrl(str(tags->SOURCE_URL()), plan), error);
+  CHECK(str(tags->PROVIDER_ID()) == kProvider && str(tags->SOURCE_NAME()) == kSourceName && str(tags->LICENSE_URL()) == kTermsUrl &&
+    str(tags->CITATION()) == kCitation && job->RECONCILE() == R::reconcileMode_Current && !job->ARCHIVE() && !job->PROVENANCE() &&
+    str(tags->BATCH_ID()).empty(), "Job differs from its canonical launch plan.");
+  const std::string peer = str(tags->SOURCE_PEER());
   CHECK(!peer.empty() && peer.size() <= 128, "An authenticated producer peer ID is required.");
-  const auto* response = frame("response");
-  CHECK(response && response->payload_length > 8 && std::memcmp(response->payload, "$HRB", 4) == 0, "Expected a raw-body-v1 HTTP response.");
-  const auto* p = response->payload;
-  const uint32_t status = uint32_t(p[4]) | uint32_t(p[5]) << 8 | uint32_t(p[6]) << 16 | uint32_t(p[7]) << 24;
-  CHECK(status == 200, "Launch registry request did not succeed; keep the previous notices.");
-  const auto source = Json::parse(p + 8, p + response->payload_length, nullptr, false);
+  const uint64_t retrieved = http->RETRIEVED_MS();
+  CHECK(retrieved > 0 && retrieved <= 9007199254740991ULL, "Invalid retrieval epoch.");
+  CHECK(http->STATUS() == 200, "Launch registry request did not succeed; keep the previous notices.");
+  const uint8_t* body = http->BODY() ? http->BODY()->data() : nullptr;
+  const size_t bodyLength = http->BODY() ? http->BODY()->size() : 0;
+  CHECK(bodyLength <= maxBytes, "Registry response exceeds its byte budget.");
+  const auto source = Json::parse(body, body + bodyLength, nullptr, false);
   CHECK(source.is_object() && source.contains("results") && source["results"].is_array(), "Registry response has no results array.");
   const auto& results = source["results"];
-  CHECK(results.size() <= size_t(job["limit"].get<int>()), "Registry returned more launches than requested.");
+  CHECK(results.size() <= size_t(plan.limit), "Registry returned more launches than requested.");
 
   std::vector<uint8_t> stream;
-  size_t count = 0, skipped = 0;
+  size_t count = 0;
+  std::vector<std::string> skippedIds;
   for (const auto& launch : results) {
     flatbuffers::FlatBufferBuilder b(2048);
     bool skip = false;
     CHECK(buildRecord(launch, b, skip), error);
-    if (skip) { ++skipped; continue; }
+    if (skip) { skippedIds.push_back(text(launch, "id")); continue; }
     CHECK(stream.size() + b.GetSize() <= 16 * 1024 * 1024, "Output exceeds its byte budget.");
     stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
     ++count;
   }
   // Emit only after the whole response validated, so a bad tail never
   // replaces a good set of notices with a partial one.
-  const Json meta = {{"schema", "LDM.fbs"}, {"batch_id", ephem::sha256_hex(p + 8, response->payload_length - 8)},
-    {"provider_id", "launch-schedule"}, {"source_name", job["source_name"]}, {"source_url", job["source_url"]},
-    {"source_peer", peer}, {"reconcile", "current"}, {"origin_id", "thespacedevs.com"},
-    {"origin_name", "Launch Library 2"}, {"dataset_id", "launch-library-2/upcoming"},
-    {"terms_url", "https://thespacedevs.com/llapi"},
-    {"citation", "Launch data from Launch Library 2 by The Space Devs (https://thespacedevs.com), free access tier."}};
-  const Json report = {{"records", count}, {"skipped_imprecise", skipped}, {"registry_count", source.value("count", 0)},
-    {"retrieved_at_ms", retrieved}};
-  if (output("meta", meta) < 0 || output("report", report) < 0) return 1;
-  return plugin_push_output_ex("records", "LDM.fbs", "$LDM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "LDM", 0, 0,
-    stream.data(), stream.size()) < 0 ? 1 : 0;
+  const std::string batch = ephem::sha256_hex(body, bodyLength);
+  R::IngestRequestT meta;
+  meta.SCHEMA = "LDM.fbs";
+  meta.TAGS = std::make_unique<R::SourceTagsT>();
+  meta.TAGS->PROVIDER_ID = kProvider;
+  meta.TAGS->SOURCE_NAME = kSourceName;
+  meta.TAGS->BATCH_ID = batch;
+  meta.TAGS->SOURCE_URL = plan.url;
+  meta.TAGS->SOURCE_PEER = peer;
+  meta.TAGS->LICENSE_URL = kTermsUrl;
+  meta.TAGS->CITATION = kCitation;
+  meta.RECONCILE = R::reconcileMode_Current;
+  meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  auto& p = *meta.PROVENANCE;
+  p.SOURCE_URL = plan.url;
+  p.HTTP_STATUS = 200;
+  p.ETAG = headerOf(*http, "etag");
+  p.LAST_MODIFIED = headerOf(*http, "last-modified");
+  p.CONTENT_TYPE = headerOf(*http, "content-type");
+  p.RETRIEVED_MS = retrieved;
+  p.PARSER = "launch-schedule";
+  p.PARSER_VERSION = "launch-schedule/0.2.0";
+  p.SOURCE_SHA256 = batch;
+  p.NORMALIZED_COUNT = count;
+  p.SCHEMAS = {"LDM.fbs"};
+  p.SCHEMA_COUNTS = {count};
+  flatbuffers::FlatBufferBuilder mb(1024);
+  R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+  // The report: records normalized (COUNT), the retrieval time (AT_MS), the registry's own total and every launch skipped
+  // for an unsupported NET precision (ITEMS).
+  R::FlowNoticeT report;
+  report.KIND = R::flowNoticeKind_Info;
+  report.SCHEMA = "LDM.fbs";
+  report.PROVIDER_ID = kProvider;
+  report.SOURCE_NAME = kSourceName;
+  report.BATCH_ID = batch;
+  report.COUNT = count;
+  report.REASON = "normalized";
+  report.ITEMS.push_back("registry-count:" + std::to_string(source.value("count", 0)));
+  for (const auto& id : skippedIds) report.ITEMS.push_back("skipped-imprecise:" + id);
+  report.AT_MS = retrieved;
+  flatbuffers::FlatBufferBuilder rb(512);
+  R::FinishFlowNoticeBuffer(rb, R::FlowNotice::Pack(rb, &report));
+  if (push("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", mb.GetBufferPointer(), mb.GetSize()) < 0 ||
+      push("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", rb.GetBufferPointer(), rb.GetSize()) < 0) return 1;
+  return push("records", "LDM.fbs", "$LDM", "LDM", stream.data(), stream.size()) < 0 ? 1 : 0;
 }

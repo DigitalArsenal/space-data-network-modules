@@ -5,11 +5,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { sp3File } from './fixtures/sp3-format.mjs';
 
 const fixture = (name) => fs.readFileSync(fileURLToPath(new URL(`../../../files/orbit-products/fixtures/${name}`, import.meta.url)), 'utf8');
-const request = (text) => ({ methodId: 'read_sp3', inputs: [{ portId: 'source', payloadUtf8: text, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: new TextEncoder().encode(text).length } }] });
+// Each file as the HttpResponse (HRSP) hostcap/http-request answers, BODY the text verbatim.
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const request = (text) => ({ methodId: 'read_sp3', inputs: [{ portId: 'source', typeRef: HRSP,
+  payload: encodeHttpResponse({ url: 'https://igs.bkg.bund.de/orbit.sp3', status: 200, body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 14) }) }] });
 
 test('the same parser artifact agrees in Chromium, native WasmEdge and Docker WasmEdge', { skip: process.env.SDN_RUN_SP3_PARITY !== '1' }, async () => {
   const state = (k) => [6871 + k, 100 * k, -200 * k, 0.1 * k, 7.123456, 1.5];

@@ -70,7 +70,10 @@ const compilation = await compileModuleFromSource({
   // memory.
   threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // plugin.getConfig (an SDS $PIV invocation through typedHostcall.hpp);
+  // symbols resolve at instantiation. The module-sdk runtime types (TimerTick,
+  // HttpRequest, HttpResponse, IngestRequest, FlowNotice) are staged by the
+  // SDK compiler.
   allowUndefinedImports: true,
 });
 

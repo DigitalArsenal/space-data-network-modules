@@ -1,10 +1,9 @@
 /**
- * Security-bond attestation module manifest (owner directive 2026-08-03:
- * free chain services, in a WASM module over the wired-up http capability).
+ * Security-bond attestation module manifest (WHA in, WHA out; typed contracts 1.0;
+ * free chain services read through the host's http capability).
  *
- * The canonical manifest is `plugin-manifest.json`. The build embeds it into
- * the WASM via the SDK's `encodePlgManifest(legacyManifestToPlg(...))` — the
- * same $PLG encoder every other compiled module uses.
+ * The canonical manifest is `plugin-manifest.json`; the SDK compiler embeds it
+ * into the WASM (build.mjs).
  */
 import fs from "node:fs";
 import path from "node:path";

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.launch-schedule-host",
   "name": "Launch notices scheduled source adapter",
-  "version": "0.1.0",
-  "description": "Generic host configuration and retrieval receipt for the launch notices flow. Requires an SDK host supplying plugin.getConfig; registry normalization remains in the portable core. SDN auto-publishes configured source lanes after successful ingestion.",
+  "version": "0.2.0",
+  "description": "Scheduling gate for the launch notices flow (typed contracts 1.0, no JSON). prepare_scheduled: a TimerTick in; node CONFIG (plugin.getConfig, SDS $PIV) launch_schedule_enabled must be true (else a FlowNotice Skipped 'disabled'), launch_schedule_producer_peer_id set and launch_schedule_source.access anonymous (a keyed tier needs a credential adapter and is refused); the tick is then forwarded to launch-schedule plan_launches. receipt_scheduled: the HttpResponse in; CONFIG must still be enabled with a producer; a 304 becomes a FlowNotice Unchanged (the stored notices are kept, nothing republished), anything else is forwarded verbatim to parse_launches. SDN auto-publishes configured source lanes after successful ingestion.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Reads generic host configuration and the clock once per scheduled cycle; HTTP, signing, IPFS and persistence remain in existing host capability nodes. No threads."
+    "detail": "Reads generic host configuration once per call; HTTP, signing, IPFS and persistence remain in existing host capability nodes. No threads."
   },
   "methods": [
     {
@@ -27,69 +27,66 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "tick-v1",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
-              }
+              "description": "TimerTick (TICK) from the flow's timer trigger. Configuration is supplied by plugin.getConfig."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+          "description": "TimerTick (TICK) from the flow's timer trigger. Configuration is supplied by plugin.getConfig."
         }
       ],
       "outputPorts": [
         {
-          "portId": "config",
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "config-v1",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "One location, selected hourly variables, launch registry days and explicit API access tier."
-              }
+              "description": "The tick, forwarded verbatim to plan_launches when the cycle is enabled."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One location, selected hourly variables, launch registry days and explicit API access tier."
+          "description": "The tick, forwarded verbatim to plan_launches when the cycle is enabled."
         },
         {
           "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "status-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-              }
+              "description": "FlowNotice (FNTC) Skipped 'disabled' when scheduling is off; flow bookkeeping, never a data record."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+          "description": "FlowNotice (FNTC) Skipped 'disabled' when scheduling is off; flow bookkeeping, never a data record."
         }
       ],
       "maxBatch": 1,
@@ -97,141 +94,72 @@
     },
     {
       "methodId": "receipt_scheduled",
-      "displayName": "Attach retrieval receipt",
+      "displayName": "Gate the registry response",
       "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Unmodified launch registry plan."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Unmodified launch registry plan."
-        },
         {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request, the plan echoed in CONTEXT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
+          "description": "HttpResponse (HRSP) from hostcap/http-request, the plan echoed in CONTEXT."
         }
       ],
       "outputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Unmodified launch registry plan."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Unmodified launch registry plan."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-              }
+              "description": "The HttpResponse, forwarded verbatim to parse_launches (any status but 304)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-        },
-        {
-          "portId": "receipt",
-          "acceptedTypeSets": [
-            {
-              "setId": "receipt-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+          "description": "The HttpResponse, forwarded verbatim to parse_launches (any status but 304)."
         },
         {
           "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "status-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-              }
+              "description": "FlowNotice (FNTC) Unchanged 'not-modified' on a 304; flow bookkeeping, never a data record."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+          "description": "FlowNotice (FNTC) Unchanged 'not-modified' on a 304; flow bookkeeping, never a data record."
         }
       ],
       "maxBatch": 1,

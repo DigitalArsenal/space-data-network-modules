@@ -1,0 +1,21 @@
+{
+  "spacedatastandards": "1.247.0+1791801690384",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM"
+  ],
+  "commonHeaders": [
+    "oem_fb_builder.hpp"
+  ],
+  "sources": [
+    "src/iss_source.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "153ade4ecdd6a74e2b9a8b1d9cdfcb67cd32d0597f435ddc0864748298ff33f2"
+}

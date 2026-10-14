@@ -1,24 +1,25 @@
 # ISS (NASA public OEM) Data Source (A2.2c)
 
-A Tier-1 `data_source` adapter on the shared provider template
-(`common/provider_source.hpp`, promoted from `spacex-starlink-source` in A2.2c).
-On a TIMERS-driven `pull` it fetches the single public NASA ISS ephemeris — a
-CCSDS **OEM** KVN file — re-emits it as a schema-exact SDS **OEM** record, stores
-it, signs its content id, and publishes a schema-exact **PNM** pointer. This is
-the cleanest non-Starlink target: the source is *already* OEM, so the adapter is
-a faithful re-serializer, and it exercises the template on a genuinely different
-input format (KVN OEM vs Starlink's MEME text).
+Typed contracts 1.0 (FlatBuffers only, no JSON, no base64). The module fetches and stores nothing itself: it is a
+pure request-and-parse node beside `hostcap/http-request`, and its `$OEM` output is consumed in memory by
+`analysis/od` (`fit`), never stored, signed or published.
 
-## Pull flow (`src/iss_source.cpp`)
+## Flow (`src/iss_source.cpp`)
 
-1. **Fetch** — GET
-   `https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt`
-   (one file; single object NORAD 25544; no manifest, no per-object fan-out).
-2. **Parse** — the CCSDS OEM KVN header + the (single) META block + explicit-epoch
-   state lines (COMMENT / trajectory-event blocks skipped; raw bytes preserved by
-   SHA-256 in provenance).
-3. **Canonical record** — a schema-exact SDS OEM, `storage.write` under schema
-   `OEM`, `keyslot.sign` its CID, `pubsub.publish` a PNM on `sdn/data-source/iss`.
+| Method | In | Out |
+| --- | --- | --- |
+| `request` | `tick`: `TimerTick` (TICK; fields not read) | `request`: one GET `HttpRequest` (HREQ) for NASA's public ISS ephemeris (CCSDS OEM KVN) |
+| `emit` | `response`: the file's `HttpResponse` (HRSP) | `oem`: one $OEM (verbose, explicit epochs, EME2000/UTC/EARTH as declared, NORAD 25544) |
+
+Node config through `plugin.getConfig` (sdm_piv, one `ModuleConfig` read in place; the module's only hostcall):
+`sourceUrl`. Capabilities: none. A transport error, a status other than 200, an empty body
+or a file with nothing fittable fails closed (`fetch-failed` / `fetch-empty`); nothing partial is emitted. The flow's
+trigger sets the cadence (the former module timer's cadence is noted in the manifest).
+
+The former `pull` method (JSON hostcalls; it declared a signed `$PNM` output but only ever returned the in-memory `$OEM`
+stream) and the hand-built guest-link (`guest-link/emit_entry.cpp`, `manifest.js`) are gone: the SDK compiler builds the
+module and its guest-link object (`dist/guest-link/`). `test/module.test.mjs` runs the methods in the SDK browser harness
+on the fixtures and checks the `$OEM` bytes against the legacy artifact's (`test/fixtures/legacy/oem-stream.bin`).
 
 ## Schema / frame / time decisions
 
@@ -42,39 +43,29 @@ input format (KVN OEM vs Starlink's MEME text).
 
 ## Fetch politeness / cadence math
 
-- One file per pull (single GET); no per-object load. Full upstream ≈ 700 KB
+- One file per run (single GET); no per-object load. Full upstream ≈ 700 KB
   (5403 vectors, 15-day span).
-- **Cadence** — `pull` every **12h** (2×/day). NASA refreshes the OEM a few times
+- **Cadence** — a run (flow trigger) every **12h** (2×/day). NASA refreshes the OEM a few times
   a week, but each file is a *continuous* 15-day ephemeris, so 12h catches every
   refresh with margin: `~700 KB × 2/day ≈ 1.4 MB/day`. Configurable via
   `{"sourceUrl":…}`.
 
-## PNM / provenance
-
-- `FILE_ID` = `iss:OEM:25544:<START_TIME>`. Published message =
-  `{"PNM":{…}, "provenance":{…}}`; provenance carries `SOURCE_NAME` `iss`,
-  `DATA_SOURCE` `ISS-E`, `RECORD_SCHEMA` `OEM`, `NORAD_CAT_ID`, `OBJECT_ID`,
-  `REFERENCE_FRAME`, `CREATION_DATE`, `START_TIME`/`STOP_TIME`, `STATE_COUNT`.
-
 ## Build & test
 
 ```
-SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org checkout>
+node build.mjs
 node --test test/*.test.mjs
 ```
 
-`test/module.test.mjs` drives the rebuilt WASM with a mock
-`space_data_module_host` bridge serving the trimmed real ISS OEM fixture, and
-asserts: KVN parse → verbose OEM record with schema-exact keys, `REFERENCE_FRAME
-= EME2000` (not transformed), explicit-epoch lines, signed PNM structure,
-provenance `SOURCE_SHA256` binding, `sourceUrl` override, non-200 fail-closed,
-and malformed-input fail-closed. No live network is touched.
+`build.mjs` compiles through the SDK (`scripts/lib/build-source-module.mjs`: the SDS `$OEM` headers generated for the
+build, `common/oem_fb_builder.hpp`, this module's source). The test drives the methods in the SDK browser harness with
+the node config on `plugin.getConfig`, hands the fixtures back as `HttpResponse`s, compares the `$OEM` bytes with the
+legacy artifact's and checks the config overrides and the fail-closed cases. No live network is touched.
 
 ## Residuals (handoff)
 
 - **A2.4 parity pair.** The CelesTrak SupGP (`SOURCE=ISS-E`) same-epoch reference
   was not captured (CelesTrak `ECONNREFUSED` from this env). Draft + exact query
   in `test/fixtures/supgp-reference-draft/`.
-- **Binary FlatBuffer / ingest lane / OD consumption** — same A2.2c/A2.3
-  residuals as the Starlink adapter (records are JSON; OD consumes the raw OEM via
-  the PNM `FILE_NAME` + `SOURCE_SHA256`, not this JSON record).
+- **Resolved by typed contracts 1.0:** the module emits `$OEM` FlatBuffers that `analysis/od` reads in memory; no JSON record is built.

@@ -16,15 +16,19 @@ import { legacyCountryCode } from 'spacedatastandards.org/lib/js/CAT/legacyCount
 import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decodeFlowNotice, encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { gpRecord, satcatRecord, synthetic } from './fixtures/spacetrack-format.mjs';
 
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url), 'utf8'));
 const standardsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 
-const request = (methodId, text) => {
-  const payload = new TextEncoder().encode(text);
-  return { methodId, inputs: [{ portId: 'source', payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } }] };
+// The parser's one input: the HttpResponse hostcap/http-request answers, BODY the Space-Track JSON verbatim.
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const request = (methodId, text, { status = 200, error = '' } = {}) => {
+  const payload = encodeHttpResponse({ url: 'https://www.space-track.org/basicspacedata/query/class/gp', status, error, headers: { 'content-type': 'application/json' },
+    body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 10, 18) });
+  return { methodId, inputs: [{ portId: 'response', payload, typeRef: HRSP }] };
 };
 async function harness(t) {
   const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
@@ -47,7 +51,25 @@ const records = (result, port, type, identifier) => [...sizePrefixed(output(resu
   assert.equal(Buffer.from(rec.subarray(8, 12)).toString(), identifier);
   return type[`getSizePrefixedRootAs${identifier.slice(1)}`](new ByteBuffer(rec)).unpack();
 });
-const report = (result) => JSON.parse(new TextDecoder().decode(output(result, 'report')));
+// The report is one FlowNotice (FNTC): ITEMS are "name=value" counters, a map's entries "name.key=value".
+const notice = (result) => decodeFlowNotice(output(result, 'report'));
+const report = (result) => {
+  const n = notice(result);
+  assert.equal(n.kind, 'info');
+  assert.equal(n.sourceName, 'space-track');
+  const out = { class: n.reason, rejectionExamples: [] };
+  for (const item of n.items) {
+    const eq = item.indexOf('=');
+    const name = item.slice(0, eq), value = item.slice(eq + 1);
+    const dot = name.indexOf('.');
+    if (name.startsWith('rejectionExample.')) out.rejectionExamples.push({ record: Number(name.slice(dot + 1)), reason: value });
+    else if (name.endsWith('Range')) out[name] = value.split('/');
+    else if (dot > 0) (out[name.slice(0, dot)] ??= {})[name.slice(dot + 1)] = Number(value);
+    else out[name] = Number(value);
+  }
+  assert.equal(n.count, out.emitted);
+  return out;
+};
 const params = (omm) => Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 test('the SDK artifact validates against the canonical standards', async () => {
@@ -178,4 +200,21 @@ test('a damaged input is refused whole: no partial output, a code and a message'
     assert.ok(result.errorMessage, name);
   }
   assert.equal(records(await host.invoke(request('parse_gp', good)), 'omm', OMM, '$OMM').length, 1);
+});
+
+test('HTTP 304 is one Unchanged notice and no records; another status or a transport error is refused', async (t) => {
+  const host = await harness(t);
+  const unchanged = await host.invoke(request('parse_gp', '', { status: 304 }));
+  assert.equal(unchanged.statusCode, 0, unchanged.errorMessage);
+  assert.deepEqual(unchanged.outputs.map((f) => f.portId), ['report']);
+  const n = notice(unchanged);
+  assert.deepEqual([n.kind, n.reason, n.schema, n.count], ['unchanged', 'not-modified', 'OMM', 1]);
+  assert.equal(notice(await host.invoke(request('parse_satcat', '', { status: 304 }))).schema, 'CAT');
+  for (const [name, options] of [['HTTP 500', { status: 500 }], ['transport error', { status: 0, error: 'connection reset' }]]) {
+    const result = await host.invoke(request('parse_gp', JSON.stringify([gpRecord(synthetic())]), options));
+    assert.notEqual(result.statusCode, 0, name);
+    assert.equal(result.outputs?.length ?? 0, 0, name);
+  }
+  const wrong = await host.invoke({ methodId: 'parse_gp', inputs: [{ portId: 'response', payload: new TextEncoder().encode('[]'), typeRef: HRSP }] });
+  assert.notEqual(wrong.statusCode, 0, 'a frame that is not an HttpResponse is refused');
 });

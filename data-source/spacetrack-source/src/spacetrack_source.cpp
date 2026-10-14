@@ -3,8 +3,12 @@
 //   parse_gp      Space-Track `gp` or `gp_history` JSON (omm-gp-json, the REST API's output) -> $OMM
 //   parse_satcat  Space-Track `satcat` JSON                                                  -> $CAT
 //
-// Pure bytes in, pure bytes out: the login, the polite request rate, the schedule and the archive belong to
-// the SDN host flow. One record that cannot be read is dropped and counted in the report; an input that is
+// Typed contracts 1.0 (FlatBuffers only): the input is the HttpResponse (HRSP) hostcap/http-request answers,
+// its BODY the Space-Track JSON verbatim; the records leave as one size-prefixed SDS stream and the report as
+// one FlowNotice (FNTC, KIND Info: COUNT the records emitted, ITEMS the counters as "name=value"). HTTP 304
+// gives one FlowNotice (Unchanged) on "report" and no records; any other status but 200, or a transport ERROR,
+// is refused. No hostcalls: the login, the polite request rate, the schedule and the archive belong to the
+// SDN host flow. One record that cannot be read is dropped and counted in the report; an input that is
 // not a JSON array of objects is refused whole. Errors are flags (a return code and a message), never
 // exceptions.
 //
@@ -23,7 +27,10 @@
 #include <string>
 #include <vector>
 
-using Json = nlohmann::json;
+#include <HttpResponse_generated.h>
+#include <FlowNotice_generated.h>
+
+namespace R = sdn::runtime;
 
 namespace {
 
@@ -128,31 +135,63 @@ bool catalog_number(const flatjson::Record& r, const char* field, uint32_t* out,
 struct Counters {
   size_t read = 0, emitted = 0, duplicates = 0, rejected = 0, alpha5 = 0, unrepresented = 0;
   std::map<std::string, size_t> reasons;
-  Json examples = Json::array();
+  std::vector<std::string> examples;
   void reject(size_t index, const std::string& why) {
     ++rejected;
     ++reasons[why];
-    if (examples.size() < kMaxExamples) examples.push_back({{"record", index}, {"reason", why}});
+    if (examples.size() < kMaxExamples) examples.push_back("rejectionExample." + std::to_string(index) + "=" + why);
   }
 };
 
-Json reasons_json(const Counters& c) {
-  Json out = Json::object();
-  for (const auto& entry : c.reasons) out[entry.first] = entry.second;
-  return out;
+// The report's ITEMS: one "name=value" counter each; a map's entries as "name.key=value".
+struct Items {
+  std::vector<std::string> items;
+  void add(const std::string& name, size_t value) { items.push_back(name + "=" + std::to_string(value)); }
+  void add(const std::string& name, const std::string& value) { items.push_back(name + "=" + value); }
+  void add(const std::string& name, const std::map<std::string, size_t>& values) {
+    for (const auto& entry : values) add(name + "." + entry.first, entry.second);
+  }
+};
+
+int push_notice(R::flowNoticeKind kind, const char* schema, const char* reason, uint64_t count, std::vector<std::string> items) {
+  R::FlowNoticeT notice;
+  notice.KIND = kind;
+  notice.SCHEMA = schema;
+  notice.SOURCE_NAME = "space-track";
+  notice.REASON = reason;
+  notice.COUNT = count;
+  notice.ITEMS = std::move(items);
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+  return plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+                               b.GetBufferPointer(), b.GetSize());
 }
 
-int push_report(const Json& report) {
-  const std::string text = report.dump();
-  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size()));
-}
-
-const plugin_input_frame_t* source_frame() {
-  if (plugin_get_input_count() != 1) return nullptr;
+// The one input: the HttpResponse. Returns the body (verbatim JSON) or nullptr with the error set; *unchanged on 304.
+const R::HttpResponse* response_frame(bool* unchanged) {
+  *unchanged = false;
+  if (plugin_get_input_count() != 1) return fail("invalid-spacetrack-source", "One HttpResponse frame is expected."), nullptr;
   const auto* input = plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) return nullptr;
-  return input;
+  if (!input || !input->port_id || std::strcmp(input->port_id, "response") || !input->payload || !input->payload_length) {
+    return fail("missing-response-frame", "The parser requires the HttpResponse frame on 'response'."), nullptr;
+  }
+  flatbuffers::Verifier verifier(input->payload, input->payload_length, 64, 1000000, false);
+  if (!R::VerifyHttpResponseBuffer(verifier)) return fail("invalid-response-frame", "The response frame is not an HttpResponse (HRSP)."), nullptr;
+  const R::HttpResponse* r = R::GetHttpResponse(input->payload);
+  if (r->ERROR() && r->ERROR()->size()) return fail("fetch-failed", "The Space-Track request failed: " + r->ERROR()->str()), nullptr;
+  if (r->STATUS() == 304) {
+    *unchanged = true;
+    return r;
+  }
+  if (r->STATUS() != 200) return fail("fetch-failed", "Space-Track returned HTTP status " + std::to_string(r->STATUS()) + "."), nullptr;
+  if (!r->BODY() || r->BODY()->size() == 0 || r->BODY()->size() > kMaxBytes) {
+    return fail("invalid-spacetrack-source", "The source must be one bounded Space-Track JSON array (1 byte to 256 MiB)."), nullptr;
+  }
+  return r;
+}
+
+int push_unchanged(const R::HttpResponse& r, const char* schema) {
+  return push_notice(R::flowNoticeKind_Unchanged, schema, "not-modified", 1, {r.URL() ? r.URL()->str() : std::string()}) < 0 ? 1 : 0;
 }
 
 // ── omm-gp-json -> $OMM ────────────────────────────────────────────────────────────────────────────────
@@ -265,8 +304,10 @@ bool build_omm(const flatjson::Record& r, OMMT* omm, bool* alpha5, std::string* 
 }  // namespace
 
 extern "C" int parse_gp(void) {
-  const auto* input = source_frame();
-  if (!input) return fail("invalid-spacetrack-source", "The source must be one bounded Space-Track gp or gp_history JSON array.");
+  bool unchanged = false;
+  const R::HttpResponse* response = response_frame(&unchanged);
+  if (!response) return 1;
+  if (unchanged) return push_unchanged(*response, "OMM");
   Counters counters;
   std::set<std::string> gp_ids;
   std::map<std::string, size_t> theories;
@@ -308,17 +349,22 @@ extern "C" int parse_gp(void) {
     }
     return true;
   };
-  if (!flatjson::for_each_record(reinterpret_cast<const char*>(input->payload), input->payload_length, on_record, &error)) {
+  if (!flatjson::for_each_record(reinterpret_cast<const char*>(response->BODY()->data()), response->BODY()->size(), on_record, &error)) {
     return fail("invalid-spacetrack-source", oversize ? "The $OMM output exceeds its byte budget." : error);
   }
   if (counters.emitted == 0) return fail("invalid-spacetrack-source", "No Space-Track element set could be read" + (counters.rejected ? std::string(" (") + std::to_string(counters.rejected) + " rejected)" : std::string()) + ".");
-  Json theory_counts = Json::object();
-  for (const auto& entry : theories) theory_counts[entry.first] = entry.second;
-  const Json report = {{"version", 1}, {"source", "space-track"}, {"class", "gp"}, {"records", counters.read}, {"emitted", counters.emitted},
-                       {"duplicateGpIds", counters.duplicates}, {"rejected", counters.rejected}, {"rejections", reasons_json(counters)},
-                       {"rejectionExamples", counters.examples}, {"alpha5CatalogNumbers", counters.alpha5}, {"meanElementTheories", theory_counts},
-                       {"epochRange", {first_epoch, last_epoch}}, {"creationDateRange", {first_creation, last_creation}}};
-  if (push_report(report) < 0) return 1;
+  Items report;
+  report.add("records", counters.read);
+  report.add("emitted", counters.emitted);
+  report.add("duplicateGpIds", counters.duplicates);
+  report.add("rejected", counters.rejected);
+  report.add("rejections", counters.reasons);
+  report.items.insert(report.items.end(), counters.examples.begin(), counters.examples.end());
+  report.add("alpha5CatalogNumbers", counters.alpha5);
+  report.add("meanElementTheories", theories);
+  report.add("epochRange", first_epoch + "/" + last_epoch);
+  report.add("creationDateRange", first_creation + "/" + last_creation);
+  if (push_notice(R::flowNoticeKind_Info, "OMM", "gp", counters.emitted, std::move(report.items)) < 0) return 1;
   return plugin_push_output_ex("omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OMM", 0, 0, output.data(), static_cast<uint32_t>(output.size())) < 0 ? 1 : 0;
 }
 
@@ -339,8 +385,10 @@ bool country(const std::string& text, legacyCountryCode* out) {
 }  // namespace
 
 extern "C" int parse_satcat(void) {
-  const auto* input = source_frame();
-  if (!input) return fail("invalid-spacetrack-source", "The source must be one bounded Space-Track satcat JSON array.");
+  bool unchanged = false;
+  const R::HttpResponse* response = response_frame(&unchanged);
+  if (!response) return 1;
+  if (unchanged) return push_unchanged(*response, "CAT");
   Counters counters;
   size_t superseded = 0, unnumbered_designators = 0, decayed = 0;
   std::map<std::string, size_t> unknown_countries;
@@ -412,22 +460,25 @@ extern "C" int parse_satcat(void) {
     ++counters.emitted;
     return true;
   };
-  if (!flatjson::for_each_record(reinterpret_cast<const char*>(input->payload), input->payload_length, on_record, &error)) {
+  if (!flatjson::for_each_record(reinterpret_cast<const char*>(response->BODY()->data()), response->BODY()->size(), on_record, &error)) {
     return fail("invalid-spacetrack-source", oversize ? "The $CAT output exceeds its byte budget." : error);
   }
   if (counters.emitted == 0) return fail("invalid-spacetrack-source", "No Space-Track SATCAT entry could be read.");
   // A country code the standard's legacyCountryCode enum does not list is written as UNK and counted by code, not guessed.
-  Json countries = Json::object();
   size_t unrepresented_countries = 0;
-  for (const auto& entry : unknown_countries) {
-    countries[entry.first] = entry.second;
-    unrepresented_countries += entry.second;
-  }
-  const Json report = {{"version", 1}, {"source", "space-track"}, {"class", "satcat"}, {"records", counters.read}, {"emitted", counters.emitted},
-                       {"supersededEntries", superseded}, {"duplicateCatalogNumbers", counters.duplicates}, {"rejected", counters.rejected},
-                       {"rejections", reasons_json(counters)}, {"rejectionExamples", counters.examples},
-                       {"unrepresentedDesignators", unnumbered_designators}, {"unrepresentedCountries", unrepresented_countries},
-                       {"unrepresentedCountryCodes", countries}, {"decayed", decayed}};
-  if (push_report(report) < 0) return 1;
+  for (const auto& entry : unknown_countries) unrepresented_countries += entry.second;
+  Items report;
+  report.add("records", counters.read);
+  report.add("emitted", counters.emitted);
+  report.add("supersededEntries", superseded);
+  report.add("duplicateCatalogNumbers", counters.duplicates);
+  report.add("rejected", counters.rejected);
+  report.add("rejections", counters.reasons);
+  report.items.insert(report.items.end(), counters.examples.begin(), counters.examples.end());
+  report.add("unrepresentedDesignators", unnumbered_designators);
+  report.add("unrepresentedCountries", unrepresented_countries);
+  report.add("unrepresentedCountryCodes", unknown_countries);
+  report.add("decayed", decayed);
+  if (push_notice(R::flowNoticeKind_Info, "CAT", "satcat", counters.emitted, std::move(report.items)) < 0) return 1;
   return plugin_push_output_ex("catalog", "CAT.fbs", "$CAT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CAT", 0, 0, output.data(), static_cast<uint32_t>(output.size())) < 0 ? 1 : 0;
 }

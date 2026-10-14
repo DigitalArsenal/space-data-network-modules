@@ -1,24 +1,25 @@
 # GLONASS Precise Ephemeris (IAC SP3) Data Source (A2.2c-2)
 
-A Tier-1 `data_source` adapter on the shared provider template
-(`common/provider_source.hpp`). On a TIMERS-driven `pull` it fetches a GLONASS
-precise ephemeris from the Russian **Information-Analytical Center (IAC)** — an
-**SP3-d** file — and for each GLONASS satellite (`Rnn`) emits a schema-exact SDS
-**OEM** record with the state-vector series, stores it, signs its content id, and
-publishes a schema-exact **PNM** pointer. The OEM/verbose skeleton mirrors the
-ISS adapter; only the SP3 parse is GLONASS-specific.
+Typed contracts 1.0 (FlatBuffers only, no JSON, no base64). The module fetches and stores nothing itself: it is a
+pure request-and-parse node beside `hostcap/http-request`, and its `$OEM` output is consumed in memory by
+`analysis/od` (`fit`), never stored, signed or published.
 
-## Pull flow (`src/glonass_source.cpp`)
+## Flow (`src/glonass_source.cpp`)
 
-1. **Fetch** — GET the IAC SP3 (default the rolling `LATEST/Final.sp3`). The raw
-   file is SHA-256'd once and bound into every record's provenance.
-2. **Parse SP3-d** — header (version, coordinate system, time system, orbit type,
-   agency, GPS week), epoch lines, and position (`P`) records; filter to GLONASS
-   (`R`) satellites.
-3. **Per GLONASS satellite** — build a verbose OEM (see below), `storage.write`
-   it (schema `OEM`), `keyslot.sign` its CID, and `pubsub.publish` a PNM on
-   `sdn/data-source/glonass`. `objectCap` (default 40 ≥ the ~24 GLONASS slots)
-   bounds per-pull record churn.
+| Method | In | Out |
+| --- | --- | --- |
+| `request` | `tick`: `TimerTick` (TICK; fields not read) | `request`: one GET `HttpRequest` (HREQ) for an IAC GLONASS precise ephemeris (SP3-d) |
+| `emit` | `response`: the file's `HttpResponse` (HRSP) | `oem`: one $OEM per GLONASS satellite (position-only, frame/time as the SP3 header declares), at most `objectCap` when positive |
+
+Node config through `plugin.getConfig` (sdm_piv, one `ModuleConfig` read in place; the module's only hostcall):
+`sourceUrl`, `objectCap` (default: the whole constellation). Capabilities: none. A transport error, a status other than 200, an empty body
+or a file with nothing fittable fails closed (`fetch-failed` / `fetch-empty`); nothing partial is emitted. The flow's
+trigger sets the cadence (the former module timer's cadence is noted in the manifest).
+
+The former `pull` method (JSON hostcalls; it declared a signed `$PNM` output but only ever returned the in-memory `$OEM`
+stream) and the hand-built guest-link (`guest-link/emit_entry.cpp`, `manifest.js`) are gone: the SDK compiler builds the
+module and its guest-link object (`dist/guest-link/`). `test/module.test.mjs` runs the methods in the SDK browser harness
+on the fixtures and checks the `$OEM` bytes against the legacy artifact's (`test/fixtures/legacy/oem-stream.bin`).
 
 ## ⚠️ Frame / time preserved AS DECLARED (a mission correction)
 
@@ -76,10 +77,10 @@ Full detail + the exact `GLONASS-RE` CelesTrak query are in
 
 ## Fetch politeness / cadence / transport
 
-- One SP3 file per pull (single GET). The module `timers` block runs `pull` every
+- One SP3 file per run (single GET). The module `timers` block runs a run (flow trigger) every
   **12h**; IAC regenerates its precise products ~daily (rapid) with a rolling
   ultra-rapid, so 12h captures the refresh promptly.
-- `objectCap` (default **40**) bounds per-pull *record* churn (one record per
+- `objectCap` (default: none, the whole constellation) bounds per-run *record* churn (one record per
   GLONASS satellite), not fetch load. Configurable via `{"objectCap":…,
   "sourceUrl":…}`.
 - **Transport residual (OWNER-ASSIST):** at capture time the IAC **HTTPS**
@@ -89,30 +90,15 @@ Full detail + the exact `GLONASS-RE` CelesTrak query are in
   `http` capability can fetch `ftp://` is a host concern — if not, the fetch
   needs an FTP-capable host fetch or an HTTPS mirror (`sourceUrl` override).
 
-## PNM / provenance
-
-- `FILE_ID` = `glonass:OEM:<Rnn>:<start-epoch>` (CelesTrak
-  `<source>:<schema>:<key>:<epoch>` convention; key = SP3 slot id).
-- `FILE_NAME` = the SP3 file basename (e.g. `Final.sp3`).
-- Provenance carries `SOURCE_NAME`, `SOURCE_URL`, `SOURCE_SHA256`, `DATA_SOURCE =
-  GLONASS-RE`, `RECORD_SCHEMA = OEM`, plus the SP3 facts (`SP3_SAT_ID`,
-  `SP3_VERSION`, `COORDINATE_SYSTEM`, `TIME_SYSTEM`, `FRAME_NOTE`,
-  `STATE_REPRESENTATION`, `ORBIT_TYPE`, `AGENCY`, `GPS_WEEK`, `STATE_COUNT`,
-  `START_TIME`/`STOP_TIME`).
-
 ## Build & test
 
 ```
-SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org checkout>
+node build.mjs
 node --test test/*.test.mjs
 ```
 
-`test/module.test.mjs` instantiates the rebuilt WASM with a mock
-`space_data_module_host` bridge serving a **synthetic** GLONASS-style SP3-d (SGP4 truth; no IAC data)
-fixture, and asserts: SP3 parse → 25 GLONASS OEM records with schema-exact keys,
-`REFERENCE_FRAME = IGS20` (NOT PZ-90.11) + `TIME_SYSTEM = GPS` preserved as
-declared, verbose position-only (`STATE_VECTOR_SIZE = 3`, `X`/`Y`/`Z`, no
-fabricated velocity), the R01 bad-clock edge case (position kept), signed PNM
-structure, provenance `SOURCE_SHA256` binding + `FRAME_NOTE`, `objectCap`,
-`sourceUrl` override, non-200 fail-closed, and malformed-input fail-closed. No
-live network is touched.
+`build.mjs` compiles through the SDK (`scripts/lib/build-source-module.mjs`: the SDS `$OEM` headers generated for the
+build, `common/oem_fb_builder.hpp`, this module's source). The test drives the methods in the SDK browser harness with
+the node config on `plugin.getConfig`, hands the fixtures back as `HttpResponse`s, compares the `$OEM` bytes with the
+legacy artifact's and checks the config overrides and the fail-closed cases. No live network is touched.
