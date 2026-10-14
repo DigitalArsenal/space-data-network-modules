@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.247.0+1791801690384",
-  "standardsRoot": "/Users/tj/software/worktrees/spacedatastandards--sds-node-api-standards-20261013",
+  "spacedatastandards": "1.249.0",
+  "standardsRoot": "/private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/work/sds-root/node_modules/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",

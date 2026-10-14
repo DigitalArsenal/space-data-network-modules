@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.247.0+1791801690384",
+  "spacedatastandards": "1.249.0",
   "schema": "CQR",
   "threadModel": "single-thread"
 }

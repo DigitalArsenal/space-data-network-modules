@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.247.0+1791801690384",
-  "standardsRoot": "/Users/tj/software/worktrees/spacedatastandards--sds-node-api-standards-20261013",
+  "spacedatastandards": "1.249.0",
+  "standardsRoot": "/Users/tj/software/worktrees/space-data-network-modules--modules-hostcap-typed-20261013/data-source/vimpel-source/node_modules/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",

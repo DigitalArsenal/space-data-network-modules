@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.247.0+1791801690384",
+  "spacedatastandards": "1.249.0",
   "sdsFamilies": [
     "RDO",
     "RFM",
@@ -13,12 +13,12 @@
     "PPE",
     "OEM",
     "EOP",
-    "ASN"
+    "ASG"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "eopSeries": "foundation/frames/src/eop_series.hpp",
-  "moduleSdk": "0.9.3",
+  "moduleSdk": "0.9.5",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "5ca4f2c91ea122736de0f2cb4e679bfc81df9777df46660e1399df27c79f6a62"
+  "wasmSha256": "5eaa6ae43506fb1f1b06b2c868545924aeebc0741bef64e5355ac64f8aff2fc2"
 }

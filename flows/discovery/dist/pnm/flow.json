@@ -3,7 +3,7 @@
   "name": "SDN PNM Publication History Flow",
   "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Gateway PNM history flow (mount GET /api/v1/peers/{peerId}/pnm): foundation/http-route discover decides the request as an $APR (pnm_history + peerId + limit); hostcap/p2p-discovery pnm_history reads p2p.pnm_history (typed $PIV, capability p2p_read; the host attributes each notice to its publisher by Ed25519 signature) and answers a $PNV beside the $APR (STATUS 404 no-publications when none are recorded); foundation/http-respond respond renders the $HTR. foundation/discovery-shape is no longer in the graph. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
+  "description": "Gateway PNM history flow (mount GET /api/v1/peers/{peerId}/pnm): foundation/http-route discover decides the request as an $APR (pnm_history + peerId + limit); hostcap/p2p-discovery pnm_history reads p2p.pnm_history (typed $PIV, capability p2p_read; the host attributes each notice to its publisher by Ed25519 signature) and answers a $PNV beside the $APR (STATUS 404 no-publications when none are recorded); foundation/http-respond respond renders the $HTR. foundation/discovery-shape is retired. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",

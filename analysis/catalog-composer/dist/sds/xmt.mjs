@@ -1,13 +1,11 @@
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/Band.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
 import * as flatbuffers2 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FrequencyRange.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FrequencyRange.ts
 import * as flatbuffers from "flatbuffers";
 var FrequencyRange = class _FrequencyRange {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -78,12 +76,10 @@ var FrequencyRangeT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/Band.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
 var Band = class _Band {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -146,13 +142,13 @@ var BandT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CAT.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
 import * as flatbuffers7 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CATProduct.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
 import * as flatbuffers3 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/catalogProductKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/catalogProductKind.ts
 var catalogProductKind = /* @__PURE__ */ ((catalogProductKind2) => {
   catalogProductKind2[catalogProductKind2["Unspecified"] = 0] = "Unspecified";
   catalogProductKind2[catalogProductKind2["Sgp4Elements"] = 1] = "Sgp4Elements";
@@ -161,12 +157,10 @@ var catalogProductKind = /* @__PURE__ */ ((catalogProductKind2) => {
   return catalogProductKind2;
 })(catalogProductKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CATProduct.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
 var CATProduct = class _CATProduct {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -290,13 +284,13 @@ var CATProductT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PLD.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
 import * as flatbuffers6 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/IDM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
 import * as flatbuffers5 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/DataMode.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/DataMode.ts
 var DataMode = /* @__PURE__ */ ((DataMode2) => {
   DataMode2[DataMode2["EXERCISE"] = 0] = "EXERCISE";
   DataMode2[DataMode2["REAL"] = 1] = "REAL";
@@ -305,7 +299,7 @@ var DataMode = /* @__PURE__ */ ((DataMode2) => {
   return DataMode2;
 })(DataMode || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/DeviceType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/DeviceType.ts
 var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   DeviceType2[DeviceType2["UNKNOWN"] = 0] = "UNKNOWN";
   DeviceType2[DeviceType2["OPTICAL"] = 1] = "OPTICAL";
@@ -356,7 +350,7 @@ var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   return DeviceType2;
 })(DeviceType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PolarizationType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PolarizationType.ts
 var PolarizationType = /* @__PURE__ */ ((PolarizationType2) => {
   PolarizationType2[PolarizationType2["linear"] = 0] = "linear";
   PolarizationType2[PolarizationType2["circular"] = 1] = "circular";
@@ -365,7 +359,7 @@ var PolarizationType = /* @__PURE__ */ ((PolarizationType2) => {
   return PolarizationType2;
 })(PolarizationType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SimplePolarization.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/SimplePolarization.ts
 var SimplePolarization = /* @__PURE__ */ ((SimplePolarization2) => {
   SimplePolarization2[SimplePolarization2["vertical"] = 0] = "vertical";
   SimplePolarization2[SimplePolarization2["horizontal"] = 1] = "horizontal";
@@ -374,13 +368,11 @@ var SimplePolarization = /* @__PURE__ */ ((SimplePolarization2) => {
   return SimplePolarization2;
 })(SimplePolarization || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/StokesParameters.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/StokesParameters.ts
 import * as flatbuffers4 from "flatbuffers";
 var StokesParameters = class _StokesParameters {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -481,12 +473,10 @@ var StokesParametersT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/IDM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
 var IDM = class _IDM {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -946,12 +936,10 @@ var IDMT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PLD.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
 var PLD = class _PLD {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -1104,7 +1092,7 @@ var PLDT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/dataAvailability.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/dataAvailability.ts
 var dataAvailability = /* @__PURE__ */ ((dataAvailability2) => {
   dataAvailability2[dataAvailability2["NO_CURRENT_ELEMENTS"] = 0] = "NO_CURRENT_ELEMENTS";
   dataAvailability2[dataAvailability2["NO_INITIAL_ELEMENTS"] = 1] = "NO_INITIAL_ELEMENTS";
@@ -1113,7 +1101,7 @@ var dataAvailability = /* @__PURE__ */ ((dataAvailability2) => {
   return dataAvailability2;
 })(dataAvailability || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/legacyCountryCode.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/legacyCountryCode.ts
 var legacyCountryCode = /* @__PURE__ */ ((legacyCountryCode2) => {
   legacyCountryCode2[legacyCountryCode2["AB"] = 0] = "AB";
   legacyCountryCode2[legacyCountryCode2["ABS"] = 1] = "ABS";
@@ -1259,14 +1247,14 @@ var legacyCountryCode = /* @__PURE__ */ ((legacyCountryCode2) => {
   return legacyCountryCode2;
 })(legacyCountryCode || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/massCategory.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/massCategory.ts
 var massCategory = /* @__PURE__ */ ((massCategory2) => {
   massCategory2[massCategory2["DRY"] = 0] = "DRY";
   massCategory2[massCategory2["WET"] = 1] = "WET";
   return massCategory2;
 })(massCategory || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/operationalState.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/operationalState.ts
 var operationalState = /* @__PURE__ */ ((operationalState2) => {
   operationalState2[operationalState2["OPERATIONAL"] = 0] = "OPERATIONAL";
   operationalState2[operationalState2["NONOPERATIONAL"] = 1] = "NONOPERATIONAL";
@@ -1279,7 +1267,7 @@ var operationalState = /* @__PURE__ */ ((operationalState2) => {
   return operationalState2;
 })(operationalState || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/orbitRegime.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/orbitRegime.ts
 var orbitRegime = /* @__PURE__ */ ((orbitRegime2) => {
   orbitRegime2[orbitRegime2["ORBIT"] = 0] = "ORBIT";
   orbitRegime2[orbitRegime2["LANDING"] = 1] = "LANDING";
@@ -1289,7 +1277,7 @@ var orbitRegime = /* @__PURE__ */ ((orbitRegime2) => {
   return orbitRegime2;
 })(orbitRegime || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/spaceObjectClass.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/spaceObjectClass.ts
 var spaceObjectClass = /* @__PURE__ */ ((spaceObjectClass2) => {
   spaceObjectClass2[spaceObjectClass2["PAYLOAD"] = 0] = "PAYLOAD";
   spaceObjectClass2[spaceObjectClass2["ROCKET_BODY"] = 1] = "ROCKET_BODY";
@@ -1298,12 +1286,10 @@ var spaceObjectClass = /* @__PURE__ */ ((spaceObjectClass2) => {
   return spaceObjectClass2;
 })(spaceObjectClass || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CAT.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
 var CAT = class _CAT {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -1784,10 +1770,97 @@ var CATT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CVR.ts
-import * as flatbuffers8 from "flatbuffers";
+// node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrame.ts
+var CelestialFrame = /* @__PURE__ */ ((CelestialFrame2) => {
+  CelestialFrame2[CelestialFrame2["GCRF"] = 0] = "GCRF";
+  CelestialFrame2[CelestialFrame2["ICRF"] = 1] = "ICRF";
+  CelestialFrame2[CelestialFrame2["J2000"] = 2] = "J2000";
+  CelestialFrame2[CelestialFrame2["J2000A"] = 3] = "J2000A";
+  CelestialFrame2[CelestialFrame2["EME2000"] = 4] = "EME2000";
+  CelestialFrame2[CelestialFrame2["TEMEOFDATE"] = 5] = "TEMEOFDATE";
+  CelestialFrame2[CelestialFrame2["GTOD"] = 6] = "GTOD";
+  CelestialFrame2[CelestialFrame2["CIRS"] = 7] = "CIRS";
+  CelestialFrame2[CelestialFrame2["MOD_EARTH"] = 8] = "MOD_EARTH";
+  CelestialFrame2[CelestialFrame2["MOD_CB"] = 9] = "MOD_CB";
+  CelestialFrame2[CelestialFrame2["MOD_MOON"] = 10] = "MOD_MOON";
+  CelestialFrame2[CelestialFrame2["TOD_EARTH"] = 11] = "TOD_EARTH";
+  CelestialFrame2[CelestialFrame2["TOD_CB"] = 12] = "TOD_CB";
+  CelestialFrame2[CelestialFrame2["TOD_MOON"] = 13] = "TOD_MOON";
+  CelestialFrame2[CelestialFrame2["TOE_EARTH"] = 14] = "TOE_EARTH";
+  CelestialFrame2[CelestialFrame2["TOE_CB"] = 15] = "TOE_CB";
+  CelestialFrame2[CelestialFrame2["TOE_MOON"] = 16] = "TOE_MOON";
+  CelestialFrame2[CelestialFrame2["ITRF2000"] = 17] = "ITRF2000";
+  CelestialFrame2[CelestialFrame2["ITRF93"] = 18] = "ITRF93";
+  CelestialFrame2[CelestialFrame2["ITRF97"] = 19] = "ITRF97";
+  CelestialFrame2[CelestialFrame2["EFG"] = 20] = "EFG";
+  CelestialFrame2[CelestialFrame2["FIXED_CB"] = 21] = "FIXED_CB";
+  CelestialFrame2[CelestialFrame2["FIXED_EARTH"] = 22] = "FIXED_EARTH";
+  CelestialFrame2[CelestialFrame2["WGS84"] = 23] = "WGS84";
+  CelestialFrame2[CelestialFrame2["DTRFYYYY"] = 24] = "DTRFYYYY";
+  CelestialFrame2[CelestialFrame2["ALIGN_EARTH"] = 25] = "ALIGN_EARTH";
+  CelestialFrame2[CelestialFrame2["ALIGN_CB"] = 26] = "ALIGN_CB";
+  CelestialFrame2[CelestialFrame2["B1950"] = 27] = "B1950";
+  return CelestialFrame2;
+})(CelestialFrame || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/covarianceCalibration.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrameWrapper.ts
+import * as flatbuffers8 from "flatbuffers";
+var CelestialFrameWrapper = class _CelestialFrameWrapper {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsCelestialFrameWrapper(bb, obj) {
+    return (obj || new _CelestialFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsCelestialFrameWrapper(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers8.SIZE_PREFIX_LENGTH);
+    return (obj || new _CelestialFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  frame() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* GCRF */;
+  }
+  static startCelestialFrameWrapper(builder) {
+    builder.startObject(1);
+  }
+  static addFrame(builder, frame) {
+    builder.addFieldInt8(0, frame, 0 /* GCRF */);
+  }
+  static endCelestialFrameWrapper(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createCelestialFrameWrapper(builder, frame) {
+    _CelestialFrameWrapper.startCelestialFrameWrapper(builder);
+    _CelestialFrameWrapper.addFrame(builder, frame);
+    return _CelestialFrameWrapper.endCelestialFrameWrapper(builder);
+  }
+  unpack() {
+    return new CelestialFrameWrapperT(
+      this.frame()
+    );
+  }
+  unpackTo(_o) {
+    _o.frame = this.frame();
+  }
+};
+var CelestialFrameWrapperT = class {
+  constructor(frame = 0 /* GCRF */) {
+    this.frame = frame;
+  }
+  pack(builder) {
+    return CelestialFrameWrapper.createCelestialFrameWrapper(
+      builder,
+      this.frame
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/covarianceCalibration.ts
 var covarianceCalibration = /* @__PURE__ */ ((covarianceCalibration2) => {
   covarianceCalibration2[covarianceCalibration2["Unspecified"] = 0] = "Unspecified";
   covarianceCalibration2[covarianceCalibration2["Uncalibrated"] = 1] = "Uncalibrated";
@@ -1795,7 +1868,7 @@ var covarianceCalibration = /* @__PURE__ */ ((covarianceCalibration2) => {
   return covarianceCalibration2;
 })(covarianceCalibration || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/covarianceRule.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/covarianceRule.ts
 var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   covarianceRule2[covarianceRule2["Unspecified"] = 0] = "Unspecified";
   covarianceRule2[covarianceRule2["Operator"] = 1] = "Operator";
@@ -1805,12 +1878,91 @@ var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   return covarianceRule2;
 })(covarianceRule || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CVR.ts
-var CVR = class _CVR {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
+// node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrame.ts
+var CustomFrame = /* @__PURE__ */ ((CustomFrame2) => {
+  CustomFrame2[CustomFrame2["ECEF"] = 0] = "ECEF";
+  CustomFrame2[CustomFrame2["TEME"] = 1] = "TEME";
+  CustomFrame2[CustomFrame2["TEMEOFEPOCH"] = 2] = "TEMEOFEPOCH";
+  CustomFrame2[CustomFrame2["ENU"] = 3] = "ENU";
+  CustomFrame2[CustomFrame2["NED"] = 4] = "NED";
+  CustomFrame2[CustomFrame2["NEU"] = 5] = "NEU";
+  CustomFrame2[CustomFrame2["RIC"] = 6] = "RIC";
+  CustomFrame2[CustomFrame2["RTN"] = 7] = "RTN";
+  CustomFrame2[CustomFrame2["TVN"] = 8] = "TVN";
+  CustomFrame2[CustomFrame2["VVLH"] = 9] = "VVLH";
+  CustomFrame2[CustomFrame2["QSW"] = 10] = "QSW";
+  CustomFrame2[CustomFrame2["LTP"] = 11] = "LTP";
+  CustomFrame2[CustomFrame2["LVLH"] = 12] = "LVLH";
+  CustomFrame2[CustomFrame2["PNE"] = 13] = "PNE";
+  CustomFrame2[CustomFrame2["BRF"] = 14] = "BRF";
+  CustomFrame2[CustomFrame2["RSW"] = 15] = "RSW";
+  CustomFrame2[CustomFrame2["TNW"] = 16] = "TNW";
+  CustomFrame2[CustomFrame2["UVW"] = 17] = "UVW";
+  return CustomFrame2;
+})(CustomFrame || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrameWrapper.ts
+import * as flatbuffers9 from "flatbuffers";
+var CustomFrameWrapper = class _CustomFrameWrapper {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
   }
+  static getRootAsCustomFrameWrapper(bb, obj) {
+    return (obj || new _CustomFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsCustomFrameWrapper(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers9.SIZE_PREFIX_LENGTH);
+    return (obj || new _CustomFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  frame() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* ECEF */;
+  }
+  static startCustomFrameWrapper(builder) {
+    builder.startObject(1);
+  }
+  static addFrame(builder, frame) {
+    builder.addFieldInt8(0, frame, 0 /* ECEF */);
+  }
+  static endCustomFrameWrapper(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createCustomFrameWrapper(builder, frame) {
+    _CustomFrameWrapper.startCustomFrameWrapper(builder);
+    _CustomFrameWrapper.addFrame(builder, frame);
+    return _CustomFrameWrapper.endCustomFrameWrapper(builder);
+  }
+  unpack() {
+    return new CustomFrameWrapperT(
+      this.frame()
+    );
+  }
+  unpackTo(_o) {
+    _o.frame = this.frame();
+  }
+};
+var CustomFrameWrapperT = class {
+  constructor(frame = 0 /* ECEF */) {
+    this.frame = frame;
+  }
+  pack(builder) {
+    return CustomFrameWrapper.createCustomFrameWrapper(
+      builder,
+      this.frame
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/CVR.ts
+import * as flatbuffers10 from "flatbuffers";
+var CVR = class _CVR {
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -1820,7 +1972,7 @@ var CVR = class _CVR {
     return (obj || new _CVR()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsCVR(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers8.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers10.SIZE_PREFIX_LENGTH);
     return (obj || new _CVR()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -2069,191 +2221,17 @@ var CVRT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CelestialFrame.ts
-var CelestialFrame = /* @__PURE__ */ ((CelestialFrame2) => {
-  CelestialFrame2[CelestialFrame2["GCRF"] = 0] = "GCRF";
-  CelestialFrame2[CelestialFrame2["ICRF"] = 1] = "ICRF";
-  CelestialFrame2[CelestialFrame2["J2000"] = 2] = "J2000";
-  CelestialFrame2[CelestialFrame2["J2000A"] = 3] = "J2000A";
-  CelestialFrame2[CelestialFrame2["EME2000"] = 4] = "EME2000";
-  CelestialFrame2[CelestialFrame2["TEMEOFDATE"] = 5] = "TEMEOFDATE";
-  CelestialFrame2[CelestialFrame2["GTOD"] = 6] = "GTOD";
-  CelestialFrame2[CelestialFrame2["CIRS"] = 7] = "CIRS";
-  CelestialFrame2[CelestialFrame2["MOD_EARTH"] = 8] = "MOD_EARTH";
-  CelestialFrame2[CelestialFrame2["MOD_CB"] = 9] = "MOD_CB";
-  CelestialFrame2[CelestialFrame2["MOD_MOON"] = 10] = "MOD_MOON";
-  CelestialFrame2[CelestialFrame2["TOD_EARTH"] = 11] = "TOD_EARTH";
-  CelestialFrame2[CelestialFrame2["TOD_CB"] = 12] = "TOD_CB";
-  CelestialFrame2[CelestialFrame2["TOD_MOON"] = 13] = "TOD_MOON";
-  CelestialFrame2[CelestialFrame2["TOE_EARTH"] = 14] = "TOE_EARTH";
-  CelestialFrame2[CelestialFrame2["TOE_CB"] = 15] = "TOE_CB";
-  CelestialFrame2[CelestialFrame2["TOE_MOON"] = 16] = "TOE_MOON";
-  CelestialFrame2[CelestialFrame2["ITRF2000"] = 17] = "ITRF2000";
-  CelestialFrame2[CelestialFrame2["ITRF93"] = 18] = "ITRF93";
-  CelestialFrame2[CelestialFrame2["ITRF97"] = 19] = "ITRF97";
-  CelestialFrame2[CelestialFrame2["EFG"] = 20] = "EFG";
-  CelestialFrame2[CelestialFrame2["FIXED_CB"] = 21] = "FIXED_CB";
-  CelestialFrame2[CelestialFrame2["FIXED_EARTH"] = 22] = "FIXED_EARTH";
-  CelestialFrame2[CelestialFrame2["WGS84"] = 23] = "WGS84";
-  CelestialFrame2[CelestialFrame2["DTRFYYYY"] = 24] = "DTRFYYYY";
-  CelestialFrame2[CelestialFrame2["ALIGN_EARTH"] = 25] = "ALIGN_EARTH";
-  CelestialFrame2[CelestialFrame2["ALIGN_CB"] = 26] = "ALIGN_CB";
-  CelestialFrame2[CelestialFrame2["B1950"] = 27] = "B1950";
-  return CelestialFrame2;
-})(CelestialFrame || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CelestialFrameWrapper.ts
-import * as flatbuffers9 from "flatbuffers";
-var CelestialFrameWrapper = class _CelestialFrameWrapper {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsCelestialFrameWrapper(bb, obj) {
-    return (obj || new _CelestialFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsCelestialFrameWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers9.SIZE_PREFIX_LENGTH);
-    return (obj || new _CelestialFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  frame() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* GCRF */;
-  }
-  static startCelestialFrameWrapper(builder) {
-    builder.startObject(1);
-  }
-  static addFrame(builder, frame) {
-    builder.addFieldInt8(0, frame, 0 /* GCRF */);
-  }
-  static endCelestialFrameWrapper(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createCelestialFrameWrapper(builder, frame) {
-    _CelestialFrameWrapper.startCelestialFrameWrapper(builder);
-    _CelestialFrameWrapper.addFrame(builder, frame);
-    return _CelestialFrameWrapper.endCelestialFrameWrapper(builder);
-  }
-  unpack() {
-    return new CelestialFrameWrapperT(
-      this.frame()
-    );
-  }
-  unpackTo(_o) {
-    _o.frame = this.frame();
-  }
-};
-var CelestialFrameWrapperT = class {
-  constructor(frame = 0 /* GCRF */) {
-    this.frame = frame;
-  }
-  pack(builder) {
-    return CelestialFrameWrapper.createCelestialFrameWrapper(
-      builder,
-      this.frame
-    );
-  }
-};
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CustomFrame.ts
-var CustomFrame = /* @__PURE__ */ ((CustomFrame2) => {
-  CustomFrame2[CustomFrame2["ECEF"] = 0] = "ECEF";
-  CustomFrame2[CustomFrame2["TEME"] = 1] = "TEME";
-  CustomFrame2[CustomFrame2["TEMEOFEPOCH"] = 2] = "TEMEOFEPOCH";
-  CustomFrame2[CustomFrame2["ENU"] = 3] = "ENU";
-  CustomFrame2[CustomFrame2["NED"] = 4] = "NED";
-  CustomFrame2[CustomFrame2["NEU"] = 5] = "NEU";
-  CustomFrame2[CustomFrame2["RIC"] = 6] = "RIC";
-  CustomFrame2[CustomFrame2["RTN"] = 7] = "RTN";
-  CustomFrame2[CustomFrame2["TVN"] = 8] = "TVN";
-  CustomFrame2[CustomFrame2["VVLH"] = 9] = "VVLH";
-  CustomFrame2[CustomFrame2["QSW"] = 10] = "QSW";
-  CustomFrame2[CustomFrame2["LTP"] = 11] = "LTP";
-  CustomFrame2[CustomFrame2["LVLH"] = 12] = "LVLH";
-  CustomFrame2[CustomFrame2["PNE"] = 13] = "PNE";
-  CustomFrame2[CustomFrame2["BRF"] = 14] = "BRF";
-  CustomFrame2[CustomFrame2["RSW"] = 15] = "RSW";
-  CustomFrame2[CustomFrame2["TNW"] = 16] = "TNW";
-  CustomFrame2[CustomFrame2["UVW"] = 17] = "UVW";
-  return CustomFrame2;
-})(CustomFrame || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/CustomFrameWrapper.ts
-import * as flatbuffers10 from "flatbuffers";
-var CustomFrameWrapper = class _CustomFrameWrapper {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsCustomFrameWrapper(bb, obj) {
-    return (obj || new _CustomFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsCustomFrameWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers10.SIZE_PREFIX_LENGTH);
-    return (obj || new _CustomFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  frame() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* ECEF */;
-  }
-  static startCustomFrameWrapper(builder) {
-    builder.startObject(1);
-  }
-  static addFrame(builder, frame) {
-    builder.addFieldInt8(0, frame, 0 /* ECEF */);
-  }
-  static endCustomFrameWrapper(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createCustomFrameWrapper(builder, frame) {
-    _CustomFrameWrapper.startCustomFrameWrapper(builder);
-    _CustomFrameWrapper.addFrame(builder, frame);
-    return _CustomFrameWrapper.endCustomFrameWrapper(builder);
-  }
-  unpack() {
-    return new CustomFrameWrapperT(
-      this.frame()
-    );
-  }
-  unpackTo(_o) {
-    _o.frame = this.frame();
-  }
-};
-var CustomFrameWrapperT = class {
-  constructor(frame = 0 /* ECEF */) {
-    this.frame = frame;
-  }
-  pack(builder) {
-    return CustomFrameWrapper.createCustomFrameWrapper(
-      builder,
-      this.frame
-    );
-  }
-};
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/DataType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/DataType.ts
 var DataType = /* @__PURE__ */ ((DataType2) => {
   DataType2[DataType2["OBSERVED"] = 0] = "OBSERVED";
   DataType2[DataType2["PREDICTED"] = 1] = "PREDICTED";
   return DataType2;
 })(DataType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/EOP.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
 import * as flatbuffers11 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/eopSeries.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/eopSeries.ts
 var eopSeries = /* @__PURE__ */ ((eopSeries2) => {
   eopSeries2[eopSeries2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   eopSeries2[eopSeries2["IERS_C04_14"] = 1] = "IERS_C04_14";
@@ -2265,7 +2243,7 @@ var eopSeries = /* @__PURE__ */ ((eopSeries2) => {
   return eopSeries2;
 })(eopSeries || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/iauPrecessionNutationModel.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/iauPrecessionNutationModel.ts
 var iauPrecessionNutationModel = /* @__PURE__ */ ((iauPrecessionNutationModel2) => {
   iauPrecessionNutationModel2[iauPrecessionNutationModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   iauPrecessionNutationModel2[iauPrecessionNutationModel2["IAU_2000A"] = 1] = "IAU_2000A";
@@ -2274,12 +2252,10 @@ var iauPrecessionNutationModel = /* @__PURE__ */ ((iauPrecessionNutationModel2) 
   return iauPrecessionNutationModel2;
 })(iauPrecessionNutationModel || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/EOP.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
 var EOP = class _EOP {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -2787,7 +2763,7 @@ var EOPT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/F107DataType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/F107DataType.ts
 var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
   F107DataType2[F107DataType2["OBS"] = 0] = "OBS";
   F107DataType2[F107DataType2["INT"] = 1] = "INT";
@@ -2796,19 +2772,27 @@ var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
   return F107DataType2;
 })(F107DataType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FluxQualifier.ts
+var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
+  FluxQualifier2[FluxQualifier2["OBSERVED"] = 0] = "OBSERVED";
+  FluxQualifier2[FluxQualifier2["BURST_ADJUSTED"] = 1] = "BURST_ADJUSTED";
+  FluxQualifier2[FluxQualifier2["INTERPOLATED_EXTRAPOLATED"] = 2] = "INTERPOLATED_EXTRAPOLATED";
+  FluxQualifier2[FluxQualifier2["NO_OBSERVATION"] = 3] = "NO_OBSERVATION";
+  FluxQualifier2[FluxQualifier2["PROVIDER_INTERPOLATED"] = 4] = "PROVIDER_INTERPOLATED";
+  return FluxQualifier2;
+})(FluxQualifier || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
 import * as flatbuffers21 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMFrameTransformRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
 import * as flatbuffers19 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMMatrix3.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMMatrix3.ts
 import * as flatbuffers12 from "flatbuffers";
 var FRMMatrix3 = class _FRMMatrix3 {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -2957,16 +2941,14 @@ var FRMMatrix3T = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMStateVector.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
 import * as flatbuffers14 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMVector3.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMVector3.ts
 import * as flatbuffers13 from "flatbuffers";
 var FRMVector3 = class _FRMVector3 {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -3043,7 +3025,7 @@ var FRMVector3T = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/frmStateRepresentation.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/frmStateRepresentation.ts
 var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
   frmStateRepresentation2[frmStateRepresentation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   frmStateRepresentation2[frmStateRepresentation2["CARTESIAN"] = 1] = "CARTESIAN";
@@ -3063,12 +3045,10 @@ var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
   return frmStateRepresentation2;
 })(frmStateRepresentation || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMStateVector.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
 var FRMStateVector = class _FRMStateVector {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -3229,16 +3209,14 @@ var FRMStateVectorT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMCoordinateSystem.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
 import * as flatbuffers18 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
 import * as flatbuffers15 from "flatbuffers";
 var RFMLocalAlignedConstrainedAxes = class _RFMLocalAlignedConstrainedAxes {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -3429,10 +3407,10 @@ var RFMLocalAlignedConstrainedAxesT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMObjectReferencedAxes.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
 import * as flatbuffers16 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/rfmVectorSpecification.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/rfmVectorSpecification.ts
 var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
   rfmVectorSpecification2[rfmVectorSpecification2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmVectorSpecification2[rfmVectorSpecification2["RADIAL"] = 1] = "RADIAL";
@@ -3444,12 +3422,10 @@ var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
   return rfmVectorSpecification2;
 })(rfmVectorSpecification || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMObjectReferencedAxes.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
 var RFMObjectReferencedAxes = class _RFMObjectReferencedAxes {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -3552,10 +3528,10 @@ var RFMObjectReferencedAxesT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMOrigin.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
 import * as flatbuffers17 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/rfmLibrationPoint.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/rfmLibrationPoint.ts
 var rfmLibrationPoint = /* @__PURE__ */ ((rfmLibrationPoint2) => {
   rfmLibrationPoint2[rfmLibrationPoint2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmLibrationPoint2[rfmLibrationPoint2["L1"] = 1] = "L1";
@@ -3566,7 +3542,7 @@ var rfmLibrationPoint = /* @__PURE__ */ ((rfmLibrationPoint2) => {
   return rfmLibrationPoint2;
 })(rfmLibrationPoint || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/rfmOriginKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/rfmOriginKind.ts
 var rfmOriginKind = /* @__PURE__ */ ((rfmOriginKind2) => {
   rfmOriginKind2[rfmOriginKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmOriginKind2[rfmOriginKind2["CELESTIAL_BODY"] = 1] = "CELESTIAL_BODY";
@@ -3577,12 +3553,10 @@ var rfmOriginKind = /* @__PURE__ */ ((rfmOriginKind2) => {
   return rfmOriginKind2;
 })(rfmOriginKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMOrigin.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
 var RFMOrigin = class _RFMOrigin {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -3809,7 +3783,7 @@ var RFMOriginT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/rfmAxisType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/rfmAxisType.ts
 var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   rfmAxisType2[rfmAxisType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmAxisType2[rfmAxisType2["MEAN_EQUATOR_EQUINOX_J2000"] = 1] = "MEAN_EQUATOR_EQUINOX_J2000";
@@ -3847,12 +3821,10 @@ var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   return rfmAxisType2;
 })(rfmAxisType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMCoordinateSystem.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
 var RFMCoordinateSystem = class _RFMCoordinateSystem {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4036,7 +4008,7 @@ var RFMCoordinateSystemT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/frmOperationCode.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/frmOperationCode.ts
 var frmOperationCode = /* @__PURE__ */ ((frmOperationCode2) => {
   frmOperationCode2[frmOperationCode2["UNKNOWN"] = 0] = "UNKNOWN";
   frmOperationCode2[frmOperationCode2["PCI_TO_PCPF"] = 1] = "PCI_TO_PCPF";
@@ -4049,12 +4021,10 @@ var frmOperationCode = /* @__PURE__ */ ((frmOperationCode2) => {
   return frmOperationCode2;
 })(frmOperationCode || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMFrameTransformRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
 var FRMFrameTransformRequest = class _FRMFrameTransformRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4255,10 +4225,10 @@ var FRMFrameTransformRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMFrameTransformResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
 import * as flatbuffers20 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/frmResultStatus.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/frmResultStatus.ts
 var frmResultStatus = /* @__PURE__ */ ((frmResultStatus2) => {
   frmResultStatus2[frmResultStatus2["OK"] = 0] = "OK";
   frmResultStatus2[frmResultStatus2["INVALID_INPUT"] = 1] = "INVALID_INPUT";
@@ -4270,12 +4240,10 @@ var frmResultStatus = /* @__PURE__ */ ((frmResultStatus2) => {
   return frmResultStatus2;
 })(frmResultStatus || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRMFrameTransformResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
 var FRMFrameTransformResult = class _FRMFrameTransformResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4445,12 +4413,10 @@ var FRMFrameTransformResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FRM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
 var FRM = class _FRM {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4519,23 +4485,11 @@ var FRMT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/FluxQualifier.ts
-var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
-  FluxQualifier2[FluxQualifier2["OBSERVED"] = 0] = "OBSERVED";
-  FluxQualifier2[FluxQualifier2["BURST_ADJUSTED"] = 1] = "BURST_ADJUSTED";
-  FluxQualifier2[FluxQualifier2["INTERPOLATED_EXTRAPOLATED"] = 2] = "INTERPOLATED_EXTRAPOLATED";
-  FluxQualifier2[FluxQualifier2["NO_OBSERVATION"] = 3] = "NO_OBSERVATION";
-  FluxQualifier2[FluxQualifier2["PROVIDER_INTERPOLATED"] = 4] = "PROVIDER_INTERPOLATED";
-  return FluxQualifier2;
-})(FluxQualifier || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/LCC.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/LCC.ts
 import * as flatbuffers22 from "flatbuffers";
 var LCC = class _LCC {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4664,13 +4618,40 @@ var LCCT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/MNV.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/maneuverCharacterization.ts
+var maneuverCharacterization = /* @__PURE__ */ ((maneuverCharacterization2) => {
+  maneuverCharacterization2[maneuverCharacterization2["IN_PLANE"] = 0] = "IN_PLANE";
+  maneuverCharacterization2[maneuverCharacterization2["OUT_OF_PLANE"] = 1] = "OUT_OF_PLANE";
+  maneuverCharacterization2[maneuverCharacterization2["COMBINED"] = 2] = "COMBINED";
+  maneuverCharacterization2[maneuverCharacterization2["STATION_KEEPING"] = 3] = "STATION_KEEPING";
+  maneuverCharacterization2[maneuverCharacterization2["ORBIT_RAISING"] = 4] = "ORBIT_RAISING";
+  maneuverCharacterization2[maneuverCharacterization2["ORBIT_LOWERING"] = 5] = "ORBIT_LOWERING";
+  maneuverCharacterization2[maneuverCharacterization2["PHASING"] = 6] = "PHASING";
+  maneuverCharacterization2[maneuverCharacterization2["DEORBIT"] = 7] = "DEORBIT";
+  maneuverCharacterization2[maneuverCharacterization2["COLLISION_AVOIDANCE"] = 8] = "COLLISION_AVOIDANCE";
+  maneuverCharacterization2[maneuverCharacterization2["UNKNOWN"] = 9] = "UNKNOWN";
+  return maneuverCharacterization2;
+})(maneuverCharacterization || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/maneuverStatus.ts
+var maneuverStatus = /* @__PURE__ */ ((maneuverStatus2) => {
+  maneuverStatus2[maneuverStatus2["DETECTED"] = 0] = "DETECTED";
+  maneuverStatus2[maneuverStatus2["CONFIRMED"] = 1] = "CONFIRMED";
+  maneuverStatus2[maneuverStatus2["PREDICTED"] = 2] = "PREDICTED";
+  maneuverStatus2[maneuverStatus2["PLANNED"] = 3] = "PLANNED";
+  maneuverStatus2[maneuverStatus2["EXECUTED"] = 4] = "EXECUTED";
+  maneuverStatus2[maneuverStatus2["CANCELLED"] = 5] = "CANCELLED";
+  maneuverStatus2[maneuverStatus2["UNKNOWN"] = 6] = "UNKNOWN";
+  return maneuverStatus2;
+})(maneuverStatus || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
 import * as flatbuffers25 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PVN.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
 import * as flatbuffers23 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pvnLicenseClass.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pvnLicenseClass.ts
 var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
   pvnLicenseClass2[pvnLicenseClass2["Unspecified"] = 0] = "Unspecified";
   pvnLicenseClass2[pvnLicenseClass2["Reproducible"] = 1] = "Reproducible";
@@ -4680,7 +4661,7 @@ var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
   return pvnLicenseClass2;
 })(pvnLicenseClass || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pvnSourceKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pvnSourceKind.ts
 var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
   pvnSourceKind2[pvnSourceKind2["Unspecified"] = 0] = "Unspecified";
   pvnSourceKind2[pvnSourceKind2["ElementSet"] = 1] = "ElementSet";
@@ -4689,12 +4670,10 @@ var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
   return pvnSourceKind2;
 })(pvnSourceKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PVN.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
 var PVN = class _PVN {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -4852,40 +4831,11 @@ var PVNT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/maneuverCharacterization.ts
-var maneuverCharacterization = /* @__PURE__ */ ((maneuverCharacterization2) => {
-  maneuverCharacterization2[maneuverCharacterization2["IN_PLANE"] = 0] = "IN_PLANE";
-  maneuverCharacterization2[maneuverCharacterization2["OUT_OF_PLANE"] = 1] = "OUT_OF_PLANE";
-  maneuverCharacterization2[maneuverCharacterization2["COMBINED"] = 2] = "COMBINED";
-  maneuverCharacterization2[maneuverCharacterization2["STATION_KEEPING"] = 3] = "STATION_KEEPING";
-  maneuverCharacterization2[maneuverCharacterization2["ORBIT_RAISING"] = 4] = "ORBIT_RAISING";
-  maneuverCharacterization2[maneuverCharacterization2["ORBIT_LOWERING"] = 5] = "ORBIT_LOWERING";
-  maneuverCharacterization2[maneuverCharacterization2["PHASING"] = 6] = "PHASING";
-  maneuverCharacterization2[maneuverCharacterization2["DEORBIT"] = 7] = "DEORBIT";
-  maneuverCharacterization2[maneuverCharacterization2["COLLISION_AVOIDANCE"] = 8] = "COLLISION_AVOIDANCE";
-  maneuverCharacterization2[maneuverCharacterization2["UNKNOWN"] = 9] = "UNKNOWN";
-  return maneuverCharacterization2;
-})(maneuverCharacterization || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/maneuverStatus.ts
-var maneuverStatus = /* @__PURE__ */ ((maneuverStatus2) => {
-  maneuverStatus2[maneuverStatus2["DETECTED"] = 0] = "DETECTED";
-  maneuverStatus2[maneuverStatus2["CONFIRMED"] = 1] = "CONFIRMED";
-  maneuverStatus2[maneuverStatus2["PREDICTED"] = 2] = "PREDICTED";
-  maneuverStatus2[maneuverStatus2["PLANNED"] = 3] = "PLANNED";
-  maneuverStatus2[maneuverStatus2["EXECUTED"] = 4] = "EXECUTED";
-  maneuverStatus2[maneuverStatus2["CANCELLED"] = 5] = "CANCELLED";
-  maneuverStatus2[maneuverStatus2["UNKNOWN"] = 6] = "UNKNOWN";
-  return maneuverStatus2;
-})(maneuverStatus || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/mnvOrbitalState.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/mnvOrbitalState.ts
 import * as flatbuffers24 from "flatbuffers";
 var mnvOrbitalState = class _mnvOrbitalState {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -5278,12 +5228,10 @@ var mnvOrbitalStateT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/MNV.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
 var MNV = class _MNV {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -6037,16 +5985,14 @@ var MNVT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCD.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
 import * as flatbuffers30 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCDCode500Header.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCDCode500Header.ts
 import * as flatbuffers26 from "flatbuffers";
 var NCDCode500Header = class _NCDCode500Header {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -6218,13 +6164,11 @@ var NCDCode500HeaderT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCDSP3Header.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCDSP3Header.ts
 import * as flatbuffers27 from "flatbuffers";
 var NCDSP3Header = class _NCDSP3Header {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -6566,13 +6510,11 @@ var NCDSP3HeaderT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCDScenarioEpochContainer.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCDScenarioEpochContainer.ts
 import * as flatbuffers28 from "flatbuffers";
 var NCDScenarioEpochContainer = class _NCDScenarioEpochContainer {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -6770,13 +6712,11 @@ var NCDScenarioEpochContainerT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCDSegmentDescriptor.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCDSegmentDescriptor.ts
 import * as flatbuffers29 from "flatbuffers";
 var NCDSegmentDescriptor = class _NCDSegmentDescriptor {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7009,7 +6949,7 @@ var NCDSegmentDescriptorT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/ncdContainerFormat.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/ncdContainerFormat.ts
 var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   ncdContainerFormat2[ncdContainerFormat2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   ncdContainerFormat2[ncdContainerFormat2["SPK_DAF"] = 1] = "SPK_DAF";
@@ -7042,12 +6982,10 @@ var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   return ncdContainerFormat2;
 })(ncdContainerFormat || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/NCD.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
 var NCD = class _NCD {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7380,13 +7318,13 @@ var NCDT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OIL.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
 import * as flatbuffers35 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILConflict.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
 import * as flatbuffers31 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/oilConflictShape.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/oilConflictShape.ts
 var oilConflictShape = /* @__PURE__ */ ((oilConflictShape2) => {
   oilConflictShape2[oilConflictShape2["Unspecified"] = 0] = "Unspecified";
   oilConflictShape2[oilConflictShape2["OneLeftManyRight"] = 1] = "OneLeftManyRight";
@@ -7395,12 +7333,10 @@ var oilConflictShape = /* @__PURE__ */ ((oilConflictShape2) => {
   return oilConflictShape2;
 })(oilConflictShape || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILConflict.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
 var OILConflict = class _OILConflict {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7520,16 +7456,14 @@ var OILConflictT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILLink.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
 import * as flatbuffers34 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILEvidence.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILEvidence.ts
 import * as flatbuffers32 from "flatbuffers";
 var OILEvidence = class _OILEvidence {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7654,13 +7588,11 @@ var OILEvidenceT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILIdentifier.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILIdentifier.ts
 import * as flatbuffers33 from "flatbuffers";
 var OILIdentifier = class _OILIdentifier {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7808,7 +7740,7 @@ var OILIdentifierT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/oilLinkStatus.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/oilLinkStatus.ts
 var oilLinkStatus = /* @__PURE__ */ ((oilLinkStatus2) => {
   oilLinkStatus2[oilLinkStatus2["Unspecified"] = 0] = "Unspecified";
   oilLinkStatus2[oilLinkStatus2["Candidate"] = 1] = "Candidate";
@@ -7821,12 +7753,10 @@ var oilLinkStatus = /* @__PURE__ */ ((oilLinkStatus2) => {
   return oilLinkStatus2;
 })(oilLinkStatus || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OILLink.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
 var OILLink = class _OILLink {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -7956,12 +7886,10 @@ var OILLinkT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OIL.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
 var OIL = class _OIL {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -8308,7 +8236,7 @@ var OILT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OrbitFrame.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrame.ts
 var OrbitFrame = /* @__PURE__ */ ((OrbitFrame2) => {
   OrbitFrame2[OrbitFrame2["EQW_INERTIAL"] = 0] = "EQW_INERTIAL";
   OrbitFrame2[OrbitFrame2["LVLH_INERTIAL"] = 1] = "LVLH_INERTIAL";
@@ -8329,13 +8257,11 @@ var OrbitFrame = /* @__PURE__ */ ((OrbitFrame2) => {
   return OrbitFrame2;
 })(OrbitFrame || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/OrbitFrameWrapper.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrameWrapper.ts
 import * as flatbuffers36 from "flatbuffers";
 var OrbitFrameWrapper = class _OrbitFrameWrapper {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -8388,16 +8314,16 @@ var OrbitFrameWrapperT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCE.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
 import * as flatbuffers48 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
 import * as flatbuffers39 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationContext.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
 import * as flatbuffers37 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceOwnerClass.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceOwnerClass.ts
 var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
   pceOwnerClass2[pceOwnerClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceOwnerClass2[pceOwnerClass2["SPACE_OBJECT"] = 1] = "SPACE_OBJECT";
@@ -8414,12 +8340,10 @@ var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
   return pceOwnerClass2;
 })(pceOwnerClass || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationContext.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
 var PCEEvaluationContext = class _PCEEvaluationContext {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -8654,10 +8578,10 @@ var PCEEvaluationContextT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterRef.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
 import * as flatbuffers38 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceParameter.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceParameter.ts
 var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
   pceParameter2[pceParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceParameter2[pceParameter2["POSITION_X"] = 1] = "POSITION_X";
@@ -8886,12 +8810,10 @@ var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
   return pceParameter2;
 })(pceParameter || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterRef.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
 var PCEParameterRef = class _PCEParameterRef {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -9070,12 +8992,10 @@ var PCEParameterRefT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
 var PCEEvaluationRequest = class _PCEEvaluationRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -9200,16 +9120,16 @@ var PCEEvaluationRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
 import * as flatbuffers42 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterSample.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
 import * as flatbuffers41 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterValue.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
 import * as flatbuffers40 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceResultStatus.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceResultStatus.ts
 var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
   pceResultStatus2[pceResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceResultStatus2[pceResultStatus2["OK"] = 1] = "OK";
@@ -9227,7 +9147,7 @@ var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
   return pceResultStatus2;
 })(pceResultStatus || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceUnit.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceUnit.ts
 var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
   pceUnit2[pceUnit2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceUnit2[pceUnit2["DIMENSIONLESS"] = 1] = "DIMENSIONLESS";
@@ -9256,12 +9176,10 @@ var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
   return pceUnit2;
 })(pceUnit || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterValue.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
 var PCEParameterValue = class _PCEParameterValue {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -9458,12 +9376,10 @@ var PCEParameterValueT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterSample.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
 var PCEParameterSample = class _PCEParameterSample {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -9557,12 +9473,10 @@ var PCEParameterSampleT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEEvaluationResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
 var PCEEvaluationResult = class _PCEEvaluationResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -9684,13 +9598,13 @@ var PCEEvaluationResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterCatalog.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
 import * as flatbuffers44 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterDescriptor.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
 import * as flatbuffers43 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceAvailability.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceAvailability.ts
 var pceAvailability = /* @__PURE__ */ ((pceAvailability2) => {
   pceAvailability2[pceAvailability2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceAvailability2[pceAvailability2["IMPLEMENTED"] = 1] = "IMPLEMENTED";
@@ -9699,7 +9613,7 @@ var pceAvailability = /* @__PURE__ */ ((pceAvailability2) => {
   return pceAvailability2;
 })(pceAvailability || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceDataType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceDataType.ts
 var pceDataType = /* @__PURE__ */ ((pceDataType2) => {
   pceDataType2[pceDataType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceDataType2[pceDataType2["REAL_SCALAR"] = 1] = "REAL_SCALAR";
@@ -9712,7 +9626,7 @@ var pceDataType = /* @__PURE__ */ ((pceDataType2) => {
   return pceDataType2;
 })(pceDataType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceFrameDependency.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceFrameDependency.ts
 var pceFrameDependency = /* @__PURE__ */ ((pceFrameDependency2) => {
   pceFrameDependency2[pceFrameDependency2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceFrameDependency2[pceFrameDependency2["FRAME_INDEPENDENT"] = 1] = "FRAME_INDEPENDENT";
@@ -9723,12 +9637,10 @@ var pceFrameDependency = /* @__PURE__ */ ((pceFrameDependency2) => {
   return pceFrameDependency2;
 })(pceFrameDependency || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterDescriptor.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
 var PCEParameterDescriptor = class _PCEParameterDescriptor {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10092,12 +10004,10 @@ var PCEParameterDescriptorT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterCatalog.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
 var PCEParameterCatalog = class _PCEParameterCatalog {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10204,13 +10114,11 @@ var PCEParameterCatalogT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEStopReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopReport.ts
 import * as flatbuffers45 from "flatbuffers";
 var PCEStopReport = class _PCEStopReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10451,13 +10359,13 @@ var PCEStopReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEStopRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
 import * as flatbuffers47 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterCondition.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
 import * as flatbuffers46 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pceConditionDirection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceConditionDirection.ts
 var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
   pceConditionDirection2[pceConditionDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceConditionDirection2[pceConditionDirection2["ANY_CROSSING"] = 1] = "ANY_CROSSING";
@@ -10466,12 +10374,10 @@ var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
   return pceConditionDirection2;
 })(pceConditionDirection || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEParameterCondition.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
 var PCEParameterCondition = class _PCEParameterCondition {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10585,7 +10491,7 @@ var PCEParameterConditionT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/pcePropagationDirection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcePropagationDirection.ts
 var pcePropagationDirection = /* @__PURE__ */ ((pcePropagationDirection2) => {
   pcePropagationDirection2[pcePropagationDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcePropagationDirection2[pcePropagationDirection2["FORWARD"] = 1] = "FORWARD";
@@ -10593,12 +10499,10 @@ var pcePropagationDirection = /* @__PURE__ */ ((pcePropagationDirection2) => {
   return pcePropagationDirection2;
 })(pcePropagationDirection || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCEStopRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
 var PCEStopRequest = class _PCEStopRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10799,12 +10703,10 @@ var PCEStopRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PCE.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
 var PCE = class _PCE {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -10909,13 +10811,7 @@ var PCET = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PPE.ts
-import * as flatbuffers54 from "flatbuffers";
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PPEOrbitalElementRecord.ts
-import * as flatbuffers49 from "flatbuffers";
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/polynomialBasisType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/polynomialBasisType.ts
 var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
   polynomialBasisType2[polynomialBasisType2["CHEBYSHEV"] = 0] = "CHEBYSHEV";
   polynomialBasisType2[polynomialBasisType2["LEGENDRE"] = 1] = "LEGENDRE";
@@ -10925,7 +10821,13 @@ var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
   return polynomialBasisType2;
 })(polynomialBasisType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/ppeAnomalyType.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
+import * as flatbuffers54 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
+import * as flatbuffers49 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/ppeAnomalyType.ts
 var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
   ppeAnomalyType2[ppeAnomalyType2["TRUE_ANOMALY"] = 0] = "TRUE_ANOMALY";
   ppeAnomalyType2[ppeAnomalyType2["MEAN_ANOMALY"] = 1] = "MEAN_ANOMALY";
@@ -10933,19 +10835,17 @@ var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
   return ppeAnomalyType2;
 })(ppeAnomalyType || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/sizeShapeProfile.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/sizeShapeProfile.ts
 var sizeShapeProfile = /* @__PURE__ */ ((sizeShapeProfile2) => {
   sizeShapeProfile2[sizeShapeProfile2["SMA"] = 0] = "SMA";
   sizeShapeProfile2[sizeShapeProfile2["R_PERIAPSIS"] = 1] = "R_PERIAPSIS";
   return sizeShapeProfile2;
 })(sizeShapeProfile || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PPEOrbitalElementRecord.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
 var PPEOrbitalElementRecord = class _PPEOrbitalElementRecord {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -11322,13 +11222,11 @@ var PPEOrbitalElementRecordT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PPEPositionRecord.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PPEPositionRecord.ts
 import * as flatbuffers50 from "flatbuffers";
 var PPEPositionRecord = class _PPEPositionRecord {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -11688,16 +11586,14 @@ var PPEPositionRecordT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
 import * as flatbuffers53 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
 import * as flatbuffers51 from "flatbuffers";
 var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -11751,10 +11647,10 @@ var RFMCoordinateSystemWrapperT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SpacecraftFrameWrapper.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
 import * as flatbuffers52 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SpacecraftFrame.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrame.ts
 var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
   SpacecraftFrame2[SpacecraftFrame2["ACC_i"] = 0] = "ACC_i";
   SpacecraftFrame2[SpacecraftFrame2["ACTUATOR_i"] = 1] = "ACTUATOR_i";
@@ -11775,12 +11671,10 @@ var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
   return SpacecraftFrame2;
 })(SpacecraftFrame || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SpacecraftFrameWrapper.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
 var SpacecraftFrameWrapper = class _SpacecraftFrameWrapper {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -11833,7 +11727,7 @@ var SpacecraftFrameWrapperT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFMUnion.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMUnion.ts
 var RFMUnion = /* @__PURE__ */ ((RFMUnion2) => {
   RFMUnion2[RFMUnion2["NONE"] = 0] = "NONE";
   RFMUnion2[RFMUnion2["CelestialFrameWrapper"] = 1] = "CelestialFrameWrapper";
@@ -11861,13 +11755,29 @@ function unionToRfmunion(type, accessor) {
       return null;
   }
 }
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/RFM.ts
-var RFM = class _RFM {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
+function unionListToRfmunion(type, accessor, index) {
+  switch (RFMUnion[type]) {
+    case "NONE":
+      return null;
+    case "CelestialFrameWrapper":
+      return accessor(index, new CelestialFrameWrapper());
+    case "SpacecraftFrameWrapper":
+      return accessor(index, new SpacecraftFrameWrapper());
+    case "OrbitFrameWrapper":
+      return accessor(index, new OrbitFrameWrapper());
+    case "CustomFrameWrapper":
+      return accessor(index, new CustomFrameWrapper());
+    case "RFMCoordinateSystemWrapper":
+      return accessor(index, new RFMCoordinateSystemWrapper());
+    default:
+      return null;
   }
+}
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
+var RFM = class _RFM {
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -11979,7 +11889,7 @@ var RFMT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/timingStandard.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/timingStandard.ts
 var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
   timingStandard2[timingStandard2["GMST"] = 0] = "GMST";
   timingStandard2[timingStandard2["GPS"] = 1] = "GPS";
@@ -12003,12 +11913,10 @@ var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
   return timingStandard2;
 })(timingStandard || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PPE.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
 var PPE = class _PPE {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -12276,19 +12184,43 @@ var PPET = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRW.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/propagatorErrorCode.ts
+var propagatorErrorCode = /* @__PURE__ */ ((propagatorErrorCode2) => {
+  propagatorErrorCode2[propagatorErrorCode2["OK"] = 0] = "OK";
+  propagatorErrorCode2[propagatorErrorCode2["UNKNOWN"] = 1] = "UNKNOWN";
+  propagatorErrorCode2[propagatorErrorCode2["UNKNOWN_ENTITY"] = 2] = "UNKNOWN_ENTITY";
+  propagatorErrorCode2[propagatorErrorCode2["INVALID_EPOCH"] = 3] = "INVALID_EPOCH";
+  propagatorErrorCode2[propagatorErrorCode2["OUTPUT_BUFFER_OVERFLOW"] = 4] = "OUTPUT_BUFFER_OVERFLOW";
+  propagatorErrorCode2[propagatorErrorCode2["NOT_INITIALIZED"] = 5] = "NOT_INITIALIZED";
+  return propagatorErrorCode2;
+})(propagatorErrorCode || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/propagatorStateFlags.ts
+var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
+  propagatorStateFlags2[propagatorStateFlags2["VALID"] = 1] = "VALID";
+  propagatorStateFlags2[propagatorStateFlags2["IN_ECLIPSE"] = 2] = "IN_ECLIPSE";
+  propagatorStateFlags2[propagatorStateFlags2["DECAYED"] = 4] = "DECAYED";
+  propagatorStateFlags2[propagatorStateFlags2["EXTRAPOLATED"] = 8] = "EXTRAPOLATED";
+  propagatorStateFlags2[propagatorStateFlags2["RESERVED_4"] = 16] = "RESERVED_4";
+  propagatorStateFlags2[propagatorStateFlags2["RESERVED_5"] = 32] = "RESERVED_5";
+  propagatorStateFlags2[propagatorStateFlags2["RESERVED_6"] = 64] = "RESERVED_6";
+  propagatorStateFlags2[propagatorStateFlags2["RESERVED_7"] = 128] = "RESERVED_7";
+  return propagatorStateFlags2;
+})(propagatorStateFlags || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
 import * as flatbuffers102 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWAtmosphereRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
 import * as flatbuffers57 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMInstant.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
 import * as flatbuffers56 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMCcsdsTimeCode.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
 import * as flatbuffers55 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/timCcsdsTimeCodeKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/timCcsdsTimeCodeKind.ts
 var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
   timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["NONE"] = 0] = "NONE";
   timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["UNSEGMENTED"] = 1] = "UNSEGMENTED";
@@ -12297,12 +12229,10 @@ var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
   return timCcsdsTimeCodeKind2;
 })(timCcsdsTimeCodeKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMCcsdsTimeCode.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
 var TIMCcsdsTimeCode = class _TIMCcsdsTimeCode {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -12448,7 +12378,7 @@ var TIMCcsdsTimeCodeT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/timEpochRepresentation.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/timEpochRepresentation.ts
 var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
   timEpochRepresentation2[timEpochRepresentation2["JULIAN_DATE"] = 0] = "JULIAN_DATE";
   timEpochRepresentation2[timEpochRepresentation2["MODIFIED_JULIAN_DATE"] = 1] = "MODIFIED_JULIAN_DATE";
@@ -12461,12 +12391,10 @@ var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
   return timEpochRepresentation2;
 })(timEpochRepresentation || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMInstant.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
 var TIMInstant = class _TIMInstant {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -12651,7 +12579,7 @@ var TIMInstantT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwAtmosphereFamily.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwAtmosphereFamily.ts
 var prwAtmosphereFamily = /* @__PURE__ */ ((prwAtmosphereFamily2) => {
   prwAtmosphereFamily2[prwAtmosphereFamily2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwAtmosphereFamily2[prwAtmosphereFamily2["NRLMSISE00"] = 1] = "NRLMSISE00";
@@ -12663,12 +12591,10 @@ var prwAtmosphereFamily = /* @__PURE__ */ ((prwAtmosphereFamily2) => {
   return prwAtmosphereFamily2;
 })(prwAtmosphereFamily || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWAtmosphereRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
 var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -12833,13 +12759,13 @@ var PRWAtmosphereRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWAtmosphereResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
 import * as flatbuffers59 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWSpeciesDensity.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
 import * as flatbuffers58 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwDensitySpecies.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwDensitySpecies.ts
 var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
   prwDensitySpecies2[prwDensitySpecies2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDensitySpecies2[prwDensitySpecies2["HELIUM"] = 1] = "HELIUM";
@@ -12853,12 +12779,10 @@ var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
   return prwDensitySpecies2;
 })(prwDensitySpecies || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWSpeciesDensity.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
 var PRWSpeciesDensity = class _PRWSpeciesDensity {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -12923,12 +12847,10 @@ var PRWSpeciesDensityT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWAtmosphereResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
 var PRWAtmosphereResult = class _PRWAtmosphereResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13126,13 +13048,11 @@ var PRWAtmosphereResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWBatchRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchRequest.ts
 import * as flatbuffers60 from "flatbuffers";
 var PRWBatchRequest = class _PRWBatchRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13265,26 +13185,11 @@ var PRWBatchRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWBatchResponse.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchResponse.ts
 import * as flatbuffers61 from "flatbuffers";
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/propagatorErrorCode.ts
-var propagatorErrorCode = /* @__PURE__ */ ((propagatorErrorCode2) => {
-  propagatorErrorCode2[propagatorErrorCode2["OK"] = 0] = "OK";
-  propagatorErrorCode2[propagatorErrorCode2["UNKNOWN"] = 1] = "UNKNOWN";
-  propagatorErrorCode2[propagatorErrorCode2["UNKNOWN_ENTITY"] = 2] = "UNKNOWN_ENTITY";
-  propagatorErrorCode2[propagatorErrorCode2["INVALID_EPOCH"] = 3] = "INVALID_EPOCH";
-  propagatorErrorCode2[propagatorErrorCode2["OUTPUT_BUFFER_OVERFLOW"] = 4] = "OUTPUT_BUFFER_OVERFLOW";
-  propagatorErrorCode2[propagatorErrorCode2["NOT_INITIALIZED"] = 5] = "NOT_INITIALIZED";
-  return propagatorErrorCode2;
-})(propagatorErrorCode || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWBatchResponse.ts
 var PRWBatchResponse = class _PRWBatchResponse {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13445,16 +13350,14 @@ var PRWBatchResponseT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWDescribeRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
 import * as flatbuffers63 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWInstance.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInstance.ts
 import * as flatbuffers62 from "flatbuffers";
 var PRWInstance = class _PRWInstance {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13538,12 +13441,10 @@ var PRWInstanceT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWDescribeRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
 var PRWDescribeRequest = class _PRWDescribeRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13641,16 +13542,16 @@ var PRWDescribeRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWDescribeResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
 import * as flatbuffers66 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWTrajectorySource.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
 import * as flatbuffers65 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWFitQuality.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
 import * as flatbuffers64 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwQualityEvidence.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwQualityEvidence.ts
 var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
   prwQualityEvidence2[prwQualityEvidence2["UNMEASURED"] = 0] = "UNMEASURED";
   prwQualityEvidence2[prwQualityEvidence2["SAMPLED_RESIDUAL"] = 1] = "SAMPLED_RESIDUAL";
@@ -13658,12 +13559,10 @@ var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
   return prwQualityEvidence2;
 })(prwQualityEvidence || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWFitQuality.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
 var PRWFitQuality = class _PRWFitQuality {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13799,12 +13698,10 @@ var PRWFitQualityT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWTrajectorySource.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
 var PRWTrajectorySource = class _PRWTrajectorySource {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -13905,12 +13802,10 @@ var PRWTrajectorySourceT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWDescribeResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
 var PRWDescribeResult = class _PRWDescribeResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14031,13 +13926,11 @@ var PRWDescribeResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWEarthOrientation.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEarthOrientation.ts
 import * as flatbuffers67 from "flatbuffers";
 var PRWEarthOrientation = class _PRWEarthOrientation {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14106,13 +13999,11 @@ var PRWEarthOrientationT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWEphemerisRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisRequest.ts
 import * as flatbuffers68 from "flatbuffers";
 var PRWEphemerisRequest = class _PRWEphemerisRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14191,16 +14082,16 @@ var PRWEphemerisRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWEphemerisResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
 import * as flatbuffers72 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWResidentState.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
 import * as flatbuffers71 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWProcessNoise.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
 import * as flatbuffers69 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwProcessNoiseAxes.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseAxes.ts
 var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
   prwProcessNoiseAxes2[prwProcessNoiseAxes2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwProcessNoiseAxes2[prwProcessNoiseAxes2["INERTIAL"] = 1] = "INERTIAL";
@@ -14208,7 +14099,7 @@ var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
   return prwProcessNoiseAxes2;
 })(prwProcessNoiseAxes || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwProcessNoiseModel.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseModel.ts
 var prwProcessNoiseModel = /* @__PURE__ */ ((prwProcessNoiseModel2) => {
   prwProcessNoiseModel2[prwProcessNoiseModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwProcessNoiseModel2[prwProcessNoiseModel2["NONE"] = 1] = "NONE";
@@ -14216,12 +14107,10 @@ var prwProcessNoiseModel = /* @__PURE__ */ ((prwProcessNoiseModel2) => {
   return prwProcessNoiseModel2;
 })(prwProcessNoiseModel || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWProcessNoise.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
 var PRWProcessNoise = class _PRWProcessNoise {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14335,13 +14224,11 @@ var PRWProcessNoiseT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWStateMatrix.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWStateMatrix.ts
 import * as flatbuffers70 from "flatbuffers";
 var PRWStateMatrix = class _PRWStateMatrix {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14426,12 +14313,10 @@ var PRWStateMatrixT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWResidentState.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
 var PRWResidentState = class _PRWResidentState {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14717,12 +14602,10 @@ var PRWResidentStateT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWEphemerisResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
 var PRWEphemerisResult = class _PRWEphemerisResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14809,19 +14692,17 @@ var PRWEphemerisResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWExecutionRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
 import * as flatbuffers81 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWFiniteBurn.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
 import * as flatbuffers75 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWBurnBoundary.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnBoundary.ts
 import * as flatbuffers73 from "flatbuffers";
 var PRWBurnBoundary = class _PRWBurnBoundary {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14897,13 +14778,11 @@ var PRWBurnBoundaryT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWThrottlePoint.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWThrottlePoint.ts
 import * as flatbuffers74 from "flatbuffers";
 var PRWThrottlePoint = class _PRWThrottlePoint {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -14968,7 +14847,7 @@ var PRWThrottlePointT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwSteeringBasis.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwSteeringBasis.ts
 var prwSteeringBasis = /* @__PURE__ */ ((prwSteeringBasis2) => {
   prwSteeringBasis2[prwSteeringBasis2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwSteeringBasis2[prwSteeringBasis2["INTEGRATION_FRAME"] = 1] = "INTEGRATION_FRAME";
@@ -14979,7 +14858,7 @@ var prwSteeringBasis = /* @__PURE__ */ ((prwSteeringBasis2) => {
   return prwSteeringBasis2;
 })(prwSteeringBasis || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwThrustPrescription.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwThrustPrescription.ts
 var prwThrustPrescription = /* @__PURE__ */ ((prwThrustPrescription2) => {
   prwThrustPrescription2[prwThrustPrescription2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwThrustPrescription2[prwThrustPrescription2["FORCE"] = 1] = "FORCE";
@@ -14987,12 +14866,10 @@ var prwThrustPrescription = /* @__PURE__ */ ((prwThrustPrescription2) => {
   return prwThrustPrescription2;
 })(prwThrustPrescription || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWFiniteBurn.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
 var PRWFiniteBurn = class _PRWFiniteBurn {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -15193,16 +15070,14 @@ var PRWFiniteBurnT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWForceConfiguration.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWForceConfiguration.ts
 import * as flatbuffers78 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWEcom2.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEcom2.ts
 import * as flatbuffers76 from "flatbuffers";
 var PRWEcom2 = class _PRWEcom2 {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -15375,13 +15250,11 @@ var PRWEcom2T = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWSpaceWeather.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeather.ts
 import * as flatbuffers77 from "flatbuffers";
 var PRWSpaceWeather = class _PRWSpaceWeather {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -15487,14 +15360,14 @@ var PRWSpaceWeatherT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwEarthRadiationModel.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwEarthRadiationModel.ts
 var prwEarthRadiationModel = /* @__PURE__ */ ((prwEarthRadiationModel2) => {
   prwEarthRadiationModel2[prwEarthRadiationModel2["NONE"] = 0] = "NONE";
   prwEarthRadiationModel2[prwEarthRadiationModel2["KNOCKE"] = 1] = "KNOCKE";
   return prwEarthRadiationModel2;
 })(prwEarthRadiationModel || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwGnssSpacecraftBlock.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwGnssSpacecraftBlock.ts
 var prwGnssSpacecraftBlock = /* @__PURE__ */ ((prwGnssSpacecraftBlock2) => {
   prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["GPS_IIR"] = 1] = "GPS_IIR";
@@ -15503,7 +15376,7 @@ var prwGnssSpacecraftBlock = /* @__PURE__ */ ((prwGnssSpacecraftBlock2) => {
   return prwGnssSpacecraftBlock2;
 })(prwGnssSpacecraftBlock || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwGravitySelection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwGravitySelection.ts
 var prwGravitySelection = /* @__PURE__ */ ((prwGravitySelection2) => {
   prwGravitySelection2[prwGravitySelection2["INFER_FLAGS"] = 0] = "INFER_FLAGS";
   prwGravitySelection2[prwGravitySelection2["POINT_MASS"] = 1] = "POINT_MASS";
@@ -15515,14 +15388,14 @@ var prwGravitySelection = /* @__PURE__ */ ((prwGravitySelection2) => {
   return prwGravitySelection2;
 })(prwGravitySelection || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwOceanTideModel.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwOceanTideModel.ts
 var prwOceanTideModel = /* @__PURE__ */ ((prwOceanTideModel2) => {
   prwOceanTideModel2[prwOceanTideModel2["NONE"] = 0] = "NONE";
   prwOceanTideModel2[prwOceanTideModel2["FES2004"] = 1] = "FES2004";
   return prwOceanTideModel2;
 })(prwOceanTideModel || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwRadiationPressureFamily.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwRadiationPressureFamily.ts
 var prwRadiationPressureFamily = /* @__PURE__ */ ((prwRadiationPressureFamily2) => {
   prwRadiationPressureFamily2[prwRadiationPressureFamily2["CANNONBALL"] = 0] = "CANNONBALL";
   prwRadiationPressureFamily2[prwRadiationPressureFamily2["GNSS_BOX_WING"] = 1] = "GNSS_BOX_WING";
@@ -15530,7 +15403,7 @@ var prwRadiationPressureFamily = /* @__PURE__ */ ((prwRadiationPressureFamily2) 
   return prwRadiationPressureFamily2;
 })(prwRadiationPressureFamily || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwRelativityTerms.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwRelativityTerms.ts
 var prwRelativityTerms = /* @__PURE__ */ ((prwRelativityTerms2) => {
   prwRelativityTerms2[prwRelativityTerms2["NONE"] = 0] = "NONE";
   prwRelativityTerms2[prwRelativityTerms2["SCHWARZSCHILD"] = 1] = "SCHWARZSCHILD";
@@ -15538,19 +15411,17 @@ var prwRelativityTerms = /* @__PURE__ */ ((prwRelativityTerms2) => {
   return prwRelativityTerms2;
 })(prwRelativityTerms || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwSolidTideModel.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwSolidTideModel.ts
 var prwSolidTideModel = /* @__PURE__ */ ((prwSolidTideModel2) => {
   prwSolidTideModel2[prwSolidTideModel2["NONE"] = 0] = "NONE";
   prwSolidTideModel2[prwSolidTideModel2["IERS_2010"] = 1] = "IERS_2010";
   return prwSolidTideModel2;
 })(prwSolidTideModel || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWForceConfiguration.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWForceConfiguration.ts
 var PRWForceConfiguration = class _PRWForceConfiguration {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -16121,13 +15992,11 @@ var PRWForceConfigurationT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWImpulse.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWImpulse.ts
 import * as flatbuffers79 from "flatbuffers";
 var PRWImpulse = class _PRWImpulse {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -16200,10 +16069,10 @@ var PRWImpulseT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWIntegratorSettings.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWIntegratorSettings.ts
 import * as flatbuffers80 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwSolverAlgorithm.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwSolverAlgorithm.ts
 var prwSolverAlgorithm = /* @__PURE__ */ ((prwSolverAlgorithm2) => {
   prwSolverAlgorithm2[prwSolverAlgorithm2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwSolverAlgorithm2[prwSolverAlgorithm2["RK4"] = 1] = "RK4";
@@ -16219,12 +16088,10 @@ var prwSolverAlgorithm = /* @__PURE__ */ ((prwSolverAlgorithm2) => {
   return prwSolverAlgorithm2;
 })(prwSolverAlgorithm || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWIntegratorSettings.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWIntegratorSettings.ts
 var PRWIntegratorSettings = class _PRWIntegratorSettings {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -16372,7 +16239,7 @@ var PRWIntegratorSettingsT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwDensityTreatment.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwDensityTreatment.ts
 var prwDensityTreatment = /* @__PURE__ */ ((prwDensityTreatment2) => {
   prwDensityTreatment2[prwDensityTreatment2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDensityTreatment2[prwDensityTreatment2["NEGLECTED"] = 1] = "NEGLECTED";
@@ -16380,7 +16247,7 @@ var prwDensityTreatment = /* @__PURE__ */ ((prwDensityTreatment2) => {
   return prwDensityTreatment2;
 })(prwDensityTreatment || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwDerivativeTechnique.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwDerivativeTechnique.ts
 var prwDerivativeTechnique = /* @__PURE__ */ ((prwDerivativeTechnique2) => {
   prwDerivativeTechnique2[prwDerivativeTechnique2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDerivativeTechnique2[prwDerivativeTechnique2["ANALYTIC"] = 1] = "ANALYTIC";
@@ -16388,12 +16255,10 @@ var prwDerivativeTechnique = /* @__PURE__ */ ((prwDerivativeTechnique2) => {
   return prwDerivativeTechnique2;
 })(prwDerivativeTechnique || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWExecutionRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
 var PRWExecutionRequest = class _PRWExecutionRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -16681,19 +16546,17 @@ var PRWExecutionRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWExecutionResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
 import * as flatbuffers84 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWPropagationSample.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
 import * as flatbuffers83 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWBurnReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnReport.ts
 import * as flatbuffers82 from "flatbuffers";
 var PRWBurnReport = class _PRWBurnReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -16883,12 +16746,10 @@ var PRWBurnReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWPropagationSample.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
 var PRWPropagationSample = class _PRWPropagationSample {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17051,12 +16912,10 @@ var PRWPropagationSampleT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWExecutionResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
 var PRWExecutionResult = class _PRWExecutionResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17222,19 +17081,17 @@ var PRWExecutionResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWInit.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
 import * as flatbuffers88 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWInitSource.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
 import * as flatbuffers87 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWKeplerianElements.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWKeplerianElements.ts
 import * as flatbuffers85 from "flatbuffers";
 var PRWKeplerianElements = class _PRWKeplerianElements {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17395,13 +17252,11 @@ var PRWKeplerianElementsT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWTleLines.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTleLines.ts
 import * as flatbuffers86 from "flatbuffers";
 var PRWTleLines = class _PRWTleLines {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17496,7 +17351,7 @@ var PRWTleLinesT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwSourceKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwSourceKind.ts
 var prwSourceKind = /* @__PURE__ */ ((prwSourceKind2) => {
   prwSourceKind2[prwSourceKind2["OMM"] = 0] = "OMM";
   prwSourceKind2[prwSourceKind2["TLE"] = 1] = "TLE";
@@ -17507,12 +17362,10 @@ var prwSourceKind = /* @__PURE__ */ ((prwSourceKind2) => {
   return prwSourceKind2;
 })(prwSourceKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWInitSource.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
 var PRWInitSource = class _PRWInitSource {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17637,12 +17490,10 @@ var PRWInitSourceT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWInit.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
 var PRWInit = class _PRWInit {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17747,16 +17598,14 @@ var PRWInitT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWJB2008IndicesTable.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
 import * as flatbuffers90 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWJB2008Indices.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008Indices.ts
 import * as flatbuffers89 from "flatbuffers";
 var PRWJB2008Indices = class _PRWJB2008Indices {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -17954,12 +17803,10 @@ var PRWJB2008IndicesT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWJB2008IndicesTable.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
 var PRWJB2008IndicesTable = class _PRWJB2008IndicesTable {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18028,13 +17875,11 @@ var PRWJB2008IndicesTableT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWNativeInput.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWNativeInput.ts
 import * as flatbuffers91 from "flatbuffers";
 var PRWNativeInput = class _PRWNativeInput {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18124,13 +17969,11 @@ var PRWNativeInputT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWPrepareRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareRequest.ts
 import * as flatbuffers92 from "flatbuffers";
 var PRWPrepareRequest = class _PRWPrepareRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18256,13 +18099,11 @@ var PRWPrepareRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWPrepareResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareResult.ts
 import * as flatbuffers93 from "flatbuffers";
 var PRWPrepareResult = class _PRWPrepareResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18346,13 +18187,11 @@ var PRWPrepareResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWResidentRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentRequest.ts
 import * as flatbuffers94 from "flatbuffers";
 var PRWResidentRequest = class _PRWResidentRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18468,16 +18307,14 @@ var PRWResidentRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWSpaceWeatherTable.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
 import * as flatbuffers96 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SPW.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/SPW.ts
 import * as flatbuffers95 from "flatbuffers";
 var SPW = class _SPW {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -18990,12 +18827,10 @@ var SPWT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWSpaceWeatherTable.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
 var PRWSpaceWeatherTable = class _PRWSpaceWeatherTable {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19064,13 +18899,11 @@ var PRWSpaceWeatherTableT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWVersionResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWVersionResult.ts
 import * as flatbuffers97 from "flatbuffers";
 var PRWVersionResult = class _PRWVersionResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19139,16 +18972,14 @@ var PRWVersionResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
 import * as flatbuffers99 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowRefusal.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRefusal.ts
 import * as flatbuffers98 from "flatbuffers";
 var PRWWindowRefusal = class _PRWWindowRefusal {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19232,12 +19063,10 @@ var PRWWindowRefusalT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
 var PRWWindowReport = class _PRWWindowReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19372,16 +19201,14 @@ var PRWWindowReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
 import * as flatbuffers101 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowQuery.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowQuery.ts
 import * as flatbuffers100 from "flatbuffers";
 var PRWWindowQuery = class _PRWWindowQuery {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19559,12 +19386,10 @@ var PRWWindowQueryT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRWWindowRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
 var PRWWindowRequest = class _PRWWindowRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -19687,12 +19512,10 @@ var PRWWindowRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/PRW.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
 var PRW = class _PRW {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20018,13 +19841,32 @@ var PRWT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/SPWCOLLECTION.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/prwDynamicParameter.ts
+var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
+  prwDynamicParameter2[prwDynamicParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  prwDynamicParameter2[prwDynamicParameter2["DRAG_AREA_OVER_MASS"] = 1] = "DRAG_AREA_OVER_MASS";
+  prwDynamicParameter2[prwDynamicParameter2["DRAG_AREA_OVER_MASS_RATE"] = 2] = "DRAG_AREA_OVER_MASS_RATE";
+  prwDynamicParameter2[prwDynamicParameter2["SRP_AREA_OVER_MASS"] = 3] = "SRP_AREA_OVER_MASS";
+  prwDynamicParameter2[prwDynamicParameter2["IN_TRACK_ACCELERATION"] = 4] = "IN_TRACK_ACCELERATION";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D0"] = 5] = "ECOM2_D0";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_Y0"] = 6] = "ECOM2_Y0";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B0"] = 7] = "ECOM2_B0";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D2_COS"] = 8] = "ECOM2_D2_COS";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D2_SIN"] = 9] = "ECOM2_D2_SIN";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D4_COS"] = 10] = "ECOM2_D4_COS";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D4_SIN"] = 11] = "ECOM2_D4_SIN";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B1_COS"] = 12] = "ECOM2_B1_COS";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B1_SIN"] = 13] = "ECOM2_B1_SIN";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B3_COS"] = 14] = "ECOM2_B3_COS";
+  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B3_SIN"] = 15] = "ECOM2_B3_SIN";
+  return prwDynamicParameter2;
+})(prwDynamicParameter || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/SPWCOLLECTION.ts
 import * as flatbuffers103 from "flatbuffers";
 var SPWCOLLECTION = class _SPWCOLLECTION {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20092,16 +19934,14 @@ var SPWCOLLECTIONT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
 import * as flatbuffers106 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMConversionRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionRequest.ts
 import * as flatbuffers104 from "flatbuffers";
 var TIMConversionRequest = class _TIMConversionRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20261,10 +20101,10 @@ var TIMConversionRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMConversionResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
 import * as flatbuffers105 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/timConversionStatus.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/timConversionStatus.ts
 var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
   timConversionStatus2[timConversionStatus2["OK"] = 0] = "OK";
   timConversionStatus2[timConversionStatus2["INVALID_INPUT"] = 1] = "INVALID_INPUT";
@@ -20275,12 +20115,10 @@ var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
   return timConversionStatus2;
 })(timConversionStatus || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIMConversionResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
 var TIMConversionResult = class _TIMConversionResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20398,12 +20236,10 @@ var TIMConversionResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/TIM.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
 var TIM = class _TIM {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20507,19 +20343,17 @@ var TIMT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMT.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
 import * as flatbuffers137 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposeRecipe.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
 import * as flatbuffers111 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTLayer.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayer.ts
 import * as flatbuffers107 from "flatbuffers";
 var XMTLayer = class _XMTLayer {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20652,13 +20486,11 @@ var XMTLayerT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTObjectOverride.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTObjectOverride.ts
 import * as flatbuffers108 from "flatbuffers";
 var XMTObjectOverride = class _XMTObjectOverride {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20767,13 +20599,11 @@ var XMTObjectOverrideT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTSourceCoverage.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSourceCoverage.ts
 import * as flatbuffers109 from "flatbuffers";
 var XMTSourceCoverage = class _XMTSourceCoverage {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20867,13 +20697,11 @@ var XMTSourceCoverageT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTStateCandidate.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateCandidate.ts
 import * as flatbuffers110 from "flatbuffers";
 var XMTStateCandidate = class _XMTStateCandidate {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -20968,19 +20796,17 @@ var XMTStateCandidateT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtIdentityRule.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtIdentityRule.ts
 var xmtIdentityRule = /* @__PURE__ */ ((xmtIdentityRule2) => {
   xmtIdentityRule2[xmtIdentityRule2["NoradFirst"] = 0] = "NoradFirst";
   xmtIdentityRule2[xmtIdentityRule2["InternationalDesignator"] = 1] = "InternationalDesignator";
   return xmtIdentityRule2;
 })(xmtIdentityRule || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposeRecipe.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
 var XMTComposeRecipe = class _XMTComposeRecipe {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21201,19 +21027,17 @@ var XMTComposeRecipeT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposeReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
 import * as flatbuffers115 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposedObject.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
 import * as flatbuffers114 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTLayerRecord.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayerRecord.ts
 import * as flatbuffers112 from "flatbuffers";
 var XMTLayerRecord = class _XMTLayerRecord {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21321,10 +21145,10 @@ var XMTLayerRecordT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTStateSelection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
 import * as flatbuffers113 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtStateChoice.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtStateChoice.ts
 var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
   xmtStateChoice2[xmtStateChoice2["Unspecified"] = 0] = "Unspecified";
   xmtStateChoice2[xmtStateChoice2["Selected"] = 1] = "Selected";
@@ -21337,12 +21161,10 @@ var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
   return xmtStateChoice2;
 })(xmtStateChoice || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTStateSelection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
 var XMTStateSelection = class _XMTStateSelection {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21463,7 +21285,7 @@ var XMTStateSelectionT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtRecordChoice.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordChoice.ts
 var xmtRecordChoice = /* @__PURE__ */ ((xmtRecordChoice2) => {
   xmtRecordChoice2[xmtRecordChoice2["Unspecified"] = 0] = "Unspecified";
   xmtRecordChoice2[xmtRecordChoice2["Selected"] = 1] = "Selected";
@@ -21472,12 +21294,10 @@ var xmtRecordChoice = /* @__PURE__ */ ((xmtRecordChoice2) => {
   return xmtRecordChoice2;
 })(xmtRecordChoice || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposedObject.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
 var XMTComposedObject = class _XMTComposedObject {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21613,12 +21433,10 @@ var XMTComposedObjectT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTComposeReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
 var XMTComposeReport = class _XMTComposeReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21731,13 +21549,11 @@ var XMTComposeReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTEpochFitPolicy.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitPolicy.ts
 import * as flatbuffers116 from "flatbuffers";
 var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -21963,10 +21779,10 @@ var XMTEpochFitPolicyT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTEpochFitReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
 import * as flatbuffers117 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtFitVerdict.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtFitVerdict.ts
 var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
   xmtFitVerdict2[xmtFitVerdict2["Unspecified"] = 0] = "Unspecified";
   xmtFitVerdict2[xmtFitVerdict2["Validated"] = 1] = "Validated";
@@ -21976,12 +21792,10 @@ var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
   return xmtFitVerdict2;
 })(xmtFitVerdict || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTEpochFitReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
 var XMTEpochFitReport = class _XMTEpochFitReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22283,16 +22097,14 @@ var XMTEpochFitReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegrateRecipe.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
 import * as flatbuffers124 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTManeuverPolicy.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverPolicy.ts
 import * as flatbuffers118 from "flatbuffers";
 var XMTManeuverPolicy = class _XMTManeuverPolicy {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22446,16 +22258,14 @@ var XMTManeuverPolicyT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMatchRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
 import * as flatbuffers121 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMatchPolicy.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchPolicy.ts
 import * as flatbuffers119 from "flatbuffers";
 var XMTMatchPolicy = class _XMTMatchPolicy {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22557,13 +22367,11 @@ var XMTMatchPolicyT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTTrajectory.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTTrajectory.ts
 import * as flatbuffers120 from "flatbuffers";
 var XMTTrajectory = class _XMTTrajectory {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22656,12 +22464,10 @@ var XMTTrajectoryT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMatchRequest.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
 var XMTMatchRequest = class _XMTMatchRequest {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22778,16 +22584,14 @@ var XMTMatchRequestT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTSelectionPolicy.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
 import * as flatbuffers123 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMeasuredError.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMeasuredError.ts
 import * as flatbuffers122 from "flatbuffers";
 var XMTMeasuredError = class _XMTMeasuredError {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -22912,12 +22716,10 @@ var XMTMeasuredErrorT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTSelectionPolicy.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
 var XMTSelectionPolicy = class _XMTSelectionPolicy {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23075,12 +22877,10 @@ var XMTSelectionPolicyT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegrateRecipe.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
 var XMTIntegrateRecipe = class _XMTIntegrateRecipe {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23169,22 +22969,20 @@ var XMTIntegrateRecipeT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegrateReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
 import * as flatbuffers136 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegratedObject.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
 import * as flatbuffers131 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTManeuverEvent.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
 import * as flatbuffers127 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTManeuverMember.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverMember.ts
 import * as flatbuffers125 from "flatbuffers";
 var XMTManeuverMember = class _XMTManeuverMember {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23278,10 +23076,10 @@ var XMTManeuverMemberT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTRecordRef.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
 import * as flatbuffers126 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtRecordKind.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordKind.ts
 var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
   xmtRecordKind2[xmtRecordKind2["Unspecified"] = 0] = "Unspecified";
   xmtRecordKind2[xmtRecordKind2["Cat"] = 1] = "Cat";
@@ -23292,12 +23090,10 @@ var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
   return xmtRecordKind2;
 })(xmtRecordKind || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTRecordRef.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
 var XMTRecordRef = class _XMTRecordRef {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23376,12 +23172,10 @@ var XMTRecordRefT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTManeuverEvent.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
 var XMTManeuverEvent = class _XMTManeuverEvent {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23500,13 +23294,13 @@ var XMTManeuverEventT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductChoice.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
 import * as flatbuffers130 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductCandidate.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
 import * as flatbuffers128 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtCandidateStanding.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtCandidateStanding.ts
 var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
   xmtCandidateStanding2[xmtCandidateStanding2["Unspecified"] = 0] = "Unspecified";
   xmtCandidateStanding2[xmtCandidateStanding2["Selected"] = 1] = "Selected";
@@ -23517,12 +23311,10 @@ var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
   return xmtCandidateStanding2;
 })(xmtCandidateStanding || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductCandidate.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
 var XMTProductCandidate = class _XMTProductCandidate {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23678,10 +23470,10 @@ var XMTProductCandidateT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductSelection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
 import * as flatbuffers129 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtCovarianceOrigin.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtCovarianceOrigin.ts
 var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
   xmtCovarianceOrigin2[xmtCovarianceOrigin2["Absent"] = 0] = "Absent";
   xmtCovarianceOrigin2[xmtCovarianceOrigin2["FromOcm"] = 1] = "FromOcm";
@@ -23689,7 +23481,7 @@ var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
   return xmtCovarianceOrigin2;
 })(xmtCovarianceOrigin || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtSelectionReason.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtSelectionReason.ts
 var xmtSelectionReason = /* @__PURE__ */ ((xmtSelectionReason2) => {
   xmtSelectionReason2[xmtSelectionReason2["Unspecified"] = 0] = "Unspecified";
   xmtSelectionReason2[xmtSelectionReason2["OnlyCandidate"] = 1] = "OnlyCandidate";
@@ -23698,12 +23490,10 @@ var xmtSelectionReason = /* @__PURE__ */ ((xmtSelectionReason2) => {
   return xmtSelectionReason2;
 })(xmtSelectionReason || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductSelection.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
 var XMTProductSelection = class _XMTProductSelection {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23736,16 +23526,16 @@ var XMTProductSelection = class _XMTProductSelection {
     return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
   }
   /**
-   * The element set chosen.
+   * The element set chosen ($OMM).
    */
-  OMM(obj) {
+  OMM_REF(obj) {
     const offset = this.bb.__offset(this.bb_pos, 12);
     return offset ? (obj || new XMTRecordRef()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   /**
-   * The paired state and covariance, when there is one.
+   * The paired state and covariance ($OCM), when there is one.
    */
-  OCM(obj) {
+  OCM_REF(obj) {
     const offset = this.bb.__offset(this.bb_pos, 14);
     return offset ? (obj || new XMTRecordRef()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
@@ -23782,11 +23572,11 @@ var XMTProductSelection = class _XMTProductSelection {
   static addTie(builder, TIE) {
     builder.addFieldInt8(3, +TIE, 0);
   }
-  static addOmm(builder, OMMOffset) {
-    builder.addFieldOffset(4, OMMOffset, 0);
+  static addOmmRef(builder, OMM_REFOffset) {
+    builder.addFieldOffset(4, OMM_REFOffset, 0);
   }
-  static addOcm(builder, OCMOffset) {
-    builder.addFieldOffset(5, OCMOffset, 0);
+  static addOcmRef(builder, OCM_REFOffset) {
+    builder.addFieldOffset(5, OCM_REFOffset, 0);
   }
   static addCovarianceOrigin(builder, COVARIANCE_ORIGIN) {
     builder.addFieldInt8(6, COVARIANCE_ORIGIN, 0 /* Absent */);
@@ -23807,8 +23597,8 @@ var XMTProductSelection = class _XMTProductSelection {
       this.EPOCH_MS(),
       this.REASON(),
       this.TIE(),
-      this.OMM() !== null ? this.OMM().unpack() : null,
-      this.OCM() !== null ? this.OCM().unpack() : null,
+      this.OMM_REF() !== null ? this.OMM_REF().unpack() : null,
+      this.OCM_REF() !== null ? this.OCM_REF().unpack() : null,
       this.COVARIANCE_ORIGIN(),
       this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null,
       this.MEASURED() !== null ? this.MEASURED().unpack() : null
@@ -23819,29 +23609,29 @@ var XMTProductSelection = class _XMTProductSelection {
     _o.EPOCH_MS = this.EPOCH_MS();
     _o.REASON = this.REASON();
     _o.TIE = this.TIE();
-    _o.OMM = this.OMM() !== null ? this.OMM().unpack() : null;
-    _o.OCM = this.OCM() !== null ? this.OCM().unpack() : null;
+    _o.OMM_REF = this.OMM_REF() !== null ? this.OMM_REF().unpack() : null;
+    _o.OCM_REF = this.OCM_REF() !== null ? this.OCM_REF().unpack() : null;
     _o.COVARIANCE_ORIGIN = this.COVARIANCE_ORIGIN();
     _o.COVARIANCE = this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null;
     _o.MEASURED = this.MEASURED() !== null ? this.MEASURED().unpack() : null;
   }
 };
 var XMTProductSelectionT = class {
-  constructor(SOURCE_ID = null, EPOCH_MS = BigInt("0"), REASON = 0 /* Unspecified */, TIE = false, OMM = null, OCM = null, COVARIANCE_ORIGIN = 0 /* Absent */, COVARIANCE = null, MEASURED = null) {
+  constructor(SOURCE_ID = null, EPOCH_MS = BigInt("0"), REASON = 0 /* Unspecified */, TIE = false, OMM_REF = null, OCM_REF = null, COVARIANCE_ORIGIN = 0 /* Absent */, COVARIANCE = null, MEASURED = null) {
     this.SOURCE_ID = SOURCE_ID;
     this.EPOCH_MS = EPOCH_MS;
     this.REASON = REASON;
     this.TIE = TIE;
-    this.OMM = OMM;
-    this.OCM = OCM;
+    this.OMM_REF = OMM_REF;
+    this.OCM_REF = OCM_REF;
     this.COVARIANCE_ORIGIN = COVARIANCE_ORIGIN;
     this.COVARIANCE = COVARIANCE;
     this.MEASURED = MEASURED;
   }
   pack(builder) {
     const SOURCE_ID = this.SOURCE_ID !== null ? builder.createString(this.SOURCE_ID) : 0;
-    const OMM = this.OMM !== null ? this.OMM.pack(builder) : 0;
-    const OCM = this.OCM !== null ? this.OCM.pack(builder) : 0;
+    const OMM_REF = this.OMM_REF !== null ? this.OMM_REF.pack(builder) : 0;
+    const OCM_REF = this.OCM_REF !== null ? this.OCM_REF.pack(builder) : 0;
     const COVARIANCE = this.COVARIANCE !== null ? this.COVARIANCE.pack(builder) : 0;
     const MEASURED = this.MEASURED !== null ? this.MEASURED.pack(builder) : 0;
     XMTProductSelection.startXMTProductSelection(builder);
@@ -23849,8 +23639,8 @@ var XMTProductSelectionT = class {
     XMTProductSelection.addEpochMs(builder, this.EPOCH_MS);
     XMTProductSelection.addReason(builder, this.REASON);
     XMTProductSelection.addTie(builder, this.TIE);
-    XMTProductSelection.addOmm(builder, OMM);
-    XMTProductSelection.addOcm(builder, OCM);
+    XMTProductSelection.addOmmRef(builder, OMM_REF);
+    XMTProductSelection.addOcmRef(builder, OCM_REF);
     XMTProductSelection.addCovarianceOrigin(builder, this.COVARIANCE_ORIGIN);
     XMTProductSelection.addCovariance(builder, COVARIANCE);
     XMTProductSelection.addMeasured(builder, MEASURED);
@@ -23858,12 +23648,10 @@ var XMTProductSelectionT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTProductChoice.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
 var XMTProductChoice = class _XMTProductChoice {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -23952,7 +23740,7 @@ var XMTProductChoiceT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtObjectOutcome.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtObjectOutcome.ts
 var xmtObjectOutcome = /* @__PURE__ */ ((xmtObjectOutcome2) => {
   xmtObjectOutcome2[xmtObjectOutcome2["Unspecified"] = 0] = "Unspecified";
   xmtObjectOutcome2[xmtObjectOutcome2["Selected"] = 1] = "Selected";
@@ -23961,12 +23749,10 @@ var xmtObjectOutcome = /* @__PURE__ */ ((xmtObjectOutcome2) => {
   return xmtObjectOutcome2;
 })(xmtObjectOutcome || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegratedObject.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
 var XMTIntegratedObject = class _XMTIntegratedObject {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -24170,13 +23956,13 @@ var XMTIntegratedObjectT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMatchReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
 import * as flatbuffers133 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTPairResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
 import * as flatbuffers132 from "flatbuffers";
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/xmtPairVerdict.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/xmtPairVerdict.ts
 var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
   xmtPairVerdict2[xmtPairVerdict2["Unspecified"] = 0] = "Unspecified";
   xmtPairVerdict2[xmtPairVerdict2["Compatible"] = 1] = "Compatible";
@@ -24186,12 +23972,10 @@ var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
   return xmtPairVerdict2;
 })(xmtPairVerdict || {});
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTPairResult.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
 var XMTPairResult = class _XMTPairResult {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -24392,12 +24176,10 @@ var XMTPairResultT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTMatchReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
 var XMTMatchReport = class _XMTMatchReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -24505,13 +24287,11 @@ var XMTMatchReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTReasonCount.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTReasonCount.ts
 import * as flatbuffers134 from "flatbuffers";
 var XMTReasonCount = class _XMTReasonCount {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -24577,13 +24357,11 @@ var XMTReasonCountT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTUnplacedRecord.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTUnplacedRecord.ts
 import * as flatbuffers135 from "flatbuffers";
 var XMTUnplacedRecord = class _XMTUnplacedRecord {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -24718,12 +24496,10 @@ var XMTUnplacedRecordT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMTIntegrateReport.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
 var XMTIntegrateReport = class _XMTIntegrateReport {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -25090,12 +24866,10 @@ var XMTIntegrateReportT = class {
   }
 };
 
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/XMT.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
 var XMT = class _XMT {
-  constructor() {
-    this.bb = null;
-    this.bb_pos = 0;
-  }
+  bb = null;
+  bb_pos = 0;
   __init(i, bb) {
     this.bb_pos = i;
     this.bb = bb;
@@ -25235,40 +25009,6 @@ var XMTT = class {
     return XMT.endXMT(builder);
   }
 };
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/propagatorStateFlags.ts
-var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
-  propagatorStateFlags2[propagatorStateFlags2["VALID"] = 1] = "VALID";
-  propagatorStateFlags2[propagatorStateFlags2["IN_ECLIPSE"] = 2] = "IN_ECLIPSE";
-  propagatorStateFlags2[propagatorStateFlags2["DECAYED"] = 4] = "DECAYED";
-  propagatorStateFlags2[propagatorStateFlags2["EXTRAPOLATED"] = 8] = "EXTRAPOLATED";
-  propagatorStateFlags2[propagatorStateFlags2["RESERVED_4"] = 16] = "RESERVED_4";
-  propagatorStateFlags2[propagatorStateFlags2["RESERVED_5"] = 32] = "RESERVED_5";
-  propagatorStateFlags2[propagatorStateFlags2["RESERVED_6"] = 64] = "RESERVED_6";
-  propagatorStateFlags2[propagatorStateFlags2["RESERVED_7"] = 128] = "RESERVED_7";
-  return propagatorStateFlags2;
-})(propagatorStateFlags || {});
-
-// ../../../spacedatastandards--sds-node-api-standards-20261013/lib/ts/XMT/prwDynamicParameter.ts
-var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
-  prwDynamicParameter2[prwDynamicParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  prwDynamicParameter2[prwDynamicParameter2["DRAG_AREA_OVER_MASS"] = 1] = "DRAG_AREA_OVER_MASS";
-  prwDynamicParameter2[prwDynamicParameter2["DRAG_AREA_OVER_MASS_RATE"] = 2] = "DRAG_AREA_OVER_MASS_RATE";
-  prwDynamicParameter2[prwDynamicParameter2["SRP_AREA_OVER_MASS"] = 3] = "SRP_AREA_OVER_MASS";
-  prwDynamicParameter2[prwDynamicParameter2["IN_TRACK_ACCELERATION"] = 4] = "IN_TRACK_ACCELERATION";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D0"] = 5] = "ECOM2_D0";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_Y0"] = 6] = "ECOM2_Y0";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B0"] = 7] = "ECOM2_B0";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D2_COS"] = 8] = "ECOM2_D2_COS";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D2_SIN"] = 9] = "ECOM2_D2_SIN";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D4_COS"] = 10] = "ECOM2_D4_COS";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_D4_SIN"] = 11] = "ECOM2_D4_SIN";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B1_COS"] = 12] = "ECOM2_B1_COS";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B1_SIN"] = 13] = "ECOM2_B1_SIN";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B3_COS"] = 14] = "ECOM2_B3_COS";
-  prwDynamicParameter2[prwDynamicParameter2["ECOM2_B3_SIN"] = 15] = "ECOM2_B3_SIN";
-  return prwDynamicParameter2;
-})(prwDynamicParameter || {});
 export {
   Band,
   BandT,
@@ -25618,6 +25358,8 @@ export {
   timConversionStatus,
   timEpochRepresentation,
   timingStandard,
+  unionListToRfmunion,
+  unionToRfmunion,
   xmtCandidateStanding,
   xmtCovarianceOrigin,
   xmtFitVerdict,

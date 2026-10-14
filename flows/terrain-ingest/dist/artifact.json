@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "artifact": {
     "file": "runtime.wasm",
-    "sha256": "e6a8d37cb479f13ff732350dd00187bc470477032bdd3f24d1d00d87b2e1d733",
+    "sha256": "2280d9c3c3423a4b929a3577cd47651abe6a0e134e3c27743bb691bfb043245f",
     "bytes": 393609
   },
   "compiler": "space-data-module flow compile (isomorphic, emception)",
@@ -194,7 +194,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "version": "0.2.0",
-      "sha256": "b080e0c9ed791ed555bf02eaa601d42d004d0ce33cbccb4a8c9cf048c5fb7df1",
+      "sha256": "589f1d8f3fcfb7cccb0e3b5a784cb31388ba3cc7b05603248c13fcdec2943548",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -211,8 +211,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "version": "0.2.0",
-      "sha256": "0bf43d369dcebdd3ba79049d06eaed734c584b2f039e6353d51edbb4b61860b1",
+      "version": "0.3.0",
+      "sha256": "0aed7c1cdd06b18d6cd8b72e8de452bff1d694ecceb51996b7a1ee6e96e0bbc1",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

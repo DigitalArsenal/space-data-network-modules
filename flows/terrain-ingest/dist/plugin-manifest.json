@@ -34,8 +34,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-write",
