@@ -24,12 +24,25 @@ enum ScheduleIn : int {
   SI_MAX_SPAN = 6, SI_MIN_SPAN = 7, SI_INTERVAL = 8, SI_BUSY = 9, SI_ROWS_CHANGED = 10,
   SI_OBSERVER_VALID = 11, SI_OBSERVER = 12, /* 3 */ SI_SNAPSHOT_OBSERVER_VALID = 15,
   SI_SNAPSHOT_OBSERVER = 16, /* 3 */ SI_VALIDITY_VALID = 19, SI_VALIDITY_START = 20, SI_VALIDITY_STOP = 21,
+  SI_DRAWN_OBSERVER_VALID = 22, SI_DRAWN_OBSERVER = 23, /* 3 */
 };
-enum ScheduleOut : int { SO_MIX = 0, SO_REQUEST = 1, SO_TARGET = 2, SO_JUMP = 3 };
+enum ScheduleOut : int { SO_MIX = 0, SO_REQUEST = 1, SO_TARGET = 2, SO_JUMP = 3, SO_STALE = 4 };
 
 /* The observer moving this far (m) since the last snapshot asks for a new one
  * at once: the light-time and aberration shifts are the observer's. */
 constexpr double kObserverMovedFar = 1.0e9;
+
+/* A drawn pair spaced more than this many times the spacing the clock rate
+ * asks for now is refined: a fast run leaves pairs up to 12 h apart, and a
+ * straight mix across 12 h is off by up to ~1" for a near-Earth asteroid
+ * (its heliocentric curvature, GM/r^2 * T^2 / 8, seen from 0.2-0.5 AU), so
+ * once the clock slows or stops the layer asks for the present epoch. */
+constexpr double kRefineSpacing = 4.0;
+
+inline double distance3(const double* a, const double* b) {
+  const double d[3] = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+  return std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+}
 
 inline double clampd(double v, double lo, double hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -67,6 +80,15 @@ inline void schedule(const double* in, double* out) {
   out[SO_MIX] = mix;
   out[SO_REQUEST] = 0.0;
   out[SO_JUMP] = 0.0;
+  /* The drawn snapshot's apparent places (light time, aberration) belong to
+   * an observer far from this one: stale, so the layer is not drawn until a
+   * snapshot for this observer arrives (never drawn at another observer's
+   * apparent places). */
+  out[SO_STALE] = (hasSnapshot && in[SI_OBSERVER_VALID] != 0.0 &&
+                   in[SI_DRAWN_OBSERVER_VALID] != 0.0 &&
+                   distance3(in + SI_OBSERVER, in + SI_DRAWN_OBSERVER) > kObserverMovedFar)
+                      ? 1.0
+                      : 0.0;
   if (in[SI_BUSY] != 0.0) return;
   /* a couple of wall seconds of animation, never so long that the straight
    * mix leaves the orbit, never shorter than ten minutes */
@@ -75,15 +97,16 @@ inline void schedule(const double* in, double* out) {
   const double direction = rate < 0.0 ? -1.0 : 1.0;
   bool observerMoved = false;
   if (in[SI_OBSERVER_VALID] != 0.0 && in[SI_SNAPSHOT_OBSERVER_VALID] != 0.0) {
-    const double* a = in + SI_OBSERVER;
-    const double* b = in + SI_SNAPSHOT_OBSERVER;
-    const double d[3] = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-    observerMoved = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) > kObserverMovedFar;
+    observerMoved = distance3(in + SI_OBSERVER, in + SI_SNAPSHOT_OBSERVER) > kObserverMovedFar;
   }
+  /* a pair far wider than the present spacing, with the epoch inside it */
+  const bool coarse = hasSnapshot && !same && std::isfinite(tOlder) && std::isfinite(tNewer) &&
+                      std::fabs(tNewer - tOlder) > kRefineSpacing * span &&
+                      et > std::min(tOlder, tNewer) && et < std::max(tOlder, tNewer);
   double target;
   bool jump = false;
-  if (!hasSnapshot || in[SI_ROWS_CHANGED] != 0.0 || observerMoved || !std::isfinite(tOlder) ||
-      !std::isfinite(tNewer)) {
+  if (!hasSnapshot || in[SI_ROWS_CHANGED] != 0.0 || observerMoved || coarse ||
+      !std::isfinite(tOlder) || !std::isfinite(tNewer)) {
     target = et;
     jump = true;
   } else {

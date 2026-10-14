@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { threadedExports } from "./threaded.mjs";
 
@@ -22,8 +22,16 @@ const S = { COUNT: 2, THREADS: 3, CONTROL: 4, PARAMS: 5, SNAPSHOT: 6, NUMBERS: 7
 const C = { DONE_SEQ: 1, RESULT: 3 };
 const P = { ET: 0, OBSERVER: 1, OBSERVER_COUNT: 11, DATA: 12, LENGTH: 13, CLASS_MASK: 14, H_MIN: 15, H_MAX: 16, EXCLUDE: 17 };
 
+// Every pool started here is torn down at the end: its pthreads are worker
+// threads that would otherwise keep the test process alive.
+const started = [];
+after(async () => {
+  for (const x of started) await x.harness.destroy();
+});
+
 async function catalog(threads) {
   const x = await threadedExports(fs.readFileSync(wasmPath), { threads });
+  started.push(x);
   const table = new Uint32Array(x.memory.buffer, x.kepler_catalog_init(64, 32, threads), 16);
   const view = (Type, slot, n) => new Type(x.memory.buffer, table[slot], n);
   const control = view(Int32Array, S.CONTROL, 8);

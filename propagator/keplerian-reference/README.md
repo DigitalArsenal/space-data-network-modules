@@ -94,9 +94,9 @@ npm run build            # -> dist/isomorphic/module.wasm
 npm test                 # conformance + contract + lifecycle (17 tests)
 npm run vectors:check    # the corpus reproduces from its generator
 
-# tri-runtime parity, from the SDK repo:
-space-data-module parity-gate \
-  --artifact keplerian-reference=./dist/isomorphic/module.wasm:module
+# tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the threaded
+# build: the invoke surface byte-identical in every lane
+PATH=$HOME/.wasmedge/bin:$PATH npm run test:parity   # -> conformance/parity.json
 ```
 
 `npm run build` needs `space-data-module-sdk` resolvable and the wasi
@@ -188,6 +188,13 @@ The small-body layer's display decisions are here too
 the fade with the camera's distance), `kepler_small_schedule` (the GPU mix
 between two snapshots and when, and for which epoch, the next is asked for;
 never past the rows' validity span) and `kepler_small_display_radius`.
+Since 1.8.0 the schedule also says when the drawn snapshot is stale (taken for
+an observer more than 1e9 m from this one: the camera jumped, and its light
+time and aberration are another observer's; the layer is not drawn until a
+snapshot for this observer arrives), and asks for the present epoch when the
+drawn pair is more than four times wider than the clock rate's spacing (a fast
+run leaves pairs up to 12 h apart; a straight mix across them is off by up to
+~1" for a near-Earth asteroid) (`tests/small-schedule.e2e.test.mjs`).
 
 Evidence (`tests/small-catalog.e2e.test.mjs`): three pool threads run; a
 shard ingests with the select and describe exports' results; a threaded

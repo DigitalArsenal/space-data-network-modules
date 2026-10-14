@@ -1,6 +1,6 @@
 {
   "name": "space-data-network-module-propagator-keplerian-reference",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Reference implementation of the official OrbPro WASM propagator ABI: a two-body Keplerian propagator",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -14,7 +14,8 @@
     "conformance": "space-data-module conformance propagator --artifact ./dist/sequential/module.wasm --vectors ./vectors/vectors.json",
     "conformance:self-test": "space-data-module conformance propagator --self-test",
     "vectors:check": "node vectors/tools/build-vectors.mjs --check",
-    "vectors:build": "node vectors/tools/build-vectors.mjs"
+    "vectors:build": "node vectors/tools/build-vectors.mjs",
+    "test:parity": "node tests/parity.mjs"
   },
   "dependencies": {
     "space-data-module-sdk": "0.8.25"
