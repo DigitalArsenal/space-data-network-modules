@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "single-thread",
+  "symbolPrefix": "sdm_guest_636f6d2e6f726270726f2e636174616c6f672d73796e746865736973_",
+  "methodSymbols": {
+    "synthesize_catalog": "sdm_guest_636f6d2e6f726270726f2e636174616c6f672d73796e746865736973_synthesize_catalog"
+  },
+  "capabilities": [
+    "storage_query",
+    "timers"
+  ]
+}
