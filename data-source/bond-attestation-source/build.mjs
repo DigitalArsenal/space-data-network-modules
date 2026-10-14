@@ -1,11 +1,12 @@
 // Builds the bond attestation module through the SDK compiler (typed contracts 1.0): WHA in, WHA out, the http and
-// clock reads as sdm_piv hostcalls. The WHA header (spacedatastandards.org lib/cpp/WHA/main_generated.h) is inlined
+// clock reads as sdm_piv hostcalls. The WHA header (scripts/lib/sds-cpp-headers.mjs, with the object API) is inlined
 // in place of `#include "WHA_generated.h"`, its include guard renamed and its flatc version static_assert relaxed,
 // as hostcap/clock/build.mjs does for TIM.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -14,7 +15,7 @@ const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 process.env.SPACE_DATA_STANDARDS_ROOT ??= fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const whaHeader = (await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", "WHA", "main_generated.h"), "utf8"))
+const whaHeader = (await generateSdsHeader("WHA", import.meta.url))
   .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_SDS_WHA_MAIN_H_")
   .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "");
 const jsonHeader = await fs.readFile(path.resolve(packageRoot, "../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");

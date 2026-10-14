@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 // propagator/cislunar on the typed contracts (1.0): a $TBP request in, a $TBP answer out.
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -39,7 +40,7 @@ const inlineHeader = (source) =>
     .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
 const standards = await includeOrder(["TBP"]);
 const sdsHeaders = (
-  await Promise.all(standards.map((code) => fs.readFile(path.join(standardsRoot, "lib", "cpp", code, "main_generated.h"), "utf8")))
+  await Promise.all(standards.map((code) => generateSdsHeader(code, import.meta.url)))
 ).map(inlineHeader);
 
 // The CR3BP core, unchanged, ahead of the module (its own includes resolved by this concatenation).

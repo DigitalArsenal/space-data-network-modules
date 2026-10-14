@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -21,7 +22,7 @@ process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 // output an SDS $FSO control frame - so those two standards' generated headers are inlined ahead of the module, with
 // their shared include guard renamed (every SDS header is "main_generated.h").
 async function sdsHeader(code) {
-  const header = await fs.readFile(path.join(standardsRoot, "lib", "cpp", code, "main_generated.h"), "utf8");
+  const header = await generateSdsHeader(code, import.meta.url);
   return header
     .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
     .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
+import { generateSdsHeader } from '../../scripts/lib/sds-cpp-headers.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
@@ -14,7 +15,7 @@ process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 // hostcap/clock does. The runtime types (HREQ, HRSP, FNTC, MCFG) are staged by the SDK compiler. nlohmann/json parses
 // Cloudflare's external API body and renders the external API request body only.
 async function sdsHeader(code) {
-  const header = await fs.readFile(path.join(standardsRoot, 'lib', 'cpp', code, 'main_generated.h'), 'utf8');
+  const header = await generateSdsHeader(code, import.meta.url);
   return header
     .replaceAll('FLATBUFFERS_GENERATED_MAIN_H_', `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
     .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, '')

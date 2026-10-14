@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -13,8 +14,8 @@ const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 
-// The SDS standards' own generated C++ headers (SPACE_DATA_STANDARDS_ROOT
-// lib/cpp/<FAMILY>/main_generated.h), in dependency order: $MPE needs MET;
+// The SDS standards' own generated C++ headers (scripts/lib/sds-cpp-headers.mjs,
+// with the object API), in dependency order: $MPE needs MET;
 // $CAT needs PLD (-> IDM) and LCC. They are inlined in place of
 // `#include "SDS_ARCHIVE_HEADERS.h"` as one translation unit: cross-family
 // `#include "main_generated.h"` lines are dropped (their families come first),
@@ -25,7 +26,7 @@ if (!standardsRoot) throw new Error("Set SPACE_DATA_STANDARDS_ROOT to the spaced
 const SCHEMA_FAMILIES = ["MET", "MPE", "IDM", "PLD", "LCC", "CAT"];
 const sdsHeaders = [];
 for (const family of SCHEMA_FAMILIES) {
-  const header = await fs.readFile(path.join(standardsRoot, "lib", "cpp", family, "main_generated.h"), "utf8");
+  const header = await generateSdsHeader(family, import.meta.url);
   sdsHeaders.push(
     header
       .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${family}_MAIN_H_`)

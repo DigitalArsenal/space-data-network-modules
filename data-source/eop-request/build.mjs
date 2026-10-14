@@ -2,15 +2,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
+import {generateSdsHeader} from '../../scripts/lib/sds-cpp-headers.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
 // The spacedatastandards.org checkout (SPACE_DATA_STANDARDS_ROOT wins; default the sibling checkout).
 process.env.SPACE_DATA_STANDARDS_ROOT??=fileURLToPath(new URL('../../../spacedatastandards.org/',import.meta.url));
 // The runtime types (TimerTick, HttpRequest, ...) are staged by the SDK compiler; the SDS standards are not, so each
-// one's generated header (lib/cpp/<CODE>/main_generated.h) is inlined in place of `#include "<CODE>_generated.h"`, its
+// one's generated header (scripts/lib/sds-cpp-headers.mjs, with the object API) is inlined in place of `#include "<CODE>_generated.h"`, its
 // include guard renamed (every SDS header is "main_generated.h") and its flatc version static_assert relaxed.
 export async function inlineStandards(source,codes){
  for(const code of codes){
-  const header=(await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT,'lib','cpp',code,'main_generated.h'),'utf8'))
+  const header=(await generateSdsHeader(code, import.meta.url))
    .replaceAll('FLATBUFFERS_GENERATED_MAIN_H_',`FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/,'')
    .replace(/#include "main_generated\.h"\n/g,'');

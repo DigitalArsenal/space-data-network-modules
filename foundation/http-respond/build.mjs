@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -20,12 +21,12 @@ const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
 
 // The decisions and answers are SDS standards: APR / QRP (decisions), NHS NEV NST PNV DAV (answers), OMM (the records
 // this node renders as JSON) with the standards OMM includes (RFM TIM MET CVR PVN), in dependency order. Each
-// standard's own generated C++ header (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) is inlined: its include
+// standard's own generated C++ header (scripts/lib/sds-cpp-headers.mjs, with the object API) is inlined: its include
 // guard renamed (every SDS header is "main_generated.h"), its schema-include lines dropped (inlined here instead) and its
 // flatc version static_assert relaxed, as hostcap/clock does.
 const SDS = ["APR", "QRP", "NHS", "NEV", "NST", "PNV", "DAV", "RFM", "TIM", "MET", "CVR", "PVN", "OMM"];
 async function sdsHeader(code) {
-  const header = await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", code, "main_generated.h"), "utf8");
+  const header = await generateSdsHeader(code, import.meta.url);
   return header
     .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
     .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")

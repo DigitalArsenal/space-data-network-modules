@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -27,7 +28,7 @@ function inlineGeneratedHeader(source) {
 // records (the runtime types - HttpRequest, HttpResponse, IngestRequest, IngestResult, FlowNotice - and
 // typedHostcall.hpp are staged by the SDK compiler).
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const wxf = await fs.readFile(path.join(standardsRoot, "lib", "cpp", "WXF", "main_generated.h"), "utf8");
+const wxf = await generateSdsHeader("WXF", import.meta.url);
 if (!/add_SENSOR_ID/.test(wxf)) {
   throw new Error(`${standardsRoot} predates SDS 1.238.0 ($WXF imager fields): set SPACE_DATA_STANDARDS_ROOT`);
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
+import { generateSdsHeader } from '../../scripts/lib/sds-cpp-headers.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const distRoot = path.join(root, 'dist');
@@ -16,7 +17,7 @@ const inline = source => source
 // IDM -> PLD and LCC feed CAT. The runtime types (HttpResponse, FlowNotice) are staged by the SDK compiler.
 const headers = [];
 for (const code of ['IDM', 'PLD', 'LCC', 'CAT'])
-  headers.push(inline(await fs.readFile(path.join(standardsRoot, 'lib/cpp', code, 'main_generated.h'), 'utf8')));
+  headers.push(inline(await generateSdsHeader(code, import.meta.url)));
 const source = await fs.readFile(path.join(root, 'src/catalog_source.cpp'), 'utf8');
 const outputPath = path.join(distRoot, 'isomorphic/module.wasm');
 await fs.rm(distRoot, { recursive: true, force: true });

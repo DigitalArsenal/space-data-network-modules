@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -38,7 +39,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const inlineStandards = ["RFM", "TIM", "MET", "CVR", "PVN", "IDM", "PLD", "LCC", "OMM", "MPE", "CAT", "SPW", "EOP", "CSM", "ICN"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");

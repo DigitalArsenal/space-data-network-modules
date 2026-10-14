@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
 import { cleanupCompilation, compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(packageRoot, "../..");
@@ -63,7 +64,7 @@ const inlineHeader = (source) =>
     .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
 const standards = await includeOrder(["PPS"]);
 const sdsHeaders = (
-  await Promise.all(standards.map((code) => fs.readFile(path.join(standardsRoot, "lib", "cpp", code, "main_generated.h"), "utf8")))
+  await Promise.all(standards.map((code) => generateSdsHeader(code, import.meta.url)))
 ).map(inlineHeader);
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));

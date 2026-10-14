@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -19,10 +20,10 @@ const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
 
 // The decisions are SDS standards: APR ($APR, API Request) for the non-query routes and QRP ($QRP, Query Page) for the
 // query/data routes. The SDK compiler stages only its runtime headers, so each standard's own generated C++ header
-// (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) is inlined: its include guard renamed (every SDS header is
+// (scripts/lib/sds-cpp-headers.mjs, with the object API) is inlined: its include guard renamed (every SDS header is
 // "main_generated.h") and its flatc version static_assert relaxed, as hostcap/clock does.
 async function sdsHeader(code) {
-  const header = await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT, "lib", "cpp", code, "main_generated.h"), "utf8");
+  const header = await generateSdsHeader(code, import.meta.url);
   return header
     .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
     .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")

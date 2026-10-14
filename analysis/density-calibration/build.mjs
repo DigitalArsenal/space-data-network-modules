@@ -3,9 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
+import { generateSdsHeader } from '../../scripts/lib/sds-cpp-headers.mjs';
 
 // One translation unit: the SDS standards' generated C++ headers for the $DCL
-// frames (spacedatastandards.org lib/cpp/<CODE>/main_generated.h of DCL and
+// frames (scripts/lib/sds-cpp-headers.mjs, with the object API of DCL and
 // every standard it includes, in include order, inlined in place of
 // `#include "DCL_generated.h"`: each include guard renamed, since every one is
 // "main_generated.h", and the flatc version static_assert relaxed, as
@@ -47,7 +48,7 @@ async function visit(code) {
   if (!ordered.includes(code)) ordered.push(code);
 }
 await visit('DCL');
-const sdsHeaders = (await Promise.all(ordered.map(async (code) => (await fs.readFile(path.join(standardsRoot, 'lib', 'cpp', code, 'main_generated.h'), 'utf8'))
+const sdsHeaders = (await Promise.all(ordered.map(async (code) => (await generateSdsHeader(code, import.meta.url))
   .replaceAll('FLATBUFFERS_GENERATED_MAIN_H_', `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
   .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, '')
   .replace(/^#include "main_generated\.h"\s*$/gm, '')))).join('\n');
@@ -66,6 +67,6 @@ if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/hpop/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
-  sdsHeaders: ordered.map((code) => `lib/cpp/${code}/main_generated.h`), threadModel: 'single-thread',
+  sdsHeaders: ordered.map((code) => `schema/${code}/main.fbs (scripts/lib/sds-cpp-headers.mjs)`), threadModel: 'single-thread',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath}`);
