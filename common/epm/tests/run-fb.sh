@@ -1,22 +1,15 @@
 #!/bin/bash
-# Build + run the EPM FlatBuffer end-to-end test (needs EPM_generated.h + flatbuffers
-# headers + Crypto++ from the protection-key-server native build).
+# Build + run the EPM FlatBuffer end-to-end tests natively (EPM_generated.h from
+# licensing/core, flatbuffers headers, the repo's pinned Crypto++; see cryptopp.sh).
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"     # common/epm
 COMMON="$(cd "$DIR/.." && pwd)"             # common
 ROOT="$(cd "$COMMON/.." && pwd)"            # space-data-network-modules
-CPPBUILD="$ROOT/licensing/protection-key-server/.build"
-CRYPTOPP="$CPPBUILD/cryptopp-src"
 EPMINC="$ROOT/licensing/core/src/cpp/generated/sds"
-
-if [ ! -f "$CRYPTOPP/libcryptopp.a" ]; then
-  echo "Native Crypto++ not built. Run licensing/protection-key-server/tests/run-native.sh once." >&2
-  exit 1
-fi
-[ -e "$CPPBUILD/cryptopp" ] || ln -s cryptopp-src "$CPPBUILD/cryptopp"
+source "$DIR/tests/cryptopp.sh"
 
 FBINC="${SDN_FLATBUFFERS_INCLUDE_DIR:-}"
-for cand in "$FBINC" "$ROOT/../../../flatbuffers/include" /opt/homebrew/include /usr/local/include; do
+for cand in "$FBINC" "$ROOT/../flatbuffers/include" "$ROOT/../../../flatbuffers/include" /opt/homebrew/include /usr/local/include; do
   [ -n "$cand" ] && [ -f "$cand/flatbuffers/flatbuffers.h" ] && FBINC="$cand" && break
 done
 if [ -z "$FBINC" ] || [ ! -f "$FBINC/flatbuffers/flatbuffers.h" ]; then
@@ -28,9 +21,8 @@ CXX="${CXX:-$(command -v clang++ 2>/dev/null || echo /opt/homebrew/opt/llvm/bin/
 SRC=("$COMMON/jcs/jcs.cpp" "$DIR/epm_content.cpp" "$DIR/epm_verify.cpp" "$DIR/epm_fb.cpp" "$DIR/epm_authorize.cpp" "$DIR/epm_key_proof.cpp")
 
 for test in epm_fb_test epm_authorize_test; do
-  "$CXX" -std=c++17 -O2 -I"$DIR" -I"$EPMINC" -I"$FBINC" -I"$CPPBUILD" \
-    "${SRC[@]}" "$DIR/tests/${test}.cpp" "$CRYPTOPP/libcryptopp.a" \
-    -o "$DIR/tests/${test}"
-  "$DIR/tests/${test}"
-  rm -f "$DIR/tests/${test}"
+  "$CXX" -std=c++17 -O2 -I"$DIR" -I"$EPMINC" -I"$FBINC" -I"$CRYPTOPP_INCLUDE" \
+    "${SRC[@]}" "$DIR/tests/${test}.cpp" "$CRYPTOPP_LIB" \
+    -o "$EPM_BUILD/${test}"
+  "$EPM_BUILD/${test}"
 done
