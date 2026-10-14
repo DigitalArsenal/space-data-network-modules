@@ -1,8 +1,0 @@
-{
-  "sha256": "d0a2ca25c08351b6eb939d36adce0be6bba551e27c56b1bc7c4970266f45417a",
-  "canonicalModuleHash": "5d7784eee22fe3bb55ec82804b7a1a07275821c871cdabcf9149355d99f7f09a",
-  "signedHash": "d114ca0073a9e1a282c90e7c9c87d0081f12d6e5239aed9e6414d7e4ecac3b4c",
-  "signatureScope": "bundle",
-  "keyId": "spaceaware-sdn-isomorphic-2026-08-06",
-  "buildMode": "production"
-}
