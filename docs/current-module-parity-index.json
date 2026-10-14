@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T20:17:21.075Z",
+  "generatedAt": "2026-10-14T22:54:13.102Z",
   "moduleCount": 115,
   "parityScopeModuleCount": 47,
   "isomorphicWasmCount": 114,
@@ -4218,7 +4218,7 @@
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "name": "SDN Host HTTP Request Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "request"
       ],
@@ -4234,14 +4234,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/http_request_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4769,7 +4768,7 @@
       ],
       "cxxSourceFileCount": 37,
       "cSourceFileCount": 0,
-      "testFileCount": 297,
+      "testFileCount": 303,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -4901,6 +4900,7 @@
         "tests/force_partials_native.cpp",
         "tests/generated/sds/Band.js",
         "tests/generated/sds/CAT.js",
+        "tests/generated/sds/CATProduct.js",
         "tests/generated/sds/CelestialFrame.js",
         "tests/generated/sds/CelestialFrameWrapper.js",
         "tests/generated/sds/CustomFrame.js",
@@ -4984,6 +4984,10 @@
         "tests/generated/sds/PRWTleLines.js",
         "tests/generated/sds/PRWTrajectorySource.js",
         "tests/generated/sds/PRWVersionResult.js",
+        "tests/generated/sds/PRWWindowQuery.js",
+        "tests/generated/sds/PRWWindowRefusal.js",
+        "tests/generated/sds/PRWWindowReport.js",
+        "tests/generated/sds/PRWWindowRequest.js",
         "tests/generated/sds/PolarizationType.js",
         "tests/generated/sds/RFM.js",
         "tests/generated/sds/RFMCoordinateSystem.js",
@@ -5003,6 +5007,7 @@
         "tests/generated/sds/TIMConversionRequest.js",
         "tests/generated/sds/TIMConversionResult.js",
         "tests/generated/sds/TIMInstant.js",
+        "tests/generated/sds/catalogProductKind.js",
         "tests/generated/sds/dataAvailability.js",
         "tests/generated/sds/eopSeries.js",
         "tests/generated/sds/frmOperationCode.js",
