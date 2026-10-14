@@ -83,13 +83,13 @@ same as an `$ERM`).
 
 An ephemeris or observation source brings the SGP4 sets fitted to its states. The
 fit is not a node of this flow. The production fit stage is the OD node of
-`flows/supplemental-omm`, which reads the provider-native responses of Starlink,
-the ISS, Intelsat, GLONASS and CPF (Earth-fixed and position-only states
-included) and gives `$OMM`, `$OCM` and `$OBD` record streams. `analysis/od` is
+`flows/supplemental-omm`, which fits the `$OEM` of the Starlink, ISS, Intelsat,
+GLONASS and CPF source modules (Earth-fixed and position-only states included)
+and gives `$OMM`, `$OCM` and `$OBD` record streams, each with its IngestRequest. `analysis/od` is
 built as a `wasm32-wasip1-threads` module (0.1.2) and its committed guest-link
 object is of 0.1.0: it references `od::build_ocm_flatbuffer` without defining
-it, so the flow compiler cannot link it either. A host unwraps the OD node's
-record streams and enqueues the `$OMM` on `fit_omm`.
+it, so the flow compiler cannot link it either. A host enqueues the OD node's
+`$OMM` record stream on `fit_omm`.
 
 ## Sources
 

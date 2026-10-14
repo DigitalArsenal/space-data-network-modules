@@ -192,7 +192,6 @@
         "method": "fit",
         "input": "starlink",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -254,7 +253,6 @@
         "method": "fit",
         "input": "iss",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -300,7 +298,6 @@
         "method": "fit",
         "input": "intelsat",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -345,7 +342,6 @@
         "method": "fit",
         "input": "glonass",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -391,7 +387,6 @@
         "method": "fit",
         "input": "cpf",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -438,7 +433,6 @@
         "method": "fit",
         "input": "cpf",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
