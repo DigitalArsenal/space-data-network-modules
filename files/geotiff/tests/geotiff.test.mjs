@@ -27,20 +27,25 @@ const skip = !fs.existsSync(WASM) && "run `npm run build` first";
 const fixture = (name) => new Uint8Array(fs.readFileSync(path.join(here, "fixtures", name)));
 const cases = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "cases.json"), "utf8"));
 
-/** [u32le n][$NCD][u32le count][(u64le offset, u32le length, bytes)...] */
-function fileFrame(size, ranges) {
+/** Size-prefixed SDS $NCD describing the GeoTIFF. */
+function descriptor(size) {
   const b = new flatbuffers.Builder(64);
+  const name = b.createString("GeoTIFF");
   NCD.startNCD(b);
+  NCD.addFormat(b, 255);
+  NCD.addProviderDefinedFormatName(b, name);
   NCD.addSourceByteLength(b, BigInt(size));
   NCD.finishSizePrefixedNCDBuffer(b, NCD.endNCD(b));
-  const d = b.asUint8Array();
-  const total = d.byteLength + 4 + ranges.reduce((n, r) => n + 12 + r.bytes.byteLength, 0);
+  return b.asUint8Array();
+}
+
+/** Raw lane: [u32le count][(u64le offset, u32le length, bytes)...] */
+function rangesFrame(ranges) {
+  const total = 4 + ranges.reduce((n, r) => n + 12 + r.bytes.byteLength, 0);
   const out = new Uint8Array(total);
   const view = new DataView(out.buffer);
-  out.set(d, 0);
-  let at = d.byteLength;
-  view.setUint32(at, ranges.length, true);
-  at += 4;
+  view.setUint32(0, ranges.length, true);
+  let at = 4;
   for (const r of ranges) {
     view.setBigUint64(at, BigInt(r.offset), true);
     view.setUint32(at + 8, r.bytes.byteLength, true);
@@ -50,7 +55,8 @@ function fileFrame(size, ranges) {
   return out;
 }
 
-const ncdRef = (n) => ({ schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "aligned-binary", requiredAlignment: 8, byteLength: n });
+const ncdRef = (n) => ({ schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "flatbuffer", byteLength: n });
+const rawRef = (n) => ({ acceptsAnyFlatbuffer: true, byteLength: n });
 const outputs = (r, port) => r.outputs.filter((o) => o.portId === port).map((o) => new Uint8Array(o.payload));
 const f64 = (bytes) => Array.from(new Float64Array(bytes.slice().buffer));
 
@@ -59,9 +65,13 @@ async function call(harness, methodId, file, request) {
   const ranges = [{ offset: 0, bytes: file.subarray(0, 16384) }];
   let fetched = 16384;
   for (let round = 0; round < 8; round += 1) {
-    const payload = fileFrame(file.byteLength, ranges);
-    const inputs = [{ portId: "file", typeRef: ncdRef(payload.byteLength), payload }];
-    if (request) inputs.push({ portId: "request", typeRef: { acceptsAnyFlatbuffer: true, byteLength: request.byteLength }, payload: request });
+    const d = descriptor(file.byteLength);
+    const pieces = rangesFrame(ranges);
+    const inputs = [
+      { portId: "descriptor", typeRef: ncdRef(d.byteLength), payload: d },
+      { portId: "ranges", typeRef: rawRef(pieces.byteLength), payload: pieces },
+    ];
+    if (request) inputs.push({ portId: "request", typeRef: rawRef(request.byteLength), payload: request });
     const r = await harness.invoke({ methodId, inputs });
     const [need] = outputs(r, "need");
     if (!need) return { r, rounds: round + 1, fetched };
@@ -161,4 +171,22 @@ test("refusals name the reason: WebP compression", { skip }, async (t) => {
   const { r } = await call(harness, "describe", fixture("rgb-webp-cog.tif"));
   assert.notEqual(r.statusCode, 0);
   assert.match(r.errorMessage, /WebP/);
+});
+
+test("ports carry what they say: a descriptor that is not $NCD is refused by name", { skip }, async (t) => {
+  const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(WASM), manifest, surface: "direct" });
+  t.after(() => harness.destroy());
+  const file = fixture("rgb-4326-jpeg-cog.tif");
+  const pieces = rangesFrame([{ offset: 0, bytes: file.subarray(0, 16384) }]);
+  const r = await harness.invoke({ methodId: "describe", inputs: [
+    { portId: "descriptor", typeRef: ncdRef(pieces.byteLength), payload: pieces },
+    { portId: "ranges", typeRef: rawRef(pieces.byteLength), payload: pieces },
+  ] });
+  assert.notEqual(r.statusCode, 0);
+  assert.match(`${r.errorCode} ${r.errorMessage}`, /descriptor|NCD|type/i);
+  const ok = await call(harness, "describe", file);
+  assert.equal(ok.r.statusCode, 0, ok.r.errorMessage);
+  const [info] = ok.r.outputs.filter((o) => o.portId === "info");
+  assert.equal(info.wireFormat, "flatbuffer", "info is a regular FlatBuffer");
+  assert.equal(info.typeRef?.schemaName, "GDI.fbs");
 });

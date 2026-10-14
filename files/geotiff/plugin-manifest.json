@@ -1,8 +1,8 @@
 {
  "pluginId": "com.digitalarsenal.files.geotiff",
  "name": "GeoTIFF imagery",
- "version": "0.1.0",
- "description": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery. describe reads the header (classic or BigTIFF, either byte order) into one SDS $GDI (format, EPSG:4326 footprint, source EPSG) and a level table; render draws a window given in EPSG:4326 as RGBA from the coarsest level at least as fine as the window's pixels, through the file's projection (EPSG:4326, Web Mercator 3857, UTM on WGS84 or GRS80). Compression none, LZW, PackBits, DEFLATE (miniz) and JPEG with JPEGTables (stb_image); 8-, 16- and 32-bit integer and 32-bit float samples with the horizontal and floating-point predictors; gray, RGB, YCbCr-in-JPEG and palette images; alpha bands, internal masks and GDAL no-data. Both methods read only the byte ranges the caller gives and name the ones they still need.",
+ "version": "0.2.0",
+ "description": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery. describe reads the header (classic or BigTIFF, either byte order) into one SDS $GDI (format, EPSG:4326 footprint, source EPSG) and a level table; render draws a window given in EPSG:4326 as RGBA from the coarsest level at least as fine as the window's pixels, through the file's projection (EPSG:4326, Web Mercator 3857, UTM on WGS84 or GRS80). Compression none, LZW, PackBits, DEFLATE (miniz) and JPEG with JPEGTables (stb_image); 8-, 16- and 32-bit integer and 32-bit float samples with the horizontal and floating-point predictors; gray, RGB, YCbCr-in-JPEG and palette images; alpha bands, internal masks and GDAL no-data. Both methods take an SDS $NCD descriptor of the file and the byte ranges the caller has (raw), and name the ranges they still need.",
  "pluginFamily": "parser",
  "capabilities": [],
  "externalInterfaces": [],
@@ -38,30 +38,46 @@
    "drainPolicy": "single-shot",
    "inputPorts": [
     {
-     "portId": "file",
-     "displayName": "file",
+     "portId": "descriptor",
+     "displayName": "descriptor",
      "minStreams": 1,
      "maxStreams": 1,
      "required": true,
-     "description": "The GeoTIFF's bytes the caller has: a size-prefixed SDS $NCD descriptor (SOURCE_BYTE_LENGTH, when stated, is the whole file's size), then [u32le count] and per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\".",
+     "description": "Size-prefixed SDS $NCD describing the file: FORMAT PROVIDER_DEFINED, PROVIDER_DEFINED_FORMAT_NAME \"GeoTIFF\"; SOURCE_BYTE_LENGTH, when stated, is the whole file's size.",
      "acceptedTypeSets": [
       {
-       "setId": "sds-ncd-ranges",
+       "setId": "sds-ncd",
        "allowedTypes": [
         {
          "schemaName": "NCD.fbs",
          "fileIdentifier": "$NCD",
          "rootTypeName": "NCD"
-        },
-        {
-         "schemaName": "NCD.fbs",
-         "fileIdentifier": "$NCD",
-         "rootTypeName": "NCD",
-         "wireFormat": "aligned-binary",
-         "requiredAlignment": 8
         }
        ],
-       "description": "SDS $NCD envelope with the file's byte ranges appended to the frame."
+       "description": "SDS $NCD container descriptor of the GeoTIFF."
+      }
+     ]
+    },
+    {
+     "portId": "ranges",
+     "displayName": "ranges",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\".",
+     "acceptedTypeSets": [
+      {
+       "setId": "tiff-byte-ranges-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.tiff-byte-ranges",
+        "detail": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\"."
+       }
       }
      ]
     }
@@ -82,13 +98,6 @@
          "schemaName": "GDI.fbs",
          "fileIdentifier": "$GDI",
          "rootTypeName": "GDI"
-        },
-        {
-         "schemaName": "GDI.fbs",
-         "fileIdentifier": "$GDI",
-         "rootTypeName": "GDI",
-         "wireFormat": "aligned-binary",
-         "requiredAlignment": 8
         }
        ]
       }
@@ -110,9 +119,9 @@
         }
        ],
        "wildcardJustification": {
-        "kind": "foreign-wire-format",
+        "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.levels+f64",
-        "detail": "float64 little-endian: [1, levelCount, epsg, bands, bits, sampleFormat, photometric, compression, west, south, east, north, maxLevel, stretched, width, height] then per level, finest first, [width, height, chunkWidth, chunkHeight, chunks]. The bounds are the footprint's EPSG:4326 box; maxLevel is the finest level of a 256-pixel geographic tiling (level 0: two tiles) the image's resolution fills; stretched is 1 when samples are not 8-bit and draw through a stretch."
+        "detail": "float64 little-endian: [1, levelCount, epsg, bands, bits, sampleFormat, photometric, compression, west, south, east, north, maxLevel, stretched, width, height] then per level, finest first, [width, height, chunkWidth, chunkHeight, chunks]. The bounds are the footprint's EPSG:4326 box; maxLevel is the finest level of a 256-pixel geographic tiling (level 0: two tiles) the image's resolution fills; stretched is 1 when samples are not 8-bit and draw through a stretch. A control frame between the caller and this module, never persisted."
        }
       }
      ]
@@ -133,9 +142,9 @@
         }
        ],
        "wildcardJustification": {
-        "kind": "foreign-wire-format",
+        "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.byte-ranges+f64",
-        "detail": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output."
+        "detail": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output. A control frame between the caller and this module, never persisted."
        }
       }
      ]
@@ -149,30 +158,46 @@
    "drainPolicy": "single-shot",
    "inputPorts": [
     {
-     "portId": "file",
-     "displayName": "file",
+     "portId": "descriptor",
+     "displayName": "descriptor",
      "minStreams": 1,
      "maxStreams": 1,
      "required": true,
-     "description": "The GeoTIFF's bytes the caller has: a size-prefixed SDS $NCD descriptor (SOURCE_BYTE_LENGTH, when stated, is the whole file's size), then [u32le count] and per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\".",
+     "description": "Size-prefixed SDS $NCD describing the file: FORMAT PROVIDER_DEFINED, PROVIDER_DEFINED_FORMAT_NAME \"GeoTIFF\"; SOURCE_BYTE_LENGTH, when stated, is the whole file's size.",
      "acceptedTypeSets": [
       {
-       "setId": "sds-ncd-ranges",
+       "setId": "sds-ncd",
        "allowedTypes": [
         {
          "schemaName": "NCD.fbs",
          "fileIdentifier": "$NCD",
          "rootTypeName": "NCD"
-        },
-        {
-         "schemaName": "NCD.fbs",
-         "fileIdentifier": "$NCD",
-         "rootTypeName": "NCD",
-         "wireFormat": "aligned-binary",
-         "requiredAlignment": 8
         }
        ],
-       "description": "SDS $NCD envelope with the file's byte ranges appended to the frame."
+       "description": "SDS $NCD container descriptor of the GeoTIFF."
+      }
+     ]
+    },
+    {
+     "portId": "ranges",
+     "displayName": "ranges",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\".",
+     "acceptedTypeSets": [
+      {
+       "setId": "tiff-byte-ranges-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.tiff-byte-ranges",
+        "detail": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\"."
+       }
       }
      ]
     },
@@ -192,9 +217,9 @@
         }
        ],
        "wildcardJustification": {
-        "kind": "foreign-wire-format",
+        "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.window+f64",
-        "detail": "float64 little-endian, 16 values: [1, level (-1: automatic, the coarsest at least as fine as the window's pixels), west, south, east, north (degrees, EPSG:4326), width, height (1-4096), lo0, hi0, lo1, hi1, lo2, hi2 (stretch per band; NaN: 2-98 % of the window's samples), 0, 0]."
+        "detail": "float64 little-endian, 16 values: [1, level (-1: automatic, the coarsest at least as fine as the window's pixels), west, south, east, north (degrees, EPSG:4326), width, height (1-4096), lo0, hi0, lo1, hi1, lo2, hi2 (stretch per band; NaN: 2-98 % of the window's samples), 0, 0]. A control frame between the caller and this module, never persisted."
        }
       }
      ]
@@ -240,9 +265,9 @@
         }
        ],
        "wildcardJustification": {
-        "kind": "foreign-wire-format",
+        "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.stretch+f64",
-        "detail": "float64 little-endian [lo0, hi0, lo1, hi1, lo2, hi2]: the stretch the image was drawn with (NaN for 8-bit and palette data, which draw as stored). A caller pins it for every window of one layer so tiles match."
+        "detail": "float64 little-endian [lo0, hi0, lo1, hi1, lo2, hi2]: the stretch the image was drawn with (NaN for 8-bit and palette data, which draw as stored). A caller pins it for every window of one layer so tiles match. A control frame between the caller and this module, never persisted."
        }
       }
      ]
@@ -263,9 +288,9 @@
         }
        ],
        "wildcardJustification": {
-        "kind": "foreign-wire-format",
+        "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.byte-ranges+f64",
-        "detail": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output."
+        "detail": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output. A control frame between the caller and this module, never persisted."
        }
       }
      ]

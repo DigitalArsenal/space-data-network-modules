@@ -5,8 +5,8 @@ GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery (owner 2026-10-13:
 
 | method | in | out |
 | --- | --- | --- |
-| `describe` | `file` | `info`: one size-prefixed `$GDI` (FORMAT GEOTIFF, EPSG:4326 footprint polygon, source EPSG in KEYWORDS); `levels`: the level table |
-| `render` | `file`, `request` (window in EPSG:4326, size, stretch) | `image`: RGBA; `stats`: the stretch used |
+| `describe` | `descriptor`, `ranges` | `info`: one size-prefixed `$GDI` (FORMAT GEOTIFF, EPSG:4326 footprint polygon, source EPSG in KEYWORDS); `levels`: the level table |
+| `render` | `descriptor`, `ranges`, `request` (window in EPSG:4326, size, stretch) | `image`: RGBA; `stats`: the stretch used |
 
 Either method answers on `need` instead when the bytes it was given do not
 cover what it reads: float64 `(offset, length)` pairs, merged across gaps up to
@@ -14,9 +14,13 @@ cover what it reads: float64 `(offset, length)` pairs, merged across gaps up to
 file) and calls again. A COG's header is in its first 16 KiB, so a layer costs
 one header fetch and then one fetch of the tiles each window needs.
 
-`file` is `[u32le n][$NCD][u32le count]` then per range
-`[u64le offset][u32le length][bytes]`; `SOURCE_BYTE_LENGTH`, when stated, is
-the file's size. Port layouts are in `plugin-manifest.json`.
+Both methods take `descriptor`, a size-prefixed SDS `$NCD` (FORMAT
+`PROVIDER_DEFINED`, name `GeoTIFF`; `SOURCE_BYTE_LENGTH`, when stated, is the
+file's size), and `ranges`, the pieces of the file the caller has:
+`[u32le count]` then per range `[u64le offset][u32le length][bytes]`. `info`
+is an SDS `$GDI` FlatBuffer. `ranges`, `request`, `need`, `levels`, `stats`
+and `image` have no SDS identity and travel on the SDK's raw lane (wildcard
+ports with a stated media type). Port layouts are in `plugin-manifest.json`.
 
 - **Structure**: classic TIFF and BigTIFF, little- and big-endian; tiles or
   strips; chunky or planar bands; the full image and its reduced levels

@@ -13,9 +13,11 @@
 // fetches them and calls again. A COG is read with a header fetch and one
 // fetch of the tiles each window needs.
 //
-// Port "file": a size-prefixed SDS $NCD descriptor, then [u32le count] and per
-// range [u64le offset][u32le length][bytes]. SOURCE_BYTE_LENGTH, when stated,
-// is the whole file's size.
+// Port "descriptor": a size-prefixed SDS $NCD FlatBuffer describing the file
+// (FORMAT PROVIDER_DEFINED, PROVIDER_DEFINED_FORMAT_NAME "GeoTIFF");
+// SOURCE_BYTE_LENGTH, when stated, is the whole file's size.
+// Port "ranges" (raw bytes, no SDS identity): [u32le count] and per range
+// [u64le offset][u32le length][bytes], pieces of the TIFF file.
 // Port "request" (render): float64 little-endian
 //   [1, level (-1: automatic), west, south, east, north (degrees), width, height,
 //    lo0, hi0, lo1, hi1, lo2, hi2 (stretch; NaN: 2-98 % of the window's samples), 0, 0].
@@ -51,6 +53,9 @@ int32_t fail(const char* code, const std::string& message, int32_t status = 400)
   return status;
 }
 
+// Raw bytes on a wildcard port (the SDK's raw lane): plugin_push_output_ex with
+// the aligned-binary wire format is the SDK's only way to emit variable-length
+// bytes with no SDS identity.
 int32_t push(const char* port, const void* data, size_t size) {
   return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 8,
                                static_cast<const uint8_t*>(data), uint32_t(size)) < 0
@@ -66,34 +71,40 @@ struct FileInput {
 uint32_t le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
 uint64_t le64(const uint8_t* p) { return uint64_t(le32(p)) | uint64_t(le32(p + 4)) << 32; }
 
+const plugin_input_frame_t* inputFrame(const char* port) {
+  const int32_t index = plugin_find_input_index(port, 0);
+  return index >= 0 ? plugin_get_input_frame(uint32_t(index)) : nullptr;
+}
+
 int32_t readFile(FileInput* in) {
-  const int32_t index = plugin_find_input_index("file", 0);
-  const plugin_input_frame_t* frame = index >= 0 ? plugin_get_input_frame(uint32_t(index)) : nullptr;
-  if (!frame || !frame->payload || frame->payload_length < 8) return fail("missing-file-frame", "A frame on port \"file\" is required.");
+  const plugin_input_frame_t* d = inputFrame("descriptor");
+  if (!d || !d->payload || d->payload_length < 8) return fail("missing-descriptor", "A size-prefixed $NCD frame on port \"descriptor\" is required.");
+  const uint32_t prefix = le32(d->payload);
+  if (size_t(prefix) + 4 != size_t(d->payload_length)) return fail("malformed-descriptor", "The $NCD size prefix does not match the frame.");
+  if (!::flatbuffers::BufferHasIdentifier(d->payload, NCDIdentifier(), true)) return fail("malformed-descriptor", "The frame on port \"descriptor\" is not a size-prefixed $NCD.");
+  ::flatbuffers::Verifier verifier(d->payload, size_t(d->payload_length));
+  if (!VerifySizePrefixedNCDBuffer(verifier)) return fail("malformed-descriptor", "The $NCD descriptor does not verify.");
+  in->size = uint64_t(GetSizePrefixedNCD(d->payload)->SOURCE_BYTE_LENGTH());
+
+  const plugin_input_frame_t* frame = inputFrame("ranges");
+  if (!frame || !frame->payload || frame->payload_length < 4) return fail("missing-ranges", "A frame of the file's byte ranges on port \"ranges\" is required.");
   const uint8_t* p = frame->payload;
   const size_t n = size_t(frame->payload_length);
-  const uint32_t prefix = le32(p);
-  if (size_t(prefix) + 4 > n) return fail("malformed-file-frame", "The $NCD size prefix overruns the frame.");
-  if (!::flatbuffers::BufferHasIdentifier(p, NCDIdentifier(), true)) return fail("malformed-file-frame", "The frame does not open with a size-prefixed $NCD descriptor.");
-  ::flatbuffers::Verifier verifier(p, size_t(prefix) + 4);
-  if (!VerifySizePrefixedNCDBuffer(verifier)) return fail("malformed-file-frame", "The $NCD descriptor does not verify.");
-  in->size = uint64_t(GetSizePrefixedNCD(p)->SOURCE_BYTE_LENGTH());
-  size_t at = size_t(prefix) + 4;
-  if (at + 4 > n) return fail("malformed-file-frame", "The frame carries no range count.");
+  size_t at = 0;
   const uint32_t count = le32(p + at);
   at += 4;
   for (uint32_t i = 0; i < count; ++i) {
-    if (at + 12 > n) return fail("malformed-file-frame", "A range header overruns the frame.");
+    if (at + 12 > n) return fail("malformed-ranges", "A range header overruns the frame.");
     tiff::Sparse::Range r;
     r.off = le64(p + at);
     r.len = le32(p + at + 8);
     at += 12;
-    if (at + r.len > n) return fail("malformed-file-frame", "A range's bytes overrun the frame.");
+    if (at + r.len > n) return fail("malformed-ranges", "A range's bytes overrun the frame.");
     r.data = p + at;
     at += size_t(r.len);
     in->sparse.ranges.push_back(r);
   }
-  if (in->sparse.ranges.empty()) return fail("malformed-file-frame", "The frame carries no byte range of the file.");
+  if (in->sparse.ranges.empty()) return fail("malformed-ranges", "The frame carries no byte range of the file.");
   return 0;
 }
 
@@ -204,7 +215,7 @@ extern "C" int describe() {
   gdi.KEYWORDS.push_back("EPSG:" + std::to_string(im.crs.epsg));
   ::flatbuffers::FlatBufferBuilder fbb(1024);
   fbb.FinishSizePrefixed(CreateGDI(fbb, &gdi), GDIIdentifier());
-  if (plugin_push_output_ex("info", "GDI.fbs", "$GDI", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "GDI", 0, 8, fbb.GetBufferPointer(), uint32_t(fbb.GetSize())) < 0)
+  if (plugin_push_output_ex("info", "GDI.fbs", "$GDI", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "GDI", 0, 0, fbb.GetBufferPointer(), uint32_t(fbb.GetSize())) < 0)
     return 500;
 
   std::vector<double> t = {1, double(im.levels.size()), double(im.crs.epsg), double(im.spp), double(im.bps), double(im.sampleFormat),
