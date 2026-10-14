@@ -265,6 +265,8 @@ const referenceOptions = (e) => ({ inputFormat: "meme", refEpoch: e.epoch, refMe
 
 async function checkEme2000Suite(t, suiteDir, referenceCsv) {
   const { OMM } = await import(pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/OMM/main.js")).href);
+  const { OBD } = await import(pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/OBD/main.js")).href);
+  const { FILT } = await import(pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/FIL/main.js")).href);
   const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
   const files = fs.readdirSync(path.join(suiteDir, "meme")).filter((n) => /^MEME_\d+_.*\.txt$/.test(n)).sort();
   assert.equal(files.length, 10, "the Starlink suite holds ten MEME files");
@@ -273,8 +275,17 @@ async function checkEme2000Suite(t, suiteDir, referenceCsv) {
   assert.equal(oems.length, files.length, "one $OEM per suite object");
 
   const supGp = parseSupGpRows(path.join(suiteDir, referenceCsv));
-  const od = await createStandaloneHarness("browser", OD_WASM_PATH, { enableThreads: true });
-  t.after(() => od.destroy());
+  // analysis/od on the typed contract: the options are node CONFIG (fixed when a host is created, so one harness per
+  // reference set), a text ephemeris goes in as a $FIL on "meme", and a configured reference set comes back scored on
+  // the same points as the $OBD whose METHOD_SOURCE is "reference" (its WRMS, km).
+  const odHarnesses = [];
+  const odWith = async (config) => {
+    const harness = await createStandaloneHarness("browser", OD_WASM_PATH, { enableThreads: true, hostOptions: { config } });
+    odHarnesses.push(harness);
+    return harness;
+  };
+  t.after(async () => { for (const harness of odHarnesses) await harness.destroy(); });
+  const od = await odWith({});
   const fitOem = async (oem) => {
     const response = ok(await od.invoke({ methodId: "fit", inputs: [{ portId: "oem", wireFormat: "flatbuffer",
       typeRef: { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM", wireFormat: "flatbuffer" }, payload: oem }] }));
@@ -283,11 +294,21 @@ async function checkEme2000Suite(t, suiteDir, referenceCsv) {
       raan: omm.RA_OF_ASC_NODE(), argp: omm.ARG_OF_PERICENTER(), meanAnomaly: omm.MEAN_ANOMALY(), bstar: omm.BSTAR(),
       meanMotionDot: omm.MEAN_MOTION_DOT(), meanMotionDdot: omm.MEAN_MOTION_DDOT() };
   };
+  const filFrame = (bytes) => {
+    const builder = new flatbuffers.Builder(1024 + bytes.length);
+    builder.finish(Object.assign(new FILT(), { NAME: "ephemeris.txt", MEDIA_TYPE: "text/plain", CONTENT: [...bytes] }).pack(builder), "$FIL");
+    return { portId: "meme", typeRef: { schemaName: "FIL.fbs", fileIdentifier: "$FIL", rootTypeName: "FIL", wireFormat: "flatbuffer" },
+      payload: builder.asUint8Array() };
+  };
   const scoreOnMemeStates = async (meme, elements) => {
-    const response = ok(await od.invoke({ methodId: "fit", inputs: [{ portId: "meme", payload: meme },
-      { portId: "options", payload: new TextEncoder().encode(JSON.stringify(referenceOptions(elements))) }] }));
-    const km = Number.parseFloat(JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "result").payload)).REFERENCE_RMS);
-    assert.ok(Number.isFinite(km), "analysis/od reported no REFERENCE_RMS");
+    const scorer = await odWith(referenceOptions(elements));
+    const response = ok(await scorer.invoke({ methodId: "fit", inputs: [filFrame(meme)] }));
+    const reference = response.outputs.filter((o) => o.portId === "obd")
+      .map((o) => OBD.getSizePrefixedRootAsOBD(new flatbuffers.ByteBuffer(new Uint8Array(o.payload))))
+      .find((obd) => obd.METHOD_SOURCE() === "reference");
+    assert.ok(reference, "analysis/od reported no reference $OBD");
+    const km = reference.WRMS();
+    assert.ok(Number.isFinite(km), "analysis/od reported no reference WRMS");
     return km;
   };
 
