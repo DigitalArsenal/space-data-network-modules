@@ -819,8 +819,9 @@ constexpr double kCheckpointStep = 4.0 * 86400.0;
 ///    kept on the way out; while the clock runs toward the epoch, each
 ///    snapshot that needs no step carries it one step toward the next
 ///    checkpoint the clock will need, so a crossing finds it ready.
-/// A snapshot of a clock running either way therefore costs at most one grid
-/// step, as in 1.8.0 (a jump costs the steps from the nearest cached one).
+/// A snapshot of a clock running either way therefore costs about one grid
+/// step at most, as in 1.8.0 (a jump costs the steps from the nearest cached
+/// one).
 constexpr int kAnchors = 2;
 
 /// A checkpoint's elements as float32 differences from the epoch elements
@@ -1376,8 +1377,22 @@ inline bool step_out(const SmallBody& b, CheckpointDelta& d, int32_t& k, int32_t
 /// While the clock runs toward the epoch, carries the work slot one grid step
 /// toward the checkpoint the clock needs next (one nearer the epoch than the
 /// current one), from the nearest cached checkpoint below it.
-void small_prework(SmallBody& b) {
+void small_prework(SmallBody& b, double et) {
   if (!b.toward || std::abs(b.k) < 2 || std::abs(b.k) > 32767) return;
+  // About a quarter of the rows take a step at a given epoch (a hash of the epoch's
+  // minute and the row's mean anomaly bits), so the prework spreads over the
+  // snapshots instead of every row stepping in the same ones.
+  uint32_t bits = 0;
+  const float m0 = static_cast<float>(b.m0);
+  std::memcpy(&bits, &m0, sizeof(bits));
+  const double minute = std::floor(std::fabs(et) / 60.0);
+  if (std::isfinite(minute)) {
+    uint32_t h = static_cast<uint32_t>(std::fmod(minute, 4294967296.0)) ^ (bits * 0x9E3779B9u);
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    if ((h & 3u) != 0u) return;
+  }
   const int32_t dir = b.k > 0 ? 1 : -1;
   const int32_t target = b.k - dir;
   for (int i = 0; i < kAnchors; ++i) {
@@ -1425,7 +1440,7 @@ bool small_rebase(SmallBody& b, double et) {
   if (!std::isfinite(steps) || std::fabs(steps) > 1.0e6) return false;
   const int32_t want = static_cast<int32_t>(std::lround(steps));
   if (want == b.k) {
-    small_prework(b);
+    small_prework(b, et);
     return true;
   }
   b.toward = (b.k != 0 && want != 0 && (b.k > 0) == (want > 0) && std::abs(want) < std::abs(b.k)) ? 1 : 0;
@@ -1441,7 +1456,7 @@ bool small_rebase(SmallBody& b, double et) {
     b.k = 0;
   }
   if (b.k == want) {
-    small_prework(b);
+    small_prework(b, et);
     return true;
   }
   const int32_t dir = want > b.k ? 1 : -1;

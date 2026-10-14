@@ -161,14 +161,17 @@ the current one, one of two anchors kept on the way out (the validity span's
 grid split in three: 20 and 40 days for the default 60), a work slot, or the
 record. The work slot holds the checkpoint one nearer the epoch than the
 current one (it comes free on the way out); while the clock runs toward the
-epoch, each snapshot that needs no step carries it one step toward the next
-checkpoint the clock will need, leaving the checkpoint two short of that one in
-an anchor slot the run has left behind. A snapshot of a clock running either way so
-costs at most one grid step, as
-in 1.8.0 (1.8.1 re-ran the chain from the record at each crossing toward the
+epoch, snapshots that need no step carry it one step at a time toward the next
+checkpoint the clock will need (about a quarter of the rows at each, so the
+work spreads over the snapshots), leaving the checkpoint two short of that one
+in an anchor slot the run has left behind. A snapshot of a clock running either
+way so costs about one grid step at most, as in 1.8.0 (1.8.1 re-ran the chain from the record at each crossing toward the
 epoch: a 56-day sweep of 1,004 rows toward the epoch took 101-139 ms against
-1.8.0's 35-40 ms, the slowest snapshot 12-18 ms against 1.1-2.5 ms; 1.8.2
-takes 30-31 ms, the slowest 1.1-1.6 ms). 1.8.0 replaced the
+1.8.0's 34-36 ms, the slowest snapshot 12-18 ms against 1.2-2.4 ms; 1.8.2
+takes 29-32 ms, the slowest 1.9-2.4 ms. In the console with every numbered
+asteroid running toward the epoch at a day a second: snapshot compute at most
+239 ms against 1.8.0's 301 ms, the layer stale in 23% of frames against 20%,
+and 23% running away from it). 1.8.0 replaced the
 elements in place from wherever the clock had last been, with a fixed 6-day
 step (twice Phaethon's dynamical time at perihelion): Phaethon brought back to
 its epoch after a visit 50 days earlier was 12,886 km off. The record's own
