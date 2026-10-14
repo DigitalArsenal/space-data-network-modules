@@ -35,7 +35,19 @@ import { fileURLToPath } from "node:url";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
 
-import { buildGeoTiff } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 import { memoryPagesFor, HOST_DEFAULT_PAGES } from "../../../tools/terrain-pyramid/memory-pages.mjs";
 
 const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
@@ -59,20 +71,13 @@ function availabilityOfSize(bytes) {
   return levels;
 }
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : payload;
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
+const frame = (portId, payload) => typedInput(portId, payload);
 const req = (path, headers = {}) => ({
   portId: "request",
   typeRef: HTTP_REQUEST_TYPE_REF,
   payload: encodeHttpRequest({ method: "GET", path, query: "", headers }),
 });
-const planFrame = (value) => frame("plan", JSON.stringify(value));
+const planFrame = (value) => input("plan", value);
 
 // ── THE STORED RECORD THE MOUNT'S SECOND INVOKE IS GIVEN ────────────────────
 //
@@ -85,11 +90,13 @@ const STORED_ADDRESS = { level: 8, x: 271, y: 192 };
 let storedStream = null;
 async function storedRecordStream() {
   if (storedStream) return storedStream;
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: WASM,
     manifest: MANIFEST,
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return { terrain_tileset_id: "spaceaware-terrain" };
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
@@ -104,7 +111,7 @@ async function storedRecordStream() {
       scaleLat: 0.9 / 63,
       heightFn: (px, py) => 100 + px + 2 * py,
     });
-    const result = await harness.invoke({
+    const result = await invokeTyped(harness, {
       methodId: "tile",
       inputs: [
         planFrame({
@@ -120,7 +127,7 @@ async function storedRecordStream() {
             license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
           },
         }),
-        frame("dem", encoder.encode(JSON.stringify({ status: 200, headers: {}, bodyB64: Buffer.from(tiff).toString("base64") }))),
+        granuleFrame("dem", tiff),
       ],
     });
     const records = result.outputs.find((o) => o.portId === "records");
@@ -161,11 +168,13 @@ async function driveInstance(t, available, { soakRequests = 1200, identityFirst 
     terrain_available: available,
     terrain_version: "1.0.0",
   };
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: WASM,
     manifest: MANIFEST,
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
@@ -192,19 +201,19 @@ async function driveInstance(t, available, { soakRequests = 1200, identityFirst 
     const headers = identity ? { "accept-encoding": "identity" } : { "accept-encoding": "gzip" };
     if (identity) invoked.identity += 1;
     invoked.route += 1;
-    const routed = await harness.invoke({ methodId: "route", inputs: [req(shape.path, headers)] });
+    const routed = await invokeTyped(harness, { methodId: "route", inputs: [req(shape.path, headers)] });
     const context = routed.outputs.find((o) => o.portId === "context");
     const plan = routed.outputs.find((o) => o.portId === "layer_plan");
     if (plan) {
       invoked.layer_json += 1;
-      await harness.invoke({ methodId: "layer_json", inputs: [frame("plan", new Uint8Array(plan.payload))] });
+      await invokeTyped(harness, { methodId: "layer_json", inputs: [frame("plan", new Uint8Array(plan.payload))] });
       return;
     }
     if (!context || !shape.stream) return; // a 404 route answered by itself
     invoked.respond += 1;
-    await harness.invoke({
+    await invokeTyped(harness, {
       methodId: "respond",
-      inputs: [frame("stream", shape.stream()), frame("context", new Uint8Array(context.payload))],
+      inputs: [...storeAnswer(shape.stream()), frame("context", new Uint8Array(context.payload))],
     });
   }
 

@@ -31,7 +31,8 @@ function inlineGeneratedHeader(source) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-// $CNP includes no other standard, so the inline list is a single entry.
+// $CNP includes no other standard, so the inline list is a single entry. The module-sdk runtime types (TimerTick,
+// HttpRequest, HttpResponse, IngestRequest, FlowNotice) and typedHostcall.hpp are staged by the SDK compiler.
 const inlineStandards = ["CNP"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
@@ -65,7 +66,8 @@ const compilation = await compileModuleFromSource({
   // module-sdk-wasi-sequential-max-memory.
   threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // plugin.getConfig (an SDS $PIV invocation through typedHostcall.hpp);
+  // symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
 

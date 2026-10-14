@@ -77,7 +77,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. All four methods are
+  // THREAD MODEL — declared explicitly, never inferred. All three methods are
   // pure single-pass transforms and this guest provably never spawns a thread
   // (manifest.sequentialJustification records why), so it carries no pthreads
   // contract. Declaring it keeps the SDK's isomorphic-pthreads artifact guard

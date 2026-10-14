@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.osm-source",
   "name": "OSM Context Epoch Source",
-  "version": "0.1.0",
-  "description": "The serving half of the OpenStreetMap context lane (plan \"OpenStreetMap on SDN\", 2026-09-03; owner decision: hosted as FlatGeobuf). One method, route: a $HTQ HttpRequest enters, and exactly one $HTR HttpResponse leaves. The mount is a PREFIX only (config key osm_mount_path, default /api/v1/osm/); a path that does not start with it is a 404. \"tileset.json\" renders the epoch record the off-fleet builder (space-data-network-modules/tools/osm-context/build-fgb.mjs) wrote for the pinned epoch - the same document, verbatim from config key osm_epoch_record (an object), with PAYLOAD.CID set from osm_epoch_cid and EPOCH_BASE_PATH added as a path RELATIVE to this node's origin (<gateway path>/<cid>/), so no client learns a hostname or hardcodes an epoch; public max-age=60, strong ETag (sha2-256 multihash of the body), 304 on If-None-Match, access-control-allow-origin *. \"\" and \"catalogue.json\" answer the camelCase discovery document (epochId, delivery, cid, datasetEpoch, epochBasePath, recordPath, format osm-context-fgb/1, attribution). Without an epoch configured the record route answers 503 naming the missing keys (osm_epoch_record, osm_epoch_cid) rather than a fabricated record. Anything else is a no-store 404; non-GET/HEAD is 405. The FlatGeobuf bytes never pass through this module: clients range-read <origin>/ipfs/<cid>/<file>.fgb from the gateway. capabilities [], browser + wasmedge, request-scoped, config read once per instance over plugin.getConfig (the sanctioned bridge terrain-source uses) or handed in on the optional \"config\" port.",
+  "version": "0.2.0",
+  "description": "The serving half of the OpenStreetMap context lane (plan \"OpenStreetMap on SDN\", 2026-09-03; owner decision: hosted as FlatGeobuf). One method, route: a $HTQ HttpRequest enters, and exactly one $HTR HttpResponse leaves. The mount is a PREFIX only (config key osm_mount_path, default /api/v1/osm/); a path that does not start with it is a 404. \"tileset.json\" renders the epoch record the off-fleet builder (space-data-network-modules/tools/osm-context/build-fgb.mjs) wrote for the pinned epoch - the same document, from config key osm_epoch_record (an object), with PAYLOAD.CID set from osm_epoch_cid and EPOCH_BASE_PATH added as a path RELATIVE to this node's origin (<gateway path>/<cid>/), so no client learns a hostname or hardcodes an epoch; public max-age=60, strong ETag (sha2-256 multihash of the body), 304 on If-None-Match, access-control-allow-origin *. \"\" and \"catalogue.json\" answer the camelCase discovery document (epochId, delivery, cid, datasetEpoch, epochBasePath, recordPath, format osm-context-fgb/1, attribution). Without an epoch configured the record route answers 503 naming the missing keys (osm_epoch_record, osm_epoch_cid) rather than a fabricated record. Anything else is a no-store 404; non-GET/HEAD is 405. The FlatGeobuf bytes never pass through this module: clients range-read <origin>/ipfs/<cid>/<file>.fgb from the gateway. capabilities [], browser + wasmedge, request-scoped, config read once per instance as one ModuleConfig (MCFG) over the plugin.getConfig SDS $PIV hostcall (sdm_piv::get_config()), or handed in as the same ModuleConfig on the optional \"config\" port. The record is rendered from the typed config in the builder's key order (a ModuleConfig keeps neither JSON key order nor nulls; the builder's always-null keys FILES[].WHERE and PROVENANCE.OCEAN answer null when absent, keys the builder does not write follow in KEY order). TYPED CONTRACTS 1.0: every frame is a FlatBuffer ($HTQ, MCFG in; $HTR out).",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -32,7 +32,8 @@
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One $HTQ HttpRequest envelope (module-sdk schemas/HttpRequestAbi.fbs)."
@@ -47,24 +48,22 @@
           "portId": "config",
           "acceptedTypeSets": [
             {
-              "setId": "osm-serving-config-json",
+              "setId": "sdn-runtime-module-config",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The mount's serving config, the same JSON object plugin.getConfig returns. Optional: absent, route reads it over the host bridge.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op, not by SDS."
-              }
+              "description": "OPTIONAL: the mount's serving config as a ModuleConfig (MCFG, module-sdk runtime type) - the same entries plugin.getConfig answers (osm_epoch_record as a TableList of one table). Absent (the shipped flow), the config is read over plugin.getConfig once per instance."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "OPTIONAL serving config, handed in instead of read over plugin.getConfig, so a host-bridge-less artifact (parity lanes, tests) can execute the record surface."
+          "description": "OPTIONAL serving config on a ModuleConfig frame, handed in instead of read over plugin.getConfig, so a host-bridge-less run (parity lanes, tests) can execute the record surface."
         }
       ],
       "outputPorts": [

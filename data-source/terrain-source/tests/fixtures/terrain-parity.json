@@ -16,20 +16,22 @@
         "inputs": [
           {
             "portId": "plan",
-            "payloadFile": "parity/plan-single.json",
+            "payloadFile": "parity/plan-single.dtt",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 372
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "dem",
-            "payloadFile": "parity/dem-granule.hrb",
+            "payloadFile": "parity/dem-granule.hrsp",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 153642
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -43,20 +45,22 @@
         "inputs": [
           {
             "portId": "plan",
-            "payloadFile": "parity/plan-block.json",
+            "payloadFile": "parity/plan-block.dtt",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 444
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "dem",
-            "payloadFile": "parity/dem-granule.hrb",
+            "payloadFile": "parity/dem-granule.hrsp",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 153642
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -70,29 +74,32 @@
         "inputs": [
           {
             "portId": "plan",
-            "payloadFile": "parity/plan-water.json",
+            "payloadFile": "parity/plan-water.dtt",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 372
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "dem",
-            "payloadFile": "parity/dem-granule.hrb",
+            "payloadFile": "parity/dem-granule.hrsp",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 153642
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "water",
-            "payloadFile": "parity/water-granule.hrb",
+            "payloadFile": "parity/water-granule.hrsp",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 4575
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -106,11 +113,22 @@
         "inputs": [
           {
             "portId": "plan",
-            "payloadFile": "parity/plan-layer.json",
+            "payloadFile": "parity/request-layer.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 185
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-layer.mcfg",
+            "typeRef": {
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -124,20 +142,22 @@
         "inputs": [
           {
             "portId": "plan",
-            "payloadFile": "parity/plan-oversized.json",
+            "payloadFile": "parity/plan-oversized.dtt",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 370
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "dem",
-            "payloadFile": "parity/oversized-granule.hrb",
+            "payloadFile": "parity/oversized-granule.hrsp",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 246
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -150,21 +170,33 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stored-record.dttstream",
+            "portId": "records",
+            "payloadFile": "parity/stored-record.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 1332
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stored-record.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-stored.json",
+            "payloadFile": "parity/context-stored.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 99
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -177,21 +209,33 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stored-record.dttstream",
+            "portId": "records",
+            "payloadFile": "parity/stored-record.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 1332
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stored-record.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-identity.json",
+            "payloadFile": "parity/context-identity.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 100
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -204,21 +248,33 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stored-record.dttstream",
+            "portId": "records",
+            "payloadFile": "parity/stored-record.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 1332
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stored-record.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-conditional.json",
+            "payloadFile": "parity/context-conditional.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 171
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -231,21 +287,43 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stream-empty.bin",
+            "portId": "records",
+            "payloadFile": "parity/stream-empty.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 4
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stream-empty.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-synth.json",
+            "payloadFile": "parity/context-synth.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 162
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-synth.mcfg",
+            "typeRef": {
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -258,21 +336,33 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stream-empty.bin",
+            "portId": "records",
+            "payloadFile": "parity/stream-empty.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 4
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stream-empty.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-miss.json",
+            "payloadFile": "parity/context-miss.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 123
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -285,21 +375,33 @@
         "methodId": "respond",
         "inputs": [
           {
-            "portId": "stream",
-            "payloadFile": "parity/stream-malformed.bin",
+            "portId": "records",
+            "payloadFile": "parity/stream-malformed.0.fsb",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 31
+              "schemaName": "FSB.fbs",
+              "fileIdentifier": "$FSB",
+              "rootTypeName": "FSB",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "status",
+            "payloadFile": "parity/stream-malformed.1.fso",
+            "typeRef": {
+              "schemaName": "FSO.fbs",
+              "fileIdentifier": "$FSO",
+              "rootTypeName": "FSO",
+              "wireFormat": "flatbuffer"
             }
           },
           {
             "portId": "context",
-            "payloadFile": "parity/context-stored.json",
+            "payloadFile": "parity/context-stored.htq",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 99
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -394,11 +496,12 @@
           },
           {
             "portId": "config",
-            "payloadFile": "parity/config-catalogue.json",
+            "payloadFile": "parity/config-catalogue.mcfg",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 1076
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -421,11 +524,12 @@
           },
           {
             "portId": "config",
-            "payloadFile": "parity/config-catalogue-no-cid.json",
+            "payloadFile": "parity/config-catalogue-no-cid.mcfg",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 946
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -448,11 +552,12 @@
           },
           {
             "portId": "config",
-            "payloadFile": "parity/config-catalogue-no-lineage.json",
+            "payloadFile": "parity/config-catalogue-no-lineage.mcfg",
             "typeRef": {
-              "wireFormat": "aligned-binary",
-              "requiredAlignment": 1,
-              "byteLength": 1014
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
             }
           }
         ]

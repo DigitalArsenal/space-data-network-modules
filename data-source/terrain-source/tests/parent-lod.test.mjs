@@ -8,7 +8,7 @@ import zlib from 'node:zlib';
 import { Builder, ByteBuffer } from 'flatbuffers';
 import * as sds from 'spacedatastandards.org';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
-import { buildGeoTiff, buildWaterTiff, decodeQuantizedMesh, splitStream } from './helpers.mjs';
+import { buildGeoTiff, buildWaterTiff, decodeQuantizedMesh, splitStream, planInputs, granuleFrame } from './helpers.mjs';
 
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const wasm = fs.readFileSync(new URL('../dist/isomorphic/module.wasm', import.meta.url));
@@ -17,12 +17,8 @@ const digest = bytes => `1220${crypto.createHash('sha256').update(bytes).digest(
 const frame = (portId, payload, typed = false) => ({ portId, payload: Uint8Array.from(payload),
   typeRef: typed ? { schemaName: 'DTT.fbs', fileIdentifier: '$DTT', rootTypeName: 'DTT', wireFormat: 'flatbuffer' }
     : { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } });
-const json = (port, value) => frame(port, Buffer.from(JSON.stringify(value)));
-function raw(port, body, status = 200) {
-  const bytes = Buffer.alloc(8 + body.length);
-  bytes.write('$HRB'); bytes.writeUInt32LE(status, 4); Buffer.from(body).copy(bytes, 8);
-  return frame(port, bytes);
-}
+// Typed contracts 1.0: the plan is the $DTT header stream (+ ModuleConfig options), a granule an HttpResponse.
+const raw = (port, body, status = 200) => granuleFrame(port, body, status);
 function stream(records) {
   return Buffer.concat(records.map(record => {
     const size = Buffer.alloc(4); size.writeUInt32LE(record.length);
@@ -73,7 +69,7 @@ async function children(instance, { level = 8, parentX = 135, parentY = 96, ocea
       level, x: parentX * 2 + q % 2, y: parentY * 2 + Math.floor(q / 2),
       gridSize: 9, minGridSize: 9, maxGridSize: 9, maxLevel: level,
       skipOceanTiles: false, measureAccuracy: true, verticalDatumName: 'EGM2008', provenance };
-    const result = await instance.invoke({ methodId: 'tile', inputs: [json('plan', plan),
+    const result = await instance.invoke({ methodId: 'tile', inputs: [...planInputs(plan),
       raw('dem', ocean ? Buffer.alloc(0) : dem, ocean ? 404 : 200),
       raw('water', ocean ? Buffer.alloc(0) : water, ocean ? 404 : 200)] });
     const batch = splitStream(ok(result));

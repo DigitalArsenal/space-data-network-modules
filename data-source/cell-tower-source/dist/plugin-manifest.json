@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
   "name": "Cellular Base-Station Aggregation Nodes",
-  "version": "0.1.0",
-  "description": "Many cellular/base-station registries -> one deconflicted SDS $TBS site stream. Three pure flow nodes: `route` turns one $HTQ request into N hostcap/http-request GET descriptors for the provider set the CALLER named plus the run contract; `parse` decodes each provider native payload into normalized reports; `deconflict` merges reports across providers under the caller chosen tbsMergeMethod and emits a size-prefixed $TBS record stream plus a run summary. Configuration is REQUEST-SCOPED, never node-global, so two callers can ask for different provider sets at once without either changing what the node is. NO CAPABILITIES, deliberately: this plugin performs no I/O — http is the generic hostcap connector node, and the credential lane (keyslot.unwrap + secrets.put/clear) is a SEPARATE wasmedge-only plugin, cell-tower-credentials, so the grants an operator makes for credentials never attach to the code that parses provider bodies and stays browser-testable.",
+  "version": "0.2.0",
+  "description": "Many cellular/base-station registries -> one deconflicted SDS $TBS site stream (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between modules). Three pure flow nodes: `route` turns one $HTQ request into one hostcap/http-request HttpRequest (HREQ) per provider URL for the provider set the CALLER named, each carrying the run contract - the request normalized once as an SDS $APR (PARAMETERS PROVIDERS/METHOD/LIMIT/FULL_POPULATION/CREDENTIAL_MEDIATOR/BBOX/REFRESH, plus the fetch's own provider, the run's fetch count and, for a credentialed fetch, its credential lane) - in CONTEXT; `parse` reads each HttpResponse (HRSP; attributed by its echoed CONTEXT, never by position) and decodes the provider's native payload into normalized reports, one SINGLE_SOURCE $TBS record each, and on a bulk gzip lane writes the next $IRM resume mark (decoder state, window, partial record); `deconflict` merges reports across providers under the caller's tbsMergeMethod and emits a size-prefixed $TBS record stream plus the run contract passed on (its counters as RESPONSE_HEADERS) and a $DAV describing the dataset, for foundation/http-respond. Configuration is REQUEST-SCOPED, never node-global. /providers answers a $QRP projection page (one row per provider) handed to the credential mediator; /credentials/<id> becomes an $APR task for it. NO CAPABILITIES: http is the generic hostcap connector node and the credential lane (keyslot.unwrap + secrets.*) is the SEPARATE wasmedge-only plugin cell-tower-credentials.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -22,30 +22,28 @@
     {
       "methodId": "route",
       "displayName": "Route a cellular aggregation request",
-      "description": "Decodes the one $HTQ envelope the host delivers and dispatches on METHOD+PATH, because the host mounts ONE http trigger per flow and all HTTP semantics live in-wasm. /providers builds the provider catalog and hands it to the credential mediator to finish (key slot + per-lane configured flags); /credentials/<providerId> validates the provider against the compiled registry, derives the lane id and forwards the sealed envelope to the mediator, refusing an unknown provider or a wrong verb here without any capability; every other path is the aggregation, reading PROVIDERS/METHOD/LIMIT from the body and emitting one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted; providers requiring a login are skipped with an explicit reason.",
+      "description": "Decodes the one $HTQ envelope and dispatches on METHOD+PATH (the host mounts ONE http trigger per flow). /providers emits the provider catalog as a $QRP projection page on `catalog` for the credential mediator to finish (key slot + per-lane configured flags); /credentials/<providerId> validates the provider against the compiled registry, derives the lane and emits an $APR task (PUT/DELETE, PARAMETERS providerId + credentialLane, BODY the sealed envelope verbatim) on `credential`; every other path is the aggregation: PROVIDERS/METHOD/LIMIT/FULL_POPULATION/BBOX from the client's JSON body become the $APR run contract and one HttpRequest per provider URL (mirrors included) goes out on `requests`. Refusals (bad-envelope 400, unknown-method 400, no-providers 400, no-provider 404, unknown-provider 404, credential-not-required 400, method-not-allowed 405) are the $APR with STATUS/ERROR_CODE/ERROR_MESSAGE on `decision`. Skipped providers are named in RESPONSE_HEADERS x-sdn-providers-skipped (id=code: unknown-provider, unavailable, needs-region, needs-mediator); a run with nothing fetchable answers at once on `decision` + `availability` (an empty dataset) instead of starting a pipeline that cannot finish. A bulk gzip is requested as its first 32 MiB window; continuation is the ingest lane's durable $IRM, not a request parameter.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request-envelope",
+              "setId": "cell-tower-request-htq",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
-              }
+              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The HTTP request envelope."
+          "description": "The HTTP request envelope ($HTQ) from the flow trigger."
         }
       ],
       "outputPorts": [
@@ -53,116 +51,106 @@
           "portId": "requests",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "cell-tower-requests-hreq",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON array of http request descriptors, one per selected provider. Each descriptor opts into hostcap/http-request responseWire=raw-body-v1 so large provider bodies remain binary rather than expanding through base64 inside the flow guest.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request descriptors ({provider_id,method,url,headers,timeoutMs}) produced and consumed inside this flow; the shape is defined by the host http.request op, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: METHOD, URL, HEADERS (accept, content-type, range, user-agent), BODY (ComReg POST body raw), TIMEOUT_MS, CONTEXT."
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Per-provider fetch descriptors."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "cell-tower-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Run contract for parse and deconflict."
-        },
-        {
-          "portId": "reply",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-http-route-decision-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
-              }
-            }
-          ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Routing decision for a refused request (status 400 with the reason)."
+          "description": "One HttpRequest per provider URL. CONTEXT = a size-prefixed stream: the $APR run contract with its per-fetch parameters (provider, fetches, credentialLane), then - on the ingest lane - the $IRM this fetch continues."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-decision-apr",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR API Request."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A refusal ($APR STATUS + ERROR_CODE + ERROR_MESSAGE), or the run contract of a run with nothing fetchable (STATUS 0), for foundation/http-respond respond."
+        },
+        {
+          "portId": "availability",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-availability-dav",
+              "allowedTypes": [
+                {
+                  "schemaName": "DAV.fbs",
+                  "fileIdentifier": "$DAV",
+                  "rootTypeName": "DAV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $DAV Dataset Availability."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Only beside a nothing-fetchable answer: the empty dataset (STANDARD TBS, AVAILABLE, RECORD_COUNT 0)."
         },
         {
           "portId": "catalog",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-catalog-json",
+              "setId": "cell-tower-catalog-qrp",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON provider catalog for the configuring page.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provider catalog handed to the flow's http-respond node. Source METADATA (ids, access posture, licence, whether a lane is configured), not observation data, so no SDS record type describes it and inventing one would be worse than naming it what it is."
-              }
+              "description": "SDS $QRP Query Page (projection)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Provider catalog, emitted when the request PATH is the catalog route."
+          "description": "Only for /providers: the provider catalog as a size-prefixed $QRP projection page (columns id, name, authority, license, attribution, credentialRequired, credentialConfigured, credentialLane, authoritative, defaultSelected, methods, keySlotId, keySlotPublicKey, keySlotAlgorithm; credentialConfigured false and the key slot Null here) for the credential mediator."
         },
         {
           "portId": "credential",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-credential-task-json",
+              "setId": "cell-tower-credential-apr",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON task for the credential mediator.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "One of {op:catalog, catalog:<the catalog this node built>}, {op:put, providerId, lane, envelope:<the browser keyslot envelope, verbatim and unread>} or {op:clear, providerId, lane}. Control routing between two nodes of one flow, not observation data; no SDS record describes a request-scoped instruction and inventing one would be worse than naming it what it is."
-              }
+              "description": "SDS $APR API Request."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Task for the credential mediator, emitted when the request PATH is the catalog route or the credential route."
+          "description": "Only for PUT|DELETE /credentials/<providerId>: the mediator task as an $APR (ROUTE credential-put|credential-clear, PARAMETERS providerId + credentialLane, BODY the sealed envelope verbatim)."
         }
       ],
       "maxBatch": 1,
@@ -171,53 +159,28 @@
     {
       "methodId": "parse",
       "displayName": "Normalize provider payloads",
-      "description": "Decodes each provider's native payload into normalized reports, dropping rows whose coordinates are out of range rather than clamping them. A provider whose fetch failed contributes nothing but stays in providers_consulted, so 'asked and got nothing' never reads as 'agreed'.",
+      "description": "Decodes each provider's native payload into normalized reports, dropping rows whose coordinates are out of range rather than clamping them. Each HttpResponse is attributed by the run contract its CONTEXT echoes (the `provider` parameter); a response with no $APR in CONTEXT is refused (missing-context), a provider the registry lacks is refused (unknown-provider), a non-2xx answer contributes nothing but stays consulted. FAN-IN: the run accumulates across invocations and is emitted ONCE, when the contract's `fetches` responses are in or on a quiet tick (yield + backlog), then the state resets. The CSV header and the bulk gzip decoder come from the $IRM in CONTEXT (ingest lane); a decoder whose stamps (DECODER_STATE_FORMAT cell-tower-source/tinfl-v1, version, byte lengths) disagree restarts rather than resumes.",
       "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "cell-tower-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The run contract. Delivered EXACTLY ONCE per run, on the first invocation, and never re-delivered (the runtime FIFO-consumes it). It must therefore be OPTIONAL: while it was required:true, draining that single frame left this node permanently unready and every later response queued forever, unconsumed and unreported. Cached in module state on arrival."
-        },
         {
           "portId": "responses",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "cell-tower-responses-hrsp",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "hostcap/http-request response, one frame per provider: normally an aligned binary $HRB raw-body-v1 frame (status plus verbatim body), with legacy JSON/bodyB64 accepted for compatibility.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; the shape is defined by that generic connector, not by SDS."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, HEADERS, BODY verbatim, CONTEXT echoed, RETRIEVED_MS."
             }
           ],
           "minStreams": 1,
-          "maxStreams": 100000,
+          "maxStreams": 64,
           "required": true,
-          "description": "HTTP responses, one per request descriptor route emitted. NOT capped at 1: the fan-out is one descriptor per provider URL including mirrors, and a cap of 1 delivered only the first, which is why a two-provider request returned exactly the first-named provider's answer. raw-body-v1 is used to avoid the 4/3 base64 expansion and duplicate JSON/string buffers that previously exhausted a 128 MiB WasmEdge instance on the 27 MiB BAKOM document."
+          "description": "HTTP responses, one per HttpRequest the planner emitted. THIS IS A FAN-IN PORT: every frame is decoded."
         }
       ],
       "outputPorts": [
@@ -225,110 +188,28 @@
           "portId": "job",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-job-json",
+              "setId": "cell-tower-job-apr",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
-              }
+              "description": "SDS $APR API Request."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Run contract, forwarded."
+          "description": "The run contract ($APR) as CONTEXT carried it, per-fetch parameters stripped, with RESPONSE_HEADERS x-sdn-row-capped when a decoder stopped at the per-provider row cap."
         },
         {
           "portId": "reports",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-reports-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON array of normalized per-provider reports.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Normalized intermediate produced and consumed inside this flow. It is deliberately NOT $TBS: a single provider's unreconciled report cannot satisfy the standard's required CONSENSUS, and emitting one would assert a deconfliction that has not happened."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Normalized reports."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "drain-until-yield"
-    },
-    {
-      "methodId": "deconflict",
-      "displayName": "Deconflict across providers into $TBS",
-      "description": "Groups reports across providers by network identity (falling back to proximity where a provider publishes no identifiers) and merges each group under the caller's tbsMergeMethod, emitting one $TBS record per site with every contributing provider in SOURCES and the merge recorded in CONSENSUS. Semantics mirror packages/cell-towers-worldwide/src/deconflict.mjs and are parity-gated against it.",
-      "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "cell-tower-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Run contract."
-        },
-        {
-          "portId": "reports",
-          "acceptedTypeSets": [
-            {
-              "setId": "cell-tower-reports-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON array of normalized per-provider reports.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Normalized intermediate produced and consumed inside this flow. It is deliberately NOT $TBS: a single provider's unreconciled report cannot satisfy the standard's required CONSENSUS, and emitting one would assert a deconfliction that has not happened."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Normalized reports."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "records",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-record-stream",
+              "setId": "cell-tower-reports-tbs",
               "allowedTypes": [
                 {
                   "schemaName": "TBS.fbs",
@@ -337,36 +218,150 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $TBS FlatBuffer record stream."
+              "description": "Size-prefixed $TBS record stream."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Size-prefixed $TBS record stream."
+          "description": "Normalized reports: a size-prefixed $TBS stream, one record per report, CONSENSUS SINGLE_SOURCE with its one provider in SOURCES (a single report asserts no deconfliction). Fields the source did not report are absent, never zero."
+        },
+        {
+          "portId": "resume",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-resume-irm",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $IRM Ingest Resume Mark."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Only when a bulk gzip decoder ran: the next $IRM resume mark (NEXT_OFFSET = next compressed byte, STATE, DECODE_CONTEXT with DECODER_STATE/WINDOW/WINDOW_POSITION/PARTIAL_RECORD while resumable, LAST_CHUNK.RECORDS_DECODED), every other field of the incoming mark carried."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "deconflict",
+      "displayName": "Deconflict across providers into $TBS",
+      "description": "Groups reports across providers by network identity (falling back to proximity where a provider publishes no identifiers) and merges each group under the contract's METHOD, emitting one $TBS record per site with every contributing provider in SOURCES and the merge recorded in CONSENSUS. Semantics mirror packages/cell-towers-worldwide/src/deconflict.mjs and are parity-gated against it. The contract is passed on as the answer's $APR with this run's counters as RESPONSE_HEADERS (x-sdn-reports-in, x-sdn-sites-out, x-sdn-collapsed, x-sdn-multi-provider-sites, x-sdn-merge-method, x-sdn-full-population, x-sdn-truncated), beside a $DAV describing the dataset.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-apr",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR API Request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The run contract from parse."
+        },
+        {
+          "portId": "reports",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-reports-tbs",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Normalized reports (SINGLE_SOURCE $TBS stream) from parse."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-records-tbs",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $TBS record stream, one deconflicted site each."
         },
         {
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-route-decision-json",
+              "setId": "cell-tower-decision-apr",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
-              }
+              "description": "SDS $APR API Request."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Routing decision carrying status and this run's counters."
+          "description": "The run contract passed on with the run counters, for foundation/http-respond respond."
+        },
+        {
+          "portId": "availability",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-availability-dav",
+              "allowedTypes": [
+                {
+                  "schemaName": "DAV.fbs",
+                  "fileIdentifier": "$DAV",
+                  "rootTypeName": "DAV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $DAV Dataset Availability."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The dataset: STANDARD TBS, AVAILABLE, FRESH, RECORD_COUNT, BYTE_COUNT, PUBLISHED_AT_MS now."
         }
       ],
       "maxBatch": 1,
@@ -375,9 +370,29 @@
   ],
   "schemasUsed": [
     {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    },
+    {
       "schemaName": "TBS.fbs",
       "fileIdentifier": "$TBS",
       "rootTypeName": "TBS"
+    },
+    {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM"
     }
   ],
   "buildArtifacts": [

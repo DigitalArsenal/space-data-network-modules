@@ -40,7 +40,7 @@ export async function composeTerrainSource() {
   // schema file: DTT table + DTTPayloadRef + DTTProvenance + enums), no include
   // graph to order. TRN remains the terrain CONFIG standard and is not emitted
   // by this module.
-  const inlineStandards = ["DTT"];
+  const inlineStandards = ["DTT", "FSO", "FSB"];
   const headers = await Promise.all(
     inlineStandards.map((standard) => readSdsHeader(standard, import.meta.url)),
   );

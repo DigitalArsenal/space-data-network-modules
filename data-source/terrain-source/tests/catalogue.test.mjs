@@ -25,6 +25,19 @@ import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "sp
 
 // The SAME projector the builder writes tileset-catalogue.dttstream through.
 import { buildDttRecord, writeDttRecord } from "../../../tools/terrain-pyramid/dtt-projection.mjs";
+import {
+  typedInput,
+  input,
+  typeRefOf,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -56,17 +69,19 @@ const OVER_IPFS = {
 };
 
 async function get(t, path, config, headers = {}) {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   t.after(() => harness.destroy());
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "route",
     inputs: [
       {
@@ -159,11 +174,13 @@ test("the catalogue does not shadow the tile and layer.json routes", async (t) =
 });
 
 test("layer.json states the tiles template the mount configures", async (t) => {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") {
         // What the IPFS publisher configures: a CID needs no `?v=` cache-key
         // query, because the CID is already the cache key.
@@ -173,7 +190,7 @@ test("layer.json states the tiles template the mount configures", async (t) => {
     },
   });
   t.after(() => harness.destroy());
-  const routed = await harness.invoke({
+  const routed = await invokeTyped(harness, {
     methodId: "route",
     inputs: [
       {
@@ -188,12 +205,12 @@ test("layer.json states the tiles template the mount configures", async (t) => {
     ],
   });
   const plan = routed.outputs.find((o) => o.portId === "layer_plan");
-  const rendered = await harness.invoke({
+  const rendered = await invokeTyped(harness, {
     methodId: "layer_json",
     inputs: [
       {
         portId: "plan",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: plan.payload.byteLength },
+        typeRef: typeRefOf(plan.payload),
         payload: plan.payload,
       },
     ],
@@ -208,17 +225,19 @@ test("layer.json states the tiles template the mount configures", async (t) => {
 });
 
 test("the default tiles template is unchanged for a mount-served tileset", async (t) => {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return BASE;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   t.after(() => harness.destroy());
-  const routed = await harness.invoke({
+  const routed = await invokeTyped(harness, {
     methodId: "route",
     inputs: [
       {
@@ -233,12 +252,12 @@ test("the default tiles template is unchanged for a mount-served tileset", async
     ],
   });
   const plan = routed.outputs.find((o) => o.portId === "layer_plan");
-  const rendered = await harness.invoke({
+  const rendered = await invokeTyped(harness, {
     methodId: "layer_json",
     inputs: [
       {
         portId: "plan",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: plan.payload.byteLength },
+        typeRef: typeRefOf(plan.payload),
         payload: plan.payload,
       },
     ],
@@ -539,17 +558,19 @@ test("the datum name an operator configures is the one the record states", async
 // CID (ipfs-publish.mjs renders it through the shipped module, deliberately,
 // so there is only ever ONE authority for it).
 test("layer.json states the datum the tiles were encoded against", async (t) => {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return OVER_IPFS;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   t.after(() => harness.destroy());
-  const routed = await harness.invoke({
+  const routed = await invokeTyped(harness, {
     methodId: "route",
     inputs: [
       {
@@ -565,12 +586,12 @@ test("layer.json states the datum the tiles were encoded against", async (t) => 
   });
   const plan = routed.outputs.find((o) => o.portId === "layer_plan");
   assert.ok(plan, "layer.json is planned, not answered directly");
-  const rendered = await harness.invoke({
+  const rendered = await invokeTyped(harness, {
     methodId: "layer_json",
     inputs: [
       {
         portId: "plan",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: plan.payload.byteLength },
+        typeRef: typeRefOf(plan.payload),
         payload: plan.payload,
       },
     ],

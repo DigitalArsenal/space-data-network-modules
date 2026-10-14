@@ -41,11 +41,13 @@ function inlineGeneratedHeader(source) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const irmHeader = inlineGeneratedHeader(
-  await readSdsHeader("IRM", import.meta.url),
-);
+// Typed contracts 1.0: the job and the durable mark are $IRM, the plan is $DTT header records, the mark is read as
+// FlatSQL $FSB chunks and asked for with an $FSO - so all four generated SDS headers are inlined ahead of the module
+// (each self-contained; the SDK runtime types - TimerTick, HttpRequest/Response, IngestRequest/Result, FlowNotice,
+// ModuleConfig - are staged by the SDK compiler).
+const headers = await Promise.all(["IRM", "DTT", "FSO", "FSB"].map((code) => readSdsHeader(code, import.meta.url)));
 const implementationSource = await fs.readFile(sourcePath, "utf8");
-const sourceCode = `${irmHeader}\n${implementationSource}`;
+const sourceCode = `${headers.map(inlineGeneratedHeader).join("\n")}\n${implementationSource}`;
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

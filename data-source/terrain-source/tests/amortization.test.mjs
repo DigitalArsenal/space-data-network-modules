@@ -18,22 +18,32 @@ import zlib from "node:zlib";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { buildGeoTiff, decodeDtt, decodeQuantizedMesh, rawBodyFrameBytes, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  decodeDtt,
+  decodeQuantizedMesh,
+  rawBodyFrameBytes,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
 const WASM = fs.readFileSync(fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)));
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 const PROVENANCE = {
   datasetId: "cop-dem-glo-30",
@@ -103,9 +113,9 @@ test("a block decodes the granule ONCE and beats the per-tile re-decode outright
   const perTileMs = [];
   for (const address of addresses.slice(0, 12)) {
     const started = performance.now();
-    const response = await harness.invoke({
+    const response = await invokeTyped(harness, {
       methodId: "tile",
-      inputs: [jsonFrame("plan", { ...planBase, ...address }), frame("dem", GRANULE)],
+      inputs: [typedFrame("plan", { ...planBase, ...address }), frame("dem", GRANULE)],
     });
     perTileMs.push(performance.now() - started);
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
@@ -114,13 +124,13 @@ test("a block decodes the granule ONCE and beats the per-tile re-decode outright
 
   // (B) the amortized path: ONE invocation, 64 tiles out, one granule decode.
   const blockStarted = performance.now();
-  const blockResponse = await harness.invoke({
+  const blockResponse = await invokeTyped(harness, {
     methodId: "tile",
-    inputs: [jsonFrame("plan", { ...planBase, tiles: addresses }), frame("dem", GRANULE)],
+    inputs: [typedFrame("plan", { ...planBase, tiles: addresses }), frame("dem", GRANULE)],
   });
   const blockMs = performance.now() - blockStarted;
   assert.equal(blockResponse.statusCode, 0, `${blockResponse.errorCode}: ${blockResponse.errorMessage}`);
-  const report = JSON.parse(decoder.decode(blockResponse.outputs.find((o) => o.portId === "report").payload));
+  const report = decodeTileReport(blockResponse.outputs.find((o) => o.portId === "report").payload);
   const records = splitStream(blockResponse.outputs.find((o) => o.portId === "records").payload);
 
   assert.equal(records.length, addresses.length, "every addressed tile came out");
@@ -145,9 +155,9 @@ test("a block decodes the granule ONCE and beats the per-tile re-decode outright
 
 test("every tile fits the serving size bounds: p50 <= 4 KiB, p99 <= 12 KiB, hard 32 KiB", async (t) => {
   const harness = await harnessFor(t);
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
-    inputs: [jsonFrame("plan", { ...planBase, tiles: addresses }), frame("dem", GRANULE)],
+    inputs: [typedFrame("plan", { ...planBase, tiles: addresses }), frame("dem", GRANULE)],
   });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const sizes = splitStream(response.outputs.find((o) => o.portId === "records").payload)
@@ -190,10 +200,10 @@ test("a tile past the 32 KiB ceiling is REFUSED at encode time, not discovered b
     }),
   );
   const harness = await harnessFor(t);
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", { ...planBase, gridSize: 255, x: X0, y: Y0 }),
+      typedFrame("plan", { ...planBase, gridSize: 255, x: X0, y: Y0 }),
       frame("dem", noisy),
     ],
   });
@@ -205,9 +215,9 @@ test("a tile past the 32 KiB ceiling is REFUSED at encode time, not discovered b
 test("decoded heights track the full-resolution granule inside the stated bounds", async (t) => {
   const harness = await harnessFor(t);
   const address = { x: X0 + 3, y: Y0 + 3 };
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
-    inputs: [jsonFrame("plan", { ...planBase, ...address }), frame("dem", GRANULE)],
+    inputs: [typedFrame("plan", { ...planBase, ...address }), frame("dem", GRANULE)],
   });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const dtt = decodeDtt(splitStream(response.outputs.find((o) => o.portId === "records").payload)[0]);

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.geonames-source",
   "name": "Gazetteer Named Place Source Nodes",
-  "version": "0.1.0",
-  "description": "The PURE half of the GeoNames gazetteer lane: it decodes a gazetteer dump into $GNP records and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations. Every byte it decodes was fetched by com.digitalarsenal.hostcap.http-request and every record it emits is persisted by com.digitalarsenal.hostcap.storage-ingest; the scheduling, chunking and resume decisions live in the sibling com.digitalarsenal.data-source.geonames-ingest, exactly as cell-tower-source and cell-tower-ingest are split. The seed edition ships as a ZIP and there is no host unzip capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) and the archive's central directory is walked in-guest - the same vendored copy data-source/cell-tower-source already uses for the national bulk archives. $GNP requires RESOLVED admin and country NAMES beside the codes, which is why the division/country files are decoded into a lookup frame and joined at parse time rather than left to a consumer.",
+  "version": "0.2.0",
+  "description": "The PURE half of the GeoNames gazetteer lane (typed contracts 1.0: FlatBuffers only between modules, no JSON and no base64): it decodes a gazetteer dump into $GNP records and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations; its one hostcall is the builtin plugin.getConfig (SDS $PIV, ConfigEntry list) for the operator's record cap geonames_limit. Every byte it decodes was fetched by com.digitalarsenal.hostcap.http-request (an HttpResponse, HRSP) and every record it emits is persisted by com.digitalarsenal.hostcap.storage-ingest; the scheduling and resume decisions live in the sibling com.digitalarsenal.data-source.geonames-ingest, exactly as cell-tower-source and cell-tower-ingest are split. THE JOB TRAVELS AS HttpRequest.CONTEXT: one size-prefixed $GNP header record per fetch (ID = the id prefix records are minted under, NAME = the text the job decodes, SOURCE = the dataset contract every record is published under), echoed in the HttpResponse and carried on into the text frame; it replaces the JSON job frame. The seed edition ships as a ZIP and there is no host unzip capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) and the archive's central directory is walked in-guest. $GNP requires RESOLVED admin and country NAMES beside the codes, so the division/country files are inputs of parse_places and joined at parse time (the former parse_lookups method folded them into a JSON join table; no SDS record models one, so the join now happens in the one node that applies it). Run summaries, the inflate report and the tombstone list are FlowNotice (FNTC) frames.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "All four methods are single-pass transforms over the frames the flow hands them: inflate one archive member, fold three text files into a lookup table, decode tab-separated rows into records, decode tombstone rows into a list. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "All three methods are single-pass transforms over the frames the flow hands them: inflate one archive member, decode tab-separated rows (joined against the lookup files) into records, decode tombstone rows into a list. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [
@@ -24,50 +24,25 @@
       "displayName": "Assemble and inflate the fetched edition",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The run contract from geonames-ingest: which lane, which container, which member.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The run contract from geonames-ingest: which lane, which container, which member."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The raw hostcap/http-request response carrying the fetched bytes.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (module-sdk runtime type HRSP) from hostcap/http-request: STATUS, HEADERS, BODY verbatim, CONTEXT = the job ($GNP header)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The raw hostcap/http-request response carrying the fetched bytes."
+          "description": "The fetched edition as an HttpResponse, its job in CONTEXT. The job rides in the HttpResponse's CONTEXT: ONE size-prefixed $GNP header record geonames-ingest put in the request's CONTEXT and hostcap/http-request echoed - ID = the id prefix, NAME = the text the job decodes (the archive member of a .zip edition, empty = its first member), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL, DATASET_EPOCH, SOURCE_URL, SOURCE_QUERY = the file selection, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
         }
       ],
       "outputPorts": [
@@ -75,41 +50,37 @@
           "portId": "text",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-text-bytes",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The decoded gazetteer text, so no downstream node needs to know whether the edition arrived compressed.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (HRSP): the fetched response verbatim (URL, STATUS, HEADERS, CONTEXT = the job, RETRIEVED_MS) with BODY replaced by the decoded gazetteer text."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The decoded gazetteer text, so no downstream node needs to know whether the edition arrived compressed."
+          "description": "The decoded gazetteer text, so no downstream node needs to know whether the edition arrived compressed. Not pushed on a 304."
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-inflate-report-json",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Bytes in, bytes out, member name and upstream status for this assembly.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "FlowNotice (module-sdk runtime type FNTC): KIND Info REASON \"inflated\" COUNT = bytes out, or KIND Unchanged REASON \"not-modified\" on a 304; ITEMS container=, member=, bytes_in=, bytes_out=, status=; SOURCE_NAME = the dataset, AT_MS = its epoch."
             }
           ],
           "minStreams": 1,
@@ -118,133 +89,7 @@
           "description": "Bytes in, bytes out, member name and upstream status for this assembly."
         }
       ],
-      "description": "Turns the fetched body into plain text. container=\"zip\" walks the archive's CENTRAL DIRECTORY (never the local header, which carries zeroes under a data descriptor and would inflate to an empty gazetteer) and inflates the named member, or the first member when none is named; container=\"plain\" passes the body through, which is what the daily modifications/deletes and the three lookup files need. A non-2xx status and a short inflate are both REFUSED rather than decoded to a partial answer: an empty edition and a failed fetch must never be the same observation. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
-      "maxBatch": 1,
-      "drainPolicy": "single-shot"
-    },
-    {
-      "methodId": "parse_lookups",
-      "displayName": "Fold the division and country files into a lookup table",
-      "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The run contract from geonames-ingest.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The run contract from geonames-ingest."
-        },
-        {
-          "portId": "admin1",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-hostcap-http-response-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The first-order administrative division file, as fetched.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The first-order administrative division file, as fetched."
-        },
-        {
-          "portId": "admin2",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-hostcap-http-response-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The second-order administrative division file, as fetched.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The second-order administrative division file, as fetched."
-        },
-        {
-          "portId": "country",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-hostcap-http-response-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The country information file, as fetched.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The country information file, as fetched."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "tables",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-lookup-tables-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Code-to-name tables for admin1, admin2 and country, plus the row counts they were built from.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Code-to-name tables for admin1, admin2 and country, plus the row counts they were built from."
-        }
-      ],
-      "description": "$GNP carries a RESOLVED NAME beside every administrative and country code, 'so a consumer need not hold the division tables to render a place'. The gazetteer publishes those names in three separate plain-text files, so they are folded here into one lookup frame that parse_places joins against. A file the flow did not fetch simply contributes nothing and the affected places carry their codes with the name left UNSET - a missing name is recoverable, a wrong one is not. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Turns the fetched body into plain text. A job whose SOURCE_QUERY names a .zip walks the archive's CENTRAL DIRECTORY (never the local header, which carries zeroes under a data descriptor and would inflate to an empty gazetteer) and inflates the member the job's NAME names, or the first member when it names none; any other job (or a response with no job) passes the body through, which is what the daily modifications/deletes need. A 304 pushes no text and reports KIND Unchanged (the same-data ledger paying off). A non-2xx status, a fetch that failed outright (STATUS 0) and a short inflate are all REFUSED rather than decoded to a partial answer: an empty edition and a failed fetch must never be the same observation. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -253,73 +98,88 @@
       "displayName": "Decode geoname rows into $GNP records",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The run contract carrying the dataset identity, epoch and licence every record must be published under.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The run contract carrying the dataset identity, epoch and licence every record must be published under."
-        },
-        {
           "portId": "text",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-text-bytes",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The decoded 19-column tab-separated gazetteer text.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (HRSP) from inflate: BODY = the decoded 19-column tab-separated gazetteer text, CONTEXT = the job ($GNP header)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The decoded 19-column tab-separated gazetteer text."
+          "description": "The decoded gazetteer text with its job. The job rides in the HttpResponse's CONTEXT: ONE size-prefixed $GNP header record geonames-ingest put in the request's CONTEXT and hostcap/http-request echoed - ID = the id prefix, NAME = the text the job decodes (the archive member of a .zip edition, empty = its first member), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL, DATASET_EPOCH, SOURCE_URL, SOURCE_QUERY = the file selection, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
         },
         {
-          "portId": "tables",
+          "portId": "admin1",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-lookup-tables-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The lookup tables from parse_lookups. Absent means codes without resolved names, never a wrong name.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (HRSP): the first-order administrative division file (admin1CodesASCII.txt) as fetched; Content-Length, when the origin stated it, must match the BODY."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The lookup tables from parse_lookups. Absent means codes without resolved names, never a wrong name."
+          "description": "The first-order administrative division file (admin1CodesASCII.txt), as fetched. Optional: a file the flow did not fetch contributes nothing and the affected places carry their codes with the name UNSET."
+        },
+        {
+          "portId": "admin2",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP): the second-order administrative division file (admin2Codes.txt) as fetched; Content-Length, when the origin stated it, must match the BODY."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The second-order administrative division file (admin2Codes.txt), as fetched. Optional: a file the flow did not fetch contributes nothing and the affected places carry their codes with the name UNSET."
+        },
+        {
+          "portId": "country",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP): the country information file (countryInfo.txt) as fetched; Content-Length, when the origin stated it, must match the BODY."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The country information file (countryInfo.txt), as fetched. Optional: a file the flow did not fetch contributes nothing and the affected places carry their codes with the name UNSET."
         }
       ],
       "outputPorts": [
@@ -327,7 +187,7 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-gnp-records",
+              "setId": "sds-gnp",
               "allowedTypes": [
                 {
                   "schemaName": "GNP.fbs",
@@ -348,27 +208,25 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-decision-json",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Run summary: rows in, records out, each skip reason counted, and whether a cap cropped the answer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "FlowNotice (FNTC): KIND Info, REASON \"places-decoded\" (or \"places-cropped\" when the cap cropped the answer), COUNT = records out, SOURCE_NAME = the dataset, AT_MS = its epoch, ITEMS lane=, rows_in=, records_out=, skipped_short_row=, skipped_no_identity=, skipped_out_of_range=, truncated=, dataset_id=, dataset_epoch=, retrieved_at=, admin1_resolved=, admin2_resolved=, countries_resolved=."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "Run summary: rows in, records out, each skip reason counted, and whether a cap cropped the answer."
+          "description": "Run summary: rows in, records out, each skip reason counted, and whether the cap cropped the answer."
         }
       ],
-      "description": "Decodes the 19-column geoname row shape into $GNP. The SEED and the DAILY DELTA use this one decoder because modifications-YYYY-MM-DD.txt is a file of FULL geoname rows (verified live 2026-08-15), so a modification is an upsert of exactly the record the seed would have produced and there is no second record shape to keep in step. A job that cannot state DATASET_ID, DATASET_EPOCH and LICENSE is REFUSED, never defaulted: a place published under a guessed epoch is comparable to the wrong bytes. A position outside the WGS 84 domain is DROPPED and counted, never clamped, because a clamped place is a place in the wrong location. Columns the gazetteer leaves empty are left UNSET rather than zeroed, which is what keeps 'no elevation published' distinguishable from 'an elevation of zero'. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Decodes the 19-column geoname row shape into $GNP, joining the RESOLVED division and country names from the lookup files on the CC.A1 / CC.A1.A2 / CC keys ($GNP carries a resolved NAME beside every administrative and country code, 'so a consumer need not hold the division tables to render a place'; a lookup miss leaves the name UNSET - a missing name is recoverable, a wrong one is not; a lookup body shorter than its declared Content-Length is refused as lookup-truncated before a row is folded in). The SEED and the DAILY DELTA use this one decoder because modifications-YYYY-MM-DD.txt is a file of FULL geoname rows (verified live 2026-08-15). A job that cannot state DATASET_ID, DATASET_EPOCH and LICENSE is REFUSED (incomplete-dataset-contract), never defaulted: a place published under a guessed epoch is comparable to the wrong bytes. A position outside the WGS 84 domain is DROPPED and counted, never clamped. Columns the gazetteer leaves empty are left UNSET rather than zeroed. RETRIEVED_AT is stamped at decode. Node config geonames_limit (plugin.getConfig; 0 / absent = no cap) crops the record count and the run summary says so. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -377,50 +235,25 @@
       "displayName": "Decode the daily deletes file into tombstones",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The run contract from geonames-ingest.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The run contract from geonames-ingest."
-        },
-        {
           "portId": "text",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-text-bytes",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The decoded deletes text: geonameid TAB name TAB reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (HRSP) from inflate: BODY = the deletes text (geonameid TAB name TAB reason), CONTEXT = the job ($GNP header; its ID is the id prefix)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The decoded deletes text: geonameid TAB name TAB reason."
+          "description": "The decoded deletes text with its job."
         }
       ],
       "outputPorts": [
@@ -428,27 +261,25 @@
           "portId": "tombstones",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-tombstones-json",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The tombstone list with each id's verbatim removal reason, plus the rows-in and skipped counts.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "FlowNotice (FNTC): KIND Info, REASON \"tombstones\", COUNT = tombstones, SOURCE_NAME = the dataset, AT_MS = its epoch, ITEMS one per tombstone \"<record ID>\\t<name>\\t<reason>\" (record ID = <prefix>:<geonameid>, the ID the stored place carries; reason verbatim). When rows were refused, a second FlowNotice REASON \"deletes-rows-skipped\" COUNT = those rows, ITEMS rows_in=."
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 2,
           "required": true,
-          "description": "The tombstone list with each id's verbatim removal reason, plus the rows-in and skipped counts."
+          "description": "The tombstone list with each id's verbatim removal reason, plus the refused-row count."
         }
       ],
-      "description": "Decodes deletes-YYYY-MM-DD.txt (three tab-separated columns, verified live 2026-08-15) into a tombstone list, carrying each removal REASON verbatim because 'duplicate' and 'not a real place' are different facts about the same id. A row whose first column is not a decimal id is skipped and counted - the gazetteer serves an HTML 404 body for a day it no longer retains, and decoding that into tombstones is the exact failure this guard exists for. THIS EMITS A LIST, NOT A DELETION: no host capability removes a stored row (storage-ingest offers ingest only; flatsql-query is read-only) and inventing one would be a new host capability this lane may not add, so the list leaves the flow on its own port and the durable delete lane is recorded as a gap rather than faked. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Decodes deletes-YYYY-MM-DD.txt (three tab-separated columns, verified live 2026-08-15) into a tombstone list, carrying each removal REASON verbatim because 'duplicate' and 'not a real place' are different facts about the same id. A row whose first column is not a decimal id is skipped and counted - the gazetteer serves an HTML 404 body for a day it no longer retains, and decoding that into tombstones is the exact failure this guard exists for. THIS EMITS A LIST, NOT A DELETION: no host capability removes a stored row (storage-ingest offers ingest only; flatsql-query is read-only) and inventing one would be a new host capability this lane may not add, so the list leaves the flow on its own port as a FlowNotice (no SDS record models a gazetteer tombstone) and the durable delete lane is recorded as a gap rather than faked. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
@@ -461,5 +292,12 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "schemasUsed": [
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP"
+    }
+  ]
 }

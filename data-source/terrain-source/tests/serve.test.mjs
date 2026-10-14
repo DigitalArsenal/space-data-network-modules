@@ -14,7 +14,23 @@ import zlib from "node:zlib";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
 
-import { buildGeoTiff, decodeDtt, decodeQuantizedMesh, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  decodeDtt,
+  decodeQuantizedMesh,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  FSO_LIB,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -30,33 +46,24 @@ const CONFIG = {
   terrain_version: "1.0.0",
 };
 
-function frame(portId, payload) {
-  const bytes =
-    typeof payload === "string"
-      ? encoder.encode(payload)
-      : payload instanceof Uint8Array
-        ? payload
-        : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-}
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 async function invoke(t, methodId, inputs, config = CONFIG) {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   t.after(() => harness.destroy());
-  return harness.invoke({ methodId, inputs });
+  return invokeTyped(harness, { methodId, inputs });
 }
 
 function outputsByPort(response) {
@@ -77,6 +84,35 @@ const requestFrame = (path, { method = "GET", headers = {}, query = "" } = {}) =
   payload: encodeHttpRequest({ method, path, query, headers }),
 });
 
+// ── THE SERVE CONTEXT ON THE TYPED WIRE ─────────────────────────────────────
+//
+// Typed contracts 1.0: route forwards the request ITSELF ($HTQ) to respond, and respond re-derives the address, the
+// conditional state and what a miss there means from that request and the mount's config - with route's own
+// functions. So a context these tests used to spell out as JSON ({level, x, y, ifNoneMatch, acceptsGzip,
+// insideAvailability, synthWater, maxLevel}) is now the request for that address plus the config that makes those
+// decisions: availability that does (or does not) cover the address, the depth, the synthesized-ocean floor.
+function contextRequest({ level, x, y, ifNoneMatch = "", acceptsGzip = true }) {
+  const headers = {};
+  if (ifNoneMatch) headers["if-none-match"] = ifNoneMatch;
+  if (!acceptsGzip) headers["accept-encoding"] = "identity";
+  return { ...requestFrame(`/api/v1/terrain/${level}/${x}/${y}.terrain`, { headers }), portId: "context" };
+}
+function contextConfig({ tilesetId = "spaceaware-terrain", level, x, y, insideAvailability = false, synthWater = false, maxLevel }) {
+  const available = [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]];
+  if (insideAvailability) {
+    while (available.length < level) available.push([]);
+    available[level] = [{ startX: x, startY: y, endX: x, endY: y }];
+  }
+  const config = {
+    ...CONFIG,
+    terrain_tileset_id: tilesetId,
+    terrain_maxzoom: maxLevel ?? CONFIG.terrain_maxzoom,
+    terrain_available: available,
+  };
+  if (synthWater) config.terrain_ocean_synth_min_level = 0;
+  return config;
+}
+
 // One stored $DTT record, produced by the module's own encoder: [u32 len]
 // [plain $DTT] — exactly the stream framing tile emits and storage ingests.
 async function storedRecordStream(t) {
@@ -91,7 +127,7 @@ async function storedRecordStream(t) {
   });
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         level: 8,
         x: 271,
@@ -106,7 +142,7 @@ async function storedRecordStream(t) {
           license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
         },
       }),
-      jsonFrame("dem", { status: 200, headers: {}, bodyB64: Buffer.from(tiff).toString("base64") }),
+      granuleFrame("dem", tiff, 200),
     ]),
   );
   // The report names the density the adaptive search settled on. Tests read
@@ -116,7 +152,7 @@ async function storedRecordStream(t) {
   // plane, so the coarsest candidate is exact and the tile is 5x5 — which is
   // the feature working, not a defect, and a test that hard-coded 33 would be
   // asserting the absence of the feature.
-  const report = JSON.parse(decoder.decode(outputs.get("report")));
+  const report = decodeTileReport(outputs.get("report"));
   const stream = Buffer.from(outputs.get("records"));
   stream.shippedGrid = report.tiles[0].gridSize;
   return stream;
@@ -135,7 +171,8 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const outputs = new Map(response.outputs.map((o) => [o.portId, o.payload]));
   assert.deepEqual([...outputs.keys()].sort(), ["context", "query"]);
-  const query = asJson(outputs.get("query"));
+  const query = decodeFsoQuery(outputs.get("query"));
+  assert.equal(query.operation, FSO_LIB.flatSqlNodeOperation.QUERY_RECORDS);
   assert.equal(
     query.sql,
     "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? ORDER BY _rowid DESC LIMIT 1",
@@ -146,30 +183,10 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
     { t: "i64", v: 271 },
     { t: "i64", v: 192 },
   ]);
-  const context = asJson(outputs.get("context"));
-  assert.deepEqual(context, {
-    tilesetId: "spaceaware-terrain",
-    level: 8,
-    x: 271,
-    y: 192,
-    ifNoneMatch: 'W/"probe"',
-    // Content negotiation is decided where the request headers are, and
-    // travels with the address: respond never sees the raw request.
-    acceptsGzip: true,
-    // The miss verdict travels WITH the address: route holds the configured
-    // availability index, respond holds the store answer, and only the pair
-    // decides whether a miss is normal traffic or a broken promise.
-    insideAvailability: false,
-    // ...and whether a synthesized tile may claim WATER travels with it too.
-    // Absent terrain_ocean_synth_min_level no level is authoritative, so the
-    // answer is always false and no fabricated ocean can reach a client.
-    synthWater: false,
-    // The tileset's own DEPTH, so respond() can bound the cacheable-404 key
-    // family by the pyramid instead of by a constant. See "a 404 is publicly
-    // cacheable only INSIDE the tileset's own depth".
-    maxLevel: 8,
-    synthGridSize: 65,
-  });
+  // The serve context is the request itself, verbatim: respond re-derives the address, the client's If-None-Match,
+  // the negotiation and the miss verdict from it and the same config, with route's own functions.
+  const sent = requestFrame("/api/v1/terrain/8/271/192.terrain", { headers: { "if-none-match": 'W/"probe"' } });
+  assert.deepEqual(Uint8Array.from(outputs.get("context")), Uint8Array.from(sent.payload));
 });
 
 test("route turns layer.json into the config-derived layer plan", async (t) => {
@@ -177,11 +194,8 @@ test("route turns layer.json into the config-derived layer plan", async (t) => {
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   assert.equal(response.outputs.length, 1);
   assert.equal(response.outputs[0].portId, "layer_plan");
-  const plan = asJson(response.outputs[0].payload);
-  assert.equal(plan.tilesetId, "spaceaware-terrain");
-  assert.equal(plan.maxzoom, 8);
-  assert.deepEqual(plan.available, CONFIG.terrain_available, "availability rides verbatim");
-  assert.equal(plan.attribution, "test attribution");
+  // The layer plan is the request itself; layer_json composes the body from the same config.
+  assert.deepEqual(Uint8Array.from(response.outputs[0].payload), Uint8Array.from(requestFrame("/api/v1/terrain/layer.json").payload));
 
   // …and layer_json accepts exactly that plan.
   const layer = await invoke(t, "layer_json", [frame("plan", response.outputs[0].payload)]);
@@ -354,7 +368,7 @@ test("a 404 is publicly cacheable only when the request named a real address", a
   const context = routed.outputs.find((o) => o.portId === "context");
   assert.ok(context, "a real address is planned, not refused at the parser");
   const responded = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(4)),
+    ...storeAnswer(new Uint8Array(4)),
     frame("context", context.payload),
   ]);
   const miss = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
@@ -368,10 +382,12 @@ test("a 404 is publicly cacheable only when the request named a real address", a
 
 test("route without configured availability defaults to the two level-0 roots only", async (t) => {
   const response = await invoke(t, "route", [requestFrame("/api/v1/terrain/layer.json")], {});
-  const plan = asJson(response.outputs[0].payload);
-  assert.equal(plan.tilesetId, "spaceaware-terrain");
-  assert.equal(plan.maxzoom, 0, "no config = a pyramid of exactly the roots");
-  assert.deepEqual(plan.available, [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]]);
+  const layer = await invoke(t, "layer_json", [frame("plan", response.outputs[0].payload)], {});
+  const http = decodeHttpResponse(new Uint8Array(layer.outputs[0].payload));
+  const body = JSON.parse(zlib.gunzipSync(Buffer.from(http.body)).toString("utf8"));
+  assert.equal(body.name, "spaceaware-terrain");
+  assert.equal(body.maxzoom, 0, "no config = a pyramid of exactly the roots");
+  assert.deepEqual(body.available, [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]]);
 });
 
 test("route answers unknown paths with a no-store 404 and bad verbs with 405", async (t) => {
@@ -506,9 +522,12 @@ test("availability is the CLIENT's question: max level at the tile centre", asyn
     ],
   };
   const inside = async (path) => {
+    // An empty store at the address: INSIDE the published availability the lane synthesizes (200), outside it 404s.
     const response = await invoke(t, "route", [requestFrame(path)], config);
     const outputs = outputsByPort(response);
-    return asJson(outputs.get("context")).insideAvailability;
+    const responded = await invoke(t, "respond", [...storeAnswer(new Uint8Array(4)), frame("context", outputs.get("context"))], config);
+    const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+    return http.status === 200 && Boolean(http.headers.find((h) => h.name === "x-terrain-synthesized"));
   };
   assert.equal(await inside("/api/v1/terrain/8/271/192.terrain"), true, "the declared level");
   assert.equal(await inside("/api/v1/terrain/7/135/96.terrain"), true, "an ancestor at z7");
@@ -535,21 +554,24 @@ test("the 404 body does not track the request: reflection is bounded", async (t)
 });
 
 test("an over-long If-None-Match is dropped at the door, never carried", async (t) => {
-  // Every ETag this module issues is a quoted sha2-256 multihash (71 bytes), so
-  // a longer value cannot match one; carrying it across two guest invokes and a
-  // control frame buys nothing and costs an allocation per request.
-  const response = await invoke(t, "route", [
-    requestFrame("/api/v1/terrain/8/271/192.terrain", {
-      headers: { "if-none-match": `"${"9".repeat(100_000)}"` },
-    }),
-  ]);
-  const context = asJson(outputsByPort(response).get("context"));
-  assert.equal(context.ifNoneMatch, "", "dropped, which degrades to a 200");
-  // A real one still rides.
-  const ok = await invoke(t, "route", [
-    requestFrame("/api/v1/terrain/8/271/192.terrain", { headers: { "if-none-match": '"1220ab"' } }),
-  ]);
-  assert.equal(asJson(outputsByPort(ok).get("context")).ifNoneMatch, '"1220ab"');
+  // Every ETag this module issues is a quoted sha2-256 multihash (71 bytes), so a longer value cannot match one;
+  // carrying it buys nothing and costs an allocation per request. It is dropped where the request is read, which
+  // degrades to a 200; a real tag still revalidates to 304.
+  const stream = await storedRecordStream(t);
+  const serve = async (inm) => {
+    const routed = await invoke(t, "route", [
+      requestFrame("/api/v1/terrain/8/271/192.terrain", { headers: { "if-none-match": inm } }),
+    ]);
+    const responded = await invoke(t, "respond", [
+      ...storeAnswer(new Uint8Array(stream)),
+      frame("context", outputsByPort(routed).get("context")),
+    ]);
+    return decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+  };
+  const long = await serve(`"${"9".repeat(100_000)}"`);
+  assert.equal(long.status, 200, "dropped, which degrades to a 200");
+  const etag = long.headers.find((h) => h.name === "etag")?.value;
+  assert.equal((await serve(etag)).status, 304, "a real one still rides");
 });
 
 // ---------------------------------------------------------------------------
@@ -559,9 +581,9 @@ test("an over-long If-None-Match is dropped at the door, never carried", async (
 test("respond serves the stored record verbatim with record-stated headers", async (t) => {
   const stream = await storedRecordStream(t);
   const response = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }),
-  ]);
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }),
+  ], contextConfig({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }));
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
   assert.equal(http.status, 200);
@@ -590,9 +612,9 @@ test("respond serves the stored record verbatim with record-stated headers", asy
 
   // …and a conditional request with the served etag answers 304, bodiless.
   const conditional = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: etag }),
-  ]);
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: etag }),
+  ], contextConfig({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: etag }));
   const notModified = decodeHttpResponse(new Uint8Array(conditional.outputs[0].payload));
   assert.equal(notModified.status, 304);
   assert.equal(notModified.body.length, 0);
@@ -613,10 +635,10 @@ test("the encoding is NEGOTIATED, and each representation carries its own tag", 
     const routed = await invoke(t, "route", [
       requestFrame("/api/v1/terrain/8/271/192.terrain", { headers }),
     ]);
-    const context = decoder.decode(outputsByPort(routed).get("context"));
+    const context = outputsByPort(routed).get("context");
     const response = await invoke(t, "respond", [
-      frame("stream", new Uint8Array(stream)),
-      frame("context", encoder.encode(context)),
+      ...storeAnswer(new Uint8Array(stream)),
+      frame("context", context),
     ]);
     const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
     return { http, headerOf: (n) => http.headers.find((h) => h.name === n)?.value };
@@ -671,10 +693,10 @@ test("the encoding is NEGOTIATED, and each representation carries its own tag", 
 test("respond answers an empty stream with a cheap cacheable 404, never an error", async (t) => {
   // The flatsql stream for zero rows: nothing but alignment padding.
   const response = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(4)),
+    ...storeAnswer(new Uint8Array(4)),
     // maxLevel is what makes the miss PUBLICLY CACHEABLE: the level has to be
     // inside the tileset's own depth. route() always states it.
-    jsonFrame("context", {
+    contextRequest({
       tilesetId: "spaceaware-terrain",
       level: 12,
       x: 0,
@@ -682,7 +704,14 @@ test("respond answers an empty stream with a cheap cacheable 404, never an error
       ifNoneMatch: "",
       maxLevel: 13,
     }),
-  ]);
+  ], contextConfig({
+      tilesetId: "spaceaware-terrain",
+      level: 12,
+      x: 0,
+      y: 0,
+      ifNoneMatch: "",
+      maxLevel: 13,
+    }));
   assert.equal(response.statusCode, 0, "an unpublished tile is normal traffic");
   const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
   assert.equal(http.status, 404);
@@ -694,10 +723,8 @@ test("respond answers an empty stream with a cheap cacheable 404, never an error
   // And the SAME address in a context that does not state the depth fails
   // CLOSED: a context that cannot say how deep the pyramid is cannot show the
   // address is inside it, so the miss is not parked in a public cache.
-  const undeclared = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(4)),
-    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
-  ]);
+  // (Typed lane: a context that cannot be read - here, none at all - names no address the tileset contains.)
+  const undeclared = await invoke(t, "respond", [...storeAnswer(new Uint8Array(4))]);
   assert.equal(
     decodeHttpResponse(new Uint8Array(undeclared.outputs[0].payload)).headers.find(
       (h) => h.name === "cache-control",
@@ -710,7 +737,7 @@ test("respond refuses a stream frame that is not a $DTT record", async (t) => {
   const garbage = Buffer.alloc(24);
   garbage.writeUInt32LE(20, 0); // says 20 bytes of record follow
   garbage.write("NOT A FLATBUFFER!!!", 4, "latin1");
-  const response = await invoke(t, "respond", [frame("stream", new Uint8Array(garbage))]);
+  const response = await invoke(t, "respond", [...storeAnswer(new Uint8Array(garbage))]);
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "invalid-dtt-frame");
 });
@@ -744,8 +771,8 @@ test("respond REFUSES to serve a record labelled with another address", async (t
   // Same stream, a context asking for a DIFFERENT tile — the shape a
   // cross-batch ingest or a stale-plan re-cut produces.
   const response = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", {
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({
       tilesetId: "spaceaware-terrain",
       level: 11,
       x: 2155,
@@ -757,7 +784,18 @@ test("respond REFUSES to serve a record labelled with another address", async (t
       // and the diagnostic detail is deliberately withheld.
       maxLevel: 13,
     }),
-  ]);
+  ], contextConfig({
+      tilesetId: "spaceaware-terrain",
+      level: 11,
+      x: 2155,
+      y: 1530,
+      ifNoneMatch: "",
+      insideAvailability: false,
+      // route() always states the tileset depth; a context standing in for its
+      // output states it too, or the miss fails CLOSED (no-store, fixed body)
+      // and the diagnostic detail is deliberately withheld.
+      maxLevel: 13,
+    }));
   assert.equal(response.statusCode, 0, "a mislabelled record is not a crash; it is a miss");
   const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
   assert.equal(http.status, 404, "the other tile's bytes are NOT served under this address");
@@ -772,9 +810,9 @@ test("respond REFUSES to serve a record labelled with another address", async (t
   // And the control: the SAME stream under its OWN address still serves 200,
   // so the check refuses foreign records rather than everything.
   const own = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }),
-  ]);
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }),
+  ], contextConfig({ tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }));
   assert.equal(
     decodeHttpResponse(new Uint8Array(own.outputs[0].payload)).status,
     200,
@@ -785,8 +823,8 @@ test("respond REFUSES to serve a record labelled with another address", async (t
 test("a foreign TILESET is refused the same way as a foreign address", async (t) => {
   const stream = await storedRecordStream(t);
   const response = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", {
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({
       tilesetId: "some-other-tileset",
       level: 8,
       x: 271,
@@ -794,7 +832,14 @@ test("a foreign TILESET is refused the same way as a foreign address", async (t)
       ifNoneMatch: "",
       insideAvailability: false,
     }),
-  ]);
+  ], contextConfig({
+      tilesetId: "some-other-tileset",
+      level: 8,
+      x: 271,
+      y: 192,
+      ifNoneMatch: "",
+      insideAvailability: false,
+    }));
   assert.equal(
     decodeHttpResponse(new Uint8Array(response.outputs[0].payload)).status,
     404,
@@ -809,8 +854,8 @@ test("a mislabelled record inside availability SYNTHESIZES rather than serving t
   // the tileset promised, never another tile's terrain.
   const stream = await storedRecordStream(t);
   const response = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(stream)),
-    jsonFrame("context", {
+    ...storeAnswer(new Uint8Array(stream)),
+    contextRequest({
       tilesetId: "spaceaware-terrain",
       level: 11,
       x: 2155,
@@ -821,7 +866,17 @@ test("a mislabelled record inside availability SYNTHESIZES rather than serving t
       synthGridSize: 65,
       acceptsGzip: true,
     }),
-  ]);
+  ], contextConfig({
+      tilesetId: "spaceaware-terrain",
+      level: 11,
+      x: 2155,
+      y: 1530,
+      ifNoneMatch: "",
+      insideAvailability: true,
+      synthWater: false,
+      synthGridSize: 65,
+      acceptsGzip: true,
+    }));
   const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
   assert.equal(http.status, 200);
   assert.equal(
@@ -841,9 +896,9 @@ test("every JSON error carries nosniff and an explicit cache policy", async (t) 
     // A 404 from respond with an empty stream…
     async () =>
       await invoke(t, "respond", [
-        frame("stream", new Uint8Array(4)),
-        jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
-      ]),
+        ...storeAnswer(new Uint8Array(4)),
+        contextRequest({ tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
+      ], contextConfig({ tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" })),
     // …and the reflecting 404s route emits for junk paths, in the spellings
     // that actually put attacker bytes in the body.
     async () => await invoke(t, "route", [requestFrame("/api/v1/terrain/<script>alert(1)</script>")]),
@@ -886,7 +941,7 @@ test("a 404 is publicly cacheable only INSIDE the tileset's own depth", async (t
       return { status: http.status, cc: http.headers.find((h) => h.name === "cache-control")?.value };
     }
     const responded = await invoke(t, "respond", [
-      frame("stream", new Uint8Array(4)),
+      ...storeAnswer(new Uint8Array(4)),
       frame("context", context.payload),
     ], config);
     const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
@@ -920,7 +975,7 @@ test("a 404 is publicly cacheable only INSIDE the tileset's own depth", async (t
   const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/11/3000/1540.terrain")], shallow);
   const context = routed.outputs.find((o) => o.portId === "context");
   const responded = await invoke(t, "respond", [
-    frame("stream", new Uint8Array(4)),
+    ...storeAnswer(new Uint8Array(4)),
     frame("context", context.payload),
   ], shallow);
   const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));

@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/terrain-source",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Terrain DEM tiling module: decodes open DEM source responses, emits terrain tile records with water-mask channel. Pure transform; scheduling lives in the sibling terrain-ingest module.",
@@ -20,7 +20,7 @@
   ],
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "space-data-module-sdk": "0.8.25",
+    "space-data-module-sdk": "0.9.2",
     "spacedatastandards.org": "^1.196.0"
   }
 }

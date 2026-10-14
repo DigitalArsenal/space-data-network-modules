@@ -257,12 +257,9 @@ export function buildOversizedTiffHeader({
 
 // hostcap/http-request responseWire "raw-body-v1": "$HRB", little-endian
 // status, body verbatim.
+// A granule as hostcap/http-request hands it to the encoder (typed contracts 1.0): an HttpResponse (HRSP), BODY verbatim.
 export function rawBodyFrameBytes(body, status = 200) {
-  const out = Buffer.alloc(8 + body.length);
-  out.write("$HRB", 0, "latin1");
-  out.writeUInt32LE(status >>> 0, 4);
-  Buffer.from(body).copy(out, 8);
-  return out;
+  return Buffer.from(httpResponseBytes(body, status));
 }
 
 // The water-body granule the mask lane classifies: single-band uint8, source
@@ -486,3 +483,8 @@ export function geodeticToEcef(latDeg, lonDeg, height) {
     z: (n * (1 - e2) + height) * Math.sin(lat),
   };
 }
+
+// The typed frames (typed contracts 1.0) live beside the module so the flow tests and tools/terrain-pyramid build the
+// same bytes; re-exported here for the module's own tests.
+export * from "../typed-frames.mjs";
+import { httpResponseBytes } from "../typed-frames.mjs";
