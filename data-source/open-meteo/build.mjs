@@ -16,13 +16,14 @@ if (!schema.includes('TIME_BASIS: wxfTimeBasis') || !schema.includes('OpenAttrib
 }
 process.env.SPACE_DATA_STANDARDS_ROOT=standards;
 const header=await readSdsHeader('WXF',import.meta.url);
+// nlohmann/json parses the UPSTREAM Open-Meteo body (a foreign wire format); nothing module-to-module is JSON.
 const json=await fs.readFile(path.resolve(root,'../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'),'utf8');
 const sha=await fs.readFile(path.resolve(root,'../../files/orbit-products/src/sha256.hpp'),'utf8');
 const source=await fs.readFile(path.join(root,'src/open_meteo.cpp'),'utf8');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
 const outputPath=path.join(root,'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath),{recursive:true});
-const result=await compileModuleFromSource({manifest,sourceCode:`${header}\n${json}\n${sha}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential'});
+const result=await compileModuleFromSource({manifest,sourceCode:`${header}\n${json}\n${sha}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential',allowUndefinedImports:true});
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 console.log(`Built ${outputPath}`);
 

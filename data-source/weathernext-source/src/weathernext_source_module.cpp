@@ -1,16 +1,30 @@
 /*
- * data-source/weathernext-source.
+ * data-source/weathernext-source (typed contracts 1.0).
  *
  * Request-builder flow nodes for a machine-learned global ensemble weather
  * forecast source served as Zarr v3 objects from an allow-listed cloud
- * bucket. A module cron TIMER tick enters on "tick"; the methods emit the
- * hostcap/http-request request JSON plus the matching parser "job" JSON.
- * EVERYTHING is node CONFIG (the builtin plugin.getConfig hostcall — the
- * host's flow-service config block), never host code:
+ * bucket. A module cron TIMER tick (TimerTick, TICK; payload not read) enters
+ * on "tick"; the methods emit HttpRequest (HREQ) frames for hostcap/http-request
+ * whose CONTEXT carries the parse job as ONE size-prefixed SDS record, echoed
+ * verbatim in the HttpResponse the parser reads:
+ *   - a cloud chunk: a $WXF header record (no samples) naming the field and
+ *     the chunk's tile - FIELD_ID, MODEL_CLASS/ID/VERSION, INIT_TIME_MS,
+ *     LEAD_HOURS, VALID_TIME_MS, HORIZON_HOURS, MEMBER_KIND/INDEX,
+ *     ENSEMBLE_SIZE, VARIABLE/VARIABLE_NAME (the array), GRID (the tile's
+ *     real rows and columns, padding past the declared grid edge dropped),
+ *     TILE_INDEX/TILE_COUNT, CHUNK_DTYPE, CHUNK_CODECS, ORIGIN_ID, DATASET_ID,
+ *     SOURCE_URL, LICENSE_CLASS/URL, CITATION;
+ *   - the cyclone tracks: a $TCT header record (no points, STORM_ID empty)
+ *     naming MODEL_CLASS/ID/VERSION, ENSEMBLE_SIZE, WIND_AVERAGING_PERIOD_S,
+ *     ORIGIN_ID, DATASET_ID, SOURCE_URL, LICENSE_CLASS/URL, CITATION.
+ * Skipped cycles answer one FlowNotice (FNTC, KIND Skipped, REASON
+ * live-access-disabled / cyclone-url-missing) on "status". No JSON job frames.
+ *
+ * EVERYTHING is node CONFIG (plugin.getConfig, one ModuleConfig FlatBuffer,
+ * nested values read by dotted path), never host code:
  *
  *   weathernext_live_access      false  THE live switch. false: no request,
- *                                       no job, no secrets.get, one status
- *                                       frame {"skipped":"live-access-disabled"}.
+ *                                       no secrets.get, one Skipped notice.
  *   weathernext_auth_mode        bearer none | bearer | refresh-token (reserved)
  *   weathernext_secrets_lane     gcp-weathernext
  *   weathernext_gcs_base_url     https://storage.googleapis.com/weathernext3_spatial
@@ -34,56 +48,67 @@
  *                                nlat 1801, nlon 3600, periodic_lon true
  *   weathernext_model_id         weathernext-3
  *   weathernext_model_version    ""
- *   weathernext_cyclone_url      ""     cyclone lane: {"skipped":"cyclone-url-missing"}
+ *   weathernext_cyclone_url      ""     cyclone lane: Skipped cyclone-url-missing
  *   weathernext_wind_averaging_period_s 60
  *   weathernext_http_timeout_ms  90000
- *   weathernext_provider_id      weathernext
+ *   weathernext_provider_id      weathernext (read by the parser, which tags the batch)
  *   weathernext_publish_url      ""     publish_request emits nothing
  *   weathernext_license_realtime_url / weathernext_license_historical_url
  *   weathernext_citation         ""
+ * A list value may also arrive as dotted entries (weathernext_arrays.0, ...).
  *
- * Nothing about the private bucket layout is hardcoded: anonymous reads are
- * refused (401/403), so chunk shape, codecs, dims and the store path are
- * operator-declared here and validated by size in the parser.
+ * The parser reads the padded chunk extents (weathernext_chunk_lat/lon) and
+ * the dimension order (weathernext_dims) from the same flow-service config:
+ * a $WXF header has no field for them. The tile geometry it needs otherwise
+ * (GRID, TILE_INDEX/COUNT) rides the CONTEXT, computed here.
  *
  * CREDENTIAL. In bearer mode the operator's OAuth2 access token is read from
- * the machine-bound credential store lane with secrets.get and placed ONLY on
- * the request frames (authorization header), never on a job frame, and the
- * plaintext is wiped as soon as the request JSON is built. The host injects
- * nothing. This is the ONLY node in the flow holding the secrets capability,
- * so the parser sibling stays capabilities:[] and browser-instantiable.
+ * the machine-bound credential store lane with secrets.get (SDS $PIV:
+ * SecretParams -> raw "secret") and placed ONLY in the HttpRequest HEADERS
+ * (authorization), never in a CONTEXT record, and the plaintext is wiped as
+ * soon as the requests are built. This is the ONLY node in the flow holding
+ * the secrets capability.
  *
  * LICENCE. Decided per (init, lead) by this node, which owns the clock:
- * now - valid_time >= 1 h -> "Historical" (open attribution licence), else
- * "RealTimeExperimental" (experimental real-time terms). The parser copies
- * the class into the records and the ingest meta.
+ * now - valid_time >= 1 h -> Historical (open attribution licence), else
+ * RealTimeExperimental. The parser copies the class into the records and the
+ * IngestRequest.
+ *
+ * publish_request: the storage-ingest IngestResult (INGR) + the parser's
+ * IngestRequest (INGQ) -> an HttpRequest POST to weathernext_publish_url. Its
+ * BODY stays the JSON {schema, providerId, sourceName, batchId} the node's
+ * loopback admin endpoint decodes (sdn-server internal/api/dataset_publication.go,
+ * handlePublish: json.NewDecoder with DisallowUnknownFields) - a host HTTP API
+ * body, not a module contract. A REFUSED result publishes nothing.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <optional>
+#include <string_view>
+#include <utility>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "FlowNotice_generated.h"
+#include "HttpRequest_generated.h"
+#include "IngestRequest_generated.h"
+#include "IngestResult_generated.h"
 
 namespace {
+
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 
 constexpr const char* kDefaultBaseURL = "https://storage.googleapis.com/weathernext3_spatial";
 constexpr const char* kDefaultArrays = "low_cloud_cover,medium_cloud_cover,high_cloud_cover";
@@ -95,21 +120,13 @@ constexpr const char* kDefaultDtype = "float32";
 constexpr const char* kDefaultModelID = "weathernext-3";
 constexpr const char* kDefaultMemberKind = "Member";
 constexpr const char* kDefaultSecretsLane = "gcp-weathernext";
-constexpr const char* kDefaultProviderID = "weathernext";
 constexpr const char* kDefaultRealtimeLicenseURL =
     "https://storage.googleapis.com/weathernext-public/terms-of-use.pdf";
 constexpr const char* kDefaultHistoricalLicenseURL = "https://creativecommons.org/licenses/by/4.0/";
 constexpr const char* kOriginID = "storage.googleapis.com";
-constexpr const char* kCloudSourceName = "weathernext3-clouds-0p1deg";
-constexpr const char* kCycloneSourceName = "weathernext3-cyclone-tracks";
-constexpr const char* kCycloneArchiveName = "cyclone-tracks.csv";
-constexpr const char* kModelClass = "MachineLearnedGlobalEnsemble";
+constexpr const char* kDatasetID = "weathernext3_spatial";
 constexpr long kDefaultTimeoutMs = 90000;
 constexpr int64_t kRealTimeWindowMs = 3600000;
-
-// ---------------------------------------------------------------------------
-// JSON helpers (control metadata only).
-// ---------------------------------------------------------------------------
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -118,92 +135,6 @@ std::string trim(const std::string& s) {
     while (b < e && is_ws(s[b])) b++;
     while (e > b && is_ws(s[e - 1])) e--;
     return s.substr(b, e - b);
-}
-
-size_t json_value_start(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string::npos;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string::npos;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    return i;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    const char c = json[i];
-    if (c == '"') {
-        // Tolerate a quoted number in operator config.
-        char* end = nullptr;
-        const double value = strtod(json.c_str() + i + 1, &end);
-        if (end == json.c_str() + i + 1) return false;
-        *out = value;
-        return true;
-    }
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0 || json.compare(i, 6, "\"true\"") == 0 ||
-        json.compare(i, 3, "\"1\"") == 0 || json[i] == '1') {
-        *out = true;
-        return true;
-    }
-    if (json.compare(i, 5, "false") == 0 || json.compare(i, 7, "\"false\"") == 0 ||
-        json.compare(i, 3, "\"0\"") == 0 || json[i] == '0') {
-        *out = false;
-        return true;
-    }
-    return false;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
 }
 
 std::string format_number(double v) {
@@ -235,61 +166,103 @@ std::vector<std::string> split(const std::string& text, char sep) {
     return out;
 }
 
-std::string json_string_array(const std::vector<std::string>& items) {
-    std::string out = "[";
-    for (size_t i = 0; i < items.size(); i++) {
-        if (i) out += ",";
-        out += "\"" + json_escape(items[i]) + "\"";
-    }
-    return out + "]";
-}
-
-std::string json_number_array(const std::vector<double>& items) {
-    std::string out = "[";
-    for (size_t i = 0; i < items.size(); i++) {
-        if (i) out += ",";
-        out += format_number(items[i]);
-    }
-    return out + "]";
-}
 
 // ---------------------------------------------------------------------------
-// Base64 (the http cap takes its body as bodyB64).
+// Node CONFIG: plugin.getConfig answers with one ModuleConfig FlatBuffer (MCFG)
+// on raw "config", read in place through sdm_piv::get_config(); list items are
+// read by dotted path ("weathernext_arrays.0"). A host that provides no config (or
+// fails the call) leaves every key at its compiled default. The accessors keep
+// the JSON lane's tolerance: quoted numbers, "true"/"1"/"false"/"0" switches,
+// and a number given where a list text is expected.
 // ---------------------------------------------------------------------------
 
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+struct ConfigValue {
+    R::configValueKind kind = R::configValueKind_String;
+    std::string text;
+    double number = 0;
+    bool flag = false;
+};
 
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
+class NodeConfig {
+ public:
+    static NodeConfig load() { return NodeConfig(sdm_piv::get_config()); }
+    // The list index a dotted path ends in ("key.3" -> 3).
+    static size_t index_of(const std::string& key) { return static_cast<size_t>(std::strtoull(key.c_str() + key.rfind('.') + 1, nullptr, 10)); }
+    // One value read in place from the ModuleConfig: a String, Number or Bool at a key or dotted path, or one item of a
+    // StringList / NumberList ("key.0"). A list or table itself reads as absent (callers walk "key.0", "key.1", ...).
+    std::optional<ConfigValue> find(const std::string& key) const {
+        const R::ConfigEntry* e = config_.entry(key);
+        if (!e) return std::nullopt;
+        const std::string_view name = e->KEY() ? std::string_view(e->KEY()->c_str(), e->KEY()->size()) : std::string_view();
+        const bool item = !(key == name || (key.size() > name.size() && key[key.size() - name.size() - 1] == '.' &&
+                                            std::string_view(key).substr(key.size() - name.size()) == name));
+        ConfigValue v;
+        switch (e->KIND()) {
+            case R::configValueKind_String: if (item) return std::nullopt; v.text = std::string(config_.string(key)); return v;
+            case R::configValueKind_Number: if (item) return std::nullopt; v.kind = R::configValueKind_Number; v.number = e->NUMBER_VALUE(); return v;
+            case R::configValueKind_Bool: if (item) return std::nullopt; v.kind = R::configValueKind_Bool; v.flag = e->BOOL_VALUE(); return v;
+            case R::configValueKind_StringList:
+                if (!item || !e->STRINGS() || index_of(key) >= e->STRINGS()->size()) return std::nullopt;
+                v.text = std::string(config_.string(key));
+                return v;
+            case R::configValueKind_NumberList:
+                if (!item || !e->NUMBERS() || index_of(key) >= e->NUMBERS()->size()) return std::nullopt;
+                v.kind = R::configValueKind_Number;
+                v.number = config_.number(key);
+                return v;
+            default: return std::nullopt;
+        }
     }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
+    // A value as text (a number formatted, a switch as true/false), or a list
+    // given as dotted entries joined by `sep`; empty -> fallback.
+    std::string text(const std::string& key, const char* fallback, char sep = ',') const {
+        if (const auto v = find(key)) {
+            const std::string out = text_of(*v);
+            return out.empty() ? std::string(fallback) : out;
+        }
+        std::string joined;
+        for (size_t i = 0;; i++) {
+            const auto item = find(key + "." + std::to_string(i));
+            if (!item) break;
+            if (i) joined.push_back(sep);
+            joined += text_of(*item);
+        }
+        return joined.empty() ? std::string(fallback) : joined;
     }
-    return out;
-}
+    static std::string text_of(const ConfigValue& v) {
+        if (v.kind == R::configValueKind_String) return v.text;
+        if (v.kind == R::configValueKind_Number) return format_number(v.number);
+        return v.flag ? "true" : "false";
+    }
+    double number(const std::string& key, double fallback) const {
+        const auto v = find(key);
+        if (!v) return fallback;
+        if (v->kind == R::configValueKind_Number) return v->number;
+        if (v->kind == R::configValueKind_String && !v->text.empty()) {
+            char* end = nullptr;
+            const double d = std::strtod(v->text.c_str(), &end);
+            if (end != v->text.c_str()) return d;
+        }
+        return fallback;
+    }
+    bool flag(const std::string& key, bool fallback) const {
+        const auto v = find(key);
+        if (!v) return fallback;
+        if (v->kind == R::configValueKind_Bool) return v->flag;
+        if (v->kind == R::configValueKind_Number) {
+            if (v->number == 1) return true;
+            if (v->number == 0) return false;
+            return fallback;
+        }
+        if (v->text == "true" || v->text == "1") return true;
+        if (v->text == "false" || v->text == "0") return false;
+        return fallback;
+    }
+
+ private:
+    explicit NodeConfig(sdm_piv::Config config) : config_(std::move(config)) {}
+    sdm_piv::Config config_;
+};
 
 // ---------------------------------------------------------------------------
 // Civil time (UTC; Unix milliseconds).
@@ -341,102 +314,6 @@ int64_t default_init_time_ms(int64_t now_ms) {
 }
 
 // ---------------------------------------------------------------------------
-// Hostcall wire: u32 metaLen | meta JSON | u32 segCount | (u32 len | bytes)*.
-// Response: u32 metaLen | {"ok":bool,"result":...}. Mirrors
-// space-data-module-sdk/src/host/hostcallWire.js.
-// ---------------------------------------------------------------------------
-
-void wire_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
-
-uint32_t wire_rd32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-// ⛔ THE RETURN VALUE OF THIS FUNCTION CAN CARRY A SECRET (secrets.get). It is
-// never pushed to an output port other than inside the request headers it was
-// fetched for, never logged and never returned; callers extract one field and
-// let the rest go out of scope.
-std::string host_meta(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    wire_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    if (!payload_json.empty()) {
-        std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    }
-    wire_u32le(req.data() + 4 + payload_json.size(), 0u);
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 0) return std::string();
-    std::vector<uint8_t> buf(static_cast<size_t>(len), 0);
-    sdm_host_read_response(buf.data(), len);
-    if (buf.size() < 4) return std::string();
-    const uint32_t meta_len = wire_rd32le(buf.data());
-    if (buf.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), meta_len);
-}
-
-bool host_meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// plugin.getConfig builtin hostcall: the node-config JSON for this flow
-// service (inside {"ok":true,"result":{...}}), or "{}" when the host provides
-// none. Every key is read by name, so the wrapper is harmless.
-std::string load_config() {
-    const std::string meta = host_meta("plugin.getConfig", "{}");
-    return meta.empty() ? "{}" : meta;
-}
-
-// ---------------------------------------------------------------------------
-// Config accessors.
-// ---------------------------------------------------------------------------
-
-std::string config_string(const std::string& config, const char* key, const char* fallback) {
-    std::string value;
-    if (json_string_field(config, key, &value) && !value.empty()) return value;
-    return fallback;
-}
-
-double config_number(const std::string& config, const char* key, double fallback) {
-    double v = 0;
-    if (json_number_field(config, key, &v)) return v;
-    return fallback;
-}
-
-bool config_bool(const std::string& config, const char* key, bool fallback) {
-    bool v = false;
-    if (json_bool_field(config, key, &v)) return v;
-    return fallback;
-}
-
-// ---------------------------------------------------------------------------
-// Frame IO.
-// ---------------------------------------------------------------------------
-
-const plugin_input_frame_t* frame_for(const char* port_id) {
-    const int32_t index = plugin_find_input_index(port_id, 0);
-    if (index < 0) return nullptr;
-    return plugin_get_input_frame(static_cast<uint32_t>(index));
-}
-
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_status(const char* reason) {
-    return push_json("status", std::string("{\"skipped\":\"") + reason + "\"}") < 0 ? 500 : 0;
-}
-
-// ---------------------------------------------------------------------------
 // SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
 // The compiled runtime drains a node's queue PORT-BLIND up to a budget of 64
 // while maxStreams stays declarative; a guest that read ordinal 0 of a port
@@ -470,32 +347,100 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+
+void civil_from_days(int64_t z, int* y_out, int* m_out, int* d_out) {
+    z += 719468;
+    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = static_cast<unsigned>(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const int64_t y = static_cast<int64_t>(yoe) + era * 400;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    const unsigned d = doy - (153 * mp + 2) / 5 + 1;
+    const unsigned m = mp + (mp < 10 ? 3 : -9);
+    *y_out = static_cast<int>(y + (m <= 2));
+    *m_out = static_cast<int>(m);
+    *d_out = static_cast<int>(d);
+}
+
+std::string format_iso_seconds(int64_t unix_ms) {
+    const int64_t unix_seconds = unix_ms >= 0 ? unix_ms / 1000 : (unix_ms - 999) / 1000;
+    const int64_t days = unix_seconds >= 0 ? unix_seconds / 86400 : (unix_seconds - 86399) / 86400;
+    int64_t rem = unix_seconds - days * 86400;
+    int y, m, d;
+    civil_from_days(days, &y, &m, &d);
+    const int hh = static_cast<int>(rem / 3600);
+    rem -= static_cast<int64_t>(hh) * 3600;
+    const int mm = static_cast<int>(rem / 60);
+    const int ss = static_cast<int>(rem - mm * 60);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ", y, m, d, hh, mm, ss);
+    return std::string(buf);
+}
+
 // ---------------------------------------------------------------------------
-// Auth. Returns 0 and fills *header_json (either "" or the "headers":{...}
-// fragment) or a non-zero status after plugin_set_error. The plaintext token
-// lives only inside the returned fragment.
+// Frame IO.
 // ---------------------------------------------------------------------------
-int resolve_auth_headers(const std::string& config, std::string* header_json) {
-    header_json->clear();
-    const std::string mode = config_string(config, "weathernext_auth_mode", "bearer");
+
+const plugin_input_frame_t* frame_for(const char* port_id) {
+    const int32_t index = plugin_find_input_index(port_id, 0);
+    if (index < 0) return nullptr;
+    return plugin_get_input_frame(static_cast<uint32_t>(index));
+}
+
+// The builder's bytes are zeroed once pushed: a request may carry the bearer token.
+int push_request(const char* port, flatbuffers::FlatBufferBuilder& b) {
+    const int pushed = plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(),
+                                             PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "HttpRequest", 0, 0,
+                                             b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+    std::memset(b.GetBufferPointer(), 0, b.GetSize());
+    return pushed;
+}
+
+int push_skipped(const char* schema, const char* source_name, const std::string& provider_id, const char* reason) {
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::CreateFlowNoticeDirect(b, R::flowNoticeKind_Skipped, schema, provider_id.c_str(),
+                                                           source_name, nullptr, 0, reason));
+    return plugin_push_output_ex("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(),
+                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0, b.GetBufferPointer(),
+                                 static_cast<uint32_t>(b.GetSize())) < 0
+               ? 500
+               : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Auth. Returns 0 and fills *token (empty for mode none) or a non-zero status
+// after plugin_set_error. The caller places the token only in the request
+// HEADERS and wipes it.
+// ---------------------------------------------------------------------------
+void wipe(std::string* s) {
+    std::fill(s->begin(), s->end(), '\0');
+    s->clear();
+}
+
+int resolve_auth_token(const NodeConfig& config, std::string* token) {
+    token->clear();
+    const std::string mode = config.text("weathernext_auth_mode", "bearer");
     if (mode == "none") return 0;
     if (mode == "bearer") {
-        const std::string lane = config_string(config, "weathernext_secrets_lane", kDefaultSecretsLane);
-        const std::string meta = host_meta("secrets.get", "{\"id\":\"" + json_escape(lane) + "\"}");
-        std::string token;
-        if (host_meta_ok(meta)) json_string_field(meta, "secret", &token);
-        if (token.empty()) {
+        const std::string lane = config.text("weathernext_secrets_lane", kDefaultSecretsLane);
+        A::SecretParams params{};
+        if (sdm_piv::put(params.ID, lane)) {
+            params.set_has_ID(true);
+            const auto response = sdm_piv::call("secrets.get", "SecretParams", params);
+            if (response.ok()) {
+                const std::string_view secret = response.raw("secret");
+                token->assign(secret.data(), secret.size());
+            }
+            // The response buffer holding the plaintext goes out of scope here.
+        }
+        if (token->empty()) {
             plugin_set_error("credential-unavailable",
                              ("no access token is stored in credential lane \"" + lane +
                               "\" on this node, or this module is not approved for secrets:" + lane)
                                  .c_str());
             return 403;
         }
-        *header_json = ",\"headers\":{\"authorization\":\"Bearer " + json_escape(token) + "\"}";
-        // The plaintext's lifetime ends here; only the header fragment carries
-        // it, and that travels to the http node alone.
-        std::fill(token.begin(), token.end(), '\0');
-        token.clear();
         return 0;
     }
     if (mode == "refresh-token") {
@@ -510,11 +455,6 @@ int resolve_auth_headers(const std::string& config, std::string* header_json) {
     return 400;
 }
 
-void wipe(std::string* s) {
-    std::fill(s->begin(), s->end(), '\0');
-    s->clear();
-}
-
 struct Provenance {
     std::string provider_id;
     std::string model_id;
@@ -524,40 +464,73 @@ struct Provenance {
     std::string historical_url;
 };
 
-Provenance read_provenance(const std::string& config) {
+Provenance read_provenance(const NodeConfig& config) {
     Provenance p;
-    p.provider_id = config_string(config, "weathernext_provider_id", kDefaultProviderID);
-    p.model_id = config_string(config, "weathernext_model_id", kDefaultModelID);
-    p.model_version = config_string(config, "weathernext_model_version", "");
-    p.citation = config_string(config, "weathernext_citation", "");
-    p.realtime_url = config_string(config, "weathernext_license_realtime_url", kDefaultRealtimeLicenseURL);
-    p.historical_url = config_string(config, "weathernext_license_historical_url", kDefaultHistoricalLicenseURL);
+    p.provider_id = config.text("weathernext_provider_id", "weathernext");
+    p.model_id = config.text("weathernext_model_id", kDefaultModelID);
+    p.model_version = config.text("weathernext_model_version", "");
+    p.citation = config.text("weathernext_citation", "");
+    p.realtime_url = config.text("weathernext_license_realtime_url", kDefaultRealtimeLicenseURL);
+    p.historical_url = config.text("weathernext_license_historical_url", kDefaultHistoricalLicenseURL);
     return p;
 }
 
 // now - valid >= 1 h -> Historical, else RealTimeExperimental.
 bool is_historical(int64_t now_ms, int64_t valid_ms) { return now_ms - valid_ms >= kRealTimeWindowMs; }
 
-std::string license_fragment(const Provenance& p, bool historical) {
-    return std::string(",\"license_class\":\"") + (historical ? "Historical" : "RealTimeExperimental") +
-           "\",\"license_url\":\"" + json_escape(historical ? p.historical_url : p.realtime_url) +
-           "\",\"citation\":\"" + json_escape(p.citation) + "\"";
+wxfMemberKind member_kind_for(const std::string& name) {
+    if (name == "Control") return wxfMemberKind_Control;
+    if (name == "Deterministic") return wxfMemberKind_Deterministic;
+    if (name == "Mean") return wxfMemberKind_Mean;
+    if (name == "Median") return wxfMemberKind_Median;
+    if (name == "StandardDeviation") return wxfMemberKind_StandardDeviation;
+    if (name == "Minimum") return wxfMemberKind_Minimum;
+    if (name == "Maximum") return wxfMemberKind_Maximum;
+    if (name == "Percentile") return wxfMemberKind_Percentile;
+    if (name == "ProbabilityAboveThreshold") return wxfMemberKind_ProbabilityAboveThreshold;
+    if (name == "ProbabilityBelowThreshold") return wxfMemberKind_ProbabilityBelowThreshold;
+    return wxfMemberKind_Member;
 }
 
-std::string request_json(const std::string& url, const std::string& header_json, long timeout_ms,
-                         bool raw_body) {
-    std::string out = "{\"method\":\"GET\",\"url\":\"" + json_escape(url) + "\"" + header_json +
-                      ",\"timeoutMs\":" + std::to_string(timeout_ms);
-    if (raw_body) out += ",\"responseWire\":\"raw-body-v1\"";
-    return out + "}";
+wxfVariable variable_for_array(const std::string& array) {
+    if (array == "low_cloud_cover") return wxfVariable_LowCloudCover;
+    if (array == "medium_cloud_cover") return wxfVariable_MediumCloudCover;
+    if (array == "high_cloud_cover") return wxfVariable_HighCloudCover;
+    if (array == "total_cloud_cover") return wxfVariable_TotalCloudCover;
+    return wxfVariable_Unspecified;
 }
+
+// One GET as an HttpRequest whose CONTEXT is the job record.
+void build_get(flatbuffers::FlatBufferBuilder& b, const std::string& url, const std::string& token, long timeout_ms,
+               const uint8_t* context, size_t context_size) {
+    std::vector<flatbuffers::Offset<R::Header>> headers;
+    if (!token.empty()) {
+        const std::string value = "Bearer " + token;
+        headers.push_back(R::CreateHeaderDirect(b, "authorization", value.c_str()));
+    }
+    const auto context_off = b.CreateVector(context, context_size);
+    const auto headers_off = headers.empty() ? 0 : b.CreateVector(headers);
+    const auto url_off = b.CreateString(url);
+    const auto method_off = b.CreateString("GET");
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequest(b, method_off, url_off, headers_off, 0,
+                                                       static_cast<uint32_t>(timeout_ms > 0 ? timeout_ms : 0), 0,
+                                                       context_off));
+}
+
+// The tile one chunk covers on the declared global grid (padding past its edge dropped).
+struct TileGeometry {
+    double lat0 = 0, lon0 = 0;
+    uint32_t nlat = 0, nlon = 0;
+    uint32_t tile_index = 0, tile_count = 0;
+    bool periodic_lon = false;
+};
 
 }  // namespace
 
 extern "C" {
 
-// plan: timer tick -> N chunk fetch requests + N positional parse jobs, or
-// one status frame when the cycle is skipped.
+// plan: timer tick -> N chunk GETs (HttpRequest, the chunk's $WXF header in
+// CONTEXT), or one Skipped FlowNotice when the cycle is skipped.
 int plan(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
@@ -565,12 +538,13 @@ int plan(void) {
         return 500;
     }
 
-    const std::string config = load_config();
-    if (!config_bool(config, "weathernext_live_access", false)) {
+    const NodeConfig config = NodeConfig::load();
+    const Provenance provenance = read_provenance(config);
+    if (!config.flag("weathernext_live_access", false)) {
         // No network, no secrets.get: the dev daemon and every test run here.
-        return push_status("live-access-disabled");
+        return push_skipped("WXF.fbs", "weathernext3-clouds-0p1deg", provenance.provider_id, "live-access-disabled");
     }
-    const std::string store_path = config_string(config, "weathernext_store_path", "");
+    const std::string store_path = config.text("weathernext_store_path", "");
     if (store_path.empty()) {
         plugin_set_error("store-path-missing",
                          "weathernext_live_access is true but weathernext_store_path is empty; the "
@@ -578,42 +552,41 @@ int plan(void) {
         return 400;
     }
 
-    std::string header_json;
-    const int auth_status = resolve_auth_headers(config, &header_json);
+    std::string token;
+    const int auth_status = resolve_auth_token(config, &token);
     if (auth_status != 0) return auth_status;
 
-    const std::string base_url = config_string(config, "weathernext_gcs_base_url", kDefaultBaseURL);
-    const std::vector<std::string> arrays = split(config_string(config, "weathernext_arrays", kDefaultArrays), ',');
-    const std::vector<std::string> lead_texts = split(config_string(config, "weathernext_lead_hours", kDefaultLeadHours), ',');
-    const std::vector<std::string> chunk_pairs = split(config_string(config, "weathernext_chunks", kDefaultChunks), ';');
-    const std::vector<std::string> codecs = split(config_string(config, "weathernext_codecs", kDefaultCodecs), ',');
-    const std::vector<std::string> dims = split(config_string(config, "weathernext_dims", kDefaultDims), ',');
-    const std::string dtype = config_string(config, "weathernext_dtype", kDefaultDtype);
-    const std::string member_kind = config_string(config, "weathernext_member_kind", kDefaultMemberKind);
-    const double init_index = config_number(config, "weathernext_init_index", 0);
-    const double member_index = config_number(config, "weathernext_member_index", 0);
-    const double ensemble_size = config_number(config, "weathernext_ensemble_size", 64);
-    const double horizon_hours = config_number(config, "weathernext_horizon_hours", 360);
-    const double lead_step = config_number(config, "weathernext_lead_step_hours", 1);
-    const double chunk_lat = config_number(config, "weathernext_chunk_lat", 64);
-    const double chunk_lon = config_number(config, "weathernext_chunk_lon", 64);
-    const double lat0 = config_number(config, "weathernext_grid_lat0", 90);
-    const double lon0 = config_number(config, "weathernext_grid_lon0", 0);
-    const double dlat = config_number(config, "weathernext_grid_dlat", -0.1);
-    const double dlon = config_number(config, "weathernext_grid_dlon", 0.1);
-    const double nlat = config_number(config, "weathernext_grid_nlat", 1801);
-    const double nlon = config_number(config, "weathernext_grid_nlon", 3600);
-    const bool periodic_lon = config_bool(config, "weathernext_grid_periodic_lon", true);
-    const long timeout_ms = static_cast<long>(config_number(config, "weathernext_http_timeout_ms", kDefaultTimeoutMs));
-    const Provenance provenance = read_provenance(config);
+    const std::string base_url = config.text("weathernext_gcs_base_url", kDefaultBaseURL);
+    const std::vector<std::string> arrays = split(config.text("weathernext_arrays", kDefaultArrays), ',');
+    const std::vector<std::string> lead_texts = split(config.text("weathernext_lead_hours", kDefaultLeadHours), ',');
+    const std::vector<std::string> chunk_pairs = split(config.text("weathernext_chunks", kDefaultChunks, ';'), ';');
+    const std::vector<std::string> codecs = split(config.text("weathernext_codecs", kDefaultCodecs), ',');
+    const std::vector<std::string> dims = split(config.text("weathernext_dims", kDefaultDims), ',');
+    const std::string dtype = config.text("weathernext_dtype", kDefaultDtype);
+    const std::string member_kind = config.text("weathernext_member_kind", kDefaultMemberKind);
+    const double init_index = config.number("weathernext_init_index", 0);
+    const double member_index = config.number("weathernext_member_index", 0);
+    const double ensemble_size = config.number("weathernext_ensemble_size", 64);
+    const double horizon_hours = config.number("weathernext_horizon_hours", 360);
+    const double lead_step = config.number("weathernext_lead_step_hours", 1);
+    const double chunk_lat = config.number("weathernext_chunk_lat", 64);
+    const double chunk_lon = config.number("weathernext_chunk_lon", 64);
+    const double lat0 = config.number("weathernext_grid_lat0", 90);
+    const double lon0 = config.number("weathernext_grid_lon0", 0);
+    const double dlat = config.number("weathernext_grid_dlat", -0.1);
+    const double dlon = config.number("weathernext_grid_dlon", 0.1);
+    const double nlat = config.number("weathernext_grid_nlat", 1801);
+    const double nlon = config.number("weathernext_grid_nlon", 3600);
+    const bool periodic_lon = config.flag("weathernext_grid_periodic_lon", true);
+    const long timeout_ms = static_cast<long>(config.number("weathernext_http_timeout_ms", kDefaultTimeoutMs));
 
     const int64_t now_ms = now_unix_ms();
     int64_t init_ms = 0;
     {
-        const std::string init_text = config_string(config, "weathernext_init_time", "");
+        const std::string init_text = config.text("weathernext_init_time", "");
         if (init_text.empty()) init_ms = default_init_time_ms(now_ms);
         else if (!parse_iso_ms(init_text, &init_ms)) {
-            wipe(&header_json);
+            wipe(&token);
             plugin_set_error("init-time-invalid",
                              ("weathernext_init_time \"" + init_text + "\" is not ISO 8601 UTC").c_str());
             return 400;
@@ -621,49 +594,52 @@ int plan(void) {
     }
     if (arrays.empty() || lead_texts.empty() || chunk_pairs.empty() || lead_step <= 0 || chunk_lat < 1 ||
         chunk_lon < 1) {
-        wipe(&header_json);
+        wipe(&token);
         plugin_set_error("plan-config-invalid",
                          "weathernext_arrays, weathernext_lead_hours, weathernext_chunks, "
                          "weathernext_lead_step_hours and the chunk extents must all be non-empty and positive.");
         return 400;
     }
-
-    // Chunk shape in dims order: 1 on every non-spatial dimension.
-    std::vector<double> chunk_shape(dims.size(), 1.0);
-    int lat_dim = -1, lon_dim = -1;
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (dims[i] == "latitude") { lat_dim = static_cast<int>(i); chunk_shape[i] = chunk_lat; }
-        if (dims[i] == "longitude") { lon_dim = static_cast<int>(i); chunk_shape[i] = chunk_lon; }
+    if (nlat <= 0 || nlon <= 0) {
+        wipe(&token);
+        plugin_set_error("plan-config-invalid", "weathernext_grid_nlat / weathernext_grid_nlon must be positive.");
+        return 400;
     }
-    int init_dim = -1, member_dim = -1, lead_dim = -1;
+
+    int lat_dim = -1, lon_dim = -1, init_dim = -1, member_dim = -1, lead_dim = -1;
     for (size_t i = 0; i < dims.size(); i++) {
+        if (dims[i] == "latitude") lat_dim = static_cast<int>(i);
+        if (dims[i] == "longitude") lon_dim = static_cast<int>(i);
         if (dims[i] == "init_time") init_dim = static_cast<int>(i);
         if (dims[i] == "member") member_dim = static_cast<int>(i);
         if (dims[i] == "lead_time") lead_dim = static_cast<int>(i);
     }
     if (lat_dim < 0 || lon_dim < 0) {
-        wipe(&header_json);
+        wipe(&token);
         plugin_set_error("plan-config-invalid", "weathernext_dims must name latitude and longitude.");
         return 400;
     }
 
-    const std::string grid_json = "{\"lat0\":" + format_number(lat0) + ",\"lon0\":" + format_number(lon0) +
-                                  ",\"dlat\":" + format_number(dlat) + ",\"dlon\":" + format_number(dlon) +
-                                  ",\"nlat\":" + format_number(nlat) + ",\"nlon\":" + format_number(nlon) +
-                                  ",\"periodic_lon\":" + (periodic_lon ? "true" : "false") + "}";
+    const uint64_t grid_nlat = static_cast<uint64_t>(nlat);
+    const uint64_t grid_nlon = static_cast<uint64_t>(nlon);
+    const uint64_t extent_lat = static_cast<uint64_t>(chunk_lat);
+    const uint64_t extent_lon = static_cast<uint64_t>(chunk_lon);
+    const uint64_t tiles_per_row = (grid_nlon + extent_lon - 1) / extent_lon;
+    const uint64_t tile_rows = (grid_nlat + extent_lat - 1) / extent_lat;
 
-    std::vector<std::string> requests;
-    std::vector<std::string> jobs;
+    std::vector<flatbuffers::FlatBufferBuilder> requests;
     for (const std::string& array : arrays) {
         for (const std::string& lead_text : lead_texts) {
             const double lead_hours = strtod(lead_text.c_str(), nullptr);
             const double lead_index = std::floor(lead_hours / lead_step + 0.5);
             const int64_t valid_ms = init_ms + static_cast<int64_t>(std::llround(lead_hours * 3600000.0));
             const bool historical = is_historical(now_ms, valid_ms);
+            const std::string field_id = provenance.model_id + "|" + format_iso_seconds(init_ms) + "|" + member_kind +
+                                         format_number(member_index) + "|" + array + "|" + format_number(lead_hours) + "h";
             for (const std::string& pair : chunk_pairs) {
                 const std::vector<std::string> parts = split(pair, ',');
                 if (parts.size() != 2) {
-                    wipe(&header_json);
+                    wipe(&token);
                     plugin_set_error("plan-config-invalid",
                                      ("weathernext_chunks entry \"" + pair + "\" is not \"lat,lon\"").c_str());
                     return 400;
@@ -682,47 +658,93 @@ int plan(void) {
                 for (const double idx : chunk_index) key += "/" + format_number(idx);
                 const std::string url = base_url + "/" + store_path + "/" + array + "/" + key;
 
-                requests.push_back(request_json(url, header_json, timeout_ms, /*raw_body=*/true));
-                jobs.push_back(
-                    "{\"source_url\":\"" + json_escape(url) + "\"" +
-                    ",\"source_name\":\"" + kCloudSourceName + "\"" +
-                    ",\"provider_id\":\"" + json_escape(provenance.provider_id) + "\"" +
-                    ",\"array\":\"" + json_escape(array) + "\"" +
-                    ",\"variable_name\":\"" + json_escape(array) + "\"" +
-                    ",\"model_id\":\"" + json_escape(provenance.model_id) + "\"" +
-                    ",\"model_version\":\"" + json_escape(provenance.model_version) + "\"" +
-                    ",\"model_class\":\"" + kModelClass + "\"" +
-                    ",\"init_time_ms\":" + std::to_string(init_ms) +
-                    ",\"lead_hours\":" + format_number(lead_hours) +
-                    ",\"horizon_hours\":" + format_number(horizon_hours) +
-                    ",\"member_kind\":\"" + json_escape(member_kind) + "\"" +
-                    ",\"member_index\":" + format_number(member_index) +
-                    ",\"ensemble_size\":" + format_number(ensemble_size) +
-                    ",\"dtype\":\"" + json_escape(dtype) + "\"" +
-                    ",\"codecs\":" + json_string_array(codecs) +
-                    ",\"chunk_shape\":" + json_number_array(chunk_shape) +
-                    ",\"chunk_index\":" + json_number_array(chunk_index) +
-                    ",\"dims\":" + json_string_array(dims) +
-                    ",\"grid\":" + grid_json +
-                    license_fragment(provenance, historical) +
-                    ",\"origin_id\":\"" + kOriginID + "\"" +
-                    ",\"dataset_id\":\"weathernext3_spatial\"}");
+                // The tile this chunk covers (the parser's former job arithmetic, done once here).
+                const uint64_t i0 = static_cast<uint64_t>(lat_chunk) * extent_lat;
+                const uint64_t j0 = static_cast<uint64_t>(lon_chunk) * extent_lon;
+                if (i0 >= grid_nlat || j0 >= grid_nlon) {
+                    wipe(&token);
+                    plugin_set_error("chunk-index-invalid",
+                                     ("weathernext_chunks entry \"" + pair + "\" lies outside the declared grid").c_str());
+                    return 400;
+                }
+                TileGeometry tile;
+                tile.nlat = static_cast<uint32_t>(std::min<uint64_t>(extent_lat, grid_nlat - i0));
+                tile.nlon = static_cast<uint32_t>(std::min<uint64_t>(extent_lon, grid_nlon - j0));
+                tile.lat0 = lat0 + static_cast<double>(i0) * dlat;
+                tile.lon0 = lon0 + static_cast<double>(j0) * dlon;
+                tile.tile_index = static_cast<uint32_t>(static_cast<uint64_t>(lat_chunk) * tiles_per_row +
+                                                        static_cast<uint64_t>(lon_chunk));
+                tile.tile_count = static_cast<uint32_t>(tile_rows * tiles_per_row);
+                tile.periodic_lon = periodic_lon && tile.nlon == grid_nlon;
+
+                // The job: a $WXF header record (no samples).
+                flatbuffers::FlatBufferBuilder job(1024);
+                {
+                    std::vector<flatbuffers::Offset<flatbuffers::String>> codec_offs;
+                    for (const std::string& c : codecs) codec_offs.push_back(job.CreateString(c));
+                    const auto codecs_off = job.CreateVector(codec_offs);
+                    const auto field_id_off = job.CreateString(field_id);
+                    const auto model_id_off = job.CreateString(provenance.model_id);
+                    const auto model_version_off = job.CreateString(provenance.model_version);
+                    const auto variable_name_off = job.CreateString(array);
+                    const auto dtype_off = job.CreateString(dtype);
+                    const auto origin_off = job.CreateString(kOriginID);
+                    const auto dataset_off = job.CreateString(kDatasetID);
+                    const auto source_url_off = job.CreateString(url);
+                    const auto license_url_off = job.CreateString(historical ? provenance.historical_url : provenance.realtime_url);
+                    const auto citation_off = job.CreateString(provenance.citation);
+                    WXFGridBuilder grid(job);
+                    grid.add_KIND(wxfGridKind_RegularLatLon);
+                    grid.add_LAT0(tile.lat0);
+                    grid.add_LON0(tile.lon0);
+                    grid.add_DLAT(dlat);
+                    grid.add_DLON(dlon);
+                    grid.add_NLAT(tile.nlat);
+                    grid.add_NLON(tile.nlon);
+                    grid.add_PERIODIC_LON(tile.periodic_lon);
+                    const auto grid_off = grid.Finish();
+                    WXFBuilder w(job);
+                    w.add_FIELD_ID(field_id_off);
+                    w.add_MODEL_CLASS(wxfModelClass_MachineLearnedGlobalEnsemble);
+                    w.add_MODEL_ID(model_id_off);
+                    w.add_MODEL_VERSION(model_version_off);
+                    w.add_INIT_TIME_MS(static_cast<uint64_t>(init_ms));
+                    w.add_LEAD_HOURS(static_cast<float>(lead_hours));
+                    w.add_VALID_TIME_MS(static_cast<uint64_t>(valid_ms));
+                    w.add_HORIZON_HOURS(static_cast<uint16_t>(horizon_hours));
+                    w.add_MEMBER_KIND(member_kind_for(member_kind));
+                    w.add_MEMBER_INDEX(static_cast<uint16_t>(member_index));
+                    w.add_ENSEMBLE_SIZE(static_cast<uint16_t>(ensemble_size));
+                    w.add_VARIABLE(variable_for_array(array));
+                    w.add_VARIABLE_NAME(variable_name_off);
+                    w.add_GRID(grid_off);
+                    w.add_TILE_INDEX(tile.tile_index);
+                    w.add_TILE_COUNT(tile.tile_count);
+                    w.add_CHUNK_DTYPE(dtype_off);
+                    w.add_CHUNK_CODECS(codecs_off);
+                    w.add_ORIGIN_ID(origin_off);
+                    w.add_DATASET_ID(dataset_off);
+                    w.add_SOURCE_URL(source_url_off);
+                    w.add_LICENSE_CLASS(historical ? wxfLicenseClass_Historical : wxfLicenseClass_RealTimeExperimental);
+                    w.add_LICENSE_URL(license_url_off);
+                    w.add_CITATION(citation_off);
+                    FinishSizePrefixedWXFBuffer(job, w.Finish());
+                }
+                requests.emplace_back(1024 + job.GetSize());
+                build_get(requests.back(), url, token, timeout_ms, job.GetBufferPointer(), job.GetSize());
             }
         }
     }
-    wipe(&header_json);
+    wipe(&token);
 
-    for (const std::string& request : requests) {
-        if (push_json("requests", request) < 0) return 500;
-    }
-    for (const std::string& job : jobs) {
-        if (push_json("jobs", job) < 0) return 500;
+    for (auto& request : requests) {
+        if (push_request("requests", request) < 0) return 500;
     }
     return 0;
 }
 
-// cyclone_request: timer tick -> cyclone track CSV fetch request + job, or a
-// status frame when the cycle is skipped.
+// cyclone_request: timer tick -> the cyclone track CSV GET (HttpRequest, a
+// $TCT header in CONTEXT), or a Skipped FlowNotice when the cycle is skipped.
 int cyclone_request(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
@@ -730,58 +752,70 @@ int cyclone_request(void) {
         return 500;
     }
 
-    const std::string config = load_config();
-    if (!config_bool(config, "weathernext_live_access", false)) {
-        return push_status("live-access-disabled");
+    const NodeConfig config = NodeConfig::load();
+    const Provenance provenance = read_provenance(config);
+    if (!config.flag("weathernext_live_access", false)) {
+        return push_skipped("TCT.fbs", "weathernext3-cyclone-tracks", provenance.provider_id, "live-access-disabled");
     }
-    const std::string url = config_string(config, "weathernext_cyclone_url", "");
-    if (url.empty()) return push_status("cyclone-url-missing");
+    const std::string url = config.text("weathernext_cyclone_url", "");
+    if (url.empty()) return push_skipped("TCT.fbs", "weathernext3-cyclone-tracks", provenance.provider_id, "cyclone-url-missing");
 
-    std::string header_json;
-    const int auth_status = resolve_auth_headers(config, &header_json);
+    std::string token;
+    const int auth_status = resolve_auth_token(config, &token);
     if (auth_status != 0) return auth_status;
 
-    const Provenance provenance = read_provenance(config);
-    const long timeout_ms = static_cast<long>(config_number(config, "weathernext_http_timeout_ms", kDefaultTimeoutMs));
-    const double ensemble_size = config_number(config, "weathernext_ensemble_size", 64);
-    const double wind_period = config_number(config, "weathernext_wind_averaging_period_s", 60);
+    const long timeout_ms = static_cast<long>(config.number("weathernext_http_timeout_ms", kDefaultTimeoutMs));
+    const double ensemble_size = config.number("weathernext_ensemble_size", 64);
+    const double wind_period = config.number("weathernext_wind_averaging_period_s", 60);
     // Track rows carry their own valid times; the licence class of the fetch
     // is decided from the configured init time (the run being fetched) or,
     // absent one, from the previous synoptic cycle — both at least one hour old.
     const int64_t now_ms = now_unix_ms();
     int64_t init_ms = 0;
     {
-        const std::string init_text = config_string(config, "weathernext_init_time", "");
+        const std::string init_text = config.text("weathernext_init_time", "");
         if (init_text.empty() || !parse_iso_ms(init_text, &init_ms)) init_ms = default_init_time_ms(now_ms);
     }
     const bool historical = is_historical(now_ms, init_ms);
 
-    const std::string request = request_json(url, header_json, timeout_ms, /*raw_body=*/false);
-    wipe(&header_json);
-    const std::string job =
-        "{\"source_url\":\"" + json_escape(url) + "\"" +
-        ",\"source_name\":\"" + kCycloneSourceName + "\"" +
-        ",\"provider_id\":\"" + json_escape(provenance.provider_id) + "\"" +
-        ",\"archive_source\":\"weathernext\"" +
-        ",\"archive_name\":\"" + kCycloneArchiveName + "\"" +
-        ",\"model_id\":\"" + json_escape(provenance.model_id) + "\"" +
-        ",\"model_version\":\"" + json_escape(provenance.model_version) + "\"" +
-        ",\"model_class\":\"" + kModelClass + "\"" +
-        ",\"ensemble_size\":" + format_number(ensemble_size) +
-        ",\"wind_averaging_period_s\":" + format_number(wind_period) +
-        license_fragment(provenance, historical) +
-        ",\"origin_id\":\"" + kOriginID + "\"" +
-        ",\"dataset_id\":\"weathernext3_spatial\"}";
-    if (push_json("request", request) < 0) return 500;
-    if (push_json("job", job) < 0) return 500;
-    return 0;
+    // The job: a $TCT header record (no points; STORM_ID is required, so present and empty).
+    flatbuffers::FlatBufferBuilder job(512);
+    {
+        const auto storm_id_off = job.CreateString("");
+        const auto model_id_off = job.CreateString(provenance.model_id);
+        const auto model_version_off = job.CreateString(provenance.model_version);
+        const auto origin_off = job.CreateString(kOriginID);
+        const auto dataset_off = job.CreateString(kDatasetID);
+        const auto source_url_off = job.CreateString(url);
+        const auto license_url_off = job.CreateString(historical ? provenance.historical_url : provenance.realtime_url);
+        const auto citation_off = job.CreateString(provenance.citation);
+        TCTBuilder t(job);
+        t.add_STORM_ID(storm_id_off);
+        t.add_MODEL_CLASS(wxfModelClass_MachineLearnedGlobalEnsemble);
+        t.add_MODEL_ID(model_id_off);
+        t.add_MODEL_VERSION(model_version_off);
+        t.add_ENSEMBLE_SIZE(static_cast<uint16_t>(ensemble_size));
+        t.add_WIND_AVERAGING_PERIOD_S(static_cast<uint16_t>(wind_period));
+        t.add_ORIGIN_ID(origin_off);
+        t.add_DATASET_ID(dataset_off);
+        t.add_SOURCE_URL(source_url_off);
+        t.add_LICENSE_CLASS(historical ? wxfLicenseClass_Historical : wxfLicenseClass_RealTimeExperimental);
+        t.add_LICENSE_URL(license_url_off);
+        t.add_CITATION(citation_off);
+        FinishSizePrefixedTCTBuffer(job, t.Finish());
+    }
+    flatbuffers::FlatBufferBuilder request(1024 + job.GetSize());
+    build_get(request, url, token, timeout_ms, job.GetBufferPointer(), job.GetSize());
+    wipe(&token);
+    return push_request("request", request) < 0 ? 500 : 0;
 }
 
-// publish_request: (storage-ingest result, parser ingest meta) -> the
-// hostcap/http-request JSON that POSTs a DatasetPublicationRequest to the
-// node's loopback admin endpoint. Fail-closed: no weathernext_publish_url,
-// no frame. Body keys are camelCase (API-synthesized shape, decoded with
-// DisallowUnknownFields), never an SDS record.
+// publish_request: (storage-ingest IngestResult, parser IngestRequest) -> the
+// HttpRequest that POSTs a DatasetPublicationRequest to the node's loopback
+// admin endpoint. Fail-closed: no weathernext_publish_url, no frame; a REFUSED
+// result (nothing stored) publishes nothing. The BODY is the endpoint's JSON
+// ({schema, providerId, sourceName, batchId}, camelCase, decoded with
+// DisallowUnknownFields) - a host HTTP API body, never an SDS record.
 int publish_request(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
@@ -799,42 +833,55 @@ int publish_request(void) {
         plugin_set_error("missing-meta-frame", "publish_request requires the parser ingest meta frame.");
         return 400;
     }
-
-    const std::string config = load_config();
-    std::string url;
-    if (!json_string_field(config, "weathernext_publish_url", &url) || url.empty()) {
-        // Absence of configuration is NOT permission to publish.
-        return 0;
+    flatbuffers::Verifier result_verifier(result_frame->payload, result_frame->payload_length);
+    if (!R::VerifyIngestResultBuffer(result_verifier)) {
+        plugin_set_error("invalid-result", "the result frame is not an IngestResult (INGR).");
+        return 400;
     }
+    flatbuffers::Verifier meta_verifier(meta_frame->payload, meta_frame->payload_length);
+    if (!R::VerifyIngestRequestBuffer(meta_verifier)) {
+        plugin_set_error("invalid-meta", "the meta frame is not an IngestRequest (INGQ).");
+        return 400;
+    }
+    const R::IngestResult& result = *R::GetIngestResult(result_frame->payload);
+    const R::IngestRequest& meta = *R::GetIngestRequest(meta_frame->payload);
 
-    const std::string result(reinterpret_cast<const char*>(result_frame->payload), result_frame->payload_length);
-    const std::string meta(reinterpret_cast<const char*>(meta_frame->payload), meta_frame->payload_length);
+    const NodeConfig config = NodeConfig::load();
+    const std::string url = config.text("weathernext_publish_url", "");
+    // Absence of configuration is NOT permission to publish.
+    if (url.empty()) return 0;
+    // A refused batch was not stored: there is nothing to publish.
+    if (result.REFUSED() && result.REFUSED()->size()) return 0;
 
-    std::string schema;
-    if (!json_string_field(result, "schema", &schema) || schema.empty()) json_string_field(meta, "schema", &schema);
-    std::string batch_id;
-    if (!json_string_field(result, "batch_id", &batch_id) || batch_id.empty()) json_string_field(meta, "batch_id", &batch_id);
-    std::string provider;
-    std::string source;
-    json_string_field(meta, "provider_id", &provider);
-    json_string_field(meta, "source_name", &source);
+    const auto text = [](const flatbuffers::String* s) { return s ? s->str() : std::string(); };
+    std::string schema = text(result.SCHEMA());
+    if (schema.empty()) schema = text(meta.SCHEMA());
+    std::string batch_id = text(result.BATCH_ID());
+    if (batch_id.empty() && meta.TAGS()) batch_id = text(meta.TAGS()->BATCH_ID());
+    const std::string provider = meta.TAGS() ? text(meta.TAGS()->PROVIDER_ID()) : std::string();
+    const std::string source = meta.TAGS() ? text(meta.TAGS()->SOURCE_NAME()) : std::string();
     if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
         plugin_set_error("incomplete-publication-identity",
                          "publish_request needs schema, batchId, providerId and sourceName.");
         return 400;
     }
 
-    const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\"" +
-                             ",\"providerId\":\"" + json_escape(provider) + "\"" +
-                             ",\"sourceName\":\"" + json_escape(source) + "\"" +
-                             ",\"batchId\":\"" + json_escape(batch_id) + "\"}";
-    const long timeout_ms = static_cast<long>(config_number(config, "weathernext_http_timeout_ms", kDefaultTimeoutMs));
-    const std::string request =
-        std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(url) + "\"" +
-        ",\"headers\":{\"content-type\":\"application/json\"}" + ",\"bodyB64\":\"" +
-        base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
-        ",\"timeoutMs\":" + std::to_string(timeout_ms) + "}";
-    return push_json("request", request) < 0 ? 500 : 0;
+    // The publication names the stored batch: an IngestResult (INGR) FlatBuffer, as data-source/nwp-field-source posts it.
+    flatbuffers::FlatBufferBuilder rb(512);
+    R::FinishIngestResultBuffer(rb, R::CreateIngestResultDirect(rb, schema.c_str(), provider.c_str(), source.c_str(), batch_id.c_str(), result.INSERTED(),
+                                                                result.RECONCILED_DUPLICATES(), result.RECONCILED_OLD_BATCHES(),
+                                                                result.ARCHIVED() && result.ARCHIVED()->size() ? result.ARCHIVED()->c_str() : nullptr, nullptr));
+    const std::vector<uint8_t> body(rb.GetBufferPointer(), rb.GetBufferPointer() + rb.GetSize());
+    const long timeout_ms = static_cast<long>(config.number("weathernext_http_timeout_ms", kDefaultTimeoutMs));
+    flatbuffers::FlatBufferBuilder b(512 + body.size());
+    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "content-type", "application/octet-stream")};
+    const auto headers_off = b.CreateVector(headers);
+    const auto body_off = b.CreateVector(body);
+    const auto url_off = b.CreateString(url);
+    const auto method_off = b.CreateString("POST");
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequest(b, method_off, url_off, headers_off, body_off,
+                                                       static_cast<uint32_t>(timeout_ms > 0 ? timeout_ms : 0)));
+    return push_request("request", b) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

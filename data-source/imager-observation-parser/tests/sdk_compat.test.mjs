@@ -14,6 +14,8 @@ import { gunzipSync } from "node:zlib";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { createHash } from "node:crypto";
+import { decodeHostCall, decodeIngestRequest, encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -32,43 +34,64 @@ const FRAME_TIME_MS = Date.UTC(2026, 9, 7, 6, 0, 0);   // 2026-280 06:00 UTC
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function job(field, { part = 0, parts = 1, widths } = {}) {
+// The file job select_files puts on each GET's CONTEXT: one size-prefixed $WXF header record (GRID present, empty).
+function key(field) {
   const e = EXPECTED[field];
   const product = e.file.match(/OR_(ABI-L2-[A-Z]+M)\d/)[1];   // (the mesoscale product's folder: ABI-L2-CMIPM, ...)
-  return {
-    satellite: "goes-east", sensor: SENSOR, bucket: "noaa-goes19",
-    key: `${product}/2026/280/06/${e.file}`,
-    variable: e.variable, field, frame_time_ms: FRAME_TIME_MS, part, parts,
-    ...(widths ? { widths } : {}),
-    provider_id: "noaa-goes", source_name: "noaa-goes19", origin_id: "NOAA Open Data Dissemination (AWS)",
-    dataset_id: "noaa-goes19", license: "LicenseRef-NOAA-Open-Data", license_class: "OpenAttribution",
-    license_url: "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C01502",
-    citation: `${SENSOR} data courtesy of NOAA via NOAA Open Data Dissemination`,
-  };
+  return `${product}/2026/280/06/${e.file}`;
 }
-
-function bytesInput(portId, payload) {
-  return { portId, typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength }, payload };
+function jobBytes(field, { part = 0, parts = 1, variable = EXPECTED[field]?.variable ?? "CMI" } = {}) {
+  const W = wxfLib.WXF;
+  const b = new flatbuffers.Builder(512);
+  const s = (v) => b.createString(v);
+  const fid = s(field), vname = s(variable), sensor = s(SENSOR), dataset = s("noaa-goes19");
+  const url = s(`https://noaa-goes19.s3.amazonaws.com/${key(field in EXPECTED ? field : "cloud_phase")}`);
+  const origin = s("NOAA Open Data Dissemination (AWS)"), licenseUrl = s(LICENSE_URL), citation = s(`${SENSOR} data courtesy of NOAA via NOAA Open Data Dissemination`);
+  const grid = wxfLib.WXFGrid.createWXFGrid(b, 0, 0, 0, 0, 0, 0, 0, false);
+  W.startWXF(b);
+  W.addFieldId(b, fid); W.addVariableName(b, vname); W.addTimeBasis(b, wxfLib.wxfTimeBasis.ValidTimeOnly); W.addValidTimeMs(b, BigInt(FRAME_TIME_MS));
+  W.addGrid(b, grid); W.addTileIndex(b, part); W.addTileCount(b, parts); W.addSensorId(b, sensor); W.addDatasetId(b, dataset); W.addSourceUrl(b, url);
+  W.addOriginId(b, origin); W.addLicenseClass(b, wxfLib.wxfLicenseClass.OpenAttribution); W.addLicenseUrl(b, licenseUrl); W.addCitation(b, citation);
+  W.finishSizePrefixedWXFBuffer(b, W.endWXF(b));
+  return b.asUint8Array().slice();
 }
-const jsonInput = (portId, value) => bytesInput(portId, encoder.encode(JSON.stringify(value)));
-
-// hostcap/http-request raw-body-v1 lane: "$HRB" + int32le status + body.
-function rawResponseFrame(body, status = 200) {
-  const frame = new Uint8Array(8 + body.byteLength);
-  frame.set([0x24, 0x48, 0x52, 0x42]);
-  new DataView(frame.buffer).setInt32(4, status, true);
-  frame.set(body, 8);
-  return frame;
-}
+const LICENSE_URL = "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C01502";
+const HRSP = { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" };
+// hostcap/http-request's answer: an HttpResponse with the body verbatim and the request's CONTEXT echoed.
+const response = (field, body, { status = 200, context = jobBytes(field), headers, retrievedMs = RETRIEVED_MS } = {}) =>
+  ({ portId: "responses", typeRef: HRSP, payload: encodeHttpResponse({ url: `https://noaa-goes19.s3.amazonaws.com/${key(field)}`, status, headers, body, context, retrievedMs }) });
+const RETRIEVED_MS = Date.UTC(2026, 9, 7, 6, 12, 3);
 const fileBytes = (field) => new Uint8Array(fs.readFileSync(new URL(EXPECTED[field].file, SET)));
 
-async function createHarness(t) {
+// The SDK harness's BrowserHost answers plugin.getConfig from its `config` option (one ModuleConfig on raw "config", as
+// the Go node answers). The hostcall import is only watched, to decode every $PIV request into `wire`.
+const instantiate = WebAssembly.instantiate;
+async function createHarness(t, config = {}) {
+  const wire = [];
+  WebAssembly.instantiate = async (module, imports) => {
+    const host = imports?.space_data_module_host;
+    if (!host) return instantiate(module, imports);
+    let memory;
+    const wrapped = { ...imports, space_data_module_host: { ...host,
+      call: (op, opLen, ptr, len) => {
+        const call = decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice());
+        wire.push(call);
+        return host.call(op, opLen, ptr, len);
+      },
+    } };
+    const instance = await instantiate(module, wrapped);
+    memory = instance.exports.memory;
+    return instance;
+  };
+  t.after(() => { WebAssembly.instantiate = instantiate; });
   const harness = await createBrowserModuleHarness({
     wasmSource: new Uint8Array(fs.readFileSync(ISOMORPHIC_WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
+    hostOptions: { config },
   });
   t.after(() => harness.destroy());
+  harness.wire = wire;
   return harness;
 }
 
@@ -166,7 +189,11 @@ function assertFieldMatchesReference(field, records) {
       assert.equal(r.PLATFORM_LATITUDE_DEG, 0);
       assert.equal(r.PLATFORM_HEIGHT_M, e.platform_height);
       assert.equal(r.LICENSE_CLASS, wxfLib.wxfLicenseClass.OpenAttribution);
-      assert.equal(r.SOURCE_URL, `s3://noaa-goes19/${job(field).key}`);
+      assert.equal(r.SOURCE_URL, `s3://noaa-goes19/${key(field)}`);
+      assert.equal(Number(r.RETRIEVED_AT), RETRIEVED_MS);
+      assert.equal(r.ORIGIN_ID, "NOAA Open Data Dissemination (AWS)");
+      assert.equal(r.DATASET_ID, "noaa-goes19");
+      assert.equal(r.LICENSE_URL, LICENSE_URL);
       assert.equal(r.GRID.KIND, wxfLib.wxfGridKind.RegularLatLon);
       assert.equal(r.GRID.LAT0, 90 - (row + 0.5) * d);
       assert.equal(r.GRID.LON0, -180 + 0.5 * d);
@@ -196,100 +223,120 @@ function assertFieldMatchesReference(field, records) {
   }
 }
 
-test("imager-observation-parser artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    standardsRoot: STANDARDS_ROOT,
-  });
+test("imager-observation-parser artifact passes SDK compliance, every port one concrete type", async () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const [method] = manifest.methods;
+  const ids = [...method.inputPorts, ...method.outputPorts].map((port) => {
+    assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+    assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+    const [type] = port.acceptedTypeSets[0].allowedTypes;
+    assert.equal(type.acceptsAnyFlatbuffer, undefined);
+    assert.equal(type.wireFormat, "flatbuffer");
+    return [port.portId, type.fileIdentifier];
+  });
+  assert.deepEqual(ids, [["responses", "HRSP"], ["wxf_meta", "INGQ"], ["wxf_records", "$WXF"]]);
 });
 
-test("imager-observation-parser artifact is pure: canonical ABI, WASI-only imports", async () => {
+test("imager-observation-parser artifact: canonical ABI, WASI + the hostcall bridge (plugin.getConfig) only, no capability", async () => {
   const inspection = await inspectModule(new Uint8Array(fs.readFileSync(ISOMORPHIC_WASM_PATH)));
-  assert.equal(inspection.profile, "standalone");
-  assert.deepEqual(Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort(), ["wasi_snapshot_preview1"]);
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);
   for (const required of ["plugin_alloc", "plugin_free", "plugin_invoke_stream", "plugin_get_manifest_flatbuffer", "plugin_get_manifest_flatbuffer_size"]) {
     assert.ok(inspection.exports.includes(required), `missing export ${required}`);
   }
+  assert.deepEqual(JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")).capabilities, []);
 });
 
 for (const field of FIELDS) {
   test(`parse: ${field} (${EXPECTED[field].file.slice(0, 32)}...) equals the reference at 4096, 2048 and 1024`, async (t) => {
     const harness = await createHarness(t);
-    const { response, outputs } = await parse(harness, [jsonInput("jobs", job(field)), bytesInput("responses", rawResponseFrame(fileBytes(field)))]);
-    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-    assertFieldMatchesReference(field, splitStream(outputs.get("wxf_records").payload));
-    const meta = JSON.parse(decoder.decode(outputs.get("wxf_meta").payload));
-    assert.equal(meta.schema, "WXF.fbs");
-    assert.equal(meta.provider_id, "noaa-goes");
-    assert.equal(meta.source_name, "noaa-goes19");
-    assert.equal(meta.reconcile, "duplicates");
-    assert.equal(meta.license, "LicenseRef-NOAA-Open-Data");
-    assert.match(meta.batch_id, /^[0-9a-f]{64}$/);
-    const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-    assert.equal(provenance.normalized_count, Object.values(EXPECTED[field].widths).reduce((n, w) => n + w.bands, 0));
+    const body = fileBytes(field);
+    const { response: r, outputs } = await parse(harness, [response(field, body, { headers: { etag: "\"e1\"", "content-type": "application/x-netcdf", "last-modified": "Wed, 07 Oct 2026 06:01:00 GMT" } })]);
+    assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
+    assert.deepEqual(harness.wire.map((c) => c.op), ["plugin.getConfig"]);
+    const records = splitStream(outputs.get("wxf_records").payload);
+    assertFieldMatchesReference(field, records);
+    assert.equal(outputs.get("wxf_meta").typeRef?.fileIdentifier, "INGQ");
+    const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
+    const batchId = createHash("sha256").update(body).digest("hex");
+    assert.deepEqual({ ...meta, provenance: undefined }, {
+      schema: "WXF.fbs",
+      tags: { providerId: "noaa-goes", sourceName: "noaa-goes19-world", batchId, sourceUrl: `s3://noaa-goes19/${key(field)}`, contentKeyId: "public",
+        sourcePeer: "source:NOAA Open Data Dissemination (AWS)", license: "LicenseRef-NOAA-Open-Data", licenseUrl: LICENSE_URL,
+        citation: `${SENSOR} data courtesy of NOAA via NOAA Open Data Dissemination`, shareAlike: false },
+      reconcile: "duplicates", archive: null, provenance: undefined,
+    });
+    const normalized = createHash("sha256");
+    for (const rec of records) normalized.update("WXF.fbs").update(new Uint8Array([0])).update(rec).update(new Uint8Array([0]));
+    assert.deepEqual(meta.provenance, { attributes: [], sourceUrl: `s3://noaa-goes19/${key(field)}`, httpStatus: 200, etag: "\"e1\"", lastModified: "Wed, 07 Oct 2026 06:01:00 GMT",
+      contentType: "application/x-netcdf", retrievedMs: RETRIEVED_MS, parser: "imager-observation-parser", parserVersion: "imager-observation-parser/v1",
+      sourceSha256: batchId, normalizedSha256: normalized.digest("hex"), normalizedCount: records.length, schemaCounts: { "WXF.fbs": records.length }, warnings: [], fromCache: false });
+    assert.equal(records.length, Object.values(EXPECTED[field].widths).reduce((n, w) => n + w.bands, 0));
   });
 }
 
-test("parse: a file fetched as three byte ranges is joined first (206 parts), same records", async (t) => {
+test("parse: a file fetched as three byte ranges is joined first (206 parts), same records and batch id", async (t) => {
   const field = "reflectance_064um";
   const bytes = fileBytes(field);
   const cut = [0, 400_000, 900_000, bytes.byteLength];
   const harness = await createHarness(t);
   const inputs = [];
-  for (let p = 0; p < 3; p++) inputs.push(jsonInput("jobs", job(field, { part: p, parts: 3 })));
-  for (let p = 0; p < 3; p++) inputs.push(bytesInput("responses", rawResponseFrame(bytes.subarray(cut[p], cut[p + 1]), 206)));
-  const { response, outputs } = await parse(harness, inputs);
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  for (let p = 0; p < 3; p++) inputs.push(response(field, bytes.subarray(cut[p], cut[p + 1]), { status: 206, context: jobBytes(field, { part: p, parts: 3 }) }));
+  const { response: r, outputs } = await parse(harness, inputs);
+  assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
   assertFieldMatchesReference(field, splitStream(outputs.get("wxf_records").payload));
+  assert.equal(decodeIngestRequest(outputs.get("wxf_meta").payload).tags.batchId, createHash("sha256").update(bytes).digest("hex"));
 });
 
-test("parse: only the requested widths", async (t) => {
+test("parse: only the configured widths (imager_widths, a string or a dotted list)", async (t) => {
   const field = "cloud_top_height";
-  const harness = await createHarness(t);
-  const { response, outputs } = await parse(harness, [jsonInput("jobs", job(field, { widths: "1024" })), bytesInput("responses", rawResponseFrame(fileBytes(field)))]);
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-  const widths = new Set(splitStream(outputs.get("wxf_records").payload).map((b) => unpackWxf(b).GRID.NLON));
-  assert.deepEqual([...widths], [1024]);
+  for (const config of [{ imager_widths: "1024" }, { imager_widths: [2048, 1024] }]) {
+    const harness = await createHarness(t, config);
+    const { response: r, outputs } = await parse(harness, [response(field, fileBytes(field))]);
+    assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
+    const widths = new Set(splitStream(outputs.get("wxf_records").payload).map((b) => unpackWxf(b).GRID.NLON));
+    assert.deepEqual([...widths], typeof config.imager_widths === "string" ? [1024] : [2048, 1024]);
+  }
+  const bad = await createHarness(t, { imager_widths: "512" });
+  assert.equal((await parse(bad, [response(field, fileBytes(field))])).response.errorCode, "invalid-widths");
 });
 
 test("parse refuses what it cannot attribute or read, by name", async (t) => {
   const harness = await createHarness(t);
   const field = "cloud_phase";
-  const ok = bytesInput("responses", rawResponseFrame(fileBytes(field)));
+  const body = fileBytes(field);
   const cases = [
-    [[jsonInput("jobs", job(field)), jsonInput("jobs", job(field)), ok], "job-response-count-mismatch"],
-    [[jsonInput("jobs", job(field, { part: 1, parts: 2 })), ok], "incomplete-file"],
-    [[jsonInput("jobs", job(field)), bytesInput("responses", rawResponseFrame(new Uint8Array(0), 404))], "fetch-failed"],
-    [[jsonInput("jobs", { ...job(field), field: "sea_surface_temperature" }), ok], "invalid-file-job"],
-    [[jsonInput("jobs", job(field)), bytesInput("responses", rawResponseFrame(encoder.encode("<Error>NoSuchKey</Error>")))], "netcdf-unreadable"],
-    [[jsonInput("jobs", { ...job(field), variable: "NOT_THERE" }), ok], "netcdf-unreadable"],
+    [[], "missing-required-input"],   // (refused by the invoke glue: the port is required)
+    [[response(field, body, { context: jobBytes(field, { part: 1, parts: 2 }), status: 206 })], "incomplete-file"],
+    [[response(field, new Uint8Array(0), { status: 404 })], "fetch-failed"],
+    [[response(field, body, { context: new Uint8Array(0) })], "invalid-file-job"],
+    [[response(field, body, { context: jobBytes("sea_surface_temperature", { variable: "SST" }) })], "invalid-file-job"],
+    [[{ portId: "responses", typeRef: HRSP, payload: new TextEncoder().encode("{\"status\":200}") }], "invalid-response-frame"],
+    [[response(field, new TextEncoder().encode("<Error>NoSuchKey</Error>"))], "netcdf-unreadable"],
+    [[response(field, body, { context: jobBytes(field, { variable: "NOT_THERE" }) })], "netcdf-unreadable"],
   ];
   for (const [inputs, code] of cases) {
-    const { response } = await parse(harness, inputs);
-    assert.notEqual(response.statusCode, 0, code);
-    assert.equal(response.errorCode, code, response.errorMessage);
-    assert.equal(response.outputs.length, 0);
+    const { response: r } = await parse(harness, inputs);
+    assert.notEqual(r.statusCode, 0, code);
+    assert.equal(r.errorCode, code, r.errorMessage);
+    assert.equal(r.outputs.length, 0);
   }
 });
 
 // NO INPUT FRAME IS EVER DESTROYED SILENTLY (graph task modules-guest-nodes-drop-batched-frames): the compiled flow
-// runtime fills an invocation port-blind up to 64 frames, so every job/response pair handed over is parsed - two files
-// in one invocation are one ingest batch carrying both.
+// runtime fills an invocation port-blind up to 64 frames, so every response handed over is parsed - two files in one
+// invocation are one ingest batch carrying both.
 test("parse: two files in one invocation make one batch with both fields' records", async (t) => {
   const harness = await createHarness(t);
   const [a, b] = ["cloud_phase", "cloud_mask"];
-  const { response, outputs } = await parse(harness, [
-    jsonInput("jobs", job(a)), jsonInput("jobs", job(b)),
-    bytesInput("responses", rawResponseFrame(fileBytes(a))), bytesInput("responses", rawResponseFrame(fileBytes(b))),
-  ]);
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  const { response: r, outputs } = await parse(harness, [response(a, fileBytes(a)), response(b, fileBytes(b))]);
+  assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
   const records = splitStream(outputs.get("wxf_records").payload);
   const names = records.map((bytes) => unpackWxf(bytes).VARIABLE_NAME);
   assertFieldMatchesReference(a, records.filter((_, k) => names[k] === a));
   assertFieldMatchesReference(b, records.filter((_, k) => names[k] === b));
-  const meta = JSON.parse(decoder.decode(outputs.get("wxf_meta").payload));
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.normalized_count, records.length);
+  const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
+  assert.equal(meta.provenance.normalizedCount, records.length);
+  assert.equal(meta.tags.batchId, createHash("sha256").update(fileBytes(a)).update(fileBytes(b)).digest("hex"));
 });

@@ -1,21 +1,27 @@
 /*
- * data-source/nwp-grib2-parser.
+ * data-source/nwp-grib2-parser (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
  *
- * A pure parser flow node (capabilities: none) for numerical-weather-prediction model fields in GRIB2 (NOAA/NCEP GFS
- * and GEFS from NOAA Open Data Dissemination's public buckets, fetched message by message through the .idx inventory):
- * each instantaneous field becomes $WXF record(s) carrying the GRIB2 packing's own integers - value = (R + X 2^E) /
- * 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D (times 1/100 for a percentage, the fraction $WXF
+ * A pure parser flow node (capabilities: none, no hostcall) for numerical-weather-prediction model fields in GRIB2
+ * (NOAA/NCEP GFS and GEFS from NOAA Open Data Dissemination's public buckets, fetched message by message through the .idx
+ * inventory): each instantaneous field becomes $WXF record(s) carrying the GRIB2 packing's own integers - value = (R + X
+ * 2^E) / 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D (times 1/100 for a percentage, the fraction $WXF
  * defines) - exactly, delta/zigzag/shuffle coded (InlineEncodedChunk). Rows south to north, longitude from 0 east,
- * every `stride`-th point (GEFS 0.5 deg spread at the 1 deg points), whole or in `band_rows` bands. Raw: nothing is
- * resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives).
+ * every `stride`-th point (GEFS 0.5 deg spread at the 1 deg points), whole or in `band_rows` bands, or cut into tiles.
+ * Raw: nothing is resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives).
  *
  * GRIB2 is read by grib2mini (vendored; grid 3.0, product 4.0/4.1/4.2, packing 5.0/5.2/5.3, bitmaps), checked against
  * ecCodes on NOAA's own files. Interval statistics (4.8/4.11/4.12), other grids or packings, parameters it does not map
  * and integers wider than 16 bits are refused by name.
  *
  * Method:
- *   parse : jobs[k] + responses[k] -> wxf_meta + wxf_records
- *       Paired by position; each response is whole GRIB2 messages of one byte range. One batch per invocation.
+ *   parse : responses (HttpResponse, HRSP) -> wxf_meta (IngestRequest, INGQ) + wxf_records ($WXF record stream)
+ *       Each response is whole GRIB2 messages of one byte range, and carries ITS JOB in CONTEXT: the size-prefixed $WXF
+ *       header record nwp-field-source's plan built for the (product, lead) - FIELD_ID "<model_key>:<run>:f<LLL>:
+ *       <product>", VARIABLE_NAME the product (the lane's SOURCE_NAME), MODEL_CLASS / MODEL_ID, LEAD_HOURS, MEMBER_KIND
+ *       (StandardDeviation: the GEFS spread) / ENSEMBLE_SIZE, GRID.DLAT the records' spacing (the stride is it over the
+ *       field's own spacing), GRID.NLAT the rows a record (0 = whole), TILE_COUNT > 1 the square tiles (2n x n), SOURCE_URL
+ *       and the attribution (ORIGIN_ID, DATASET_ID, LICENSE_CLASS, LICENSE_URL, CITATION). Pairing is by CONTEXT, never by
+ *       position. One batch per invocation (a tiled job: one batch a tile, through the backlog).
  */
 #include <algorithm>
 #include <cctype>
@@ -31,20 +37,20 @@
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+// $WXF (spacedatastandards.org lib/cpp/WXF/main_generated.h) and grib2mini are inlined ahead of this file by build.mjs.
 
 namespace {
 
+namespace R = sdn::runtime;
+
 constexpr const char* kContentKeyID = "public";
+constexpr const char* kParserName = "nwp-grib2-parser";
 constexpr const char* kParserVersion = "nwp-grib2-parser/v2";
 
 // ---------------------------------------------------------------------------
-// String / JSON / base64 / SHA-256 / date helpers, frame IO and the hostcap/http-request response decoder: the same
-// code as data-source/weathernext-parser (control metadata only; record bodies never pass through JSON).
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// Small string / JSON helpers (control metadata only).
+// Small string helpers.
 // ---------------------------------------------------------------------------
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -54,236 +60,6 @@ std::string trim(const std::string& s) {
     while (b < e && is_ws(s[b])) b++;
     while (e > b && is_ws(s[e - 1])) e--;
     return s.substr(b, e - b);
-}
-
-std::string lower(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-    }
-    return out;
-}
-
-std::string upper(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-    }
-    return out;
-}
-
-// Position just past the colon of "key": at the first occurrence, or npos.
-size_t json_value_start(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string::npos;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string::npos;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    return i;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else if (n == 'u' && i + 5 < json.size()) {
-                const long cp = std::strtol(json.substr(i + 2, 4).c_str(), nullptr, 16);
-                value.push_back(cp < 0x80 ? static_cast<char>(cp) : '?');
-                i += 4;
-            } else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0) { *out = true; return true; }
-    if (json.compare(i, 5, "false") == 0) { *out = false; return true; }
-    return false;
-}
-
-std::string json_bracketed_slice(const std::string& json, const std::string& key, char open, char close) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != open) return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == open) depth++;
-        else if (c == close) {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '{', '}');
-}
-
-std::string json_array_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '[', ']');
-}
-
-// Numbers of a flat JSON array slice "[1, 2, 3]".
-std::vector<double> json_number_array(const std::string& slice) {
-    std::vector<double> out;
-    size_t i = 0;
-    while (i < slice.size()) {
-        const char c = slice[i];
-        if (c == '-' || (c >= '0' && c <= '9')) {
-            char* end = nullptr;
-            const double v = strtod(slice.c_str() + i, &end);
-            const size_t consumed = static_cast<size_t>(end - (slice.c_str() + i));
-            if (consumed == 0) break;
-            out.push_back(v);
-            i += consumed;
-        } else {
-            i++;
-        }
-    }
-    return out;
-}
-
-// Strings of a flat JSON array slice "[\"a\", \"b\"]".
-std::vector<std::string> json_string_array(const std::string& slice) {
-    std::vector<std::string> out;
-    for (size_t i = 0; i < slice.size(); i++) {
-        if (slice[i] != '"') continue;
-        std::string value;
-        size_t j = i + 1;
-        while (j < slice.size() && slice[j] != '"') {
-            if (slice[j] == '\\' && j + 1 < slice.size()) {
-                value.push_back(slice[j + 1]);
-                j += 2;
-            } else {
-                value.push_back(slice[j]);
-                j++;
-            }
-        }
-        out.push_back(value);
-        i = j;
-    }
-    return out;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (standard alphabet).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,59 +179,6 @@ int64_t days_from_civil(int64_t y, int m, int d) {
     return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
 
-void civil_from_days(int64_t z, int* y_out, int* m_out, int* d_out) {
-    z += 719468;
-    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-    const unsigned doe = static_cast<unsigned>(z - era * 146097);
-    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    const int64_t y = static_cast<int64_t>(yoe) + era * 400;
-    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    const unsigned mp = (5 * doy + 2) / 153;
-    const unsigned d = doy - (153 * mp + 2) / 5 + 1;
-    const unsigned m = mp + (mp < 10 ? 3 : -9);
-    *y_out = static_cast<int>(y + (m <= 2));
-    *m_out = static_cast<int>(m);
-    *d_out = static_cast<int>(d);
-}
-
-// ISO 8601 UTC: YYYY-MM-DD[T ]HH:MM[:SS[.fff]][Z] or bare YYYY-MM-DD.
-bool parse_iso_ms(const std::string& raw_in, int64_t* out_ms) {
-    const std::string raw = trim(raw_in);
-    if (raw.size() < 10 || raw[4] != '-' || raw[7] != '-') return false;
-    const int y = atoi(raw.substr(0, 4).c_str());
-    const int mo = atoi(raw.substr(5, 2).c_str());
-    const int d = atoi(raw.substr(8, 2).c_str());
-    int hh = 0, mm = 0;
-    double ss = 0;
-    if (raw.size() >= 16 && (raw[10] == 'T' || raw[10] == ' ') && raw[13] == ':') {
-        hh = atoi(raw.substr(11, 2).c_str());
-        mm = atoi(raw.substr(14, 2).c_str());
-        if (raw.size() >= 19 && raw[16] == ':') ss = strtod(raw.substr(17).c_str(), nullptr);
-    } else if (raw.size() != 10) {
-        return false;
-    }
-    if (y < 1600 || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
-    const int64_t seconds = days_from_civil(y, mo, d) * 86400 + hh * 3600 + mm * 60;
-    *out_ms = seconds * 1000 + static_cast<int64_t>(std::llround(ss * 1000.0));
-    return true;
-}
-
-std::string format_iso_seconds(int64_t unix_ms) {
-    const int64_t unix_seconds = unix_ms >= 0 ? unix_ms / 1000 : (unix_ms - 999) / 1000;
-    const int64_t days = unix_seconds >= 0 ? unix_seconds / 86400
-                                           : (unix_seconds - 86399) / 86400;
-    int64_t rem = unix_seconds - days * 86400;
-    int y, m, d;
-    civil_from_days(days, &y, &m, &d);
-    const int hh = static_cast<int>(rem / 3600);
-    rem -= static_cast<int64_t>(hh) * 3600;
-    const int mm = static_cast<int>(rem / 60);
-    const int ss = static_cast<int>(rem - mm * 60);
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ", y, m, d, hh, mm, ss);
-    return std::string(buf);
-}
-
 int64_t now_unix_ms() {
     struct timeval tv;
     if (gettimeofday(&tv, nullptr) != 0) return 0;
@@ -484,54 +207,18 @@ bool parse_http_date(const std::string& raw, int64_t* out_ms) {
     return true;
 }
 
-std::string format_number(double v) {
-    if (std::isfinite(v) && v == std::floor(v) && std::fabs(v) < 1e15) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
-        return buf;
-    }
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.15g", v);
-    if (strtod(buf, nullptr) != v) std::snprintf(buf, sizeof(buf), "%.17g", v);
-    return buf;
-}
-
 // ---------------------------------------------------------------------------
 // Frame IO helpers.
 // ---------------------------------------------------------------------------
 
-const plugin_input_frame_t* frame_at(const char* port, uint32_t ordinal) {
-    const int32_t idx = plugin_find_input_index(port, ordinal);
-    if (idx < 0) return nullptr;
-    return plugin_get_input_frame(static_cast<uint32_t>(idx));
-}
-
 std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
     std::vector<const plugin_input_frame_t*> out;
     for (uint32_t ordinal = 0;; ordinal++) {
-        const plugin_input_frame_t* frame = frame_at(port, ordinal);
-        if (!frame) break;
-        out.push_back(frame);
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
     }
     return out;
-}
-
-std::string frame_text(const plugin_input_frame_t* frame) {
-    if (!frame || !frame->payload || frame->payload_length == 0) return std::string();
-    return std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-}
-
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
 }
 
 // The record streams declare their concrete SDS identity on the port, so the
@@ -551,70 +238,36 @@ void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_
     stream->insert(stream->end(), record.begin(), record.end());
 }
 
-// A decoded hostcap/http-request response: the default JSON lane
-// {status, headers, bodyB64} or the raw-body-v1 lane
-// ("$HRB" + int32le status + body, no headers).
-struct HttpResponse {
+// What the parser keeps of one HttpResponse (HRSP): the status, the validators and dates of its headers, the host's
+// receive time and the body.
+struct Fetched {
     long status = 0;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string date;
+    int64_t retrieved_ms = 0;
     std::vector<uint8_t> body;
 };
 
-void read_header(const std::string& headers, const char* lower_name, const char* title_name,
-                 std::string* out) {
-    if (json_string_field(headers, lower_name, out) && !out->empty()) return;
-    json_string_field(headers, title_name, out);
+std::string header_of(const R::HttpResponse& r, const char* lower_name) {
+    if (!r.HEADERS()) return std::string();
+    for (const R::Header* h : *r.HEADERS())
+        if (h && h->NAME() && h->NAME()->str() == lower_name) return h->VALUE() ? h->VALUE()->str() : std::string();
+    return std::string();
 }
 
-bool decode_http_response(const plugin_input_frame_t* frame, HttpResponse* out, std::string* err) {
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        *err = "http response frame is empty.";
-        return false;
-    }
-    const uint8_t* p = frame->payload;
-    if (frame->payload_length >= 8 && p[0] == '$' && p[1] == 'H' && p[2] == 'R' && p[3] == 'B') {
-        const uint32_t raw_status = static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
-                                    (static_cast<uint32_t>(p[6]) << 16) |
-                                    (static_cast<uint32_t>(p[7]) << 24);
-        out->status = static_cast<int32_t>(raw_status);
-        out->body.assign(p + 8, p + frame->payload_length);
-        return true;
-    }
-    const std::string json = frame_text(frame);
-    double status = 0;
-    if (!json_number_field(json, "status", &status)) {
-        *err = "http response frame carries no status.";
-        return false;
-    }
-    out->status = static_cast<long>(status);
-    const std::string headers = json_object_slice(json, "headers");
-    read_header(headers, "etag", "ETag", &out->etag);
-    read_header(headers, "last-modified", "Last-Modified", &out->last_modified);
-    read_header(headers, "content-type", "Content-Type", &out->content_type);
-    read_header(headers, "date", "Date", &out->date);
-    std::string body_b64;
-    if (json_string_field(json, "bodyB64", &body_b64) && !body_b64.empty()) {
-        if (!base64_decode(body_b64, &out->body)) {
-            *err = "http response bodyB64 is not valid base64.";
-            return false;
-        }
-    }
-    return true;
-}
-
-int64_t retrieved_at_ms(const HttpResponse& response) {
+// The records' retrieval time: the publisher's Date header, else the host's receive time, else the clock.
+int64_t retrieved_at_ms(const Fetched& response) {
     int64_t ms = 0;
     if (!response.date.empty() && parse_http_date(response.date, &ms)) return ms;
+    if (response.retrieved_ms > 0) return response.retrieved_ms;
     return now_unix_ms();
 }
 
 // ---------------------------------------------------------------------------
-// Ingest meta + provenance (storage.ingest_with_source contract).
+// The ingest request (IngestRequest, INGQ) for storage-ingest: source tags, reconcile mode and provenance.
 // ---------------------------------------------------------------------------
-
 
 struct Attribution {
     std::string provider_id;
@@ -622,66 +275,51 @@ struct Attribution {
     std::string source_url;
     std::string origin_id;
     std::string dataset_id;
-    std::string license_class;
+    std::string license_id;
     std::string license_url;
     std::string citation;
-    std::string archive_source;
-    std::string archive_name;
 };
 
-void read_attribution(const std::string& job, Attribution* out) {
-    json_string_field(job, "provider_id", &out->provider_id);
-    json_string_field(job, "source_name", &out->source_name);
-    json_string_field(job, "source_url", &out->source_url);
-    json_string_field(job, "origin_id", &out->origin_id);
-    json_string_field(job, "dataset_id", &out->dataset_id);
-    json_string_field(job, "license_class", &out->license_class);
-    json_string_field(job, "license_url", &out->license_url);
-    json_string_field(job, "citation", &out->citation);
-    json_string_field(job, "archive_source", &out->archive_source);
-    json_string_field(job, "archive_name", &out->archive_name);
+std::vector<uint8_t> build_ingest_request(const char* schema, const Attribution& attribution, const std::string& source_url,
+                                          const std::string& batch_id, const Fetched& response, const std::string& source_sha256,
+                                          const std::string& normalized_sha256, int normalized_count, int64_t retrieved_ms) {
+    R::IngestRequestT q;
+    q.SCHEMA = schema;
+    q.TAGS = std::make_unique<R::SourceTagsT>();
+    q.TAGS->PROVIDER_ID = attribution.provider_id;
+    q.TAGS->SOURCE_NAME = attribution.source_name;
+    q.TAGS->BATCH_ID = batch_id;
+    q.TAGS->SOURCE_URL = source_url;
+    q.TAGS->CONTENT_KEY_ID = kContentKeyID;
+    q.TAGS->SOURCE_PEER = "source:" + attribution.origin_id;
+    q.TAGS->LICENSE = attribution.license_id;
+    q.TAGS->LICENSE_URL = attribution.license_url;
+    q.TAGS->CITATION = attribution.citation;
+    q.RECONCILE = R::reconcileMode_Duplicates;
+    q.PROVENANCE = std::make_unique<R::ProvenanceT>();
+    R::ProvenanceT& p = *q.PROVENANCE;
+    p.SOURCE_URL = source_url;
+    p.HTTP_STATUS = static_cast<int32_t>(response.status);
+    p.ETAG = response.etag;
+    p.LAST_MODIFIED = response.last_modified;
+    p.CONTENT_TYPE = response.content_type;
+    p.RETRIEVED_MS = static_cast<uint64_t>(retrieved_ms);
+    p.PARSER = kParserName;
+    p.PARSER_VERSION = kParserVersion;
+    p.SOURCE_SHA256 = source_sha256;
+    p.NORMALIZED_SHA256 = normalized_sha256;
+    p.NORMALIZED_COUNT = static_cast<uint64_t>(normalized_count);
+    p.SCHEMAS = {schema};
+    p.SCHEMA_COUNTS = {static_cast<uint64_t>(normalized_count)};
+    p.FROM_CACHE = false;
+    ::flatbuffers::FlatBufferBuilder b(1024);
+    R::FinishIngestRequestBuffer(b, R::IngestRequest::Pack(b, &q));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-
-std::string build_provenance_json(const char* parser_version, const std::string& source_url,
-                                  long status, const HttpResponse& response,
-                                  const std::string& source_sha256,
-                                  const std::string& normalized_sha256, int normalized_count,
-                                  const std::string& schema_counts_json, int64_t retrieved_ms) {
-    std::string out = std::string("{\"source_url\":\"") + json_escape(source_url) + "\"" +
-                      ",\"http_status\":" + std::to_string(status);
-    if (!response.etag.empty()) out += ",\"etag\":\"" + json_escape(response.etag) + "\"";
-    if (!response.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(response.last_modified) + "\"";
-    if (!response.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(response.content_type) + "\"";
-    out += std::string(",\"retrieved_at\":\"") + format_iso_seconds(retrieved_ms) + "\"" +
-           ",\"parser_version\":\"" + parser_version + "\"" +
-           ",\"source_sha256\":\"" + source_sha256 + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + std::to_string(normalized_count) +
-           ",\"schema_counts\":" + schema_counts_json +
-           ",\"warnings\":[],\"from_cache\":false}";
-    return out;
-}
-
-
-std::string build_ingest_meta(const char* schema, const Attribution& attribution, const std::string& license_id,
-                              const std::string& source_url, const std::string& batch_id,
-                              const std::string& provenance_json) {
-    return std::string("{\"schema\":\"") + schema + "\"" +
-           ",\"provider_id\":\"" + json_escape(attribution.provider_id) + "\"" +
-           ",\"source_name\":\"" + json_escape(attribution.source_name) + "\"" +
-           ",\"source_url\":\"" + json_escape(source_url) + "\"" +
-           ",\"batch_id\":\"" + batch_id + "\"" +
-           ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-           ",\"source_peer\":\"source:" + json_escape(attribution.origin_id) + "\"" +
-           ",\"reconcile\":\"duplicates\"" +
-           ",\"license\":\"" + json_escape(license_id) + "\"" +
-           ",\"license_url\":\"" + json_escape(attribution.license_url) + "\"" +
-           ",\"citation\":\"" + json_escape(attribution.citation) + "\"" +
-           ",\"provenance\":{\"source\":\"" + json_escape(attribution.source_name) + "\",\"json\":\"" +
-           base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()), provenance_json.size()) + "\"}}";
+int push_ingest_request(const std::vector<uint8_t>& meta) {
+    return plugin_push_output_ex("wxf_meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "IngestRequest", 0, 0, meta.data(), static_cast<uint32_t>(meta.size()));
 }
 
 std::vector<uint8_t> finished_unprefixed(::flatbuffers::FlatBufferBuilder& fbb) {
@@ -789,45 +427,66 @@ bool map_field(const grib2mini::Message& m, Mapped* out, std::string* why) {
 // ---------------------------------------------------------------------------
 
 struct GribJob {
-    std::string url, product, model_key, model_id, model_class, run;
+    std::string url, product, model_key, model_id, run;
+    wxfModelClass model_class = wxfModelClass_Other;
     int64_t lead = 0;
-    int stride = 1, band_rows = 0, ensemble_size = 0;
+    double grid_deg = 0;   // the records' spacing: the stride is it over the field's own spacing
+    int band_rows = 0, ensemble_size = 0;
     double tile_deg = 0;   // > 0: level-4 style tiles of this many degrees, one batch a tile (the sea product)
     bool spread = false;
-    std::string license_id;
     Attribution attribution;
 };
 
-bool read_grib_job(const std::string& json, GribJob* job, std::string* err) {
-    json_string_field(json, "url", &job->url);
-    json_string_field(json, "product", &job->product);
-    json_string_field(json, "model_key", &job->model_key);
-    json_string_field(json, "model_id", &job->model_id);
-    json_string_field(json, "model_class", &job->model_class);
-    json_string_field(json, "run", &job->run);
-    json_string_field(json, "license", &job->license_id);
-    double v = 0;
-    if (json_number_field(json, "lead", &v)) job->lead = static_cast<int64_t>(v);
-    if (json_number_field(json, "stride", &v)) job->stride = static_cast<int>(v);
-    if (json_number_field(json, "band_rows", &v)) job->band_rows = static_cast<int>(v);
-    if (json_number_field(json, "ensemble_size", &v)) job->ensemble_size = static_cast<int>(v);
-    if (json_number_field(json, "tile_deg", &v)) job->tile_deg = v;
-    json_bool_field(json, "spread", &job->spread);
-    read_attribution(json, &job->attribution);
-    if (job->url.empty() || job->product.empty() || job->model_key.empty() || job->run.empty()) { *err = "a GRIB job needs url, product, model_key and run"; return false; }
-    if (job->stride < 1 || job->stride > 8) { *err = "stride must be 1..8"; return false; }
-    if (job->band_rows < 0) { *err = "band_rows must be 0 (whole field) or a row count"; return false; }
-    if (job->tile_deg < 0 || (job->tile_deg > 0 && (std::fabs(360.0 / job->tile_deg - std::round(360.0 / job->tile_deg)) > 1e-9 ||
-                                                    std::fabs(180.0 / job->tile_deg - std::round(180.0 / job->tile_deg)) > 1e-9))) {
-        *err = "tile_deg must divide 360 and 180"; return false;
+// The provider lane and licence of a dataset the job names (DATASET_ID: the NOAA Open Data Dissemination bucket). A
+// dataset this parser has no attribution for is refused, never stored under a guessed provider.
+struct DatasetAttribution { const char* dataset_id; const char* provider_id; const char* license_id; };
+const DatasetAttribution kDatasets[] = {
+    {"noaa-gfs-bdp-pds", "noaa-ncep", "LicenseRef-NOAA-Open-Data"},
+    {"noaa-gefs-pds", "noaa-ncep", "LicenseRef-NOAA-Open-Data"},
+};
+
+std::string text_of(const ::flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+// The job a response carries back in CONTEXT: the size-prefixed $WXF header record nwp-field-source's plan built.
+bool read_grib_job(const R::HttpResponse& response, GribJob* job, std::string* err) {
+    const auto* context = response.CONTEXT();
+    if (!context || context->size() < 8) { *err = "the response carries no job ($WXF header) in CONTEXT"; return false; }
+    ::flatbuffers::Verifier verifier(context->data(), context->size());
+    if (!VerifySizePrefixedWXFBuffer(verifier)) { *err = "the response's CONTEXT is not a size-prefixed $WXF header record"; return false; }
+    const WXF& h = *GetSizePrefixedWXF(context->data());
+    const std::string field_id = text_of(h.FIELD_ID());
+    const size_t c1 = field_id.find(':'), c2 = c1 == std::string::npos ? c1 : field_id.find(':', c1 + 1);
+    if (c2 == std::string::npos) { *err = "the job's FIELD_ID is not <model_key>:<run>:...: " + field_id; return false; }
+    job->model_key = field_id.substr(0, c1);
+    job->run = field_id.substr(c1 + 1, c2 - c1 - 1);
+    job->url = text_of(h.SOURCE_URL());
+    job->product = text_of(h.VARIABLE_NAME());
+    job->model_id = text_of(h.MODEL_ID());
+    job->model_class = h.MODEL_CLASS();
+    job->lead = static_cast<int64_t>(std::llround(h.LEAD_HOURS()));
+    job->spread = h.MEMBER_KIND() == wxfMemberKind_StandardDeviation;
+    job->ensemble_size = h.ENSEMBLE_SIZE();
+    job->grid_deg = h.GRID()->DLAT();
+    job->band_rows = static_cast<int>(h.GRID()->NLAT());
+    Attribution& a = job->attribution;
+    a.source_name = job->product;
+    a.source_url = job->url;
+    a.origin_id = text_of(h.ORIGIN_ID());
+    a.dataset_id = text_of(h.DATASET_ID());
+    a.license_url = text_of(h.LICENSE_URL());
+    a.citation = text_of(h.CITATION());
+    for (const DatasetAttribution& d : kDatasets)
+        if (a.dataset_id == d.dataset_id) { a.provider_id = d.provider_id; a.license_id = d.license_id; }
+    if (job->url.empty() || job->product.empty() || job->model_key.empty() || job->run.empty()) { *err = "a GRIB job needs SOURCE_URL, VARIABLE_NAME (the product) and FIELD_ID <model_key>:<run>"; return false; }
+    if (a.provider_id.empty()) { *err = "dataset \"" + a.dataset_id + "\" has no provider attribution in this parser"; return false; }
+    if (!(job->grid_deg > 0)) { *err = "the job's GRID.DLAT (the records' spacing) must be > 0"; return false; }
+    const uint32_t tiles = h.TILE_COUNT();
+    if (tiles > 1) {
+        const long n = std::lround(std::sqrt(tiles / 2.0));
+        if (n < 1 || static_cast<uint32_t>(2 * n * n) != tiles) { *err = "TILE_COUNT " + std::to_string(tiles) + " is not a 2n x n tiling of the globe"; return false; }
+        job->tile_deg = 180.0 / static_cast<double>(n);
     }
     return true;
-}
-
-wxfModelClass model_class_named(const std::string& name) {
-    if (name == "NumericalGlobalEnsemble") return wxfModelClass_NumericalGlobalEnsemble;
-    if (name == "NumericalGlobalDeterministic") return wxfModelClass_NumericalGlobalDeterministic;
-    return wxfModelClass_Other;
 }
 
 // ---------------------------------------------------------------------------
@@ -857,12 +516,21 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
         return false;
     }
     if (m.scanMode != 0 || m.ni == 0 || m.nj < 2) { *code = "grid-unsupported"; *message = job.url + ": " + f.name + ": scan mode " + std::to_string(m.scanMode) + " (only +i, -j)"; return false; }
+    // every `stride`-th point: the job's spacing over the field's own (1..8, whole, the same both ways)
+    const long stride_l = std::lround(job.grid_deg / m.dj);
+    if (stride_l < 1 || stride_l > 8 || std::fabs(stride_l * m.dj - job.grid_deg) > 1e-6 || std::fabs(stride_l * m.di - job.grid_deg) > 1e-6) {
+        *code = "grid-unsupported";
+        *message = job.url + ": " + f.name + ": the job asks for a " + std::to_string(job.grid_deg) + " deg grid; the field's spacing (" +
+                   std::to_string(m.dj) + " x " + std::to_string(m.di) + " deg) is not 1..8 times into it";
+        return false;
+    }
+    const int stride = static_cast<int>(stride_l);
     std::vector<uint32_t> X;
     std::string err;
     if (!grib2mini::unpack(bytes, m, previous_bitmap, X, err)) { *code = "grib2-unreadable"; *message = job.url + ": " + f.name + ": " + err; return false; }
     // the grid: GRIB rows north to south from La1; the record south to north from the southernmost row, lon from Lo1
-    const double dlat = m.dj * job.stride, dlon = m.di * job.stride;
-    const uint32_t nj = (m.nj - 1) / static_cast<uint32_t>(job.stride) + 1, ni = (m.ni + static_cast<uint32_t>(job.stride) - 1) / static_cast<uint32_t>(job.stride);
+    const double dlat = m.dj * stride, dlon = m.di * stride;
+    const uint32_t nj = (m.nj - 1) / static_cast<uint32_t>(stride) + 1, ni = (m.ni + static_cast<uint32_t>(stride) - 1) / static_cast<uint32_t>(stride);
     const double lat0 = m.la1 - (m.nj - 1) * m.dj;   // southernmost row
     if (std::fabs(m.la1 - 90) > 1e-6 || std::fabs(lat0 + 90) > 1e-6 || std::fabs(m.lo1) > 1e-6) {
         *code = "grid-unsupported"; *message = job.url + ": " + f.name + ": only global grids from 90 N, 0 E are published"; return false;
@@ -872,9 +540,9 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
     double lo = 0, hi = 0; bool any = false; uint32_t missing = 0;
     const double scale = std::ldexp(1.0, m.E) / std::pow(10.0, m.D) * f.factor, offset = double(m.R) / std::pow(10.0, m.D) * f.factor;
     for (uint32_t j = 0; j < nj; j++) {
-        const uint32_t src_row = m.nj - 1 - j * static_cast<uint32_t>(job.stride);   // (record row j from the south)
+        const uint32_t src_row = m.nj - 1 - j * static_cast<uint32_t>(stride);   // (record row j from the south)
         for (uint32_t i = 0; i < ni; i++) {
-            const uint32_t x = X[static_cast<size_t>(src_row) * m.ni + static_cast<size_t>(i) * static_cast<uint32_t>(job.stride)];
+            const uint32_t x = X[static_cast<size_t>(src_row) * m.ni + static_cast<size_t>(i) * static_cast<uint32_t>(stride)];
             uint16_t c;
             if (x == grib2mini::MISSING) { c = 65535; missing++; }
             else if (x > 65534) { *code = "packing-too-wide"; *message = job.url + ": " + f.name + ": a packing integer (" + std::to_string(x) + ") does not fit 16 bits"; return false; }
@@ -929,7 +597,7 @@ bool message_records(const GribJob& job, const uint8_t* bytes, const grib2mini::
             const auto grid_off = grid.Finish();
             WXFBuilder r(fbb);
             r.add_FIELD_ID(field_id);
-            r.add_MODEL_CLASS(model_class_named(job.model_class));
+            r.add_MODEL_CLASS(job.model_class);
             r.add_MODEL_ID(model_id);
             r.add_MODEL_VERSION(model_version);
             r.add_TIME_BASIS(wxfTimeBasis_Initialization);
@@ -1025,8 +693,8 @@ extern "C" {
 // out is kept as its raw GRIB bytes (a few MB, not its ~20 MB of tile records) and cut when the tiles before it are out -
 // nothing dropped, the memory one lead's tiles plus the waiting leads' bytes. (A whole-field or banded batch is parsed
 // and emitted at once, as before.)
-struct PendingBatch { std::string meta; std::vector<uint8_t> stream; };
-struct PendingInput { std::vector<GribJob> jobs; std::vector<HttpResponse> responses; };
+struct PendingBatch { std::vector<uint8_t> meta; std::vector<uint8_t> stream; };
+struct PendingInput { std::vector<GribJob> jobs; std::vector<Fetched> responses; };
 std::vector<PendingBatch> g_tile_backlog;
 size_t g_tile_next = 0;
 std::vector<PendingInput> g_raw_pending;
@@ -1041,9 +709,9 @@ void set_backlog_state() {
     plugin_set_yielded(remaining > 0 ? 1 : 0);
 }
 
-// One input's records: a tiled job's into the tile backlog (tiled true), else the batch's meta + record stream.
-// Returns 0, or the failing status with the error set.
-int parse_input(const PendingInput& in, bool* tiled, std::string* meta_out, std::vector<uint8_t>* stream) {
+// One input's records: a tiled job's into the tile backlog (tiled true), else the batch's ingest request + record
+// stream. Returns 0, or the failing status with the error set.
+int parse_input(const PendingInput& in, bool* tiled, std::vector<uint8_t>* meta_out, std::vector<uint8_t>* stream) {
     Sha256 batch, normalized;
     int count = 0;
     TileSinks tiles;
@@ -1072,7 +740,7 @@ int parse_input(const PendingInput& in, bool* tiled, std::string* meta_out, std:
     }
     const std::string batch_id = batch.hex_digest();
     const GribJob& first = in.jobs[0];
-    const HttpResponse& response = in.responses[0];
+    const Fetched& response = in.responses[0];
     const int64_t retrieved = retrieved_at_ms(response);
     *tiled = !tiles.empty();
     if (*tiled) {
@@ -1081,15 +749,13 @@ int parse_input(const PendingInput& in, bool* tiled, std::string* meta_out, std:
             char lead[8];
             std::snprintf(lead, sizeof(lead), "%03d", t.lead);
             const std::string tile_batch = first.model_key + ":" + first.run + ":f" + lead + ":s4:" + key;
-            const std::string tile_provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id,
-                                                                      t.normalized.hex_digest(), t.count, "{\"WXF.fbs\":" + std::to_string(t.count) + "}", retrieved);
-            g_tile_backlog.push_back({build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, tile_batch, tile_provenance), std::move(t.stream)});
+            g_tile_backlog.push_back({build_ingest_request("WXF.fbs", first.attribution, first.url, tile_batch, response, batch_id,
+                                                           t.normalized.hex_digest(), t.count, retrieved),
+                                      std::move(t.stream)});
         }
         return 0;
     }
-    const std::string provenance = build_provenance_json(kParserVersion, first.url, response.status, response, batch_id, normalized.hex_digest(), count,
-                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
-    *meta_out = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, first.url, batch_id, provenance);
+    *meta_out = build_ingest_request("WXF.fbs", first.attribution, first.url, batch_id, response, batch_id, normalized.hex_digest(), count, retrieved);
     return 0;
 }
 
@@ -1102,22 +768,21 @@ int emit_next_tile_batch() {
             PendingInput in = std::move(g_raw_pending[g_raw_next++]);
             if (g_raw_next >= g_raw_pending.size()) { g_raw_pending.clear(); g_raw_next = 0; }
             bool tiled = false;
-            std::string unused_meta;
-            std::vector<uint8_t> unused_stream;
+            std::vector<uint8_t> unused_meta, unused_stream;
             const int status = parse_input(in, &tiled, &unused_meta, &unused_stream);
             if (status != 0) return status;
         }
         if (g_tile_backlog.empty()) return 0;
     }
     PendingBatch b = std::move(g_tile_backlog[g_tile_next++]);
-    if (push_json("wxf_meta", b.meta) < 0) return 500;
+    if (push_ingest_request(b.meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", b.stream) < 0) return 500;
     if (g_tile_next >= g_tile_backlog.size()) { g_tile_backlog.clear(); g_tile_next = 0; }
     return 0;
 }
 
-// parse: jobs[k] + responses[k] (paired by position; each response whole GRIB2 messages of one byte range) ->
-// wxf_meta + wxf_records (one batch for the invocation). A tiled job (tile_deg) -> one batch a tile, batch_id
+// parse: the responses (each whole GRIB2 messages of one byte range, its job a $WXF header in CONTEXT) -> wxf_meta
+// (IngestRequest) + wxf_records (one batch for the invocation). A tiled job (TILE_COUNT) -> one batch a tile, batch_id
 // <model>:<run>:f<LLL>:s4:<x>:<y>, handed out one an invocation; resumed without input, the next.
 int parse(void) {
     if (plugin_get_input_count() == 0) {
@@ -1125,36 +790,45 @@ int parse(void) {
         set_backlog_state();
         return status;
     }
-    const std::vector<const plugin_input_frame_t*> job_frames = frames_on("jobs");
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
-    if (job_frames.empty()) {
-        plugin_set_error("missing-job-frame", "parse requires at least one GRIB job frame.");
-        return 400;
-    }
-    if (job_frames.size() != response_frames.size()) {
-        const std::string msg = "parse received " + std::to_string(job_frames.size()) + " job frames but " + std::to_string(response_frames.size()) +
-                                " response frames; jobs and responses pair by position, so a mismatch cannot be attributed and is refused.";
-        plugin_set_error("job-response-count-mismatch", msg.c_str());
+    if (response_frames.empty()) {
+        plugin_set_error("missing-response-frame", "parse requires at least one HttpResponse frame on \"responses\".");
         return 400;
     }
     PendingInput in;
-    in.jobs.resize(job_frames.size());
+    in.jobs.resize(response_frames.size());
     in.responses.resize(response_frames.size());
     bool tiled_job = false;
-    for (size_t k = 0; k < in.jobs.size(); k++) {
+    for (size_t k = 0; k < response_frames.size(); k++) {
+        const plugin_input_frame_t* frame = response_frames[k];
+        if (!frame || !frame->payload || frame->payload_length == 0) {
+            plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": the frame is empty.").c_str());
+            return 400;
+        }
+        ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+        if (!R::VerifyHttpResponseBuffer(verifier)) {
+            plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": not an HttpResponse (HRSP).").c_str());
+            return 400;
+        }
+        const R::HttpResponse& r = *R::GetHttpResponse(frame->payload);
         std::string err;
-        if (!read_grib_job(frame_text(job_frames[k]), &in.jobs[k], &err)) {
-            plugin_set_error("invalid-grib-job", ("GRIB job " + std::to_string(k) + ": " + err).c_str());
+        if (!read_grib_job(r, &in.jobs[k], &err)) {
+            plugin_set_error("invalid-grib-job", ("response " + std::to_string(k) + " (" + text_of(r.URL()) + "): " + err).c_str());
             return 400;
         }
-        if (!decode_http_response(response_frames[k], &in.responses[k], &err)) {
-            plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": " + err).c_str());
-            return 400;
-        }
-        if (in.responses[k].status != 200 && in.responses[k].status != 206) {
-            plugin_set_error("fetch-failed", (in.jobs[k].url + " returned HTTP status " + std::to_string(in.responses[k].status)).c_str());
+        Fetched& f = in.responses[k];
+        f.status = r.STATUS();
+        if (f.status != 200 && f.status != 206) {
+            const std::string why = r.ERROR() && r.ERROR()->size() ? " (" + r.ERROR()->str() + ")" : std::string();
+            plugin_set_error("fetch-failed", (in.jobs[k].url + " returned HTTP status " + std::to_string(f.status) + why).c_str());
             return 502;
         }
+        f.etag = header_of(r, "etag");
+        f.last_modified = header_of(r, "last-modified");
+        f.content_type = header_of(r, "content-type");
+        f.date = header_of(r, "date");
+        f.retrieved_ms = static_cast<int64_t>(r.RETRIEVED_MS());
+        if (r.BODY()) f.body.assign(r.BODY()->data(), r.BODY()->data() + r.BODY()->size());
         if (in.jobs[k].tile_deg > 0) tiled_job = true;
     }
     if (tiled_job) {
@@ -1165,11 +839,10 @@ int parse(void) {
         return status;
     }
     bool tiled = false;
-    std::string meta;
-    std::vector<uint8_t> stream;
+    std::vector<uint8_t> meta, stream;
     const int status = parse_input(in, &tiled, &meta, &stream);
     if (status != 0) return status;
-    if (push_json("wxf_meta", meta) < 0) return 500;
+    if (push_ingest_request(meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", stream) < 0) return 500;
     set_backlog_state();   // (tiles still going out: yielded, resumed for them)
     return 0;

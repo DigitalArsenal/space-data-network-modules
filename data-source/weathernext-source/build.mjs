@@ -9,15 +9,29 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "weathernext_source_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+// The sibling spacedatastandards.org checkout; SPACE_DATA_STANDARDS_ROOT wins when set.
+const defaultStandardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : defaultStandardsRoot;
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+// The parse jobs ride each HttpRequest's CONTEXT as SDS header records ($WXF for a cloud chunk, $TCT for the cyclone
+// tracks), built with the GENERATED C++ code. flatc emits every SDS header with the same include guard and a
+// self-named `#include "main_generated.h"` (TCT includes WXF); inlining both into one translation unit strips them
+// (same pattern as data-source/weathernext-parser).
+function inlineGeneratedHeader(source) {
+  return source
+    .replace(/#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/, "")
+    .replace(/#include "main_generated\.h"\s*\n/g, "")
+    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
+}
 
-// No SDS header is inlined: this node carries no record. Its frames are the
-// flow's own control JSON (http request descriptors, per-chunk parse jobs,
-// status frames); the parser sibling builds the $WXF/$TCT records.
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+const headers = await Promise.all(
+  ["WXF", "TCT"].map((standard) => fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8")),
+);
+const sourceCode = [...headers.map(inlineGeneratedHeader), await fs.readFile(sourcePath, "utf8")].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -29,7 +43,7 @@ const compilation = await compileModuleFromSource({
   outputPath,
   // THREAD MODEL — declared explicitly, never inferred. One control frame in,
   // a handful of synchronous hostcalls (plugin.getConfig, secrets.get) in a
-  // fixed order, request/job frames out; no shared state, provably no thread.
+  // fixed order, HttpRequest / FlowNotice frames out; no shared state, provably no thread.
   // Same single-thread STANDALONE_WASM lane as celestrak-request and
   // cell-tower-credentials.
   threadModel: "single-thread",

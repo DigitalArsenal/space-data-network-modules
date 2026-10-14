@@ -56,6 +56,9 @@ const compilation = await compileModuleFromSource({
   // so it compiles on the single-thread STANDALONE_WASM lane like every other
   // flow node (celestrak-parser, satnogs-source, hostcap/*).
   threadModel: "single-thread",
+  // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig (the chunk extents, the
+  // dimension order and the provider id); symbols resolve at instantiation.
+  allowUndefinedImports: true,
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler.
