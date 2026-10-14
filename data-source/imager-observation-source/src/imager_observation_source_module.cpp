@@ -749,6 +749,8 @@ int plan(void) {
     forget_before(floor_hour(now) - static_cast<int64_t>(std::max(backfill, view_backfill) + 24) * 3600000);
     // (a tick re-plans from scratch: what the last one queued and did not hand out yet is replaced)
     g_plan_backlog.clear(); g_plan_next = 0;
+    // (newest hour first across the satellites: every satellite's latest frame before any backfill)
+    std::vector<std::vector<Pending>> by_hour;
     for (const std::string& id : satellites) {
         const Satellite* sat = satellite_for(id);
         if (!sat) { plugin_set_error("unknown-satellite", ("imager_satellites names an unknown satellite: " + id).c_str()); return 400; }
@@ -759,6 +761,7 @@ int plan(void) {
                                          config_number(config, "imager_lag_minutes", sat->lag_minutes));
         const int64_t latest = fixed ? fixed : floor_hour(now - static_cast<int64_t>(lag * 60000.0));
         const int hours = fixed ? 1 : ledger_kind(*sat) ? backfill : std::max(view_backfill, kViewRetryHours);
+        if (by_hour.size() < size_t(hours)) by_hour.resize(size_t(hours));
         for (int h = 0; h < hours; h++) {
             const int64_t frame = latest - static_cast<int64_t>(h) * 3600000;
             std::vector<std::string> todo;
@@ -774,7 +777,7 @@ int plan(void) {
                 p.port_a = "work";
                 p.a = std::string("{\"kind\":\"view\",") + attribution_json(*sat) + ",\"frame_time_ms\":" + std::to_string(frame) +
                       ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":" + fields_json(todo) + "}";
-                g_plan_backlog.push_back(p);
+                by_hour[size_t(h)].push_back(p);
                 continue;
             }
             int year = 0, doy = 0, hour = 0, month = 0, day = 0;
@@ -811,10 +814,11 @@ int plan(void) {
                 p.b = std::string("{\"what\":\"") + what + "\"," + attribution_json(*sat) + ",\"bucket\":\"" + sat->dataset +
                       "\",\"prefix\":\"" + json_escape(l.first) + "\",\"frame_time_ms\":" + std::to_string(frame) +
                       ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":\"" + list_fields + "\"}";
-                g_plan_backlog.push_back(p);
+                by_hour[size_t(h)].push_back(p);
             }
         }
     }
+    for (const auto& hour : by_hour) g_plan_backlog.insert(g_plan_backlog.end(), hour.begin(), hour.end());
     if (g_plan_backlog.empty()) {
         // every frame of the window landed (or tried, for view imagery): nothing new upstream - the node's unchanged
         // notice (internal/flowrt cronmount egressReportsUnchanged), not a failure that widens the retrieval window

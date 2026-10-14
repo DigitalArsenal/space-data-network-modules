@@ -2005,8 +2005,11 @@ int run() {
                 }
                 return 0;
             }
-            g_active = make_job(g_queue.front());
-            g_queue.erase(g_queue.begin());
+            // the newest frame first (a backfill queued behind never holds back the hour that just came out)
+            size_t pick = 0;
+            for (size_t q = 1; q < g_queue.size(); q++) if (g_queue[q].frame_ms > g_queue[pick].frame_ms) pick = q;
+            g_active = make_job(g_queue[pick]);
+            g_queue.erase(g_queue.begin() + long(pick));
         }
         std::string err;
         if (!g_active->step(&err)) { fail_active(err); continue; }
