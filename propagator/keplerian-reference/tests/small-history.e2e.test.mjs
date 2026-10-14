@@ -1,11 +1,12 @@
-// E2E for keplerian-reference 1.8.1: a row's drawn place depends on the epoch
+// E2E for keplerian-reference 1.8.1/1.8.2: a row's drawn place depends on the epoch
 // asked for and nothing else. 1.8.0 replaced a row's elements in place from
 // wherever the clock had last been, with a fixed 6-day RK4 step that was twice
 // (3200) Phaethon's dynamical time at perihelion: after the clock visited
 // -50 days, Phaethon brought back to its element epoch was 12,886 km off
 // (verifier, 2026-10-14). Now the perturbed path runs on checkpoints keyed to
 // the element epoch, each reached only from its neighbour toward the epoch,
-// with the step refined near the Sun.
+// with the step refined near the Sun. 1.8.2 caches anchor checkpoints on the
+// way out, so a run back toward the epoch restarts from the nearest one.
 //   1. Bit-identical states and snapshots whatever the clock visited first
 //      (the 1,004-row astorb sample and three low-perihelion asteroids).
 //   2. The low-perihelion rows against JPL Horizons (geometric heliocentric
@@ -91,6 +92,17 @@ test("a snapshot of the 1,004-row astorb sample is bit-identical after a -50 day
   snapshot(n, EPOCH + 3 * DAY);
   const back = snapshot(n, EPOCH + 27 * DAY);
   assert.deepEqual(back, fresh);
+});
+
+test("a clock run back toward the epoch and across it draws what a fresh catalog draws at every epoch (1.8.2 anchored restarts)", () => {
+  const n = ingest(sample);
+  const days = [];
+  for (let d = 58; d >= -58; d -= 1.5) days.push(d);
+  const run = days.map((d) => snapshot(n, EPOCH + d * DAY));
+  days.forEach((d, i) => {
+    ingest(sample);
+    assert.deepEqual(run[i], snapshot(n, EPOCH + d * DAY), `${d} d`);
+  });
 });
 
 test("low-perihelion asteroids follow JPL Horizons within 300 km over +-55 days after any clock history (2005 MB: its epoch offset + 1,500 km)", () => {

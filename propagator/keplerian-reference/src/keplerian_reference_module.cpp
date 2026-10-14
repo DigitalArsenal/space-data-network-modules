@@ -808,6 +808,23 @@ double g_small_validity = kDefaultSmallValiditySeconds;
 /// the conic osculating at the nearest checkpoint (at most 2 days away).
 constexpr double kCheckpointStep = 4.0 * 86400.0;
 
+/// Checkpoints cached on the way out from the element epoch so that a move
+/// back toward it restarts from the nearest one instead of from the epoch
+/// elements (keplerian-reference 1.8.2: 1.8.1 re-ran the whole chain at every
+/// grid crossing toward the epoch, 117 ms against 1.8.0's 42 ms for a 56-day
+/// sweep of 1,004 rows; 1.0-1.9 s snapshot spikes for 806k rows in the
+/// console). The anchors split the validity span into kAnchors + 1 equal
+/// parts, so a step toward the epoch costs at most a few grid steps.
+constexpr int kAnchors = 3;
+
+/// A checkpoint's elements as float32 differences from the epoch elements
+/// (see SmallBody).
+struct CheckpointDelta {
+  float da = 0.0f, de = 0.0f, dn = 0.0f, dm = 0.0f;
+  float dp[3] = {0.0f, 0.0f, 0.0f};
+  float dq[3] = {0.0f, 0.0f, 0.0f};
+};
+
 struct SmallBody {
   // The record's osculating elements at its element epoch, exactly as decoded
   // and never changed afterwards (keplerian-reference 1.8.1: the drawn place
@@ -830,6 +847,11 @@ struct SmallBody {
   int32_t k = 0;
   float h = NAN;
   float g = 0.15f;
+  // Copies of checkpoints anchor_k[i] (0: empty) of the same chain. They are
+  // values of the path at fixed grid points, so restarting from one gives the
+  // same elements as restarting from the epoch.
+  int16_t anchor_k[kAnchors] = {0, 0, 0};
+  CheckpointDelta anchor[kAnchors];
 };
 
 /// A two-body conic: the elements a row's places are computed from.
@@ -1291,17 +1313,75 @@ void store_checkpoint(SmallBody& b, const Conic& c, int32_t k) {
 /// cached chain when `et` lies farther out on the same side of the epoch, and
 /// otherwise restarts it from the epoch elements, so the elements used at et
 /// are a function of et alone. A failed step keeps the last good checkpoint.
+/// The grid spacing of the anchors: the validity span's checkpoints split
+/// into kAnchors + 1 parts (4 for the default 60 days: anchors at 16, 32 and
+/// 48 days, so a step toward the epoch costs at most 3 grid steps).
+inline int32_t anchor_spacing() {
+  const double kmax = std::ceil(g_small_validity / kCheckpointStep);
+  const double s = std::ceil(kmax / (kAnchors + 1));
+  return (std::isfinite(s) && s >= 1.0) ? static_cast<int32_t>(std::min(s, 8192.0)) : 1;
+}
+
+inline void load_delta(SmallBody& b, const CheckpointDelta& d, int32_t k) {
+  b.da = d.da;
+  b.de = d.de;
+  b.dn = d.dn;
+  b.dm = d.dm;
+  for (int i = 0; i < 3; ++i) {
+    b.dp[i] = d.dp[i];
+    b.dq[i] = d.dq[i];
+  }
+  b.k = k;
+}
+
+/// Keeps the row's current checkpoint as an anchor when it falls on one.
+inline void keep_anchor(SmallBody& b, int32_t spacing) {
+  const int32_t m = std::abs(b.k);
+  if (m == 0 || m % spacing != 0) return;
+  const int32_t slot = m / spacing - 1;
+  if (slot >= kAnchors || m > 32767) return;
+  CheckpointDelta& d = b.anchor[slot];
+  d.da = b.da;
+  d.de = b.de;
+  d.dn = b.dn;
+  d.dm = b.dm;
+  for (int i = 0; i < 3; ++i) {
+    d.dp[i] = b.dp[i];
+    d.dq[i] = b.dq[i];
+  }
+  b.anchor_k[slot] = static_cast<int16_t>(b.k);
+}
+
+/// The row's checkpoint nearest `et`, from its perturbed path: continued from
+/// the cached checkpoint (the current one or an anchor) nearest `et` between
+/// the epoch and `et`, or from the epoch elements, so the elements used at et
+/// are a function of et alone. A failed step keeps the last good checkpoint.
 bool small_rebase(SmallBody& b, double et) {
   const double steps = (et - b.epoch_et) / kCheckpointStep;
   if (!std::isfinite(steps) || std::fabs(steps) > 1.0e6) return false;
   const int32_t want = static_cast<int32_t>(std::lround(steps));
   if (want == b.k) return true;
-  const bool onward = b.k != 0 && (b.k > 0) == (want > 0) && std::abs(want) > std::abs(b.k);
-  if (!onward) {
-    b.da = b.de = b.dn = b.dm = 0.0f;
-    for (int i = 0; i < 3; ++i) b.dp[i] = b.dq[i] = 0.0f;
-    b.k = 0;
+  // A cached checkpoint s is a start for `want` when it lies between the
+  // epoch and want: same side, |s| <= |want|.
+  const auto usable = [want](int32_t s) {
+    return s != 0 && (s > 0) == (want > 0) && std::abs(s) <= std::abs(want);
+  };
+  int32_t start = usable(b.k) ? b.k : 0;
+  int slot = -1;
+  for (int i = 0; i < kAnchors; ++i) {
+    const int32_t ak = b.anchor_k[i];
+    if (usable(ak) && std::abs(ak) > std::abs(start)) {
+      start = ak;
+      slot = i;
+    }
   }
+  if (slot >= 0) {
+    load_delta(b, b.anchor[slot], start);
+  } else if (start == 0) {
+    load_delta(b, CheckpointDelta{}, 0);
+  }
+  if (b.k == want) return true;
+  const int32_t spacing = anchor_spacing();
   const int32_t dir = want > b.k ? 1 : -1;
   Conic c;
   while (b.k != want) {
@@ -1309,6 +1389,7 @@ bool small_rebase(SmallBody& b, double et) {
     const int32_t next = b.k + dir;
     if (!advance_conic(c, b.epoch_et + next * kCheckpointStep)) return false;
     store_checkpoint(b, c, next);
+    keep_anchor(b, spacing);
   }
   return true;
 }

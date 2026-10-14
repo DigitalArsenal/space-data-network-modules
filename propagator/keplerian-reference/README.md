@@ -138,7 +138,7 @@ Rows are independent, so a host shards them across its own workers, as for
 reallocation as a catalog grows shard by shard: a module's linear memory keeps
 its high-water mark), and an ingest writes rows straight into the store.
 
-**Perturbed paths (1.6.0; clock-independent 1.8.1).** Osculating elements are
+**Perturbed paths (1.6.0; clock-independent 1.8.1; anchored 1.8.2).** Osculating elements are
 a conic only at their epoch; the planets pull a body off it (two-body alone put
 (16) Psyche 1.44" from Horizons at +45 days and 3" at +60). A row is carried
 along its perturbed path on a fixed grid of checkpoints keyed to its element
@@ -154,9 +154,15 @@ perihelion, one step per grid interval beyond about 1 AU).
 
 The record's elements are never changed: the cached checkpoint is held as
 float32 differences from them, a checkpoint is only ever reached from its
-neighbour toward the epoch (moving back toward the epoch, or across it,
-restarts the chain from the record), so a row's place at et is a function of et
-alone, bit for bit, whatever the clock visited before. 1.8.0 replaced the
+neighbour toward the epoch, so a row's place at et is a function of et alone,
+bit for bit, whatever the clock visited before. Moving back toward the epoch
+restarts the chain from the nearest cached checkpoint between the epoch and et:
+the current one, one of three anchors kept on the way out (the validity span's
+grid split in four: 16, 32 and 48 days for the default 60), or the record. A
+grid crossing toward the epoch therefore costs at most three grid steps (1.8.1
+re-ran the chain from the record at each one: a 56-day sweep of 1,004 rows
+toward the epoch took 104 ms against 1.8.0's 38 ms, the slowest snapshot
+13 ms; 1.8.2 takes 35-38 ms, the slowest 3.1 ms). 1.8.0 replaced the
 elements in place from wherever the clock had last been, with a fixed 6-day
 step (twice Phaethon's dynamical time at perihelion): Phaethon brought back to
 its epoch after a visit 50 days earlier was 12,886 km off. The record's own
@@ -169,8 +175,10 @@ Horizons over +-55 days after any of those histories, Phaethon 38-102 km and
 Lowell's orbit for it (computed 2025-08-02, CEU 0.46") is itself 2,192 km from
 JPL's at the element epoch, before any propagation; from JPL's own elements
 at that epoch the module follows Horizons within 50 km over +-55 days
-(Phaethon within 73 km, 2000 BD19 within 127 km). Memory: 40 bytes more per
-row (35 MB for the 895,910 numbered asteroids).
+(Phaethon within 73 km, 2000 BD19 within 127 km). A run from +58 days back
+across the epoch to -58 days draws what a fresh catalog draws at every
+1.5-day step. Memory: 168 bytes more per row than 1.8.0 (the checkpoint and
+three anchors; 150 MB for the 895,910 numbered asteroids).
 
 Evidence (`tests/small-bodies.e2e.test.mjs`, 1,004 Lowell astorb.dat records):
 within 2.7 mm of an independent two-body oracle of the record within the
