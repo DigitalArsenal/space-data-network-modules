@@ -16,13 +16,13 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     }
   ],
   "externalInterfaces": [
