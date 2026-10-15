@@ -2508,6 +2508,52 @@
         "inferenceHazard": false
       }
     },
+    "files/geotiff/dist/isomorphic/module.wasm": {
+      "sha256": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
+      "bytes": 222656,
+      "module": "files/geotiff",
+      "lastCommit": "93fc3190586eabbc380aa4d9a08a081d0e857c81",
+      "lastCommitDate": "2026-10-14T10:15:35-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "files/misb-klv/dist/isomorphic/module.wasm": {
+      "sha256": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
+      "bytes": 175171,
+      "module": "files/misb-klv",
+      "lastCommit": "d6bb2a7bbc058a0ae92783aa72149ab7b8419837",
+      "lastCommitDate": "2026-10-14T08:53:52-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "files/orbit-products/dist/isomorphic/module.wasm": {
       "sha256": "717f2f3c7508bae3426354471d45113188db96eb143c675956c0a5f9ffa1a6de",
       "bytes": 521868,
