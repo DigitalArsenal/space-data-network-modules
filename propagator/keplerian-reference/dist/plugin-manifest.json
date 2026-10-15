@@ -1,18 +1,20 @@
 {
   "pluginId": "com.orbpro.keplerian.reference",
   "name": "Keplerian Reference Propagator",
-  "version": "1.0.0",
-  "description": "Two-body Keplerian propagator. The reference implementation of the official OrbPro WASM propagator ABI — the minimal complete surface, written to be copied.",
+  "version": "1.8.2",
+  "description": "Two-body Keplerian propagator. The reference implementation of the official OrbPro WASM propagator ABI \u2014 the minimal complete surface, written to be copied. Also: heliocentric osculating elements for small bodies (asteroids) from SDS $SBD small-body records centred on the Sun (asteroids and comets are never $OMM), with frame snapshots (positions and H-G magnitudes) for hundreds of thousands of rows and one double-precision state for a selected body.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
-  "threadModel": "wasi-sequential",
-  "sequentialJustification": {
-    "kind": "caller-level-parallelism",
-    "detail": "Propagation is embarrassingly parallel ACROSS entities and strictly sequential WITHIN one. The propagator ABI (docs/propagator-abi.md §9) puts the sharding on the HOST: the frame-worker pool hands each worker the same output base pointer and a disjoint index range. This module therefore spawns no threads of its own and holds no cross-row state, which is what makes it safe under ANY sharding the host chooses. A module that spawned its own pool here would contend with the pool already scheduling it. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
-  },
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "threadModel": "emscripten-pthreads",
   "methods": [
     {
       "methodId": "ingest_omm",
