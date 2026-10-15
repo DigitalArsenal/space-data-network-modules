@@ -78,6 +78,18 @@ static void applyWindMode() {
 
 static bool g_initialized = false;
 
+/// Refusal codes shared by every gmat-07 setter. Zero is success; every
+/// refusal is NEGATIVE, distinct, and leaves the configuration untouched.
+enum HpopStatus {
+    HPOP_OK = 0,
+    HPOP_ERR_SHORT_BUFFER = -1,     ///< The caller's array is too short to read
+    HPOP_ERR_UNKNOWN_LABEL = -2,    ///< No such enumerator
+    HPOP_ERR_NOT_IMPLEMENTED = -3,  ///< The label names a model we do not have
+    HPOP_ERR_BAD_ARGUMENT = -4,
+    HPOP_ERR_PARSE = -5,            ///< File content could not be read
+    HPOP_ERR_NOT_LOADED = -6,       ///< Nothing has been loaded to use
+};
+
 // gmat-07 environment state. A field loaded from a potential file, a predicted
 // solar-activity table, and the reason the last load refused — a refusal that
 // cannot explain itself gets guessed at.
@@ -1602,18 +1614,6 @@ void plugin_set_force_model(double* configPtr) {
 // -----------------------------------------------------------------------------
 // Force-model configuration, extended                                (gmat-07)
 // -----------------------------------------------------------------------------
-
-/// Refusal codes shared by every gmat-07 setter. Zero is success; every
-/// refusal is NEGATIVE, distinct, and leaves the configuration untouched.
-enum HpopStatus {
-    HPOP_OK = 0,
-    HPOP_ERR_SHORT_BUFFER = -1,     ///< The caller's array is too short to read
-    HPOP_ERR_UNKNOWN_LABEL = -2,    ///< No such enumerator
-    HPOP_ERR_NOT_IMPLEMENTED = -3,  ///< The label names a model we do not have
-    HPOP_ERR_BAD_ARGUMENT = -4,
-    HPOP_ERR_PARSE = -5,            ///< File content could not be read
-    HPOP_ERR_NOT_LOADED = -6,       ///< Nothing has been loaded to use
-};
 
 /// Set force model configuration, length-checked, with an explicit gravity
 /// model.
