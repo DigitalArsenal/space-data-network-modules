@@ -78,6 +78,52 @@ static void applyWindMode() {
 
 static bool g_initialized = false;
 
+/// Earth's GM as the diagnostic force model takes it, in km^3/s^2.
+///
+/// HPOP integrates about Earth: its fields, Earth orientation, atmosphere and
+/// orbital elements are Earth's. So the force model's mu slot is Earth's GM in
+/// km^3/s^2, and the published values (EGM2008 and EGM96 398600.4415, WGS-84
+/// 398600.4418, DE440 398600.435507) agree to 3e-8. The band refuses a unit
+/// error, not a constant: the same GM in m^3/s^2 (3.986e14, what Cesium's
+/// GRAVITATIONALPARAMETER holds) is 1e9 times too large, and integrating a
+/// km-scale orbit with it erases every gravity setting. Zero selects
+/// MU_EARTH. The PRW path takes GRAVITATIONAL_PARAMETER in m^3/s^2 and
+/// converts it (prw_dynamics.cpp).
+static constexpr double FORCE_MODEL_MU_RELATIVE_BAND = 1.0e-3;
+
+static bool isEarthGravitationalParameterKm(double mu) {
+    return mu == 0.0 ||
+           (std::isfinite(mu) && std::fabs(mu / MU_EARTH - 1.0) <= FORCE_MODEL_MU_RELATIVE_BAND);
+}
+
+/// Set when plugin_set_force_model (or _v2) refused its configuration, and
+/// cleared by the next accepted one or by plugin_init. While it is set every
+/// diagnostic propagation refuses: hosts written against the old void setter
+/// never read its answer, so the refusal has to reach them where they do
+/// look. Propagating the previous configuration instead would answer a request
+/// nobody made.
+static bool g_forceModelRefused = false;
+
+/// The diagnostic propagation exports need an initialized module and an
+/// accepted force model.
+static bool propagationReady() {
+    return g_initialized && !g_forceModelRefused;
+}
+
+/// Refusal codes shared by every gmat-07 setter and plugin_set_force_model.
+/// Zero is success; every refusal is NEGATIVE, distinct, and leaves the
+/// configuration untouched (a refused force model also stops propagation;
+/// see g_forceModelRefused).
+enum HpopStatus {
+    HPOP_OK = 0,
+    HPOP_ERR_SHORT_BUFFER = -1,     ///< The caller's array is too short to read
+    HPOP_ERR_UNKNOWN_LABEL = -2,    ///< No such enumerator
+    HPOP_ERR_NOT_IMPLEMENTED = -3,  ///< The label names a model we do not have
+    HPOP_ERR_BAD_ARGUMENT = -4,
+    HPOP_ERR_PARSE = -5,            ///< File content could not be read
+    HPOP_ERR_NOT_LOADED = -6,       ///< Nothing has been loaded to use
+};
+
 // gmat-07 environment state. A field loaded from a potential file, a predicted
 // solar-activity table, and the reason the last load refused — a refusal that
 // cannot explain itself gets guessed at.
@@ -1018,6 +1064,7 @@ int plugin_init() {
     g_visibilityMask = nullptr;
     g_visibilityCount = 0;
     g_initialized = true;
+    g_forceModelRefused = false;
     g_configVersion++;
 
     return 0;
@@ -1109,7 +1156,7 @@ double get_eccentricity(int entityIndex) {
 /// Output: [epochJD, rx, ry, rz, vx, vy, vz] in ECEF meters, m/s.
 /// Returns 0 on success, negative on error.
 int plugin_propagate(double jd, int entityIndex, double* outPtr) {
-    if (!g_initialized || !outPtr || !std::isfinite(jd) || entityIndex < 0 || entityIndex >= g_entityCount || !g_entities[entityIndex].valid) return -1;
+    if (!propagationReady() || !outPtr || !std::isfinite(jd) || entityIndex < 0 || entityIndex >= g_entityCount || !g_entities[entityIndex].valid) return -1;
 
     StateVector result = propagateEntity(entityIndex, jd);
 
@@ -1135,7 +1182,7 @@ int plugin_propagate(double jd, int entityIndex, double* outPtr) {
 /// Returns number of valid samples.
 int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDays,
                                  int count, double* outPtr) {
-    if (!g_initialized || entityIndex < 0 || entityIndex >= g_entityCount || count <= 0)
+    if (!propagationReady() || entityIndex < 0 || entityIndex >= g_entityCount || count <= 0)
         return 0;
 
     HPOPEntity& entity = g_entities[entityIndex];
@@ -1190,7 +1237,7 @@ int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDay
 /// Uses the same native arc/ephemeris dispatch as plugin_propagate, including burns.
 int plugin_propagate_path_sv(int entityIndex, double startJD, double stepDays,
                             int count, double* outPtr) {
-    if (!g_initialized || !outPtr || count <= 0 || entityIndex < 0 ||
+    if (!propagationReady() || !outPtr || count <= 0 || entityIndex < 0 ||
         entityIndex >= g_entityCount || !g_entities[entityIndex].valid ||
         !std::isfinite(startJD) || !std::isfinite(stepDays)) return 0;
     for (int i = 0; i < count; ++i) {
@@ -1211,7 +1258,7 @@ void plugin_set_visibility_mask(const uint8_t* mask, int count) {
 /// including burn entities (which belong on the separate focus instance).
 /// Uncovered/hidden/invalid states are zero; return the indexed output length.
 int plugin_eval_states(double jd, double* outPtr, int maxCount) {
-    if (!g_initialized || !outPtr || maxCount <= 0 || !std::isfinite(jd)) return 0;
+    if (!propagationReady() || !outPtr || maxCount <= 0 || !std::isfinite(jd)) return 0;
     const int n = std::min(g_entityCount, maxCount);
     const auto rotation = coords::getTransformMatrix(coords::Frame::GCRF, coords::Frame::ECEF, jd);
     const auto omega = rotation.apply(coords::Vec3(0.0, 0.0, coords::constants::EARTH_ROTATION_RATE));
@@ -1244,7 +1291,7 @@ int plugin_eval_states(double jd, double* outPtr, int maxCount) {
 /// Returns number of valid samples.
 int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
                                 double* outPtr) {
-    if (!g_initialized || entityIndex < 0 || entityIndex >= g_entityCount || count <= 0)
+    if (!propagationReady() || entityIndex < 0 || entityIndex >= g_entityCount || count <= 0)
         return 0;
 
     HPOPEntity& entity = g_entities[entityIndex];
@@ -1309,7 +1356,7 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
 /// Returns: number of entities written.
 int plugin_propagate_all_positions(double julianDate, double* positionsOut,
                                    int maxCount) {
-    if (!g_initialized || positionsOut == nullptr || maxCount <= 0) return 0;
+    if (!propagationReady() || positionsOut == nullptr || maxCount <= 0) return 0;
 
     int n = g_entityCount;
     if (n > maxCount) n = maxCount;
@@ -1354,7 +1401,7 @@ int plugin_propagate_all_positions(double julianDate, double* positionsOut,
 /// per-frame call never integrates on the hot path. Applies the configured
 /// retention window (focus = julianDate). Returns entities processed.
 int plugin_ensure_coverage(double julianDate, int startEntity, int count) {
-    if (!g_initialized || startEntity < 0 || count <= 0) return 0;
+    if (!propagationReady() || startEntity < 0 || count <= 0) return 0;
     int end = startEntity + count;
     if (end > g_entityCount) end = g_entityCount;
     int processed = 0;
@@ -1380,7 +1427,7 @@ int plugin_ensure_coverage(double julianDate, int startEntity, int count) {
 /// no coverage at all are zero-filled. Same output ABI as
 /// plugin_propagate_all_positions. Returns entities written.
 int plugin_eval_positions(double julianDate, double* positionsOut, int maxCount) {
-    if (!g_initialized || positionsOut == nullptr || maxCount <= 0) return 0;
+    if (!propagationReady() || positionsOut == nullptr || maxCount <= 0) return 0;
 
     int n = g_entityCount;
     if (n > maxCount) n = maxCount;
@@ -1513,7 +1560,21 @@ void plugin_set_state(double* statePtr) {
 /// Fifteen elements exactly. Callers allocate `15 * 8` bytes, so reading a
 /// sixteenth is an out-of-bounds heap read — a longer configuration goes
 /// through `plugin_set_force_model_v2`, which is told its own length.
-void plugin_set_force_model(double* configPtr) {
+///
+/// mu is Earth's GM in km^3/s^2, or 0 for MU_EARTH. Any other value is
+/// refused with HPOP_ERR_BAD_ARGUMENT (see isEarthGravitationalParameterKm),
+/// the force set is left as it was, and propagation refuses until a force
+/// model is accepted.
+/// @return HPOP_OK, or a negative HpopStatus
+int plugin_set_force_model(double* configPtr) {
+    if (!configPtr) return HPOP_ERR_SHORT_BUFFER;
+    if (!isEarthGravitationalParameterKm(configPtr[0])) {
+        g_forceModelRefused = true;
+        g_configVersion++;
+        return HPOP_ERR_BAD_ARGUMENT;
+    }
+    g_forceModelRefused = false;
+
     // Registered contributions are a SEPARATE registration and survive a
     // force-model reconfiguration. Wiping them here would make the port
     // order-dependent — register before configure and your force silently
@@ -1544,7 +1605,7 @@ void plugin_set_force_model(double* configPtr) {
     double Cd       = configPtr[13];
     double Cr       = configPtr[14];
 
-    g_forceSet.mu = (mu > 0) ? mu : MU_EARTH;
+    g_forceSet.mu = (mu != 0.0) ? mu : MU_EARTH;
 
     if (gravDeg >= 2) {
         g_forceSet.usePointMass = false;
@@ -1597,23 +1658,12 @@ void plugin_set_force_model(double* configPtr) {
     }
 
     g_configVersion++;
+    return HPOP_OK;
 }
 
 // -----------------------------------------------------------------------------
 // Force-model configuration, extended                                (gmat-07)
 // -----------------------------------------------------------------------------
-
-/// Refusal codes shared by every gmat-07 setter. Zero is success; every
-/// refusal is NEGATIVE, distinct, and leaves the configuration untouched.
-enum HpopStatus {
-    HPOP_OK = 0,
-    HPOP_ERR_SHORT_BUFFER = -1,     ///< The caller's array is too short to read
-    HPOP_ERR_UNKNOWN_LABEL = -2,    ///< No such enumerator
-    HPOP_ERR_NOT_IMPLEMENTED = -3,  ///< The label names a model we do not have
-    HPOP_ERR_BAD_ARGUMENT = -4,
-    HPOP_ERR_PARSE = -5,            ///< File content could not be read
-    HPOP_ERR_NOT_LOADED = -6,       ///< Nothing has been loaded to use
-};
 
 /// Set force model configuration, length-checked, with an explicit gravity
 /// model.
@@ -1631,7 +1681,8 @@ enum HpopStatus {
 int plugin_set_force_model_v2(double* configPtr, int len) {
     if (!configPtr || len < 15) return HPOP_ERR_SHORT_BUFFER;
 
-    plugin_set_force_model(configPtr);
+    const int baseStatus = plugin_set_force_model(configPtr);
+    if (baseStatus != HPOP_OK) return baseStatus;
 
     if (len >= 16) {
         const int mode = (int)configPtr[15];
@@ -2061,7 +2112,7 @@ void plugin_set_empirical(int numTerms, double* configPtr) {
 /// Propagate working state to target Julian Date.
 /// Output: [epochJD, rx, ry, rz, vx, vy, vz] in ECEF meters, m/s
 int plugin_propagate_to(double targetJD, double* outStatePtr) {
-    if (!g_initialized) return -1;
+    if (!propagationReady()) return -1;
 
     StateVector result = propagateInternal(g_state, targetJD);
     g_state = result;
@@ -2082,7 +2133,7 @@ int plugin_propagate_to(double targetJD, double* outStatePtr) {
 
 /// Batch propagation using working state (low-level API).
 int plugin_propagate_path(double startJD, double stepDays, int count, double* outPtr) {
-    if (!g_initialized || count <= 0) return 0;
+    if (!propagationReady() || count <= 0) return 0;
 
     StateVector current = g_state;
     int valid = 0;
@@ -2123,7 +2174,7 @@ static bool computeSelectedSTM(double dt,Mat6& stm) {
 /// Compute state transition matrix (6x6) over dt seconds.
 /// Integrates analytical force partials with the state by default.
 int plugin_compute_stm(double dt, double* outSTMPtr) {
-    if (!g_initialized) return -1;
+    if (!propagationReady()) return -1;
 
     Mat6 stm;
     if(!outSTMPtr||!computeSelectedSTM(dt,stm))return -2;
@@ -2139,7 +2190,7 @@ int plugin_compute_stm(double dt, double* outSTMPtr) {
 
 /// Propagate covariance: P' = Phi * P * Phi^T
 int plugin_propagate_covariance(double* covInPtr, double dt, double* covOutPtr) {
-    if (!g_initialized) return -1;
+    if (!propagationReady()) return -1;
 
     Mat6 phi;
     if(!covInPtr||!covOutPtr||!computeSelectedSTM(dt,phi))return -2;
@@ -2191,7 +2242,7 @@ int plugin_get_covariance_ellipsoid(double* covPtr, double sigmaLevel,
 
 /// Get per-force-model acceleration breakdown at current state.
 int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
-    if (!g_initialized) return -1;
+    if (!propagationReady()) return -1;
 
     g_forceSet.weather = g_weather;
 

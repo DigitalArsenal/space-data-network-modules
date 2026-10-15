@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.hpop",
   "name": "HPOP High-Precision Orbit Propagator",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "High-precision C++ WASM propagation with PRW execution, resident state (configured full-force dynamics, or the gravity-only profile by name), PPE trajectory, finite-burn, STM, atmosphere and ephemeris records. State interchange uses SI units with explicit frame and time. Native diagnostic state-vector exports retain ECEF metre/metre-per-second units.",
   "pluginFamily": "propagator",
   "capabilities": [],
