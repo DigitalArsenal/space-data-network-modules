@@ -1,6 +1,6 @@
 {
-  "wasmSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
-  "wasmBytes": 2042860,
+  "wasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "wasmBytes": 2062455,
   "wasmedgeVersion": "0.16.4",
   "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
   "runtimeInstances": "One persistent direct instance per group",
@@ -51,7 +51,7 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-0",
-      "responseSha256": "bae2d8829c7fd124223e75f6c86e07ecaeb6688756f5ee0c909cb54a53fbd436",
+      "responseSha256": "85352a1a4e50e32d398f92b3a6ef7c616a2e44f42438bf398f48e96cf8971162",
       "bytes": 2456,
       "errorCode": null,
       "yielded": true,
@@ -60,7 +60,7 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-1",
-      "responseSha256": "8c96f6cc245a2931c70ec96af1511d01c7ea1ec584604b23677fdec5851e4595",
+      "responseSha256": "e4ec935b7bfe429a116d6fdb00e2499e5e8b0ba71e109d290979fdc73ee3341a",
       "bytes": 2448,
       "errorCode": null,
       "yielded": false,
@@ -240,7 +240,7 @@
     {
       "group": "configured-full-force",
       "label": "configured-ppe-chunk-0",
-      "responseSha256": "735927e7bb6950403ac1253ee47cd2b19cce783ca815b3e79971d33f766c86ef",
+      "responseSha256": "8e03462668fcf6d0a8e1b9357b6356382fae47ea72d13e68d1468df7caa35cfc",
       "bytes": 10520,
       "errorCode": null,
       "yielded": true,
@@ -249,7 +249,7 @@
     {
       "group": "configured-full-force",
       "label": "configured-ppe-chunk-1",
-      "responseSha256": "488bc678e204ea6144ec5e0f68dfa22cb53c26175ae30e06630073cf1924a347",
+      "responseSha256": "7ecda6c01964f446f767e1c2314b336e883b33347c8563f2a3dc173e8a3775ca",
       "bytes": 10520,
       "errorCode": null,
       "yielded": false,

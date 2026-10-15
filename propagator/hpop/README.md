@@ -500,7 +500,7 @@ orientation; no Sun, Moon, drag, radiation pressure or tides), RK78
 restarted integrations. It is not full force and is never selected by
 default. Mass, coefficients and per-object gravitational parameters fail with
 `unsupported-configuration`. Its trajectories are named
-`com.orbpro.hpop@1.3.0 gravity-only`.
+`com.orbpro.hpop@1.3.1 gravity-only`.
 
 ### Covariance and process noise
 
@@ -561,7 +561,7 @@ and km/s.
   largest over the set. The method is stated once per source (the PPE
   comment) and in the prepare result's quality, not in each segment's
   record: a segment is about 0.8 KB, a day about 236 KB per object.
-  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.0`.
+  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.1`.
   Measured (`tests/prw_resident_configured.test.mjs`, four days, PPE
   evaluated every 61 s): within 0.31 mm of the dense output in LEO and 0.18 mm
   for Molniya (GPS and GEO under 0.1 µm); within 0.08 mm of the execution path;
