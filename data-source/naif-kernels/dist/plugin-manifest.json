@@ -1,0 +1,463 @@
+{
+ "pluginId": "com.digitalarsenal.data-source.naif-kernels",
+ "name": "Solar-system ephemerides and orientation (NAIF)",
+ "version": "0.1.0",
+ "description": "Retrieval nodes for the planetary, satellite and small-body ephemerides and the lunar orientation that propagator/solar-system-bodies reads: DE440s, the JPL satellite kernels (mar099s, jup365, sat441, ura184, nep097, plu060), SSD sb441-n16 (Ceres, Vesta), the DE440 lunar PA binary PCK and the pck00011, gm_de440 and lunar frame text kernels from NASA/JPL NAIF and SSD. Nothing is downloaded whole: plan_kernels and four advance stages ask for the DAF file records, summary and name records, type-2 segment directories and one Chebyshev record window per needed segment by HTTP range; build_kernels copies each decade's records unchanged into new DAF shards (CSPICE spksub/pckw02 semantics, no refit) named as the module reads them (core-1950.bsp ... moon-pa-2040.bpc, the satellite systems from 2000); announce_kernels turns the IPFS add results into one $PNM per file. Fetching, IPFS and storage belong to the host; the node's auto-publisher announces the PNM.fbs lane provider naif, source ssb-kernels.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "externalInterfaces": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "sequentialJustification": {
+  "kind": "pure-transform",
+  "detail": "Bounded deterministic range planning over DAF headers and one copy of selected Chebyshev records into new DAF files. No host calls, threads or network access."
+ },
+ "schemasUsed": [
+  {
+   "schemaName": "PNM.fbs",
+   "fileIdentifier": "$PNM",
+   "rootTypeName": "PNM"
+  }
+ ],
+ "methods": [
+  {
+   "methodId": "plan_kernels",
+   "displayName": "Plan the DAF file-record ranges",
+   "inputPorts": [
+    {
+     "portId": "config",
+     "acceptedTypeSets": [
+      {
+       "setId": "config-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Source configuration from the host adapter (access anonymous)."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Source configuration from the host adapter (access anonymous)."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "hostcap/http-request descriptors: the 1 KiB DAF file record of each binary kernel, raw-body-v1."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "hostcap/http-request descriptors: the 1 KiB DAF file record of each binary kernel, raw-body-v1."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval state for the next stage: kernels and the pending request list."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The retrieval state for the next stage: kernels and the pending request list."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "advance",
+   "displayName": "Plan the next stage of DAF ranges",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval state emitted by the previous stage."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The retrieval state emitted by the previous stage."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The next stage's range requests: summary and name records, segment directories, text kernels or record windows."
+       }
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 64,
+     "required": false,
+     "description": "The next stage's range requests: summary and name records, segment directories, text kernels or record windows."
+    },
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval state after this stage's responses."
+       }
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "The retrieval state after this stage's responses."
+    },
+    {
+     "portId": "status",
+     "acceptedTypeSets": [
+      {
+       "setId": "status-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "An unchanged cycle (every file record answered 304); never a data record."
+       }
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "An unchanged cycle (every file record answered 304); never a data record."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "build_kernels",
+   "displayName": "Cut the decade shards",
+   "inputPorts": [
+    {
+     "portId": "state",
+     "acceptedTypeSets": [
+      {
+       "setId": "state-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The retrieval state after the window stage."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The retrieval state after the window stage."
+    },
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "response-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.http-raw-body-v1",
+        "detail": "raw-body-v1 record windows, one per needed segment, in planned order."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "raw-body-v1 record windows, one per needed segment, in planned order."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "file",
+     "acceptedTypeSets": [
+      {
+       "setId": "file-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.named-file-v1",
+        "detail": "One kernel file per frame: u32 name length, the file name, the NAIF DAF or text kernel bytes."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "One kernel file per frame: u32 name length, the file name, the NAIF DAF or text kernel bytes."
+    },
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "File names, lengths, SHA-256 and decade coverage, and the source list."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "File names, lengths, SHA-256 and decade coverage, and the source list."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  },
+  {
+   "methodId": "announce_kernels",
+   "displayName": "Announce the kernel files as $PNM",
+   "inputPorts": [
+    {
+     "portId": "job",
+     "acceptedTypeSets": [
+      {
+       "setId": "job-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "The build job emitted by build_kernels."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "The build job emitted by build_kernels."
+    },
+    {
+     "portId": "receipt",
+     "acceptedTypeSets": [
+      {
+       "setId": "receipt-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+    },
+    {
+     "portId": "added",
+     "acceptedTypeSets": [
+      {
+       "setId": "added-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "One IPFS add result per kernel file: name, CID and length."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 64,
+     "required": true,
+     "description": "One IPFS add result per kernel file: name, CID and length."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "records-records",
+       "allowedTypes": [
+        {
+         "schemaName": "PNM.fbs",
+         "fileIdentifier": "$PNM",
+         "rootTypeName": "PNM"
+        }
+       ]
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed $PNM stream, one per kernel file: FILE_NAME, CID, /ipfs/ address and FILE_ID."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "meta-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Attribution metadata (provider naif, source ssb-kernels, licence, citation) for generic storage.ingest_with_source."
+    },
+    {
+     "portId": "report",
+     "acceptedTypeSets": [
+      {
+       "setId": "report-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/json",
+        "detail": "Inputs, outputs with SHA-256 and coverage, and the retrieval time; never a dataset record."
+       }
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Inputs, outputs with SHA-256 and coverage, and the retrieval time; never a dataset record."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot"
+  }
+ ]
+}
