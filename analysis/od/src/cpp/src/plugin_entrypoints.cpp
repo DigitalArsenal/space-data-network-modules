@@ -4,7 +4,13 @@
 #include "space_data_module_invoke.h"
 
 #include <cstdint>
+#include <limits>
 #include <string>
+#include <string_view>
+#include <vector>
+
+#include "FIL_generated.h"
+#include "typedHostcall.hpp"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -25,6 +31,59 @@ const plugin_input_frame_t* find_input_frame(const char* port_id) {
     return nullptr;
 }
 
+// One size-prefixed SDS record as an ALIGNED_BINARY frame (align 8).
+bool push_record(const char* port, const char* schema, const char* file_id, const char* root,
+                 const std::vector<uint8_t>& bytes) {
+    if (bytes.empty() || plugin_push_output_ex(port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root,
+                                               /*fixed_string_length=*/0, /*required_alignment=*/8, bytes.data(),
+                                               static_cast<uint32_t>(bytes.size())) < 0) {
+        plugin_set_error("emit-failed", (std::string("Failed to emit the ") + file_id + " frame.").c_str());
+        return false;
+    }
+    return true;
+}
+
+int positive_int(const sdm_piv::Config& config, std::string_view key) {
+    const double value = config.number(key, 0);
+    if (!(value >= 1)) return 0;
+    return value >= static_cast<double>(std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max()
+                                                                         : static_cast<int>(value);
+}
+
+// The fit's node CONFIG (plugin.getConfig: one ModuleConfig, read in place).
+bool read_fit_options(od::FitOptions* out) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) {
+        plugin_set_error("config-unavailable", ("plugin.getConfig: " + config.error_message()).c_str());
+        return false;
+    }
+    out->data_source = std::string(config.string("dataSource"));
+    out->object_name = std::string(config.string("objectName"));
+    out->object_id = std::string(config.string("objectId"));
+    out->norad_cat_id = positive_int(config, "noradCatId");
+    const int camel = positive_int(config, "maxIterations");
+    out->max_iterations = camel > 0 ? camel : positive_int(config, "max_iterations");
+    out->input_format = std::string(config.string("inputFormat"));
+    out->emit_tle = config.boolean("emitTle");
+    const std::string_view ref_epoch = config.string("refEpoch");
+    const double ref_mm = config.number("refMeanMotion", 0);
+    if (!ref_epoch.empty() && ref_mm > 0.0) {
+        od::SGP4Elements& ref = out->reference;
+        ref.epoch_iso = std::string(ref_epoch);
+        ref.mean_motion = ref_mm;
+        ref.eccentricity = config.number("refEccentricity", ref.eccentricity);
+        ref.inclination = config.number("refInclination", ref.inclination);
+        ref.ra_of_asc_node = config.number("refRaan", ref.ra_of_asc_node);
+        ref.arg_of_pericenter = config.number("refArgPericenter", ref.arg_of_pericenter);
+        ref.mean_anomaly = config.number("refMeanAnomaly", ref.mean_anomaly);
+        ref.bstar = config.number("refBstar", ref.bstar);
+        ref.mean_motion_dot = config.number("refMeanMotionDot", ref.mean_motion_dot);
+        ref.mean_motion_ddot = config.number("refMeanMotionDdot", ref.mean_motion_ddot);
+        out->has_reference = true;
+    }
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -43,76 +102,64 @@ EMSCRIPTEN_KEEPALIVE
 int fit(void) {
     plugin_reset_output_state();
 
-    // Optional "options" frame (labeling / fit-config / scoring). In a baked flow
-    // these live in node CONFIG; the port is kept for the command surface.
-    const auto* options_frame = find_input_frame("options");
-    const std::string_view options_json =
-        options_frame && options_frame->payload
-            ? std::string_view(
-                  reinterpret_cast<const char*>(options_frame->payload),
-                  options_frame->payload_length)
-            : std::string_view{};
+    od::FitOptions options;
+    if (!read_fit_options(&options)) return 1;
 
-    // ── FlatBuffer flow path (aligned-binary) ──────────────────────────────────
-    // The "oem" input port carries an SDS $OEM FlatBuffer. Fit the SAME core the
-    // text path fits and emit an SDS $OMM FlatBuffer on the "omm" output port as
-    // ALIGNED_BINARY. No JSON at this data hop.
+    // Exactly one ephemeris: an SDS $OEM FlatBuffer on "oem", or a text ephemeris file (SpaceX MEME or CCSDS OEM
+    // KVN) as an SDS $FIL on "meme". Both fit the SAME core and emit the same records.
+    od::PluginFitFBResult fb;
     const auto* oem_frame = find_input_frame("oem");
     if (oem_frame && oem_frame->payload && oem_frame->payload_length > 0) {
-        const auto fb = od::fit_ephemeris_fb(oem_frame->payload,
-                                             oem_frame->payload_length, options_json);
-        if (!fb.ok) {
-            plugin_set_error(fb.error_code.c_str(), fb.error_message.c_str());
+        fb = od::fit_ephemeris_fb(oem_frame->payload, oem_frame->payload_length, options);
+    } else {
+        const auto* frame = find_input_frame("meme");
+        if (!frame || !frame->payload) {
+            plugin_set_error("missing-input",
+                             "Input port \"oem\" ($OEM) or \"meme\" ($FIL text ephemeris) is required.");
             return 1;
         }
-        if (plugin_push_output_ex(
-                "omm", "OMM.fbs", "$OMM",
-                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
-                /*fixed_string_length=*/0, /*required_alignment=*/8,
-                fb.omm.data(), static_cast<uint32_t>(fb.omm.size())) < 0) {
-            plugin_set_error("emit-failed", "Failed to emit $OMM frame.");
+        flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+        if (!VerifyFILBuffer(verifier)) {
+            plugin_set_error("invalid-input", "The \"meme\" frame is not an SDS $FIL FlatBuffer.");
             return 1;
         }
-        if (fb.ocm.empty() || plugin_push_output_ex(
-                "ocm", "OCM.fbs", "$OCM",
-                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OCM",
-                0, 8, fb.ocm.data(), static_cast<uint32_t>(fb.ocm.size())) < 0) {
-            plugin_set_error("emit-failed", "Failed to emit $OCM frame.");
-            return 1;
-        }
-        return 0;
+        const FIL* file = GetFIL(frame->payload);
+        const auto* content = file->CONTENT();
+        fb = od::fit_ephemeris_text(
+            content ? std::string_view(reinterpret_cast<const char*>(content->data()), content->size())
+                    : std::string_view{},
+            options);
     }
-
-    // ── Text command path (back-compat: SpaceX MEME text or CCSDS OEM KVN) ──────
-    // The "meme" port carries the ephemeris payload for any supported text format;
-    // the format is selected data-level via the "options" inputFormat field, or
-    // auto-detected. The port id is kept for ABI stability.
-    const auto* frame = find_input_frame("meme");
-    if (!frame || !frame->payload) {
-        plugin_set_error("missing-input",
-                         "Input port \"oem\" ($OEM FlatBuffer) or \"meme\" (text) is required.");
+    if (!fb.ok) {
+        plugin_set_error(fb.error_code.c_str(), fb.error_message.c_str());
         return 1;
     }
 
-    const auto result = od::fit_ephemeris_payload(
-        std::string_view(
-            reinterpret_cast<const char*>(frame->payload),
-            frame->payload_length),
-        options_json);
-
-    if (!result.ok) {
-        plugin_set_error(result.error_code.c_str(), result.error_message.c_str());
+    if (!push_record("omm", "OMM.fbs", "$OMM", "OMM", fb.omm) ||
+        !push_record("ocm", "OCM.fbs", "$OCM", "OCM", fb.ocm) ||
+        !push_record("obd", "OBD.fbs", "$OBD", "OBD", fb.obd) ||
+        (!fb.reference_obd.empty() && !push_record("obd", "OBD.fbs", "$OBD", "OBD", fb.reference_obd))) {
         return 1;
     }
-
-    const auto* payload =
-        reinterpret_cast<const uint8_t*>(result.json.data());
-    if (plugin_push_output("result", nullptr, nullptr, payload,
-                           static_cast<uint32_t>(result.json.size())) < 0) {
-        plugin_set_error("emit-failed", "Failed to emit result frame.");
-        return 1;
+    if (options.emit_tle) {
+        // The legacy two-line set as a text file record: NAME "<NORAD>.tle", text/plain, "line1\nline2".
+        flatbuffers::FlatBufferBuilder b(512);
+        const auto name = b.CreateString(fb.tle_name);
+        const auto media = b.CreateString("text/plain");
+        const auto bytes = b.CreateVector(reinterpret_cast<const uint8_t*>(fb.tle.data()), fb.tle.size());
+        FILBuilder fil(b);
+        fil.add_NAME(name);
+        fil.add_KIND(filEntryKind_File);
+        fil.add_MEDIA_TYPE(media);
+        fil.add_SIZE(fb.tle.size());
+        fil.add_CONTENT(bytes);
+        FinishFILBuffer(b, fil.Finish());
+        if (plugin_push_output_ex("tle", "FIL.fbs", "$FIL", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FIL", 0, 0,
+                                  b.GetBufferPointer(), b.GetSize()) < 0) {
+            plugin_set_error("emit-failed", "Failed to emit the $FIL two-line set.");
+            return 1;
+        }
     }
-
     return 0;
 }
 

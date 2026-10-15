@@ -1,226 +1,38 @@
 /*
- * hostcap/node-status (M1 node-status flow, cycle B).
+ * hostcap/node-status — the host node_status_read connector (typed contracts 1.0).
  *
- * Capability node for the host read-only node_status_read hostcall. One
- * method:
+ *   status — "decision": ONE $APR (SDS API Request) from foundation/http-route route_node_status.
+ *            Served only when ROUTE is "status" and STATUS is 0:
+ *              node_status_read.status (SDS $PIV: no params; "result" NodeStatusReport, list "bandwidth_history"
+ *              NodeBandwidthSample), node.peerId (raw "value": NHS.NODE_ID) and clock.now (TimeValue:
+ *              NHS.GENERATED_AT_MS; 0 when the host clock is unavailable - the snapshot is still served)
+ *            -> "decision": the input $APR verbatim, and "status": ONE $NHS (SDS Node Health Status).
+ *            A refused decision (STATUS set upstream, e.g. 405) passes through untouched with no hostcall and no
+ *            body; a ROUTE this method does not own is answered 404 "no-route". A node_status_read.status failure
+ *            answers the $APR with STATUS 503 "status-unavailable" and the host's message - never an empty body.
  *
- *   status — routing-decision JSON in (foundation/http-route
- *            route_node_status contract: route="status" | "error") ->
- *            when route=="status", forwards an EMPTY payload ({}) to the
- *            node_status_read.status hostcall (the capability name IS the
- *            op prefix — the host's capPrefixFromName has no mapping for
- *            node_status_read) and emits the hostcall's "result" object
- *            VERBATIM as UTF-8 JSON bytes on "body"; "decision" is
- *            re-emitted unchanged (linear flow chaining into
- *            foundation/http-respond). A route this method does not own
- *            (already rewritten to "error" by the route node, e.g. 405 for
- *            non-GET) short-circuits: NO hostcall, the decision passes
- *            through untouched and no body frame is pushed —
- *            foundation/http-respond owns that response.
- *
- *            A node_status_read.status hostcall FAILURE (or a missing /
- *            non-object "result" field) rewrites the decision to
- *            route="error" status=503 with the host's error message (or an
- *            honest fallback) — never a silent empty body.
- *
- * Response shape (no FlatBuffers): there is no SDS schema for node status
- * (checked spacedatastandards.org/schema — no STA/HLT/NOD/SVC-style match);
- * a hand-written FlatBuffers table would violate the generated-types-only
- * rule, so v1 ships JSON-ONLY. The response body is a JSON OBJECT
- * (uptime_seconds, started_at, store, disk, service, bandwidth) — a live
- * status snapshot, not a record collection, so the bare-array JSON
- * convention used by the other gateway flows does not apply here.
+ * No JSON anywhere: foundation/http-respond renders the $NHS (verbatim, or as JSON when the APR's ACCEPT asks).
  */
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "APR_generated.h"  // spacedatastandards.org lib/cpp/APR/main_generated.h, inlined by build.mjs
+#include "NHS_generated.h"  // spacedatastandards.org lib/cpp/NHS/main_generated.h, inlined by build.mjs
 
 namespace {
 
-void write_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
+namespace A = sdn::runtime::Aligned;
 
-uint32_t read_u32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    size_t off = 0;
-    write_u32le(req.data() + off, static_cast<uint32_t>(payload_json.size()));
-    off += 4;
-    std::memcpy(req.data() + off, payload_json.data(), payload_json.size());
-    off += payload_json.size();
-    write_u32le(req.data() + off, 0u);
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) {
-        sdm_host_read_response(buf.data(), len);
-    }
-    return buf;
-}
-
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    const uint32_t meta_len = read_u32le(env.data());
-    if (env.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-bool meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-bool is_json_ws(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-// Colon-anchored key lookup (the G.3 key-vs-value lesson): a bare "key"
-// needle can match a string VALUE, e.g. {"route":"error"} would make an
-// "error" key lookup land on the route value.
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\":";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    size_t i = k + needle.size();
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// Slice "key":{...} out of an object (brace-depth scan, string-aware).
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\":";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    size_t i = k + needle.size();
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '{') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') depth++;
-        else if (c == '}') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-int push_decision(const std::string& decision) {
-    const int32_t pushed = plugin_push_output_ex(
-        "decision", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1,
-        reinterpret_cast<const uint8_t*>(decision.data()),
-        static_cast<uint32_t>(decision.size()));
-    return pushed < 0 ? 500 : 0;
-}
-
-int push_body(const uint8_t* data, uint32_t length) {
-    const int32_t pushed = plugin_push_output_ex(
-        "body", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1, data, length);
-    return pushed < 0 ? 500 : 0;
-}
-
-// ---------------------------------------------------------------------------
-// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
-//
-// `space_data_module_runtime_begin_node_invocation` (module-SDK
-// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
-// node's queue `while (count < budget && !queue.empty())`: PORT-BLIND, with a
-// drain budget of 64. `maxStreams`, `maxBatch` and `drainPolicy` are purely
-// DECLARATIVE in the compiled runtime — enforced at compose time and in the
-// JS-only reference runtime, never by the baked runtime.wasm. So a guest that
-// reads ordinal 0 of a port and returns DESTROYS every other frame it was
-// handed on that port: they are already dequeued, nothing re-delivers them,
-// and nothing logs the loss.
-//
-// That is measured, not hypothetical. It was a live P1
-// (`cellular-multiprovider-returns-only-first-provider`) that survived four
-// passes precisely because a partial answer is indistinguishable from an
-// honest one: a two-provider request performed exactly ONE outbound fetch and
-// returned the first provider's records, byte-identical to that provider run
-// alone, with no error anywhere.
-//
-// One routing decision in, one live status snapshot out. Two decisions in an
-// invocation would answer one HTTP exchange and destroy the other.
-//
-// So a surplus is REFUSED rather than silently dropped — a named node error
-// the flow surfaces, instead of an answer assembled from whichever frame the
-// queue happened to hold first (queue order is not semantic order, so such an
-// answer is arbitrary AND indistinguishable from a correct one). This costs
-// nothing while the contract holds: one frame per port is what every deployed
-// flow delivers today.
+// SURPLUS-FRAME REFUSAL (graph task modules-guest-nodes-drop-batched-frames): the compiled flow runtime drains a
+// node's queue port-blind, so a second frame on the single-stream "decision" port would otherwise be destroyed
+// silently. One decision answers one HTTP exchange; a surplus is refused by name.
 bool find_batched_input_port(char* message, size_t message_len) {
     const uint32_t count = plugin_get_input_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -228,8 +40,7 @@ bool find_batched_input_port(char* message, size_t message_len) {
         if (!frame || !frame->port_id) continue;
         for (uint32_t j = 0; j < i; j++) {
             const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
-            if (!earlier || !earlier->port_id) continue;
-            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            if (!earlier || !earlier->port_id || std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
             uint32_t on_port = 0;
             for (uint32_t k = 0; k < count; k++) {
                 const plugin_input_frame_t* f = plugin_get_input_frame(k);
@@ -247,68 +58,113 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+int push_apr(const uint8_t* data, size_t size) {
+    return plugin_push_output_ex("decision", "APR.fbs", APRIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "APR", 0, 0,
+                                 data, static_cast<uint32_t>(size)) < 0 ? 500 : 0;
+}
+
+// The decision answered with STATUS / ERROR_CODE / ERROR_MESSAGE; every other field kept.
+int refuse(const APR& apr, uint16_t status, const char* code, const std::string& message) {
+    APRT copy;
+    apr.UnPackTo(&copy);
+    copy.STATUS = status;
+    copy.ERROR_CODE = code;
+    copy.ERROR_MESSAGE = message;
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishAPRBuffer(b, APR::Pack(b, &copy));
+    return push_apr(b.GetBufferPointer(), b.GetSize());
+}
+
+nhsServiceState state_of(std::string state) {
+    for (char& c : state) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (state == "starting") return nhsServiceState_Starting;
+    if (state == "running") return nhsServiceState_Running;
+    if (state == "degraded") return nhsServiceState_Degraded;
+    if (state == "draining") return nhsServiceState_Draining;
+    if (state == "stopped") return nhsServiceState_Stopped;
+    if (state == "failed") return nhsServiceState_Failed;
+    return nhsServiceState_Unknown;
+}
+
 }  // namespace
 
 extern "C" {
 
-// status: routing decision -> node_status_read.status (route=="status"
-// only) -> decision passthrough + the hostcall result object verbatim on
-// "body".
 int status(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-
-    const int32_t decision_index = plugin_find_input_index("decision", 0);
-    const plugin_input_frame_t* frame =
-        decision_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(decision_index))
-                            : nullptr;
+    const int32_t index = plugin_find_input_index("decision", 0);
+    const plugin_input_frame_t* frame = index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
     if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-decision-frame",
-                         "node-status status requires a routing-decision JSON frame on port \"decision\".");
+        plugin_set_error("missing-decision-frame", "status requires the $APR decision frame on port \"decision\".");
         return 400;
     }
-    const std::string decision(reinterpret_cast<const char*>(frame->payload),
-                               frame->payload_length);
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!APRBufferHasIdentifier(frame->payload) || !VerifyAPRBuffer(verifier)) {
+        plugin_set_error("invalid-decision-frame", "the decision frame is not an $APR (SDS API Request).");
+        return 400;
+    }
+    const APR& apr = *GetAPR(frame->payload);
 
-    std::string route;
-    json_string_field(decision, "route", &route);
-
-    // Routes this method does not own (already an error/not_found decision
-    // from the route node, e.g. 405 for non-GET) short-circuit: NO
-    // hostcall, decision forwarded unchanged, no body — http-respond owns
-    // the response.
+    // Refused upstream (e.g. 405): the decision answers the exchange; nothing to read.
+    if (apr.STATUS() != 0) return push_apr(frame->payload, frame->payload_length);
+    const std::string route = apr.ROUTE() ? apr.ROUTE()->str() : std::string();
     if (route != "status") {
-        return push_decision(decision);
+        return refuse(apr, 404, "no-route", "node status serves route \"status\", not \"" + route + "\"");
     }
 
-    const std::vector<uint8_t> env = hostcall("node_status_read.status", "{}");
-    const std::string meta = envelope_meta_json(env);
-    if (meta.empty() || !meta_ok(meta)) {
-        std::string message;
-        json_string_field(meta, "message", &message);
-        if (message.empty()) message = "node status hostcall failed.";
-        const std::string out = "{\"route\":\"error\",\"status\":503,\"format\":\"json\",\"error\":\"" +
-                                json_escape(message) + "\"}";
-        return push_decision(out);
+    const auto report_response = sdm_piv::call("node_status_read.status");
+    const auto* report = report_response.ok() ? report_response.result<A::NodeStatusReport>("NodeStatusReport") : nullptr;
+    if (!report) {
+        std::string message = report_response.error_message();
+        if (message.empty()) message = "node_status_read.status answered without a NodeStatusReport.";
+        return refuse(apr, 503, "status-unavailable", message);
     }
 
-    const std::string result = json_object_slice(meta, "result");
-    if (result.empty()) {
-        const std::string out =
-            "{\"route\":\"error\",\"status\":503,\"format\":\"json\","
-            "\"error\":\"node status hostcall returned no result object.\"}";
-        return push_decision(out);
+    NHST nhs;
+    const auto peer = sdm_piv::call("node.peerId");
+    if (peer.ok()) nhs.NODE_ID = std::string(peer.raw("value"));
+    const auto now = sdm_piv::call("clock.now");
+    if (const auto* t = now.ok() ? now.result<A::TimeValue>("TimeValue") : nullptr) {
+        nhs.GENERATED_AT_MS = static_cast<int64_t>(t->UNIX_MS);
+    }
+    nhs.STARTED_AT_MS = static_cast<int64_t>(report->STARTED_MS);
+    nhs.UPTIME_S = report->UPTIME_S;
+    nhs.SERVICE_STATE = state_of(report->SERVICE_STATE.str());
+    nhs.SERVICE_MODE = report->SERVICE_MODE.str();
+    nhs.STORAGE_PATH = report->STORAGE_PATH.str();
+    nhs.STORE_TOTAL_RECORDS = report->STORE_TOTAL_RECORDS;
+    nhs.STORE_TOTAL_BYTES = report->STORE_TOTAL_BYTES;
+    nhs.HAS_DISK = report->HAS_DISK;
+    nhs.DISK_CAPACITY_BYTES = report->DISK_CAPACITY_BYTES;
+    nhs.DISK_FREE_BYTES = report->DISK_FREE_BYTES;
+    nhs.DISK_AVAILABLE_BYTES = report->DISK_AVAILABLE_BYTES;
+    nhs.HAS_NETWORK = report->HAS_BANDWIDTH;
+    nhs.TOTAL_IN_BYTES = report->TOTAL_IN_BYTES;
+    nhs.TOTAL_OUT_BYTES = report->TOTAL_OUT_BYTES;
+    nhs.RATE_IN_BPS = report->RATE_IN_BPS;
+    nhs.RATE_OUT_BPS = report->RATE_OUT_BPS;
+    const auto [samples, sample_count] = report_response.list<A::NodeBandwidthSample>("bandwidth_history", "NodeBandwidthSample");
+    for (size_t i = 0; samples && i < sample_count; i++) {
+        auto sample = std::make_unique<NHSThroughputSampleT>();
+        sample->TIME_MS = static_cast<int64_t>(samples[i].TS_MS);
+        sample->TOTAL_IN_BYTES = samples[i].TOTAL_IN_BYTES;
+        sample->TOTAL_OUT_BYTES = samples[i].TOTAL_OUT_BYTES;
+        sample->RATE_IN_BPS = samples[i].RATE_IN_BPS;
+        sample->RATE_OUT_BPS = samples[i].RATE_OUT_BPS;
+        nhs.THROUGHPUT_HISTORY.push_back(std::move(sample));
     }
 
-    if (push_body(reinterpret_cast<const uint8_t*>(result.data()),
-                 static_cast<uint32_t>(result.size())) != 0) {
-        plugin_set_error("push-failed", "failed to push the node status body frame.");
+    flatbuffers::FlatBufferBuilder b(1024);
+    FinishNHSBuffer(b, NHS::Pack(b, &nhs));
+    if (plugin_push_output_ex("status", "NHS.fbs", NHSIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "NHS", 0, 0,
+                              b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
         return 500;
     }
-    return push_decision(decision);
+    return push_apr(frame->payload, frame->payload_length);
 }
 
 }  // extern "C"

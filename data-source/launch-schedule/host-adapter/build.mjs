@@ -4,11 +4,11 @@ import {fileURLToPath} from 'node:url';
 import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
 const root=fileURLToPath(new URL('.',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
-const json=await fs.readFile(path.resolve(root,'../../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'),'utf8');
+// No JSON library: nothing here is JSON (runtime types and typedHostcall.hpp are staged by the SDK compiler).
 const source=await fs.readFile(path.join(root,'src/adapter.cpp'),'utf8');
 const outputPath=path.join(root,'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath),{recursive:true});
-const result=await compileModuleFromSource({manifest,sourceCode:`${json}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential',allowUndefinedImports:true});
+const result=await compileModuleFromSource({manifest,sourceCode:source,language:'c++',outputPath,threadModel:'wasi-sequential',allowUndefinedImports:true});
 if(!result.report?.ok)throw new Error(JSON.stringify(result.report?.issues));
 const guest=path.join(root,'dist/guest-link');await fs.mkdir(guest,{recursive:true});
 await fs.writeFile(path.join(guest,'module-link.o'),result.guestLink.objectBytes);

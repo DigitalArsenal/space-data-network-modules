@@ -1,39 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { ByteBuffer } from 'flatbuffers';
-import { CAT } from 'spacedatastandards.org/lib/js/CAT/CAT.js';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { decode, harness, manifest, request as typed, wasmPath } from './frames.mjs';
 
-const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
-const wasm = fs.readFileSync(wasmPath);
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const columns = ['#JCAT','Satcat','Name','Piece','Type','LDate','Primary','Perigee','PF','Apogee','AF','Inc','IF','Status','State','Bus'];
 const row = (overrides = {}) => columns.map(key => ({ '#JCAT':'S100000', Satcat:'100000', Name:'Saramago', Piece:'2026-067CY', Type:'P', LDate:'2026 Mar 30', Primary:'Earth', Perigee:'500', PF:'', Apogee:'508', AF:'', Inc:'97.46', IF:'', Status:'O', State:'PT', Bus:'Unstandardized bus', ...overrides })[key]).join('\t');
 const source = (...rows) => columns.join('\t')+'\n# Updated 2026 Sep 6\n'+rows.join('\n')+'\n';
-function request(text) {
-  const payload = new TextEncoder().encode(text);
-  return { methodId:'parse_gcat', inputs:[{ portId:'source', payload, typeRef:{wireFormat:'aligned-binary', requiredAlignment:1, byteLength:payload.length} }] };
-}
-async function harness(t) {
-  const host = await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});
-  t.after(() => host.destroy()); return host;
-}
-function records(result) {
-  assert.equal(result.statusCode,0,result.errorMessage);
-  const bytes = result.outputs.find(frame => frame.portId === 'catalog').payload;
-  const rows = [];
-  for(let offset=0; offset < bytes.length;) {
-    assert.ok(offset+4 <= bytes.length);
-    const length = new DataView(bytes.buffer, bytes.byteOffset+offset,4).getUint32(0,true)+4;
-    assert.ok(length > 12 && offset+length <= bytes.length);
-    rows.push(CAT.getSizePrefixedRootAsCAT(new ByteBuffer(bytes.slice(offset,offset+length))).unpack());
-    offset += length;
-  }
-  return { rows, report:JSON.parse(new TextDecoder().decode(result.outputs.find(frame => frame.portId === 'report').payload)) };
-}
+const request = text => typed('parse_gcat', text);
+const records = decode;
 
 test('the SDK artifact validates against the canonical standards', async () => {
   const result = await validateArtifactWithStandards({wasmPath,manifest,standardsRoot:process.env.SPACE_DATA_STANDARDS_ROOT});
@@ -76,6 +51,14 @@ test('rejects ambiguous identifiers, duplicate objects and damaged editions with
     assert.notEqual(result.statusCode,0); assert.equal(result.outputs?.length ?? 0,0);
   }
   assert.equal(records(await host.invoke(request(source(row())))).rows.length,1);
+});
+test('emits the CAT stream and a typed FlowNotice report', async t => {
+  const host = await harness(t);
+  const { notice } = records(await host.invoke(request(source(row(), row({'#JCAT':'S5',Satcat:'5',Type:'R'}))))) ;
+  assert.equal(notice.sourceName, 'gcat'); assert.deepEqual(notice.items, ['S100000','S5']); assert.equal(notice.count, 2);
+  assert.equal(notice.reason, 'sourceUpdate=2026 Sep 6;unrepresentedDesignators=0;unrepresentedLaunchDates=0;unnumberedObjects=0');
+  const failed = await host.invoke(typed('parse_gcat', source(row()), 500));
+  assert.notEqual(failed.statusCode, 0); assert.equal(failed.outputs?.length ?? 0, 0);
 });
 test('parses a complete upstream edition when provided', {skip:!process.env.GCAT_TEST_EDITION}, async t => {
   const text = fs.readFileSync(process.env.GCAT_TEST_EDITION,'utf8');

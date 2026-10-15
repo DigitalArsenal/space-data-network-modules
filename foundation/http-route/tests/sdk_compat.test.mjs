@@ -1,515 +1,255 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
-import { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
+import { encodeHttpRequest } from "space-data-module-sdk/http";
+import { encodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+// foundation/http-route on the typed contracts (1.0): one $HTQ in, exactly ONE typed decision out - an SDS $QRP for the
+// query/data routes (Request on "bulk" / "query" / "surface", Error on "refusal") and an SDS $APR for the others.
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-function readManifest() {
-  return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+// The standards' own generated TypeScript bindings, bundled for Node by the standards repo's esbuild.
+async function loadStandard(code) {
+  const esbuild = await import(pathToFileURL(path.join(STANDARDS_ROOT, "node_modules", "esbuild", "lib", "main.js")).href);
+  const flatbuffersEntry = fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"));
+  const out = await esbuild.build({ entryPoints: [path.join(STANDARDS_ROOT, "lib", "ts", code, "main.ts")], bundle: true, format: "esm", write: false, platform: "neutral", alias: { flatbuffers: flatbuffersEntry }, logLevel: "silent" });
+  return import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
 }
+const flatbuffers = await import(pathToFileURL(fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"))).href);
+const { APR, aprMethod, aprRepresentation } = await loadStandard("APR");
+const { QRP, qrpKind, qrpStatus, qrpTimeProfile, qrpRepresentation, qrpValueKind } = await loadStandard("QRP");
 
-function readWasm() {
-  return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
-}
+const readManifest = () => JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+const readWasm = () => fs.readFileSync(fileURLToPath(WASM_PATH));
+const HTQ = { schemaName: "HttpRequestAbi.fbs", fileIdentifier: "$HTQ", rootTypeName: "HttpRequest", wireFormat: "flatbuffer" };
+const requestFrame = (request) => ({ portId: "request", typeRef: HTQ, payload: encodeHttpRequest(request) });
 
-async function createHarness(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-  });
+async function harnessFor(t) {
+  const harness = await createBrowserModuleHarness({ wasmSource: readWasm(), manifest: readManifest(), surface: "direct" });
   t.after(() => harness.destroy());
   return harness;
 }
-
-async function invokeRoute(t, request) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "route",
-    inputs: [
-      {
-        portId: "request",
-        typeRef: HTTP_REQUEST_TYPE_REF,
-        payload: encodeHttpRequest(request),
-      },
-    ],
-  });
+// One invoke -> the ONE decision frame: { port, value } with value unpacked through the SDS bindings.
+async function decide(harness, methodId, request) {
+  const result = await harness.invoke({ methodId, inputs: [requestFrame(request)] });
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  assert.equal(result.outputs.length, 1, "exactly one decision per request");
+  const [frame] = result.outputs;
+  const bb = new flatbuffers.ByteBuffer(frame.payload);
+  if (APR.bufferHasIdentifier(bb)) return { port: frame.portId, apr: APR.getRootAsAPR(bb).unpack() };
+  assert.ok(QRP.bufferHasIdentifier(bb), "the decision is an $APR or a $QRP");
+  return { port: frame.portId, qrp: QRP.getRootAsQRP(bb).unpack() };
 }
+const params = (apr) => Object.fromEntries(apr.PARAMETERS.map((p) => [p.NAME, p.VALUE]));
+const typeOf = (port) => port.acceptedTypeSets[0].allowedTypes[0].fileIdentifier;
 
-// The module must emit exactly one decision frame per request.
-function decodeDecision(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1, "route must emit exactly one decision frame");
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "decision");
-  assert.equal(frame.wireFormat, "aligned-binary");
-  return JSON.parse(new TextDecoder().decode(frame.payload));
-}
-
-test("foundation/http-route artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    standardsRoot: STANDARDS_ROOT,
-  });
+test("http-route passes SDK compliance; every port names exactly one type", async () => {
+  const manifest = readManifest();
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ports = Object.fromEntries(manifest.methods.map((m) => [m.methodId, Object.fromEntries(m.outputPorts.map((p) => [p.portId, typeOf(p)]))]));
+  assert.deepEqual(ports, {
+    route: { bulk: "$QRP", query: "$QRP", refusal: "$QRP" },
+    discover: { decision: "$APR" },
+    route_public_query: { query: "$QRP", surface: "$QRP", refusal: "$QRP" },
+    route_node_status: { decision: "$APR" },
+    route_node_activity: { decision: "$APR" },
+  });
+  for (const method of manifest.methods) {
+    assert.equal(typeOf(method.inputPorts[0]), "$HTQ");
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes[0].acceptsAnyFlatbuffer, undefined);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes[0].wireFormat, "flatbuffer");
+    }
+  }
 });
 
-test("foundation/http-route artifact is standalone WASI with canonical exports", async () => {
+test("http-route imports only WASI and the host bridge (no hostcalls are made)", async () => {
   const inspection = await inspectModule(readWasm());
-  const importedModuleNames = Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort();
-  assert.equal(inspection.profile, "standalone");
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"], "pure compute: WASI imports only");
-  for (const required of [
-    "_start",
-    "plugin_alloc",
-    "plugin_free",
-    "plugin_invoke_stream",
-    "plugin_get_manifest_flatbuffer",
-    "plugin_get_manifest_flatbuffer_size",
-  ]) {
-    assert.ok(inspection.exports.includes(required), `missing export ${required}`);
+  for (const entry of inspection.imports) assert.ok(["wasi_snapshot_preview1", "space_data_module_host"].includes(entry.module), entry.module);
+});
+
+test("route: /<code>/bulk becomes a $QRP Request with every query-string parameter typed", async (t) => {
+  const harness = await harnessFor(t);
+  const { port, qrp } = await decide(harness, "route", {
+    method: "GET", path: "/api/v1/data/omm/bulk", query: "source=celestrak&mode=as_of&epoch=2026-10-13T06%3A00%3A00Z&limit=250",
+    headers: { "If-None-Match": "W/\"fnv1a64-0123456789abcdef\"" },
+  });
+  assert.equal(port, "bulk");
+  assert.equal(qrp.KIND, qrpKind.Request);
+  assert.equal(qrp.SCHEMA_NAME, "OMM");
+  assert.equal(qrp.FILE_IDENTIFIER, "$OMM");
+  assert.equal(qrp.SOURCE_NAME, "celestrak");
+  assert.equal(qrp.TIME_PROFILE, qrpTimeProfile.AsOf, "the mode alias names the profile");
+  assert.equal(Number(qrp.PROFILE_EPOCH_MS), Date.UTC(2026, 9, 13, 6), "RFC3339 epoch -> Unix ms");
+  assert.equal(qrp.LIMIT, 250);
+  assert.equal(qrp.REPRESENTATION, qrpRepresentation.Default);
+  assert.equal(qrp.ETAG, "W/\"fnv1a64-0123456789abcdef\"", "If-None-Match rides ETAG verbatim");
+
+  const rfb = await decide(harness, "route", { method: "GET", path: "/test/data/rfb/bulk", query: "profile=nearest&mode=forward&epoch=1791880000.5" });
+  assert.equal(rfb.port, "bulk");
+  assert.equal(rfb.qrp.SCHEMA_NAME, "RFB", "any standard code is a bulk route");
+  assert.equal(rfb.qrp.TIME_PROFILE, qrpTimeProfile.Nearest, "profile wins over its mode alias");
+  assert.equal(Number(rfb.qrp.PROFILE_EPOCH_MS), 1791880000500, "unix seconds -> ms");
+  assert.equal(rfb.qrp.ETAG, null);
+
+  const plain = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", query: "limit=0&format=flatbuffer" });
+  assert.equal(plain.qrp.TIME_PROFILE, qrpTimeProfile.Unspecified, "no profile: not stated, the serving node's default applies");
+  const all = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", query: "profile=all" });
+  assert.equal(all.qrp.TIME_PROFILE, qrpTimeProfile.All, "all: every record in the window");
+  assert.equal(Number(plain.qrp.PROFILE_EPOCH_MS), 0, "no epoch: now");
+  assert.equal(plain.qrp.LIMIT, 0, "a non-positive limit defers to the default");
+  assert.equal(plain.qrp.REPRESENTATION, qrpRepresentation.FlatBuffer);
+});
+
+test("route: JSON is negotiated by ?format or Accept; JSON of a standard other than $OMM is refused 406", async (t) => {
+  const harness = await harnessFor(t);
+  const byFormat = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", query: "format=json" });
+  assert.equal(byFormat.qrp.REPRESENTATION, qrpRepresentation.Json);
+  const byAccept = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", headers: { Accept: "application/json" } });
+  assert.equal(byAccept.qrp.REPRESENTATION, qrpRepresentation.Json);
+  const fbAccept = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", headers: { Accept: "application/x-flatbuffers" } });
+  assert.equal(fbAccept.qrp.REPRESENTATION, qrpRepresentation.FlatBuffer);
+
+  const refused = await decide(harness, "route", { method: "GET", path: "/api/v1/data/rfb/bulk", query: "format=json", headers: { "if-none-match": "\"x\"" } });
+  assert.equal(refused.port, "refusal");
+  assert.equal(refused.qrp.KIND, qrpKind.Error);
+  assert.equal(refused.qrp.STATUS, qrpStatus.Error);
+  assert.equal(refused.qrp.ERROR_CODE, "not-acceptable");
+  assert.equal(refused.qrp.HTTP_STATUS, 406);
+  assert.match(refused.qrp.MESSAGE, /RFB\.fbs; request format=flatbuffer/);
+  assert.equal(refused.qrp.REPRESENTATION, qrpRepresentation.Json, "the refusal keeps the representation it is rendered in");
+  assert.equal(refused.qrp.ETAG, "\"x\"");
+
+  const badProfile = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", query: "profile=sideways" });
+  assert.deepEqual([badProfile.port, badProfile.qrp.ERROR_CODE, badProfile.qrp.HTTP_STATUS], ["refusal", "invalid-profile", 400]);
+  const badEpoch = await decide(harness, "route", { method: "GET", path: "/api/v1/data/omm/bulk", query: "epoch=yesterday" });
+  assert.deepEqual([badEpoch.port, badEpoch.qrp.ERROR_CODE], ["refusal", "invalid-epoch"]);
+});
+
+test("route: /query parses the client's JSON body into SQL + typed PARAMETERS; raw SQL text works too", async (t) => {
+  const harness = await harnessFor(t);
+  const body = JSON.stringify({ sql: "SELECT _data FROM OMM WHERE NORAD_CAT_ID = ? AND OBJECT_NAME LIKE ?", params: [
+    { t: "i64", v: 25544 }, { t: "str", v: "ISS%" }, { t: "f64", v: 1.5 }, { t: "bool", v: true }, { t: "null" }, { t: "bytes", v: "AAEC/w==" }, 7, 2.25, "plain", false, null, { t: "i64", v: "9007199254740993" },
+  ] });
+  const { port, qrp } = await decide(harness, "route", { method: "POST", path: "/api/v1/data/query", body });
+  assert.equal(port, "query");
+  assert.equal(qrp.SQL, "SELECT _data FROM OMM WHERE NORAD_CAT_ID = ? AND OBJECT_NAME LIKE ?");
+  const values = qrp.PARAMETERS.map((v) => {
+    switch (v.KIND) {
+      case qrpValueKind.Int: return ["Int", BigInt(v.INT_VALUE)];
+      case qrpValueKind.Text: return ["Text", v.TEXT_VALUE];
+      case qrpValueKind.Float: return ["Float", v.FLOAT_VALUE];
+      case qrpValueKind.Bool: return ["Bool", v.BOOL_VALUE];
+      case qrpValueKind.Bytes: return ["Bytes", Array.from(v.BYTES_VALUE)];
+      default: return ["Null"];
+    }
+  });
+  assert.deepEqual(values, [["Int", 25544n], ["Text", "ISS%"], ["Float", 1.5], ["Bool", true], ["Null"], ["Bytes", [0, 1, 2, 255]], ["Int", 7n], ["Float", 2.25], ["Text", "plain"], ["Bool", false], ["Null"], ["Int", 9007199254740993n]]);
+
+  const raw = await decide(harness, "route", { method: "POST", path: "/api/v1/data/query", body: "  SELECT 1  \n" });
+  assert.deepEqual([raw.port, raw.qrp.SQL, raw.qrp.PARAMETERS.length], ["query", "SELECT 1", 0]);
+
+  const missing = await decide(harness, "route", { method: "POST", path: "/api/v1/data/query", body: "" });
+  assert.deepEqual([missing.port, missing.qrp.ERROR_CODE], ["refusal", "missing-sql"]);
+  const badParams = await decide(harness, "route", { method: "POST", path: "/api/v1/data/query", body: JSON.stringify({ sql: "SELECT ?", params: [{ t: "i64", v: "seven" }] }) });
+  assert.equal(badParams.qrp.ERROR_CODE, "invalid-params");
+  assert.match(badParams.qrp.MESSAGE, /^params\[0\]: i64 parameter is not an integer/);
+  const badJson = await decide(harness, "route", { method: "POST", path: "/api/v1/data/query", body: "{\"sql\": " });
+  assert.equal(badJson.qrp.ERROR_CODE, "invalid-body");
+});
+
+test("route: an unmatched path is refused 404 no-route", async (t) => {
+  const { port, qrp } = await decide(await harnessFor(t), "route", { method: "DELETE", path: "/api/v1/data/omm" });
+  assert.equal(port, "refusal");
+  assert.equal(qrp.ERROR_CODE, "no-route");
+  assert.equal(qrp.HTTP_STATUS, 404);
+  assert.equal(qrp.MESSAGE, "no route for DELETE /api/v1/data/omm");
+});
+
+test("discover: every discovery route becomes an $APR with its parameters", async (t) => {
+  const harness = await harnessFor(t);
+  const peers = await decide(harness, "discover", { method: "GET", path: "/api/v1/peers/", headers: { "If-None-Match": "\"e\"" } });
+  assert.equal(peers.port, "decision");
+  assert.deepEqual([peers.apr.ROUTE, peers.apr.METHOD, peers.apr.PATH, peers.apr.IF_NONE_MATCH, peers.apr.STATUS], ["peers_list", aprMethod.GET, "/api/v1/peers/", "\"e\"", 0]);
+  const one = await decide(harness, "discover", { method: "HEAD", path: "/api/v1/peers/16Uiu2HAm%2Fx", query: "format=json" });
+  assert.deepEqual([one.apr.ROUTE, params(one.apr), one.apr.ACCEPT, one.apr.METHOD], ["peer_get", { peerId: "16Uiu2HAm/x" }, aprRepresentation.Json, aprMethod.HEAD]);
+  const pnm = await decide(harness, "discover", { method: "GET", path: "/api/v1/peers/P1/pnm", query: "limit=500" });
+  assert.deepEqual([pnm.apr.ROUTE, params(pnm.apr)], ["pnm_history", { peerId: "P1", limit: "100" }], "limit clamped to 100");
+  const pnmDefault = await decide(harness, "discover", { method: "GET", path: "/api/v1/peers/P1/pnm", query: "limit=x" });
+  assert.equal(params(pnmDefault.apr).limit, "1", "the default is the newest publication");
+  const latest = await decide(harness, "discover", { method: "GET", path: "/api/v1/peers/P1/omm/latest" });
+  assert.deepEqual([latest.apr.ROUTE, params(latest.apr)], ["latest_dataset", { peerId: "P1", standard: "omm" }]);
+  const standards = await decide(harness, "discover", { method: "GET", path: "/api/v1/standards" });
+  assert.equal(standards.apr.ROUTE, "standards");
+});
+
+test("discover: non-GET and unmatched paths are refused 404 on the same $APR port", async (t) => {
+  const harness = await harnessFor(t);
+  const post = await decide(harness, "discover", { method: "POST", path: "/api/v1/peers" });
+  assert.deepEqual([post.port, post.apr.STATUS, post.apr.ERROR_CODE, post.apr.ROUTE], ["decision", 404, "no-route", null]);
+  assert.match(post.apr.ERROR_MESSAGE, /discovery routes are GET/);
+  const deep = await decide(harness, "discover", { method: "GET", path: "/api/v1/peers/P1/omm/older" });
+  assert.deepEqual([deep.apr.STATUS, deep.apr.ERROR_CODE], [404, "no-route"]);
+});
+
+test("route_public_query: POST SQL / profile, GET surface, other methods 405", async (t) => {
+  const harness = await harnessFor(t);
+  const sql = await decide(harness, "route_public_query", { method: "POST", path: "/api/v1/query", query: "format=json", body: JSON.stringify({ sql: "SELECT NORAD_CAT_ID FROM OMM", params: [{ t: "i64", v: 1 }], sort: "NORAD_CAT_ID desc", limit: 10, format: "flatbuffer" }) });
+  assert.equal(sql.port, "query");
+  assert.deepEqual([sql.qrp.SQL, sql.qrp.SORT_FIELD, sql.qrp.SORT_DESC, sql.qrp.LIMIT, sql.qrp.PARAMETERS.length], ["SELECT NORAD_CAT_ID FROM OMM", "NORAD_CAT_ID", true, 10, 1]);
+  assert.equal(sql.qrp.REPRESENTATION, qrpRepresentation.Json, "?format wins over the body's format");
+  const bodyFormat = await decide(harness, "route_public_query", { method: "POST", path: "/api/v1/query", body: JSON.stringify({ sql: "SELECT 1", format: "json" }) });
+  assert.equal(bodyFormat.qrp.REPRESENTATION, qrpRepresentation.Json);
+
+  const profile = await decide(harness, "route_public_query", { method: "POST", path: "/api/v1/query", body: JSON.stringify({ profile: "epoch.as_of", epoch: "2026-10-13T00:00:00Z", source: "celestrak", limit: 5 }) });
+  assert.deepEqual([profile.port, profile.qrp.TIME_PROFILE, Number(profile.qrp.PROFILE_EPOCH_MS), profile.qrp.SOURCE_NAME, profile.qrp.SCHEMA_NAME, profile.qrp.SQL], ["query", qrpTimeProfile.AsOf, Date.UTC(2026, 9, 13), "celestrak", "OMM", null]);
+
+  const surface = await decide(harness, "route_public_query", { method: "GET", path: "/api/v1/query", headers: { "If-None-Match": "\"s\"" } });
+  assert.deepEqual([surface.port, surface.qrp.KIND, surface.qrp.ETAG, surface.qrp.SQL], ["surface", qrpKind.Request, "\"s\"", null]);
+
+  const put = await decide(harness, "route_public_query", { method: "PUT", path: "/api/v1/query", body: "SELECT 1" });
+  assert.deepEqual([put.port, put.qrp.ERROR_CODE, put.qrp.HTTP_STATUS], ["refusal", "method-not-allowed", 405]);
+  const empty = await decide(harness, "route_public_query", { method: "POST", path: "/api/v1/query", body: "{}" });
+  assert.deepEqual([empty.port, empty.qrp.ERROR_CODE], ["refusal", "missing-sql"]);
+  const badSort = await decide(harness, "route_public_query", { method: "POST", path: "/api/v1/query", body: JSON.stringify({ sql: "SELECT 1", sort: "A sideways" }) });
+  assert.equal(badSort.qrp.ERROR_CODE, "invalid-sort");
+});
+
+test("route_node_status / route_node_activity: GET routes, other methods 405, activity limit clamped", async (t) => {
+  const harness = await harnessFor(t);
+  const status = await decide(harness, "route_node_status", { method: "GET", path: "/api/v1/node/status", headers: { Accept: "application/json" } });
+  assert.deepEqual([status.port, status.apr.ROUTE, status.apr.ACCEPT, status.apr.STATUS], ["decision", "status", aprRepresentation.Json, 0]);
+  const post = await decide(harness, "route_node_status", { method: "POST", path: "/api/v1/node/status" });
+  assert.deepEqual([post.apr.STATUS, post.apr.ERROR_CODE, post.apr.ERROR_MESSAGE], [405, "method-not-allowed", "no POST route for node status (GET only)"]);
+
+  const activity = await decide(harness, "route_node_activity", { method: "GET", path: "/api/v1/node/activity", query: "limit=9999" });
+  assert.deepEqual([activity.apr.ROUTE, params(activity.apr)], ["activity", { limit: "256" }]);
+  assert.deepEqual(params((await decide(harness, "route_node_activity", { method: "GET", path: "/x", query: "limit=0" })).apr), { limit: "1" });
+  assert.deepEqual(params((await decide(harness, "route_node_activity", { method: "GET", path: "/x", query: "limit=12abc" })).apr), { limit: "50" });
+  const del = await decide(harness, "route_node_activity", { method: "DELETE", path: "/api/v1/node/activity" });
+  assert.deepEqual([del.apr.STATUS, del.apr.ERROR_CODE], [405, "method-not-allowed"]);
+});
+
+test("a frame that is not an $HTQ is refused; two request frames are refused, never one silently dropped", async (t) => {
+  const harness = await harnessFor(t);
+  const notHtq = await harness.invoke({ methodId: "route", inputs: [{ portId: "request", typeRef: HTQ, payload: encodeFlowNotice({ kind: "info" }) }] });
+  assert.notEqual(notHtq.statusCode, 0);
+  assert.equal(notHtq.errorCode, "invalid-request-frame");
+  for (const methodId of ["route", "discover", "route_public_query", "route_node_status", "route_node_activity"]) {
+    const twice = await harness.invoke({ methodId, inputs: [requestFrame({ method: "GET", path: "/a" }), requestFrame({ method: "GET", path: "/b" })] });
+    assert.equal(twice.errorCode, "batched-input-frames", methodId);
+    assert.match(twice.errorMessage, /2 frames on single-stream input port "request"/);
+    assert.equal(twice.outputs.length, 0);
   }
-});
-
-test("route /omm/bulk parses RFC3339 epoch, profile alias, limit, source, format, If-None-Match", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "GET",
-    path: "/api/v1/omm/bulk",
-    // RFC3339 epoch stays URL-encoded on the wire; the module owns decoding.
-    query: "epoch=2026-07-01T12%3A00%3A00Z&mode=as_of&limit=250&source=celestrak-gp&format=json",
-    headers: { "if-none-match": "\"etag-123\"", accept: "*/*" },
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "omm_bulk");
-  assert.equal(decision.format, "json");
-  assert.equal(decision.ifNoneMatch, "\"etag-123\"");
-  assert.equal(decision.query.schema, "OMM.fbs");
-  assert.equal(decision.query.source, "celestrak-gp");
-  assert.equal(decision.query.profile, "as_of", "mode must alias profile");
-  assert.equal(decision.query.limit, 250);
-  // 2026-07-01T12:00:00Z in unix seconds, independently via Date.UTC.
-  assert.ok(Math.abs(decision.query.epoch - Date.UTC(2026, 6, 1, 12, 0, 0) / 1000) < 1e-6);
-});
-
-test("route /omm/bulk accepts unix-seconds epoch and prefers profile over mode", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "GET",
-    path: "/omm/bulk",
-    query: "epoch=1751500800.5&profile=nearest&mode=forward",
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "omm_bulk");
-  assert.ok(Math.abs(decision.query.epoch - 1751500800.5) < 1e-6);
-  assert.equal(decision.query.profile, "nearest", "profile must beat its mode alias");
-});
-
-test("route /omm/bulk defaults: format flatbuffer, no epoch/profile/limit/source keys, no ifNoneMatch", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "GET",
-    path: "/api/v1/omm/bulk",
-    query: "",
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "omm_bulk");
-  assert.equal(decision.format, "flatbuffer", "format must default to flatbuffer");
-  assert.equal(decision.ifNoneMatch, undefined, "absent If-None-Match must omit the key");
-  assert.deepEqual(decision.query, { schema: "OMM.fbs" }, "absent params defer to retrieval defaults");
-});
-
-test("route /omm/bulk ignores an unparseable epoch (defers to retrieval defaults)", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "GET",
-    path: "/omm/bulk",
-    query: "epoch=yesterday&limit=-5&format=xml",
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "omm_bulk");
-  assert.equal(decision.query.epoch, undefined);
-  assert.equal(decision.query.limit, undefined, "non-positive limit must be dropped");
-  assert.equal(decision.format, "flatbuffer", "unknown format must fall back to flatbuffer");
-});
-
-test("route /query passes a JSON SQL body through verbatim", async (t) => {
-  const body = {
-    sql: "SELECT * FROM omm WHERE NORAD_CAT_ID = ?",
-    params: [{ t: "i64", v: 25544 }],
-  };
-  const response = await invokeRoute(t, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "format=json",
-    body: JSON.stringify(body),
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "data_query");
-  assert.equal(decision.format, "json");
-  assert.equal(decision.sql, body.sql);
-  assert.deepEqual(decision.params, body.params);
-});
-
-test("route /query accepts a raw SQL text body", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "POST",
-    path: "/query",
-    body: "SELECT COUNT(*) FROM omm",
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "data_query");
-  assert.equal(decision.sql, "SELECT COUNT(*) FROM omm");
-  assert.deepEqual(decision.params, []);
-  assert.equal(decision.format, "flatbuffer");
-});
-
-test("route /query without a SQL body degrades to not_found", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "POST",
-    path: "/api/v1/query",
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "not_found");
-  assert.match(decision.error, /SQL request body/);
-});
-
-test("route unknown path emits a not_found decision (single frame)", async (t) => {
-  const response = await invokeRoute(t, {
-    method: "GET",
-    path: "/api/v1/nope",
-    headers: { "If-None-Match": "abc" },
-  });
-  const decision = decodeDecision(response);
-  assert.equal(decision.route, "not_found");
-  assert.match(decision.error, /GET \/api\/v1\/nope/);
-  assert.equal(decision.ifNoneMatch, "abc", "If-None-Match lookup must be case-insensitive");
-});
-
-// ---------------------------------------------------------------------------
-// discover: the gateway discovery routing method (loop G.2).
-// ---------------------------------------------------------------------------
-
-async function invokeDiscover(t, request) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "discover",
-    inputs: [
-      {
-        portId: "request",
-        typeRef: HTTP_REQUEST_TYPE_REF,
-        payload: encodeHttpRequest(request),
-      },
-    ],
-  });
-}
-
-test("discover routes /peers (with and without trailing slash) to peers_list", async (t) => {
-  for (const path of ["/api/v1/peers", "/api/v1/peers/"]) {
-    const decision = decodeDecision(await invokeDiscover(t, { method: "GET", path, query: "" }));
-    assert.equal(decision.route, "peers_list", path);
-    assert.equal(decision.format, "flatbuffer");
-    assert.equal(decision.peerId, undefined);
-  }
-});
-
-test("discover routes /peers/{peerId} to peer_get with the percent-decoded segment", async (t) => {
-  const decision = decodeDecision(
-    await invokeDiscover(t, {
-      method: "GET",
-      path: "/api/v1/peers/16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3/",
-      query: "format=json",
-      headers: { "if-none-match": 'W/"fnv1a64-0011223344556677"' },
-    }),
-  );
-  assert.equal(decision.route, "peer_get");
-  assert.equal(decision.peerId, "16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3");
-  assert.equal(decision.format, "json");
-  assert.equal(decision.ifNoneMatch, 'W/"fnv1a64-0011223344556677"');
-});
-
-test("discover routes /standards to standards", async (t) => {
-  const decision = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/standards", query: "format=json" }),
-  );
-  assert.equal(decision.route, "standards");
-  assert.equal(decision.format, "json");
-});
-
-test("discover routes /peers/{peerId}/pnm to pnm_history with a clamped limit (loop G.3)", async (t) => {
-  // Default: limit=1 (newest publication only).
-  const newest = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "" }),
-  );
-  assert.equal(newest.route, "pnm_history");
-  assert.equal(newest.peerId, "16Uiu2HAmX");
-  assert.equal(newest.limit, 1);
-  assert.equal(newest.format, "flatbuffer");
-
-  // Explicit limit passes through; trailing slash tolerated; format=json.
-  const some = decodeDecision(
-    await invokeDiscover(t, {
-      method: "GET",
-      path: "/api/v1/peers/16Uiu2HAmX/pnm/",
-      query: "limit=25&format=json",
-    }),
-  );
-  assert.equal(some.route, "pnm_history");
-  assert.equal(some.limit, 25);
-  assert.equal(some.format, "json");
-
-  // The clamp is IN-WASM (api-block contract): [1, 100].
-  const over = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=5000" }),
-  );
-  assert.equal(over.limit, 100);
-  const under = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=-3" }),
-  );
-  assert.equal(under.limit, 1);
-  const junk = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=abc" }),
-  );
-  assert.equal(junk.limit, 1);
-});
-
-test("discover routes /peers/{peerId}/{standard}/latest to latest_dataset (loop G.4)", async (t) => {
-  const latest = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest", query: "" }),
-  );
-  assert.equal(latest.route, "latest_dataset");
-  assert.equal(latest.peerId, "16Uiu2HAmX");
-  assert.equal(latest.standard, "omm");
-  assert.equal(latest.format, "flatbuffer");
-
-  const json = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/cat/latest", query: "format=json" }),
-  );
-  assert.equal(json.route, "latest_dataset");
-  assert.equal(json.standard, "cat");
-  assert.equal(json.format, "json");
-
-  // Trailing slash tolerated (API paths never redirect).
-  const slash = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest/", query: "" }),
-  );
-  assert.equal(slash.route, "latest_dataset");
-});
-
-test("discover degrades unknown deeper per-peer paths and non-GET methods to not_found", async (t) => {
-  const deep = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/bogus", query: "" }),
-  );
-  assert.equal(deep.route, "not_found");
-  assert.ok(deep.error);
-
-  const deeper = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest/extra", query: "" }),
-  );
-  assert.equal(deeper.route, "not_found");
-
-  const post = decodeDecision(
-    await invokeDiscover(t, { method: "POST", path: "/api/v1/peers", query: "" }),
-  );
-  assert.equal(post.route, "not_found");
-  assert.match(post.error, /GET/);
-});
-
-// ---------------------------------------------------------------------------
-// route_node_status: the M1 node-status flow routing method.
-// ---------------------------------------------------------------------------
-
-async function invokeNodeStatus(t, request) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "route_node_status",
-    inputs: [
-      {
-        portId: "request",
-        typeRef: HTTP_REQUEST_TYPE_REF,
-        payload: encodeHttpRequest(request),
-      },
-    ],
-  });
-}
-
-test("route_node_status: GET/HEAD emit route=status, format=json, no path inspection", async (t) => {
-  for (const method of ["GET", "HEAD"]) {
-    const decision = decodeDecision(
-      await invokeNodeStatus(t, { method, path: "/api/v1/node/status", query: "" }),
-    );
-    assert.deepEqual(decision, { route: "status", format: "json" }, method);
-  }
-  // PATH is not inspected — the mount carries exactly one resource.
-  const anyPath = decodeDecision(
-    await invokeNodeStatus(t, { method: "GET", path: "/anything/at/all", query: "" }),
-  );
-  assert.equal(anyPath.route, "status");
-});
-
-test("route_node_status: non-GET/HEAD methods answer route=error status=405", async (t) => {
-  for (const method of ["POST", "PUT", "DELETE"]) {
-    const decision = decodeDecision(
-      await invokeNodeStatus(t, { method, path: "/api/v1/node/status", query: "" }),
-    );
-    assert.equal(decision.route, "error", method);
-    assert.equal(decision.status, 405, method);
-    assert.equal(decision.format, "json");
-    assert.match(decision.error, new RegExp(method));
-  }
-});
-
-// ---------------------------------------------------------------------------
-// route_node_activity: the M2 node-activity flow routing method.
-// ---------------------------------------------------------------------------
-
-async function invokeNodeActivity(t, request) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "route_node_activity",
-    inputs: [
-      {
-        portId: "request",
-        typeRef: HTTP_REQUEST_TYPE_REF,
-        payload: encodeHttpRequest(request),
-      },
-    ],
-  });
-}
-
-test("route_node_activity: GET/HEAD emit route=activity, format=json, default limit=50, no path inspection", async (t) => {
-  for (const method of ["GET", "HEAD"]) {
-    const decision = decodeDecision(
-      await invokeNodeActivity(t, { method, path: "/api/v1/node/activity", query: "" }),
-    );
-    assert.deepEqual(decision, { route: "activity", format: "json", limit: 50 }, method);
-  }
-  // PATH is not inspected — the mount carries exactly one resource.
-  const anyPath = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/anything/at/all", query: "" }),
-  );
-  assert.equal(anyPath.route, "activity");
-  assert.equal(anyPath.limit, 50);
-});
-
-test("route_node_activity: an explicit ?limit passes through unclamped within range", async (t) => {
-  const decision = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=5" }),
-  );
-  assert.equal(decision.route, "activity");
-  assert.equal(decision.limit, 5);
-});
-
-test("route_node_activity: ?limit is clamped in-wasm to [1, 256]", async (t) => {
-  const over = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=5000" }),
-  );
-  assert.equal(over.limit, 256);
-
-  const zero = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=0" }),
-  );
-  assert.equal(zero.limit, 1);
-
-  const negative = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=-3" }),
-  );
-  assert.equal(negative.limit, 1);
-});
-
-test("route_node_activity: a missing, empty, or garbage ?limit defaults to 50", async (t) => {
-  const missing = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "" }),
-  );
-  assert.equal(missing.limit, 50);
-
-  const empty = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=" }),
-  );
-  assert.equal(empty.limit, 50);
-
-  const junk = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=abc" }),
-  );
-  assert.equal(junk.limit, 50);
-
-  const partial = decodeDecision(
-    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=25abc" }),
-  );
-  assert.equal(partial.limit, 50, "a partially-numeric value must not be partially parsed");
-});
-
-test("route_node_activity: non-GET/HEAD methods answer route=error status=405", async (t) => {
-  for (const method of ["POST", "PUT", "DELETE"]) {
-    const decision = decodeDecision(
-      await invokeNodeActivity(t, { method, path: "/api/v1/node/activity", query: "" }),
-    );
-    assert.equal(decision.route, "error", method);
-    assert.equal(decision.status, 405, method);
-    assert.equal(decision.format, "json");
-    assert.match(decision.error, new RegExp(method));
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Per-schema bulk routing THROUGH THE WASM (sdn-data-retrieval-rfb-bulk-route).
-//
-// tests/bulk_route.test.mjs compiles src/bulk_route.h natively and proves the
-// RULE. These prove the rule is COMPILED INTO the shipped artifact and survives
-// the guest ABI — the wasm lane that could not run while this module's build was
-// refused by the isomorphic-pthreads artifact guard
-// (mod-flow-bundles-descriptor-abi-gen2).
-// ---------------------------------------------------------------------------
-
-test("route /<code>/bulk carries the named SDS standard in query.schema (wasm lane)", async (t) => {
-  for (const [path, schema] of [
-    ["/api/v1/data/rfb/bulk", "RFB.fbs"],
-    ["/api/v1/data/RFB/bulk", "RFB.fbs"],
-    ["/api/v1/data/omm/bulk", "OMM.fbs"],
-    ["/api/v1/data/satcat/bulk", "SATCAT.fbs"],
-    ["/test/data/rfb/bulk", "RFB.fbs"],
-  ]) {
-    const decision = decodeDecision(await invokeRoute(t, { method: "GET", path, query: "" }));
-    assert.equal(decision.route, "omm_bulk", path);
-    assert.equal(decision.query.schema, schema, path);
-  }
-});
-
-test("route rejects a bulk path whose code segment is not a standard code (wasm lane)", async (t) => {
-  for (const path of ["/bulk", "/api/v1/data/toolongcode/bulk", "/api/v1/data/r%2Fb/bulk"]) {
-    const decision = decodeDecision(await invokeRoute(t, { method: "GET", path, query: "" }));
-    assert.equal(decision.route, "not_found", path);
-  }
-});
-
-// The match is on the SUFFIX and the flow does not know its own mount, so the
-// segment before "/bulk" is ALWAYS read as the standard code — including when
-// that segment is the mount itself. "/api/v1/data/bulk" therefore asks for
-// standard $DATA, not for "the default standard". Recorded as the rule's actual
-// behaviour so nobody later reads it as an $OMM alias.
-test("a bulk path with no standard segment names the MOUNT as the code (wasm lane)", async (t) => {
-  const decision = decodeDecision(
-    await invokeRoute(t, { method: "GET", path: "/api/v1/data/bulk", query: "" }),
-  );
-  assert.equal(decision.route, "omm_bulk");
-  assert.equal(decision.query.schema, "DATA.fbs");
-});
-
-test("route refuses ?format=json on a non-$OMM standard rather than mis-encoding it (wasm lane)", async (t) => {
-  const refused = decodeDecision(
-    await invokeRoute(t, { method: "GET", path: "/api/v1/data/rfb/bulk", query: "format=json" }),
-  );
-  assert.equal(refused.route, "not_found", "the flow's json branch is an $OMM encoder");
-  assert.ok(typeof refused.error === "string" && refused.error.length > 0, "the refusal must be explained");
-
-  const honoured = decodeDecision(
-    await invokeRoute(t, { method: "GET", path: "/api/v1/data/omm/bulk", query: "format=json" }),
-  );
-  assert.equal(honoured.route, "omm_bulk");
-  assert.equal(honoured.format, "json");
 });

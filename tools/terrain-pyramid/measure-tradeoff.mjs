@@ -32,6 +32,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
+import { decodeTileReport, granuleFrame, planInputs } from "../../data-source/terrain-source/typed-frames.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -57,12 +58,7 @@ const outDir = path.resolve(args.out);
 const granuleDir = path.join(outDir, "granules");
 
 const encoder = new TextEncoder();
-const frame = (portId, bytes) => ({
-  portId,
-  typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.length },
-  payload: bytes,
-});
-const jsonFrame = (portId, value) => frame(portId, encoder.encode(JSON.stringify(value)));
+// Typed contracts 1.0: the plan is the $DTT header stream (+ ModuleConfig options), each granule an HttpResponse.
 
 // ── the store, read back by hand (field ids follow schema/DTT/main.fbs) ─────
 function readDtt(record) {
@@ -162,11 +158,7 @@ function granulesFor(tile) {
       if (!fs.existsSync(file) || !fs.existsSync(`${file}.status`)) continue;
       if (fs.readFileSync(`${file}.status`, "utf8").trim() !== "200") continue;
       const body = fs.readFileSync(file);
-      const hrb = Buffer.alloc(8 + body.length);
-      hrb.write("$HRB", 0, "latin1");
-      hrb.writeUInt32LE(200, 4);
-      body.copy(hrb, 8);
-      frames.push(frame("dem", hrb));
+      frames.push(granuleFrame("dem", body, 200));
     }
   }
   return frames;
@@ -188,7 +180,7 @@ async function denseLattice(tile, harness) {
   const response = await harness.invoke({
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      ...planInputs({
         tilesetId: "tradeoff",
         level: tile.level + DEPTH,
         gridSize: GRID,

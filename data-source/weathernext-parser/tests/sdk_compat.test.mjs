@@ -1,31 +1,34 @@
-// data-source/weathernext-parser SDK-compat tests: the compiled wasm runs in
-// the SDK browser harness against the deterministic fixtures and its records
-// are unpacked through the spacedatastandards.org generated JS lib and
-// asserted against the SAME expected.json constants the reference parser is
-// held to (tests/fixtures/generate-fixtures.mjs). The wasm and the reference
-// build records with different builders, so bytes are never compared — decoded
-// values are.
+// data-source/weathernext-parser on the typed contracts (1.0): the compiled wasm runs in the SDK browser harness
+// against the deterministic fixtures. Its input is what hostcap/http-request answers - HttpResponses (HRSP) whose
+// CONTEXT is the parse job as a size-prefixed SDS header record ($WXF per cloud chunk, $TCT for the cyclone tracks),
+// exactly as weathernext-source builds them - and its outputs are the record streams, the batch's IngestRequest
+// (INGQ) and, for the cyclone lane, the HttpResponse itself for archiving. Records are unpacked through the
+// spacedatastandards.org generated JS lib and asserted against the SAME expected.json constants the reference parser
+// is held to (tests/fixtures/generate-fixtures.mjs). The only hostcall is plugin.getConfig (the chunk extents, the
+// dimension order and the provider id). The wasm and the reference build records with different builders, so bytes
+// are never compared - decoded values are.
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire as createModuleRequire } from "node:module";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { decodeHostCall, decodeIngestRequest, encodeFlowNotice, encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const STANDARDS_ROOT =
   process.env.SPACE_DATA_STANDARDS_ROOT ??
   fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
-const WXF_LIB_URL = new URL("../../../../spacedatastandards.org/lib/js/WXF/main.js", import.meta.url);
-const TCT_LIB_URL = new URL("../../../../spacedatastandards.org/lib/js/TCT/main.js", import.meta.url);
+const WXF_LIB_URL = pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/WXF/main.js"));
+const TCT_LIB_URL = pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/TCT/main.js"));
 const flatbuffers = createModuleRequire(WXF_LIB_URL)("flatbuffers");
 const wxfLib = await import(WXF_LIB_URL.href);
 const tctLib = await import(TCT_LIB_URL.href);
@@ -39,59 +42,51 @@ const CSV_BYTES = new Uint8Array(fs.readFileSync(new URL("cyclone-tracks.csv", C
 
 const HISTORICAL_URL = "https://creativecommons.org/licenses/by/4.0/";
 const REALTIME_URL = "https://storage.googleapis.com/weathernext-public/terms-of-use.pdf";
+const HRSP = { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" };
+const LICENSE = { RealTimeExperimental: 0, Historical: 1 };
 
-// Job JSON exactly as the source module's plan / cyclone_request nodes emit it
-// (contract D), pointed at the fixture chunk paths.
-function chunkJob(name, { codecs = ["bytes"], licenseClass = "Historical" } = {}) {
-  const chunk = EXPECTED_CLOUDS.chunks[name];
-  const job = EXPECTED_CLOUDS.job;
-  return {
-    source_url: `https://storage.googleapis.com/weathernext3_spatial/wn3/${chunk.array}/c/${chunk.chunk_index.join("/")}`,
-    source_name: job.source_name,
-    provider_id: "weathernext",
-    array: chunk.array,
-    variable_name: chunk.array,
-    model_id: job.model_id,
-    model_version: "",
-    model_class: job.model_class,
-    init_time_ms: job.init_time_ms,
-    lead_hours: job.lead_hours,
-    horizon_hours: job.horizon_hours,
-    member_kind: job.member_kind,
-    member_index: job.member_index,
-    ensemble_size: job.ensemble_size,
-    dtype: EXPECTED_CLOUDS.dtype,
-    codecs,
-    chunk_shape: EXPECTED_CLOUDS.chunk_shape,
-    chunk_index: chunk.chunk_index,
-    dims: EXPECTED_CLOUDS.dims,
-    grid: EXPECTED_CLOUDS.grid,
-    license_class: licenseClass,
-    license_url: licenseClass === "Historical" ? HISTORICAL_URL : REALTIME_URL,
-    citation: "Forecast data (CC BY 4.0)",
-    origin_id: job.origin_id,
-    dataset_id: job.dataset_id,
-  };
+function sizePrefixed(build) {
+  const b = new flatbuffers.Builder(1024);
+  build(b);
+  return b.asUint8Array().slice();
 }
 
-function cycloneJob({ licenseClass = "Historical" } = {}) {
-  return {
-    source_url: "https://storage.googleapis.com/weathernext3_spatial/cyclones/cyclone-tracks.csv",
-    source_name: EXPECTED_CYCLONES.source_name,
-    provider_id: "weathernext",
-    archive_source: EXPECTED_CYCLONES.archive.source,
-    archive_name: EXPECTED_CYCLONES.archive.name,
-    model_id: "weathernext-3",
-    model_version: "",
-    model_class: "MachineLearnedGlobalEnsemble",
-    ensemble_size: EXPECTED_CYCLONES.ensemble_size,
-    wind_averaging_period_s: EXPECTED_CYCLONES.wind_averaging_period_s,
-    license_class: licenseClass,
-    license_url: licenseClass === "Historical" ? HISTORICAL_URL : REALTIME_URL,
-    citation: "Forecast data (CC BY 4.0)",
-    origin_id: "storage.googleapis.com",
-    dataset_id: "weathernext3_spatial",
-  };
+// The chunk's job as weathernext-source:plan builds it: a size-prefixed $WXF header record (no samples) naming the
+// field and the chunk's tile on the declared grid.
+function chunkContext(name, { codecs = ["bytes"], licenseClass = "Historical", dtype = EXPECTED_CLOUDS.dtype } = {}) {
+  const chunk = EXPECTED_CLOUDS.chunks[name];
+  const job = EXPECTED_CLOUDS.job;
+  const t = new wxfLib.WXFT();
+  Object.assign(t, {
+    FIELD_ID: EXPECTED_CLOUDS.field_ids[chunk.array], MODEL_CLASS: 1, MODEL_ID: job.model_id, MODEL_VERSION: "",
+    INIT_TIME_MS: BigInt(job.init_time_ms), LEAD_HOURS: job.lead_hours, VALID_TIME_MS: BigInt(job.valid_time_ms),
+    HORIZON_HOURS: job.horizon_hours, MEMBER_KIND: 0, MEMBER_INDEX: job.member_index, ENSEMBLE_SIZE: job.ensemble_size,
+    VARIABLE: { low_cloud_cover: 14, medium_cloud_cover: 13, high_cloud_cover: 12 }[chunk.array], VARIABLE_NAME: chunk.array,
+    GRID: Object.assign(new wxfLib.WXFGridT(), { LAT0: chunk.LAT0, LON0: chunk.LON0, DLAT: chunk.DLAT, DLON: chunk.DLON, NLAT: chunk.NLAT, NLON: chunk.NLON, PERIODIC_LON: chunk.PERIODIC_LON }),
+    TILE_INDEX: chunk.TILE_INDEX, TILE_COUNT: chunk.TILE_COUNT, CHUNK_DTYPE: dtype, CHUNK_CODECS: codecs,
+    ORIGIN_ID: job.origin_id, DATASET_ID: job.dataset_id, SOURCE_URL: chunkUrl(name),
+    LICENSE_CLASS: LICENSE[licenseClass], LICENSE_URL: licenseClass === "Historical" ? HISTORICAL_URL : REALTIME_URL,
+    CITATION: "Forecast data (CC BY 4.0)",
+  });
+  return sizePrefixed((b) => wxfLib.WXF.finishSizePrefixedWXFBuffer(b, t.pack(b)));
+}
+const chunkUrl = (name) => {
+  const chunk = EXPECTED_CLOUDS.chunks[name];
+  return `https://storage.googleapis.com/weathernext3_spatial/wn3/${chunk.array}/c/${chunk.chunk_index.join("/")}`;
+};
+
+// The cyclone job: a size-prefixed $TCT header record (no points).
+const CYCLONE_URL = "https://storage.googleapis.com/weathernext3_spatial/cyclones/cyclone-tracks.csv";
+function cycloneContext({ licenseClass = "Historical" } = {}) {
+  const t = new tctLib.TCTT();
+  Object.assign(t, {
+    STORM_ID: "", MODEL_CLASS: 1, MODEL_ID: "weathernext-3", MODEL_VERSION: "",
+    ENSEMBLE_SIZE: EXPECTED_CYCLONES.ensemble_size, WIND_AVERAGING_PERIOD_S: EXPECTED_CYCLONES.wind_averaging_period_s,
+    ORIGIN_ID: "storage.googleapis.com", DATASET_ID: "weathernext3_spatial", SOURCE_URL: CYCLONE_URL,
+    LICENSE_CLASS: LICENSE[licenseClass], LICENSE_URL: licenseClass === "Historical" ? HISTORICAL_URL : REALTIME_URL,
+    CITATION: "Forecast data (CC BY 4.0)",
+  });
+  return sizePrefixed((b) => tctLib.TCT.finishSizePrefixedTCTBuffer(b, t.pack(b)));
 }
 
 // The SAME expected.json assertions the reference parser is held to
@@ -171,20 +166,11 @@ function assertTctMatchesExpected(record, key) {
   return track;
 }
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function readManifest() {
-  return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-}
-
-function readWasm() {
-  return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
-}
-
-function readChunk(name, zstd = false) {
-  return new Uint8Array(fs.readFileSync(new URL(zstd ? `${name}.zst` : name, CLOUDS)));
-}
+const readManifest = () => JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+const readWasm = () => fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
+const readChunk = (name, zstd = false) => new Uint8Array(fs.readFileSync(new URL(zstd ? `${name}.zst` : name, CLOUDS)));
 
 function sha256Hex(parts) {
   const hash = createHash("sha256");
@@ -192,39 +178,39 @@ function sha256Hex(parts) {
   return hash.digest("hex");
 }
 
-// SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength.
-function bytesInput(portId, payload) {
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
+// What hostcap/http-request answers: an HttpResponse echoing the request's CONTEXT.
+const responseInput = (portId, { body = new Uint8Array(0), status = 200, headers = {}, context, error, retrievedMs, url } = {}) =>
+  ({ portId, typeRef: HRSP, payload: encodeHttpResponse({ url, status, headers, body, context, error, retrievedMs }) });
+const chunkInput = (name, options = {}, response = {}) =>
+  responseInput("responses", { url: chunkUrl(name), body: readChunk(name), context: chunkContext(name, options), ...response });
+
+// The SDK harness's BrowserHost answers plugin.getConfig from its `config` option (one ModuleConfig on raw "config", as
+// the Go node answers). The hostcall import is only watched, to decode every $PIV request into `wire`.
+const instantiate = WebAssembly.instantiate;
+async function createHarness(t, config = {}) {
+  const wire = [];
+  WebAssembly.instantiate = async (module, imports) => {
+    const host = imports?.space_data_module_host;
+    if (!host) return instantiate(module, imports);
+    let memory;
+    const wrapped = { ...imports, space_data_module_host: { ...host,
+      call: (op, opLen, ptr, len) => {
+        const call = decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice());
+        wire.push(call);
+        return host.call(op, opLen, ptr, len);
+      },
+    } };
+    const instance = await instantiate(module, wrapped);
+    memory = instance.exports.memory;
+    return instance;
   };
-}
-
-function jsonInput(portId, value) {
-  return bytesInput(portId, encoder.encode(JSON.stringify(value)));
-}
-
-function jsonResponse(body, headers = {}) {
-  return { status: 200, headers, bodyB64: Buffer.from(body).toString("base64") };
-}
-
-// hostcap/http-request raw-body-v1 lane: "$HRB" + int32le status + body.
-function rawResponseFrame(body, status = 200) {
-  const frame = new Uint8Array(8 + body.byteLength);
-  frame.set([0x24, 0x48, 0x52, 0x42]);
-  new DataView(frame.buffer).setInt32(4, status, true);
-  frame.set(body, 8);
-  return frame;
-}
-
-async function createHarness(t) {
+  t.after(() => { WebAssembly.instantiate = instantiate; });
   const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
+    wasmSource: readWasm(), manifest: readManifest(), surface: "direct",
+    hostOptions: { config },
   });
   t.after(() => harness.destroy());
+  harness.wire = wire;
   return harness;
 }
 
@@ -232,12 +218,6 @@ function outputsByPort(response) {
   const map = new Map();
   for (const frame of response.outputs) map.set(frame.portId, frame);
   return map;
-}
-
-function jsonFrame(map, portId) {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
 }
 
 function splitStream(payload) {
@@ -269,42 +249,45 @@ function unpackTct(record) {
 
 const DATE_HEADER = "Thu, 03 Sep 2026 12:00:00 GMT";
 
-test("weathernext-parser artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    standardsRoot: STANDARDS_ROOT,
-  });
+test("weathernext-parser artifact passes SDK compliance with typed ports only", async () => {
+  const report = await validateArtifactWithStandards({ manifest: readManifest(), wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ids = {};
+  for (const method of readManifest().methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+      const [type] = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(type.acceptsAnyFlatbuffer, undefined, port.portId);
+      assert.equal(type.wireFormat, "flatbuffer", port.portId);
+      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+    }
+  }
+  assert.deepEqual(ids, {
+    "parse_cloud_chunks.responses": "HRSP", "parse_cloud_chunks.wxf_meta": "INGQ", "parse_cloud_chunks.wxf_records": "$WXF",
+    "parse_cyclone_tracks.response": "HRSP", "parse_cyclone_tracks.tct_meta": "INGQ", "parse_cyclone_tracks.tct_records": "$TCT", "parse_cyclone_tracks.raw": "HRSP",
+  });
+  assert.deepEqual(readManifest().capabilities, [], "no capability: plugin.getConfig is the only hostcall");
 });
 
-test("weathernext-parser artifact is pure: canonical ABI, WASI-only imports", async () => {
+test("weathernext-parser artifact: canonical ABI, imports only WASI and the sync hostcall bridge", async () => {
   const inspection = await inspectModule(readWasm());
-  assert.equal(inspection.profile, "standalone");
   const importedModuleNames = Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort();
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
-  for (const required of [
-    "plugin_alloc",
-    "plugin_free",
-    "plugin_invoke_stream",
-    "plugin_get_manifest_flatbuffer",
-    "plugin_get_manifest_flatbuffer_size",
-  ]) {
+  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
+  for (const required of ["plugin_alloc", "plugin_free", "plugin_invoke_stream", "plugin_get_manifest_flatbuffer", "plugin_get_manifest_flatbuffer_size"]) {
     assert.ok(inspection.exports.includes(required), `missing export ${required}`);
   }
 });
 
-test("parse_cloud_chunks: bytes-codec chunks -> $WXF tiles matching expected.json", async (t) => {
+test("parse_cloud_chunks: bytes-codec chunk responses (job in CONTEXT) -> $WXF tiles matching expected.json + an IngestRequest", async (t) => {
   const harness = await createHarness(t);
-  const inputs = [];
-  for (const name of CHUNK_NAMES) inputs.push(jsonInput("jobs", chunkJob(name)));
-  for (const name of CHUNK_NAMES) {
-    inputs.push(jsonInput("responses", jsonResponse(readChunk(name), { date: DATE_HEADER, etag: '"abc"' })));
-  }
+  const inputs = CHUNK_NAMES.map((name) => chunkInput(name, {}, { headers: { date: DATE_HEADER, etag: '"abc"' } }));
   const response = await harness.invoke({ methodId: "parse_cloud_chunks", inputs });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  assert.deepEqual(harness.wire.map((c) => c.op), ["plugin.getConfig"], "one hostcall: the node config");
   const outputs = outputsByPort(response);
 
+  assert.equal(outputs.get("wxf_records").typeRef?.fileIdentifier, "$WXF");
   const records = splitStream(outputs.get("wxf_records").payload);
   assert.equal(records.length, CHUNK_NAMES.length);
   const enums = { low_cloud_cover: 14, medium_cloud_cover: 13, high_cloud_cover: 12 };
@@ -321,124 +304,116 @@ test("parse_cloud_chunks: bytes-codec chunks -> $WXF tiles matching expected.jso
     assert.equal(record.LICENSE_CLASS, 1, "Historical");
     assert.equal(record.LICENSE_URL, "https://creativecommons.org/licenses/by/4.0/");
     assert.equal(Number(record.RETRIEVED_AT), Date.UTC(2026, 8, 3, 12, 0, 0), "Date header wins");
-    assert.equal(record.SOURCE_URL, chunkJob(CHUNK_NAMES[k]).source_url);
+    assert.equal(record.SOURCE_URL, chunkUrl(CHUNK_NAMES[k]));
   }
 
-  const meta = jsonFrame(outputs, "wxf_meta");
+  assert.equal(outputs.get("wxf_meta").typeRef?.fileIdentifier, "INGQ");
+  const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
   assert.equal(meta.schema, "WXF.fbs");
-  assert.equal(meta.provider_id, "weathernext");
-  assert.equal(meta.source_name, EXPECTED_CLOUDS.job.source_name);
-  assert.equal(meta.batch_id, sha256Hex(CHUNK_NAMES.map((name) => readChunk(name))));
-  assert.equal(meta.content_key_id, "public");
-  assert.equal(meta.source_peer, "source:storage.googleapis.com");
+  const batchId = sha256Hex(CHUNK_NAMES.map((name) => readChunk(name)));
+  assert.equal(meta.tags.providerId, "weathernext");
+  assert.equal(meta.tags.sourceName, EXPECTED_CLOUDS.job.source_name);
+  assert.equal(meta.tags.batchId, batchId);
+  assert.equal(meta.tags.contentKeyId, "public");
+  assert.equal(meta.tags.sourcePeer, "source:storage.googleapis.com");
+  assert.equal(meta.tags.license, "CC-BY-4.0");
+  assert.equal(meta.tags.licenseUrl, "https://creativecommons.org/licenses/by/4.0/");
+  assert.equal(meta.tags.citation, "Forecast data (CC BY 4.0)");
+  assert.equal(meta.tags.shareAlike, false);
   assert.equal(meta.reconcile, "duplicates");
-  assert.equal(meta.license, "CC-BY-4.0");
-  assert.equal(meta.license_url, "https://creativecommons.org/licenses/by/4.0/");
-  assert.equal(meta.archive, undefined, "field lane archives nothing");
-  assert.ok(meta.source_url.startsWith("https://storage.googleapis.com/weathernext3_spatial/wn3/"));
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.parser_version, "weathernext-zarr-wasm/v1");
-  assert.equal(provenance.source_sha256, meta.batch_id);
-  assert.equal(provenance.normalized_count, CHUNK_NAMES.length);
-  assert.deepEqual(provenance.schema_counts, { "WXF.fbs": CHUNK_NAMES.length });
+  assert.equal(meta.archive, null, "field lane archives nothing");
+  assert.equal(meta.tags.sourceUrl, "https://storage.googleapis.com/weathernext3_spatial/wn3/");
+  const provenance = meta.provenance;
+  assert.equal(provenance.sourceUrl, meta.tags.sourceUrl);
+  assert.equal(provenance.httpStatus, 200);
+  assert.equal(provenance.parserVersion, "weathernext-zarr-wasm/v1");
+  assert.equal(provenance.sourceSha256, batchId);
+  assert.equal(provenance.normalizedCount, CHUNK_NAMES.length);
+  assert.deepEqual(provenance.schemaCounts, { "WXF.fbs": CHUNK_NAMES.length });
+  assert.deepEqual(provenance.warnings, []);
+  assert.equal(provenance.fromCache, false);
   assert.equal(provenance.etag, '"abc"');
-  assert.equal(provenance.retrieved_at, "2026-09-03T12:00:00Z");
-  assert.match(provenance.normalized_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(provenance.retrievedMs, Date.UTC(2026, 8, 3, 12, 0, 0));
+  assert.match(provenance.normalizedSha256, /^[0-9a-f]{64}$/);
   assert.equal(outputs.has("raw"), false, "no raw port: the samples ride VALUES");
 });
 
-test("parse_cloud_chunks: raw-body-v1 responses and the real-time licence class", async (t) => {
+test("parse_cloud_chunks: no Date header -> the host's RETRIEVED_MS; the real-time licence class", async (t) => {
   const harness = await createHarness(t);
   const name = CHUNK_NAMES[0];
-  const response = await harness.invoke({
-    methodId: "parse_cloud_chunks",
-    inputs: [
-      jsonInput("jobs", chunkJob(name, { licenseClass: "RealTimeExperimental" })),
-      bytesInput("responses", rawResponseFrame(readChunk(name))),
-    ],
-  });
+  const retrievedMs = Date.UTC(2026, 8, 3, 12, 34, 56, 789);
+  const response = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name, { licenseClass: "RealTimeExperimental" }, { retrievedMs })] });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const outputs = outputsByPort(response);
   const record = unpackWxf(splitStream(outputs.get("wxf_records").payload)[0]);
   assertWxfMatchesExpected(record, name);
   assert.equal(record.LICENSE_CLASS, 0, "RealTimeExperimental");
-  assert.equal(record.LICENSE_URL, "https://storage.googleapis.com/weathernext-public/terms-of-use.pdf");
-  const meta = jsonFrame(outputs, "wxf_meta");
-  assert.equal(meta.license, "LicenseRef-WeatherNext-RealTime-Experimental");
-  assert.equal(meta.source_url, chunkJob(name).source_url, "single chunk keeps its URL");
+  assert.equal(record.LICENSE_URL, REALTIME_URL);
+  assert.equal(Number(record.RETRIEVED_AT), retrievedMs);
+  const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
+  assert.equal(meta.tags.license, "LicenseRef-WeatherNext-RealTime-Experimental");
+  assert.equal(meta.tags.sourceUrl, chunkUrl(name), "single chunk keeps its URL");
+  assert.equal(meta.provenance.retrievedMs, Date.UTC(2026, 8, 3, 12, 34, 56), "provenance keeps the whole second");
+});
+
+test("parse_cloud_chunks: the provider id and the chunk extents come from the node config", async (t) => {
+  const name = CHUNK_NAMES[0];
+  const provider = await createHarness(t, { weathernext_provider_id: "prov-test" });
+  const ok = await provider.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name)] });
+  assert.equal(decodeIngestRequest(outputsByPort(ok).get("wxf_meta").payload).tags.providerId, "prov-test");
+  const extents = await createHarness(t, { weathernext_chunk_lat: 32 });
+  const refused = await extents.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name)] });
+  assert.equal(refused.errorCode, "chunk-size-mismatch", "a 64 x 64 body is not a 32 x 64 chunk");
+  const dims = await createHarness(t, { weathernext_dims: "init_time,member,lead_time,y,x" });
+  assert.equal((await dims.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name)] })).errorCode, "dims-invalid");
 });
 
 test("parse_cloud_chunks: zstd chunks report codec-unsupported in this build", async (t) => {
   const harness = await createHarness(t);
   const name = CHUNK_NAMES[0];
-  const response = await harness.invoke({
-    methodId: "parse_cloud_chunks",
-    inputs: [
-      jsonInput("jobs", chunkJob(name, { codecs: ["bytes", "zstd"] })),
-      jsonInput("responses", jsonResponse(readChunk(name, true))),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name, { codecs: ["bytes", "zstd"] }, { body: readChunk(name, true) })] });
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "codec-unsupported");
   assert.match(response.errorMessage ?? "", /zstd/);
   assert.equal(response.outputs.length, 0);
 });
 
-test("parse_cloud_chunks: a non-200 chunk fails the batch", async (t) => {
+test("parse_cloud_chunks: a non-200 chunk (or a failed exchange) fails the batch", async (t) => {
   const harness = await createHarness(t);
   const name = CHUNK_NAMES[0];
-  const response = await harness.invoke({
-    methodId: "parse_cloud_chunks",
-    inputs: [
-      jsonInput("jobs", chunkJob(name)),
-      jsonInput("responses", { status: 503, headers: {}, bodyB64: "" }),
-    ],
-  });
-  assert.notEqual(response.statusCode, 0);
+  const response = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name), chunkInput(CHUNK_NAMES[1], {}, { status: 503, body: new Uint8Array(0) })] });
   assert.equal(response.errorCode, "fetch-failed");
-  assert.match(response.errorMessage ?? "", /503/);
+  assert.match(response.errorMessage ?? "", /chunk 1 .* 503/);
+  const failed = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name, {}, { status: 0, body: new Uint8Array(0), error: "timeout: no answer in 90000 ms" })] });
+  assert.equal(failed.errorCode, "fetch-failed");
+  assert.match(failed.errorMessage ?? "", /status 0 \(timeout: no answer in 90000 ms\)/);
 });
 
-test("parse_cloud_chunks: jobs and responses must pair one to one", async (t) => {
+test("parse_cloud_chunks: a response without its CONTEXT job, or not an HttpResponse, is refused by name", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_cloud_chunks",
-    inputs: [
-      jsonInput("jobs", chunkJob(CHUNK_NAMES[0])),
-      jsonInput("jobs", chunkJob(CHUNK_NAMES[1])),
-      jsonInput("jobs", chunkJob(CHUNK_NAMES[2])),
-      jsonInput("responses", jsonResponse(readChunk(CHUNK_NAMES[0]))),
-      jsonInput("responses", jsonResponse(readChunk(CHUNK_NAMES[1]))),
-    ],
-  });
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "job-response-count-mismatch");
-  assert.match(response.errorMessage ?? "", /3 job frames but 2 response frames/);
+  const name = CHUNK_NAMES[0];
+  const noJob = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name), responseInput("responses", { body: readChunk(name) })] });
+  assert.equal(noJob.errorCode, "invalid-chunk-job");
+  assert.match(noJob.errorMessage, /^chunk job 1: /);
+  const wrong = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name, {}, { context: cycloneContext() })] });
+  assert.equal(wrong.errorCode, "invalid-chunk-job");
+  const notResponse = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [{ portId: "responses", typeRef: HRSP, payload: encodeFlowNotice({ kind: "info" }) }] });
+  assert.equal(notResponse.errorCode, "invalid-response-frame");
+  for (const r of [noJob, wrong, notResponse]) assert.equal(r.outputs.length, 0);
 });
 
 test("parse_cloud_chunks: a short chunk body is refused by size", async (t) => {
   const harness = await createHarness(t);
   const name = CHUNK_NAMES[0];
-  const response = await harness.invoke({
-    methodId: "parse_cloud_chunks",
-    inputs: [
-      jsonInput("jobs", chunkJob(name)),
-      jsonInput("responses", jsonResponse(readChunk(name).subarray(0, 100))),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse_cloud_chunks", inputs: [chunkInput(name, {}, { body: readChunk(name).subarray(0, 100) })] });
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "chunk-size-mismatch");
 });
 
-test("parse_cyclone_tracks: CSV -> $TCT tracks matching expected.json, raw passthrough, archive meta", async (t) => {
+test("parse_cyclone_tracks: CSV -> $TCT tracks matching expected.json, the HttpResponse passed on for archiving, archive naming", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_cyclone_tracks",
-    inputs: [
-      jsonInput("job", cycloneJob()),
-      jsonInput("response", jsonResponse(CSV_BYTES, { "content-type": "text/csv", date: DATE_HEADER })),
-    ],
-  });
+  const input = responseInput("response", { url: CYCLONE_URL, body: CSV_BYTES, headers: { "content-type": "text/csv", date: DATE_HEADER }, context: cycloneContext() });
+  const response = await harness.invoke({ methodId: "parse_cyclone_tracks", inputs: [input] });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const outputs = outputsByPort(response);
 
@@ -457,34 +432,35 @@ test("parse_cyclone_tracks: CSV -> $TCT tracks matching expected.json, raw passt
     assert.equal(record.MODEL_CLASS, 1);
     assert.equal(record.MODEL_ID, "weathernext-3");
     assert.equal(record.LICENSE_CLASS, 1);
+    assert.equal(record.SOURCE_URL, CYCLONE_URL);
     assert.equal(Number(record.RETRIEVED_AT), Date.UTC(2026, 8, 3, 12, 0, 0));
     for (let i = 0; i < track.points.length; i++) {
       assert.equal(record.POINTS[i].CATEGORY, categories[track.points[i].CATEGORY], `${key} point ${i} category`);
     }
   }
 
-  const meta = jsonFrame(outputs, "tct_meta");
+  const meta = decodeIngestRequest(outputs.get("tct_meta").payload);
   assert.equal(meta.schema, "TCT.fbs");
-  assert.equal(meta.batch_id, EXPECTED_CYCLONES.csv_sha256);
-  assert.equal(meta.source_name, EXPECTED_CYCLONES.source_name);
+  assert.equal(meta.tags.batchId, EXPECTED_CYCLONES.csv_sha256);
+  assert.equal(meta.tags.sourceName, EXPECTED_CYCLONES.source_name);
+  assert.equal(meta.tags.sourceUrl, CYCLONE_URL);
   assert.equal(meta.reconcile, "duplicates");
   assert.deepEqual(meta.archive, EXPECTED_CYCLONES.archive);
-  assert.equal(meta.license, "CC-BY-4.0");
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.parser_version, "weathernext-cyclone-wasm/v1");
-  assert.equal(provenance.content_type, "text/csv");
-  assert.deepEqual(provenance.schema_counts, { "TCT.fbs": EXPECTED_CYCLONES.record_count });
+  assert.equal(meta.tags.license, "CC-BY-4.0");
+  assert.equal(meta.provenance.parserVersion, "weathernext-cyclone-wasm/v1");
+  assert.equal(meta.provenance.contentType, "text/csv");
+  assert.deepEqual(meta.provenance.schemaCounts, { "TCT.fbs": EXPECTED_CYCLONES.record_count });
 
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(CSV_BYTES), "raw passthrough byte-equal");
+  const raw = outputs.get("raw");
+  assert.equal(raw.typeRef?.fileIdentifier, "HRSP");
+  assert.deepEqual(Buffer.from(raw.payload), Buffer.from(input.payload), "the HttpResponse passes on byte-equal (its BODY is the CSV)");
 });
 
-test("parse_cyclone_tracks: a non-200 fetch fails closed", async (t) => {
+test("parse_cyclone_tracks: a non-200 fetch fails closed; a response without its $TCT job is refused", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_cyclone_tracks",
-    inputs: [jsonInput("job", cycloneJob()), jsonInput("response", { status: 503, headers: {}, bodyB64: "" })],
-  });
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "fetch-failed");
-  assert.match(response.errorMessage ?? "", /503/);
+  const failed = await harness.invoke({ methodId: "parse_cyclone_tracks", inputs: [responseInput("response", { status: 503, context: cycloneContext() })] });
+  assert.equal(failed.errorCode, "fetch-failed");
+  assert.match(failed.errorMessage ?? "", /503/);
+  const noJob = await harness.invoke({ methodId: "parse_cyclone_tracks", inputs: [responseInput("response", { body: CSV_BYTES })] });
+  assert.equal(noJob.errorCode, "invalid-cyclone-job");
 });

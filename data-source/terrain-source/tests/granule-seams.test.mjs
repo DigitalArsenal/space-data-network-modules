@@ -37,7 +37,23 @@ import zlib from "node:zlib";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { buildGeoTiff, decodeDtt, decodeQuantizedMesh, rawBodyFrameBytes, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  decodeDtt,
+  decodeQuantizedMesh,
+  rawBodyFrameBytes,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -73,15 +89,9 @@ function granule(lat, lon) {
   );
 }
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 const PROVENANCE = {
   datasetId: "cop-dem-glo-30",
@@ -97,10 +107,10 @@ async function encodeTile(t, address, cells) {
     surface: "direct",
   });
   t.after(() => harness.destroy());
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         ...address,
         rowOriginNorth: false,
@@ -124,7 +134,7 @@ async function encodeTile(t, address, cells) {
   const records = response.outputs.find((o) => o.portId === "records");
   const dtt = decodeDtt(splitStream(Buffer.from(records.payload))[0]);
   const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(dtt.payload.bytes)));
-  const report = JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload));
+  const report = decodeTileReport(response.outputs.find((o) => o.portId === "report").payload);
   // Real metres, back out of the quantised heights: v is the SOUTH-north axis.
   const range = mesh.header.maxHeight - mesh.header.minHeight;
   const heights = new Map();
@@ -304,10 +314,10 @@ test("a stencil across a LATITUDE-BAND boundary interpolates, it does not clamp"
     surface: "direct",
   });
   t.after(() => harness.destroy());
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         ...straddle,
         rowOriginNorth: false,
@@ -323,9 +333,7 @@ test("a stencil across a LATITUDE-BAND boundary interpolates, it does not clamp"
     ],
   });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-  const report = JSON.parse(
-    new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload),
-  );
+  const report = decodeTileReport(response.outputs.find((o) => o.portId === "report").payload);
   const tile = report.tiles[0];
   const dtt = decodeDtt(
     splitStream(Buffer.from(response.outputs.find((o) => o.portId === "records").payload))[0],

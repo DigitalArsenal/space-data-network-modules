@@ -15,7 +15,7 @@ namespace {
 BatchResult fit_one(const BatchObject& obj) {
     BatchResult r;
     PluginFitFBResult fr = fit_ephemeris_fb(
-        obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(), std::string_view{});
+        obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(), FitOptions{});
     if (!fr.ok) {
         r.ok = false;
         r.error_code = fr.error_code;

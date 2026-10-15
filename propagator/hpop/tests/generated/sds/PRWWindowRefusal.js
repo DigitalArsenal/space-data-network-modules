@@ -1,0 +1,74 @@
+import * as flatbuffers from 'flatbuffers';
+export class PRWWindowRefusal {
+    bb = null;
+    bb_pos = 0;
+    __init(i, bb) {
+        this.bb_pos = i;
+        this.bb = bb;
+        return this;
+    }
+    static getRootAsPRWWindowRefusal(bb, obj) {
+        return (obj || new PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    }
+    static getSizePrefixedRootAsPRWWindowRefusal(bb, obj) {
+        bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
+        return (obj || new PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    }
+    SEQUENCE() {
+        const offset = this.bb.__offset(this.bb_pos, 4);
+        return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+    }
+    SET_INDEX() {
+        const offset = this.bb.__offset(this.bb_pos, 6);
+        return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+    }
+    REASON(optionalEncoding) {
+        const offset = this.bb.__offset(this.bb_pos, 8);
+        return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+    }
+    static startPRWWindowRefusal(builder) {
+        builder.startObject(3);
+    }
+    static addSequence(builder, SEQUENCE) {
+        builder.addFieldInt32(0, SEQUENCE, 0);
+    }
+    static addSetIndex(builder, SET_INDEX) {
+        builder.addFieldInt32(1, SET_INDEX, 0);
+    }
+    static addReason(builder, REASONOffset) {
+        builder.addFieldOffset(2, REASONOffset, 0);
+    }
+    static endPRWWindowRefusal(builder) {
+        const offset = builder.endObject();
+        return offset;
+    }
+    static createPRWWindowRefusal(builder, SEQUENCE, SET_INDEX, REASONOffset) {
+        PRWWindowRefusal.startPRWWindowRefusal(builder);
+        PRWWindowRefusal.addSequence(builder, SEQUENCE);
+        PRWWindowRefusal.addSetIndex(builder, SET_INDEX);
+        PRWWindowRefusal.addReason(builder, REASONOffset);
+        return PRWWindowRefusal.endPRWWindowRefusal(builder);
+    }
+    unpack() {
+        return new PRWWindowRefusalT(this.SEQUENCE(), this.SET_INDEX(), this.REASON());
+    }
+    unpackTo(_o) {
+        _o.SEQUENCE = this.SEQUENCE();
+        _o.SET_INDEX = this.SET_INDEX();
+        _o.REASON = this.REASON();
+    }
+}
+export class PRWWindowRefusalT {
+    SEQUENCE;
+    SET_INDEX;
+    REASON;
+    constructor(SEQUENCE = 0, SET_INDEX = 0, REASON = null){
+        this.SEQUENCE = SEQUENCE;
+        this.SET_INDEX = SET_INDEX;
+        this.REASON = REASON;
+    }
+    pack(builder) {
+        const REASON = this.REASON !== null ? builder.createString(this.REASON) : 0;
+        return PRWWindowRefusal.createPRWWindowRefusal(builder, this.SEQUENCE, this.SET_INDEX, REASON);
+    }
+}

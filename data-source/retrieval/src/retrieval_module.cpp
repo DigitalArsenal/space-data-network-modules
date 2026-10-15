@@ -1,279 +1,248 @@
 /*
- * SDN data retrieval module (loop C.2).
+ * data-source/retrieval — engine-native FlatSQL retrieval (typed contracts 1.0).
  *
- * Two methods over the host FlatSQL engine-native retrieval ops:
+ * Two methods over the host FlatSQL engine-native retrieval ops, both answering the data-retrieval flow's routes
+ * with the SDS $QRP (Query Page) contract:
  *
- *   omm_bulk   — resolves a per-standard epoch query profile and calls
- *                storage.flatsql_epoch_stream. The ALIGNED size-prefixed
- *                $OMM FlatBuffer stream returned as hostcall binary
- *                segment 0 passes through VERBATIM to the "stream" port.
- *   data_query — extracts {sql, params} from an SDS CAQ request frame and
- *                calls storage.flatsql_query_stream; the aligned result
- *                stream passes through verbatim to the "rows" port.
+ *   omm_bulk   — "request" (OPTIONAL) one $QRP KIND Request from foundation/http-route (the "/<code>/bulk" route:
+ *                SCHEMA_NAME, SOURCE_NAME, TIME_PROFILE, PROFILE_EPOCH_MS, LIMIT, REPRESENTATION, ETAG = If-None-Match)
+ *                -> storage.flatsql_epoch_stream (SDS $PIV: EpochStreamParams; the batch on raw "stream")
+ *                -> "decision" (the request verbatim, or a synthesized default Request when the invoke carried none;
+ *                   a $QRP KIND Error on failure) + "page" (a $QRP page stream: the size-prefixed KIND Page header,
+ *                   then the record frames exactly as the host delivered them).
+ *   data_query — "query" one $QRP KIND Request (SQL + typed PARAMETERS)
+ *                -> storage.flatsql_query_stream (SDS $PIV: SqlStreamParams, raw "sql", raw "params" tagged SQL values)
+ *                -> "decision" + "page", as above.
  *
- * Profile resolution order for omm_bulk (per user directive, defaults are
- * config-driven, not hard-coded):
- *   request frame (CAQRequest.QUERY JSON / MAX_COUNT)
- *     > module config (plugin.getConfig -> {"profiles":{"OMM.fbs":{...}}})
- *       > compiled fallback (profile "nearest", epoch = clock.now, limit 50000)
+ * Profile resolution for omm_bulk (defaults are config-driven, not hard-coded): the request's stated fields
+ *   > module config (plugin.getConfig: one ModuleConfig, dotted paths "profiles.<SCHEMA>.profile|source|limit|epoch")
+ *   > compiled fallback (profile "nearest", limit 50000, epoch = clock.now).
+ * TIME_PROFILE Unspecified (the $QRP default) means "not stated": config, then "nearest". The engine's epoch profiles
+ * are nearest / as_of / forward (storage.flatsql_epoch_stream). All means every record in the window: it is served by
+ * storage.flatsql_query_stream selecting _data from the standard's table, filtered by the source shadow
+ * ("<CODE>@<source>") and, for $OMM only, by FROM_EPOCH_MS / TO_EPOCH_MS on USER_DEFINED_EPOCH_TIMESTAMP (a window on
+ * another standard, or with a per-object profile, is refused 400 window-unsupported). Latest has no engine profile and
+ * is refused (400 invalid-profile).
  *
- * Hostcall ABI (space_data_module_host, sync guest subset):
- *   call(op_ptr, op_len, payload_ptr, payload_len) -> i32 status
- *   response_len() -> i32
- *   read_response(dst_ptr, dst_len) -> i32 (bytes copied)
- * Request payloads and responses use the hostcall wire envelope
- * ([u32le metaLen][meta JSON][u32le segCount]([u32le segLen][seg])...);
- * see space-data-module-sdk/src/host/hostcallWire.js and the Go bridge in
- * sdn-server/internal/modulert/hostbridge.go. The SDK does not ship C-side
- * hostcall helpers (the generated invoke glue covers method dispatch only),
- * so the small envelope helpers below follow the same pattern as the
- * spacex-starlink-source module.
+ * Page header: KIND Page, SCHEMA_NAME (standard code), FILE_IDENTIFIER (from the first record frame), RECORD_COUNT
+ * (frames that follow, zero-length padding prefixes skipped), ETAG W/"fnv1a64-<16 hex>" over the record stream bytes
+ * (word-folded FNV-1a 64, the gateway's shared algorithm), REPRESENTATION and the resolved request echoed.
  *
- * The SDS CAQ/ETM generated C++ headers are prepended by build.mjs; this
- * file only contains the method bodies plus hostcall helpers.
+ * NOTHING IS TRUNCATED: a value over its hostcall bound (SOURCE 128, SCHEMA 64) is refused with
+ * a $QRP Error naming it. Host failures answer a $QRP Error (host-failed 502; an SQL error query-failed 400; no clock
+ * for a default epoch unavailable 503), each with QRP HTTP_STATUS set; success pages carry HTTP_STATUS 200.
+ *
+ * Delivery: a request whose REPRESENTATION is not Json asks the host for DELIVER Ref. A host that answers a BodyRef
+ * (REF.TOKEN != 0, no raw stream) keeps the bytes for the egress: the page is then the header ALONE with
+ * BODY_REF_TOKEN / BODY_REF_SIZE, RECORD_COUNT = REF.FRAMES and ETAG W/"fnv1a64-<REF.FNV1A64>". A host that ignores Ref
+ * answers inline as before. Json requests ask Inline: the responder renders the bytes. No JSON anywhere.
  */
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#ifdef SDN_FLATSQL_LINKED
-#include <sys/time.h>
-#endif
-
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
-
-#ifdef SDN_FLATSQL_LINKED
-// ---------------------------------------------------------------------------
-// Direct engine linkage (loop C.7). This variant is compiled into the
-// guest-link-linked object the flow compiler uses for engineLinkage:
-// "flatsql" flows: query SUBMISSION becomes a direct in-wasm call into the
-// live store engine through the flow runtime template's linked helpers
-// (SDK src/flow/runtime-src/flow_runtime.cpp) — the storage.flatsql_*
-// hostcall bridge is fully retired for both delivery shapes:
-//   deliver:"ref"  -> the aligned stream STAYS in engine memory; only an
-//                     engine body-ref token descriptor enters this module
-//   byte delivery  -> the stream is copied engine->flow memory in-wasm
-//                     (json branch, field extraction downstream)
-// The struct layout and symbols are the flow runtime's linked ABI.
-// ---------------------------------------------------------------------------
-
-struct SdnFlatsqlLinkedResult {
-    uint64_t generation;
-    uint64_t fnv1a64;
-    uint64_t token;
-    uint32_t engine_ptr;
-    uint32_t size;
-    int32_t rows;
-    int32_t cols;
-    int32_t cache_hit;
-    int32_t frames;
-};
-
-extern "C" int32_t sdn_flatsql_linked_query_raw_stream(
-    const char* sql, uint32_t sql_len, const uint8_t* params_tlv, uint32_t tlv_len,
-    uint32_t param_count, int32_t want_ref, SdnFlatsqlLinkedResult* out);
-extern "C" int32_t sdn_flatsql_linked_read(uint8_t* dst, uint32_t engine_ptr, uint32_t len);
-extern "C" const char* sdn_flatsql_linked_error(void);
-extern "C" uint32_t sdn_flatsql_linked_available(void);
-#endif  // SDN_FLATSQL_LINKED
+#include "typedHostcall.hpp"
+#include "QRP_generated.h"  // spacedatastandards.org lib/cpp/QRP/main_generated.h, inlined by build.mjs
 
 namespace {
 
+namespace A = sdn::runtime::Aligned;
+
 constexpr const char* kDefaultSchema = "OMM.fbs";
 constexpr const char* kDefaultProfile = "nearest";
-constexpr long kDefaultLimit = 50000;
+constexpr uint32_t kDefaultLimit = 50000;
 
 // ---------------------------------------------------------------------------
-// Hostcall wire envelope helpers.
-// ---------------------------------------------------------------------------
-
-void write_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
-
-uint32_t read_u32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-// Invoke a host op with a JSON params document. The request payload is a
-// hostcall envelope with the JSON as meta and zero binary segments; the
-// returned bytes are the full response envelope.
-std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    write_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    // Trailing 4 zero bytes = segment count 0.
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) {
-        sdm_host_read_response(buf.data(), len);
+// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
+// The compiled flow runtime drains a node's queue PORT-BLIND (maxStreams/maxBatch are declarative only), so a guest
+// that reads ordinal 0 of a port destroys every other frame it was handed there. Each method answers ONE request
+// with ONE page; a surplus is refused by name rather than silently dropped.
+bool find_batched_input_port(char* message, size_t message_len) {
+    const uint32_t count = plugin_get_input_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id) continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
+            if (!earlier || !earlier->port_id || std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            uint32_t on_port = 0;
+            for (uint32_t k = 0; k < count; k++) {
+                const plugin_input_frame_t* f = plugin_get_input_frame(k);
+                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+            }
+            std::snprintf(message, message_len,
+                          "This invocation carries %u frames on single-stream input port \"%s\" "
+                          "(the compiled flow runtime drains a node's whole queue port-blind; "
+                          "maxStreams is declarative only). The surplus frames are refused "
+                          "rather than silently discarded.",
+                          on_port, frame->port_id);
+            return true;
+        }
     }
+    return false;
+}
+
+const plugin_input_frame_t* frame_for(const char* port) {
+    const int32_t idx = plugin_find_input_index(port, 0);
+    return idx < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(idx));
+}
+
+uint32_t read_u32le(const uint8_t* p) {
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
+           (static_cast<uint32_t>(p[3]) << 24);
+}
+
+std::string fnv1a64_etag(const uint8_t* data, size_t length) {
+    constexpr uint64_t kPrime = 1099511628211ull;
+    uint64_t hash = 1469598103934665603ull;
+    size_t i = 0;
+    for (; i + 8 <= length; i += 8) {
+        uint64_t word;
+        std::memcpy(&word, data + i, 8);
+        hash ^= word;
+        hash *= kPrime;
+    }
+    for (; i < length; i++) {
+        hash ^= data[i];
+        hash *= kPrime;
+    }
+    char buf[40];
+    std::snprintf(buf, sizeof buf, "W/\"fnv1a64-%016llx\"", static_cast<unsigned long long>(hash));
     return buf;
 }
 
-// Extract the JSON meta document from a response envelope.
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    const uint32_t meta_len = read_u32le(env.data());
-    if (env.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-// Locate binary segment 0 of a response envelope without copying. Returns
-// false when the envelope carries no segments.
-bool envelope_first_segment(const std::vector<uint8_t>& env,
-                            const uint8_t** seg_out, uint32_t* seg_len_out) {
-    *seg_out = nullptr;
-    *seg_len_out = 0;
-    if (env.size() < 4) return false;
-    const uint32_t meta_len = read_u32le(env.data());
-    size_t off = 4u + meta_len;
-    if (off + 4 > env.size()) return false;
-    const uint32_t seg_count = read_u32le(env.data() + off);
-    off += 4;
-    if (seg_count == 0 || off + 4 > env.size()) return false;
-    const uint32_t seg_len = read_u32le(env.data() + off);
-    off += 4;
-    if (off + seg_len > env.size()) return false;
-    *seg_out = env.data() + off;
-    *seg_len_out = seg_len;
+// Walk a size-prefixed record stream: frame count (zero-length padding prefixes skipped) and the first frame's file
+// identifier (bytes 4..8 of the record). False when the framing does not parse.
+bool scan_stream(std::string_view stream, uint32_t* count, std::string* identifier) {
+    *count = 0;
+    identifier->clear();
+    const auto* data = reinterpret_cast<const uint8_t*>(stream.data());
+    size_t at = 0;
+    while (at < stream.size()) {
+        if (stream.size() - at < 4) return false;
+        const uint32_t size = read_u32le(data + at);
+        at += 4;
+        if (size == 0) continue;
+        if (size > stream.size() - at) return false;
+        if (*count == 0 && size >= 8) identifier->assign(reinterpret_cast<const char*>(data + at + 4), 4);
+        at += size;
+        ++*count;
+    }
     return true;
 }
 
-bool meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// ---------------------------------------------------------------------------
-// Minimal JSON field extraction (control metadata only — binary payloads
-// never round-trip through JSON).
-// ---------------------------------------------------------------------------
-
-bool is_json_ws(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-// Extract "key":"..." string values. Handles simple escapes.
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-// Extract "key":<number> values.
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-// Slice "key": <open>...<close> blocks (objects or arrays), string-aware.
-std::string json_block_slice(const std::string& json, const std::string& key,
-                             char open, char close) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != open) return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == open) depth++;
-        else if (c == close) {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    return json_block_slice(json, key, '{', '}');
-}
-
-std::string json_array_slice(const std::string& json, const std::string& key) {
-    return json_block_slice(json, key, '[', ']');
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else out.push_back(c);
-    }
+// "omm.fbs", "$OMM", "OMM" -> "OMM".
+std::string code_of(std::string_view schema) {
+    if (!schema.empty() && schema.front() == '$') schema.remove_prefix(1);
+    if (schema.size() > 4 && schema.substr(schema.size() - 4) == ".fbs") schema.remove_suffix(4);
+    std::string out(schema);
+    for (char& c : out) if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
     return out;
+}
+
+int push_qrp(const char* port, const uint8_t* data, size_t size) {
+    return plugin_push_output_ex(port, "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "QRP", 0, 0,
+                                 data, static_cast<uint32_t>(size));
+}
+
+uint16_t http_status_of(const std::string& code) {
+    if (code == "no-route" || code == "not-found") return 404;
+    if (code == "method-not-allowed") return 405;
+    if (code == "not-acceptable") return 406;
+    if (code == "timeout" || code == "too-large") return 422;
+    if (code == "host-failed") return 502;
+    if (code == "unavailable") return 503;
+    return 400;
+}
+
+// A $QRP KIND Error on "decision": the request's REPRESENTATION and ETAG carried so the responder can render.
+int refuse(const QRPT* request, const char* code, const std::string& message, qrpStatus status = qrpStatus_Error) {
+    QRPT error;
+    error.KIND = qrpKind_Error;
+    error.STATUS = status;
+    error.ERROR_CODE = code;
+    error.MESSAGE = message;
+    error.HTTP_STATUS = http_status_of(code);
+    if (request) {
+        error.REPRESENTATION = request->REPRESENTATION;
+        error.ETAG = request->ETAG;
+        error.SCHEMA_NAME = request->SCHEMA_NAME;
+    }
+    flatbuffers::FlatBufferBuilder b(256 + message.size());
+    FinishQRPBuffer(b, QRP::Pack(b, &error));
+    return push_qrp("decision", b.GetBufferPointer(), b.GetSize()) < 0 ? 500 : 0;
+}
+
+// "decision" (the request) + "page" (size-prefixed header + the record stream verbatim).
+int answer(const uint8_t* decision, size_t decision_size, QRPT& header, std::string_view stream) {
+    uint32_t count = 0;
+    std::string identifier;
+    if (!scan_stream(stream, &count, &identifier)) {
+        return refuse(&header, "host-failed", "the host answered a record stream whose size-prefixed framing does not parse");
+    }
+    header.KIND = qrpKind_Page;
+    header.STATUS = qrpStatus_Ok;
+    header.ERROR_CODE.clear();
+    header.MESSAGE.clear();
+    if (!identifier.empty()) header.FILE_IDENTIFIER = identifier;
+    if (header.SCHEMA_NAME.empty() && !identifier.empty()) header.SCHEMA_NAME = code_of(identifier);
+    header.RECORD_COUNT = count;
+    header.ETAG = fnv1a64_etag(reinterpret_cast<const uint8_t*>(stream.data()), stream.size());
+    header.SQL.clear();
+    header.PARAMETERS.clear();
+    header.HTTP_STATUS = 200;
+
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &header));
+    std::vector<uint8_t> page(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    if (page.size() % 8) page.resize(page.size() + 4, 0);  // a zero-length prefix: padding, skipped by readers
+    page.insert(page.end(), stream.begin(), stream.end());
+
+    if (push_qrp("decision", decision, decision_size) < 0) return 500;
+    return push_qrp("page", page.data(), page.size()) < 0 ? 500 : 0;
+}
+
+// The host kept the bytes (DELIVER Ref): "decision" + "page" = the header ALONE carrying the reference.
+int answer_ref(const uint8_t* decision, size_t decision_size, QRPT& header, const A::BodyRef& ref) {
+    header.KIND = qrpKind_Page;
+    header.STATUS = qrpStatus_Ok;
+    header.ERROR_CODE.clear();
+    header.MESSAGE.clear();
+    header.SQL.clear();
+    header.PARAMETERS.clear();
+    header.HTTP_STATUS = 200;
+    header.BODY_REF_TOKEN = ref.TOKEN;
+    header.BODY_REF_SIZE = ref.SIZE;
+    if (ref.FRAMES >= 0) header.RECORD_COUNT = static_cast<uint32_t>(ref.FRAMES);
+    if (ref.has_FNV1A64() && ref.FNV1A64.length) header.ETAG = "W/\"fnv1a64-" + ref.FNV1A64.str() + "\"";
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &header));
+    if (push_qrp("decision", decision, decision_size) < 0) return 500;
+    return push_qrp("page", b.GetBufferPointer(), b.GetSize()) < 0 ? 500 : 0;
+}
+
+// A stream answer: by reference when the host kept the bytes, else inline.
+int answer_stream(const uint8_t* decision, size_t decision_size, QRPT& header, const sdm_piv::Response& response) {
+    const std::string_view stream = response.raw("stream");
+    const auto* result = response.result<A::StreamResult>("StreamResult");
+    if (stream.empty() && result && result->has_REF() && result->REF.TOKEN != 0) {
+        return answer_ref(decision, decision_size, header, result->REF);
+    }
+    return answer(decision, decision_size, header, stream);
+}
+
+A::deliverMode deliver_for(const QRPT& request) {
+    return request.REPRESENTATION == qrpRepresentation_Json ? A::deliverMode_Inline : A::deliverMode_Ref;
+}
+
+bool sql_error(const sdm_piv::Response& response) {
+    return response.error_code() == "invalid-params" || response.error_message().find("SQL error") != std::string::npos;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,551 +252,281 @@ std::string json_escape(const std::string& s) {
 struct EpochQuery {
     std::string schema = kDefaultSchema;
     std::string source;
+    bool has_source = false;
     std::string profile;
     double epoch = 0.0;
     bool has_epoch = false;
-    long limit = -1;
+    uint32_t limit = 0;
 };
 
-// Apply {source,profile,epoch,limit} fields from a JSON object onto a query.
-void apply_json_overrides(const std::string& json, EpochQuery* query) {
-    if (json.empty()) return;
-    std::string s;
-    if (json_string_field(json, "source", &s)) query->source = s;
-    if (json_string_field(json, "profile", &s) && !s.empty()) query->profile = s;
-    double d = 0.0;
-    if (json_number_field(json, "epoch", &d)) {
-        query->epoch = d;
-        query->has_epoch = true;
+// plugin.getConfig: one ModuleConfig (MCFG), read in place by dotted path. The schema name itself carries a dot
+// ("OMM.fbs"); the SDK's lookup tries the longest key before each dot first, so "profiles.OMM.fbs.profile" resolves
+// whether the host nests {"profiles": {"OMM.fbs": {...}}} or keeps the flattened key.
+void apply_config(EpochQuery* q, bool stated_profile, bool stated_source, bool stated_limit, bool stated_epoch) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return;  // config absent -> compiled fallbacks
+    using K = sdn::runtime::configValueKind;
+    const std::string prefix = "profiles." + q->schema + ".";
+    const auto is = [&](const char* field, K kind) {
+        const std::string key = prefix + field;
+        return config.has(key) && config.kind(key) == kind;
+    };
+    if (!stated_profile && is("profile", sdn::runtime::configValueKind_String)) {
+        const std::string_view v = config.string(prefix + "profile");
+        if (!v.empty()) q->profile = std::string(v);
     }
-    if (json_number_field(json, "limit", &d) && d > 0) query->limit = static_cast<long>(d);
+    if (!stated_source && is("source", sdn::runtime::configValueKind_String)) {
+        q->source = std::string(config.string(prefix + "source"));
+        q->has_source = true;
+    }
+    if (!stated_limit && is("limit", sdn::runtime::configValueKind_Number)) {
+        const double n = config.number(prefix + "limit");
+        if (n > 0) q->limit = n >= 4294967295.0 ? 4294967295u : static_cast<uint32_t>(n);
+    }
+    if (!stated_epoch && is("epoch", sdn::runtime::configValueKind_Number)) {
+        q->epoch = config.number(prefix + "epoch");
+        q->has_epoch = true;
+    }
 }
 
-// Read the module config through the built-in plugin.getConfig hostcall and
-// apply the per-standard profile entry for query->schema, if any. Config
-// shape: {"profiles":{"OMM.fbs":{"profile":"nearest","limit":50000,...}}}.
-void apply_config_profile(EpochQuery* query) {
-#ifdef SDN_FLATSQL_LINKED
-    // Module config is static per instance: fetch it ONCE and reuse — with
-    // query submission linked, this removes the remaining per-request
-    // hostcall from the hot path (loop C.7).
-    static bool config_cached = false;
-    static std::string cached_meta;
-    if (!config_cached) {
-        cached_meta = envelope_meta_json(hostcall("plugin.getConfig", "{}"));
-        config_cached = true;
+const char* profile_name(qrpTimeProfile p) {
+    switch (p) {
+        case qrpTimeProfile_Nearest: return "nearest";
+        case qrpTimeProfile_AsOf: return "as_of";
+        case qrpTimeProfile_Forward: return "forward";
+        default: return nullptr;
     }
-    const std::string& meta = cached_meta;
-#else
-    const std::vector<uint8_t> env = hostcall("plugin.getConfig", "{}");
-    const std::string meta = envelope_meta_json(env);
-#endif
-    if (!meta_ok(meta)) return;  // Config absent -> compiled fallbacks apply.
-    const std::string result = json_object_slice(meta, "result");
-    if (result.empty()) return;
-    const std::string profiles = json_object_slice(result, "profiles");
-    if (profiles.empty()) return;
-    const std::string entry = json_object_slice(profiles, query->schema);
-    apply_json_overrides(entry, query);
+}
+qrpTimeProfile profile_enum(const std::string& name) {
+    std::string p = name.rfind("epoch.", 0) == 0 ? name.substr(6) : name;
+    if (p == "nearest") return qrpTimeProfile_Nearest;
+    if (p == "as_of") return qrpTimeProfile_AsOf;
+    if (p == "forward") return qrpTimeProfile_Forward;
+    if (p == "latest") return qrpTimeProfile_Latest;
+    if (p == "all") return qrpTimeProfile_All;
+    return qrpTimeProfile_Unspecified;
 }
 
-// Modules have no clock: default the epoch through the built-in clock.now
-// hostcall (unix milliseconds). Returns false when the host clock fails.
-bool default_epoch_to_now(EpochQuery* query) {
-    const std::vector<uint8_t> env = hostcall("clock.now", "{}");
-    const std::string meta = envelope_meta_json(env);
-    double now_ms = 0.0;
-    if (!meta_ok(meta) || !json_number_field(meta, "result", &now_ms)) {
+// A request frame on `port`: verified and unpacked; nullptr (with the error set) when it is not a $QRP Request.
+bool read_request(const plugin_input_frame_t* frame, QRPT* out, const char* method) {
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!QRPBufferHasIdentifier(frame->payload) || !VerifyQRPBuffer(verifier)) {
+        const std::string m = std::string(method) + ": the input frame is not a $QRP buffer.";
+        plugin_set_error("invalid-request-frame", m.c_str());
         return false;
     }
-    query->epoch = now_ms / 1000.0;
-    query->has_epoch = true;
+    GetQRP(frame->payload)->UnPackTo(out);
     return true;
 }
-
-std::string format_number(double value) {
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.6f", value);
-    return std::string(buf);
-}
-
-// Fail the current invoke with the host error message from a response meta.
-int fail_from_meta(const char* code, const std::string& meta, const char* fallback) {
-    std::string message;
-    json_string_field(meta, "message", &message);
-    plugin_set_error(code, message.empty() ? fallback : message.c_str());
-    return 502;
-}
-
-// Body-reference delivery (loop C.5c): when the request carries
-// "deliver":"ref", the host MAY answer with result.ref =
-// {"token":..,"size":..,"frames":..,"fnv1a64":"<16 hex>"} and NO stream
-// segment — the stream bytes then never enter this module's memory; they are
-// substituted by the host at the egress sink ($HTR BODY_REF_TOKEN/SIZE).
-// This module passes the reference through as a small JSON descriptor frame
-// {"$sdnbodyref":1,...ref fields...} on the same output port the stream
-// bytes would have used. Hosts that ignore "deliver" keep returning segment
-// bytes, and this module falls back to verbatim byte passthrough.
-std::string body_ref_descriptor(const std::string& meta) {
-    const std::string result = json_object_slice(meta, "result");
-    if (result.empty()) return std::string();
-    const std::string ref = json_object_slice(result, "ref");
-    if (ref.empty() || ref[0] != '{') return std::string();
-    return "{\"$sdnbodyref\":1," + ref.substr(1);
-}
-
-// Push ONE body-reference descriptor frame on `port`.
-//
-// THE DESCRIPTOR TRAVELS THE SAME TYPED EDGE AS THE BYTES IT STANDS FOR, so it
-// must wear the SAME type claim and the SAME alignment claim. This is the P1
-// `modules-data-retrieval-flatbuffer-branch-emits-nothing`: the descriptor used
-// to be pushed with NO type claim and required_alignment=1 while the
-// omm.stream/query.rows edges declare $OMM/OMM.fbs at alignment 8. The compiled
-// flow runtime's route_output then rejects the frame
-// (flow_runtime.cpp: `out.required_alignment != edge.aligned_required_alignment`
-// -> -26) and DROPS it. Nothing downstream runs, nothing errors: `branch` is
-// never invoked, no $HTR is ever emitted, and the Go host answers 502 "flow
-// produced no HTTP response" with no detail at all. Because only the
-// flatbuffer branch elects ref delivery, that silently killed EVERY default
-// request on /omm/bulk and /cat/bulk while format=json kept working.
-//
-// A reference to an $OMM stream is still an $OMM stream — it is the same bytes
-// delivered out of band — so claiming the edge's identity is honest, and
-// downstream (decision-gate `branch`, foundation/http-respond) discriminates on
-// the `{"$sdnbodyref"` prefix, never on the type claim.
-//
-// The payload must also SIT on the declared alignment (route_output checks
-// `payload % edge.aligned_required_alignment`), which a std::string's heap
-// buffer does not guarantee — hence the alignas(8) staging buffer.
-int push_body_ref_descriptor(const char* port, const char* schema, const char* file_id,
-                             const char* root_type, const char* descriptor, size_t length) {
-    alignas(8) char staged[256];
-    if (length == 0 || length >= sizeof(staged)) {
-        plugin_set_error("invalid-body-ref",
-                         "body-reference descriptor does not fit the aligned staging buffer.");
-        return -1;
-    }
-    std::memcpy(staged, descriptor, length);
-    return plugin_push_output_ex(
-        port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type,
-        0, 8, reinterpret_cast<const uint8_t*>(staged), static_cast<uint32_t>(length));
-}
-
-// Push either the body-reference descriptor (ref delivery) or binary segment
-// 0 verbatim (byte delivery) on the given port. Returns the invoke status.
-int push_stream_or_ref(const char* port, const char* schema, const char* file_id,
-                       const char* root_type, const std::vector<uint8_t>& env,
-                       const std::string& meta, bool deliver_ref) {
-    if (deliver_ref) {
-        const std::string descriptor = body_ref_descriptor(meta);
-        if (!descriptor.empty()) {
-            const int32_t pushed = push_body_ref_descriptor(port, schema, file_id, root_type,
-                                                            descriptor.data(), descriptor.size());
-            return pushed < 0 ? 500 : 0;
-        }
-        // Host ignored "deliver":"ref" — fall through to segment bytes.
-    }
-    const uint8_t* seg = nullptr;
-    uint32_t seg_len = 0;
-    envelope_first_segment(env, &seg, &seg_len);  // Zero rows -> empty stream.
-    const int32_t pushed = plugin_push_output_ex(
-        port, schema, file_id,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type,
-        0, 8, seg, seg_len);
-    return pushed < 0 ? 500 : 0;
-}
-
-#ifdef SDN_FLATSQL_LINKED
-// ---------------------------------------------------------------------------
-// Linked-mode query execution (loop C.7).
-// ---------------------------------------------------------------------------
-
-// Engine-native epoch profile SQL over the unified OMM view. MUST stay
-// byte-identical to sdn-server internal/storage/engine_records.go — same
-// engine query-cache identity, same results. Positional params: ?1 source
-// shadow name ('' = all), ?2 epoch unix seconds, ?3 limit (-1 = unlimited).
-constexpr const char* kEpochNearestSQL =
-    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
-    "ABS(USER_DEFINED_EPOCH_TIMESTAMP - ?2)) rn FROM OMM WHERE (?1 = '' OR _source = ?1)) WHERE "
-    "rn = 1 LIMIT ?3";
-constexpr const char* kEpochAsOfSQL =
-    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
-    "USER_DEFINED_EPOCH_TIMESTAMP DESC) rn FROM OMM WHERE (?1 = '' OR _source = ?1) AND "
-    "USER_DEFINED_EPOCH_TIMESTAMP <= ?2) WHERE rn = 1 LIMIT ?3";
-constexpr const char* kEpochForwardSQL =
-    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
-    "USER_DEFINED_EPOCH_TIMESTAMP ASC) rn FROM OMM WHERE (?1 = '' OR _source = ?1) AND "
-    "USER_DEFINED_EPOCH_TIMESTAMP >= ?2) WHERE rn = 1 LIMIT ?3";
-
-const char* epoch_profile_sql(const std::string& profile) {
-    std::string p = profile;
-    if (p.rfind("epoch.", 0) == 0) p = p.substr(6);
-    if (p == "nearest") return kEpochNearestSQL;
-    if (p == "as_of") return kEpochAsOfSQL;
-    if (p == "forward") return kEpochForwardSQL;
-    return nullptr;
-}
-
-// Engine TLV parameter encoding: per param [u8 tag][u32le len][payload]
-// (tags 0=null 1=bool 2=int64 3=float64 4=string 5=bytes — the same blob
-// flatsqlrt EncodeParams / standalone.js encodeQueryParams produce).
-void tlv_append(std::vector<uint8_t>* out, uint8_t tag, const uint8_t* payload, uint32_t len) {
-    out->push_back(tag);
-    uint8_t hdr[4];
-    write_u32le(hdr, len);
-    out->insert(out->end(), hdr, hdr + 4);
-    if (payload != nullptr && len > 0) out->insert(out->end(), payload, payload + len);
-}
-
-void tlv_append_string(std::vector<uint8_t>* out, const std::string& s) {
-    tlv_append(out, 4, reinterpret_cast<const uint8_t*>(s.data()),
-               static_cast<uint32_t>(s.size()));
-}
-
-void tlv_append_i64(std::vector<uint8_t>* out, int64_t v) {
-    uint8_t payload[8];
-    std::memcpy(payload, &v, 8);
-    tlv_append(out, 2, payload, 8);
-}
-
-void tlv_append_f64(std::vector<uint8_t>* out, double v) {
-    uint8_t payload[8];
-    std::memcpy(payload, &v, 8);
-    tlv_append(out, 3, payload, 8);
-}
-
-bool base64_decode(const std::string& in, std::vector<uint8_t>* out) {
-    static const char* alphabet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    int8_t lookup[256];
-    std::memset(lookup, -1, sizeof(lookup));
-    for (int i = 0; i < 64; i++) lookup[static_cast<uint8_t>(alphabet[i])] = static_cast<int8_t>(i);
-    uint32_t buf = 0;
-    int bits = 0;
-    for (char c : in) {
-        if (c == '=') break;
-        const int8_t v = lookup[static_cast<uint8_t>(c)];
-        if (v < 0) continue;
-        buf = (buf << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((buf >> bits) & 0xff));
-        }
-    }
-    return true;
-}
-
-// Encode a {t,v} typed-params JSON array ('[{"t":"i64","v":25544}, ...]')
-// into the engine TLV blob. Returns the param count, or -1 on a malformed
-// entry (error text in *err).
-int tlv_from_params_json(const std::string& params_json, std::vector<uint8_t>* out,
-                         std::string* err) {
-    int count = 0;
-    size_t i = 0;
-    while (i < params_json.size()) {
-        const size_t start = params_json.find('{', i);
-        if (start == std::string::npos) break;
-        // Slice the object (string-aware brace matching).
-        int depth = 0;
-        bool in_string = false;
-        size_t end = start;
-        for (; end < params_json.size(); end++) {
-            const char c = params_json[end];
-            if (in_string) {
-                if (c == '\\') end++;
-                else if (c == '"') in_string = false;
-                continue;
-            }
-            if (c == '"') in_string = true;
-            else if (c == '{') depth++;
-            else if (c == '}') {
-                depth--;
-                if (depth == 0) break;
-            }
-        }
-        if (end >= params_json.size()) break;
-        const std::string entry = params_json.substr(start, end - start + 1);
-        i = end + 1;
-
-        std::string tag;
-        json_string_field(entry, "t", &tag);
-        if (tag == "null") {
-            tlv_append(out, 0, nullptr, 0);
-        } else if (tag == "bool") {
-            const uint8_t v = entry.find("\"v\":true") != std::string::npos ? 1 : 0;
-            tlv_append(out, 1, &v, 1);
-        } else if (tag == "i64") {
-            double d = 0.0;
-            if (!json_number_field(entry, "v", &d)) { *err = "i64 param value missing"; return -1; }
-            tlv_append_i64(out, static_cast<int64_t>(d));
-        } else if (tag == "f64") {
-            double d = 0.0;
-            if (!json_number_field(entry, "v", &d)) { *err = "f64 param value missing"; return -1; }
-            tlv_append_f64(out, d);
-        } else if (tag == "str") {
-            std::string s;
-            if (!json_string_field(entry, "v", &s)) { *err = "str param value missing"; return -1; }
-            tlv_append_string(out, s);
-        } else if (tag == "bytes") {
-            std::string s;
-            if (!json_string_field(entry, "v", &s)) { *err = "bytes param value missing"; return -1; }
-            std::vector<uint8_t> decoded;
-            base64_decode(s, &decoded);
-            tlv_append(out, 5, decoded.data(), static_cast<uint32_t>(decoded.size()));
-        } else {
-            *err = "unknown param tag \"" + tag + "\"";
-            return -1;
-        }
-        count++;
-    }
-    return count;
-}
-
-// Execute a linked engine query and push the result: engine body-ref
-// descriptor (deliver_ref — bytes never enter this module) or verbatim bytes
-// copied engine->flow in-wasm. Mirrors push_stream_or_ref's port shapes.
-int linked_query_and_push(const char* port, const char* schema, const char* file_id,
-                          const char* root_type, const std::string& sql,
-                          const std::vector<uint8_t>& tlv, uint32_t param_count,
-                          bool deliver_ref, const char* fail_code) {
-    SdnFlatsqlLinkedResult result;
-    const int32_t status = sdn_flatsql_linked_query_raw_stream(
-        sql.data(), static_cast<uint32_t>(sql.size()), tlv.data(),
-        static_cast<uint32_t>(tlv.size()), param_count, deliver_ref ? 1 : 0, &result);
-    if (status != 0) {
-        plugin_set_error(fail_code, sdn_flatsql_linked_error());
-        return 502;
-    }
-
-    if (deliver_ref) {
-        char descriptor[192];
-        std::snprintf(descriptor, sizeof(descriptor),
-                      "{\"$sdnbodyref\":1,\"token\":%llu,\"size\":%u,\"frames\":%d,"
-                      "\"fnv1a64\":\"%016llx\"}",
-                      static_cast<unsigned long long>(result.token), result.size, result.frames,
-                      static_cast<unsigned long long>(result.fnv1a64));
-        // Same typed-edge alignment contract as push_body_ref_descriptor's
-        // comment states — a no-claim/alignment-1 frame is dropped by
-        // route_output and the flow emits nothing.
-        const int32_t pushed = push_body_ref_descriptor(port, schema, file_id, root_type,
-                                                        descriptor, std::strlen(descriptor));
-        return pushed < 0 ? 500 : 0;
-    }
-
-    std::vector<uint8_t> bytes(result.size);
-    if (result.size > 0) {
-        sdn_flatsql_linked_read(bytes.data(), result.engine_ptr, result.size);
-    }
-    const int32_t pushed = plugin_push_output_ex(
-        port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type, 0, 8,
-        bytes.data(), static_cast<uint32_t>(bytes.size()));
-    return pushed < 0 ? 500 : 0;
-}
-
-// Linked mode defaults the epoch through the WASI realtime clock (both hosts
-// provide clock_time_get) instead of the clock.now hostcall: the last
-// per-request hostcall on the hot path goes away.
-bool default_epoch_wasi_clock(EpochQuery* query) {
-    struct timeval tv;
-    if (gettimeofday(&tv, nullptr) != 0) return false;
-    query->epoch = static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1e6;
-    query->has_epoch = true;
-    return true;
-}
-#endif  // SDN_FLATSQL_LINKED
 
 }  // namespace
 
 extern "C" {
 
-// omm_bulk: resolve {schema, source, profile, epoch, limit} (request frame >
-// config > fallback defaults), call storage.flatsql_epoch_stream, and pass
-// the aligned size-prefixed $OMM stream (binary segment 0) through verbatim.
 int omm_bulk(void) {
-    // Optional request frame: an SDS CAQ envelope. CAQRequest.QUERY carries a
-    // JSON override object {schema,source,profile,epoch,limit}; MAX_COUNT > 0
-    // overrides the row limit when the QUERY JSON does not set one.
-    std::string frame_overrides;
-    uint32_t frame_max_count = 0;
-    if (plugin_get_input_count() > 0) {
-        const plugin_input_frame_t* frame = plugin_get_input_frame(0);
-        if (frame && frame->payload && frame->payload_length >= 8) {
-            ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-            if (!CAQBufferHasIdentifier(frame->payload) || !VerifyCAQBuffer(verifier)) {
-                plugin_set_error("invalid-request-frame",
-                                 "omm_bulk request frame is not a valid SDS CAQ buffer.");
-                return 400;
-            }
-            const CAQ* envelope = GetCAQ(frame->payload);
-            const CAQRequest* request = envelope ? envelope->REQUEST() : nullptr;
-            if (request) {
-                if (request->QUERY()) {
-                    frame_overrides.assign(request->QUERY()->c_str(), request->QUERY()->size());
-                }
-                frame_max_count = request->MAX_COUNT();
-            }
-        }
-    }
-
-    EpochQuery query;
-    // Schema override first: the config profile lookup is keyed by schema.
-    {
-        std::string s;
-        if (!frame_overrides.empty() && json_string_field(frame_overrides, "schema", &s) &&
-            !s.empty()) {
-            query.schema = s;
-        }
-    }
-    // Config-driven per-standard defaults (plugin.getConfig).
-    apply_config_profile(&query);
-    // Request frame fields win over config, per call.
-    apply_json_overrides(frame_overrides, &query);
-    {
-        double d = 0.0;
-        const bool frame_has_limit = !frame_overrides.empty() &&
-                                     json_number_field(frame_overrides, "limit", &d) && d > 0;
-        if (!frame_has_limit && frame_max_count > 0) {
-            query.limit = static_cast<long>(frame_max_count);
-        }
-    }
-    // Compiled fallback defaults apply only when neither frame nor config set
-    // the field: OMM -> nearest, epoch = now, limit 50000.
-    if (query.profile.empty()) query.profile = kDefaultProfile;
-    if (query.limit <= 0) query.limit = kDefaultLimit;
-#ifdef SDN_FLATSQL_LINKED
-    if (!query.has_epoch && !default_epoch_wasi_clock(&query)) {
-        plugin_set_error("clock-unavailable",
-                         "WASI clock_time_get failed while defaulting the query epoch.");
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof batch_message)) {
+        plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-#else
-    if (!query.has_epoch && !default_epoch_to_now(&query)) {
-        plugin_set_error("clock-unavailable",
-                         "clock.now hostcall failed while defaulting the query epoch.");
-        return 500;
-    }
-#endif
 
-    // Reference delivery is requested by the caller (the flow's gate injects
-    // "deliver":"ref" on the flatbuffer branch); never invented here.
-    std::string deliver;
-    if (!frame_overrides.empty()) {
-        json_string_field(frame_overrides, "deliver", &deliver);
-    }
-    const bool deliver_ref = deliver == "ref";
-
-#ifdef SDN_FLATSQL_LINKED
-    // Direct in-wasm query submission (loop C.7): the profile resolves to the
-    // engine-native SQL here — identical text to the server's
-    // QueryEpochRawStream — and executes against the LIVE store engine via
-    // the linked imports. No storage.flatsql_* hostcall exists on this path.
-    const char* sql = epoch_profile_sql(query.profile);
-    if (sql == nullptr) {
-        const std::string message = "unsupported engine epoch profile \"" + query.profile +
-                                    "\" (want nearest, as_of, or forward)";
-        plugin_set_error("unsupported-profile", message.c_str());
-        return 400;
-    }
-    const std::string source_shadow =
-        query.source.empty() ? std::string() : ("OMM@" + query.source);
-    std::vector<uint8_t> tlv;
-    tlv_append_string(&tlv, source_shadow);
-    tlv_append_f64(&tlv, query.epoch);
-    tlv_append_i64(&tlv, query.limit <= 0 ? -1 : static_cast<int64_t>(query.limit));
-    return linked_query_and_push("stream", "OMM.fbs", "$OMM", "OMM", sql, tlv, 3, deliver_ref,
-                                 "flatsql-linked-epoch-failed");
-#else
-    char limit_buf[32];
-    std::snprintf(limit_buf, sizeof(limit_buf), "%ld", query.limit);
-    const std::string payload = std::string("{\"schema\":\"") + json_escape(query.schema) +
-                                "\",\"source\":\"" + json_escape(query.source) +
-                                "\",\"profile\":\"" + json_escape(query.profile) +
-                                "\",\"epoch\":" + format_number(query.epoch) +
-                                ",\"limit\":" + limit_buf +
-                                (deliver_ref ? ",\"deliver\":\"ref\"" : "") + "}";
-
-    const std::vector<uint8_t> env = hostcall("storage.flatsql_epoch_stream", payload);
-    const std::string meta = envelope_meta_json(env);
-    if (!meta_ok(meta)) {
-        return fail_from_meta("flatsql-epoch-stream-failed", meta,
-                              "storage.flatsql_epoch_stream hostcall failed.");
+    QRPT request;
+    const plugin_input_frame_t* frame = frame_for("request");
+    const bool has_request = frame && frame->payload && frame->payload_length > 0;
+    if (has_request && !read_request(frame, &request, "omm_bulk")) return 400;
+    if (has_request && request.KIND != qrpKind_Request) {
+        // A refusal routed here is passed on untouched: the responder answers it.
+        return push_qrp("decision", frame->payload, frame->payload_length) < 0 ? 500 : 0;
     }
 
-    return push_stream_or_ref("stream", "OMM.fbs", "$OMM", "OMM", env, meta, deliver_ref);
-#endif
+    EpochQuery q;
+    if (!request.SCHEMA_NAME.empty()) q.schema = code_of(request.SCHEMA_NAME) + ".fbs";
+    const bool stated_source = !request.SOURCE_NAME.empty();
+    if (stated_source) { q.source = request.SOURCE_NAME; q.has_source = true; }
+    const bool stated_profile = request.TIME_PROFILE != qrpTimeProfile_Unspecified;
+    if (request.TIME_PROFILE == qrpTimeProfile_Latest) {
+        return refuse(&request, "invalid-profile",
+                      "TIME_PROFILE Latest has no engine epoch profile (nearest, as_of or forward)");
+    }
+    if (stated_profile) q.profile = request.TIME_PROFILE == qrpTimeProfile_All ? "all" : profile_name(request.TIME_PROFILE);
+    const bool stated_epoch = request.PROFILE_EPOCH_MS != 0;
+    if (stated_epoch) { q.epoch = static_cast<double>(request.PROFILE_EPOCH_MS) / 1000.0; q.has_epoch = true; }
+    const bool stated_limit = request.LIMIT > 0;
+    if (stated_limit) q.limit = request.LIMIT;
+
+    apply_config(&q, stated_profile, stated_source, stated_limit, stated_epoch);
+    if (q.profile.empty()) q.profile = kDefaultProfile;
+    if (q.limit == 0) q.limit = kDefaultLimit;
+    const qrpTimeProfile resolved_profile = profile_enum(q.profile);
+    if (resolved_profile == qrpTimeProfile_Unspecified || resolved_profile == qrpTimeProfile_Latest) {
+        return refuse(&request, "invalid-profile",
+                      "configured profile \"" + q.profile + "\" is not an engine epoch profile (nearest, as_of, forward or all)");
+    }
+    const bool windowed = request.FROM_EPOCH_MS != 0 || request.TO_EPOCH_MS != 0;
+    const std::string code = code_of(q.schema);
+    if (windowed && (resolved_profile != qrpTimeProfile_All || code != "OMM")) {
+        return refuse(&request, "window-unsupported",
+                      resolved_profile != qrpTimeProfile_All
+                          ? "an epoch window (FROM_EPOCH_MS / TO_EPOCH_MS) selects with TIME_PROFILE All, not a per-object profile"
+                          : "an epoch window is served for $OMM only (USER_DEFINED_EPOCH_TIMESTAMP); " + code + " has no epoch column here");
+    }
+
+    // The decision: the request verbatim, or the default Request this invoke resolved when none came.
+    QRPT header;
+    if (has_request) GetQRP(frame->payload)->UnPackTo(&header);
+    header.SCHEMA_NAME = code;
+    header.FILE_IDENTIFIER = "$" + code;
+    header.TIME_PROFILE = resolved_profile;
+    header.LIMIT = q.limit;
+    header.SOURCE_NAME = q.source;
+    flatbuffers::FlatBufferBuilder synthesized(256);
+    const uint8_t* decision = has_request ? frame->payload : nullptr;
+    size_t decision_size = has_request ? frame->payload_length : 0;
+    const auto synthesize = [&]() {
+        if (has_request) return;
+        QRPT stated;
+        stated.KIND = qrpKind_Request;
+        stated.SCHEMA_NAME = header.SCHEMA_NAME;
+        stated.FILE_IDENTIFIER = header.FILE_IDENTIFIER;
+        stated.SOURCE_NAME = header.SOURCE_NAME;
+        stated.TIME_PROFILE = header.TIME_PROFILE;
+        stated.PROFILE_EPOCH_MS = header.PROFILE_EPOCH_MS;
+        stated.LIMIT = header.LIMIT;
+        FinishQRPBuffer(synthesized, QRP::Pack(synthesized, &stated));
+        decision = synthesized.GetBufferPointer();
+        decision_size = synthesized.GetSize();
+    };
+
+    if (resolved_profile == qrpTimeProfile_All) {
+        // Every record of the lane in the window: the standard's table, filtered by the source shadow.
+        std::string sql = "SELECT _data FROM \"" + code + "\" WHERE (?1 = '' OR _source = ?1)";
+        const std::string shadow = q.source.empty() ? std::string() : code + "@" + q.source;
+        sdm_piv::SqlValues values;
+        values.str(shadow);
+        int next = 2;
+        if (request.FROM_EPOCH_MS != 0) {
+            sql += " AND USER_DEFINED_EPOCH_TIMESTAMP >= ?" + std::to_string(next++);
+            values.f64(static_cast<double>(request.FROM_EPOCH_MS) / 1000.0);
+        }
+        if (request.TO_EPOCH_MS != 0) {
+            sql += " AND USER_DEFINED_EPOCH_TIMESTAMP <= ?" + std::to_string(next++);
+            values.f64(static_cast<double>(request.TO_EPOCH_MS) / 1000.0);
+        }
+        sql += " LIMIT ?" + std::to_string(next);
+        values.i64(q.limit);
+
+        A::SqlStreamParams params{};
+        params.DELIVER = deliver_for(request);
+        const std::vector<sdm_piv::Frame> frames{
+            {"params", reinterpret_cast<const uint8_t*>(&params), sizeof params, "SqlStreamParams",
+             static_cast<uint32_t>(sizeof params), static_cast<uint16_t>(alignof(A::SqlStreamParams))},
+            sdm_piv::raw("sql", sql),
+            values.frame(),
+        };
+        const auto response = sdm_piv::call_frames("storage.flatsql_query_stream", frames);
+        if (!response.ok()) {
+            std::string message = response.error_message();
+            if (message.empty()) message = "storage.flatsql_query_stream hostcall failed";
+            if (sql_error(response)) return refuse(&request, "query-failed", message);
+            return refuse(&request, "host-failed", response.error_code() + ": " + message);
+        }
+        header.PROFILE_EPOCH_MS = 0;
+        synthesize();
+        return answer_stream(decision, decision_size, header, response);
+    }
+
+    if (!q.has_epoch) {
+        const auto now = sdm_piv::call("clock.now");
+        const auto* value = now.ok() ? now.result<A::TimeValue>("TimeValue") : nullptr;
+        if (!value) {
+            return refuse(&request, "unavailable", "clock.now failed while defaulting the query epoch: " + now.error_message());
+        }
+        q.epoch = static_cast<double>(value->UNIX_MS) / 1000.0;
+        q.has_epoch = true;
+    }
+
+    A::EpochStreamParams params{};
+    const auto over = [&](const char* field, size_t size, size_t bound) {
+        return refuse(&request, "invalid-parameter",
+                      std::string(field) + " is " + std::to_string(size) + " bytes; storage.flatsql_epoch_stream holds at most " +
+                          std::to_string(bound) + " - refused rather than truncated");
+    };
+    if (!sdm_piv::put(params.SCHEMA, q.schema)) return over("SCHEMA", q.schema.size(), 64);
+    params.set_has_SCHEMA(true);
+    if (!q.source.empty()) {
+        if (!sdm_piv::put(params.SOURCE, q.source)) return over("SOURCE_NAME", q.source.size(), 128);
+        params.set_has_SOURCE(true);
+    }
+    sdm_piv::put(params.PROFILE, q.profile);
+    params.set_has_PROFILE(true);
+    params.EPOCH = q.epoch;
+    params.LIMIT = q.limit;
+    params.DELIVER = deliver_for(request);
+
+    const auto response = sdm_piv::call("storage.flatsql_epoch_stream", "EpochStreamParams", params);
+    if (!response.ok()) {
+        std::string message = response.error_message();
+        if (message.empty()) message = "storage.flatsql_epoch_stream hostcall failed";
+        return refuse(&request, "host-failed", response.error_code() + ": " + message);
+    }
+
+    header.PROFILE_EPOCH_MS = static_cast<int64_t>(std::llround(q.epoch * 1000.0));
+    synthesize();
+    return answer_stream(decision, decision_size, header, response);
 }
 
-// data_query: extract {sql, params} from the SDS CAQ request frame and pass
-// the storage.flatsql_query_stream result stream through verbatim.
-// CAQRequest.QUERY carries either a plain SQL string or a JSON object
-// {"sql":"...","params":[{"t":"i64|f64|str|bool|null|bytes","v":...}]} —
-// the SDS CAQ schema has no typed parameter vector, so typed params ride in
-// the QUERY JSON and forward verbatim to the host op.
 int data_query(void) {
-    const plugin_input_frame_t* frame = plugin_get_input_frame(0);
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-query-frame", "data_query requires an SDS CAQ input frame.");
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof batch_message)) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+    const plugin_input_frame_t* frame = frame_for("query");
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-query-frame", "data_query requires a $QRP Request on port \"query\".");
         return 400;
     }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!CAQBufferHasIdentifier(frame->payload) || !VerifyCAQBuffer(verifier)) {
-        plugin_set_error("invalid-query-frame",
-                         "data_query input frame is not a valid SDS CAQ buffer.");
-        return 400;
+    QRPT request;
+    if (!read_request(frame, &request, "data_query")) return 400;
+    if (request.KIND != qrpKind_Request) {
+        return push_qrp("decision", frame->payload, frame->payload_length) < 0 ? 500 : 0;
     }
-    const CAQ* envelope = GetCAQ(frame->payload);
-    const CAQRequest* request = envelope ? envelope->REQUEST() : nullptr;
-    std::string query_text;
-    if (request && request->QUERY()) {
-        query_text.assign(request->QUERY()->c_str(), request->QUERY()->size());
-    }
-    if (query_text.empty()) {
-        plugin_set_error("missing-query", "data_query requires CAQRequest.QUERY to carry SQL.");
-        return 400;
-    }
+    if (request.SQL.empty()) return refuse(&request, "missing-sql", "data_query requires SQL");
 
-    std::string sql = query_text;
-    std::string params_json = "[]";
-    std::string deliver;
-    if (query_text[0] == '{') {
-        std::string s;
-        if (json_string_field(query_text, "sql", &s) && !s.empty()) {
-            sql = s;
-            const std::string params = json_array_slice(query_text, "params");
-            if (!params.empty()) params_json = params;
-        }
-        json_string_field(query_text, "deliver", &deliver);
-    }
-    const bool deliver_ref = deliver == "ref";
-
-#ifdef SDN_FLATSQL_LINKED
-    std::vector<uint8_t> tlv;
-    int param_count = 0;
-    if (params_json != "[]") {
-        std::string tlv_err;
-        param_count = tlv_from_params_json(params_json, &tlv, &tlv_err);
-        if (param_count < 0) {
-            plugin_set_error("invalid-params", tlv_err.c_str());
-            return 400;
+    // QRPValue -> FlatSQL's tagged parameter encoding (raw "params"): text and bytes of any length travel as they are.
+    sdm_piv::SqlValues values;
+    for (size_t i = 0; i < request.PARAMETERS.size(); i++) {
+        const QRPValueT* v = request.PARAMETERS[i].get();
+        switch (v ? v->KIND : qrpValueKind_Null) {
+            case qrpValueKind_Bool: values.boolean(v->BOOL_VALUE); break;
+            case qrpValueKind_Int: values.i64(v->INT_VALUE); break;
+            case qrpValueKind_Float: values.f64(v->FLOAT_VALUE); break;
+            case qrpValueKind_Text: values.str(v->TEXT_VALUE); break;
+            case qrpValueKind_Bytes: values.bytes(v->BYTES_VALUE.data(), v->BYTES_VALUE.size()); break;
+            default: values.null(); break;
         }
     }
-    return linked_query_and_push("rows", nullptr, nullptr, nullptr, sql, tlv,
-                                 static_cast<uint32_t>(param_count), deliver_ref,
-                                 "flatsql-linked-query-failed");
-#else
-    const std::string payload =
-        std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params_json +
-        (deliver_ref ? ",\"deliver\":\"ref\"" : "") + "}";
-    const std::vector<uint8_t> env = hostcall("storage.flatsql_query_stream", payload);
-    const std::string meta = envelope_meta_json(env);
-    if (!meta_ok(meta)) {
-        return fail_from_meta("flatsql-query-stream-failed", meta,
-                              "storage.flatsql_query_stream hostcall failed.");
+
+    A::SqlStreamParams params{};
+    params.DELIVER = deliver_for(request);
+    std::vector<sdm_piv::Frame> frames{
+        {"params", reinterpret_cast<const uint8_t*>(&params), sizeof params, "SqlStreamParams",
+         static_cast<uint32_t>(sizeof params), static_cast<uint16_t>(alignof(A::SqlStreamParams))},
+        sdm_piv::raw("sql", request.SQL),
+    };
+    if (!request.PARAMETERS.empty()) frames.push_back(values.frame());
+    const auto response = sdm_piv::call_frames("storage.flatsql_query_stream", frames);
+    if (!response.ok()) {
+        std::string message = response.error_message();
+        if (message.empty()) message = "storage.flatsql_query_stream hostcall failed";
+        if (sql_error(response)) return refuse(&request, "query-failed", message);
+        return refuse(&request, "host-failed", response.error_code() + ": " + message);
     }
 
-    return push_stream_or_ref("rows", nullptr, nullptr, nullptr, env, meta, deliver_ref);
-#endif
+    QRPT header;
+    GetQRP(frame->payload)->UnPackTo(&header);
+    header.SCHEMA_NAME.clear();  // from the first record frame
+    return answer_stream(frame->payload, frame->payload_length, header, response);
 }
 
 }  // extern "C"

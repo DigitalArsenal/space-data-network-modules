@@ -1,7 +1,7 @@
 {
   "name": "@spacedatanetwork/client-decrypt",
-  "version": "0.1.0",
-  "description": "SDN client decryption module — decrypts X25519 ECIES artifact envelopes using Crypto++",
+  "version": "0.2.0",
+  "description": "SDN client decryption module: decrypts a protected module artifact from its SDS $LGR grant with Crypto++ (typed contracts 1.0: $LGR + $KMF + $FIL in, $FIL out)",
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -14,6 +14,7 @@
     "dist/",
     "index.js",
     "build.mjs",
+    "plugin-manifest.json",
     "src/"
   ],
   "scripts": {
@@ -22,14 +23,18 @@
     "test": "node test/api.test.mjs && node test/decrypt.test.mjs && node test/e2e-roundtrip.test.mjs && node test/protected-publication-trailer.test.mjs"
   },
   "devDependencies": {
-    "blockstore-core": "^6.1.2",
-    "datastore-core": "^11.0.2",
-    "@helia/unixfs": "^7.1.0",
-    "helia": "^6.0.22",
-    "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.8.25"
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "^1.249.0"
   },
-  "keywords": ["sdn", "wasm", "decryption", "x25519", "ecies", "aes-gcm"],
+  "keywords": [
+    "sdn",
+    "wasm",
+    "decryption",
+    "x25519",
+    "ecies",
+    "aes-gcm"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/DigitalArsenal/space-data-network-plugin-client-decrypt"

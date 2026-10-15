@@ -1,50 +1,164 @@
 {
   "pluginId": "com.orbpro.od-fit-pipeline",
   "name": "OD Fit Pipeline",
-  "version": "0.1.0",
-  "description": "Executable pipeline (App 2, A2.3): on a timer, reads stored operator-ephemeris OEM records (storage_query), fits SGP4 SupGP/OMM mean elements per object with the existing OD fit (od::fit_sgp4_series), and ingests (storage_ingest_with_source) + signs + publishes schema-exact fitted OMM records with SourceTags provenance (SourceName 'od-fit-pipeline', deterministic per-pass batch_id). Provider set and per-provider fit config are data-driven (request payload > plugin.getConfig > compiled fallback). Records that cannot be fitted (unsupported frame/time/center, undecodable shells, too few samples, non-converged) are skipped with an honest reason.",
+  "version": "0.2.0",
+  "description": "On a timer, reads the stored operator ephemerides ($OEM records, typed storage.query) and fits SGP4 supplemental-GP mean elements per object with analysis/od's fitter, emitting $OMM and $OBD records (analysis/od's builders). Provider set, per-provider fit policy and the object-ID registry are node config (plugin.getConfig). Records that cannot be fitted (unsupported frame/time/center, unreadable, too few samples, non-converged) are FlowNotices with the reason; storing and publishing the fits is the flow's (hostcap/storage-ingest).",
   "pluginFamily": "orbit_determination",
   "capabilities": [
     "storage_query",
-    "storage_ingest",
-    "wallet_sign",
-    "crypto_sign",
-    "pubsub"
+    "timers"
   ],
-  "protocols": [],
+  "externalInterfaces": [],
   "timers": [
     {
       "timerId": "od-fit-pull",
       "methodId": "fit_pipeline",
       "defaultIntervalMs": 7200000,
-      "description": "Periodic OD fit pass over stored OEM records (default every 2h, matching CelesTrak's 2h SupGP regeneration cadence — no value in re-fitting more often than the source ephemerides refresh)."
+      "description": "Periodic OD fit pass over stored OEM records (default every 2h, matching CelesTrak's 2h SupGP regeneration cadence - no value in re-fitting more often than the source ephemerides refresh)."
     }
   ],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD",
+      "wireFormat": "flatbuffer"
+    }
+  ],
   "methods": [
     {
       "methodId": "fit_pipeline",
-      "displayName": "Fit SupGP/OMM from stored operator ephemeris",
-      "description": "Reads stored OEM records (storage_query), fits SGP4 mean elements per object with od::fit_sgp4_series, and stores + signs + publishes schema-exact fitted OMM records. Optional JSON config payload overrides the provider set + per-provider fit config.",
-      "inputPorts": [],
-      "outputPorts": [
+      "displayName": "Fit SupGP $OMM from stored operator ephemerides",
+      "description": "One pass: storage.query(querySchema, queryLimit) -> per record, group by SOURCE_NAME to a configured provider, read the $OEM (analysis/od's reader: TEME / EME2000-J2000-GCRF / Earth-fixed frames, UTC/GPS/TAI, EARTH only), fit (od::fit_sgp4_series with the provider's maxIterations, fitWindowSec, subsample, convergenceTol) and emit $OMM + $OBD; skips and a per-provider summary are FlowNotices.",
+      "inputPorts": [
         {
-          "portId": "published",
-          "displayName": "Published fitted-OMM PNMs",
-          "description": "Signed PNM pointer for each fitted OMM published, plus a per-provider fit/skip summary.",
-          "required": false,
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "od-fit-pipeline.pnm",
-              "description": "Signed PNM pointer for each published fitted-OMM record.",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
-                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
-              ]
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK); FIRED_MS stamps the notices."
             }
-          ]
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The od-fit-pull timer tick; a direct invoke needs none."
         }
-      ]
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Fitted supplemental-GP elements, carried as an aligned-binary frame containing a size-prefixed SDS OMM."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One size-prefixed SDS $OMM per fitted object (analysis/od's builder, ORIGINATOR SDN-OD)."
+        },
+        {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The fit's OD run results, aligned-binary frames containing a size-prefixed SDS OBD."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One $OBD per fitted object, in the order of the omm records (METHOD DIFFERENTIAL_CORRECTION, METHOD_SOURCE SDN-OD: WRMS = position RMS km, NUM_ITERATIONS, FIT_SPAN days; SENSORS[0].SENSOR_ID = the provider's dataSource)."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (module-sdk runtime type FNTC)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Skipped: one per record not fitted (SOURCE_NAME the provider, PROVIDER_ID the record's, ITEMS [its CID], REASON the cause: <reader error code>: <message>, too-few-samples:<n>, <norad>:fit-not-converged:rms=<km>, fit-failed: <message>), and one for the records of no configured provider (REASON unconfigured, ITEMS their CIDs). Info: one summary per provider (COUNT records fitted, ITEMS their CIDs in the order of the omm records). Missing: storage.query failed (REASON storage-query-failed: <message>)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "One pass reads the stored ephemerides and fits each object in turn with sequential differential correction; it starts no workers. Passes over other stores run in other host instances."
+  }
 }

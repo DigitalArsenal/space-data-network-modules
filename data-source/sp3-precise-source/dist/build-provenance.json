@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.245.0",
+  "spacedatastandards": "1.249.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -17,5 +17,5 @@
     "src/sp3_precise_source.cpp"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "a8e4f76954c47908d13389f76ea9bb0a4ccc07b62150cb68b70253f8b08d9258"
+  "wasmSha256": "7da23bc94c9f320cb8c62d5a011427873cbcf7072400c557a6623c6b2180d6cd"
 }

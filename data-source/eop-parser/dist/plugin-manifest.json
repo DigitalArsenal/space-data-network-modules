@@ -1,457 +1,384 @@
 {
-  "pluginId": "com.digitalarsenal.data-source.eop-parser",
-  "name": "eop-parser",
-  "version": "0.1.0",
-  "description": "Pure C++ Earth orientation parser emitting SDS EOP records.",
-  "pluginFamily": "data_source",
-  "capabilities": [],
-  "invokeSurfaces": [
-    "direct",
-    "command"
-  ],
-  "runtimeTargets": [
-    "browser",
-    "wasmedge"
-  ],
-  "methods": [
+ "pluginId": "com.digitalarsenal.data-source.eop-parser",
+ "name": "eop-parser",
+ "version": "0.2.0",
+ "description": "Pure C++ Earth orientation parser emitting SDS $EOP records (typed contracts 1.0: FlatBuffers only, no JSON and no base64). Each method reads exactly one source: \"response\", the HttpResponse (HRSP) from hostcap/http-request (its CONTEXT the optional $ICN job from eop-request, whose DATASET_ID must name the method's format; 304 -> one FlowNotice Unchanged on \"unchanged\", any other non-200 fails), or \"body\", one $FIL whose CONTENT is the unmodified file (at most 16 MiB; MODIFIED_AT_MS, when set, is the issue epoch written to every row's DATA_SET_EPOCH). Outputs the size-prefixed $EOP stream on \"records\" and one IngestRequest (INGQ) on \"meta\": SCHEMA EOP.fbs, TAGS SOURCE_NAME the series name, SOURCE_URL, BATCH_ID the SHA-256 of the whole body; PROVENANCE SOURCE_SHA256, NORMALIZED_COUNT (rows), PARSER eop-parser, PARSER_VERSION the format, SCHEMAS/SCHEMA_COUNTS, WARNINGS (blank future finals rows skipped). Every row carries DATA_SET_CID (CIDv1 raw sha2-256, base16). Malformed input fails the whole invocation with no output. No hostcalls, no capabilities.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "methods": [
+  {
+   "methodId": "parse_finals2000a",
+   "displayName": "finals2000a",
+   "inputPorts": [
     {
-      "methodId": "parse_finals2000a",
-      "displayName": "finals2000a",
-      "inputPorts": [
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-response",
+       "allowedTypes": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution from eop-request.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution from eop-request."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source attribution from eop-request."
-        },
-        {
-          "portId": "body",
-          "acceptedTypeSets": [
-            {
-              "setId": "body-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Raw fetched source bytes.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "text/plain",
-                "detail": "Raw fetched source bytes."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Raw fetched source bytes."
-        },
-        {
-          "portId": "response",
-          "acceptedTypeSets": [
-            {
-              "setId": "response-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request response JSON; alternative to body.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response JSON; alternative to body."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "hostcap/http-request response JSON; alternative to body."
+         "schemaName": "HttpResponse.fbs",
+         "fileIdentifier": "HRSP",
+         "rootTypeName": "HttpResponse",
+         "wireFormat": "flatbuffer"
         }
-      ],
-      "outputPorts": [
-        {
-          "portId": "records",
-          "acceptedTypeSets": [
-            {
-              "setId": "records-frames",
-              "allowedTypes": [
-                {
-                  "schemaName": "EOP.fbs",
-                  "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP"
-                }
-              ],
-              "description": "Size-prefixed SDS EOP record stream."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Size-prefixed SDS EOP record stream."
-        },
-        {
-          "portId": "meta",
-          "acceptedTypeSets": [
-            {
-              "setId": "meta-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source URL, series name, format and SHA-256 attribution.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source URL, series name, format and SHA-256 attribution."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source URL, series name, format and SHA-256 attribution."
-        },
-        {
-          "portId": "unchanged",
-          "acceptedTypeSets": [
-            {
-              "setId": "unchanged-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "HTTP 304 notification; no records.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "HTTP 304 notification; no records."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "HTTP 304 notification; no records."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Parse finals2000a EOP data; networking and storage are host concerns."
+       ],
+       "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the finals2000a file verbatim, CONTEXT the optional $ICN job (DATASET_ID finals2000a). Exclusive with body."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the finals2000a file verbatim, CONTEXT the optional $ICN job (DATASET_ID finals2000a). Exclusive with body."
     },
     {
-      "methodId": "parse_c04",
-      "displayName": "c04",
-      "inputPorts": [
+     "portId": "body",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-fil",
+       "allowedTypes": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution from eop-request.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution from eop-request."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source attribution from eop-request."
-        },
-        {
-          "portId": "body",
-          "acceptedTypeSets": [
-            {
-              "setId": "body-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Raw fetched source bytes.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "text/plain",
-                "detail": "Raw fetched source bytes."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Raw fetched source bytes."
-        },
-        {
-          "portId": "response",
-          "acceptedTypeSets": [
-            {
-              "setId": "response-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request response JSON; alternative to body.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response JSON; alternative to body."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "hostcap/http-request response JSON; alternative to body."
+         "schemaName": "FIL.fbs",
+         "fileIdentifier": "$FIL",
+         "rootTypeName": "FIL",
+         "wireFormat": "flatbuffer"
         }
-      ],
-      "outputPorts": [
-        {
-          "portId": "records",
-          "acceptedTypeSets": [
-            {
-              "setId": "records-frames",
-              "allowedTypes": [
-                {
-                  "schemaName": "EOP.fbs",
-                  "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP"
-                }
-              ],
-              "description": "Size-prefixed SDS EOP record stream."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Size-prefixed SDS EOP record stream."
-        },
-        {
-          "portId": "meta",
-          "acceptedTypeSets": [
-            {
-              "setId": "meta-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source URL, series name, format and SHA-256 attribution.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source URL, series name, format and SHA-256 attribution."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source URL, series name, format and SHA-256 attribution."
-        },
-        {
-          "portId": "unchanged",
-          "acceptedTypeSets": [
-            {
-              "setId": "unchanged-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "HTTP 304 notification; no records.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "HTTP 304 notification; no records."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "HTTP 304 notification; no records."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Parse c04 EOP data; networking and storage are host concerns."
-    },
-    {
-      "methodId": "parse_paris",
-      "displayName": "paris",
-      "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution from eop-request.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution from eop-request."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source attribution from eop-request."
-        },
-        {
-          "portId": "body",
-          "acceptedTypeSets": [
-            {
-              "setId": "body-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Raw fetched source bytes.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "text/plain",
-                "detail": "Raw fetched source bytes."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Raw fetched source bytes."
-        },
-        {
-          "portId": "response",
-          "acceptedTypeSets": [
-            {
-              "setId": "response-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request response JSON; alternative to body.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response JSON; alternative to body."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "hostcap/http-request response JSON; alternative to body."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "records",
-          "acceptedTypeSets": [
-            {
-              "setId": "records-frames",
-              "allowedTypes": [
-                {
-                  "schemaName": "EOP.fbs",
-                  "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP"
-                }
-              ],
-              "description": "Size-prefixed SDS EOP record stream."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Size-prefixed SDS EOP record stream."
-        },
-        {
-          "portId": "meta",
-          "acceptedTypeSets": [
-            {
-              "setId": "meta-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source URL, series name, format and SHA-256 attribution.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source URL, series name, format and SHA-256 attribution."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Source URL, series name, format and SHA-256 attribution."
-        },
-        {
-          "portId": "unchanged",
-          "acceptedTypeSets": [
-            {
-              "setId": "unchanged-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "HTTP 304 notification; no records.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "HTTP 304 notification; no records."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "HTTP 304 notification; no records."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Parse paris EOP data; networking and storage are host concerns."
+       ],
+       "description": "One $FIL: CONTENT the unmodified finals2000a file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "One $FIL: CONTENT the unmodified finals2000a file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
     }
-  ],
-  "externalInterfaces": []
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-eop",
+       "allowedTypes": [
+        {
+         "schemaName": "EOP.fbs",
+         "fileIdentifier": "$EOP",
+         "rootTypeName": "EOP",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "Size-prefixed SDS $EOP record stream."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Size-prefixed SDS $EOP record stream."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-ingest-request",
+       "allowedTypes": [
+        {
+         "schemaName": "IngestRequest.fbs",
+         "fileIdentifier": "INGQ",
+         "rootTypeName": "IngestRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+    },
+    {
+     "portId": "unchanged",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-flow-notice",
+       "allowedTypes": [
+        {
+         "schemaName": "FlowNotice.fbs",
+         "fileIdentifier": "FNTC",
+         "rootTypeName": "FlowNotice",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "Parse finals2000a rows into SDS $EOP records; I/O is a host concern."
+  },
+  {
+   "methodId": "parse_c04",
+   "displayName": "c04",
+   "inputPorts": [
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-response",
+       "allowedTypes": [
+        {
+         "schemaName": "HttpResponse.fbs",
+         "fileIdentifier": "HRSP",
+         "rootTypeName": "HttpResponse",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the c04 file verbatim, CONTEXT the optional $ICN job (DATASET_ID c04). Exclusive with body."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the c04 file verbatim, CONTEXT the optional $ICN job (DATASET_ID c04). Exclusive with body."
+    },
+    {
+     "portId": "body",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-fil",
+       "allowedTypes": [
+        {
+         "schemaName": "FIL.fbs",
+         "fileIdentifier": "$FIL",
+         "rootTypeName": "FIL",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "One $FIL: CONTENT the unmodified c04 file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "One $FIL: CONTENT the unmodified c04 file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-eop",
+       "allowedTypes": [
+        {
+         "schemaName": "EOP.fbs",
+         "fileIdentifier": "$EOP",
+         "rootTypeName": "EOP",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "Size-prefixed SDS $EOP record stream."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Size-prefixed SDS $EOP record stream."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-ingest-request",
+       "allowedTypes": [
+        {
+         "schemaName": "IngestRequest.fbs",
+         "fileIdentifier": "INGQ",
+         "rootTypeName": "IngestRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+    },
+    {
+     "portId": "unchanged",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-flow-notice",
+       "allowedTypes": [
+        {
+         "schemaName": "FlowNotice.fbs",
+         "fileIdentifier": "FNTC",
+         "rootTypeName": "FlowNotice",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "Parse c04 rows into SDS $EOP records; I/O is a host concern."
+  },
+  {
+   "methodId": "parse_paris",
+   "displayName": "paris",
+   "inputPorts": [
+    {
+     "portId": "response",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-response",
+       "allowedTypes": [
+        {
+         "schemaName": "HttpResponse.fbs",
+         "fileIdentifier": "HRSP",
+         "rootTypeName": "HttpResponse",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the paris file verbatim, CONTEXT the optional $ICN job (DATASET_ID paris). Exclusive with body."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, BODY the paris file verbatim, CONTEXT the optional $ICN job (DATASET_ID paris). Exclusive with body."
+    },
+    {
+     "portId": "body",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-fil",
+       "allowedTypes": [
+        {
+         "schemaName": "FIL.fbs",
+         "fileIdentifier": "$FIL",
+         "rootTypeName": "FIL",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "One $FIL: CONTENT the unmodified paris file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "One $FIL: CONTENT the unmodified paris file (at most 16 MiB), optional MODIFIED_AT_MS the issue epoch. Exclusive with response."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "records",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-eop",
+       "allowedTypes": [
+        {
+         "schemaName": "EOP.fbs",
+         "fileIdentifier": "$EOP",
+         "rootTypeName": "EOP",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "Size-prefixed SDS $EOP record stream."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Size-prefixed SDS $EOP record stream."
+    },
+    {
+     "portId": "meta",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-ingest-request",
+       "allowedTypes": [
+        {
+         "schemaName": "IngestRequest.fbs",
+         "fileIdentifier": "INGQ",
+         "rootTypeName": "IngestRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "IngestRequest (INGQ): SCHEMA EOP.fbs, TAGS SOURCE_NAME (series name) / SOURCE_URL / BATCH_ID (body SHA-256), PROVENANCE (source SHA-256, row count, parser eop-parser + format, blank-row warnings)."
+    },
+    {
+     "portId": "unchanged",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-flow-notice",
+       "allowedTypes": [
+        {
+         "schemaName": "FlowNotice.fbs",
+         "fileIdentifier": "FNTC",
+         "rootTypeName": "FlowNotice",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+      }
+     ],
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "FlowNotice (FNTC) KIND Unchanged, REASON not-modified, on HTTP 304 only; no records and no meta."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "Parse paris rows into SDS $EOP records; I/O is a host concern."
+  }
+ ],
+ "externalInterfaces": [],
+ "schemasUsed": [
+  {
+   "schemaName": "EOP.fbs",
+   "fileIdentifier": "$EOP",
+   "rootTypeName": "EOP"
+  },
+  {
+   "schemaName": "FIL.fbs",
+   "fileIdentifier": "$FIL",
+   "rootTypeName": "FIL"
+  },
+  {
+   "schemaName": "ICN.fbs",
+   "fileIdentifier": "$ICN",
+   "rootTypeName": "ICN"
+  }
+ ]
 }

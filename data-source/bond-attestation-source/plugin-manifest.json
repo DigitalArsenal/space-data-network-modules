@@ -1,11 +1,12 @@
 {
   "pluginId": "org.spacedatanetwork.bond-attestation",
   "name": "Security Bond Attestation",
-  "version": "1.0.1",
-  "description": "Reads public BTC, ETH and SOL wallet holdings, ERC-20/SPL tokens and USD quotes through free APIs. The host caches the result; chain logic stays in WASM.",
+  "version": "1.1.0",
+  "description": "Takes a WHA request (ACCOUNTS: BTC, ETH, SOL wallets by CAIP-2 chain) and answers a WHA attestation: native balances, ERC-20/SPL tokens and USD quotes read from free public services through the host's http capability. Chain logic stays in WASM.",
   "pluginFamily": "data_source",
   "capabilities": [
-    "http"
+    "http",
+    "clock"
   ],
   "protocols": [],
   "timers": [],
@@ -13,29 +14,28 @@
     "direct"
   ],
   "runtimeTargets": [
+    "browser",
     "wasmedge"
   ],
   "methods": [
     {
       "methodId": "attest",
       "displayName": "Attest Security Bond",
-      "description": "Takes this node's chain addresses ({btc, eth, sol} JSON), fetches each balance from a free public service, prices the total in USD, and returns the attestation JSON. A chain that fails to answer contributes nothing and is named in errors[] — never an invented balance.",
+      "description": "Reads each requested account's holdings from a free public service, prices them in USD and returns one WHA (PURPOSE security-bond, CURRENCY USD, AS_OF_MS from the clock). A lookup that fails contributes nothing, its chain is marked incomplete and named in ERRORS; a holding that could not be priced is VALUED false, never zero. An unknown chain or a malformed address answers ERRORS [\"invalid request\"] with nothing read.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "bond-request",
+              "setId": "wha-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "WHA.fbs",
+                  "fileIdentifier": "$WHA",
+                  "rootTypeName": "WHA",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Host-provided public wallet addresses; ephemeral JSON control input to the HTTP attestor, never persisted as a space record."
-              }
+              ]
             }
           ],
           "minStreams": 1,
@@ -45,20 +45,18 @@
       ],
       "outputPorts": [
         {
-          "portId": "response",
+          "portId": "attestation",
           "acceptedTypeSets": [
             {
-              "setId": "bond-response",
+              "setId": "wha-attestation",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "WHA.fbs",
+                  "fileIdentifier": "$WHA",
+                  "rootTypeName": "WHA",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Public balance and quote projection returned to the host cache; JSON control result, never inserted into the space-data record store."
-              }
+              ]
             }
           ],
           "minStreams": 1,
@@ -70,6 +68,12 @@
       "drainPolicy": "single-shot"
     }
   ],
-  "schemasUsed": [],
+  "schemasUsed": [
+    {
+      "schemaName": "WHA.fbs",
+      "fileIdentifier": "$WHA",
+      "rootTypeName": "WHA"
+    }
+  ],
   "threadModel": "single-thread"
 }

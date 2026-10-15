@@ -1,517 +1,504 @@
 /*
- * catalog_synthesis.cpp — Supplemental catalog synthesis (App 2, A2.7 / owner goal 3).
+ * catalog_synthesis.cpp - Supplemental catalog synthesis (App 2, A2.7) on typed contracts (1.0).
  *
- * A scheduler-driven (TIMERS) module that merges two stored OMM inputs into ONE
- * canonical CelesTrak-replacement OMM catalog:
+ * On a TimerTick, reads the stored $OMM records through the typed storage.query hostcall and merges two lanes into
+ * ONE canonical CelesTrak-replacement OMM catalog:
  *
- *   storage.query(schema="OMM")                         [cap: storage_query]
- *      -> our OD-fitted OMMs (JSON, USER_DEFINED_SDN_SOURCE_* lineage; UNTAGGED
- *         today via fit-pipeline storage.write — see README migration note)
- *      -> Space-Track GP OMMs ($OMM FlatBuffer, SourceName=spacetrack-gp)
- *      -> catsyn::read_stored_omm  (encoding-agnostic normalize + classify)
- *      -> deterministic per-NORAD precedence + dedup
- *      -> schema-exact canonical OMM JSON + full provenance
- *      -> publish_record_with_source(OMM)               [common/provider_source.hpp]
- *           storage.ingest_with_source -> keyslot.sign(CID) -> PNM -> pubsub.publish
- *      -> synthesis summary (returned + published)
+ *   - our OD-fitted supplemental OMMs (analysis/od/fit-pipeline's $OMM, stored by the flow under the provider's
+ *     SOURCE_NAME: spacex-starlink, iss, glonass, ...);
+ *   - Space-Track GP OMMs ($OMM stored under a Space-Track source name: spacetrack-gp, celestrak-gp).
  *
- * PRECEDENCE (deterministic, DATA-driven gate status): a provider's fitted OMM
- * OUTRANKS the Space-Track GP record for the same NORAD ONLY when the provider is
- * at A2.4 gate level `hard-pass` AND the fit is STRICTLY fresher (epoch). Every
- * other case falls back to Space-Track GP. An object present in EITHER input is
- * NEVER dropped. An object with no NORAD is QUARANTINED (never keyed as NORAD 0).
+ *   tick (TICK) -> storage.query(SCHEMA, LIMIT): records_meta (StoredRecordMeta) + records
+ *     -> classify (tag first) -> per-NORAD precedence -> omm_records (size-prefixed $OMM stream) + omm_meta (INGQ)
+ *     -> status (FlowNotice: summary, per provider, quarantine, unreadable, storage.query failure)
  *
- * DETERMINISM: two runs over the same stored inputs produce byte-identical
- * outputs. No wall-clock anywhere — record/PNM timestamps are the winning
- * record's own EPOCH (a sourced timestamp), and batch_id is a hash of the input
- * set's content ids. NORAD iteration, provider aggregation, and quarantine lists
- * are emitted in sorted order.
+ * PRECEDENCE (deterministic, data-driven gate status): a provider's fitted OMM OUTRANKS the Space-Track GP record for
+ * the same NORAD ONLY when the provider is at gate level `hard-pass` AND the fit is STRICTLY fresher (epoch). Every
+ * other case falls back to Space-Track GP. An object present in EITHER lane is NEVER dropped. An object with no
+ * NORAD is QUARANTINED (never keyed as NORAD 0).
  *
- * Cron contract (SDN plugins/manager.go): a timer method receives NO input
- * (Input:"none", invoked with nil) and returns JSON — this module needs ZERO Go
- * changes; declaring a `timers` block in the manifest is sufficient. A manual
- * invoke MAY pass a JSON config payload to override gate status / source names /
- * output identity / query limit.
+ * CLASSIFICATION (tag first): a record whose stored SOURCE_NAME is a Space-Track source name is Space-Track GP; any
+ * other SOURCE_NAME is our fit of that provider; an untagged record is an authoritative catalog input (Space-Track
+ * kind). A record that is not an $OMM FlatBuffer is skipped with its reason.
+ *
+ * Each catalog record is the winning stored $OMM, every field kept, with the synthesis provenance appended as
+ * USER_DEFINED_PARAMETERS (SDN_CATALOG_SOURCE_KIND / _SOURCE_NAME / _SOURCE_CID / _PRECEDENCE / _GATE_STATUS /
+ * _BATCH / _COMMENT). DETERMINISM: no wall clock; batch_id = sha256 of the sorted input CIDs; NORADs ascend.
+ * Storing and publishing the catalog is the flow's (hostcap/storage-ingest takes omm_meta + omm_records).
+ *
+ * Config (plugin.getConfig, one ModuleConfig): querySchema ("OMM"), queryLimit (20000), sourceName
+ * ("catalog-synthesis"), fileIdPrefix ("sdn-catalog"), dataSource ("SDN-CATALOG"), spacetrackSourceNames (list),
+ * defaultLevelForUnlistedProvider, gateStatus {providers {<provider>: <level>}, spacetrackSourceNames,
+ * defaultLevelForUnlistedProvider}. Over the compiled default of config/provider-gate-status.json (build.mjs).
  */
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "provider_source.hpp"   // ps:: hostcall/publish_record_with_source/json/sha256/base64
-#include "omm_reader.hpp"         // catsyn:: encoding-agnostic OMM reader + classification
-
-namespace ps = provider_source;
-
-// Embedded compiled default for config/provider-gate-status.json (generated by
-// build.mjs into dist/gate-status-embed.cpp). Runtime config can override it.
-extern "C" const char* catalog_gate_status_default_json();
-
-extern "C" {
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
+#include "space_data_module_invoke.h"
+#include "FlowNotice_generated.h"
+#include "IngestRequest_generated.h"
+#include "TimerTick_generated.h"
+#include "typedHostcall.hpp"
 
 namespace {
 
-// ── minimal JSON slicing (config + storage.query response) ───────────────────
+namespace R = sdn::runtime;
+namespace A = sdn::runtime::Aligned;
 
-std::string block_slice(const std::string& json, const std::string& key, char open, char close) {
-    std::string needle = "\"" + key + "\"";
-    size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    size_t o = json.find(open, k + needle.size());
-    if (o == std::string::npos) return std::string();
-    int depth = 0;
-    bool instr = false, esc = false;
-    for (size_t i = o; i < json.size(); ++i) {
-        char c = json[i];
-        if (instr) { if (esc) esc = false; else if (c == '\\') esc = true; else if (c == '"') instr = false; continue; }
-        if (c == '"') { instr = true; continue; }
-        if (c == open) depth++;
-        else if (c == close) { depth--; if (depth == 0) return json.substr(o + 1, i - o - 1); }
-    }
-    return std::string();
-}
-
-// Split the top-level {...} objects out of a JSON array body (string/nesting aware).
-std::vector<std::string> split_objects(const std::string& arr) {
-    std::vector<std::string> out;
-    int depth = 0;
-    bool instr = false, esc = false;
-    size_t start = std::string::npos;
-    for (size_t i = 0; i < arr.size(); ++i) {
-        char c = arr[i];
-        if (instr) { if (esc) esc = false; else if (c == '\\') esc = true; else if (c == '"') instr = false; continue; }
-        if (c == '"') { instr = true; continue; }
-        if (c == '{') { if (depth == 0) start = i; depth++; }
-        else if (c == '}') { depth--; if (depth == 0 && start != std::string::npos) { out.push_back(arr.substr(start, i - start + 1)); start = std::string::npos; } }
-    }
-    return out;
-}
-
-// Parse a flat {"k":"v",...} object body into ordered key/value string pairs.
-std::vector<std::pair<std::string, std::string>> parse_string_map(const std::string& body) {
-    std::vector<std::pair<std::string, std::string>> out;
-    size_t i = 0;
-    while (i < body.size()) {
-        size_t q1 = body.find('"', i); if (q1 == std::string::npos) break;
-        size_t q2 = body.find('"', q1 + 1); if (q2 == std::string::npos) break;
-        std::string key = body.substr(q1 + 1, q2 - q1 - 1);
-        size_t colon = body.find(':', q2 + 1); if (colon == std::string::npos) break;
-        size_t v1 = body.find('"', colon + 1); if (v1 == std::string::npos) break;
-        size_t v2 = body.find('"', v1 + 1); if (v2 == std::string::npos) break;
-        std::string val = body.substr(v1 + 1, v2 - v1 - 1);
-        out.emplace_back(key, val);
-        i = v2 + 1;
-    }
-    return out;
-}
-
-std::vector<std::string> parse_string_array(const std::string& body) {
-    std::vector<std::string> out;
-    size_t i = 0;
-    while (i < body.size()) {
-        size_t q1 = body.find('"', i); if (q1 == std::string::npos) break;
-        size_t q2 = body.find('"', q1 + 1); if (q2 == std::string::npos) break;
-        out.push_back(body.substr(q1 + 1, q2 - q1 - 1));
-        i = q2 + 1;
-    }
-    return out;
-}
-
-// ── configuration (compiled gate default > plugin.getConfig > request payload) ─
+// -- configuration -------------------------------------------------------------------------------------------------
 
 struct SynthConfig {
     std::string query_schema = "OMM";
-    long query_limit = 20000;
-
-    // output identity — the synthesis provider
+    uint32_t query_limit = 20000;
     std::string source_name = "catalog-synthesis";
-    std::string output_topic = "sdn/data-source/catalog-synthesis";
-    std::string signing_slot = "node-signing";
-    std::string signature_type = "ed25519";
     std::string file_id_prefix = "sdn-catalog";
     std::string data_source = "SDN-CATALOG";
-
-    std::vector<std::string> spacetrack_source_names = {"spacetrack-gp", "celestrak-gp"};
-    std::map<std::string, std::string> gate;            // provider -> hard-pass|interim|blocked
-    std::string default_gate_level = "interim";
+    std::vector<std::string> spacetrack_source_names;
+    std::map<std::string, std::string> gate;  // provider -> hard-pass | interim | blocked | ...
+    std::string default_gate_level;
 };
 
-void apply_gate_json(const std::string& json, SynthConfig* cfg) {
-    std::string providers = block_slice(json, "providers", '{', '}');
-    if (!providers.empty()) {
-        for (auto& kv : parse_string_map(providers)) cfg->gate[kv.first] = kv.second;
-    }
-    std::string st = block_slice(json, "spacetrackSourceNames", '[', ']');
-    if (!st.empty()) {
-        std::vector<std::string> names = parse_string_array(st);
-        if (!names.empty()) cfg->spacetrack_source_names = names;
-    }
-    std::string dflt;
-    if (ps::json_string_field(json, "defaultLevelForUnlistedProvider", &dflt) && !dflt.empty())
-        cfg->default_gate_level = dflt;
+// The compiled default (config/provider-gate-status.json, generated by build.mjs into kGate* tables).
+SynthConfig default_config() {
+    SynthConfig c;
+    for (size_t i = 0; i < kGateProviderCount; ++i) c.gate[kGateProviders[i][0]] = kGateProviders[i][1];
+    for (size_t i = 0; i < kGateSpacetrackCount; ++i) c.spacetrack_source_names.push_back(kGateSpacetrack[i]);
+    c.default_gate_level = kGateDefaultLevel;
+    return c;
 }
 
-// A runtime config object may override output identity + query + gate. A nested
-// `gateStatus` (same shape as the gate file) merges over the compiled default.
-void apply_config_json(const std::string& json, SynthConfig* cfg) {
-    if (json.empty()) return;
-    std::string s;
-    if (ps::json_string_field(json, "querySchema", &s) && !s.empty()) cfg->query_schema = s;
-    long lim = ps::json_number_field(json, "queryLimit", 0);
-    if (lim > 0) cfg->query_limit = lim;
-    if (ps::json_string_field(json, "sourceName", &s) && !s.empty()) cfg->source_name = s;
-    if (ps::json_string_field(json, "outputTopic", &s) && !s.empty()) cfg->output_topic = s;
-    if (ps::json_string_field(json, "signingSlot", &s) && !s.empty()) cfg->signing_slot = s;
-    if (ps::json_string_field(json, "signatureType", &s) && !s.empty()) cfg->signature_type = s;
-    if (ps::json_string_field(json, "fileIdPrefix", &s) && !s.empty()) cfg->file_id_prefix = s;
-    if (ps::json_string_field(json, "dataSource", &s) && !s.empty()) cfg->data_source = s;
-    std::string gate = block_slice(json, "gateStatus", '{', '}');
-    if (!gate.empty()) apply_gate_json(gate, cfg);
-    // top-level spacetrackSourceNames override (outside a gateStatus block)
-    std::string st = block_slice(json, "spacetrackSourceNames", '[', ']');
-    if (!st.empty()) {
-        std::vector<std::string> names = parse_string_array(st);
-        if (!names.empty()) cfg->spacetrack_source_names = names;
+void read_gate(const sdm_piv::ConfigTable& t, SynthConfig* c) {
+    const sdm_piv::ConfigTable providers = t.table("providers");
+    if (providers && providers.entries()) {
+        for (const auto* e : *providers.entries()) {
+            if (e->KEY() && e->KIND() == R::configValueKind_String && e->STRING_VALUE()) {
+                c->gate[e->KEY()->str()] = e->STRING_VALUE()->str();
+            }
+        }
     }
+    const std::vector<std::string_view> names = t.strings("spacetrackSourceNames");
+    if (!names.empty()) c->spacetrack_source_names.assign(names.begin(), names.end());
+    const std::string_view level = t.string("defaultLevelForUnlistedProvider");
+    if (!level.empty()) c->default_gate_level = std::string(level);
 }
 
-SynthConfig resolve_config(const uint8_t* req, uint32_t len) {
-    SynthConfig cfg;
-    // 1. compiled default gate map (embedded config/provider-gate-status.json)
-    const char* embed = catalog_gate_status_default_json();
-    if (embed != nullptr) apply_gate_json(std::string(embed), &cfg);
-
-    // 2. plugin.getConfig — the node's per-instance module config (result object)
-    std::vector<uint8_t> env = ps::hostcall("plugin.getConfig", "{}");
-    if (ps::cap_ok(env)) {
-        std::string meta = ps::envelope_meta_json(env);
-        std::string result = block_slice(meta, "result", '{', '}');
-        if (!result.empty()) apply_config_json(result, &cfg);
-    }
-
-    // 3. request payload (manual invoke) wins last; a cron tick passes nil/empty.
-    if (req != nullptr && len > 0) {
-        size_t i = 0;
-        while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-        if (i < len && req[i] == '{') apply_config_json(std::string(reinterpret_cast<const char*>(req), len), &cfg);
-    }
-    return cfg;
+SynthConfig resolve_config() {
+    SynthConfig c = default_config();
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return c;  // no node config: the compiled default
+    auto text = [&](const char* key, std::string* out) {
+        const std::string_view v = config.string(key);
+        if (!v.empty()) *out = std::string(v);
+    };
+    text("querySchema", &c.query_schema);
+    const double limit = config.number("queryLimit", 0);
+    if (limit > 0) c.query_limit = static_cast<uint32_t>(std::min(limit, 4294967295.0));
+    text("sourceName", &c.source_name);
+    text("fileIdPrefix", &c.file_id_prefix);
+    text("dataSource", &c.data_source);
+    const sdm_piv::ConfigTable gate = config.table("gateStatus");
+    if (gate) read_gate(gate, &c);
+    // Top-level spacetrackSourceNames / defaultLevelForUnlistedProvider (outside gateStatus) win last.
+    const std::vector<std::string_view> names = config.strings("spacetrackSourceNames");
+    if (!names.empty()) c.spacetrack_source_names.assign(names.begin(), names.end());
+    text("defaultLevelForUnlistedProvider", &c.default_gate_level);
+    return c;
 }
 
 std::string gate_level(const SynthConfig& cfg, const std::string& provider) {
-    auto it = cfg.gate.find(provider);
-    if (it != cfg.gate.end()) return it->second;
-    return cfg.default_gate_level;
+    const auto it = cfg.gate.find(provider);
+    return it != cfg.gate.end() ? it->second : cfg.default_gate_level;
 }
 
-// ── consumption: storage.query(schema="OMM") -> raw stored records ───────────
+bool is_spacetrack(const SynthConfig& cfg, const std::string& name) {
+    return std::find(cfg.spacetrack_source_names.begin(), cfg.spacetrack_source_names.end(), name) !=
+           cfg.spacetrack_source_names.end();
+}
 
-struct RawRecord {
+// -- the store's records -------------------------------------------------------------------------------------------
+
+struct StoredRecord {
     std::string cid;
-    std::string source_name;      // SourceTags.SourceName (may be empty)
-    std::vector<uint8_t> data;    // decoded record bytes (JSON or $OMM FlatBuffer)
+    std::string source_name;
+    std::vector<uint8_t> data;  // the $OMM FlatBuffer root (a size prefix removed), 4-aligned copy
 };
 
-bool storage_query(const SynthConfig& cfg, std::vector<RawRecord>* out, std::string* err) {
-    std::string payload = "{\"schema\":\"" + ps::json_escape(cfg.query_schema) +
-                          "\",\"limit\":" + std::to_string(cfg.query_limit) + "}";
-    std::vector<uint8_t> env = ps::hostcall("storage.query", payload);
-    if (!ps::cap_ok(env)) {
-        std::string msg;
-        ps::json_string_field(ps::envelope_meta_json(env), "message", &msg);
-        *err = msg.empty() ? "storage.query failed or storage_query capability not granted" : msg;
+std::string aligned_string(const flatbuffers::aligned_runtime::AlignedString<128>& s) { return s.str(); }
+
+bool has_omm_id(const uint8_t* p, size_t n) { return n >= 8 && std::memcmp(p + 4, "$OMM", 4) == 0; }
+
+bool storage_query(const SynthConfig& cfg, std::vector<StoredRecord>* out, std::string* error) {
+    A::StorageQueryParams params{};
+    if (!sdm_piv::put(params.SCHEMA, cfg.query_schema)) {
+        *error = "querySchema \"" + cfg.query_schema + "\" is longer than storage.query takes";
         return false;
     }
-    std::string meta = ps::envelope_meta_json(env);
-    std::string arr = block_slice(meta, "result", '[', ']');
-    for (const std::string& rec : split_objects(arr)) {
-        RawRecord r;
-        ps::json_string_field(rec, "CID", &r.cid);
-        std::string data_b64;
-        if (!ps::json_string_field(rec, "Data", &data_b64) || data_b64.empty()) continue;
-        r.data = ps::base64_decode(data_b64);
-        if (r.data.empty()) continue;
-        std::string tags = block_slice(rec, "SourceTags", '{', '}');
-        if (!tags.empty()) ps::json_string_field(tags, "SourceName", &r.source_name);
+    params.set_has_SCHEMA(true);
+    params.LIMIT = cfg.query_limit;
+    const sdm_piv::Response response = sdm_piv::call("storage.query", "StorageQueryParams", params);
+    if (!response.ok()) {
+        *error = response.error_message();
+        if (error->empty()) *error = response.error_code();
+        if (error->empty()) *error = "storage.query failed";
+        return false;
+    }
+    const auto [meta, count] = response.list<A::StoredRecordMeta>("records_meta");
+    const std::string_view raw = response.raw("records");
+    size_t at = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (at + 4 > raw.size()) break;
+        uint32_t len = 0;
+        std::memcpy(&len, raw.data() + at, 4);
+        at += 4;
+        if (at + len > raw.size()) break;
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(raw.data() + at);
+        size_t n = len;
+        // A stored record may itself be size-prefixed; either form is read.
+        if (!has_omm_id(p, n) && n >= 12 && has_omm_id(p + 4, n - 4)) {
+            uint32_t inner = 0;
+            std::memcpy(&inner, p, 4);
+            if (inner == n - 4) {
+                p += 4;
+                n -= 4;
+            }
+        }
+        StoredRecord r;
+        r.cid = aligned_string(meta[i].CID);
+        r.source_name = aligned_string(meta[i].SOURCE_NAME);
+        r.data.assign(p, p + n);
+        at += len;
         out->push_back(std::move(r));
     }
     return true;
 }
 
-// ── precedence ───────────────────────────────────────────────────────────────
+// -- canonical view of one stored $OMM -----------------------------------------------------------------------------
 
-// Newest-epoch-wins within a source; tie-break = lexicographically-smallest CID
-// (deterministic, no wall-clock). Returns the index of the winner in `idxs`.
-size_t pick_newest(const std::vector<catsyn::CanonOmm>& recs, const std::vector<size_t>& idxs) {
+enum class Kind { OursFit, SpacetrackGp };
+
+struct Candidate {
+    Kind kind = Kind::SpacetrackGp;
+    std::string provider;   // the stored SOURCE_NAME (or the first Space-Track name for an untagged record)
+    std::string cid;
+    long norad = 0;
+    std::string object_name;
+    std::string epoch_key;  // normalized, lexically chronological
+    const StoredRecord* record = nullptr;
+};
+
+// "YYYY-MM-DD[ T]HH:MM:SS[.ffffff][Z]" (or date-only) -> "YYYYMMDDHHMMSS.ffffff"; the raw string on a miss.
+std::string normalize_epoch(const std::string& iso) {
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, s = 0;
+    const int n = std::sscanf(iso.c_str(), "%d-%d-%d%*[ T]%d:%d:%d", &y, &mo, &d, &h, &mi, &s);
+    if (n < 3) return iso;
+    std::string frac;
+    const size_t dot = iso.find('.');
+    if (dot != std::string::npos) {
+        for (size_t i = dot + 1; i < iso.size() && frac.size() < 6; ++i) {
+            if (iso[i] < '0' || iso[i] > '9') break;
+            frac.push_back(iso[i]);
+        }
+    }
+    while (frac.size() < 6) frac.push_back('0');
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%04d%02d%02d%02d%02d%02d.%s", y, mo, d, h, mi, s, frac.c_str());
+    return buf;
+}
+
+// false with `reason` for a record that is no catalog candidate (not an $OMM, malformed, no EPOCH).
+bool read_candidate(const SynthConfig& cfg, const StoredRecord& r, Candidate* c, std::string* reason) {
+    if (!has_omm_id(r.data.data(), r.data.size())) {
+        *reason = "unknown-encoding";
+        return false;
+    }
+    flatbuffers::Verifier verifier(r.data.data(), r.data.size());
+    if (!VerifyOMMBuffer(verifier)) {
+        *reason = "malformed-flatbuffer-omm";
+        return false;
+    }
+    const OMM* o = GetOMM(r.data.data());
+    c->cid = r.cid;
+    c->record = &r;
+    if (!r.source_name.empty() && !is_spacetrack(cfg, r.source_name)) {
+        c->kind = Kind::OursFit;
+        c->provider = r.source_name;
+    } else {
+        c->kind = Kind::SpacetrackGp;
+        c->provider = !r.source_name.empty()
+                          ? r.source_name
+                          : (cfg.spacetrack_source_names.empty() ? std::string("spacetrack-gp")
+                                                                 : cfg.spacetrack_source_names[0]);
+    }
+    c->norad = static_cast<long>(o->NORAD_CAT_ID());
+    c->object_name = o->OBJECT_NAME() ? o->OBJECT_NAME()->str() : std::string();
+    const std::string epoch = o->EPOCH() ? o->EPOCH()->str() : std::string();
+    if (epoch.empty()) {
+        *reason = "missing-epoch";
+        return false;
+    }
+    c->epoch_key = normalize_epoch(epoch);
+    return true;
+}
+
+// -- precedence ----------------------------------------------------------------------------------------------------
+
+// Newest epoch wins within a lane; tie-break = the lexically smallest CID.
+size_t pick_newest(const std::vector<Candidate>& recs, const std::vector<size_t>& idxs) {
     size_t best = idxs[0];
     for (size_t j = 1; j < idxs.size(); ++j) {
-        const catsyn::CanonOmm& a = recs[idxs[j]];
-        const catsyn::CanonOmm& b = recs[best];
+        const Candidate& a = recs[idxs[j]];
+        const Candidate& b = recs[best];
         if (a.epoch_key > b.epoch_key || (a.epoch_key == b.epoch_key && a.cid < b.cid)) best = idxs[j];
     }
     return best;
 }
 
 struct Decision {
-    size_t winner_idx;
-    catsyn::SourceKind kind;
-    std::string provider;
-    std::string rule;
-    std::string gate_status;   // ours: provider gate; ST winner: "n/a"
+    size_t winner = 0;
+    Kind kind = Kind::SpacetrackGp;
+    std::string provider, rule, gate_status;
 };
 
-Decision decide(const SynthConfig& cfg,
-                const std::vector<catsyn::CanonOmm>& recs,
-                bool has_ours, size_t ours_idx,
-                bool has_st, size_t st_idx) {
+Decision decide(const SynthConfig& cfg, const std::vector<Candidate>& recs, bool has_ours, size_t ours, bool has_st,
+                size_t st) {
     Decision d;
-    std::string ours_gate = has_ours ? gate_level(cfg, recs[ours_idx].provider) : std::string();
+    const std::string ours_gate = has_ours ? gate_level(cfg, recs[ours].provider) : std::string();
     if (has_ours && has_st) {
-        bool fresher = recs[ours_idx].epoch_key > recs[st_idx].epoch_key;  // STRICTLY fresher
+        const bool fresher = recs[ours].epoch_key > recs[st].epoch_key;  // STRICTLY fresher
         if (ours_gate == "hard-pass" && fresher) {
-            d.winner_idx = ours_idx; d.kind = catsyn::SourceKind::OursFit;
-            d.rule = "ours-hardpass-fresher"; d.gate_status = ours_gate;
+            d = {ours, Kind::OursFit, "", "ours-hardpass-fresher", ours_gate};
         } else if (ours_gate != "hard-pass") {
-            d.winner_idx = st_idx; d.kind = catsyn::SourceKind::SpacetrackGp;
-            d.rule = "spacetrack-ours-gate-" + ours_gate; d.gate_status = "n/a";
-        } else {  // hard-pass but not strictly fresher
-            d.winner_idx = st_idx; d.kind = catsyn::SourceKind::SpacetrackGp;
-            d.rule = "spacetrack-ours-not-fresher"; d.gate_status = "n/a";
+            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-gate-" + ours_gate, "n/a"};
+        } else {
+            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-not-fresher", "n/a"};
         }
     } else if (has_ours) {
-        d.winner_idx = ours_idx; d.kind = catsyn::SourceKind::OursFit;
-        d.rule = "ours-sole-source-gate-" + ours_gate; d.gate_status = ours_gate;
+        d = {ours, Kind::OursFit, "", "ours-sole-source-gate-" + ours_gate, ours_gate};
     } else {
-        d.winner_idx = st_idx; d.kind = catsyn::SourceKind::SpacetrackGp;
-        d.rule = "spacetrack-sole-source"; d.gate_status = "n/a";
+        d = {st, Kind::SpacetrackGp, "", "spacetrack-sole-source", "n/a"};
     }
-    d.provider = recs[d.winner_idx].provider;
+    d.provider = recs[d.winner].provider;
     return d;
 }
 
-// ── canonical catalog OMM record = winner OMM JSON + synthesis provenance ─────
+const char* kind_name(Kind k) { return k == Kind::OursFit ? "ours-fit" : "spacetrack-gp"; }
 
-std::string build_catalog_record(const catsyn::CanonOmm& w, const Decision& d, const std::string& batch_id) {
-    std::string kind = (d.kind == catsyn::SourceKind::OursFit) ? "ours-fit" : "spacetrack-gp";
-    std::string j = w.omm_json;                 // ends with '}' (guaranteed by the reader)
-    if (!j.empty() && j.back() == '}') j.pop_back();
-    j += ",\"USER_DEFINED_SDN_CATALOG_SOURCE_KIND\":\"" + kind + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_SOURCE_NAME\":\"" + ps::json_escape(d.provider) + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_SOURCE_CID\":\"" + ps::json_escape(w.cid) + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_PRECEDENCE\":\"" + ps::json_escape(d.rule) + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_GATE_STATUS\":\"" + ps::json_escape(d.gate_status) + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_BATCH\":\"" + ps::json_escape(batch_id) + "\"";
-    j += ",\"USER_DEFINED_SDN_CATALOG_COMMENT\":\"SDN CelesTrak-replacement catalog (App 2 A2.7): winning source " +
-         ps::json_escape(d.provider) + " (" + kind + "); precedence " + ps::json_escape(d.rule) + "\"";
-    j += "}";
-    return j;
+// The winning $OMM, every field kept, with the synthesis provenance appended; size-prefixed onto `stream`.
+void append_catalog_record(const Candidate& w, const Decision& d, const std::string& batch_id,
+                           std::vector<uint8_t>* stream) {
+    OMMT omm;
+    GetOMM(w.record->data.data())->UnPackTo(&omm);
+    auto add = [&](const char* name, const std::string& value) {
+        auto p = std::make_unique<OMMUserDefinedParameterT>();
+        p->PARAM_NAME = name;
+        p->PARAM_VALUE = value;
+        omm.USER_DEFINED_PARAMETERS.push_back(std::move(p));
+    };
+    const std::string kind = kind_name(d.kind);
+    add("SDN_CATALOG_SOURCE_KIND", kind);
+    add("SDN_CATALOG_SOURCE_NAME", d.provider);
+    add("SDN_CATALOG_SOURCE_CID", w.cid);
+    add("SDN_CATALOG_PRECEDENCE", d.rule);
+    add("SDN_CATALOG_GATE_STATUS", d.gate_status);
+    add("SDN_CATALOG_BATCH", batch_id);
+    add("SDN_CATALOG_COMMENT", "SDN CelesTrak-replacement catalog (App 2 A2.7): winning source " + d.provider + " (" +
+                                   kind + "); precedence " + d.rule);
+    flatbuffers::FlatBufferBuilder b(1024);
+    FinishSizePrefixedOMMBuffer(b, OMM::Pack(b, &omm));
+    stream->insert(stream->end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-std::string catalog_provenance_json(const catsyn::CanonOmm& w, const Decision& d,
-                                    long norad, const std::string& batch_id) {
-    std::string kind = (d.kind == catsyn::SourceKind::OursFit) ? "ours-fit" : "spacetrack-gp";
-    std::string p = "{";
-    p += "\"SOURCE_NAME\":\"catalog-synthesis\",";
-    p += "\"RECORD_SCHEMA\":\"OMM\",";
-    p += "\"CATALOG\":\"celestrak-replacement\",";
-    p += "\"WINNING_SOURCE_KIND\":\"" + kind + "\",";
-    p += "\"WINNING_SOURCE_NAME\":\"" + ps::json_escape(d.provider) + "\",";
-    p += "\"WINNING_SOURCE_CID\":\"" + ps::json_escape(w.cid) + "\",";
-    p += "\"PRECEDENCE_RULE\":\"" + ps::json_escape(d.rule) + "\",";
-    p += "\"GATE_STATUS\":\"" + ps::json_escape(d.gate_status) + "\",";
-    p += "\"NORAD_CAT_ID\":" + std::to_string(norad) + ",";
-    p += "\"EPOCH\":\"" + ps::json_escape(w.epoch_iso) + "\",";
-    p += "\"BATCH_ID\":\"" + ps::json_escape(batch_id) + "\"";
-    if (d.kind == catsyn::SourceKind::OursFit) {
-        p += ",\"FIT_SOURCE_CID\":\"" + ps::json_escape(w.fit_source_cid) + "\"";
-        p += ",\"FIT_SOURCE_SHA256\":\"" + ps::json_escape(w.fit_source_sha256) + "\"";
-        p += ",\"FIT_RMS_KM\":\"" + ps::json_escape(w.fit_rms) + "\"";
-        p += ",\"FIT_CONVERGED\":" + std::string(w.fit_converged ? "true" : "false");
-        p += ",\"FIT_ID_STATUS\":\"" + ps::json_escape(w.id_status) + "\"";
+// -- outputs -------------------------------------------------------------------------------------------------------
+
+uint64_t g_at_ms = 0;  // the tick's FIRED_MS (0 without a tick)
+
+int push(const char* port, const char* schema, const char* file_id, const char* root, const uint8_t* data,
+         size_t size) {
+    return plugin_push_output_ex(port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data,
+                                 static_cast<uint32_t>(size));
+}
+
+bool push_notice(R::flowNoticeKind kind, const SynthConfig& cfg, const std::string& source_name,
+                 const std::string& batch_id, uint64_t count, const std::string& reason,
+                 const std::vector<std::string>& items) {
+    R::FlowNoticeT n;
+    n.KIND = kind;
+    n.SCHEMA = cfg.query_schema;
+    n.SOURCE_NAME = source_name;
+    n.BATCH_ID = batch_id;
+    n.COUNT = count;
+    n.REASON = reason;
+    n.ITEMS = items;
+    n.AT_MS = g_at_ms;
+    flatbuffers::FlatBufferBuilder b(256 + reason.size());
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &n));
+    if (push("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b.GetBufferPointer(), b.GetSize()) <
+        0) {
+        plugin_set_error("emit-failed", "Failed to emit a FlowNotice.");
+        return false;
     }
-    p += "}";
-    return p;
+    return true;
 }
 
-// ── the synthesis pass ───────────────────────────────────────────────────────
+// -- the synthesis pass --------------------------------------------------------------------------------------------
 
-struct ProviderStat { catsyn::SourceKind kind; long candidates = 0; long won = 0; long quarantined = 0; };
+struct ProviderStat {
+    Kind kind = Kind::SpacetrackGp;
+    uint64_t candidates = 0, won = 0, quarantined = 0;
+};
 
-std::string run_synthesis(const uint8_t* req, uint32_t req_len) {
-    SynthConfig cfg = resolve_config(req, req_len);
+int run_synthesis() {
+    g_at_ms = 0;
+    const uint32_t inputs = plugin_get_input_count();
+    for (uint32_t i = 0; i < inputs; ++i) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id || std::strcmp(frame->port_id, "tick") != 0 || !frame->payload) continue;
+        flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+        if (R::VerifyTimerTickBuffer(verifier)) g_at_ms = R::GetTimerTick(frame->payload)->FIRED_MS();
+    }
 
-    std::vector<RawRecord> raw;
-    std::string query_err;
-    bool query_ok = storage_query(cfg, &raw, &query_err);
+    const SynthConfig cfg = resolve_config();
+    std::vector<StoredRecord> raw;
+    std::string query_error;
+    if (!storage_query(cfg, &raw, &query_error)) {
+        return push_notice(R::flowNoticeKind_Missing, cfg, cfg.source_name, "", 0,
+                           "storage-query-failed: " + query_error, {})
+                   ? 0
+                   : 500;
+    }
 
-    // Deterministic batch id: hash of the SORTED set of input record content ids
-    // (identical stored inputs -> identical CIDs -> identical batch). No wall-clock.
-    std::vector<std::string> input_cids;
-    input_cids.reserve(raw.size());
-    for (const RawRecord& r : raw) input_cids.push_back(r.cid);
-    std::sort(input_cids.begin(), input_cids.end());
-    std::string batch_material = "catalog-synthesis:v1";
-    for (const std::string& c : input_cids) { batch_material.push_back('\n'); batch_material += c; }
-    std::string batch_id = ps::sha256_hex(reinterpret_cast<const uint8_t*>(batch_material.data()), batch_material.size());
+    // batch_id: sha256 of the sorted input CIDs (identical stored inputs -> identical batch). No wall clock.
+    std::vector<std::string> cids;
+    for (const StoredRecord& r : raw) cids.push_back(r.cid);
+    std::sort(cids.begin(), cids.end());
+    std::string material = "catalog-synthesis:v1";
+    for (const std::string& c : cids) {
+        material.push_back('\n');
+        material += c;
+    }
+    const std::string batch_id =
+        ephem::sha256_hex(reinterpret_cast<const uint8_t*>(material.data()), material.size());
 
-    // Read + classify every record.
-    std::vector<catsyn::CanonOmm> recs;
-    recs.reserve(raw.size());
-    long unreadable = 0;
-    std::vector<std::string> skip_reasons;   // "<reason>:<cid>"
-    for (const RawRecord& r : raw) {
-        catsyn::CanonOmm c;
-        if (!catsyn::read_stored_omm(r.cid, r.source_name, r.data, cfg.spacetrack_source_names, &c)) {
-            unreadable++;
-            skip_reasons.push_back(c.skip_reason + ":" + r.cid);
+    std::vector<Candidate> recs;
+    std::vector<std::string> skipped;  // "<reason>:<cid>"
+    for (const StoredRecord& r : raw) {
+        Candidate c;
+        std::string reason;
+        if (read_candidate(cfg, r, &c, &reason)) recs.push_back(c);
+        else skipped.push_back(reason + ":" + r.cid);
+    }
+
+    std::map<long, std::vector<size_t>> by_norad;
+    std::vector<size_t> quarantine;
+    std::map<std::string, ProviderStat> stats;
+    for (size_t i = 0; i < recs.size(); ++i) {
+        ProviderStat& s = stats[recs[i].provider];
+        s.kind = recs[i].kind;
+        s.candidates++;
+        if (recs[i].norad <= 0) {
+            quarantine.push_back(i);
+            s.quarantined++;
             continue;
         }
-        recs.push_back(std::move(c));
+        by_norad[recs[i].norad].push_back(i);
     }
 
-    // Group by NORAD (>0). Quarantine NORAD<=0 (unmapped fits — never keyed as 0).
-    std::map<long, std::vector<size_t>> by_norad;
-    std::vector<size_t> quarantine;   // indices into recs
-    std::map<std::string, ProviderStat> pstats;
-    for (size_t i = 0; i < recs.size(); ++i) {
-        const catsyn::CanonOmm& c = recs[i];
-        ProviderStat& ps_ = pstats[c.provider];
-        ps_.kind = c.kind;
-        ps_.candidates++;
-        if (c.norad <= 0) { quarantine.push_back(i); ps_.quarantined++; continue; }
-        by_norad[c.norad].push_back(i);
-    }
-
-    // Per-NORAD precedence -> one canonical catalog record.
-    long catalog_records = 0, ours_won = 0, spacetrack_won = 0, stored = 0, signed_ = 0, published = 0;
-    std::vector<std::string> catalog_lines;   // "<norad>:<kind>:<rule>" (deterministic order = ascending NORAD)
-
-    for (auto& kv : by_norad) {
-        long norad = kv.first;
-        const std::vector<size_t>& idxs = kv.second;
+    std::vector<uint8_t> stream;
+    uint64_t catalog = 0, ours_won = 0, st_won = 0;
+    for (const auto& [norad, idxs] : by_norad) {
         std::vector<size_t> ours, st;
-        for (size_t idx : idxs) {
-            if (recs[idx].kind == catsyn::SourceKind::OursFit) ours.push_back(idx);
-            else st.push_back(idx);
+        for (size_t idx : idxs) (recs[idx].kind == Kind::OursFit ? ours : st).push_back(idx);
+        const bool has_ours = !ours.empty(), has_st = !st.empty();
+        const Decision d = decide(cfg, recs, has_ours, has_ours ? pick_newest(recs, ours) : 0, has_st,
+                                  has_st ? pick_newest(recs, st) : 0);
+        append_catalog_record(recs[d.winner], d, batch_id, &stream);
+        catalog++;
+        stats[d.provider].won++;
+        (d.kind == Kind::OursFit ? ours_won : st_won)++;
+    }
+
+    if (catalog > 0) {
+        R::IngestRequestT meta;
+        meta.SCHEMA = "OMM.fbs";
+        meta.TAGS = std::make_unique<R::SourceTagsT>();
+        meta.TAGS->PROVIDER_ID = cfg.source_name;
+        meta.TAGS->SOURCE_NAME = cfg.source_name;
+        meta.TAGS->BATCH_ID = batch_id;
+        meta.TAGS->SOURCE_URL = "sdn://catalog-synthesis";
+        meta.RECONCILE = R::reconcileMode_None;  // as before: no sibling deletion
+        meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+        R::ProvenanceT& p = *meta.PROVENANCE;
+        p.SOURCE_URL = "sdn://catalog-synthesis";
+        p.PARSER = "catalog-synthesis";
+        p.PARSER_VERSION = "0.2.0";
+        p.NORMALIZED_SHA256 = ephem::sha256_hex(stream.data(), stream.size());
+        p.NORMALIZED_COUNT = catalog;
+        p.SCHEMAS = {"OMM.fbs"};
+        p.SCHEMA_COUNTS = {catalog};
+        const std::map<std::string, std::string> attributes = {
+            {"catalog", "celestrak-replacement"},
+            {"dataSource", cfg.data_source},
+            {"fileIdPrefix", cfg.file_id_prefix},
+            {"oursWon", std::to_string(ours_won)},
+            {"quarantined", std::to_string(quarantine.size())},
+            {"recordsRead", std::to_string(raw.size())},
+            {"recordsUnreadable", std::to_string(skipped.size())},
+            {"spacetrackWon", std::to_string(st_won)}};
+        for (const auto& [name, value] : attributes) {
+            auto h = std::make_unique<R::HeaderT>();
+            h->NAME = name;
+            h->VALUE = value;
+            p.ATTRIBUTES.push_back(std::move(h));
         }
-        bool has_ours = !ours.empty(), has_st = !st.empty();
-        size_t ours_idx = has_ours ? pick_newest(recs, ours) : 0;
-        size_t st_idx = has_st ? pick_newest(recs, st) : 0;
-
-        Decision d = decide(cfg, recs, has_ours, ours_idx, has_st, st_idx);
-        const catsyn::CanonOmm& w = recs[d.winner_idx];
-
-        std::string record = build_catalog_record(w, d, batch_id);
-        std::string prov = catalog_provenance_json(w, d, norad, batch_id);
-
-        ps::ProviderConfig pcfg;
-        pcfg.signing_slot = cfg.signing_slot;
-        pcfg.publish_topic = cfg.output_topic;
-        pcfg.signature_type = cfg.signature_type;
-        pcfg.source_name = cfg.source_name;
-        pcfg.data_source = cfg.data_source;
-        pcfg.record_schema = "OMM";
-
-        std::string file_id = cfg.file_id_prefix + ":OMM:" + std::to_string(norad) + ":" + w.epoch_iso;
-        std::string file_name = std::to_string(norad) + "_" + w.epoch_iso + ".omm.json";
-        std::string source_url = "sdn://catalog-synthesis";
-
-        ps::PublishResult pr = ps::publish_record_with_source(
-            pcfg, reinterpret_cast<const uint8_t*>(record.data()), record.size(),
-            file_name, file_id, /*publish_timestamp=*/w.epoch_iso, prov, source_url, batch_id);
-        if (pr.stored) stored++;
-        if (pr.signed_) signed_++;
-        if (pr.published) published++;
-
-        catalog_records++;
-        pstats[d.provider].won++;
-        if (d.kind == catsyn::SourceKind::OursFit) ours_won++; else spacetrack_won++;
-
-        catalog_lines.push_back(std::to_string(norad) + ":" +
-                                (d.kind == catsyn::SourceKind::OursFit ? "ours-fit" : "spacetrack-gp") + ":" + d.rule);
+        flatbuffers::FlatBufferBuilder mb(1024);
+        R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+        if (push("omm_meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest",
+                 mb.GetBufferPointer(), mb.GetSize()) < 0 ||
+            push("omm_records", "OMM.fbs", "$OMM", "OMM", stream.data(), stream.size()) < 0) {
+            plugin_set_error("emit-failed", "Failed to emit the catalog batch.");
+            return 500;
+        }
     }
 
-    // Quarantine summary (sorted by CID for determinism).
-    std::sort(quarantine.begin(), quarantine.end(),
-              [&](size_t a, size_t b) { return recs[a].cid < recs[b].cid; });
-    std::sort(skip_reasons.begin(), skip_reasons.end());
+    // Quarantine: CIDs sorted; never keyed as NORAD 0, never stored.
+    std::vector<std::string> quarantined;
+    for (size_t i : quarantine) quarantined.push_back(recs[i].cid);
+    std::sort(quarantined.begin(), quarantined.end());
+    std::sort(skipped.begin(), skipped.end());
 
-    // ── summary JSON (returned + published) ──
-    std::string out = "{\"ok\":true,\"pipeline\":\"catalog-synthesis\",";
-    out += "\"query_ok\":" + std::string(query_ok ? "true" : "false") + ",";
-    if (!query_ok) out += "\"query_error\":\"" + ps::json_escape(query_err) + "\",";
-    out += "\"batch_id\":\"" + batch_id + "\",";
-    out += "\"records_seen\":" + std::to_string(raw.size()) + ",";
-    out += "\"records_readable\":" + std::to_string(recs.size()) + ",";
-    out += "\"records_unreadable\":" + std::to_string(unreadable) + ",";
-    out += "\"catalog_records\":" + std::to_string(catalog_records) + ",";
-    out += "\"ours_won\":" + std::to_string(ours_won) + ",";
-    out += "\"spacetrack_won\":" + std::to_string(spacetrack_won) + ",";
-    out += "\"quarantined\":" + std::to_string(quarantine.size()) + ",";
-    out += "\"stored\":" + std::to_string(stored) + ",";
-    out += "\"signed\":" + std::to_string(signed_) + ",";
-    out += "\"published\":" + std::to_string(published) + ",";
-
-    // quarantine detail: honest identity, never a fabricated NORAD.
-    out += "\"quarantine\":[";
-    for (size_t k = 0; k < quarantine.size(); ++k) {
-        const catsyn::CanonOmm& c = recs[quarantine[k]];
-        if (k) out += ",";
-        out += "{\"cid\":\"" + ps::json_escape(c.cid) + "\",";
-        out += "\"provider\":\"" + ps::json_escape(c.provider) + "\",";
-        out += "\"object_name\":\"" + ps::json_escape(c.object_name) + "\",";
-        out += "\"id_status\":\"" + ps::json_escape(c.id_status) + "\",";
-        out += "\"reason\":\"no-norad-unmapped-object-id\"}";
+    const std::string summary = "catalog ours-won=" + std::to_string(ours_won) +
+                                " spacetrack-won=" + std::to_string(st_won) +
+                                " quarantined=" + std::to_string(quarantine.size()) +
+                                " unreadable=" + std::to_string(skipped.size()) + " (" + std::to_string(raw.size()) +
+                                " records read)";
+    if (!push_notice(R::flowNoticeKind_Info, cfg, cfg.source_name, batch_id, catalog, summary, {})) return 500;
+    for (const auto& [provider, s] : stats) {
+        const std::string reason = std::string(kind_name(s.kind)) + " candidates=" + std::to_string(s.candidates) +
+                                   " won=" + std::to_string(s.won) + " quarantined=" + std::to_string(s.quarantined);
+        if (!push_notice(R::flowNoticeKind_Info, cfg, provider, batch_id, s.won, reason, {})) return 500;
     }
-    out += "],";
-
-    // per-provider counts (ascending provider name).
-    out += "\"providers\":[";
-    bool first = true;
-    for (auto& kv : pstats) {
-        if (!first) out += ",";
-        first = false;
-        out += "{\"provider\":\"" + ps::json_escape(kv.first) + "\",";
-        out += "\"kind\":\"" + std::string(kv.second.kind == catsyn::SourceKind::OursFit ? "ours-fit" : "spacetrack-gp") + "\",";
-        out += "\"candidates\":" + std::to_string(kv.second.candidates) + ",";
-        out += "\"won\":" + std::to_string(kv.second.won) + ",";
-        out += "\"quarantined\":" + std::to_string(kv.second.quarantined) + "}";
+    if (!quarantined.empty() &&
+        !push_notice(R::flowNoticeKind_Skipped, cfg, cfg.source_name, batch_id, quarantined.size(),
+                     "no-norad-unmapped-object-id", quarantined)) {
+        return 500;
     }
-    out += "],";
-
-    // skipped/unreadable detail (sorted).
-    out += "\"skipped\":[";
-    for (size_t k = 0; k < skip_reasons.size(); ++k) { if (k) out += ","; out += "\"" + ps::json_escape(skip_reasons[k]) + "\""; }
-    out += "]}";
-
-    // Publish the summary on the synthesis channel so subscribers see run stats.
-    ps::pubsub_publish(cfg.output_topic, "{\"CATALOG_SYNTHESIS_SUMMARY\":" + out + "}");
-    return out;
+    if (!skipped.empty() &&
+        !push_notice(R::flowNoticeKind_Skipped, cfg, cfg.source_name, batch_id, skipped.size(), "unreadable",
+                     skipped)) {
+        return 500;
+    }
+    return 0;
 }
 
 }  // namespace
 
-extern "C" {
-
-// Canonical streaming invoke entrypoint. The TIMERS method (cron: nil input) or a
-// manual invoke (optional JSON config payload) triggers one read+merge+publish pass.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_synthesis(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
-    }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+extern "C" int synthesize_catalog(void) {
+    plugin_reset_output_state();
+    return run_synthesis();
 }
-
-}  // extern "C"

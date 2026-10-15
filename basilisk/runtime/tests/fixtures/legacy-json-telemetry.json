@@ -1,0 +1,1216 @@
+{
+ "crewDragon": {
+  "request": {
+   "scenarioId": "crew-dragon-approach-pointing",
+   "durationSeconds": 600,
+   "stepSeconds": 120,
+   "initialAttitudeErrorDeg": 6,
+   "bodyRateDegSec": 0.08,
+   "wheelMomentumNms": 12,
+   "batteryStateOfCharge": 0.76,
+   "solarArrayAreaM2": 16,
+   "sensorNoiseArcsec": 18
+  },
+  "response": {
+   "provider": "com.digitalarsenal.basilisk.runtime",
+   "scenarioId": "crew-dragon-approach-pointing",
+   "status": "nominal",
+   "products": [
+    "attitude",
+    "power",
+    "sensor"
+   ],
+   "assumptions": [
+    "deterministic Basilisk runtime replay surface",
+    "power balance uses fixed solar efficiency and bus load",
+    "sensor noise floor is reported with each attitude sample"
+   ],
+   "telemetry": [
+    {
+     "elapsedSeconds": 0,
+     "attitudeErrorDeg": 6.0005,
+     "bodyRateDegSec": 0.08,
+     "wheelMomentumNms": 12,
+     "relativePositionM": [
+      1200,
+      0,
+      18
+     ],
+     "generatedPowerW": 5052.032,
+     "busLoadW": 878.6,
+     "batteryStateOfCharge": 0.76,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 120,
+     "attitudeErrorDeg": 2.43991795844,
+     "bodyRateDegSec": 0.0389401804768,
+     "wheelMomentumNms": 14.112,
+     "relativePositionM": [
+      976,
+      26.4503363532,
+      14.5623058987
+     ],
+     "generatedPowerW": 5038.51134226,
+     "busLoadW": 916.616,
+     "batteryStateOfCharge": 0.769814036529,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 240,
+     "attitudeErrorDeg": 0.99229332933,
+     "bodyRateDegSec": 0.0189542206946,
+     "wheelMomentumNms": 16.224,
+     "relativePositionM": [
+      752,
+      42.7975432333,
+      5.56230589875
+     ],
+     "generatedPowerW": 4998.21253327,
+     "busLoadW": 954.632,
+     "batteryStateOfCharge": 0.779441609227,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 360,
+     "attitudeErrorDeg": 0.403733076438,
+     "bodyRateDegSec": 0.00922600968305,
+     "wheelMomentumNms": 18.336,
+     "relativePositionM": [
+      528,
+      42.7975432333,
+      -5.56230589875
+     ],
+     "generatedPowerW": 4931.9199435,
+     "busLoadW": 992.648,
+     "batteryStateOfCharge": 0.788820828141,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 480,
+     "attitudeErrorDeg": 0.164442334684,
+     "bodyRateDegSec": 0.00449078102673,
+     "wheelMomentumNms": 20.448,
+     "relativePositionM": [
+      304,
+      26.4503363532,
+      -14.5623058987
+     ],
+     "generatedPowerW": 4840.92388281,
+     "busLoadW": 1030.664,
+     "batteryStateOfCharge": 0.797892875481,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 600,
+     "attitudeErrorDeg": 0.0671539792295,
+     "bodyRateDegSec": 0.00218589779578,
+     "wheelMomentumNms": 22.56,
+     "relativePositionM": [
+      80,
+      5.51091059616e-15,
+      -18
+     ],
+     "generatedPowerW": 4726.99548602,
+     "busLoadW": 1068.68,
+     "batteryStateOfCharge": 0.806603150447,
+     "sensorNoiseArcsec": 18,
+     "pointingMode": "fine-track"
+    }
+   ]
+  }
+ },
+ "defaults": {
+  "request": {},
+  "response": {
+   "provider": "com.digitalarsenal.basilisk.runtime",
+   "scenarioId": "basilisk-pointing-power",
+   "status": "nominal",
+   "products": [
+    "attitude",
+    "power",
+    "sensor"
+   ],
+   "assumptions": [
+    "deterministic Basilisk runtime replay surface",
+    "power balance uses fixed solar efficiency and bus load",
+    "sensor noise floor is reported with each attitude sample"
+   ],
+   "telemetry": [
+    {
+     "elapsedSeconds": 0,
+     "attitudeErrorDeg": 5.00055555556,
+     "bodyRateDegSec": 0.05,
+     "wheelMomentumNms": 8,
+     "relativePositionM": [
+      1200,
+      0,
+      18
+     ],
+     "generatedPowerW": 3789.024,
+     "busLoadW": 808,
+     "batteryStateOfCharge": 0.72,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 60,
+     "attitudeErrorDeg": 3.18869631366,
+     "bodyRateDegSec": 0.0348838163036,
+     "wheelMomentumNms": 8.66,
+     "relativePositionM": [
+      1088,
+      13.9057647469,
+      17.1190172933
+     ],
+     "generatedPowerW": 3786.48578519,
+     "busLoadW": 819.88,
+     "batteryStateOfCharge": 0.723531673554,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 120,
+     "attitudeErrorDeg": 2.03340385426,
+     "bodyRateDegSec": 0.024337612798,
+     "wheelMomentumNms": 9.32,
+     "relativePositionM": [
+      976,
+      26.4503363532,
+      14.5623058987
+     ],
+     "generatedPowerW": 3778.8835067,
+     "busLoadW": 831.76,
+     "batteryStateOfCharge": 0.727040153919,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 180,
+     "attitudeErrorDeg": 1.29675685879,
+     "bodyRateDegSec": 0.0169797762822,
+     "wheelMomentumNms": 9.98,
+     "relativePositionM": [
+      864,
+      36.4057647469,
+      10.5801345413
+     ],
+     "generatedPowerW": 3766.25420205,
+     "busLoadW": 843.64,
+     "batteryStateOfCharge": 0.73051945654,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 240,
+     "attitudeErrorDeg": 0.827049996663,
+     "bodyRateDegSec": 0.0118463879341,
+     "wheelMomentumNms": 10.64,
+     "relativePositionM": [
+      752,
+      42.7975432333,
+      5.56230589875
+     ],
+     "generatedPowerW": 3748.65939995,
+     "busLoadW": 855.52,
+     "batteryStateOfCharge": 0.733963670112,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 300,
+     "attitudeErrorDeg": 0.527551678365,
+     "bodyRateDegSec": 0.00826494441108,
+     "wheelMomentumNms": 11.3,
+     "relativePositionM": [
+      640,
+      45,
+      1.10218211923e-15
+     ],
+     "generatedPowerW": 3726.18482051,
+     "busLoadW": 867.4,
+     "batteryStateOfCharge": 0.737366985374,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 360,
+     "attitudeErrorDeg": 0.336583119254,
+     "bodyRateDegSec": 0.0057662560519,
+     "wheelMomentumNms": 11.96,
+     "relativePositionM": [
+      528,
+      42.7975432333,
+      -5.56230589875
+     ],
+     "generatedPowerW": 3698.93995763,
+     "busLoadW": 879.28,
+     "batteryStateOfCharge": 0.740723723419,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 420,
+     "attitudeErrorDeg": 0.214816189891,
+     "bodyRateDegSec": 0.00402298033748,
+     "wheelMomentumNms": 12.62,
+     "relativePositionM": [
+      416,
+      36.4057647469,
+      -10.5801345413
+     ],
+     "generatedPowerW": 3667.05754552,
+     "busLoadW": 891.16,
+     "batteryStateOfCharge": 0.744028363354,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 480,
+     "attitudeErrorDeg": 0.137174167792,
+     "bodyRateDegSec": 0.00280673814171,
+     "wheelMomentumNms": 13.28,
+     "relativePositionM": [
+      304,
+      26.4503363532,
+      -14.5623058987
+     ],
+     "generatedPowerW": 3630.69291211,
+     "busLoadW": 903.04,
+     "batteryStateOfCharge": 0.747275569202,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 540,
+     "attitudeErrorDeg": 0.087667428753,
+     "bodyRateDegSec": 0.00195819475495,
+     "wheelMomentumNms": 13.94,
+     "relativePositionM": [
+      192,
+      13.9057647469,
+      -17.1190172933
+     ],
+     "generatedPowerW": 3590.02322223,
+     "busLoadW": 914.92,
+     "batteryStateOfCharge": 0.750460215895,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 600,
+     "attitudeErrorDeg": 0.0561005382468,
+     "bodyRateDegSec": 0.00136618612236,
+     "wheelMomentumNms": 14.6,
+     "relativePositionM": [
+      80,
+      5.51091059616e-15,
+      -18
+     ],
+     "generatedPowerW": 3545.24661451,
+     "busLoadW": 926.8,
+     "batteryStateOfCharge": 0.753577414246,
+     "sensorNoiseArcsec": 20,
+     "pointingMode": "fine-track"
+    }
+   ]
+  }
+ },
+ "halfHour": {
+  "request": {
+   "scenarioId": "half-hour",
+   "durationSeconds": 1800,
+   "stepSeconds": 60,
+   "initialAttitudeErrorDeg": 3,
+   "bodyRateDegSec": 0.02,
+   "wheelMomentumNms": 4,
+   "batteryStateOfCharge": 0.5,
+   "solarArrayAreaM2": 30,
+   "sensorNoiseArcsec": 5
+  },
+  "response": {
+   "provider": "com.digitalarsenal.basilisk.runtime",
+   "scenarioId": "half-hour",
+   "status": "nominal",
+   "products": [
+    "attitude",
+    "power",
+    "sensor"
+   ],
+   "assumptions": [
+    "deterministic Basilisk runtime replay surface",
+    "power balance uses fixed solar efficiency and bus load",
+    "sensor noise floor is reported with each attitude sample"
+   ],
+   "telemetry": [
+    {
+     "elapsedSeconds": 0,
+     "attitudeErrorDeg": 3.00013888889,
+     "bodyRateDegSec": 0.02,
+     "wheelMomentumNms": 4,
+     "relativePositionM": [
+      1200,
+      0,
+      18
+     ],
+     "generatedPowerW": 9472.56,
+     "busLoadW": 725.5,
+     "batteryStateOfCharge": 0.5,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 60,
+     "attitudeErrorDeg": 1.91302334375,
+     "bodyRateDegSec": 0.0139535265214,
+     "wheelMomentumNms": 4.264,
+     "relativePositionM": [
+      1162.66666667,
+      4.70378084704,
+      17.9013941166
+     ],
+     "generatedPowerW": 9466.21446298,
+     "busLoadW": 730.252,
+     "batteryStateOfCharge": 0.510399955313,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 120,
+     "attitudeErrorDeg": 1.21984786811,
+     "bodyRateDegSec": 0.0097350451192,
+     "wheelMomentumNms": 4.528,
+     "relativePositionM": [
+      1125.33333333,
+      9.3560260868,
+      17.6066568132
+     ],
+     "generatedPowerW": 9447.20876674,
+     "busLoadW": 735.004,
+     "batteryStateOfCharge": 0.520771627654,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 180,
+     "attitudeErrorDeg": 0.777859670827,
+     "bodyRateDegSec": 0.0067919105129,
+     "wheelMomentumNms": 4.792,
+     "relativePositionM": [
+      1088,
+      13.9057647469,
+      17.1190172933
+     ],
+     "generatedPowerW": 9415.63550512,
+     "busLoadW": 739.756,
+     "batteryStateOfCharge": 0.531100055637,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "slew"
+    },
+    {
+     "elapsedSeconds": 240,
+     "attitudeErrorDeg": 0.496035553554,
+     "bodyRateDegSec": 0.00473855517364,
+     "wheelMomentumNms": 5.056,
+     "relativePositionM": [
+      1050.66666667,
+      18.3031489384,
+      16.4438182376
+     ],
+     "generatedPowerW": 9371.64849988,
+     "busLoadW": 744.508,
+     "batteryStateOfCharge": 0.541370460994,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 300,
+     "attitudeErrorDeg": 0.316336562574,
+     "bodyRateDegSec": 0.00330597776443,
+     "wheelMomentumNms": 5.32,
+     "relativePositionM": [
+      1013.33333333,
+      22.5,
+      15.5884572681
+     ],
+     "generatedPowerW": 9315.46205129,
+     "busLoadW": 749.26,
+     "batteryStateOfCharge": 0.551568320579,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 360,
+     "attitudeErrorDeg": 0.201755427108,
+     "bodyRateDegSec": 0.00230650242076,
+     "wheelMomentumNms": 5.584,
+     "relativePositionM": [
+      976,
+      26.4503363532,
+      14.5623058987
+     ],
+     "generatedPowerW": 9247.34989407,
+     "busLoadW": 754.012,
+     "batteryStateOfCharge": 0.561679437119,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 420,
+     "attitudeErrorDeg": 0.12869526949,
+     "bodyRateDegSec": 0.00160919213499,
+     "wheelMomentumNms": 5.848,
+     "relativePositionM": [
+      938.666666667,
+      30.1108772861,
+      13.3766068586
+     ],
+     "generatedPowerW": 9167.64386381,
+     "busLoadW": 758.764,
+     "batteryStateOfCharge": 0.571690008386,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 480,
+     "attitudeErrorDeg": 0.0821100562308,
+     "bodyRateDegSec": 0.00112269525668,
+     "wheelMomentumNms": 6.112,
+     "relativePositionM": [
+      901.333333333,
+      33.4415171465,
+      12.0443509145
+     ],
+     "generatedPowerW": 9076.73228028,
+     "busLoadW": 763.516,
+     "batteryStateOfCharge": 0.581586694434,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 540,
+     "attitudeErrorDeg": 0.0524060128074,
+     "bodyRateDegSec": 0.00078327790198,
+     "wheelMomentumNms": 6.376,
+     "relativePositionM": [
+      864,
+      36.4057647469,
+      10.5801345413
+     ],
+     "generatedPowerW": 8975.05805556,
+     "busLoadW": 768.268,
+     "batteryStateOfCharge": 0.591356682595,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 600,
+     "attitudeErrorDeg": 0.0334658785036,
+     "bodyRateDegSec": 0.000546474448946,
+     "wheelMomentumNms": 6.64,
+     "relativePositionM": [
+      826.666666667,
+      38.9711431703,
+      9
+     ],
+     "generatedPowerW": 8863.11653628,
+     "busLoadW": 773.02,
+     "batteryStateOfCharge": 0.6009877499,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 660,
+     "attitudeErrorDeg": 0.021389115676,
+     "bodyRateDegSec": 0.000381262285832,
+     "wheelMomentumNms": 6.904,
+     "relativePositionM": [
+      789.333333333,
+      41.1095455939,
+      7.32125957536
+     ],
+     "generatedPowerW": 8741.45309025,
+     "busLoadW": 777.772,
+     "batteryStateOfCharge": 0.610468322626,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 720,
+     "attitudeErrorDeg": 0.0136886317167,
+     "bodyRateDegSec": 0.000265997670849,
+     "wheelMomentumNms": 7.168,
+     "relativePositionM": [
+      752,
+      42.7975432333,
+      5.56230589875
+     ],
+     "generatedPowerW": 8610.66044956,
+     "busLoadW": 782.524,
+     "batteryStateOfCharge": 0.619787532685,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 780,
+     "attitudeErrorDeg": 0.00877858636315,
+     "bodyRateDegSec": 0.000185580277741,
+     "wheelMomentumNms": 7.432,
+     "relativePositionM": [
+      714.666666667,
+      44.016642033,
+      3.74241043472
+     ],
+     "generatedPowerW": 8471.3758228,
+     "busLoadW": 787.276,
+     "batteryStateOfCharge": 0.62893527057,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 840,
+     "attitudeErrorDeg": 0.00564780321998,
+     "bodyRateDegSec": 0.000129474966366,
+     "wheelMomentumNms": 7.696,
+     "relativePositionM": [
+      677.333333333,
+      44.7534852916,
+      1.88151233882
+     ],
+     "generatedPowerW": 8324.27779067,
+     "busLoadW": 792.028,
+     "batteryStateOfCharge": 0.637902234606,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 900,
+     "attitudeErrorDeg": 0.00365152775126,
+     "bodyRateDegSec": 0.0000903316188523,
+     "wheelMomentumNms": 7.96,
+     "relativePositionM": [
+      640,
+      45,
+      1.10218211923e-15
+     ],
+     "generatedPowerW": 8170.083,
+     "busLoadW": 796.78,
+     "batteryStateOfCharge": 0.646679976273,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 960,
+     "attitudeErrorDeg": 0.00237864631402,
+     "bodyRateDegSec": 0.0000630222319689,
+     "wheelMomentumNms": 8.224,
+     "relativePositionM": [
+      602.666666667,
+      44.7534852916,
+      -1.88151233882
+     ],
+     "generatedPowerW": 8009.54267231,
+     "busLoadW": 801.532,
+     "batteryStateOfCharge": 0.655260941359,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1020,
+     "attitudeErrorDeg": 0.00156702127596,
+     "bodyRateDegSec": 0.0000439691192609,
+     "wheelMomentumNms": 8.488,
+     "relativePositionM": [
+      565.333333333,
+      44.016642033,
+      -3.74241043472
+     ],
+     "generatedPowerW": 7843.43894395,
+     "busLoadW": 806.284,
+     "batteryStateOfCharge": 0.663638506768,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1080,
+     "attitudeErrorDeg": 0.00104950630313,
+     "bodyRateDegSec": 0.0000306762135865,
+     "wheelMomentumNms": 8.752,
+     "relativePositionM": [
+      528,
+      42.7975432333,
+      -5.56230589875
+     ],
+     "generatedPowerW": 7672.58105556,
+     "busLoadW": 811.036,
+     "batteryStateOfCharge": 0.671807012787,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1140,
+     "attitudeErrorDeg": 0.000719524187563,
+     "bodyRateDegSec": 0.0000214020679928,
+     "wheelMomentumNms": 9.016,
+     "relativePositionM": [
+      490.666666667,
+      41.1095455939,
+      -7.32125957536
+     ],
+     "generatedPowerW": 7497.80140963,
+     "busLoadW": 815.788,
+     "batteryStateOfCharge": 0.679761790656,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1200,
+     "attitudeErrorDeg": 0.000509118301149,
+     "bodyRateDegSec": 0.0000149317161675,
+     "wheelMomentumNms": 9.28,
+     "relativePositionM": [
+      453.333333333,
+      38.9711431703,
+      -9
+     ],
+     "generatedPowerW": 7319.95151501,
+     "busLoadW": 820.54,
+     "batteryStateOfCharge": 0.687499185316,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1260,
+     "attitudeErrorDeg": 0.000374957584704,
+     "bodyRateDegSec": 0.0000104175048777,
+     "wheelMomentumNms": 9.544,
+     "relativePositionM": [
+      416,
+      36.4057647469,
+      -10.5801345413
+     ],
+     "generatedPowerW": 7139.8978385,
+     "busLoadW": 825.292,
+     "batteryStateOfCharge": 0.695016573219,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1320,
+     "attitudeErrorDeg": 0.000289412935057,
+     "bodyRateDegSec": 0.0000072680465299,
+     "wheelMomentumNms": 9.808,
+     "relativePositionM": [
+      378.666666667,
+      33.4415171465,
+      -12.0443509145
+     ],
+     "generatedPowerW": 6958.51758353,
+     "busLoadW": 830.044,
+     "batteryStateOfCharge": 0.702312375104,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1380,
+     "attitudeErrorDeg": 0.000234867258222,
+     "bodyRateDegSec": 0.00000507074400069,
+     "wheelMomentumNms": 10.072,
+     "relativePositionM": [
+      341.333333333,
+      30.1108772861,
+      -13.3766068586
+     ],
+     "generatedPowerW": 6776.69441647,
+     "busLoadW": 834.796,
+     "batteryStateOfCharge": 0.709386063696,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1440,
+     "attitudeErrorDeg": 0.000200087399122,
+     "bodyRateDegSec": 0.00000353773804485,
+     "wheelMomentumNms": 10.336,
+     "relativePositionM": [
+      304,
+      26.4503363532,
+      -14.5623058987
+     ],
+     "generatedPowerW": 6595.3141615,
+     "busLoadW": 839.548,
+     "batteryStateOfCharge": 0.716238166269,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1500,
+     "attitudeErrorDeg": 0.000177910781851,
+     "bodyRateDegSec": 0.00000246819608173,
+     "wheelMomentumNms": 10.6,
+     "relativePositionM": [
+      266.666666667,
+      22.5,
+      -15.5884572681
+     ],
+     "generatedPowerW": 6415.26048499,
+     "busLoadW": 844.3,
+     "batteryStateOfCharge": 0.722870262084,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1560,
+     "attitudeErrorDeg": 0.000163770346371,
+     "bodyRateDegSec": 0.00000172200197433,
+     "wheelMomentumNms": 10.864,
+     "relativePositionM": [
+      229.333333333,
+      18.3031489384,
+      -16.4438182376
+     ],
+     "generatedPowerW": 6237.41059037,
+     "busLoadW": 849.052,
+     "batteryStateOfCharge": 0.729284974692,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1620,
+     "attitudeErrorDeg": 0.000154754006633,
+     "bodyRateDegSec": 0.00000120140001094,
+     "wheelMomentumNms": 11.128,
+     "relativePositionM": [
+      192,
+      13.9057647469,
+      -17.1190172933
+     ],
+     "generatedPowerW": 6062.63094444,
+     "busLoadW": 853.804,
+     "batteryStateOfCharge": 0.735485959149,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1680,
+     "attitudeErrorDeg": 0.000149004934591,
+     "bodyRateDegSec": 8.38188345771e-7,
+     "wheelMomentumNms": 11.392,
+     "relativePositionM": [
+      154.666666667,
+      9.3560260868,
+      -17.6066568132
+     ],
+     "generatedPowerW": 5891.77305605,
+     "busLoadW": 858.556,
+     "batteryStateOfCharge": 0.741477884216,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1740,
+     "attitudeErrorDeg": 0.000145339164412,
+     "bodyRateDegSec": 5.84784165633e-7,
+     "wheelMomentumNms": 11.656,
+     "relativePositionM": [
+      117.333333333,
+      4.70378084704,
+      -17.9013941166
+     ],
+     "generatedPowerW": 5725.66932769,
+     "busLoadW": 863.308,
+     "batteryStateOfCharge": 0.747266409606,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 1800,
+     "attitudeErrorDeg": 0.000143001766148,
+     "bodyRateDegSec": 4.07990068223e-7,
+     "wheelMomentumNms": 11.92,
+     "relativePositionM": [
+      80,
+      5.51091059616e-15,
+      -18
+     ],
+     "generatedPowerW": 5565.129,
+     "busLoadW": 868.06,
+     "batteryStateOfCharge": 0.752858158416,
+     "sensorNoiseArcsec": 5,
+     "pointingMode": "fine-track"
+    }
+   ]
+  }
+ },
+ "lowPower": {
+  "request": {
+   "scenarioId": "low-power",
+   "durationSeconds": 900,
+   "stepSeconds": 45,
+   "initialAttitudeErrorDeg": 0.3,
+   "bodyRateDegSec": 0,
+   "wheelMomentumNms": 0,
+   "batteryStateOfCharge": 0.02,
+   "solarArrayAreaM2": 0.5,
+   "sensorNoiseArcsec": 0
+  },
+  "response": {
+   "provider": "com.digitalarsenal.basilisk.runtime",
+   "scenarioId": "low-power",
+   "status": "nominal",
+   "products": [
+    "attitude",
+    "power",
+    "sensor"
+   ],
+   "assumptions": [
+    "deterministic Basilisk runtime replay surface",
+    "power balance uses fixed solar efficiency and bus load",
+    "sensor noise floor is reported with each attitude sample"
+   ],
+   "telemetry": [
+    {
+     "elapsedSeconds": 0,
+     "attitudeErrorDeg": 0.3,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      1200,
+      0,
+      18
+     ],
+     "generatedPowerW": 157.876,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.02,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 45,
+     "attitudeErrorDeg": 0.214065592412,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      1144,
+      7.03955092681,
+      17.7783901307
+     ],
+     "generatedPowerW": 157.816500018,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0195605504464,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 90,
+     "attitudeErrorDeg": 0.152746926182,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      1088,
+      13.9057647469,
+      17.1190172933
+     ],
+     "generatedPowerW": 157.638163157,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0191209416635,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 135,
+     "attitudeErrorDeg": 0.108992870808,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      1032,
+      20.4295724883,
+      16.0381174354
+     ],
+     "generatedPowerW": 157.341478226,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0186810679834,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 180,
+     "attitudeErrorDeg": 0.0777720781938,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      976,
+      26.4503363532,
+      14.5623058987
+     ],
+     "generatedPowerW": 156.927258419,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0182408244641,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 225,
+     "attitudeErrorDeg": 0.0554944199722,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      920,
+      31.8198051534,
+      12.7279220614
+     ],
+     "generatedPowerW": 156.396639082,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0178001071776,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 270,
+     "attitudeErrorDeg": 0.0395981529563,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      864,
+      36.4057647469,
+      10.5801345413
+     ],
+     "generatedPowerW": 155.751074606,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0173588134942,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 315,
+     "attitudeErrorDeg": 0.0282553402367,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      808,
+      40.0952935885,
+      8.17182899531
+     ],
+     "generatedPowerW": 154.992334439,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0169168423642,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 360,
+     "attitudeErrorDeg": 0.0201616538219,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      752,
+      42.7975432333,
+      5.56230589875
+     ],
+     "generatedPowerW": 154.122498234,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0164740945948,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 405,
+     "attitudeErrorDeg": 0.014386387898,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      696,
+      44.4459753268,
+      2.81582037072
+     ],
+     "generatedPowerW": 153.143950154,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0160304731217,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 450,
+     "attitudeErrorDeg": 0.0102654354935,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      640,
+      45,
+      1.10218211923e-15
+     ],
+     "generatedPowerW": 152.059372328,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0155858832756,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 495,
+     "attitudeErrorDeg": 0.00732492176761,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      584,
+      44.4459753268,
+      -2.81582037072
+     ],
+     "generatedPowerW": 150.871737511,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0151402330412,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 540,
+     "attitudeErrorDeg": 0.00522671239185,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      528,
+      42.7975432333,
+      -5.56230589875
+     ],
+     "generatedPowerW": 149.584300926,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0146934333099,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 585,
+     "attitudeErrorDeg": 0.00372953094843,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      472,
+      40.0952935885,
+      -8.17182899531
+     ],
+     "generatedPowerW": 148.200591348,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0142453981236,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 630,
+     "attitudeErrorDeg": 0.00266121417298,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      416,
+      36.4057647469,
+      -10.5801345413
+     ],
+     "generatedPowerW": 146.724401428,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0137960449106,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 675,
+     "attitudeErrorDeg": 0.00189891462825,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      360,
+      31.8198051534,
+      -12.7279220614
+     ],
+     "generatedPowerW": 145.159777301,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0133452947118,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 720,
+     "attitudeErrorDeg": 0.00135497428278,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      304,
+      26.4503363532,
+      -14.5623058987
+     ],
+     "generatedPowerW": 143.511007493,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.012893072397,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 765,
+     "attitudeErrorDeg": 0.000966844575157,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      248,
+      20.4295724883,
+      -16.0381174354
+     ],
+     "generatedPowerW": 141.782611166,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0124393068713,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 810,
+     "attitudeErrorDeg": 0.000689893855837,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      192,
+      13.9057647469,
+      -17.1190172933
+     ],
+     "generatedPowerW": 139.979325735,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0119839312693,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 855,
+     "attitudeErrorDeg": 0.000492275123171,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      136,
+      7.03955092681,
+      -17.7783901307
+     ],
+     "generatedPowerW": 138.10609388,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.0115268831388,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    },
+    {
+     "elapsedSeconds": 900,
+     "attitudeErrorDeg": 0.000351263886237,
+     "bodyRateDegSec": 0,
+     "wheelMomentumNms": 0,
+     "relativePositionM": [
+      80,
+      5.51091059616e-15,
+      -18
+     ],
+     "generatedPowerW": 136.16805,
+     "busLoadW": 650,
+     "batteryStateOfCharge": 0.011068104612,
+     "sensorNoiseArcsec": 0,
+     "pointingMode": "fine-track"
+    }
+   ]
+  }
+ }
+}

@@ -1,44 +1,62 @@
-// The uncertainty_model frame (CAU1) from an analysis/gp-error-model model
-// and its calibration labels: regimes, age bins, and per stratum the clipped
-// RTN covariance (km, km/s), whether the calibration gate passed and its
-// reference. Layout in src/cpp/src/plugin_invoke_bridge.cpp.
+// The uncertainty_model record ($ERM, MODEL arm) from an analysis/gp-error-model
+// model and its calibration labels: the regimes and age bins
+// (STRATA_SETTINGS), and per stratum the RTN covariance (CLIPPED.COVARIANCE
+// when the model clipped it, else COVARIANCE; km, km/s), CALIBRATION
+// Calibrated where the calibration gate passed, and its reference
+// (CALIBRATION_REFERENCE). The module reads it in
+// src/cpp/src/plugin_invoke_bridge.cpp (empiricalModel). A model that is
+// already an $ERM record (gp-error-model's typed output) is passed through.
 //
-// usage: node scripts/uncertainty-model.mjs <model.json> [<calibration.json>] <out.cau1>
+// usage: node scripts/uncertainty-model.mjs <model.json | model.erm> [<calibration.json>] <out.erm>
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import * as flatbuffers from 'flatbuffers';
+import {
+  ERM, ERMAgeBinT, ERMClippedStatisticsT, ERMModelStratumT, ERMModelT, ERMRegimeT, ERMStrataSettingsT, ERMT, covarianceCalibration,
+} from '../src/js/sds/ERM.mjs';
+
+export const isErm = (bytes) => bytes?.length >= 8 && ERM.bufferHasIdentifier(new flatbuffers.ByteBuffer(bytes));
 
 export function uncertaintyModelFrame(model, calibration = null, label = '') {
-  if (model?.kind !== 'gp-error-model') throw new Error('model must be a gp-error-model');
-  const parts = [];
-  const u32 = (v) => { const b = Buffer.alloc(4); b.writeUInt32LE(v); parts.push(b); };
-  const f64 = (v) => { const b = Buffer.alloc(8); b.writeDoubleLE(v); parts.push(b); };
-  const text = (s) => { const b = Buffer.from(s, 'utf8'); u32(b.length); parts.push(b, Buffer.alloc((4 - (b.length % 4)) % 4)); };
-  parts.push(Buffer.from('CAU1'));
-  text(label);
-  u32(model.regimes.length);
-  for (const r of model.regimes) [r.altitudeKm[0], r.altitudeKm[1], r.eccentricity[0], r.eccentricity[1]].forEach((x) => f64(Math.min(x, 1e300)));
-  u32(model.ageBinsDays.length);
-  for (const [lo, hi] of model.ageBinsDays) { f64(lo); f64(hi); }
-  const labels = new Map((calibration?.strata ?? []).map((s) => [`${s.regimeIndex}/${s.ageIndex}`, s]));
-  const strata = model.strata.filter((s) => (s.clipped?.covariance ?? s.covariance)?.length === 21);
-  u32(strata.length);
-  for (const s of strata) {
-    u32(s.regimeIndex);
-    u32(s.ageIndex);
-    (s.clipped?.covariance ?? s.covariance).forEach(f64);
-    const gate = labels.get(`${s.regimeIndex}/${s.ageIndex}`);
-    u32(gate?.label === 'CALIBRATED' ? 1 : 0);
-    text(gate?.label === 'CALIBRATED' ? gate.reference : '');
+  if (model instanceof Uint8Array) {
+    if (!isErm(model) || !ERM.getRootAsERM(new flatbuffers.ByteBuffer(model)).MODEL()) throw new Error('model must be an $ERM MODEL');
+    return model;
   }
-  return Buffer.concat(parts);
+  if (model?.kind !== 'gp-error-model') throw new Error('model must be a gp-error-model');
+  const labels = new Map((calibration?.strata ?? []).map((s) => [`${s.regimeIndex}/${s.ageIndex}`, s]));
+  const settings = new ERMStrataSettingsT();
+  settings.REGIMES = model.regimes.map((r) => Object.assign(new ERMRegimeT(), {
+    ID: r.id ?? null, ALTITUDE_MIN_KM: r.altitudeKm[0], ALTITUDE_MAX_KM: r.altitudeKm[1],
+    ECCENTRICITY_MIN: r.eccentricity[0], ECCENTRICITY_MAX: r.eccentricity[1] }));
+  settings.AGE_BINS = model.ageBinsDays.map(([lo, hi]) => Object.assign(new ERMAgeBinT(), { MIN_DAYS: lo, MAX_DAYS: hi }));
+  const m = new ERMModelT();
+  m.LABEL = label;
+  m.STRATA_SETTINGS = settings;
+  m.STRATA = model.strata.map((s) => {
+    const t = Object.assign(new ERMModelStratumT(), { REGIME_INDEX: s.regimeIndex, AGE_INDEX: s.ageIndex, COVARIANCE: s.covariance ?? [] });
+    if (s.clipped?.covariance) t.CLIPPED = Object.assign(new ERMClippedStatisticsT(), { COVARIANCE: s.clipped.covariance });
+    const gate = labels.get(`${s.regimeIndex}/${s.ageIndex}`);
+    if (gate?.label === 'CALIBRATED') {
+      t.CALIBRATION = covarianceCalibration.Calibrated;
+      t.CALIBRATION_REFERENCE = gate.reference ?? '';
+    }
+    return t;
+  });
+  const erm = new ERMT();
+  erm.MODEL = m;
+  const b = new flatbuffers.Builder(4096);
+  b.finish(erm.pack(b), '$ERM');
+  return b.asUint8Array().slice();
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  if (args.length < 2) throw new Error('usage: uncertainty-model.mjs <model.json> [<calibration.json>] <out.cau1>');
+  if (args.length < 2) throw new Error('usage: uncertainty-model.mjs <model.json | model.erm> [<calibration.json>] <out.erm>');
   const out = args.pop();
-  const [model, calibration] = args.map((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
+  const raw = new Uint8Array(fs.readFileSync(args[0]));
+  const model = isErm(raw) ? raw : JSON.parse(new TextDecoder().decode(raw));
+  const calibration = args[1] ? JSON.parse(fs.readFileSync(args[1], 'utf8')) : null;
   const label = `${args[0]}${calibration ? `; calibration ${args[1]}` : ''}`;
   fs.writeFileSync(out, uncertaintyModelFrame(model, calibration, label));
-  console.log(`${out}: ${model.strata.length} strata, ${(calibration?.strata ?? []).filter((s) => s.label === 'CALIBRATED').length} calibrated`);
+  console.log(`${out}: $ERM MODEL${isErm(raw) ? ' (passed through)' : `, ${model.strata.length} strata, ${(calibration?.strata ?? []).filter((s) => s.label === 'CALIBRATED').length} calibrated`}`);
 }

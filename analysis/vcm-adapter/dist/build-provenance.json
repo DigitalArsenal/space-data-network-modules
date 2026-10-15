@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.244.0",
+  "spacedatastandards": "1.249.0",
   "sdsFamilies": [
     "RFM",
     "FRM",
@@ -15,7 +15,10 @@
     "SPW",
     "PRW",
     "ATM",
-    "OCM"
+    "CVR",
+    "PVN",
+    "OCM",
+    "FIL"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",

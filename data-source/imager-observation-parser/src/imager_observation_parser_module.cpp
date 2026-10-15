@@ -1,5 +1,5 @@
 /*
- * data-source/imager-observation-parser.
+ * data-source/imager-observation-parser (typed contracts 1.0).
  *
  * A pure parser flow node (capabilities: none) for geostationary imager observations: each fetched NetCDF4 file of a
  * GOES ABI L1b/L2 product (NOAA Open Data Dissemination, anonymous public buckets) becomes its field's world product -
@@ -18,10 +18,19 @@
  * deflate via the vendored miniz, shuffle), the values as netCDF4's mask-and-scale gives them, chunk by chunk.
  *
  * Method:
- *   parse : jobs[k] + responses[k] -> wxf_meta + wxf_records
- *       Paired by position (the request builder emitted them in the same order); a count mismatch is refused. A file
- *       fetched as byte ranges arrives as consecutive parts 0 .. n-1 and is joined before it is read. All files of the
- *       invocation make one ingest batch: one meta frame and one record stream.
+ *   parse : responses (HttpResponse, HRSP) -> wxf_meta (IngestRequest, INGQ) + wxf_records ($WXF stream)
+ *       Each response echoes, in CONTEXT, the file job imager-observation-source:select_files put on its request: one
+ *       size-prefixed $WXF header record - FIELD_ID the field, VARIABLE_NAME the NetCDF variable, SENSOR_ID, DATASET_ID
+ *       the bucket, SOURCE_URL the object's https URL (the key follows the host), ORIGIN_ID, LICENSE_URL, CITATION,
+ *       VALID_TIME_MS the frame hour, TILE_INDEX / TILE_COUNT the byte-range part / parts. A file fetched as byte ranges
+ *       arrives a part an invocation, in order, and is appended until whole (held once). All files of the invocation make one
+ *       ingest batch: one IngestRequest and one record stream.
+ *   The widths are node config (imager_widths, default "4096,2048,1024"), read through plugin.getConfig (SDS $PIV,
+ *   the builtin; no capability). The lane's attribution the $WXF job has no field for is this family's constant: the
+ *   provider noaa-goes, the source <bucket>-world, the licence LicenseRef-NOAA-Open-Data.
+ *
+ * No JSON and no base64: the meta is an IngestRequest (SCHEMA, TAGS, RECONCILE Duplicates, PROVENANCE), the batch id
+ * the SHA-256 of the fetched file bytes as before.
  */
 #include <algorithm>
 #include <cctype>
@@ -33,26 +42,26 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
 
 namespace {
 
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
+
 constexpr const char* kContentKeyID = "public";
+constexpr const char* kParser = "imager-observation-parser";
 constexpr const char* kParserVersion = "imager-observation-parser/v1";
-
-// ---------------------------------------------------------------------------
-// String / JSON / base64 / SHA-256 / date helpers, frame IO and the hostcap/http-request response decoder: the same
-// code as data-source/weathernext-parser (control metadata only; record bodies never pass through JSON).
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// Small string / JSON helpers (control metadata only).
-// ---------------------------------------------------------------------------
+constexpr const char* kProviderID = "noaa-goes";
+constexpr const char* kLicenseID = "LicenseRef-NOAA-Open-Data";
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -61,236 +70,6 @@ std::string trim(const std::string& s) {
     while (b < e && is_ws(s[b])) b++;
     while (e > b && is_ws(s[e - 1])) e--;
     return s.substr(b, e - b);
-}
-
-std::string lower(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-    }
-    return out;
-}
-
-std::string upper(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-    }
-    return out;
-}
-
-// Position just past the colon of "key": at the first occurrence, or npos.
-size_t json_value_start(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string::npos;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string::npos;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    return i;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else if (n == 'u' && i + 5 < json.size()) {
-                const long cp = std::strtol(json.substr(i + 2, 4).c_str(), nullptr, 16);
-                value.push_back(cp < 0x80 ? static_cast<char>(cp) : '?');
-                i += 4;
-            } else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0) { *out = true; return true; }
-    if (json.compare(i, 5, "false") == 0) { *out = false; return true; }
-    return false;
-}
-
-std::string json_bracketed_slice(const std::string& json, const std::string& key, char open, char close) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != open) return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == open) depth++;
-        else if (c == close) {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '{', '}');
-}
-
-std::string json_array_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '[', ']');
-}
-
-// Numbers of a flat JSON array slice "[1, 2, 3]".
-std::vector<double> json_number_array(const std::string& slice) {
-    std::vector<double> out;
-    size_t i = 0;
-    while (i < slice.size()) {
-        const char c = slice[i];
-        if (c == '-' || (c >= '0' && c <= '9')) {
-            char* end = nullptr;
-            const double v = strtod(slice.c_str() + i, &end);
-            const size_t consumed = static_cast<size_t>(end - (slice.c_str() + i));
-            if (consumed == 0) break;
-            out.push_back(v);
-            i += consumed;
-        } else {
-            i++;
-        }
-    }
-    return out;
-}
-
-// Strings of a flat JSON array slice "[\"a\", \"b\"]".
-std::vector<std::string> json_string_array(const std::string& slice) {
-    std::vector<std::string> out;
-    for (size_t i = 0; i < slice.size(); i++) {
-        if (slice[i] != '"') continue;
-        std::string value;
-        size_t j = i + 1;
-        while (j < slice.size() && slice[j] != '"') {
-            if (slice[j] == '\\' && j + 1 < slice.size()) {
-                value.push_back(slice[j + 1]);
-                j += 2;
-            } else {
-                value.push_back(slice[j]);
-                j++;
-            }
-        }
-        out.push_back(value);
-        i = j;
-    }
-    return out;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (standard alphabet).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +175,7 @@ void normalized_hash_record(Sha256* h, const char* schema, const std::vector<uin
     h->update(&z, 1);
 }
 
+
 // ---------------------------------------------------------------------------
 // Civil time — UTC only. Epochs are Unix milliseconds throughout.
 // ---------------------------------------------------------------------------
@@ -410,58 +190,6 @@ int64_t days_from_civil(int64_t y, int m, int d) {
     return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
 
-void civil_from_days(int64_t z, int* y_out, int* m_out, int* d_out) {
-    z += 719468;
-    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-    const unsigned doe = static_cast<unsigned>(z - era * 146097);
-    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    const int64_t y = static_cast<int64_t>(yoe) + era * 400;
-    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    const unsigned mp = (5 * doy + 2) / 153;
-    const unsigned d = doy - (153 * mp + 2) / 5 + 1;
-    const unsigned m = mp + (mp < 10 ? 3 : -9);
-    *y_out = static_cast<int>(y + (m <= 2));
-    *m_out = static_cast<int>(m);
-    *d_out = static_cast<int>(d);
-}
-
-// ISO 8601 UTC: YYYY-MM-DD[T ]HH:MM[:SS[.fff]][Z] or bare YYYY-MM-DD.
-bool parse_iso_ms(const std::string& raw_in, int64_t* out_ms) {
-    const std::string raw = trim(raw_in);
-    if (raw.size() < 10 || raw[4] != '-' || raw[7] != '-') return false;
-    const int y = atoi(raw.substr(0, 4).c_str());
-    const int mo = atoi(raw.substr(5, 2).c_str());
-    const int d = atoi(raw.substr(8, 2).c_str());
-    int hh = 0, mm = 0;
-    double ss = 0;
-    if (raw.size() >= 16 && (raw[10] == 'T' || raw[10] == ' ') && raw[13] == ':') {
-        hh = atoi(raw.substr(11, 2).c_str());
-        mm = atoi(raw.substr(14, 2).c_str());
-        if (raw.size() >= 19 && raw[16] == ':') ss = strtod(raw.substr(17).c_str(), nullptr);
-    } else if (raw.size() != 10) {
-        return false;
-    }
-    if (y < 1600 || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
-    const int64_t seconds = days_from_civil(y, mo, d) * 86400 + hh * 3600 + mm * 60;
-    *out_ms = seconds * 1000 + static_cast<int64_t>(std::llround(ss * 1000.0));
-    return true;
-}
-
-std::string format_iso_seconds(int64_t unix_ms) {
-    const int64_t unix_seconds = unix_ms >= 0 ? unix_ms / 1000 : (unix_ms - 999) / 1000;
-    const int64_t days = unix_seconds >= 0 ? unix_seconds / 86400
-                                           : (unix_seconds - 86399) / 86400;
-    int64_t rem = unix_seconds - days * 86400;
-    int y, m, d;
-    civil_from_days(days, &y, &m, &d);
-    const int hh = static_cast<int>(rem / 3600);
-    rem -= static_cast<int64_t>(hh) * 3600;
-    const int mm = static_cast<int>(rem / 60);
-    const int ss = static_cast<int>(rem - mm * 60);
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ", y, m, d, hh, mm, ss);
-    return std::string(buf);
-}
 
 int64_t now_unix_ms() {
     struct timeval tv;
@@ -491,22 +219,10 @@ bool parse_http_date(const std::string& raw, int64_t* out_ms) {
     return true;
 }
 
-std::string format_number(double v) {
-    if (std::isfinite(v) && v == std::floor(v) && std::fabs(v) < 1e15) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
-        return buf;
-    }
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.15g", v);
-    if (strtod(buf, nullptr) != v) std::snprintf(buf, sizeof(buf), "%.17g", v);
-    return buf;
-}
 
 // ---------------------------------------------------------------------------
 // Frame IO helpers.
 // ---------------------------------------------------------------------------
-
 const plugin_input_frame_t* frame_at(const char* port, uint32_t ordinal) {
     const int32_t idx = plugin_find_input_index(port, ordinal);
     if (idx < 0) return nullptr;
@@ -523,25 +239,6 @@ std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
     return out;
 }
 
-std::string frame_text(const plugin_input_frame_t* frame) {
-    if (!frame || !frame->payload || frame->payload_length == 0) return std::string();
-    return std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-}
-
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
-}
-
-// The record streams declare their concrete SDS identity on the port, so the
 // frame must carry it too (schema name, file identifier and root type).
 int push_record_stream(const char* port, const char* schema, const char* identifier,
                        const char* root, const std::vector<uint8_t>& bytes) {
@@ -559,144 +256,13 @@ void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_
 }
 
 // A decoded hostcap/http-request response: the default JSON lane
-// {status, headers, bodyB64} or the raw-body-v1 lane
-// ("$HRB" + int32le status + body, no headers).
-struct HttpResponse {
-    long status = 0;
-    std::string etag;
-    std::string last_modified;
-    std::string content_type;
-    std::string date;
-    std::vector<uint8_t> body;
-};
-
-void read_header(const std::string& headers, const char* lower_name, const char* title_name,
-                 std::string* out) {
-    if (json_string_field(headers, lower_name, out) && !out->empty()) return;
-    json_string_field(headers, title_name, out);
-}
-
-bool decode_http_response(const plugin_input_frame_t* frame, HttpResponse* out, std::string* err) {
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        *err = "http response frame is empty.";
-        return false;
-    }
-    const uint8_t* p = frame->payload;
-    if (frame->payload_length >= 8 && p[0] == '$' && p[1] == 'H' && p[2] == 'R' && p[3] == 'B') {
-        const uint32_t raw_status = static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
-                                    (static_cast<uint32_t>(p[6]) << 16) |
-                                    (static_cast<uint32_t>(p[7]) << 24);
-        out->status = static_cast<int32_t>(raw_status);
-        out->body.assign(p + 8, p + frame->payload_length);
-        return true;
-    }
-    const std::string json = frame_text(frame);
-    double status = 0;
-    if (!json_number_field(json, "status", &status)) {
-        *err = "http response frame carries no status.";
-        return false;
-    }
-    out->status = static_cast<long>(status);
-    const std::string headers = json_object_slice(json, "headers");
-    read_header(headers, "etag", "ETag", &out->etag);
-    read_header(headers, "last-modified", "Last-Modified", &out->last_modified);
-    read_header(headers, "content-type", "Content-Type", &out->content_type);
-    read_header(headers, "date", "Date", &out->date);
-    std::string body_b64;
-    if (json_string_field(json, "bodyB64", &body_b64) && !body_b64.empty()) {
-        if (!base64_decode(body_b64, &out->body)) {
-            *err = "http response bodyB64 is not valid base64.";
-            return false;
-        }
-    }
-    return true;
-}
-
-int64_t retrieved_at_ms(const HttpResponse& response) {
-    int64_t ms = 0;
-    if (!response.date.empty() && parse_http_date(response.date, &ms)) return ms;
-    return now_unix_ms();
-}
-
-// ---------------------------------------------------------------------------
-// Ingest meta + provenance (storage.ingest_with_source contract).
-// ---------------------------------------------------------------------------
-
-
-struct Attribution {
-    std::string provider_id;
-    std::string source_name;
-    std::string source_url;
-    std::string origin_id;
-    std::string dataset_id;
-    std::string license_class;
-    std::string license_url;
-    std::string citation;
-    std::string archive_source;
-    std::string archive_name;
-};
-
-void read_attribution(const std::string& job, Attribution* out) {
-    json_string_field(job, "provider_id", &out->provider_id);
-    json_string_field(job, "source_name", &out->source_name);
-    json_string_field(job, "source_url", &out->source_url);
-    json_string_field(job, "origin_id", &out->origin_id);
-    json_string_field(job, "dataset_id", &out->dataset_id);
-    json_string_field(job, "license_class", &out->license_class);
-    json_string_field(job, "license_url", &out->license_url);
-    json_string_field(job, "citation", &out->citation);
-    json_string_field(job, "archive_source", &out->archive_source);
-    json_string_field(job, "archive_name", &out->archive_name);
-}
-
-
-std::string build_provenance_json(const char* parser_version, const std::string& source_url,
-                                  long status, const HttpResponse& response,
-                                  const std::string& source_sha256,
-                                  const std::string& normalized_sha256, int normalized_count,
-                                  const std::string& schema_counts_json, int64_t retrieved_ms) {
-    std::string out = std::string("{\"source_url\":\"") + json_escape(source_url) + "\"" +
-                      ",\"http_status\":" + std::to_string(status);
-    if (!response.etag.empty()) out += ",\"etag\":\"" + json_escape(response.etag) + "\"";
-    if (!response.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(response.last_modified) + "\"";
-    if (!response.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(response.content_type) + "\"";
-    out += std::string(",\"retrieved_at\":\"") + format_iso_seconds(retrieved_ms) + "\"" +
-           ",\"parser_version\":\"" + parser_version + "\"" +
-           ",\"source_sha256\":\"" + source_sha256 + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + std::to_string(normalized_count) +
-           ",\"schema_counts\":" + schema_counts_json +
-           ",\"warnings\":[],\"from_cache\":false}";
-    return out;
-}
-
-
-std::string build_ingest_meta(const char* schema, const Attribution& attribution, const std::string& license_id,
-                              const std::string& source_url, const std::string& batch_id,
-                              const std::string& provenance_json) {
-    return std::string("{\"schema\":\"") + schema + "\"" +
-           ",\"provider_id\":\"" + json_escape(attribution.provider_id) + "\"" +
-           ",\"source_name\":\"" + json_escape(attribution.source_name) + "\"" +
-           ",\"source_url\":\"" + json_escape(source_url) + "\"" +
-           ",\"batch_id\":\"" + batch_id + "\"" +
-           ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-           ",\"source_peer\":\"source:" + json_escape(attribution.origin_id) + "\"" +
-           ",\"reconcile\":\"duplicates\"" +
-           ",\"license\":\"" + json_escape(license_id) + "\"" +
-           ",\"license_url\":\"" + json_escape(attribution.license_url) + "\"" +
-           ",\"citation\":\"" + json_escape(attribution.citation) + "\"" +
-           ",\"provenance\":{\"source\":\"" + json_escape(attribution.source_name) + "\",\"json\":\"" +
-           base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()), provenance_json.size()) + "\"}}";
-}
-
 std::vector<uint8_t> finished_unprefixed(::flatbuffers::FlatBufferBuilder& fbb) {
     // The builder wrote [u32 size][record]; the stream re-prefixes, so strip
     // the four bytes (the identifier then sits at bytes 4..8 of the record).
     const uint8_t* p = fbb.GetBufferPointer();
     return std::vector<uint8_t>(p + 4, p + fbb.GetSize());
 }
+
 
 // ---------------------------------------------------------------------------
 // Imager fields (as the reference producer publishes them: SDS variable and level, units, the step a code holds).
@@ -733,81 +299,140 @@ const FieldSpec* field_spec(const std::string& name) {
     return nullptr;
 }
 
+
 // ---------------------------------------------------------------------------
-// A file job (one per fetched part; a file larger than one response is fetched as consecutive byte ranges).
+// Node CONFIG: plugin.getConfig answers with one ModuleConfig FlatBuffer (MCFG) on raw "config", read in place through
+// sdm_piv::get_config(). The parser reads one key, imager_widths: a comma-separated String, a Number, or a list of
+// Strings or Numbers; absent (or no config) = "4096,2048,1024".
 // ---------------------------------------------------------------------------
 
+std::string width_text(double v) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
+}
+
+bool config_widths(std::vector<int>* widths, std::string* err) {
+    std::vector<std::string> items;
+    const sdm_piv::Config config = sdm_piv::get_config();
+    switch (config.kind("imager_widths", R::configValueKind_TableList)) {
+        case R::configValueKind_String: {
+            std::string current;
+            for (const char c : std::string(config.string("imager_widths")) + ",") {
+                if (c == ',') { if (!trim(current).empty()) items.push_back(trim(current)); current.clear(); }
+                else current.push_back(c);
+            }
+            break;
+        }
+        case R::configValueKind_Number: items.push_back(width_text(config.number("imager_widths"))); break;
+        case R::configValueKind_StringList:
+            for (std::string_view item : config.strings("imager_widths")) items.push_back(trim(std::string(item)));
+            break;
+        case R::configValueKind_NumberList:
+            for (double item : config.numbers("imager_widths")) items.push_back(width_text(item));
+            break;
+        default: break;
+    }
+    if (items.empty()) items = {"4096", "2048", "1024"};
+    for (const std::string& item : items) {
+        const int w = atoi(item.c_str());
+        if (w != 4096 && w != 2048 && w != 1024) { *err = "imager_widths must be 4096, 2048 and/or 1024"; return false; }
+        widths->push_back(w);
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// One fetched part: its HttpResponse (status, provenance headers, body in place) and the file job it echoes.
+// ---------------------------------------------------------------------------
+
+struct Attribution {
+    std::string source_name;
+    std::string origin_id;
+    std::string dataset_id;
+    std::string license_url;
+    std::string citation;
+};
+
 struct FileJob {
-    std::string satellite, sensor, bucket, key, variable, field, license_id, license_class;
+    std::string sensor, bucket, key, url, variable, field;
     int64_t frame_time_ms = 0;
     int part = 0, parts = 1;
     std::vector<int> widths;
     Attribution attribution;
 };
 
-bool read_file_job(const std::string& json, FileJob* job, std::string* err) {
-    json_string_field(json, "satellite", &job->satellite);
-    json_string_field(json, "sensor", &job->sensor);
-    json_string_field(json, "bucket", &job->bucket);
-    json_string_field(json, "key", &job->key);
-    json_string_field(json, "variable", &job->variable);
-    json_string_field(json, "field", &job->field);
-    json_string_field(json, "license", &job->license_id);
-    json_string_field(json, "license_class", &job->license_class);
-    double v = 0;
-    if (json_number_field(json, "frame_time_ms", &v)) job->frame_time_ms = static_cast<int64_t>(v);
-    if (json_number_field(json, "part", &v)) job->part = static_cast<int>(v);
-    if (json_number_field(json, "parts", &v)) job->parts = static_cast<int>(v);
-    std::string widths = "4096,2048,1024";
-    json_string_field(json, "widths", &widths);
-    for (size_t at = 0; at < widths.size();) {
-        const size_t comma = widths.find(',', at);
-        const int w = atoi(widths.substr(at, comma == std::string::npos ? std::string::npos : comma - at).c_str());
-        if (w != 4096 && w != 2048 && w != 1024) { *err = "widths must be 4096, 2048 and/or 1024"; return false; }
-        job->widths.push_back(w);
-        if (comma == std::string::npos) break;
-        at = comma + 1;
-    }
-    read_attribution(json, &job->attribution);
-    if (job->sensor.empty() || job->bucket.empty() || job->key.empty() || job->variable.empty()) {
-        *err = "a file job needs sensor, bucket, key and variable";
-        return false;
-    }
-    if (!field_spec(job->field)) { *err = "unknown field \"" + job->field + "\""; return false; }
-    if (job->frame_time_ms <= 0) { *err = "frame_time_ms is required"; return false; }
-    if (job->parts < 1 || job->part < 0 || job->part >= job->parts) { *err = "part must be 0 .. parts - 1"; return false; }
-    if (job->license_class.empty()) job->license_class = "OpenAttribution";
-    return true;
-}
-
-// A response body without copying it (raw-body-v1: "$HRB" + int32le status + body); the JSON lane decodes into owned.
 struct Body {
     long status = 0;
     const uint8_t* data = nullptr;
     size_t size = 0;
-    std::vector<uint8_t> owned;
-    HttpResponse response;   // (the JSON lane's headers, for provenance)
+    std::string etag, last_modified, content_type, date;
+    uint64_t retrieved_ms = 0;
 };
 
-bool read_body(const plugin_input_frame_t* frame, Body* out, std::string* err) {
-    if (frame && frame->payload && frame->payload_length >= 8 && memcmp(frame->payload, "$HRB", 4) == 0) {
-        const uint8_t* p = frame->payload;
-        out->status = static_cast<int32_t>(static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
-                                           (static_cast<uint32_t>(p[6]) << 16) | (static_cast<uint32_t>(p[7]) << 24));
-        out->data = p + 8;
-        out->size = frame->payload_length - 8;
-        out->response.status = out->status;
-        return true;
+std::string str(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+bool read_part(const plugin_input_frame_t* frame, FileJob* job, Body* body, std::string* code, std::string* err) {
+    *code = "invalid-response-frame";
+    if (!frame || !frame->payload || frame->payload_length == 0) { *err = "http response frame is empty."; return false; }
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!R::VerifyHttpResponseBuffer(verifier)) { *err = "the frame is not an HttpResponse (HRSP)."; return false; }
+    const R::HttpResponse& response = *R::GetHttpResponse(frame->payload);
+    body->status = response.STATUS();
+    if (response.BODY()) { body->data = response.BODY()->data(); body->size = response.BODY()->size(); }
+    if (response.HEADERS()) {
+        for (const auto* h : *response.HEADERS()) {
+            const std::string name = str(h->NAME()), value = str(h->VALUE());
+            if (name == "etag") body->etag = value;
+            else if (name == "last-modified") body->last_modified = value;
+            else if (name == "content-type") body->content_type = value;
+            else if (name == "date") body->date = value;
+        }
     }
-    if (!decode_http_response(frame, &out->response, err)) return false;
-    out->status = out->response.status;
-    out->owned.swap(out->response.body);
-    out->data = out->owned.data();
-    out->size = out->owned.size();
+    body->retrieved_ms = response.RETRIEVED_MS();
+
+    *code = "invalid-file-job";
+    const auto* context = response.CONTEXT();
+    bool ok = false;
+    if (context && context->size()) {
+        flatbuffers::Verifier job_verifier(context->data(), context->size());
+        ok = VerifySizePrefixedWXFBuffer(job_verifier);
+    }
+    if (!ok) { *err = "the response does not echo its file job (a size-prefixed $WXF) in CONTEXT"; return false; }
+    const WXF& w = *GetSizePrefixedWXF(context->data());
+    job->field = str(w.FIELD_ID());
+    job->variable = str(w.VARIABLE_NAME());
+    job->sensor = str(w.SENSOR_ID());
+    job->bucket = str(w.DATASET_ID());
+    job->url = str(w.SOURCE_URL());
+    job->frame_time_ms = static_cast<int64_t>(w.VALID_TIME_MS());
+    job->part = static_cast<int>(w.TILE_INDEX());
+    job->parts = static_cast<int>(w.TILE_COUNT());
+    job->attribution.origin_id = str(w.ORIGIN_ID());
+    job->attribution.dataset_id = job->bucket;
+    job->attribution.license_url = str(w.LICENSE_URL());
+    job->attribution.citation = str(w.CITATION());
+    job->attribution.source_name = job->bucket + "-world";
+    const std::string host = "https://" + job->bucket + ".s3.amazonaws.com/";
+    if (job->url.compare(0, host.size(), host) == 0) job->key = job->url.substr(host.size());
+    if (job->sensor.empty() || job->bucket.empty() || job->key.empty() || job->variable.empty()) {
+        *err = "a file job needs SENSOR_ID, DATASET_ID (bucket), SOURCE_URL (an object of the bucket) and VARIABLE_NAME";
+        return false;
+    }
+    if (!field_spec(job->field)) { *err = "unknown field \"" + job->field + "\""; return false; }
+    if (job->frame_time_ms <= 0) { *err = "VALID_TIME_MS (the frame time) is required"; return false; }
+    if (job->parts < 1 || job->part < 0 || job->part >= job->parts) { *err = "TILE_INDEX must be 0 .. TILE_COUNT - 1"; return false; }
     return true;
 }
 
-// A NetCDF4 chunk inflated with the vendored miniz (zlib stream, exact size).
+// When the part was received: the host's RETRIEVED_MS, else the publisher's Date, else the node's clock.
+int64_t retrieved_at_ms(const Body& body) {
+    if (body.retrieved_ms) return static_cast<int64_t>(body.retrieved_ms);
+    int64_t ms = 0;
+    if (!body.date.empty() && parse_http_date(body.date, &ms)) return ms;
+    return now_unix_ms();
+}
+
 bool inflate_miniz(const uint8_t* in, size_t n, uint8_t* out, size_t out_size) {
     const size_t got = tinfl_decompress_mem_to_mem(out, out_size, in, n, TINFL_FLAG_PARSE_ZLIB_HEADER);
     return got != TINFL_DECOMPRESS_MEM_TO_MEM_FAILED && got == out_size;
@@ -986,6 +611,10 @@ bool world_records(const FileJob& job, const uint8_t* bytes, size_t size, int64_
     return true;
 }
 
+// The file being assembled from its byte-range parts (one part an invocation).
+struct Assembling { std::string key; int parts = 0, next = 0; std::vector<uint8_t> bytes; };
+Assembling g_assembling;
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -994,33 +623,29 @@ bool world_records(const FileJob& job, const uint8_t* bytes, size_t size, int64_
 
 extern "C" {
 
-// parse: jobs[k] + responses[k] (paired by position; a file's byte-range parts consecutive) -> wxf_meta + wxf_records.
+// parse: responses (each echoing its file job; a file's byte-range parts in order, a part an invocation) -> wxf_meta +
+// wxf_records once a file is whole.
 int parse(void) {
-    const std::vector<const plugin_input_frame_t*> job_frames = frames_on("jobs");
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
-    if (job_frames.empty()) {
-        plugin_set_error("missing-job-frame", "parse requires at least one file job frame.");
+    if (response_frames.empty()) {
+        plugin_set_error("missing-response-frame", "parse requires at least one HttpResponse frame on \"responses\".");
         return 400;
     }
-    if (job_frames.size() != response_frames.size()) {
-        const std::string msg = "parse received " + std::to_string(job_frames.size()) + " job frames but " +
-                                std::to_string(response_frames.size()) +
-                                " response frames; jobs and responses pair by position, so a mismatch cannot be attributed and is refused.";
-        plugin_set_error("job-response-count-mismatch", msg.c_str());
+    std::vector<int> widths;
+    std::string widths_err;
+    if (!config_widths(&widths, &widths_err)) {
+        plugin_set_error("invalid-widths", widths_err.c_str());
         return 400;
     }
-    std::vector<FileJob> jobs(job_frames.size());
+    std::vector<FileJob> jobs(response_frames.size());
     std::vector<Body> bodies(response_frames.size());
     for (size_t k = 0; k < jobs.size(); k++) {
-        std::string err;
-        if (!read_file_job(frame_text(job_frames[k]), &jobs[k], &err)) {
-            plugin_set_error("invalid-file-job", ("file job " + std::to_string(k) + ": " + err).c_str());
+        std::string code, err;
+        if (!read_part(response_frames[k], &jobs[k], &bodies[k], &code, &err)) {
+            plugin_set_error(code.c_str(), ("response " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
-        if (!read_body(response_frames[k], &bodies[k], &err)) {
-            plugin_set_error("invalid-response-frame", ("response " + std::to_string(k) + ": " + err).c_str());
-            return 400;
-        }
+        jobs[k].widths = widths;
         const bool ranged = jobs[k].parts > 1;
         if (bodies[k].status != 200 && !(ranged && bodies[k].status == 206)) {
             const std::string msg = jobs[k].key + " part " + std::to_string(jobs[k].part) + " fetch returned HTTP status " +
@@ -1030,49 +655,64 @@ int parse(void) {
         }
     }
 
+    // A file fetched as byte ranges arrives a part an invocation (imager-observation-source select_files): the parts are
+    // appended here as they come and the file is read after its last - held once, never beside its part frames.
     Sha256 batch, normalized;
     std::vector<uint8_t> stream;
     int count = 0;
-    for (size_t k = 0; k < jobs.size();) {
-        // a file: its parts 0 .. parts - 1, consecutive
+    int first_done = -1;
+    for (size_t k = 0; k < jobs.size(); k++) {
         const FileJob& job = jobs[k];
-        if (job.part != 0 || k + job.parts > jobs.size()) {
-            plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive together, in order").c_str());
-            return 400;
-        }
-        for (int p = 1; p < job.parts; p++) {
-            if (jobs[k + p].key != job.key || jobs[k + p].part != p || jobs[k + p].parts != job.parts) {
-                plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive together, in order").c_str());
-                return 400;
-            }
-        }
         const uint8_t* bytes = bodies[k].data;
         size_t size = bodies[k].size;
-        std::vector<uint8_t> joined;
         if (job.parts > 1) {
-            for (int p = 0; p < job.parts; p++) size += p ? bodies[k + p].size : 0;
-            joined.reserve(size);
-            for (int p = 0; p < job.parts; p++) joined.insert(joined.end(), bodies[k + p].data, bodies[k + p].data + bodies[k + p].size);
-            bytes = joined.data();
+            if (job.part == 0) { g_assembling = Assembling(); g_assembling.key = job.key; g_assembling.parts = job.parts; }
+            if (g_assembling.key != job.key || g_assembling.parts != job.parts || g_assembling.next != job.part) {
+                g_assembling = Assembling();
+                plugin_set_error("incomplete-file", (job.key + ": its byte-range parts must arrive in order, 0 .. parts - 1").c_str());
+                return 400;
+            }
+            g_assembling.bytes.insert(g_assembling.bytes.end(), bytes, bytes + size);
+            g_assembling.next++;
+            if (job.part + 1 < job.parts) continue;   // more parts to come
+            bytes = g_assembling.bytes.data();
+            size = g_assembling.bytes.size();
         }
         batch.update(bytes, size);
         std::string code, message;
-        if (!world_records(job, bytes, size, retrieved_at_ms(bodies[k].response), &stream, &normalized, &count, &code, &message)) {
+        const bool ok = world_records(job, bytes, size, retrieved_at_ms(bodies[k]), &stream, &normalized, &count, &code, &message);
+        if (job.parts > 1) g_assembling = Assembling();   // (the file's bytes released)
+        if (!ok) {
             plugin_set_error(code.c_str(), message.c_str());
             return 422;
         }
-        k += static_cast<size_t>(job.parts);
+        if (first_done < 0) first_done = static_cast<int>(k);
     }
+    if (first_done < 0) return 0;   // only leading parts of a file so far
 
     const std::string batch_id = batch.hex_digest();
-    const FileJob& first = jobs[0];
+    const FileJob& first = jobs[static_cast<size_t>(first_done)];
+    const Body& first_body = bodies[static_cast<size_t>(first_done)];
     const std::string source_url = "s3://" + first.bucket + "/" + first.key;
-    const int64_t retrieved = retrieved_at_ms(bodies[0].response);
-    const std::string provenance = build_provenance_json(kParserVersion, source_url, 200, bodies[0].response, batch_id,
-                                                         normalized.hex_digest(), count,
-                                                         "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved);
-    const std::string meta = build_ingest_meta("WXF.fbs", first.attribution, first.license_id, source_url, batch_id, provenance);
-    if (push_json("wxf_meta", meta) < 0) return 500;
+    const std::string source_peer = "source:" + first.attribution.origin_id;
+    const std::string normalized_sha = normalized.hex_digest();
+
+    flatbuffers::FlatBufferBuilder b(1024);
+    const auto opt = [&](const std::string& s) { return s.empty() ? 0 : b.CreateString(s); };
+    const auto schemas = b.CreateVectorOfStrings(std::vector<std::string>{"WXF.fbs"});
+    const auto schema_counts = b.CreateVector(std::vector<uint64_t>{static_cast<uint64_t>(count)});
+    const auto provenance = R::CreateProvenance(
+        b, b.CreateString(source_url), 200, opt(first_body.etag), opt(first_body.last_modified), opt(first_body.content_type),
+        static_cast<uint64_t>(retrieved_at_ms(first_body)), b.CreateString(kParser), b.CreateString(kParserVersion),
+        b.CreateString(batch_id), b.CreateString(normalized_sha), static_cast<uint64_t>(count), schemas, schema_counts, 0, false);
+    const auto tags = R::CreateSourceTagsDirect(b, kProviderID, first.attribution.source_name.c_str(), batch_id.c_str(),
+                                                source_url.c_str(), kContentKeyID, source_peer.c_str(), kLicenseID,
+                                                first.attribution.license_url.c_str(), first.attribution.citation.c_str());
+    R::FinishIngestRequestBuffer(b, R::CreateIngestRequest(b, b.CreateString("WXF.fbs"), tags, R::reconcileMode_Duplicates, 0, provenance));
+    if (plugin_push_output_ex("wxf_meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                              "IngestRequest", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
+        return 500;
+    }
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", stream) < 0) return 500;
     return 0;
 }

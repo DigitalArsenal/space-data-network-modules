@@ -1,11 +1,9 @@
 /**
- * OD Fit Pipeline module manifest (App 2, A2.3).
+ * OD Fit Pipeline module manifest (typed contracts 1.0).
  *
- * The canonical manifest is `plugin-manifest.json`. The build embeds it into the
- * WASM via the SDK's `encodePlgManifest(legacyManifestToPlg(...))` — the same
- * $PLG encoder every compiled module uses and the format the Go node's PLG parser
- * reads to grant host capabilities (storage_query / storage_ingest / wallet_sign /
- * crypto_sign / pubsub) and schedule the `od-fit-pull` timer.
+ * The canonical manifest is `plugin-manifest.json`; the SDK compiler embeds it in the WASM (build.mjs). The
+ * `od-fit-pull` timer (every 2 h) invokes `fit_pipeline` with a TimerTick; the module reads the stored $OEM records
+ * through the typed storage.query hostcall (capability storage_query).
  */
 import fs from "node:fs";
 import path from "node:path";

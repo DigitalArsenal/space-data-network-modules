@@ -1,10 +1,10 @@
-// data-source/celestrak-parser SDK-compat tests (loop C.8a): the pure
-// provider-parser nodes run in the SDK browser harness against the SAME
-// fixture payloads sdn-server's internal/ingest tests use, and their
-// outputs are asserted structurally: ingest metas carry full attribution
-// (batch = sha256 of the payload), record streams are size-prefixed
-// FlatBuffers with the right file identifiers, and the runner's failure
-// gates (duplicate SATCAT NORAD, SPW staleness, non-200 fetch) reproduce.
+// data-source/celestrak-parser SDK-compat tests on the typed contracts (1.0): the pure provider-parser nodes run in
+// the SDK browser harness against the SAME fixture payloads sdn-server's internal/ingest tests use, each fed as the
+// HttpResponse (HRSP) hostcap/http-request answers - its CONTEXT the job celestrak-request sends, one size-prefixed
+// $ICN record - and their outputs are asserted structurally: IngestRequests (INGQ) carry full attribution (batch =
+// sha256 of the payload), record streams are size-prefixed FlatBuffers with the right file identifiers, the raw
+// document is the HttpResponse itself, 304 is one FlowNotice, and the runner's failure gates (duplicate SATCAT NORAD,
+// SPW/EOP staleness, non-200 fetch) reproduce.
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
@@ -13,24 +13,18 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "flatbuffers";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
-import {
-  CelestialFrame,
-  CelestialFrameWrapper,
-  OMM,
-  RFMUnion,
-} from "spacedatastandards.org/lib/js/OMM/main.js";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { decodeFlowNotice, decodeHttpResponse, decodeIngestRequest, encodeTimerTick, identifierOf } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+
+import { STANDARDS_ROOT, flatbuffers, rawCaseResponseInput, responseInput, sdsLib } from "./frames.mjs";
+
+const { CelestialFrame, CelestialFrameWrapper, OMM, RFMUnion } = await sdsLib("OMM");
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT =
-  process.env.SPACE_DATA_STANDARDS_ROOT ??
-  fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const GP_CSV = fs.readFileSync(new URL("./fixtures/celestrak-gp-omm.csv", import.meta.url));
@@ -48,48 +42,40 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-// SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength: the
-// SDK invoke codec (src/invoke/codec.js normalizeFrameTypeRef) rejects a frame
-// without them and the invoke throws before the wasm is ever entered. This
-// suite omitted both, so every behavioural test in it was dead — failing
-// identically against old and new artifacts, which reads as "the harness is
-// broken" rather than "these fixtures are". Repaired under graph task
-// modules-guest-nodes-drop-batched-frames.
-function jsonInput(portId, value) {
-  const payload = encoder.encode(JSON.stringify(value));
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
-  };
-}
-
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
 async function createHarness(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-  });
+  const harness = await createBrowserModuleHarness({ wasmSource: readWasm(), manifest: readManifest(), surface: "direct" });
   t.after(() => harness.destroy());
   return harness;
 }
 
 function outputsByPort(response) {
   const map = new Map();
-  for (const frame of response.outputs) {
-    map.set(frame.portId, frame);
-  }
+  for (const frame of response.outputs) map.set(frame.portId, frame);
   return map;
 }
 
-function jsonFrame(map, portId) {
+function metaFrame(map, portId) {
   const frame = map.get(portId);
   assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
+  return decodeIngestRequest(frame.payload);
+}
+
+function noticeFrame(map) {
+  const frame = map.get("unchanged");
+  assert.ok(frame, "missing output frame unchanged");
+  return decodeFlowNotice(frame.payload);
+}
+
+// The raw output is the HttpResponse the batch was made from, forwarded byte for byte.
+function assertRaw(outputs, input, body) {
+  const raw = outputs.get("raw");
+  assert.ok(raw, "missing raw frame");
+  assert.deepEqual(Buffer.from(raw.payload), Buffer.from(input.payload), "the input HttpResponse, verbatim");
+  assert.deepEqual(Buffer.from(decodeHttpResponse(raw.payload).body), Buffer.from(body), "its BODY is the payload");
 }
 
 // Splits a size-prefixed record stream into unprefixed record buffers.
@@ -188,23 +174,14 @@ function catOwner(record) {
   return view.getInt8(table + fieldOffset);
 }
 
-function httpResponse(bodyBytes, headers = {}) {
-  return {
-    status: 200,
-    headers,
-    bodyB64: Buffer.from(bodyBytes).toString("base64"),
-  };
-}
 
 const GP_JOB = {
   source_url: "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv",
   source_name: "celestrak-gp",
-  archive_source: "celestrak",
-  archive_name: "catalog.csv",
+  dataset_id: "gp-full-catalog",
 };
 
-// What the request-builder node puts on every job besides attribution: the
-// upstream origin and its usage terms.
+// What the request-builder node puts on every job besides attribution: the upstream origin and its usage terms.
 const ORIGIN_JOB = {
   origin_id: "celestrak.org",
   origin_name: "CelesTrak",
@@ -213,94 +190,91 @@ const ORIGIN_JOB = {
   citation: "CelesTrak Usage Policy, by Dr. T.S. Kelso, https://celestrak.org/usage-policy.php",
 };
 
-test("celestrak-parser artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    standardsRoot: STANDARDS_ROOT,
-  });
+test("celestrak-parser artifact passes SDK compliance with typed ports only", async () => {
+  const manifest = readManifest();
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ids = {};
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+      const [type] = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(type.acceptsAnyFlatbuffer, undefined);
+      assert.equal(type.wireFormat, "flatbuffer");
+      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+    }
+  }
+  const lane = (m, code) => ({ [`${m}.response`]: "HRSP", [`${m}.${code.toLowerCase()}_meta`]: "INGQ", [`${m}.${code.toLowerCase()}_records`]: `$${code}`, [`${m}.raw`]: "HRSP", [`${m}.unchanged`]: "FNTC" });
+  assert.deepEqual(ids, { ...lane("parse_gp", "OMM"), "parse_gp.mpe_meta": "INGQ", "parse_gp.mpe_records": "$MPE", ...lane("parse_satcat", "CAT"),
+    ...lane("parse_spw", "SPW"), ...lane("parse_eop", "EOP"), ...lane("parse_socrates", "CSM") });
 });
 
 test("celestrak-parser artifact is pure: canonical ABI, WASI-only imports", async () => {
   const inspection = await inspectModule(readWasm());
-  // No hostcall bridge import at all -> the inspector classifies the module
-  // as "standalone" (pure compute node); the canonical ABI exports must
-  // still be present.
+  // No hostcall bridge import at all -> the inspector classifies the module as "standalone" (pure compute node); the
+  // canonical ABI exports must still be present.
   assert.equal(inspection.profile, "standalone");
-  const importedModuleNames = Array.from(
-    new Set(inspection.imports.map((entry) => entry.module)),
-  ).sort();
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
-  for (const required of [
-    "plugin_alloc",
-    "plugin_free",
-    "plugin_invoke_stream",
-    "plugin_get_manifest_flatbuffer",
-    "plugin_get_manifest_flatbuffer_size",
-  ]) {
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort(), ["wasi_snapshot_preview1"]);
+  for (const required of ["plugin_alloc", "plugin_free", "plugin_invoke_stream", "plugin_get_manifest_flatbuffer", "plugin_get_manifest_flatbuffer_size"]) {
     assert.ok(inspection.exports.includes(required), `missing export ${required}`);
   }
 });
 
 test("parse_gp produces OMM + MPE streams with full attribution", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_gp",
-    inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV))],
-  });
+  const input = responseInput(GP_JOB, GP_CSV, { date: "Fri, 02 Jan 2026 12:00:00 GMT" });
+  const response = await harness.invoke({ methodId: "parse_gp", inputs: [input] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
+  assert.deepEqual([...outputs.keys()], ["omm_meta", "omm_records", "raw", "mpe_meta", "mpe_records"]);
 
-  const ommMeta = jsonFrame(outputs, "omm_meta");
+  const ommMeta = metaFrame(outputs, "omm_meta");
   assert.equal(ommMeta.schema, "OMM.fbs");
-  assert.equal(ommMeta.provider_id, "space-data-network-02");
-  assert.equal(ommMeta.source_name, "celestrak-gp");
-  assert.equal(ommMeta.source_url, GP_JOB.source_url);
-  assert.equal(ommMeta.batch_id, sha256Hex(GP_CSV));
-  assert.equal(ommMeta.content_key_id, "public");
-  assert.equal(ommMeta.source_peer, "source:celestrak");
+  assert.equal(ommMeta.tags.providerId, "space-data-network-02", "the default provider when the job names none");
+  assert.equal(ommMeta.tags.sourceName, "celestrak-gp");
+  assert.equal(ommMeta.tags.sourceUrl, GP_JOB.source_url);
+  assert.equal(ommMeta.tags.batchId, sha256Hex(GP_CSV));
+  assert.equal(ommMeta.tags.contentKeyId, "public");
+  assert.equal(ommMeta.tags.sourcePeer, "source:celestrak");
   assert.equal(ommMeta.reconcile, "duplicates");
-  assert.deepEqual(ommMeta.archive, { source: "celestrak", name: "catalog.csv" });
-  assert.equal(ommMeta.provenance.source, "celestrak-gp");
-  const provenance = JSON.parse(Buffer.from(ommMeta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.source_sha256, sha256Hex(GP_CSV));
-  assert.equal(provenance.parser_version, "celestrak-gp-wasm/v2");
-  assert.equal(provenance.schema_counts["OMM.fbs"], 2);
-  assert.equal(provenance.schema_counts["MPE.fbs"], 2);
+  assert.deepEqual(ommMeta.archive, { source: "celestrak", name: "catalog.csv" }, "archive naming keyed by the job's dataset");
+  const provenance = ommMeta.provenance;
+  assert.equal(provenance.sourceUrl, GP_JOB.source_url);
+  assert.equal(provenance.httpStatus, 200);
+  assert.equal(provenance.sourceSha256, sha256Hex(GP_CSV));
+  assert.equal(provenance.retrievedMs, Date.UTC(2026, 0, 2, 12), "retrieved at the response Date, whole seconds");
+  assert.deepEqual([provenance.parser, provenance.parserVersion], ["celestrak-gp-wasm", "v2"]);
+  assert.deepEqual(provenance.schemaCounts, { "OMM.fbs": 2, "MPE.fbs": 2 });
+  assert.equal(provenance.normalizedCount, 4);
+  assert.match(provenance.normalizedSha256, /^[0-9a-f]{64}$/);
+  assert.deepEqual(provenance.warnings, []);
+  assert.equal(provenance.fromCache, false);
 
-  const mpeMeta = jsonFrame(outputs, "mpe_meta");
+  const mpeMeta = metaFrame(outputs, "mpe_meta");
   assert.equal(mpeMeta.schema, "MPE.fbs");
-  assert.equal(mpeMeta.batch_id, sha256Hex(GP_CSV));
-  assert.equal(mpeMeta.archive, undefined, "raw payload is archived once (OMM meta only)");
+  assert.equal(mpeMeta.tags.batchId, sha256Hex(GP_CSV));
+  assert.equal(mpeMeta.reconcile, "duplicates");
+  assert.equal(mpeMeta.archive, null, "raw payload is archived once (OMM meta only)");
+  assert.equal(mpeMeta.provenance, null);
 
   const ommRecords = splitStream(outputs.get("omm_records").payload);
   assert.equal(ommRecords.length, 2);
-  for (const record of ommRecords) {
-    assert.equal(fileIdentifier(record), "$OMM");
-  }
+  for (const record of ommRecords) assert.equal(fileIdentifier(record), "$OMM");
   const mpeRecords = splitStream(outputs.get("mpe_records").payload);
   assert.equal(mpeRecords.length, 2);
-  for (const record of mpeRecords) {
-    assert.equal(fileIdentifier(record), "$MPE");
-  }
+  for (const record of mpeRecords) assert.equal(fileIdentifier(record), "$MPE");
 
-  const raw = outputs.get("raw");
-  assert.deepEqual(Buffer.from(raw.payload), Buffer.from(GP_CSV), "raw payload passthrough");
+  assertRaw(outputs, input, GP_CSV);
 });
 
-// CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product
-// defines them that way and CelesTrak's own OMM KVN/XML for the same records
-// states REF_FRAME = TEME. Every GP OMM therefore declares Earth + TEME of
-// date, read here through the published SDS JavaScript bindings (SDS RFM
-// CelestialFrame.TEMEOFDATE, SANA OID 1.3.112.4.57.2.25). An OMM without a
-// frame is refused by SGP4 consumers such as conjunction-assessment.
+// CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product defines them that way and CelesTrak's own
+// OMM KVN/XML for the same records states REF_FRAME = TEME. Every GP OMM therefore declares Earth + TEME of date, read
+// here through the SDS JavaScript bindings (SDS RFM CelestialFrame.TEMEOFDATE, SANA OID 1.3.112.4.57.2.25). An OMM
+// without a frame is refused by SGP4 consumers such as conjunction-assessment.
 test("parse_gp declares CENTER_NAME EARTH and REFERENCE_FRAME TEME of date on every OMM", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_gp",
-    inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV))],
-  });
+  const response = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput(GP_JOB, GP_CSV)] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const ommRecords = splitStream(outputsByPort(response).get("omm_records").payload);
   assert.equal(ommRecords.length, 2);
@@ -322,44 +296,34 @@ test("parse_gp declares CENTER_NAME EARTH and REFERENCE_FRAME TEME of date on ev
   });
 });
 
-test("parse_gp forwards the job's licence and origin into the ingest meta", async (t) => {
+// The job's usage terms reach the ingest request's source tags. TAGS.LICENSE is an SPDX identifier the storage-ingest
+// record bounds to 64 bytes: the usage-policy SENTENCE is not one, so it is named by reference and its text stays in the
+// job; an identifier an operator configured travels as is.
+test("parse_gp forwards the job's licence terms into the ingest requests", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_gp",
-    inputs: [
-      jsonInput("job", { ...GP_JOB, ...ORIGIN_JOB, dataset_id: "gp-full-catalog" }),
-      jsonInput("response", httpResponse(GP_CSV)),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput({ ...GP_JOB, ...ORIGIN_JOB }, GP_CSV)] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
   for (const port of ["omm_meta", "mpe_meta"]) {
-    const meta = jsonFrame(outputs, port);
-    assert.equal(meta.license, ORIGIN_JOB.license, `${port} licence`);
-    assert.equal(meta.license_url, ORIGIN_JOB.license_url, `${port} licence url`);
-    assert.equal(meta.citation, ORIGIN_JOB.citation, `${port} citation`);
-    assert.equal(meta.origin_id, "celestrak.org", `${port} origin`);
-    assert.equal(meta.origin_name, "CelesTrak", `${port} origin name`);
-    assert.equal(meta.dataset_id, "gp-full-catalog", `${port} dataset`);
+    const meta = metaFrame(outputs, port);
+    assert.equal(meta.tags.license, "LicenseRef-CelesTrak-Usage-Policy", `${port} licence identifier`);
+    assert.equal(meta.tags.licenseUrl, ORIGIN_JOB.license_url, `${port} licence url`);
+    assert.equal(meta.tags.citation, ORIGIN_JOB.citation, `${port} citation`);
   }
+  const spdx = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput({ ...GP_JOB, ...ORIGIN_JOB, license: "CC0-1.0" }, GP_CSV)] });
+  assert.equal(metaFrame(outputsByPort(spdx), "omm_meta").tags.license, "CC0-1.0", "an identifier travels as is");
 });
 
-test("parse_gp emits no licence or origin keys the job did not declare", async (t) => {
+test("parse_gp emits no licence terms the job did not declare", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_gp",
-    inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV))],
-  });
+  const response = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput(GP_JOB, GP_CSV)] });
   assert.equal(response.statusCode, 0, response.errorMessage);
-  const meta = jsonFrame(outputsByPort(response), "omm_meta");
-  for (const key of ["license", "license_url", "citation", "origin_id", "origin_name", "dataset_id"]) {
-    assert.equal(key in meta, false, `${key} must not be invented`);
-  }
+  const meta = metaFrame(outputsByPort(response), "omm_meta");
+  assert.deepEqual([meta.tags.license, meta.tags.licenseUrl, meta.tags.citation], ["", "", ""], "never invented");
 });
 
-// The Go host hands headers back under net/http canonical keys ("Etag", not
-// "ETag"/"etag"); the provenance record must capture the validator under
-// every host spelling so the connector ledger can gate the next pull.
+// HttpResponse header NAMEs are lower-cased by contract; a host that does not normalize them is still read: the
+// provenance record captures the validators under every spelling so the connector ledger can gate the next pull.
 for (const [label, headers] of [
   ["Go canonical Etag", { Etag: 'W/"x"', "Last-Modified": "Fri, 02 Jan 2026 12:00:00 GMT" }],
   ["fetch lower-case etag", { etag: 'W/"x"', "last-modified": "Fri, 02 Jan 2026 12:00:00 GMT" }],
@@ -367,69 +331,55 @@ for (const [label, headers] of [
 ]) {
   test(`parse_gp captures the response validators under ${label}`, async (t) => {
     const harness = await createHarness(t);
-    const response = await harness.invoke({
-      methodId: "parse_gp",
-      inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV, headers))],
-    });
-    assert.equal(response.statusCode, 0, response.errorMessage);
-    const meta = jsonFrame(outputsByPort(response), "omm_meta");
-    const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-    assert.equal(provenance.etag, 'W/"x"');
-    assert.equal(provenance.last_modified, "Fri, 02 Jan 2026 12:00:00 GMT");
+    for (const input of [responseInput(GP_JOB, GP_CSV, headers), rawCaseResponseInput(GP_JOB, GP_CSV, headers)]) {
+      const response = await harness.invoke({ methodId: "parse_gp", inputs: [input] });
+      assert.equal(response.statusCode, 0, response.errorMessage);
+      const { provenance } = metaFrame(outputsByPort(response), "omm_meta");
+      assert.equal(provenance.etag, 'W/"x"');
+      assert.equal(provenance.lastModified, "Fri, 02 Jan 2026 12:00:00 GMT");
+    }
   });
 }
 
-// HTTP 304 Not Modified: the host sent the recorded validators and the origin
-// confirmed the document is current. No batch exists, so no record port may
-// fire — only the single "unchanged" notice, and the invocation succeeds.
-for (const [methodId, job, recordPorts] of [
-  ["parse_gp", { ...GP_JOB, dataset_id: "gp-full-catalog" }, ["omm_meta", "omm_records", "mpe_meta", "mpe_records", "raw"]],
-  [
-    "parse_satcat",
-    { source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv", dataset_id: "satcat-csv" },
-    ["cat_meta", "cat_records", "raw"],
-  ],
-  [
-    "parse_spw",
-    { source_url: "https://celestrak.org/SpaceData/SW-All.csv", source_name: "celestrak-space-weather", dataset_id: "sw-all" },
-    ["spw_meta", "spw_records", "raw"],
-  ],
+// HTTP 304 Not Modified: the host sent the recorded validators and the origin confirmed the document is current. No
+// batch exists, so no record port may fire - only the single "unchanged" FlowNotice, and the invocation succeeds.
+for (const [methodId, job, schema, recordPorts] of [
+  ["parse_gp", GP_JOB, "OMM.fbs", ["omm_meta", "omm_records", "mpe_meta", "mpe_records", "raw"]],
+  ["parse_satcat", { source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv", dataset_id: "satcat-csv" }, "CAT.fbs", ["cat_meta", "cat_records", "raw"]],
+  ["parse_spw", { source_url: "https://celestrak.org/SpaceData/SW-All.csv", source_name: "celestrak-space-weather", dataset_id: "sw-all" }, "SPW.fbs", ["spw_meta", "spw_records", "raw"]],
 ]) {
   test(`${methodId} answers HTTP 304 with one unchanged notice and zero record frames`, async (t) => {
     const harness = await createHarness(t);
-    const response = await harness.invoke({
-      methodId,
-      inputs: [
-        jsonInput("job", job),
-        jsonInput("response", { status: 304, headers: { Etag: 'W/"x"' }, bodyB64: "" }),
-      ],
-    });
+    const response = await harness.invoke({ methodId, inputs: [responseInput(job, new Uint8Array(0), { etag: 'W/"x"' }, 304)] });
     assert.equal(response.statusCode, 0, response.errorMessage);
     assert.equal(response.outputs.length, 1, "exactly one frame");
     const outputs = outputsByPort(response);
     for (const port of recordPorts) assert.equal(outputs.has(port), false, `${port} must stay silent`);
-    const notice = jsonFrame(outputs, "unchanged");
-    assert.deepEqual(notice, {
-      status: 304,
-      unchanged: true,
-      source_name: job.source_name,
-      source_url: job.source_url,
-      dataset_id: job.dataset_id,
+    assert.deepEqual(noticeFrame(outputs), {
+      kind: "unchanged", schema, providerId: "space-data-network-02", sourceName: job.source_name, batchId: "",
+      count: 1, reason: "not-modified", items: [job.source_url], atMs: 0,
     });
   });
 }
 
 test("parse_gp rejects non-200 fetches", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_gp",
-    inputs: [
-      jsonInput("job", GP_JOB),
-      jsonInput("response", { status: 503, headers: {}, bodyB64: "" }),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput(GP_JOB, new Uint8Array(0), {}, 503)] });
   assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "fetch-failed");
   assert.match(response.errorMessage ?? "", /503/);
+});
+
+// Pairing is by CONTEXT: a response that carries no $ICN job cannot be attributed and is refused, never guessed.
+test("parse_gp refuses a response without its $ICN job, and a frame that is no HttpResponse", async (t) => {
+  const harness = await createHarness(t);
+  for (const context of [new Uint8Array(0), encodeTimerTick({})]) {
+    const response = await harness.invoke({ methodId: "parse_gp", inputs: [responseInput(GP_JOB, GP_CSV, {}, 200, context)] });
+    assert.equal(response.errorCode, "missing-context");
+    assert.equal(response.outputs.length, 0);
+  }
+  const notResponse = await harness.invoke({ methodId: "parse_gp", inputs: [{ ...responseInput(GP_JOB, GP_CSV), payload: encodeTimerTick({}) }] });
+  assert.equal(notResponse.errorCode, "invalid-response-frame");
 });
 
 for (const [label, payload] of [
@@ -438,49 +388,34 @@ for (const [label, payload] of [
 ]) {
   test(`parse_satcat handles the ${label} format`, async (t) => {
     const harness = await createHarness(t);
-    const response = await harness.invoke({
-      methodId: "parse_satcat",
-      inputs: [
-        jsonInput("job", {
-          source_url: "https://celestrak.org/pub/satcat.txt",
-          source_name: label === "csv" ? "celestrak-satcat-csv" : "celestrak-satcat",
-          archive_source: "celestrak",
-          archive_name: label === "csv" ? "satcat.csv" : "satcat.txt",
-        }),
-        jsonInput("response", httpResponse(payload)),
-      ],
-    });
+    const job = {
+      source_url: label === "csv" ? "https://celestrak.org/pub/satcat.csv" : "https://celestrak.org/pub/satcat.txt",
+      source_name: label === "csv" ? "celestrak-satcat-csv" : "celestrak-satcat",
+      dataset_id: label === "csv" ? "satcat-csv" : "satcat",
+    };
+    const input = responseInput(job, payload);
+    const response = await harness.invoke({ methodId: "parse_satcat", inputs: [input] });
     assert.equal(response.statusCode, 0, response.errorMessage);
     const outputs = outputsByPort(response);
-    const catMeta = jsonFrame(outputs, "cat_meta");
+    const catMeta = metaFrame(outputs, "cat_meta");
     assert.equal(catMeta.schema, "CAT.fbs");
     assert.equal(catMeta.reconcile, "current", "SATCAT is a snapshot source");
-    assert.equal(catMeta.batch_id, sha256Hex(payload));
+    assert.equal(catMeta.tags.batchId, sha256Hex(payload));
+    assert.deepEqual(catMeta.archive, { source: "celestrak", name: label === "csv" ? "satcat.csv" : "satcat.txt" });
+    assert.deepEqual([catMeta.provenance.parser, catMeta.provenance.parserVersion], ["celestrak-satcat-wasm", "v1"]);
+    assert.deepEqual(catMeta.provenance.schemaCounts, { "CAT.fbs": 2 });
     const catRecords = splitStream(outputs.get("cat_records").payload);
     assert.equal(catRecords.length, 2);
-    for (const record of catRecords) {
-      assert.equal(fileIdentifier(record), "$CAT");
-    }
+    for (const record of catRecords) assert.equal(fileIdentifier(record), "$CAT");
     if (label === "fixed-width txt") {
-      assert.deepEqual(
-        catRecords.map(catOwner),
-        [118, 118],
-        "fixed-width SATCAT lacks OWNER and must encode explicit legacyCountryCode UNK",
-      );
-      assert.deepEqual(
-        catRecords.map(catLaunchSite),
-        ["TTM", "AFET"],
-        "fixed-width LAUNCH_SITE comes from columns 69-73 of the row",
-      );
+      assert.deepEqual(catRecords.map(catOwner), [118, 118], "fixed-width SATCAT lacks OWNER and must encode explicit legacyCountryCode UNK");
+      assert.deepEqual(catRecords.map(catLaunchSite), ["TTM", "AFET"], "fixed-width LAUNCH_SITE comes from columns 69-73 of the row");
     } else {
-      assert.deepEqual(
-        catRecords.map(catLaunchSite),
-        ["TYMSC", "AFETR"],
-        "CSV LAUNCH_SITE comes from the LAUNCH_SITE column",
-      );
+      assert.deepEqual(catRecords.map(catLaunchSite), ["TYMSC", "AFETR"], "CSV LAUNCH_SITE comes from the LAUNCH_SITE column");
       const ownersByNorad = new Map(catRecords.map((record) => [catNoradID(record), catOwner(record)]));
       assert.equal(ownersByNorad.get(40909), 120, "STARLINK-1001 OWNER US from the OWNER column");
     }
+    assertRaw(outputs, input, payload);
   });
 }
 
@@ -504,10 +439,7 @@ test("parse_satcat keeps the builder's TYMSC launch site ONLY when the source ha
   ]) {
     const response = await harness.invoke({
       methodId: "parse_satcat",
-      inputs: [
-        jsonInput("job", { source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv" }),
-        jsonInput("response", httpResponse(payload)),
-      ],
+      inputs: [responseInput({ source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv" }, payload)],
     });
     assert.equal(response.statusCode, 0, response.errorMessage);
     const [record] = splitStream(outputsByPort(response).get("cat_records").payload);
@@ -529,16 +461,9 @@ test("parse_satcat maps CSV OWNER codes only from the canonical legacy enum", as
   const harness = await createHarness(t);
   const response = await harness.invoke({
     methodId: "parse_satcat",
-    inputs: [
-      jsonInput("job", {
-        source_url: "https://celestrak.org/pub/satcat.csv",
-        source_name: "celestrak-satcat-csv",
-      }),
-      jsonInput("response", httpResponse(ownerCSV)),
-    ],
+    inputs: [responseInput({ source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv" }, ownerCSV)],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
-
   const records = splitStream(outputsByPort(response).get("cat_records").payload);
   const ownersByNorad = new Map(records.map((record) => [catNoradID(record), catOwner(record)]));
   assert.equal(ownersByNorad.get(27559), 3, "ALSAT-1 OWNER must decode as legacyCountryCode ALG");
@@ -546,70 +471,45 @@ test("parse_satcat maps CSV OWNER codes only from the canonical legacy enum", as
   assert.equal(ownersByNorad.get(90001), 118, "unknown OWNER must decode as explicit legacyCountryCode UNK");
   assert.equal(ownersByNorad.get(90002), 118, "absent OWNER must decode as explicit legacyCountryCode UNK");
   assert.equal(ownersByNorad.get(90003), 0, "explicit OWNER=AB must remain legacyCountryCode AB");
+  assert.equal(metaFrame(outputsByPort(response), "cat_meta").archive, null, "a job without a known dataset names no archive");
 });
 
 test("parse_satcat rejects duplicate NORAD ids (runner parity)", async (t) => {
   const harness = await createHarness(t);
   const dup = Buffer.concat([SATCAT_TXT, Buffer.from("\n"), SATCAT_TXT]);
-  const response = await harness.invoke({
-    methodId: "parse_satcat",
-    inputs: [
-      jsonInput("job", { source_url: "https://x.test", source_name: "celestrak-satcat" }),
-      jsonInput("response", httpResponse(dup)),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse_satcat", inputs: [responseInput({ source_url: "https://x.test", source_name: "celestrak-satcat" }, dup)] });
   assert.notEqual(response.statusCode, 0);
   assert.match(response.errorMessage ?? "", /duplicate SATCAT NORAD_CAT_ID/);
 });
 
 test("parse_spw builds SPW records when the source is fresh", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_spw",
-    inputs: [
-      jsonInput("job", {
-        source_url: "https://celestrak.org/SpaceData/SW-All.csv",
-        source_name: "celestrak-space-weather",
-        archive_source: "celestrak",
-        archive_name: "SW-All.csv",
-      }),
-      jsonInput(
-        "response",
-        // Fixture rows end 2026-01-02: a Last-Modified in the same window
-        // keeps the 7-day staleness gate green (the reference time).
-        httpResponse(SW_CSV, { "last-modified": "Fri, 02 Jan 2026 12:00:00 GMT" }),
-      ),
-    ],
-  });
+  const job = { source_url: "https://celestrak.org/SpaceData/SW-All.csv", source_name: "celestrak-space-weather", dataset_id: "sw-all" };
+  // Fixture rows end 2026-01-02: a Last-Modified in the same window keeps the 7-day staleness gate green.
+  const input = responseInput(job, SW_CSV, { "last-modified": "Fri, 02 Jan 2026 12:00:00 GMT" });
+  const response = await harness.invoke({ methodId: "parse_spw", inputs: [input] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
-  const spwMeta = jsonFrame(outputs, "spw_meta");
+  const spwMeta = metaFrame(outputs, "spw_meta");
   assert.equal(spwMeta.schema, "SPW.fbs");
-  assert.equal(spwMeta.batch_id, sha256Hex(SW_CSV));
-  // SW-All.csv is a whole-history snapshot: each batch supersedes the older
-  // ones, so the lane converges on one row per DATE (a reconciliation of
-  // duplicate snapshots, not a loss).
+  assert.equal(spwMeta.tags.batchId, sha256Hex(SW_CSV));
+  // SW-All.csv is a whole-history snapshot: each batch supersedes the older ones, so the lane converges on one row
+  // per DATE (a reconciliation of duplicate snapshots, not a loss).
   assert.equal(spwMeta.reconcile, "current", "SPW snapshot supersedes older batches");
+  assert.deepEqual(spwMeta.archive, { source: "celestrak", name: "SW-All.csv" });
+  assert.deepEqual([spwMeta.provenance.parser, spwMeta.provenance.parserVersion], ["celestrak-space-weather-wasm", "v1"]);
   const spwRecords = splitStream(outputs.get("spw_records").payload);
   assert.equal(spwRecords.length, 2);
-  for (const record of spwRecords) {
-    assert.equal(fileIdentifier(record), "$SPW");
-  }
+  for (const record of spwRecords) assert.equal(fileIdentifier(record), "$SPW");
+  assertRaw(outputs, input, SW_CSV);
 });
 
 test("parse_spw enforces the 7-day stale-source gate", async (t) => {
   const harness = await createHarness(t);
+  // No Last-Modified: the reference falls back to NOW, far past the fixture's 2026-01-02 latest DATE.
   const response = await harness.invoke({
     methodId: "parse_spw",
-    inputs: [
-      jsonInput("job", {
-        source_url: "https://celestrak.org/SpaceData/SW-All.csv",
-        source_name: "celestrak-space-weather",
-      }),
-      // No Last-Modified: the reference falls back to NOW, far past the
-      // fixture's 2026-01-02 latest DATE.
-      jsonInput("response", httpResponse(SW_CSV)),
-    ],
+    inputs: [responseInput({ source_url: "https://celestrak.org/SpaceData/SW-All.csv", source_name: "celestrak-space-weather" }, SW_CSV)],
   });
   assert.notEqual(response.statusCode, 0);
   assert.match(response.errorMessage ?? "", /stale source timestamp/);
@@ -626,8 +526,6 @@ test("parse_spw enforces the 7-day stale-source gate", async (t) => {
 const EOP_JOB = {
   source_url: "https://celestrak.org/SpaceData/EOP-All.csv",
   source_name: "celestrak-eop",
-  archive_source: "celestrak",
-  archive_name: "EOP-All.csv",
   dataset_id: "eop-all",
   ...ORIGIN_JOB,
 };
@@ -638,26 +536,27 @@ const ARCSEC_TO_RAD = Math.PI / 648000;
 
 test("parse_eop builds $EOP records with radians in the _HP fields and float32 copies", async (t) => {
   const harness = await createHarness(t);
+  const input = responseInput(EOP_JOB, EOP_CSV, EOP_HEADERS);
   const response = await harness.invoke({
     methodId: "parse_eop",
-    inputs: [jsonInput("job", EOP_JOB), jsonInput("response", httpResponse(EOP_CSV, EOP_HEADERS))],
+    inputs: [input],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
 
-  const meta = jsonFrame(outputs, "eop_meta");
+  const meta = metaFrame(outputs, "eop_meta");
   assert.equal(meta.schema, "EOP.fbs");
-  assert.equal(meta.source_name, "celestrak-eop");
-  assert.equal(meta.batch_id, sha256Hex(EOP_CSV), "batch id = sha256 of the fetched payload");
+  assert.equal(meta.tags.sourceName, "celestrak-eop");
+  assert.equal(meta.tags.batchId, sha256Hex(EOP_CSV), "batch id = sha256 of the fetched payload");
   assert.equal(meta.reconcile, "current", "whole-history snapshot supersedes the previous one");
-  assert.equal(meta.origin_id, "celestrak.org");
-  assert.equal(meta.dataset_id, "eop-all");
-  assert.equal(meta.license, ORIGIN_JOB.license);
+  assert.equal(meta.tags.license, "LicenseRef-CelesTrak-Usage-Policy");
+  assert.equal(meta.tags.licenseUrl, ORIGIN_JOB.license_url);
   assert.deepEqual(meta.archive, { source: "celestrak", name: "EOP-All.csv" });
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.parser_version, "celestrak-eop-wasm/v1");
-  assert.equal(provenance.schema_counts["EOP.fbs"], 3);
+  const provenance = meta.provenance;
+  assert.deepEqual([provenance.parser, provenance.parserVersion], ["celestrak-eop-wasm", "v1"]);
+  assert.deepEqual(provenance.schemaCounts, { "EOP.fbs": 3 });
   assert.equal(provenance.etag, '"154cec7daf3bdd1:0"');
+  assert.equal(provenance.lastModified, "Tue, 01 Sep 2026 12:00:00 GMT");
 
   const records = splitStream(outputs.get("eop_records").payload);
   assert.equal(records.length, 3);
@@ -686,7 +585,7 @@ test("parse_eop builds $EOP records with radians in the _HP fields and float32 c
   assert.equal(readScalar(predicted, 9, "i8"), 1, "DATA_TYPE P -> PREDICTED");
   assert.equal(readString(first, 24), "2026-09-01T12:00:00Z", "DATA_SET_EPOCH = Last-Modified as RFC3339");
 
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(EOP_CSV));
+  assertRaw(outputs, input, EOP_CSV);
 });
 
 test("parse_eop gates staleness on the newest OBSERVED row", async (t) => {
@@ -694,9 +593,8 @@ test("parse_eop gates staleness on the newest OBSERVED row", async (t) => {
   const response = await harness.invoke({
     methodId: "parse_eop",
     inputs: [
-      jsonInput("job", EOP_JOB),
       // A reference a month past the newest observed DATE (2026-08-31).
-      jsonInput("response", httpResponse(EOP_CSV, { "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT" })),
+      responseInput(EOP_JOB, EOP_CSV, { "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT" }),
     ],
   });
   assert.notEqual(response.statusCode, 0);
@@ -708,20 +606,16 @@ test("parse_eop answers HTTP 304 with one unchanged notice and zero record frame
   const response = await harness.invoke({
     methodId: "parse_eop",
     inputs: [
-      jsonInput("job", EOP_JOB),
-      jsonInput("response", { status: 304, headers: { Etag: '"154cec7daf3bdd1:0"' }, bodyB64: "" }),
+      responseInput(EOP_JOB, new Uint8Array(0), { Etag: '"154cec7daf3bdd1:0"' }, 304),
     ],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1);
   const outputs = outputsByPort(response);
   for (const port of ["eop_meta", "eop_records", "raw"]) assert.equal(outputs.has(port), false, port);
-  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
-    status: 304,
-    unchanged: true,
-    source_name: "celestrak-eop",
-    source_url: EOP_JOB.source_url,
-    dataset_id: "eop-all",
+  assert.deepEqual(noticeFrame(outputs), {
+    kind: "unchanged", schema: "EOP.fbs", providerId: "space-data-network-02", sourceName: "celestrak-eop", batchId: "",
+    count: 1, reason: "not-modified", items: [EOP_JOB.source_url], atMs: 0,
   });
 });
 
@@ -740,8 +634,6 @@ const OPS_NONOPERATIONAL = 1;
 const SOCRATES_JOB = {
   source_url: "https://celestrak.org/SOCRATES/sort-minRange.csv",
   source_name: "celestrak-socrates-minrange",
-  archive_source: "celestrak",
-  archive_name: "sort-minRange.csv",
   dataset_id: "socrates-minrange",
   ...ORIGIN_JOB,
 };
@@ -758,23 +650,19 @@ function socratesTca(tcaText) {
 
 test("parse_socrates builds $CSM records with nested CAT identities and an exact TCA", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_socrates",
-    inputs: [jsonInput("job", SOCRATES_JOB), jsonInput("response", httpResponse(SOCRATES_CSV))],
-  });
+  const input = responseInput(SOCRATES_JOB, SOCRATES_CSV);
+  const response = await harness.invoke({ methodId: "parse_socrates", inputs: [input] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
 
-  const meta = jsonFrame(outputs, "csm_meta");
+  const meta = metaFrame(outputs, "csm_meta");
   assert.equal(meta.schema, "CSM.fbs");
-  assert.equal(meta.source_name, "celestrak-socrates-minrange");
-  assert.equal(meta.batch_id, sha256Hex(SOCRATES_CSV));
+  assert.equal(meta.tags.sourceName, "celestrak-socrates-minrange");
+  assert.equal(meta.tags.batchId, sha256Hex(SOCRATES_CSV));
   assert.equal(meta.reconcile, "current", "each sort file is a snapshot of the current list");
-  assert.equal(meta.origin_id, "celestrak.org");
-  assert.equal(meta.dataset_id, "socrates-minrange");
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.parser_version, "celestrak-socrates-wasm/v1");
-  assert.equal(provenance.schema_counts["CSM.fbs"], 2);
+  assert.deepEqual(meta.archive, { source: "celestrak", name: "sort-minRange.csv" });
+  assert.deepEqual([meta.provenance.parser, meta.provenance.parserVersion], ["celestrak-socrates-wasm", "v1"]);
+  assert.deepEqual(meta.provenance.schemaCounts, { "CSM.fbs": 2 });
 
   const records = splitStream(outputs.get("csm_records").payload);
   assert.equal(records.length, 2);
@@ -805,7 +693,7 @@ test("parse_socrates builds $CSM records with nested CAT identities and an exact
   assert.equal(readScalar(second, 2, "u32", subTable(second, 2)), 91004);
   assert.equal(readScalar(second, 4, "f64"), socratesTca("2026-05-11 12:09:59.834"));
 
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(SOCRATES_CSV));
+  assertRaw(outputs, input, SOCRATES_CSV);
 });
 
 test("parse_socrates answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
@@ -813,13 +701,13 @@ test("parse_socrates answers HTTP 304 with one unchanged notice and zero record 
   const response = await harness.invoke({
     methodId: "parse_socrates",
     inputs: [
-      jsonInput("job", SOCRATES_JOB),
-      jsonInput("response", { status: 304, headers: {}, bodyB64: "" }),
+      responseInput(SOCRATES_JOB, new Uint8Array(0), {}, 304),
     ],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1);
   const outputs = outputsByPort(response);
   for (const port of ["csm_meta", "csm_records", "raw"]) assert.equal(outputs.has(port), false, port);
-  assert.equal(jsonFrame(outputs, "unchanged").dataset_id, "socrates-minrange");
+  const notice = noticeFrame(outputs);
+  assert.deepEqual([notice.kind, notice.schema, notice.sourceName, notice.items], ["unchanged", "CSM.fbs", "celestrak-socrates-minrange", [SOCRATES_JOB.source_url]]);
 });

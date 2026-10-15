@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.geonames-ingest",
   "name": "GeoNames Gazetteer Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Scheduled ingest of a gazetteer into $GNP. A 24 h host-cron TICK enters at geonames-ingest:mark_query, which builds the flatsql-query that reads this dataset's durable resume mark; hostcap/flatsql-query returns it to geonames-ingest:ingest_plan, which decides between three outcomes and only three. FIRST TICK (no mark) = the SEED: one ranged hostcap/http-request for cities15000.zip plus three more for the division and country files, because $GNP carries a RESOLVED admin and country NAME beside every code and those names live in separate files. EVERY LATER TICK = the DELTA for that tick's own UTC day: modifications-YYYY-MM-DD.txt and deletes-YYYY-MM-DD.txt, verified live 2026-08-15 to be full 19-column geoname rows and three-column tombstone rows respectively - so the delta upserts through the SAME decoder as the seed and there is no second record shape to keep in step. A TICK FOR A DAY ALREADY ON THE MARK emits nothing at all: the mark IS the same-data ledger, carrying the upstream ETag that also rides out as If-None-Match, so an unchanged file costs one conditional request and comes back 304, which geonames-source:inflate ends the run on without an error. The seed archive is inflated IN-GUEST (vendored miniz; there is no host unzip capability and none may be added) and the chunk is bounded by the Go server host's 4 MiB response-body cap, which ingest_meta re-checks against Content-Range's denominator rather than trusting. geonames-ingest:ingest_meta authors the storage attribution before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op, with reconcile=append because a daily modifications file is an upsert of a few thousand rows and not the gazetteer's set. geonames-ingest:publish_request then advances the mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one day instead of skipping it invisibly - and emits the epoch announcement only when a publish URL is configured; DATASET_EPOCH and DATASET_CID already ride in $GNP.SOURCE, so no new record type is minted. The tombstone list leaves the flow on egress: no host capability removes a stored row, and inventing one would be a new host capability this lane may not add. The host owns no schedule, no dataset list, no licence and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required.",
+  "description": "Scheduled ingest of a gazetteer into $GNP, on the typed contracts (1.0): every frame between nodes is a FlatBuffer, no JSON and no base64. A 24 h host-cron TimerTick enters at geonames-ingest:mark_query, which builds the $FSO that reads the newest $IRM resume marks (SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?); hostcap/flatsql-query answers $FSB chunks to geonames-ingest:ingest_plan, which picks this dataset's mark by JOB_ID and decides between three outcomes and only three. FIRST TICK (no mark) = the SEED: one ranged HttpRequest for cities15000.zip plus three more for the division and country files, because $GNP carries a RESOLVED admin and country NAME beside every code and those names live in separate files. EVERY LATER TICK = the DELTA for that tick's own UTC day: modifications-YYYY-MM-DD.txt and deletes-YYYY-MM-DD.txt, verified live 2026-08-15 to be full 19-column geoname rows and three-column tombstone rows respectively - so the delta upserts through the SAME decoder as the seed. A TICK FOR A DAY ALREADY ON THE MARK emits nothing at all: the mark IS the same-data ledger, carrying the upstream ETag that also rides out as if-none-match, so an unchanged file costs one conditional request and comes back 304, which geonames-source:inflate ends the run on with an Unchanged FlowNotice. Every fetch carries its JOB in HttpRequest.CONTEXT - one size-prefixed $GNP header record naming the dataset contract (id prefix, member, dataset id/name/URL/epoch, source URL and file, licence, attribution) - echoed by hostcap/http-request and read by geonames-source and ingest_meta. The seed archive is inflated IN-GUEST (vendored miniz; there is no host unzip capability and none may be added) into a text HttpResponse; geonames-source:parse_places joins the three lookup HttpResponses and decodes the rows, and the chunk is bounded by the Go server host's 4 MiB response-body cap, which ingest_meta re-checks against Content-Range's denominator rather than trusting. geonames-ingest:ingest_meta authors the IngestRequest (INGQ: GNP.fbs, batch <dataset>@<day>, RECONCILE None because a daily modifications file is an upsert of a few thousand rows and not the gazetteer's set, PROVENANCE with the ETag / Last-Modified / record count) before hostcap/storage-ingest persists the $GNP stream on gnp_records through the policy-mediated storage.ingest_with_source op. geonames-ingest:publish_request then advances the mark FROM THE STORAGE RESULT - an $IRM, never at dispatch and never for a refused or stored-nothing batch, so a crash between fetch and store re-fetches one day instead of skipping it invisibly - and POSTs the epoch announcement (body: the IngestResult naming the batch) only when geonames_publish_url is configured; DATASET_EPOCH and DATASET_CID already ride in $GNP.SOURCE, so no new record type is minted. The $IRM mark, the IngestResult, the publication response and the FlowNotices (inflate report, parse summary, tombstone list) leave on egress: no host capability removes a stored row, and inventing one would be a new host capability this lane may not add; persisting the mark is hostcap/storage-write's job and is not wired here (the flow declares no storage_write grant). The host owns no schedule, no dataset list, no licence and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL rows that hold the marks.",
   "nodes": [
     {
       "nodeId": "mark_read_q",
@@ -76,13 +76,6 @@
       "drainPolicy": "single-shot"
     },
     {
-      "nodeId": "lookups",
-      "pluginId": "com.digitalarsenal.data-source.geonames-source",
-      "methodId": "parse_lookups",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
       "nodeId": "places",
       "pluginId": "com.digitalarsenal.data-source.geonames-source",
       "methodId": "parse_places",
@@ -140,78 +133,16 @@
       "toNodeId": "mark_read",
       "toPortId": "query",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "fq-plan",
       "fromNodeId": "mark_read",
-      "fromPortId": "stream",
+      "fromPortId": "records",
       "toNodeId": "plan",
       "toPortId": "mark",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-unzip-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "unzip",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-lookups-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "lookups",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-places-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "places",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-tombstones-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "tombstones",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-unzip-del-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "unzip_deletes",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-meta-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "meta",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 64
     },
     {
       "edgeId": "plan-http",
@@ -220,8 +151,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-http-deletes",
@@ -230,8 +160,7 @@
       "toNodeId": "http_deletes",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-http-admin1",
@@ -240,8 +169,7 @@
       "toNodeId": "http_admin1",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-http-admin2",
@@ -250,8 +178,7 @@
       "toNodeId": "http_admin2",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-http-country",
@@ -260,8 +187,7 @@
       "toNodeId": "http_country",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-unzip",
@@ -270,8 +196,7 @@
       "toNodeId": "unzip",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "unzip-places-text",
@@ -280,48 +205,34 @@
       "toNodeId": "places",
       "toPortId": "text",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
-      "edgeId": "http-admin1-lookups",
+      "edgeId": "http-admin1-places",
       "fromNodeId": "http_admin1",
       "fromPortId": "response",
-      "toNodeId": "lookups",
+      "toNodeId": "places",
       "toPortId": "admin1",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
-      "edgeId": "http-admin2-lookups",
+      "edgeId": "http-admin2-places",
       "fromNodeId": "http_admin2",
       "fromPortId": "response",
-      "toNodeId": "lookups",
+      "toNodeId": "places",
       "toPortId": "admin2",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
-      "edgeId": "http-country-lookups",
+      "edgeId": "http-country-places",
       "fromNodeId": "http_country",
       "fromPortId": "response",
-      "toNodeId": "lookups",
+      "toNodeId": "places",
       "toPortId": "country",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "lookups-places",
-      "fromNodeId": "lookups",
-      "fromPortId": "tables",
-      "toNodeId": "places",
-      "toPortId": "tables",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-deletes-unzip",
@@ -330,8 +241,7 @@
       "toNodeId": "unzip_deletes",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "unzip-deletes-tombstones",
@@ -340,8 +250,7 @@
       "toNodeId": "tombstones",
       "toPortId": "text",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "places-records-meta",
@@ -350,18 +259,7 @@
       "toNodeId": "meta",
       "toPortId": "records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
-    },
-    {
-      "edgeId": "places-decision-meta",
-      "fromNodeId": "places",
-      "fromPortId": "decision",
-      "toNodeId": "meta",
-      "toPortId": "decision",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-meta-response",
@@ -370,8 +268,7 @@
       "toNodeId": "meta",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-ingest-meta",
@@ -380,18 +277,16 @@
       "toNodeId": "ingest",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-ingest-records",
       "fromNodeId": "meta",
       "fromPortId": "records",
       "toNodeId": "ingest",
-      "toPortId": "records",
+      "toPortId": "gnp_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-publish-result",
@@ -400,8 +295,7 @@
       "toNodeId": "publish",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-publish-meta",
@@ -410,8 +304,7 @@
       "toNodeId": "publish",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-http",
@@ -420,58 +313,79 @@
       "toNodeId": "publish_http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-egress",
       "fromNodeId": "ingest",
       "fromPortId": "result",
       "toNodeId": "egress",
-      "toPortId": "response",
+      "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-http-egress",
       "fromNodeId": "publish_http",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "response",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-mark-egress",
       "fromNodeId": "publish",
       "fromPortId": "mark",
       "toNodeId": "egress",
-      "toPortId": "response",
+      "toPortId": "mark",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "places-decision-egress",
+      "fromNodeId": "places",
+      "fromPortId": "decision",
+      "toNodeId": "egress",
+      "toPortId": "notice",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "tombstones-egress",
       "fromNodeId": "tombstones",
       "fromPortId": "tombstones",
       "toNodeId": "egress",
-      "toPortId": "response",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "unzip-report-egress",
       "fromNodeId": "unzip",
       "fromPortId": "report",
       "toNodeId": "egress",
-      "toPortId": "response",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "unzip-deletes-report-egress",
+      "fromNodeId": "unzip_deletes",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "notice",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "mark-read-status-egress",
+      "fromNodeId": "mark_read",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "mark_read",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     }
   ],
   "triggers": [
@@ -480,7 +394,7 @@
       "kind": "timer",
       "source": "host-cron",
       "defaultIntervalMs": 86400000,
-      "description": "Epoch tick, at the gazetteer's own publication cadence. One tick is one bounded unit of work - the seed on the first, one day's modifications and deletes on every later one - and the durable resume mark advances only from a verified store, so a restart resumes at the day it left off and an overrun tick is naturally skipped because the next one re-derives the same date and finds it already marked."
+      "description": "Epoch tick (a TimerTick; FIRED_MS dates the edition), at the gazetteer's own publication cadence. One tick is one bounded unit of work - the seed on the first, one day's modifications and deletes on every later one - and the durable resume mark advances only from a verified store, so a restart resumes at the day it left off and an overrun tick is naturally skipped because the next one re-derives the same date and finds it already marked."
     }
   ],
   "triggerBindings": [

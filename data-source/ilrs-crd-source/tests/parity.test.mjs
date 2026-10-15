@@ -5,11 +5,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { crdFile, pass } from './fixtures/crd-format.mjs';
 
 const real = fs.readFileSync(fileURLToPath(new URL('./fixtures/lageos1_20261008.first-two-passes.np2', import.meta.url)), 'utf8');
-const request = (text) => ({ methodId: 'read_crd', inputs: [{ portId: 'source', payloadUtf8: text, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: new TextEncoder().encode(text).length } }] });
+// Each file as the HttpResponse (HRSP) hostcap/http-request answers, BODY the text verbatim.
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const request = (text) => ({ methodId: 'read_crd', inputs: [{ portId: 'source', typeRef: HRSP,
+  payload: encodeHttpResponse({ url: 'https://edc.dgfi.tum.de/lageos1.np2', status: 200, body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 14) }) }] });
 
 test('the same parser artifact agrees in Chromium, native WasmEdge and Docker WasmEdge', { skip: process.env.SDN_RUN_CRD_PARITY !== '1' }, async () => {
   const synthetic = crdFile([

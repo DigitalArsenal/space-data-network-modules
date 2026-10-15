@@ -1,43 +1,44 @@
 /*
- * foundation/http-route (loop C.3b).
+ * foundation/http-route — the HTTP edge's parser (typed contracts 1.0).
  *
- * Single-purpose flow node: one $HTQ HttpRequest envelope in, exactly one
- * routing-decision JSON frame out. Pure compute — no capabilities, no
- * hostcalls. All HTTP semantics live here (TRUE isomorphism; the host is a
- * dumb pipe):
+ * One $HTQ HttpRequest envelope (the SDK's WASM-served HTTP request) in, exactly ONE typed routing decision out. Pure
+ * compute: no capabilities, no hostcalls. Every HTTP semantic lives here (path routing, query-string parsing,
+ * If-None-Match, representation negotiation, request-body parsing); nothing downstream re-parses the transport.
  *
- *   - URL path suffix routing: "/<code>/bulk" -> omm_bulk (per-schema bulk
- *     read: the matched standard travels in query.schema, e.g. "/rfb/bulk" ->
- *     "RFB.fbs"), "/query" -> data_query, anything else -> not_found.
- *     The ROUTE ID stays "omm_bulk": it is the retrieval node's method name in
- *     the compiled flow graph (data-source/retrieval:omm_bulk), and that
- *     method has always been schema-generic — it was simply only ever handed
- *     "OMM.fbs". Renaming it would be a flow-graph change, not a routing one.
- *   - Query-string parsing (module-owned, still URL-encoded on the wire):
- *     epoch (RFC3339 "YYYY-MM-DDTHH:MM:SSZ" or unix-seconds number),
- *     mode|profile ("profile" wins when both present), limit (positive
- *     integer), source, format ("json" | anything else -> default
- *     "flatbuffer").
- *   - If-None-Match extraction via case-insensitive header lookup.
- *   - data_query POST body passthrough: body is either a JSON object
- *     {"sql":"...","params":[...]} (forwarded verbatim) or raw SQL text.
- *     A data_query request without a SQL body degrades to not_found.
+ *   route               (data retrieval)  -> "bulk"    $QRP Request  "/<code>/bulk": a whole-record read of one standard
+ *                                            "query"   $QRP Request  "/query": SQL from the request body
+ *                                            "refusal" $QRP Error    anything else, or a request that cannot be served
+ *   discover            (network discovery) -> "decision" $APR       peers_list | peer_get | pnm_history | latest_dataset
+ *                                                                    | standards, or a refusal (STATUS set)
+ *   route_public_query  (public query)    -> "query"   $QRP Request  POST: sandboxed SQL or a named time profile
+ *                                            "surface" $QRP Request  GET/HEAD: the queryable surface
+ *                                            "refusal" $QRP Error
+ *   route_node_status   -> "decision" $APR  route "status" (GET/HEAD) or STATUS 405
+ *   route_node_activity -> "decision" $APR  route "activity" + parameter limit (clamped [1,256], default 50) or 405
  *
- * Decision JSON contract (documented in plugin-manifest.json):
- *   {"route":"omm_bulk"|"data_query"|"not_found","format":"flatbuffer"|"json"}
- *   plus optional "ifNoneMatch", "query":{schema,source,profile,epoch,limit}
- *   (omm_bulk; absent keys defer to retrieval config/defaults),
- *   "sql"/"params" (data_query), "error" (not_found).
+ * The query/data routes are decided as $QRP, the others as $APR; a method that can decide more than one way answers
+ * on more than one port so that every port carries exactly one type. A refusal is a decision too: the responder
+ * answers it (QRP ERROR_CODE / APR STATUS), so a request is never dropped.
  *
- * The SDK HTTP ABI C++ header (src/generated/http/cpp/HttpRequestAbi_generated.h)
- * is prepended by build.mjs; this file contains only the method body.
+ * JSON appears only where the CLIENT sent it: the body of POST /query and of the public query is the external request
+ * representation, parsed here into typed fields. No JSON leaves this node.
+ *
+ * Representation: ?format=json (or an Accept header naming application/json and no FlatBuffers type) asks for Json;
+ * ?format=flatbuffer|flatbuffers|fb (or an Accept header naming x-flatbuffers / vnd.sdn.flatbuffers) asks for
+ * FlatBuffer; otherwise Default (the service default, FlatBuffers). ?format wins over Accept.
+ *
+ * The SDK HTTP ABI header (HttpRequestAbi_generated.h), the SDS APR and QRP headers and src/bulk_route.h are inlined by
+ * build.mjs; this file holds the method bodies.
  */
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "space_data_module_invoke.h"
@@ -45,26 +46,17 @@
 namespace {
 
 // ---------------------------------------------------------------------------
-// Small string helpers.
+// Strings
 // ---------------------------------------------------------------------------
 
 bool ends_with(const std::string& value, const char* suffix) {
-    const size_t suffix_len = std::strlen(suffix);
-    return value.size() >= suffix_len &&
-           std::memcmp(value.data() + value.size() - suffix_len, suffix, suffix_len) == 0;
+    const size_t n = std::strlen(suffix);
+    return value.size() >= n && std::memcmp(value.data() + value.size() - n, suffix, n) == 0;
 }
 
-char ascii_lower(char c) {
-    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-}
-
-bool iequals(const char* a, size_t a_len, const char* b) {
-    const size_t b_len = std::strlen(b);
-    if (a_len != b_len) return false;
-    for (size_t i = 0; i < a_len; i++) {
-        if (ascii_lower(a[i]) != ascii_lower(b[i])) return false;
-    }
-    return true;
+std::string lower(std::string s) {
+    for (char& c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return s;
 }
 
 int hex_nibble(char c) {
@@ -82,42 +74,15 @@ std::string percent_decode(const std::string& in) {
         const char c = in[i];
         if (c == '+') {
             out.push_back(' ');
-        } else if (c == '%' && i + 2 < in.size()) {
-            const int hi = hex_nibble(in[i + 1]);
-            const int lo = hex_nibble(in[i + 2]);
-            if (hi >= 0 && lo >= 0) {
-                out.push_back(static_cast<char>((hi << 4) | lo));
-                i += 2;
-            } else {
-                out.push_back(c);
-            }
+        } else if (c == '%' && i + 2 < in.size() && hex_nibble(in[i + 1]) >= 0 && hex_nibble(in[i + 2]) >= 0) {
+            out.push_back(static_cast<char>((hex_nibble(in[i + 1]) << 4) | hex_nibble(in[i + 2])));
+            i += 2;
         } else {
             out.push_back(c);
         }
     }
     return out;
 }
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Query-string parsing.
-// ---------------------------------------------------------------------------
 
 struct QueryParam {
     std::string key;
@@ -133,14 +98,8 @@ std::vector<QueryParam> parse_query_string(const std::string& raw) {
         if (end > start) {
             const std::string pair = raw.substr(start, end - start);
             const size_t eq = pair.find('=');
-            QueryParam param;
-            if (eq == std::string::npos) {
-                param.key = percent_decode(pair);
-            } else {
-                param.key = percent_decode(pair.substr(0, eq));
-                param.value = percent_decode(pair.substr(eq + 1));
-            }
-            params.push_back(param);
+            if (eq == std::string::npos) params.push_back({percent_decode(pair), std::string()});
+            else params.push_back({percent_decode(pair.substr(0, eq)), percent_decode(pair.substr(eq + 1))});
         }
         if (end == raw.size()) break;
         start = end + 1;
@@ -148,18 +107,24 @@ std::vector<QueryParam> parse_query_string(const std::string& raw) {
     return params;
 }
 
-const std::string* find_query_param(const std::vector<QueryParam>& params, const char* key) {
-    for (const auto& param : params) {
-        if (param.key == key) return &param.value;
-    }
+const std::string* find_param(const std::vector<QueryParam>& params, const char* key) {
+    for (const auto& p : params) if (p.key == key) return &p.value;
     return nullptr;
 }
 
+// Full-string integer parse (garbage or partial values are not numbers).
+bool parse_long(const std::string& text, long* out) {
+    if (text.empty()) return false;
+    char* end = nullptr;
+    const long v = std::strtol(text.c_str(), &end, 10);
+    if (end == text.c_str() || !end || *end != '\0') return false;
+    *out = v;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
-// Epoch parsing: unix seconds number OR RFC3339 "YYYY-MM-DDTHH:MM:SSZ"
-// (fractional seconds accepted). Proleptic-Gregorian civil-days algorithm
-// (Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms") — no host
-// clock or timezone database involved.
+// Epoch: unix seconds (integer or fractional) or RFC3339 UTC "YYYY-MM-DDTHH:MM:SS(.frac)Z". Proleptic-Gregorian
+// civil days (Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms"); no clock or zone database.
 // ---------------------------------------------------------------------------
 
 int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
@@ -171,173 +136,335 @@ int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
     return era * 146097LL + static_cast<int64_t>(doe) - 719468LL;
 }
 
-bool parse_epoch(const std::string& value, double* out) {
+bool parse_epoch_seconds(const std::string& value, double* out) {
     if (value.empty()) return false;
-    // Unix seconds number (integer or fractional).
     if (value.find('T') == std::string::npos) {
         char* end = nullptr;
-        const double numeric = strtod(value.c_str(), &end);
-        if (end != value.c_str() && end && *end == '\0') {
-            *out = numeric;
-            return true;
-        }
-        return false;
+        const double numeric = std::strtod(value.c_str(), &end);
+        if (end == value.c_str() || !end || *end != '\0' || !std::isfinite(numeric)) return false;
+        *out = numeric;
+        return true;
     }
-    // RFC3339 UTC: YYYY-MM-DDTHH:MM:SS(.frac)?Z
     int year = 0;
     unsigned month = 0, day = 0, hour = 0, minute = 0;
     double seconds = 0.0;
     int consumed = 0;
-    const int matched = std::sscanf(value.c_str(), "%d-%u-%uT%u:%u:%lf%n",
-                                    &year, &month, &day, &hour, &minute, &seconds, &consumed);
-    if (matched != 6) return false;
-    if (value[static_cast<size_t>(consumed)] != 'Z' ||
-        static_cast<size_t>(consumed) + 1 != value.size()) {
+    if (std::sscanf(value.c_str(), "%d-%u-%uT%u:%u:%lf%n", &year, &month, &day, &hour, &minute, &seconds, &consumed) != 6) {
         return false;
     }
-    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 ||
-        seconds < 0.0 || seconds >= 61.0) {
+    if (value[static_cast<size_t>(consumed)] != 'Z' || static_cast<size_t>(consumed) + 1 != value.size()) return false;
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || seconds < 0.0 || seconds >= 61.0) {
         return false;
     }
-    const int64_t days = days_from_civil(year, month, day);
-    *out = static_cast<double>(days) * 86400.0 + hour * 3600.0 + minute * 60.0 + seconds;
+    *out = static_cast<double>(days_from_civil(year, month, day)) * 86400.0 + hour * 3600.0 + minute * 60.0 + seconds;
     return true;
 }
 
-std::string format_number(double value) {
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.6f", value);
-    return std::string(buf);
-}
+int64_t epoch_ms(double seconds) { return static_cast<int64_t>(std::llround(seconds * 1000.0)); }
 
 // ---------------------------------------------------------------------------
-// Minimal JSON extraction for the data_query body ({"sql":"...","params":[...]}).
-// Mirrors the retrieval module's helpers (control metadata only).
+// A small JSON reader for the CLIENT's request bodies (the external representation; nothing here is emitted).
 // ---------------------------------------------------------------------------
 
-bool is_json_ws(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+struct Json {
+    enum Kind { Null, Bool, Number, String, Array, Object } kind = Null;
+    bool boolean = false;
+    double number = 0.0;
+    std::string text;  // String value, or the number's source text (exact integers)
+    std::vector<Json> items;
+    std::vector<std::pair<std::string, Json>> members;
+
+    const Json* get(const char* key) const {
+        if (kind != Object) return nullptr;
+        for (const auto& m : members) if (m.first == key) return &m.second;
+        return nullptr;
+    }
+};
+
+class JsonReader {
+ public:
+    explicit JsonReader(const std::string& s) : s_(s) {}
+    bool parse(Json* out) {
+        if (!value(out, 0)) return false;
+        ws();
+        return i_ == s_.size();
+    }
+
+ private:
+    void ws() { while (i_ < s_.size() && (s_[i_] == ' ' || s_[i_] == '\t' || s_[i_] == '\n' || s_[i_] == '\r')) i_++; }
+    bool lit(const char* word) {
+        const size_t n = std::strlen(word);
+        if (s_.compare(i_, n, word) != 0) return false;
+        i_ += n;
+        return true;
+    }
+    static void utf8(std::string* out, uint32_t cp) {
+        if (cp < 0x80) out->push_back(static_cast<char>(cp));
+        else if (cp < 0x800) { out->push_back(static_cast<char>(0xC0 | (cp >> 6))); out->push_back(static_cast<char>(0x80 | (cp & 0x3F))); }
+        else if (cp < 0x10000) { out->push_back(static_cast<char>(0xE0 | (cp >> 12))); out->push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F))); out->push_back(static_cast<char>(0x80 | (cp & 0x3F))); }
+        else { out->push_back(static_cast<char>(0xF0 | (cp >> 18))); out->push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F))); out->push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F))); out->push_back(static_cast<char>(0x80 | (cp & 0x3F))); }
+    }
+    bool hex4(uint32_t* cp) {
+        if (i_ + 4 > s_.size()) return false;
+        uint32_t v = 0;
+        for (int k = 0; k < 4; k++) {
+            const int n = hex_nibble(s_[i_ + k]);
+            if (n < 0) return false;
+            v = (v << 4) | static_cast<uint32_t>(n);
+        }
+        i_ += 4;
+        *cp = v;
+        return true;
+    }
+    bool string(std::string* out) {
+        if (i_ >= s_.size() || s_[i_] != '"') return false;
+        i_++;
+        while (i_ < s_.size() && s_[i_] != '"') {
+            const char c = s_[i_++];
+            if (c != '\\') { out->push_back(c); continue; }
+            if (i_ >= s_.size()) return false;
+            const char e = s_[i_++];
+            switch (e) {
+                case '"': out->push_back('"'); break;
+                case '\\': out->push_back('\\'); break;
+                case '/': out->push_back('/'); break;
+                case 'b': out->push_back('\b'); break;
+                case 'f': out->push_back('\f'); break;
+                case 'n': out->push_back('\n'); break;
+                case 'r': out->push_back('\r'); break;
+                case 't': out->push_back('\t'); break;
+                case 'u': {
+                    uint32_t cp = 0;
+                    if (!hex4(&cp)) return false;
+                    if (cp >= 0xD800 && cp < 0xDC00 && i_ + 1 < s_.size() && s_[i_] == '\\' && s_[i_ + 1] == 'u') {
+                        i_ += 2;
+                        uint32_t low = 0;
+                        if (!hex4(&low) || low < 0xDC00 || low > 0xDFFF) return false;
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                    }
+                    utf8(out, cp);
+                    break;
+                }
+                default: return false;
+            }
+        }
+        if (i_ >= s_.size()) return false;
+        i_++;
+        return true;
+    }
+    bool value(Json* out, int depth) {
+        if (depth > 32) return false;
+        ws();
+        if (i_ >= s_.size()) return false;
+        const char c = s_[i_];
+        if (c == '{') {
+            out->kind = Json::Object;
+            i_++;
+            ws();
+            if (i_ < s_.size() && s_[i_] == '}') { i_++; return true; }
+            while (true) {
+                ws();
+                std::string key;
+                if (!string(&key)) return false;
+                ws();
+                if (i_ >= s_.size() || s_[i_] != ':') return false;
+                i_++;
+                Json v;
+                if (!value(&v, depth + 1)) return false;
+                out->members.emplace_back(std::move(key), std::move(v));
+                ws();
+                if (i_ < s_.size() && s_[i_] == ',') { i_++; continue; }
+                if (i_ < s_.size() && s_[i_] == '}') { i_++; return true; }
+                return false;
+            }
+        }
+        if (c == '[') {
+            out->kind = Json::Array;
+            i_++;
+            ws();
+            if (i_ < s_.size() && s_[i_] == ']') { i_++; return true; }
+            while (true) {
+                Json v;
+                if (!value(&v, depth + 1)) return false;
+                out->items.push_back(std::move(v));
+                ws();
+                if (i_ < s_.size() && s_[i_] == ',') { i_++; continue; }
+                if (i_ < s_.size() && s_[i_] == ']') { i_++; return true; }
+                return false;
+            }
+        }
+        if (c == '"') { out->kind = Json::String; return string(&out->text); }
+        if (lit("true")) { out->kind = Json::Bool; out->boolean = true; return true; }
+        if (lit("false")) { out->kind = Json::Bool; out->boolean = false; return true; }
+        if (lit("null")) { out->kind = Json::Null; return true; }
+        const size_t start = i_;
+        if (s_[i_] == '-') i_++;
+        while (i_ < s_.size() && ((s_[i_] >= '0' && s_[i_] <= '9') || s_[i_] == '.' || s_[i_] == 'e' || s_[i_] == 'E' || s_[i_] == '+' || s_[i_] == '-')) i_++;
+        if (i_ == start) return false;
+        out->kind = Json::Number;
+        out->text = s_.substr(start, i_ - start);
+        char* end = nullptr;
+        out->number = std::strtod(out->text.c_str(), &end);
+        return end && *end == '\0';
+    }
+
+    const std::string& s_;
+    size_t i_ = 0;
+};
+
+bool body_is_object(const std::string& body) {
+    for (const char c : body) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') continue;
+        return c == '{';
+    }
+    return false;
 }
 
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
+std::string trim(const std::string& s) {
+    size_t a = 0, b = s.size();
+    while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\n' || s[a] == '\r')) a++;
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\n' || s[b - 1] == '\r')) b--;
+    return s.substr(a, b - a);
+}
+
+bool base64_decode(const std::string& in, std::vector<uint8_t>* out) {
+    auto val = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+' || c == '-') return 62;
+        if (c == '/' || c == '_') return 63;
+        return -1;
+    };
+    uint32_t acc = 0;
+    int bits = 0;
+    for (const char c : in) {
+        if (c == '=' || c == '\n' || c == '\r' || c == ' ') continue;
+        const int v = val(c);
+        if (v < 0) return false;
+        acc = (acc << 6) | static_cast<uint32_t>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xFF));
         }
     }
-    *out = value;
     return true;
 }
 
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-std::string json_array_slice(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '[') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
+// One client parameter -> a typed QRPValue. Tagged {"t":"i64|f64|str|bool|null|bytes","v":...} (the node API's tagged
+// form; bytes are base64) or a bare JSON scalar. false + why when the value has no typed reading.
+bool parameter_value(const Json& p, QRPValueT* out, std::string* why) {
+    const Json* tag = p.kind == Json::Object ? p.get("t") : nullptr;
+    if (tag && tag->kind == Json::String) {
+        const Json* v = p.get("v");
+        const std::string& t = tag->text;
+        if (t == "null") { out->KIND = qrpValueKind_Null; return true; }
+        if (!v) { *why = "tagged parameter has no \"v\""; return false; }
+        if (t == "bool" && v->kind == Json::Bool) { out->KIND = qrpValueKind_Bool; out->BOOL_VALUE = v->boolean; return true; }
+        if (t == "i64" && (v->kind == Json::Number || v->kind == Json::String)) {
+            char* end = nullptr;
+            const long long n = std::strtoll(v->text.c_str(), &end, 10);
+            if (!end || *end != '\0' || v->text.empty()) { *why = "i64 parameter is not an integer"; return false; }
+            out->KIND = qrpValueKind_Int;
+            out->INT_VALUE = n;
+            return true;
         }
-        if (c == '"') in_string = true;
-        else if (c == '[') depth++;
-        else if (c == ']') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
+        if (t == "f64" && v->kind == Json::Number) { out->KIND = qrpValueKind_Float; out->FLOAT_VALUE = v->number; return true; }
+        if (t == "str" && v->kind == Json::String) { out->KIND = qrpValueKind_Text; out->TEXT_VALUE = v->text; return true; }
+        if (t == "bytes" && v->kind == Json::String) {
+            out->KIND = qrpValueKind_Bytes;
+            if (!base64_decode(v->text, &out->BYTES_VALUE)) { *why = "bytes parameter is not base64"; return false; }
+            return true;
         }
+        *why = "parameter tag \"" + t + "\" does not match its value";
+        return false;
     }
-    return std::string();
+    switch (p.kind) {
+        case Json::Null: out->KIND = qrpValueKind_Null; return true;
+        case Json::Bool: out->KIND = qrpValueKind_Bool; out->BOOL_VALUE = p.boolean; return true;
+        case Json::String: out->KIND = qrpValueKind_Text; out->TEXT_VALUE = p.text; return true;
+        case Json::Number: {
+            const bool integral = p.text.find_first_of(".eE") == std::string::npos;
+            if (integral) {
+                char* end = nullptr;
+                const long long n = std::strtoll(p.text.c_str(), &end, 10);
+                if (end && *end == '\0') { out->KIND = qrpValueKind_Int; out->INT_VALUE = n; return true; }
+            }
+            out->KIND = qrpValueKind_Float;
+            out->FLOAT_VALUE = p.number;
+            return true;
+        }
+        default: *why = "a parameter must be a scalar or a tagged {\"t\",\"v\"} object"; return false;
+    }
 }
 
-int push_decision(const std::string& decision) {
-    const int32_t pushed = plugin_push_output_ex(
-        "decision", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1,
-        reinterpret_cast<const uint8_t*>(decision.data()),
-        static_cast<uint32_t>(decision.size()));
-    return pushed < 0 ? 500 : 0;
+bool parameters_from(const Json* params, std::vector<std::unique_ptr<QRPValueT>>* out, std::string* why) {
+    if (!params || params->kind == Json::Null) return true;
+    if (params->kind != Json::Array) { *why = "\"params\" must be an array"; return false; }
+    for (size_t i = 0; i < params->items.size(); i++) {
+        auto value = std::make_unique<QRPValueT>();
+        std::string detail;
+        if (!parameter_value(params->items[i], value.get(), &detail)) {
+            *why = "params[" + std::to_string(i) + "]: " + detail;
+            return false;
+        }
+        out->push_back(std::move(value));
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
-// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
-//
-// `space_data_module_runtime_begin_node_invocation` (module-SDK
-// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
-// node's queue `while (count < budget && !queue.empty())`: PORT-BLIND, with a
-// drain budget of 64. `maxStreams`, `maxBatch` and `drainPolicy` are purely
-// DECLARATIVE in the compiled runtime — enforced at compose time and in the
-// JS-only reference runtime, never by the baked runtime.wasm. So a guest that
-// reads ordinal 0 of a port and returns DESTROYS every other frame it was
-// handed on that port: they are already dequeued, nothing re-delivers them,
-// and nothing logs the loss.
-//
-// That is measured, not hypothetical. It was a live P1
-// (`cellular-multiprovider-returns-only-first-provider`) that survived four
-// passes precisely because a partial answer is indistinguishable from an
-// honest one: a two-provider request performed exactly ONE outbound fetch and
-// returned the first provider's records, byte-identical to that provider run
-// alone, with no error anywhere.
-//
-// Every method here parses ONE $HTQ HttpRequest envelope into ONE routing
-// decision. The flow's http-request trigger binds exactly one envelope per
-// run and the host mount checks a pooled instance out per exchange
-// (sdn-server internal/flowrt/httpmount.go), so two request frames in one
-// invocation means either a topology change nobody re-derived this node
-// against or a producer bug — and answering one HTTP request while throwing
-// another away is the worst possible response to either.
-//
-// So a surplus is REFUSED rather than silently dropped — a named node error
-// the flow surfaces, instead of an answer assembled from whichever frame the
-// queue happened to hold first (queue order is not semantic order, so such an
-// answer is arbitrary AND indistinguishable from a correct one). This costs
-// nothing while the contract holds: one frame per port is what every deployed
-// flow delivers today.
+// The request
+// ---------------------------------------------------------------------------
+
+struct Request {
+    std::string method;
+    std::string path;
+    std::vector<QueryParam> query;
+    std::string body;
+    std::string if_none_match;
+    std::string accept_header;
+};
+
+aprMethod method_of(const std::string& m) {
+    if (m == "GET") return aprMethod_GET;
+    if (m == "HEAD") return aprMethod_HEAD;
+    if (m == "POST") return aprMethod_POST;
+    if (m == "PUT") return aprMethod_PUT;
+    if (m == "PATCH") return aprMethod_PATCH;
+    if (m == "DELETE") return aprMethod_DELETE;
+    if (m == "OPTIONS") return aprMethod_OPTIONS;
+    return aprMethod_Unspecified;
+}
+
+// 0 Default, 1 FlatBuffer, 2 Json (aprRepresentation and qrpRepresentation share these values).
+int representation_of(const Request& r, const std::string* body_format = nullptr) {
+    auto from_format = [](const std::string& f) -> int {
+        const std::string v = lower(f);
+        if (v == "json") return 2;
+        if (v == "flatbuffer" || v == "flatbuffers" || v == "fb") return 1;
+        return -1;
+    };
+    if (const std::string* f = find_param(r.query, "format")) {
+        const int v = from_format(*f);
+        if (v >= 0) return v;
+        if (!f->empty()) return 0;
+    }
+    if (body_format) {
+        const int v = from_format(*body_format);
+        if (v >= 0) return v;
+    }
+    const std::string accept = lower(r.accept_header);
+    if (accept.find("flatbuffers") != std::string::npos) return 1;
+    if (accept.find("application/json") != std::string::npos) return 2;
+    return 0;
+}
+
+// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`. The compiled flow runtime fills an
+// invocation by popping the node's queue PORT-BLIND (drain budget 64); maxStreams / maxBatch / drainPolicy are
+// declarative only. Every method here answers ONE HTTP request, so a second request frame is refused by name rather
+// than silently destroyed (an answer from whichever frame the queue held first is arbitrary and looks correct).
 bool find_batched_input_port(char* message, size_t message_len) {
     const uint32_t count = plugin_get_input_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -345,8 +472,7 @@ bool find_batched_input_port(char* message, size_t message_len) {
         if (!frame || !frame->port_id) continue;
         for (uint32_t j = 0; j < i; j++) {
             const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
-            if (!earlier || !earlier->port_id) continue;
-            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            if (!earlier || !earlier->port_id || std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
             uint32_t on_port = 0;
             for (uint32_t k = 0; k < count; k++) {
                 const plugin_input_frame_t* f = plugin_get_input_frame(k);
@@ -364,639 +490,349 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+// Read the one $HTQ request. Returns 0, or the invoke status after setting the node error.
+int read_request(const char* method_name, Request* out) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof batch_message)) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+    const int32_t index = plugin_find_input_index("request", 0);
+    const plugin_input_frame_t* frame = index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
+    if (!frame || !frame->payload || frame->payload_length < 8) {
+        const std::string message = std::string(method_name) + " requires a $HTQ HttpRequest frame on port \"request\".";
+        plugin_set_error("missing-request-frame", message.c_str());
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) || !sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        const std::string message = std::string(method_name) + " input frame is not a valid $HTQ HttpRequest buffer.";
+        plugin_set_error("invalid-request-frame", message.c_str());
+        return 400;
+    }
+    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+    if (request->METHOD()) out->method = request->METHOD()->str();
+    if (request->PATH()) out->path = request->PATH()->str();
+    if (request->QUERY()) out->query = parse_query_string(request->QUERY()->str());
+    if (request->BODY()) out->body.assign(reinterpret_cast<const char*>(request->BODY()->data()), request->BODY()->size());
+    if (const auto* headers = request->HEADERS()) {
+        for (const auto* header : *headers) {
+            if (!header || !header->NAME()) continue;
+            const std::string name = lower(header->NAME()->str());
+            const std::string value = header->VALUE() ? header->VALUE()->str() : std::string();
+            if (name == "if-none-match" && out->if_none_match.empty()) out->if_none_match = value;
+            if (name == "accept" && out->accept_header.empty()) out->accept_header = value;
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Emitting decisions
+// ---------------------------------------------------------------------------
+
+int push_apr(const APRT& apr) {
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishAPRBuffer(b, APR::Pack(b, &apr));
+    return plugin_push_output_ex("decision", "APR.fbs", APRIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "APR", 0, 0,
+                                 b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0 ? 500 : 0;
+}
+
+int push_qrp(const char* port, const QRPT& qrp) {
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishQRPBuffer(b, QRP::Pack(b, &qrp));
+    return plugin_push_output_ex(port, "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "QRP", 0, 0,
+                                 b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0 ? 500 : 0;
+}
+
+APRT apr_for(const Request& r) {
+    APRT apr;
+    apr.METHOD = method_of(r.method);
+    apr.PATH = r.path;
+    apr.IF_NONE_MATCH = r.if_none_match;
+    apr.ACCEPT = static_cast<aprRepresentation>(representation_of(r));
+    return apr;
+}
+
+void add_parameter(APRT* apr, const char* name, const std::string& value) {
+    auto p = std::make_unique<APRParameterT>();
+    p->NAME = name;
+    p->VALUE = value;
+    apr->PARAMETERS.push_back(std::move(p));
+}
+
+int apr_refusal(APRT apr, uint16_t status, const char* code, const std::string& message) {
+    apr.STATUS = status;
+    apr.ERROR_CODE = code;
+    apr.ERROR_MESSAGE = message;
+    return push_apr(apr);
+}
+
+QRPT qrp_request(const Request& r, int representation) {
+    QRPT q;
+    q.KIND = qrpKind_Request;
+    q.REPRESENTATION = static_cast<qrpRepresentation>(representation);
+    q.ETAG = r.if_none_match;
+    return q;
+}
+
+// A refusal of a query/data route: one QRP Error on "refusal", carrying what the responder needs to render it.
+int qrp_refusal(const Request& r, int representation, const char* code, const std::string& message) {
+    QRPT q = qrp_request(r, representation);
+    q.KIND = qrpKind_Error;
+    q.STATUS = qrpStatus_Error;
+    q.ERROR_CODE = code;
+    q.MESSAGE = message;
+    const std::string c(code);
+    q.HTTP_STATUS = c == "no-route" ? 404 : c == "method-not-allowed" ? 405 : c == "not-acceptable" ? 406 : 400;
+    return push_qrp("refusal", q);
+}
+
+// Time-profile names, as the HTTP API spells them ("epoch." prefix tolerated). -1 = not a profile.
+int time_profile_of(const std::string& name) {
+    std::string p = lower(name);
+    if (p.rfind("epoch.", 0) == 0) p = p.substr(6);
+    if (p == "nearest") return qrpTimeProfile_Nearest;
+    if (p == "as_of" || p == "asof") return qrpTimeProfile_AsOf;
+    if (p == "forward") return qrpTimeProfile_Forward;
+    if (p == "latest") return qrpTimeProfile_Latest;
+    if (p == "all") return qrpTimeProfile_All;
+    return -1;
+}
+
 }  // namespace
 
 extern "C" {
 
-// route: parse one $HTQ HttpRequest into exactly one decision JSON frame.
+// route: one $HTQ -> exactly one of "bulk" / "query" / "refusal" (each a $QRP).
 int route(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
-    }
+    Request r;
+    if (const int status = read_request("route", &r)) return status;
+    const int representation = representation_of(r);
 
-    const int32_t input_index = plugin_find_input_index("request", 0);
-    const plugin_input_frame_t* frame =
-        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-request-frame",
-                         "route requires a $HTQ HttpRequest input frame on port \"request\".");
-        return 400;
-    }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
-        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
-        plugin_set_error("invalid-request-frame",
-                         "route input frame is not a valid $HTQ HttpRequest buffer.");
-        return 400;
-    }
-    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
-
-    std::string method;
-    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
-    std::string path;
-    if (request->PATH()) path.assign(request->PATH()->c_str(), request->PATH()->size());
-    std::string raw_query;
-    if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
-
-    // If-None-Match: case-insensitive header lookup (host lower-cases names,
-    // but do not rely on it).
-    std::string if_none_match;
-    bool has_if_none_match = false;
-    if (const auto* headers = request->HEADERS()) {
-        for (::flatbuffers::uoffset_t i = 0; i < headers->size(); i++) {
-            const auto* header = headers->Get(i);
-            if (!header || !header->NAME()) continue;
-            if (iequals(header->NAME()->c_str(), header->NAME()->size(), "if-none-match")) {
-                if (header->VALUE()) {
-                    if_none_match.assign(header->VALUE()->c_str(), header->VALUE()->size());
-                }
-                has_if_none_match = true;
-                break;
-            }
-        }
-    }
-
-    const std::vector<QueryParam> params = parse_query_string(raw_query);
-
-    // format: "json" | default "flatbuffer".
-    std::string format = "flatbuffer";
-    if (const std::string* format_param = find_query_param(params, "format")) {
-        if (*format_param == "json") format = "json";
-    }
-
-    std::string decision = "{";
-    const auto append_common_tail = [&](std::string* out) {
-        *out += "\"format\":\"" + format + "\"";
-        if (has_if_none_match) {
-            *out += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
-        }
-    };
-
-    // Per-schema bulk read: "<code>/bulk" names the standard (loop C.3b served
-    // only "/omm/bulk"; sdn-data-retrieval-rfb-bulk-route generalized it, so
-    // "/rfb/bulk" reaches the live RF catalogue through the SAME retrieval
-    // node — its query already carries the schema, it was only ever handed one
-    // value).
-    const std::string bulk_schema = sdn_http_route::bulk_route_schema(path);
+    // Per-schema bulk read: "<code>/bulk" names the standard (src/bulk_route.h decides only the path's SHAPE).
+    const std::string bulk_schema = sdn_http_route::bulk_route_schema(r.path);
     if (!bulk_schema.empty()) {
-        if (format == "json" && !sdn_http_route::json_encode_available(bulk_schema)) {
-            // Refuse rather than mis-encode: the flow's json branch is an $OMM
-            // encoder, and running $RFB bytes through it would answer confident
-            // nonsense. Say which formats exist instead.
-            decision += "\"route\":\"not_found\",";
-            append_common_tail(&decision);
-            decision += ",\"error\":\"json encoding is not available for " + json_escape(bulk_schema) +
-                        "; request format=flatbuffer\"}";
-            return push_decision(decision);
+        if (representation == 2 && !sdn_http_route::json_encode_available(bulk_schema)) {
+            // The responder renders JSON for $OMM records only; rendering another standard's bytes as OMM would be
+            // confident nonsense, so the request is refused and told which representation exists.
+            return qrp_refusal(r, representation, "not-acceptable",
+                               "json encoding is not available for " + bulk_schema + "; request format=flatbuffer");
         }
-        decision += "\"route\":\"omm_bulk\",";
-        append_common_tail(&decision);
-        decision += ",\"query\":{\"schema\":\"" + json_escape(bulk_schema) + "\"";
-        if (const std::string* source = find_query_param(params, "source")) {
-            if (!source->empty()) decision += ",\"source\":\"" + json_escape(*source) + "\"";
-        }
-        // "profile" wins over its "mode" alias when both are present.
-        const std::string* profile = find_query_param(params, "profile");
-        if (!profile) profile = find_query_param(params, "mode");
+        const std::string code = bulk_schema.substr(0, bulk_schema.size() - 4);
+        QRPT q = qrp_request(r, representation);
+        q.SCHEMA_NAME = code;
+        q.FILE_IDENTIFIER = "$" + code;
+        if (const std::string* source = find_param(r.query, "source")) q.SOURCE_NAME = *source;
+        const std::string* profile = find_param(r.query, "profile");  // "profile" wins over its "mode" alias
+        if (!profile || profile->empty()) profile = find_param(r.query, "mode");
         if (profile && !profile->empty()) {
-            decision += ",\"profile\":\"" + json_escape(*profile) + "\"";
-        }
-        if (const std::string* epoch_param = find_query_param(params, "epoch")) {
-            double epoch = 0.0;
-            if (parse_epoch(*epoch_param, &epoch)) {
-                decision += ",\"epoch\":" + format_number(epoch);
+            const int tp = time_profile_of(*profile);
+            if (tp < 0) {
+                return qrp_refusal(r, representation, "invalid-profile",
+                                   "unknown profile: " + *profile + " (nearest | as_of | forward | latest | all)");
             }
+            q.TIME_PROFILE = static_cast<qrpTimeProfile>(tp);
         }
-        if (const std::string* limit_param = find_query_param(params, "limit")) {
-            char* end = nullptr;
-            const long limit = strtol(limit_param->c_str(), &end, 10);
-            if (end != limit_param->c_str() && end && *end == '\0' && limit > 0) {
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "%ld", limit);
-                decision += ",\"limit\":";
-                decision += buf;
+        if (const std::string* epoch = find_param(r.query, "epoch")) {
+            double seconds = 0.0;
+            if (!parse_epoch_seconds(*epoch, &seconds)) {
+                return qrp_refusal(r, representation, "invalid-epoch",
+                                   "epoch must be RFC3339 (YYYY-MM-DDTHH:MM:SSZ) or unix seconds: " + *epoch);
             }
+            q.PROFILE_EPOCH_MS = epoch_ms(seconds);
         }
-        decision += "}}";
-        return push_decision(decision);
+        if (const std::string* limit = find_param(r.query, "limit")) {
+            long n = 0;
+            if (parse_long(*limit, &n) && n > 0) q.LIMIT = static_cast<uint32_t>(n > 0xFFFFFFFFL ? 0xFFFFFFFFL : n);
+        }
+        return push_qrp("bulk", q);
     }
 
-    if (ends_with(path, "/query")) {
-        // POST body passthrough: JSON {"sql","params"} or raw SQL text.
-        std::string body;
-        if (const auto* body_bytes = request->BODY()) {
-            body.assign(reinterpret_cast<const char*>(body_bytes->data()), body_bytes->size());
-        }
-        size_t first = 0;
-        while (first < body.size() && is_json_ws(body[first])) first++;
-        std::string sql;
-        std::string params_json = "[]";
-        if (first < body.size() && body[first] == '{') {
-            std::string sql_field;
-            if (json_string_field(body, "sql", &sql_field) && !sql_field.empty()) {
-                sql = sql_field;
-                const std::string body_params = json_array_slice(body, "params");
-                if (!body_params.empty()) params_json = body_params;
+    if (ends_with(r.path, "/query")) {
+        // The body is the client's request: a JSON object {"sql","params"} or raw SQL text.
+        QRPT q = qrp_request(r, representation);
+        if (body_is_object(r.body)) {
+            Json body;
+            if (!JsonReader(r.body).parse(&body)) {
+                return qrp_refusal(r, representation, "invalid-body", "the request body is not valid JSON");
             }
-        } else if (first < body.size()) {
-            sql = body.substr(first);
+            if (const Json* sql = body.get("sql"); sql && sql->kind == Json::String) q.SQL = sql->text;
+            std::string why;
+            if (!parameters_from(body.get("params"), &q.PARAMETERS, &why)) {
+                return qrp_refusal(r, representation, "invalid-params", why);
+            }
+        } else {
+            q.SQL = trim(r.body);
         }
-        if (sql.empty()) {
-            decision += "\"route\":\"not_found\",";
-            append_common_tail(&decision);
-            decision += ",\"error\":\"data_query requires a SQL request body\"}";
-            return push_decision(decision);
+        if (q.SQL.empty()) {
+            return qrp_refusal(r, representation, "missing-sql",
+                               "data_query requires a SQL request body ({\"sql\":\"SELECT ...\"} or raw SQL text)");
         }
-        decision += "\"route\":\"data_query\",";
-        append_common_tail(&decision);
-        decision += ",\"sql\":\"" + json_escape(sql) + "\",\"params\":" + params_json + "}";
-        return push_decision(decision);
+        return push_qrp("query", q);
     }
 
-    decision += "\"route\":\"not_found\",";
-    append_common_tail(&decision);
-    decision += ",\"error\":\"no route for " + json_escape(method) + " " + json_escape(path) + "\"}";
-    return push_decision(decision);
+    return qrp_refusal(r, representation, "no-route", "no route for " + r.method + " " + r.path);
 }
 
-// discover: parse one $HTQ HttpRequest into exactly one discovery routing
-// decision (gateway loops G.2 + G.3 + G.4). Routes (suffix-matched,
-// mount-agnostic; one trailing "/" tolerated):
-//   .../peers                          -> peers_list
-//   .../peers/<segment>                -> peer_get     (+"peerId")
-//   .../peers/<segment>/pnm            -> pnm_history  (+"peerId", +"limit":
-//                                         the ?limit=N query param clamped
-//                                         IN-WASM to [1, 100], default 1)
-//   .../peers/<segment>/<std>/latest   -> latest_dataset (+"peerId",
-//                                         +"standard" — the provider-scoped
-//                                         newest-dataset surface, G.4)
-//   .../standards                      -> standards
-//   anything else                      -> not_found
-// Only GET/HEAD are discovery reads; other methods degrade to not_found.
-// Decision JSON contract: {"route","format"} + optional "ifNoneMatch",
-// "peerId", "standard", "limit", "error" — same envelope family as route().
+// discover: one $HTQ -> exactly one $APR on "decision". Routes (suffix-matched, mount-agnostic, one trailing "/"
+// tolerated): .../peers -> peers_list; .../peers/<id> -> peer_get (peerId); .../peers/<id>/pnm -> pnm_history (peerId,
+// limit clamped [1,100], default 1 = the newest publication); .../peers/<id>/<standard>/latest -> latest_dataset
+// (peerId, standard); .../standards -> standards. Only GET/HEAD are discovery reads.
 int discover(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
+    Request r;
+    if (const int status = read_request("discover", &r)) return status;
+    APRT apr = apr_for(r);
+
+    if (r.method != "GET" && r.method != "HEAD") {
+        return apr_refusal(std::move(apr), 404, "no-route", "no " + r.method + " route for " + r.path + " (discovery routes are GET)");
     }
+    std::string path = r.path;
+    if (path.size() > 1 && path.back() == '/') path.pop_back();
 
-    const int32_t input_index = plugin_find_input_index("request", 0);
-    const plugin_input_frame_t* frame =
-        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-request-frame",
-                         "discover requires a $HTQ HttpRequest input frame on port \"request\".");
-        return 400;
+    if (ends_with(path, "/standards")) {
+        apr.ROUTE = "standards";
+        return push_apr(apr);
     }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
-        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
-        plugin_set_error("invalid-request-frame",
-                         "discover input frame is not a valid $HTQ HttpRequest buffer.");
-        return 400;
+    if (ends_with(path, "/peers")) {
+        apr.ROUTE = "peers_list";
+        return push_apr(apr);
     }
-    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
-
-    std::string method;
-    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
-    std::string path;
-    if (request->PATH()) path.assign(request->PATH()->c_str(), request->PATH()->size());
-    std::string raw_query;
-    if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
-
-    std::string if_none_match;
-    bool has_if_none_match = false;
-    if (const auto* headers = request->HEADERS()) {
-        for (::flatbuffers::uoffset_t i = 0; i < headers->size(); i++) {
-            const auto* header = headers->Get(i);
-            if (!header || !header->NAME()) continue;
-            if (iequals(header->NAME()->c_str(), header->NAME()->size(), "if-none-match")) {
-                if (header->VALUE()) {
-                    if_none_match.assign(header->VALUE()->c_str(), header->VALUE()->size());
-                }
-                has_if_none_match = true;
-                break;
-            }
-        }
-    }
-
-    const std::vector<QueryParam> params = parse_query_string(raw_query);
-    std::string format = "flatbuffer";
-    if (const std::string* format_param = find_query_param(params, "format")) {
-        if (*format_param == "json") format = "json";
-    }
-
-    std::string decision = "{";
-    const auto append_common_tail = [&](std::string* out) {
-        *out += "\"format\":\"" + format + "\"";
-        if (has_if_none_match) {
-            *out += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
-        }
-    };
-    const auto not_found = [&](const std::string& message) {
-        std::string out = "{\"route\":\"not_found\",";
-        append_common_tail(&out);
-        out += ",\"error\":\"" + json_escape(message) + "\"}";
-        return push_decision(out);
-    };
-
-    if (method != "GET" && method != "HEAD") {
-        return not_found("no " + method + " route for " + path + " (discovery routes are GET)");
-    }
-
-    // Tolerate exactly one trailing slash on the matchable path.
-    std::string trimmed = path;
-    if (trimmed.size() > 1 && trimmed.back() == '/') trimmed.pop_back();
-
-    if (ends_with(trimmed, "/standards")) {
-        decision += "\"route\":\"standards\",";
-        append_common_tail(&decision);
-        decision += "}";
-        return push_decision(decision);
-    }
-
-    if (ends_with(trimmed, "/peers")) {
-        decision += "\"route\":\"peers_list\",";
-        append_common_tail(&decision);
-        decision += "}";
-        return push_decision(decision);
-    }
-
-    const size_t peers_at = trimmed.rfind("/peers/");
+    const size_t peers_at = path.rfind("/peers/");
     if (peers_at != std::string::npos) {
-        const std::string remainder = trimmed.substr(peers_at + std::strlen("/peers/"));
-        if (remainder.empty()) {
-            decision += "\"route\":\"peers_list\",";
-            append_common_tail(&decision);
-            decision += "}";
-            return push_decision(decision);
+        const std::string rest = path.substr(peers_at + 7);
+        const size_t slash = rest.find('/');
+        if (slash == std::string::npos) {
+            apr.ROUTE = "peer_get";
+            add_parameter(&apr, "peerId", percent_decode(rest));
+            return push_apr(apr);
         }
-        const size_t slash = remainder.find('/');
-        if (slash != std::string::npos) {
-            // Per-peer sub-surfaces: <peerId>/pnm (G.3) and
-            // <peerId>/<standard>/latest (G.4); anything else stays
-            // not_found.
-            const std::string peer_segment = remainder.substr(0, slash);
-            const std::string sub = remainder.substr(slash + 1);
-            const size_t sub_slash = sub.find('/');
-            if (!peer_segment.empty() && sub_slash != std::string::npos) {
-                const std::string standard = sub.substr(0, sub_slash);
-                const std::string tail = sub.substr(sub_slash + 1);
-                if (!standard.empty() && tail == "latest") {
-                    decision += "\"route\":\"latest_dataset\",";
-                    append_common_tail(&decision);
-                    decision += ",\"peerId\":\"" + json_escape(percent_decode(peer_segment)) + "\"";
-                    decision += ",\"standard\":\"" + json_escape(percent_decode(standard)) + "\"}";
-                    return push_decision(decision);
-                }
-                return not_found("no route for " + path);
-            }
-            if (!peer_segment.empty() && sub == "pnm") {
-                // limit: ?limit=N clamped in-wasm to [1, 100]; default 1 =
-                // the newest publication only (api-block contract).
-                long limit = 1;
-                if (const std::string* limit_param = find_query_param(params, "limit")) {
-                    char* end = nullptr;
-                    const long parsed = strtol(limit_param->c_str(), &end, 10);
-                    if (end != limit_param->c_str() && end && *end == '\0') {
-                        limit = parsed;
-                    }
-                }
-                if (limit < 1) limit = 1;
-                if (limit > 100) limit = 100;
-                char limit_buf[32];
-                std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
-                decision += "\"route\":\"pnm_history\",";
-                append_common_tail(&decision);
-                decision += ",\"peerId\":\"" + json_escape(percent_decode(peer_segment)) + "\"";
-                decision += ",\"limit\":";
-                decision += limit_buf;
-                decision += "}";
-                return push_decision(decision);
-            }
-            return not_found("no route for " + path);
+        const std::string peer = rest.substr(0, slash);
+        const std::string sub = rest.substr(slash + 1);
+        const size_t sub_slash = sub.find('/');
+        if (!peer.empty() && sub == "pnm") {
+            long limit = 1;
+            if (const std::string* text = find_param(r.query, "limit")) parse_long(*text, &limit);
+            if (limit < 1) limit = 1;
+            if (limit > 100) limit = 100;
+            apr.ROUTE = "pnm_history";
+            add_parameter(&apr, "peerId", percent_decode(peer));
+            add_parameter(&apr, "limit", std::to_string(limit));
+            return push_apr(apr);
         }
-        decision += "\"route\":\"peer_get\",";
-        append_common_tail(&decision);
-        decision += ",\"peerId\":\"" + json_escape(percent_decode(remainder)) + "\"}";
-        return push_decision(decision);
+        if (!peer.empty() && sub_slash != std::string::npos && sub_slash > 0 && sub.substr(sub_slash + 1) == "latest") {
+            apr.ROUTE = "latest_dataset";
+            add_parameter(&apr, "peerId", percent_decode(peer));
+            add_parameter(&apr, "standard", percent_decode(sub.substr(0, sub_slash)));
+            return push_apr(apr);
+        }
     }
-
-    return not_found("no route for " + path);
+    return apr_refusal(std::move(apr), 404, "no-route", "no route for " + r.path);
 }
 
-// route_public_query: parse one $HTQ HttpRequest for the SANDBOXED public
-// query surface (gateway loop G.5, mount /api/v1/query) into exactly one
-// routing decision:
-//
-//   GET/HEAD <mount>   -> query_surface (the discoverable queryable-surface
-//                         listing: tables/views/columns + effective caps;
-//                         always JSON)
-//   POST <mount>       -> public_query — body is a JSON object
-//                         {"sql","params",[tagged],"format","limit","sort",
-//                          "profile","epoch","source"} or raw SQL text.
-//                         format: ?format query param wins over the body
-//                         field (consistent with the other gateway routes);
-//                         default flatbuffer.
-//   anything else      -> not_found
-//
-// Numeric body fields are re-emitted from validated parses only (never
-// spliced raw); sort/limit/profile execute in the QUERY NODE
-// (hostcap/flatsql-query sandbox_query) — this method only parses.
-// A POST without SQL and without a profile answers a 400 error decision.
+// route_public_query: the sandboxed public query surface (mount /api/v1/query). GET/HEAD -> "surface"; POST -> "query"
+// (body: JSON {"sql","params","format","limit","sort","profile","epoch","source"} or raw SQL text; ?format wins over the
+// body's "format"); anything else -> 405. Pure parsing: sort/limit/profile compose in hostcap/flatsql-query and every
+// sandbox rule is enforced by the engine.
 int route_public_query(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
+    Request r;
+    if (const int status = read_request("route_public_query", &r)) return status;
+
+    if (r.method == "GET" || r.method == "HEAD") {
+        return push_qrp("surface", qrp_request(r, representation_of(r)));
+    }
+    if (r.method != "POST") {
+        return qrp_refusal(r, representation_of(r), "method-not-allowed",
+                           "no " + r.method + " route for the public query surface (POST a query; GET the surface listing)");
     }
 
-    const int32_t input_index = plugin_find_input_index("request", 0);
-    const plugin_input_frame_t* frame =
-        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-request-frame",
-                         "route_public_query requires a $HTQ HttpRequest input frame on port \"request\".");
-        return 400;
+    Json body;
+    const bool is_object = body_is_object(r.body);
+    if (is_object && !JsonReader(r.body).parse(&body)) {
+        return qrp_refusal(r, representation_of(r), "invalid-body", "the request body is not valid JSON");
     }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
-        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
-        plugin_set_error("invalid-request-frame",
-                         "route_public_query input frame is not a valid $HTQ HttpRequest buffer.");
-        return 400;
-    }
-    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+    const Json* body_format = is_object ? body.get("format") : nullptr;
+    const int representation = representation_of(r, body_format && body_format->kind == Json::String ? &body_format->text : nullptr);
+    QRPT q = qrp_request(r, representation);
 
-    std::string method;
-    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
-    std::string path;
-    if (request->PATH()) path.assign(request->PATH()->c_str(), request->PATH()->size());
-    std::string raw_query;
-    if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
-
-    std::string if_none_match;
-    bool has_if_none_match = false;
-    if (const auto* headers = request->HEADERS()) {
-        for (::flatbuffers::uoffset_t i = 0; i < headers->size(); i++) {
-            const auto* header = headers->Get(i);
-            if (!header || !header->NAME()) continue;
-            if (iequals(header->NAME()->c_str(), header->NAME()->size(), "if-none-match")) {
-                if (header->VALUE()) {
-                    if_none_match.assign(header->VALUE()->c_str(), header->VALUE()->size());
-                }
-                has_if_none_match = true;
-                break;
-            }
-        }
-    }
-
-    std::string body;
-    if (const auto* body_bytes = request->BODY()) {
-        body.assign(reinterpret_cast<const char*>(body_bytes->data()), body_bytes->size());
-    }
-
-    const std::vector<QueryParam> query_params = parse_query_string(raw_query);
-
-    // format: ?format wins, then the body field, default flatbuffer.
-    std::string format = "flatbuffer";
-    std::string body_format;
-    const bool body_is_object = [&]() {
-        size_t first = 0;
-        while (first < body.size() && is_json_ws(body[first])) first++;
-        return first < body.size() && body[first] == '{';
-    }();
-    if (body_is_object) json_string_field(body, "format", &body_format);
-    if (body_format == "json") format = "json";
-    if (const std::string* format_param = find_query_param(query_params, "format")) {
-        if (*format_param == "json") format = "json";
-        else if (!format_param->empty()) format = "flatbuffer";
-    }
-
-    const auto common_tail = [&](std::string* out) {
-        *out += "\"format\":\"" + format + "\"";
-        if (has_if_none_match) {
-            *out += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
-        }
-    };
-
-    if (method == "GET" || method == "HEAD") {
-        // The queryable-surface listing is JSON by nature.
-        std::string decision = "{\"route\":\"query_surface\",\"format\":\"json\"";
-        if (has_if_none_match) {
-            decision += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
-        }
-        decision += "}";
-        return push_decision(decision);
-    }
-
-    if (method != "POST") {
-        std::string decision = "{\"route\":\"not_found\",";
-        common_tail(&decision);
-        decision += ",\"error\":\"no " + json_escape(method) +
-                    " route for the public query surface (POST a query; GET the surface listing)\"}";
-        return push_decision(decision);
-    }
-
-    // POST: extract the query request.
-    std::string sql;
-    std::string params_json = "[]";
-    std::string sort;
-    std::string profile;
-    std::string source;
-    bool has_limit = false;
-    long limit = 0;
-    bool has_epoch = false;
-    double epoch = 0.0;
-
-    if (body_is_object) {
-        std::string sql_field;
-        if (json_string_field(body, "sql", &sql_field) && !sql_field.empty()) {
-            sql = sql_field;
-        }
-        const std::string body_params = json_array_slice(body, "params");
-        if (!body_params.empty()) params_json = body_params;
-        json_string_field(body, "sort", &sort);
-        json_string_field(body, "profile", &profile);
-        json_string_field(body, "source", &source);
-        double limit_num = 0.0;
-        if (json_number_field(body, "limit", &limit_num) && limit_num > 0) {
-            has_limit = true;
-            limit = static_cast<long>(limit_num);
-        }
-        std::string epoch_str;
-        double epoch_num = 0.0;
-        if (json_string_field(body, "epoch", &epoch_str)) {
-            if (parse_epoch(epoch_str, &epoch)) has_epoch = true;
-        } else if (json_number_field(body, "epoch", &epoch_num)) {
-            epoch = epoch_num;
-            has_epoch = true;
-        }
+    if (!is_object) {
+        q.SQL = trim(r.body);
     } else {
-        size_t first = 0;
-        while (first < body.size() && is_json_ws(body[first])) first++;
-        if (first < body.size()) sql = body.substr(first);
-    }
-
-    if (sql.empty() && profile.empty()) {
-        std::string decision = "{\"route\":\"error\",\"status\":400,";
-        common_tail(&decision);
-        decision += ",\"error\":\"public query requires a SQL body ({\\\"sql\\\":\\\"SELECT ...\\\"} or raw SQL text) or a profile\",";
-        decision += "\"code\":\"missing-sql\"}";
-        return push_decision(decision);
-    }
-
-    std::string decision = "{\"route\":\"public_query\",";
-    common_tail(&decision);
-    if (!sql.empty()) decision += ",\"sql\":\"" + json_escape(sql) + "\"";
-    decision += ",\"params\":" + params_json;
-    if (!sort.empty()) decision += ",\"sort\":\"" + json_escape(sort) + "\"";
-    if (!profile.empty()) decision += ",\"profile\":\"" + json_escape(profile) + "\"";
-    if (!source.empty()) decision += ",\"source\":\"" + json_escape(source) + "\"";
-    if (has_limit) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%ld", limit);
-        decision += ",\"limit\":";
-        decision += buf;
-    }
-    if (has_epoch) decision += ",\"epoch\":" + format_number(epoch);
-    decision += "}";
-    return push_decision(decision);
-}
-
-// route_node_status: parse one $HTQ HttpRequest for the read-only node
-// status surface (M1 node-status flow, mount /api/v1/node/status) into
-// exactly one routing decision:
-//
-//   GET/HEAD <mount>  -> status  (hostcap/node-status forwards to the
-//                        node_status_read.status hostcall; always
-//                        format=json — the response is a live status
-//                        OBJECT, not an SDS record collection, so there is
-//                        no flatbuffer presentation to negotiate)
-//   anything else     -> error status=405 — the mount carries exactly one
-//                        resource; PATH is not inspected (mount-exact,
-//                        mirrors route_public_query).
-//
-// No If-None-Match / etag handling: the status snapshot (uptime, bandwidth
-// counters) changes on every call, so a conditional-GET contract would be
-// pointless — every successful request answers a fresh 200.
-int route_node_status(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
-    }
-
-    const int32_t input_index = plugin_find_input_index("request", 0);
-    const plugin_input_frame_t* frame =
-        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-request-frame",
-                         "route_node_status requires a $HTQ HttpRequest input frame on port \"request\".");
-        return 400;
-    }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
-        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
-        plugin_set_error("invalid-request-frame",
-                         "route_node_status input frame is not a valid $HTQ HttpRequest buffer.");
-        return 400;
-    }
-    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
-
-    std::string method;
-    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
-
-    if (method == "GET" || method == "HEAD") {
-        return push_decision("{\"route\":\"status\",\"format\":\"json\"}");
-    }
-
-    std::string decision = "{\"route\":\"error\",\"status\":405,\"format\":\"json\",\"error\":\"no " +
-                           json_escape(method) +
-                           " route for node status (GET only)\"}";
-    return push_decision(decision);
-}
-
-// route_node_activity: parse one $HTQ HttpRequest for the read-only node
-// activity-log surface (M2 node-activity flow, mount /api/v1/node/activity)
-// into exactly one routing decision:
-//
-//   GET/HEAD <mount>  -> activity (hostcap/node-activity forwards the
-//                        clamped limit to the node_activity_read.activity
-//                        hostcall; always format=json — the response is a
-//                        live activity-log OBJECT, not an SDS record
-//                        collection, so there is no flatbuffer presentation
-//                        to negotiate). limit: the ?limit query param
-//                        clamped in-wasm to [1, 256], default 50 (same
-//                        strtol-full-string-validation convention as
-//                        discover()'s pnm_history limit).
-//   anything else     -> error status=405 — the mount carries exactly one
-//                        resource; PATH is not inspected (mount-exact,
-//                        mirrors route_node_status).
-//
-// No If-None-Match / etag handling: the activity log changes on every call,
-// so a conditional-GET contract would be pointless.
-int route_node_activity(void) {
-    char batch_message[384];
-    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
-        plugin_set_error("batched-input-frames", batch_message);
-        return 500;
-    }
-
-    const int32_t input_index = plugin_find_input_index("request", 0);
-    const plugin_input_frame_t* frame =
-        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length < 8) {
-        plugin_set_error("missing-request-frame",
-                         "route_node_activity requires a $HTQ HttpRequest input frame on port \"request\".");
-        return 400;
-    }
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
-        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
-        plugin_set_error("invalid-request-frame",
-                         "route_node_activity input frame is not a valid $HTQ HttpRequest buffer.");
-        return 400;
-    }
-    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
-
-    std::string method;
-    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
-
-    if (method == "GET" || method == "HEAD") {
-        std::string raw_query;
-        if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
-        const std::vector<QueryParam> params = parse_query_string(raw_query);
-
-        // limit: ?limit=N clamped in-wasm to [1, 256], default 50. Full-string
-        // strtol validation (garbage/partial values fall back to the default,
-        // never a partially-parsed number).
-        long limit = 50;
-        if (const std::string* limit_param = find_query_param(params, "limit")) {
-            char* end = nullptr;
-            const long parsed = strtol(limit_param->c_str(), &end, 10);
-            if (end != limit_param->c_str() && end && *end == '\0') {
-                limit = parsed;
+        if (const Json* sql = body.get("sql"); sql && sql->kind == Json::String) q.SQL = sql->text;
+        std::string why;
+        if (!parameters_from(body.get("params"), &q.PARAMETERS, &why)) return qrp_refusal(r, representation, "invalid-params", why);
+        if (const Json* sort = body.get("sort"); sort && sort->kind == Json::String && !trim(sort->text).empty()) {
+            const std::string s = trim(sort->text);
+            const size_t space = s.find(' ');
+            q.SORT_FIELD = s.substr(0, space);
+            if (space != std::string::npos) {
+                const std::string dir = lower(trim(s.substr(space + 1)));
+                if (dir == "desc") q.SORT_DESC = true;
+                else if (dir != "asc" && !dir.empty()) {
+                    return qrp_refusal(r, representation, "invalid-sort", "invalid sort: expected \"COLUMN [ASC|DESC]\"");
+                }
             }
         }
-        if (limit < 1) limit = 1;
-        if (limit > 256) limit = 256;
-        char limit_buf[32];
-        std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
-        std::string decision = "{\"route\":\"activity\",\"format\":\"json\",\"limit\":";
-        decision += limit_buf;
-        decision += "}";
-        return push_decision(decision);
+        if (const Json* profile = body.get("profile"); profile && profile->kind == Json::String && !profile->text.empty()) {
+            const int tp = time_profile_of(profile->text);
+            if (tp < 0) {
+                return qrp_refusal(r, representation, "invalid-profile", "unknown profile: " + profile->text + " (nearest | as_of | forward | all)");
+            }
+            q.TIME_PROFILE = static_cast<qrpTimeProfile>(tp);
+            q.SCHEMA_NAME = "OMM";  // the profiles run over the unified OMM view
+            q.FILE_IDENTIFIER = "$OMM";
+        }
+        if (const Json* source = body.get("source"); source && source->kind == Json::String) q.SOURCE_NAME = source->text;
+        if (const Json* limit = body.get("limit"); limit && limit->kind == Json::Number && limit->number >= 1) {
+            q.LIMIT = limit->number > 4294967295.0 ? 0xFFFFFFFFu : static_cast<uint32_t>(limit->number);
+        }
+        if (const Json* epoch = body.get("epoch")) {
+            double seconds = 0.0;
+            const bool ok = epoch->kind == Json::Number ? (seconds = epoch->number, true)
+                          : epoch->kind == Json::String ? parse_epoch_seconds(epoch->text, &seconds) : epoch->kind == Json::Null;
+            if (!ok) return qrp_refusal(r, representation, "invalid-epoch", "epoch must be RFC3339 or unix seconds");
+            q.PROFILE_EPOCH_MS = epoch_ms(seconds);
+        }
     }
+    if (q.SQL.empty() && q.TIME_PROFILE == qrpTimeProfile_Unspecified) {
+        return qrp_refusal(r, representation, "missing-sql",
+                           "public query requires a SQL body ({\"sql\":\"SELECT ...\"} or raw SQL text) or a profile");
+    }
+    return push_qrp("query", q);
+}
 
-    std::string decision = "{\"route\":\"error\",\"status\":405,\"format\":\"json\",\"error\":\"no " +
-                           json_escape(method) +
-                           " route for node activity (GET only)\"}";
-    return push_decision(decision);
+// route_node_status: GET/HEAD -> route "status"; anything else 405. The mount carries one resource; PATH is not
+// inspected. No conditional GET: the snapshot changes on every call.
+int route_node_status(void) {
+    Request r;
+    if (const int status = read_request("route_node_status", &r)) return status;
+    APRT apr = apr_for(r);
+    if (r.method != "GET" && r.method != "HEAD") {
+        return apr_refusal(std::move(apr), 405, "method-not-allowed", "no " + r.method + " route for node status (GET only)");
+    }
+    apr.ROUTE = "status";
+    return push_apr(apr);
+}
+
+// route_node_activity: GET/HEAD -> route "activity" + parameter limit (?limit clamped [1,256], default 50; a value
+// that is not a whole integer falls back to the default); anything else 405.
+int route_node_activity(void) {
+    Request r;
+    if (const int status = read_request("route_node_activity", &r)) return status;
+    APRT apr = apr_for(r);
+    if (r.method != "GET" && r.method != "HEAD") {
+        return apr_refusal(std::move(apr), 405, "method-not-allowed", "no " + r.method + " route for node activity (GET only)");
+    }
+    long limit = 50;
+    if (const std::string* text = find_param(r.query, "limit")) {
+        long parsed = 0;
+        if (parse_long(*text, &parsed)) limit = parsed;
+    }
+    if (limit < 1) limit = 1;
+    if (limit > 256) limit = 256;
+    apr.ROUTE = "activity";
+    add_parameter(&apr, "limit", std::to_string(limit));
+    return push_apr(apr);
 }
 
 }  // extern "C"

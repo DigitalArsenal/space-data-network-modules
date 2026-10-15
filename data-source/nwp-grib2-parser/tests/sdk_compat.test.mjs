@@ -1,4 +1,6 @@
-// data-source/nwp-grib2-parser SDK-compat tests: the compiled wasm runs in the SDK browser harness on real NOAA GRIB2
+// data-source/nwp-grib2-parser SDK-compat tests on the typed contracts (1.0): HttpResponse (HRSP) frames in, each carrying
+// its job - a size-prefixed $WXF header record, as nwp-field-source's plan builds it - in CONTEXT; an IngestRequest (INGQ)
+// and a $WXF record stream out. The compiled wasm runs in the SDK browser harness on real NOAA GRIB2
 // messages (tests/fixtures/noaa-2026100600-f024: GFS 1 deg winds and heights, GEFS 0.5 deg spread, GFS 0.5 deg cloud
 // layers, GFS 0.25 deg 2 m temperature - fetched by .idx byte range, as the source node fetches them) and its records
 // are unpacked through the spacedatastandards.org generated JS lib. Every record's codes must EQUAL the packing
@@ -14,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { decodeIngestRequest, encodeFlowNotice, encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -36,22 +39,34 @@ const VARIABLES = { wind_east: "WindU", wind_north: "WindV", geopotential_height
   cloud_cover_low: "LowCloudCover", cloud_cover_mid: "MediumCloudCover", cloud_cover_high: "HighCloudCover", air_temperature_2m: "Temperature2m",
   precipitation_rate_surface: "Unspecified", visibility_surface: "Unspecified", geopotential_height_cloud_ceiling: "GeopotentialHeight" };
 
-function job(file) {
-  return { ...JOBS[file], url: INVENTORY[file].url, run: "20261006T00", lead: 24,
-    provider_id: "noaa-ncep", source_name: `${JOBS[file].product}`, origin_id: "NOAA Open Data Dissemination (AWS)",
-    dataset_id: new URL(INVENTORY[file].url).hostname.split(".")[0], license: "LicenseRef-NOAA-Open-Data", license_class: "OpenAttribution",
-    license_url: "https://www.weather.gov/disclaimer", citation: "NOAA/NCEP via NOAA Open Data Dissemination (AWS)" };
+const HRSP = { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" };
+const CITATION = "NOAA/NCEP Global Forecast System via NOAA Open Data Dissemination (AWS)";
+
+// The job of a fixture file: the $WXF header record (size-prefixed, no values) nwp-field-source's plan puts in
+// HttpRequest.CONTEXT and hostcap/http-request echoes back in the HttpResponse.
+function job(file, { product = JOBS[file].product, tiles = 1, datasetId = new URL(INVENTORY[file].url).hostname.split(".")[0], fieldId } = {}) {
+  const j = JOBS[file];
+  const { WXF, WXFGrid } = wxfLib;
+  const b = new flatbuffers.Builder(1024);
+  const s = (v) => b.createString(v);
+  const id = s(fieldId ?? `${j.model_key}:20261006T00:f024:${product}`), modelId = s(j.model_id), name = s(product), url = s(INVENTORY[file].url),
+    origin = s("NOAA Open Data Dissemination (AWS)"), dataset = s(datasetId), licenseUrl = s("https://www.weather.gov/disclaimer"), citation = s(CITATION);
+  WXFGrid.startWXFGrid(b);
+  WXFGrid.addKind(b, wxfLib.wxfGridKind.RegularLatLon); WXFGrid.addDlat(b, j.grid_deg); WXFGrid.addDlon(b, j.grid_deg); WXFGrid.addNlat(b, j.band_rows);
+  const grid = WXFGrid.endWXFGrid(b);
+  WXF.startWXF(b);
+  WXF.addFieldId(b, id); WXF.addModelClass(b, wxfLib.wxfModelClass[j.model_class]); WXF.addModelId(b, modelId);
+  WXF.addTimeBasis(b, wxfLib.wxfTimeBasis.Initialization); WXF.addInitTimeMs(b, BigInt(INIT_MS)); WXF.addLeadHours(b, 24); WXF.addValidTimeMs(b, BigInt(INIT_MS + 24 * 3600000));
+  WXF.addMemberKind(b, j.spread ? wxfLib.wxfMemberKind.StandardDeviation : wxfLib.wxfMemberKind.Unspecified);
+  if (j.ensemble_size) WXF.addEnsembleSize(b, j.ensemble_size);
+  WXF.addVariableName(b, name); WXF.addGrid(b, grid); WXF.addTileCount(b, tiles); WXF.addSourceUrl(b, url);
+  WXF.addOriginId(b, origin); WXF.addDatasetId(b, dataset); WXF.addLicenseClass(b, wxfLib.wxfLicenseClass.OpenAttribution); WXF.addLicenseUrl(b, licenseUrl); WXF.addCitation(b, citation);
+  b.finishSizePrefixed(WXF.endWXF(b), "$WXF");
+  return b.asUint8Array().slice();
 }
-function bytesInput(portId, payload) {
-  return { portId, typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength }, payload };
-}
-const jsonInput = (portId, value) => bytesInput(portId, encoder.encode(JSON.stringify(value)));
-function rawResponseFrame(body, status = 206) {
-  const frame = new Uint8Array(8 + body.byteLength);
-  frame.set([0x24, 0x48, 0x52, 0x42]);
-  new DataView(frame.buffer).setInt32(4, status, true);
-  frame.set(body, 8);
-  return frame;
+// A byte-range response as hostcap/http-request answers it: the body verbatim, the request's CONTEXT echoed.
+function response(file, body, { status = 206, context = job(file), headers = {}, retrievedMs = Date.UTC(2026, 9, 6, 5, 30) } = {}) {
+  return { portId: "responses", typeRef: HRSP, payload: encodeHttpResponse({ url: INVENTORY[file].url, status, headers, body, context, retrievedMs }) };
 }
 const gribBytes = (file) => new Uint8Array(fs.readFileSync(new URL(file, SET)));
 
@@ -145,9 +160,18 @@ function assertMatchesEcCodes(file, records) {
   }
 }
 
-test("nwp-grib2-parser artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({ manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")), wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH), standardsRoot: STANDARDS_ROOT });
+test("nwp-grib2-parser artifact passes SDK compliance with typed ports only", async () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const [method] = manifest.methods;
+  const ids = Object.fromEntries([...method.inputPorts, ...method.outputPorts].map((p) => {
+    assert.equal(p.acceptedTypeSets.length, 1);
+    assert.equal(p.acceptedTypeSets[0].allowedTypes.length, 1);
+    assert.equal(p.acceptedTypeSets[0].allowedTypes[0].acceptsAnyFlatbuffer, undefined);
+    return [p.portId, p.acceptedTypeSets[0].allowedTypes[0].fileIdentifier];
+  }));
+  assert.deepEqual(ids, { responses: "HRSP", wxf_meta: "INGQ", wxf_records: "$WXF" });
 });
 
 test("nwp-grib2-parser artifact is pure: canonical ABI, WASI-only imports", async () => {
@@ -159,14 +183,27 @@ test("nwp-grib2-parser artifact is pure: canonical ABI, WASI-only imports", asyn
 for (const file of Object.keys(JOBS)) {
   test(`parse: ${file} - every record's codes equal ecCodes' packing integers`, async (t) => {
     const harness = await createHarness(t);
-    const { response, outputs } = await parse(harness, [jsonInput("jobs", job(file)), bytesInput("responses", rawResponseFrame(gribBytes(file)))]);
-    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-    assertMatchesEcCodes(file, splitStream(outputs.get("wxf_records").payload));
-    const meta = JSON.parse(decoder.decode(outputs.get("wxf_meta").payload));
-    assert.equal(meta.schema, "WXF.fbs");
-    assert.equal(meta.provider_id, "noaa-ncep");
-    assert.equal(meta.reconcile, "duplicates");
-    assert.match(meta.batch_id, /^[0-9a-f]{64}$/);
+    const body = gribBytes(file);
+    const headers = { etag: "\"5c0ffee\"", "last-modified": "Tue, 06 Oct 2026 03:41:07 GMT", "content-type": "binary/octet-stream" };
+    const { response: r, outputs } = await parse(harness, [response(file, body, { headers })]);
+    assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
+    const records = splitStream(outputs.get("wxf_records").payload);
+    assertMatchesEcCodes(file, records);
+    for (const bytes of records) assert.equal(Number(unpackWxf(bytes).RETRIEVED_AT), Date.UTC(2026, 9, 6, 5, 30), "the host's receive time");
+    const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
+    const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
+    const normalized = createHash("sha256");
+    for (const rec of records) normalized.update("WXF.fbs").update(Buffer.of(0)).update(rec).update(Buffer.of(0));
+    assert.deepEqual(meta, {
+      schema: "WXF.fbs",
+      tags: { providerId: "noaa-ncep", sourceName: JOBS[file].product, batchId: sha(body), sourceUrl: INVENTORY[file].url, contentKeyId: "public",
+        sourcePeer: "source:NOAA Open Data Dissemination (AWS)", license: "LicenseRef-NOAA-Open-Data", licenseUrl: "https://www.weather.gov/disclaimer", citation: CITATION, shareAlike: false },
+      reconcile: "duplicates",
+      archive: null,
+      provenance: { attributes: [], sourceUrl: INVENTORY[file].url, httpStatus: 206, etag: headers.etag, lastModified: headers["last-modified"], contentType: "binary/octet-stream",
+        retrievedMs: Date.UTC(2026, 9, 6, 5, 30), parser: "nwp-grib2-parser", parserVersion: "nwp-grib2-parser/v2", sourceSha256: sha(body),
+        normalizedSha256: normalized.digest("hex"), normalizedCount: records.length, schemaCounts: { "WXF.fbs": records.length }, warnings: [], fromCache: false },
+    }, "the batch id is the content hash of the fetched bytes");
   });
 }
 
@@ -174,19 +211,20 @@ for (const file of Object.keys(JOBS)) {
 // pole, both edges carried): every tile a batch of its own, handed out one an invocation through the backlog; the whole
 // field, put back together from its tiles, is ecCodes' packing integers exactly, and a point two tiles share (an edge,
 // or the 180th meridian's wrap) carries the same code in both.
-// A tiled job (tile_deg 11.25: the world-clouds demo's level-4 tiles, x from 180 W, y from the north pole): the first
+// A tiled job (TILE_COUNT 512, 11.25 deg: the world-clouds demo's level-4 tiles, x from 180 W, y from the north pole): the first
 // tile's batch out, the other 511 yielded as backlog - a yielded node is resumed without input by the compiled flow
 // runtime (flows/nwp-field-ingest/tests puts all 512 back together against ecCodes).
 test("parse: a tiled job - the first tile's batch, the other 511 as backlog", async (t) => {
   const harness = await createHarness(t);
   const file = "gfs-0p25-air.grib2";
-  const { response, outputs } = await parse(harness, [jsonInput("jobs", { ...job(file), source_name: "gfs-0p25-sea", tile_deg: 11.25 }), bytesInput("responses", rawResponseFrame(gribBytes(file)))]);
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-  assert.equal(response.yielded, true);
-  assert.equal(response.backlogRemaining, 511);
-  const meta = JSON.parse(decoder.decode(outputs.get("wxf_meta").payload));
-  assert.equal(meta.batch_id, "gfs:20261006T00:f024:s4:0:0");
-  assert.equal(meta.source_name, "gfs-0p25-sea");
+  const { response: r, outputs } = await parse(harness, [response(file, gribBytes(file), { context: job(file, { tiles: 512 }) })]);
+  assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
+  assert.equal(r.yielded, true);
+  assert.equal(r.backlogRemaining, 511);
+  const meta = decodeIngestRequest(outputs.get("wxf_meta").payload);
+  assert.equal(meta.tags.batchId, "gfs:20261006T00:f024:s4:0:0");
+  assert.equal(meta.tags.sourceName, "gfs-0p25-sea");
+  assert.equal(meta.provenance.normalizedCount, EXPECTED[file].length);
   const records = splitStream(outputs.get("wxf_records").payload).map(unpackWxf);
   assert.deepEqual(records.map((r) => r.VARIABLE_NAME).sort(), EXPECTED[file].map((e) => e.name).sort());
   for (const r of records) {
@@ -202,8 +240,8 @@ test("parse: a tiled job - the first tile's batch, the other 511 as backlog", as
 test("parse: all four products in one invocation are one batch, no frame dropped", async (t) => {
   const harness = await createHarness(t);
   const files = Object.keys(JOBS);
-  const { response, outputs } = await parse(harness, [...files.map((f) => jsonInput("jobs", job(f))), ...files.map((f) => bytesInput("responses", rawResponseFrame(gribBytes(f))))]);
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  const { response: r, outputs } = await parse(harness, files.map((f) => response(f, gribBytes(f))));
+  assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
   const records = splitStream(outputs.get("wxf_records").payload);
   const total = files.reduce((n, f) => n + EXPECTED[f].reduce((m, e) => m + e.bands, 0), 0);
   assert.equal(records.length, total);
@@ -232,12 +270,18 @@ test("parse refuses what it does not publish, by name", async (t) => {
     [encoder.encode("<Error><Code>NoSuchKey</Code></Error>"), "grib2-unreadable"],
   ];
   for (const [body, code] of cases) {
-    const { response } = await parse(harness, [jsonInput("jobs", job(file)), bytesInput("responses", rawResponseFrame(body))]);
-    assert.equal(response.errorCode, code, response.errorMessage);
-    assert.equal(response.outputs.length, 0);
+    const { response: r } = await parse(harness, [response(file, body)]);
+    assert.equal(r.errorCode, code, r.errorMessage);
+    assert.equal(r.outputs.length, 0);
   }
-  const mismatch = await parse(harness, [jsonInput("jobs", job(file)), jsonInput("jobs", job(file)), bytesInput("responses", rawResponseFrame(gribBytes(file)))]);
-  assert.equal(mismatch.response.errorCode, "job-response-count-mismatch");
-  const failed = await parse(harness, [jsonInput("jobs", job(file)), bytesInput("responses", rawResponseFrame(new Uint8Array(0), 404))]);
+  const failed = await parse(harness, [response(file, new Uint8Array(0), { status: 404 })]);
   assert.equal(failed.response.errorCode, "fetch-failed");
+  const lost = await parse(harness, [response(file, gribBytes(file), { status: 0, context: new Uint8Array(0) })]);
+  assert.equal(lost.response.errorCode, "invalid-grib-job", "pairing is by CONTEXT: a response without its job cannot be attributed");
+  const notJob = await parse(harness, [response(file, gribBytes(file), { context: encodeFlowNotice({ kind: "info" }) })]);
+  assert.equal(notJob.response.errorCode, "invalid-grib-job");
+  const unknownDataset = await parse(harness, [response(file, gribBytes(file), { context: job(file, { datasetId: "example-bucket" }) })]);
+  assert.match(unknownDataset.response.errorMessage, /dataset "example-bucket" has no provider attribution/);
+  const wrongGrid = await parse(harness, [response("gfs-0p50-clouds.grib2", gribBytes("gfs-0p50-clouds.grib2"), { context: job("gfs-0p25-surface.grib2", { product: "gfs-0p50-clouds" }) })]);
+  assert.equal(wrongGrid.response.errorCode, "grid-unsupported", "a 0.25 deg job on a 0.5 deg field is refused, not resampled");
 });

@@ -1,5 +1,5 @@
 /*
- * data-source/weathernext-parser.
+ * data-source/weathernext-parser (typed contracts 1.0).
  *
  * Pure parser flow nodes for a machine-learned global ensemble weather
  * forecast source, built on the spacedatastandards.org GENERATED C++ code
@@ -9,21 +9,35 @@
  * and the cyclone CSV.
  *
  * Methods:
- *   parse_cloud_chunks : jobs[k] + responses[k] -> wxf_meta + wxf_records
- *       One $WXF tile per Zarr v3 chunk. Jobs and responses are paired BY
- *       POSITION (the request builder emitted them in the same order); a
- *       count mismatch is refused, never guessed.
- *   parse_cyclone_tracks : job + response -> tct_meta + tct_records + raw
+ *   parse_cloud_chunks : responses (HttpResponse, HRSP) -> wxf_meta (IngestRequest, INGQ) + wxf_records
+ *       One $WXF tile per Zarr v3 chunk. Each response carries its own job:
+ *       the request's CONTEXT, a size-prefixed $WXF header record built by
+ *       weathernext-source:plan (FIELD_ID, model, init/lead/valid time,
+ *       member, variable, the tile's GRID and TILE_INDEX/TILE_COUNT,
+ *       CHUNK_DTYPE, CHUNK_CODECS, origin, dataset, SOURCE_URL, licence),
+ *       echoed verbatim by hostcap/http-request. Every response handed to one
+ *       invocation is one batch.
+ *   parse_cyclone_tracks : response (HRSP, CONTEXT a $TCT header record) ->
+ *       tct_meta (INGQ) + tct_records + raw (the HttpResponse itself, verbatim,
+ *       whose BODY storage-ingest archives).
  *       One $TCT per (storm, member) group of CSV rows, points sorted by
  *       valid time.
+ *
+ * Node CONFIG (plugin.getConfig - the same flow-service config the source
+ * reads; a $WXF header has no field for these): weathernext_provider_id
+ * (weathernext; the batch's PROVIDER_ID), weathernext_chunk_lat /
+ * weathernext_chunk_lon (64; the padded chunk extents the body is sized by)
+ * and weathernext_dims (init_time,member,lead_time,latitude,longitude; the
+ * order latitude and longitude are laid out in). The source names
+ * (weathernext3-clouds-0p1deg, weathernext3-cyclone-tracks) and the cyclone
+ * archive naming (weathernext / cyclone-tracks.csv) are this parser's.
  *
  * Codec scope of this build: "bytes" (float32 / float16, little endian).
  * A "zstd" stage reports codec-unsupported — vendoring a zstd decoder is the
  * documented follow-up; the .ts reference already decodes it via node:zlib.
  *
- * Nothing about the upstream bucket layout is hardcoded: chunk shape, codec
- * chain, dimension order, dtype and the global grid ride the job JSON and are
- * validated here by size (product(chunk_shape) * itemsize).
+ * No JSON and no base64: the job, the response, the ingest request and the
+ * raw document are FlatBuffers.
  */
 
 #include <algorithm>
@@ -33,27 +47,43 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <string_view>
+#include <utility>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
 
 namespace {
+
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 
 constexpr const char* kContentKeyID = "public";
 constexpr const char* kParserVersionClouds = "weathernext-zarr-wasm/v1";
 constexpr const char* kParserVersionCyclones = "weathernext-cyclone-wasm/v1";
 constexpr const char* kLicenseIdHistorical = "CC-BY-4.0";
 constexpr const char* kLicenseIdRealTime = "LicenseRef-WeatherNext-RealTime-Experimental";
+constexpr const char* kCloudSourceName = "weathernext3-clouds-0p1deg";
+constexpr const char* kCycloneSourceName = "weathernext3-cyclone-tracks";
+constexpr const char* kCycloneArchiveSource = "weathernext";
+constexpr const char* kCycloneArchiveName = "cyclone-tracks.csv";
+constexpr const char* kDefaultProviderID = "weathernext";
+constexpr const char* kDefaultDims = "init_time,member,lead_time,latitude,longitude";
 constexpr uint32_t kMaxInlineCells = 1048576u;
 constexpr double kKtToMs = 1852.0 / 3600.0;
 constexpr double kNmiToKm = 1.852;
 
 // ---------------------------------------------------------------------------
-// Small string / JSON helpers (control metadata only).
+// Small string helpers.
 // ---------------------------------------------------------------------------
+
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -78,220 +108,6 @@ std::string upper(const std::string& s) {
         if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
     }
     return out;
-}
-
-// Position just past the colon of "key": at the first occurrence, or npos.
-size_t json_value_start(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string::npos;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string::npos;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    return i;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else if (n == 'u' && i + 5 < json.size()) {
-                const long cp = std::strtol(json.substr(i + 2, 4).c_str(), nullptr, 16);
-                value.push_back(cp < 0x80 ? static_cast<char>(cp) : '?');
-                i += 4;
-            } else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0) { *out = true; return true; }
-    if (json.compare(i, 5, "false") == 0) { *out = false; return true; }
-    return false;
-}
-
-std::string json_bracketed_slice(const std::string& json, const std::string& key, char open, char close) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != open) return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == open) depth++;
-        else if (c == close) {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '{', '}');
-}
-
-std::string json_array_slice(const std::string& json, const std::string& key) {
-    return json_bracketed_slice(json, key, '[', ']');
-}
-
-// Numbers of a flat JSON array slice "[1, 2, 3]".
-std::vector<double> json_number_array(const std::string& slice) {
-    std::vector<double> out;
-    size_t i = 0;
-    while (i < slice.size()) {
-        const char c = slice[i];
-        if (c == '-' || (c >= '0' && c <= '9')) {
-            char* end = nullptr;
-            const double v = strtod(slice.c_str() + i, &end);
-            const size_t consumed = static_cast<size_t>(end - (slice.c_str() + i));
-            if (consumed == 0) break;
-            out.push_back(v);
-            i += consumed;
-        } else {
-            i++;
-        }
-    }
-    return out;
-}
-
-// Strings of a flat JSON array slice "[\"a\", \"b\"]".
-std::vector<std::string> json_string_array(const std::string& slice) {
-    std::vector<std::string> out;
-    for (size_t i = 0; i < slice.size(); i++) {
-        if (slice[i] != '"') continue;
-        std::string value;
-        size_t j = i + 1;
-        while (j < slice.size() && slice[j] != '"') {
-            if (slice[j] == '\\' && j + 1 < slice.size()) {
-                value.push_back(slice[j + 1]);
-                j += 2;
-            } else {
-                value.push_back(slice[j]);
-                j++;
-            }
-        }
-        out.push_back(value);
-        i = j;
-    }
-    return out;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (standard alphabet).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -615,10 +431,6 @@ bool parse_double(const std::string& raw, double* out) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Frame IO helpers.
-// ---------------------------------------------------------------------------
-
 const plugin_input_frame_t* frame_at(const char* port, uint32_t ordinal) {
     const int32_t idx = plugin_find_input_index(port, ordinal);
     if (idx < 0) return nullptr;
@@ -633,24 +445,6 @@ std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
         out.push_back(frame);
     }
     return out;
-}
-
-std::string frame_text(const plugin_input_frame_t* frame) {
-    if (!frame || !frame->payload || frame->payload_length == 0) return std::string();
-    return std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-}
-
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
 }
 
 // The record streams declare their concrete SDS identity on the port, so the
@@ -670,94 +464,22 @@ void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_
     stream->insert(stream->end(), record.begin(), record.end());
 }
 
-// A decoded hostcap/http-request response: the default JSON lane
-// {status, headers, bodyB64} or the raw-body-v1 lane
-// ("$HRB" + int32le status + body, no headers).
-struct HttpResponse {
-    long status = 0;
-    std::string etag;
-    std::string last_modified;
-    std::string content_type;
-    std::string date;
-    std::vector<uint8_t> body;
-};
-
-void read_header(const std::string& headers, const char* lower_name, const char* title_name,
-                 std::string* out) {
-    if (json_string_field(headers, lower_name, out) && !out->empty()) return;
-    json_string_field(headers, title_name, out);
+std::vector<uint8_t> finished_unprefixed(::flatbuffers::FlatBufferBuilder& fbb) {
+    // The builder wrote [u32 size][record]; the stream re-prefixes, so strip
+    // the four bytes (the identifier then sits at bytes 4..8 of the record).
+    const uint8_t* p = fbb.GetBufferPointer();
+    return std::vector<uint8_t>(p + 4, p + fbb.GetSize());
 }
 
-bool decode_http_response(const plugin_input_frame_t* frame, HttpResponse* out, std::string* err) {
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        *err = "http response frame is empty.";
-        return false;
+float half_to_float(uint16_t half) {
+    const double sign = (half & 0x8000) ? -1.0 : 1.0;
+    const int exponent = (half >> 10) & 0x1f;
+    const int mantissa = half & 0x03ff;
+    if (exponent == 0) return static_cast<float>(sign * mantissa * std::ldexp(1.0, -24));
+    if (exponent == 0x1f) {
+        return mantissa == 0 ? static_cast<float>(sign * INFINITY) : NAN;
     }
-    const uint8_t* p = frame->payload;
-    if (frame->payload_length >= 8 && p[0] == '$' && p[1] == 'H' && p[2] == 'R' && p[3] == 'B') {
-        const uint32_t raw_status = static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
-                                    (static_cast<uint32_t>(p[6]) << 16) |
-                                    (static_cast<uint32_t>(p[7]) << 24);
-        out->status = static_cast<int32_t>(raw_status);
-        out->body.assign(p + 8, p + frame->payload_length);
-        return true;
-    }
-    const std::string json = frame_text(frame);
-    double status = 0;
-    if (!json_number_field(json, "status", &status)) {
-        *err = "http response frame carries no status.";
-        return false;
-    }
-    out->status = static_cast<long>(status);
-    const std::string headers = json_object_slice(json, "headers");
-    read_header(headers, "etag", "ETag", &out->etag);
-    read_header(headers, "last-modified", "Last-Modified", &out->last_modified);
-    read_header(headers, "content-type", "Content-Type", &out->content_type);
-    read_header(headers, "date", "Date", &out->date);
-    std::string body_b64;
-    if (json_string_field(json, "bodyB64", &body_b64) && !body_b64.empty()) {
-        if (!base64_decode(body_b64, &out->body)) {
-            *err = "http response bodyB64 is not valid base64.";
-            return false;
-        }
-    }
-    return true;
-}
-
-int64_t retrieved_at_ms(const HttpResponse& response) {
-    int64_t ms = 0;
-    if (!response.date.empty() && parse_http_date(response.date, &ms)) return ms;
-    return now_unix_ms();
-}
-
-// ---------------------------------------------------------------------------
-// Ingest meta + provenance (storage.ingest_with_source contract).
-// ---------------------------------------------------------------------------
-
-struct Attribution {
-    std::string provider_id;
-    std::string source_name;
-    std::string source_url;
-    std::string origin_id;
-    std::string dataset_id;
-    std::string license_class;
-    std::string license_url;
-    std::string citation;
-    std::string archive_source;
-    std::string archive_name;
-};
-
-void read_attribution(const std::string& job, Attribution* out) {
-    json_string_field(job, "provider_id", &out->provider_id);
-    json_string_field(job, "source_name", &out->source_name);
-    json_string_field(job, "source_url", &out->source_url);
-    json_string_field(job, "origin_id", &out->origin_id);
-    json_string_field(job, "dataset_id", &out->dataset_id);
-    json_string_field(job, "license_class", &out->license_class);
-    json_string_field(job, "license_url", &out->license_url);
-    json_string_field(job, "citation", &out->citation);
-    json_string_field(job, "archive_source", &out->archive_source);
-    json_string_field(job, "archive_name", &out->archive_name);
+    return static_cast<float>(sign * (1.0 + mantissa / 1024.0) * std::ldexp(1.0, exponent - 15));
 }
 
 const char* license_id_for(const std::string& license_class) {
@@ -802,140 +524,145 @@ wxfVariable variable_for_array(const std::string& array) {
     return wxfVariable_Unspecified;
 }
 
-std::string build_provenance_json(const char* parser_version, const std::string& source_url,
-                                  long status, const HttpResponse& response,
-                                  const std::string& source_sha256,
-                                  const std::string& normalized_sha256, int normalized_count,
-                                  const std::string& schema_counts_json, int64_t retrieved_ms) {
-    std::string out = std::string("{\"source_url\":\"") + json_escape(source_url) + "\"" +
-                      ",\"http_status\":" + std::to_string(status);
-    if (!response.etag.empty()) out += ",\"etag\":\"" + json_escape(response.etag) + "\"";
-    if (!response.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(response.last_modified) + "\"";
-    if (!response.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(response.content_type) + "\"";
-    out += std::string(",\"retrieved_at\":\"") + format_iso_seconds(retrieved_ms) + "\"" +
-           ",\"parser_version\":\"" + parser_version + "\"" +
-           ",\"source_sha256\":\"" + source_sha256 + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + std::to_string(normalized_count) +
-           ",\"schema_counts\":" + schema_counts_json +
-           ",\"warnings\":[],\"from_cache\":false}";
-    return out;
-}
-
-std::string build_ingest_meta(const char* schema, const Attribution& attribution,
-                              const std::string& source_url, const std::string& batch_id,
-                              bool with_archive, const std::string& provenance_json) {
-    std::string meta = std::string("{\"schema\":\"") + schema + "\"" +
-                       ",\"provider_id\":\"" + json_escape(attribution.provider_id) + "\"" +
-                       ",\"source_name\":\"" + json_escape(attribution.source_name) + "\"" +
-                       ",\"source_url\":\"" + json_escape(source_url) + "\"" +
-                       ",\"batch_id\":\"" + batch_id + "\"" +
-                       ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-                       ",\"source_peer\":\"source:" + json_escape(attribution.origin_id) + "\"" +
-                       ",\"reconcile\":\"duplicates\"" +
-                       ",\"license\":\"" + license_id_for(attribution.license_class) + "\"" +
-                       ",\"license_url\":\"" + json_escape(attribution.license_url) + "\"" +
-                       ",\"citation\":\"" + json_escape(attribution.citation) + "\"";
-    if (with_archive && !attribution.archive_source.empty() && !attribution.archive_name.empty()) {
-        meta += ",\"archive\":{\"source\":\"" + json_escape(attribution.archive_source) +
-                "\",\"name\":\"" + json_escape(attribution.archive_name) + "\"}";
-    }
-    meta += ",\"provenance\":{\"source\":\"" + json_escape(attribution.source_name) +
-            "\",\"json\":\"" +
-            base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()),
-                          provenance_json.size()) +
-            "\"}}";
-    return meta;
-}
-
-std::vector<uint8_t> finished_unprefixed(::flatbuffers::FlatBufferBuilder& fbb) {
-    // The builder wrote [u32 size][record]; the stream re-prefixes, so strip
-    // the four bytes (the identifier then sits at bytes 4..8 of the record).
-    const uint8_t* p = fbb.GetBufferPointer();
-    return std::vector<uint8_t>(p + 4, p + fbb.GetSize());
-}
 
 // ---------------------------------------------------------------------------
-// Zarr chunk decode ("bytes" codec; float32 / float16 little endian).
+// Node CONFIG: plugin.getConfig answers with one ModuleConfig FlatBuffer
+// (MCFG) on raw "config", read in place through sdm_piv::get_config(). A host
+// that provides no config leaves every key at its compiled default.
 // ---------------------------------------------------------------------------
 
-float half_to_float(uint16_t half) {
-    const double sign = (half & 0x8000) ? -1.0 : 1.0;
-    const int exponent = (half >> 10) & 0x1f;
-    const int mantissa = half & 0x03ff;
-    if (exponent == 0) return static_cast<float>(sign * mantissa * std::ldexp(1.0, -24));
-    if (exponent == 0x1f) {
-        return mantissa == 0 ? static_cast<float>(sign * INFINITY) : NAN;
+class NodeConfig {
+ public:
+    static NodeConfig load() { return NodeConfig(sdm_piv::get_config()); }
+    // A String value (non-empty), or a StringList joined by commas; else fallback.
+    std::string text(const std::string& key, const char* fallback) const {
+        const R::ConfigEntry* e = config_.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == R::configValueKind_String) {
+            const std::string_view v = config_.string(key);
+            return v.empty() ? std::string(fallback) : std::string(v);
+        }
+        if (e->KIND() != R::configValueKind_StringList) return fallback;
+        std::string joined;
+        size_t i = 0;
+        for (std::string_view item : config_.strings(key)) {
+            if (i++) joined.push_back(',');
+            joined += item;
+        }
+        return joined.empty() ? std::string(fallback) : joined;
     }
-    return static_cast<float>(sign * (1.0 + mantissa / 1024.0) * std::ldexp(1.0, exponent - 15));
-}
+    // A Number, or a String holding one (operators quote numbers).
+    double number(const std::string& key, double fallback) const {
+        const R::ConfigEntry* e = config_.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == R::configValueKind_Number) return e->NUMBER_VALUE();
+        if (e->KIND() == R::configValueKind_String) {
+            const std::string s(config_.string(key));
+            char* end = nullptr;
+            const double d = std::strtod(s.c_str(), &end);
+            if (!s.empty() && end != s.c_str()) return d;
+        }
+        return fallback;
+    }
 
-struct ChunkJob {
-    std::string json;
-    Attribution attribution;
-    std::string array;
-    std::string model_id;
-    std::string model_version;
-    std::string model_class;
-    std::string member_kind;
-    int64_t init_time_ms = 0;
-    double lead_hours = 0;
-    double horizon_hours = 0;
-    double member_index = 0;
-    double ensemble_size = 0;
-    std::string dtype;
-    std::vector<std::string> codecs;
-    std::vector<double> chunk_shape;
-    std::vector<double> chunk_index;
-    std::vector<std::string> dims;
-    double lat0 = 0, lon0 = 0, dlat = 0, dlon = 0, nlat = 0, nlon = 0;
-    bool periodic_lon = false;
+ private:
+    explicit NodeConfig(sdm_piv::Config config) : config_(std::move(config)) {}
+    sdm_piv::Config config_;
 };
 
-bool read_chunk_job(const std::string& json, ChunkJob* job, std::string* err) {
-    job->json = json;
-    read_attribution(json, &job->attribution);
-    json_string_field(json, "array", &job->array);
-    json_string_field(json, "model_id", &job->model_id);
-    json_string_field(json, "model_version", &job->model_version);
-    json_string_field(json, "model_class", &job->model_class);
-    json_string_field(json, "member_kind", &job->member_kind);
-    if (job->member_kind.empty()) job->member_kind = "Member";
-    double v = 0;
-    if (!json_number_field(json, "init_time_ms", &v)) { *err = "job carries no init_time_ms"; return false; }
-    job->init_time_ms = static_cast<int64_t>(v);
-    if (!json_number_field(json, "lead_hours", &job->lead_hours)) { *err = "job carries no lead_hours"; return false; }
-    json_number_field(json, "horizon_hours", &job->horizon_hours);
-    json_number_field(json, "member_index", &job->member_index);
-    json_number_field(json, "ensemble_size", &job->ensemble_size);
-    json_string_field(json, "dtype", &job->dtype);
-    if (job->dtype.empty()) job->dtype = "float32";
-    job->codecs = json_string_array(json_array_slice(json, "codecs"));
-    job->chunk_shape = json_number_array(json_array_slice(json, "chunk_shape"));
-    job->chunk_index = json_number_array(json_array_slice(json, "chunk_index"));
-    job->dims = json_string_array(json_array_slice(json, "dims"));
-    const std::string grid = json_object_slice(json, "grid");
-    if (grid.empty()) { *err = "job carries no grid"; return false; }
-    json_number_field(grid, "lat0", &job->lat0);
-    json_number_field(grid, "lon0", &job->lon0);
-    json_number_field(grid, "dlat", &job->dlat);
-    json_number_field(grid, "dlon", &job->dlon);
-    json_number_field(grid, "nlat", &job->nlat);
-    json_number_field(grid, "nlon", &job->nlon);
-    json_bool_field(grid, "periodic_lon", &job->periodic_lon);
-    if (job->array.empty()) { *err = "job carries no array name"; return false; }
-    if (job->chunk_shape.empty() || job->chunk_shape.size() != job->chunk_index.size() ||
-        job->chunk_shape.size() != job->dims.size()) {
-        *err = "job chunk_shape, chunk_index and dims must have the same length";
+// ---------------------------------------------------------------------------
+// The HttpResponse (HRSP) and its CONTEXT job record.
+// ---------------------------------------------------------------------------
+
+struct HttpResponse {
+    const R::HttpResponse* frame = nullptr;
+    const uint8_t* bytes = nullptr;  // the HRSP frame itself (re-emitted verbatim as "raw")
+    size_t length = 0;
+    long status = 0;
+    std::string error;
+    std::string url;
+    std::string etag;
+    std::string last_modified;
+    std::string content_type;
+    std::string date;
+    uint64_t retrieved_ms = 0;
+    std::vector<uint8_t> body;
+    const uint8_t* context = nullptr;
+    size_t context_length = 0;
+};
+
+std::string header_value(const R::HttpResponse& r, const char* lower_name) {
+    if (!r.HEADERS()) return std::string();
+    for (const auto* h : *r.HEADERS()) {
+        if (!h || !h->NAME()) continue;
+        if (lower(h->NAME()->str()) == lower_name) return h->VALUE() ? h->VALUE()->str() : std::string();
+    }
+    return std::string();
+}
+
+bool decode_http_response(const plugin_input_frame_t* frame, HttpResponse* out, std::string* err) {
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        *err = "http response frame is empty.";
         return false;
     }
-    if (job->nlat <= 0 || job->nlon <= 0) { *err = "job grid nlat/nlon must be positive"; return false; }
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        *err = "the response frame is not an HttpResponse (HRSP).";
+        return false;
+    }
+    const R::HttpResponse* r = R::GetHttpResponse(frame->payload);
+    out->frame = r;
+    out->bytes = frame->payload;
+    out->length = frame->payload_length;
+    out->status = r->STATUS();
+    out->error = r->ERROR() ? r->ERROR()->str() : std::string();
+    out->url = r->URL() ? r->URL()->str() : std::string();
+    out->etag = header_value(*r, "etag");
+    out->last_modified = header_value(*r, "last-modified");
+    out->content_type = header_value(*r, "content-type");
+    out->date = header_value(*r, "date");
+    out->retrieved_ms = r->RETRIEVED_MS();
+    if (r->BODY()) out->body.assign(r->BODY()->begin(), r->BODY()->end());
+    if (r->CONTEXT()) {
+        out->context = r->CONTEXT()->data();
+        out->context_length = r->CONTEXT()->size();
+    }
     return true;
 }
 
-std::string lead_label(double lead_hours) { return format_number(lead_hours) + "h"; }
+// The Date header when the host passed one, else the host's receive time, else this node's clock.
+int64_t retrieved_at_ms(const HttpResponse& response) {
+    int64_t ms = 0;
+    if (!response.date.empty() && parse_http_date(response.date, &ms)) return ms;
+    if (response.retrieved_ms > 0) return static_cast<int64_t>(response.retrieved_ms);
+    return now_unix_ms();
+}
+
+std::string failed_status(const HttpResponse& response) {
+    std::string out = std::to_string(response.status);
+    if (!response.error.empty()) out += " (" + response.error + ")";
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// The IngestRequest (storage-ingest's typed meta) + provenance.
+// ---------------------------------------------------------------------------
+
+struct Attribution {
+    std::string provider_id;
+    std::string source_name;
+    std::string source_url;
+    std::string origin_id;
+    std::string dataset_id;
+    std::string license_class;
+    std::string license_url;
+    std::string citation;
+    std::string archive_source;
+    std::string archive_name;
+};
+
+std::string str_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
 
 // One tile: NLAT x NLON real cells cut from the chunk (padding past the grid
 // edge dropped), statistics over the non-missing cells.
@@ -949,8 +676,137 @@ struct Tile {
     bool periodic_lon = false;
 };
 
+
+// The batch's IngestRequest: TAGS, RECONCILE Duplicates, ARCHIVE (cyclone lane) and PROVENANCE - the fields the JSON
+// meta carried, now typed. The provenance's RETRIEVED_MS keeps the whole second the JSON's retrieved_at named.
+std::vector<uint8_t> build_ingest_request(const char* schema, const Attribution& attribution,
+                                          const std::string& source_url, const std::string& batch_id,
+                                          bool with_archive, const char* parser_version, long status,
+                                          const HttpResponse& response, const std::string& normalized_sha256,
+                                          int normalized_count, int64_t retrieved_ms) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    const auto opt = [](const std::string& s) { return s.empty() ? nullptr : s.c_str(); };
+    const std::vector<flatbuffers::Offset<flatbuffers::String>> schemas{b.CreateString(schema)};
+    const std::vector<uint64_t> counts{static_cast<uint64_t>(normalized_count)};
+    const std::vector<flatbuffers::Offset<flatbuffers::String>> warnings;
+    const int64_t retrieved_seconds_ms = (retrieved_ms >= 0 ? retrieved_ms / 1000 : (retrieved_ms - 999) / 1000) * 1000;
+    const auto provenance = R::CreateProvenanceDirect(
+        b, source_url.c_str(), static_cast<int32_t>(status), opt(response.etag), opt(response.last_modified),
+        opt(response.content_type), static_cast<uint64_t>(retrieved_seconds_ms), nullptr, parser_version,
+        batch_id.c_str(), normalized_sha256.c_str(), static_cast<uint64_t>(normalized_count), &schemas, &counts,
+        &warnings, false);
+    const std::string source_peer = "source:" + attribution.origin_id;
+    const auto tags = R::CreateSourceTagsDirect(
+        b, attribution.provider_id.c_str(), attribution.source_name.c_str(), batch_id.c_str(), source_url.c_str(),
+        kContentKeyID, source_peer.c_str(), license_id_for(attribution.license_class),
+        attribution.license_url.c_str(), attribution.citation.c_str(), false);
+    flatbuffers::Offset<R::ArchiveTarget> archive = 0;
+    if (with_archive && !attribution.archive_source.empty() && !attribution.archive_name.empty()) {
+        archive = R::CreateArchiveTargetDirect(b, attribution.archive_source.c_str(), attribution.archive_name.c_str());
+    }
+    R::FinishIngestRequestBuffer(b, R::CreateIngestRequestDirect(b, schema, tags, R::reconcileMode_Duplicates, archive, provenance));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+int push_ingest_request(const char* port, const std::vector<uint8_t>& bytes) {
+    return plugin_push_output_ex(port, "IngestRequest.fbs", R::IngestRequestIdentifier(),
+                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "IngestRequest", 0, 0, bytes.data(),
+                                 static_cast<uint32_t>(bytes.size()));
+}
+
+// ---------------------------------------------------------------------------
+// Zarr chunk decode ("bytes" codec; float32 / float16 little endian).
+// ---------------------------------------------------------------------------
+
+// The chunk job, from the response's CONTEXT ($WXF header record) and the node config (chunk extents, dims order).
+struct ChunkJob {
+    Attribution attribution;
+    std::string field_id;
+    std::string array;
+    std::string model_id;
+    std::string model_version;
+    wxfModelClass model_class = wxfModelClass_Unspecified;
+    wxfMemberKind member_kind = wxfMemberKind_Member;
+    wxfVariable variable = wxfVariable_Unspecified;
+    uint64_t init_time_ms = 0;
+    float lead_hours = 0;
+    uint64_t valid_time_ms = 0;
+    uint16_t horizon_hours = 0;
+    uint16_t member_index = 0;
+    uint16_t ensemble_size = 0;
+    std::string dtype;
+    std::vector<std::string> codecs;
+    // the tile (the source cut it from the declared global grid)
+    double lat0 = 0, lon0 = 0, dlat = 0, dlon = 0;
+    uint32_t nlat = 0, nlon = 0;
+    bool periodic_lon = false;
+    uint32_t tile_index = 0, tile_count = 0;
+};
+
+struct ChunkLayout {
+    double chunk_lat = 64, chunk_lon = 64;
+    std::vector<std::string> dims;
+};
+
+std::vector<std::string> split_list(const std::string& text) {
+    std::vector<std::string> out;
+    std::string current;
+    for (const char c : text + ",") {
+        if (c != ',') { current.push_back(c); continue; }
+        const std::string t = trim(current);
+        if (!t.empty()) out.push_back(t);
+        current.clear();
+    }
+    return out;
+}
+
+bool read_chunk_job(const HttpResponse& response, const std::string& provider_id, ChunkJob* job, std::string* err) {
+    if (!response.context || response.context_length < 8) { *err = "the response carries no CONTEXT job record"; return false; }
+    flatbuffers::Verifier verifier(response.context, response.context_length);
+    if (!VerifySizePrefixedWXFBuffer(verifier)) { *err = "the response CONTEXT is not a size-prefixed $WXF record"; return false; }
+    const WXF* w = GetSizePrefixedWXF(response.context);
+    job->attribution.provider_id = provider_id;
+    job->attribution.source_name = kCloudSourceName;
+    job->attribution.source_url = str_of(w->SOURCE_URL());
+    job->attribution.origin_id = str_of(w->ORIGIN_ID());
+    job->attribution.dataset_id = str_of(w->DATASET_ID());
+    job->attribution.license_class = EnumNamewxfLicenseClass(w->LICENSE_CLASS());
+    job->attribution.license_url = str_of(w->LICENSE_URL());
+    job->attribution.citation = str_of(w->CITATION());
+    job->field_id = str_of(w->FIELD_ID());
+    job->array = str_of(w->VARIABLE_NAME());
+    job->model_id = str_of(w->MODEL_ID());
+    job->model_version = str_of(w->MODEL_VERSION());
+    job->model_class = w->MODEL_CLASS();
+    job->member_kind = w->MEMBER_KIND();
+    job->variable = w->VARIABLE();
+    job->init_time_ms = w->INIT_TIME_MS();
+    job->lead_hours = w->LEAD_HOURS();
+    job->valid_time_ms = w->VALID_TIME_MS();
+    job->horizon_hours = w->HORIZON_HOURS();
+    job->member_index = w->MEMBER_INDEX();
+    job->ensemble_size = w->ENSEMBLE_SIZE();
+    job->dtype = str_of(w->CHUNK_DTYPE());
+    if (job->dtype.empty()) job->dtype = "float32";
+    if (w->CHUNK_CODECS()) for (const auto* c : *w->CHUNK_CODECS()) job->codecs.push_back(str_of(c));
+    const WXFGrid* g = w->GRID();
+    job->lat0 = g->LAT0();
+    job->lon0 = g->LON0();
+    job->dlat = g->DLAT();
+    job->dlon = g->DLON();
+    job->nlat = g->NLAT();
+    job->nlon = g->NLON();
+    job->periodic_lon = g->PERIODIC_LON();
+    job->tile_index = w->TILE_INDEX();
+    job->tile_count = w->TILE_COUNT();
+    if (job->array.empty()) { *err = "job carries no array name (VARIABLE_NAME)"; return false; }
+    if (job->field_id.empty()) { *err = "job carries no FIELD_ID"; return false; }
+    if (job->nlat == 0 || job->nlon == 0) { *err = "job tile GRID NLAT/NLON must be positive"; return false; }
+    return true;
+}
+
 // Decodes the chunk body and cuts the tile; sets the error code on failure.
-bool decode_tile(const ChunkJob& job, const std::vector<uint8_t>& body, Tile* tile,
+bool decode_tile(const ChunkJob& job, const ChunkLayout& layout, const std::vector<uint8_t>& body, Tile* tile,
                  std::string* code, std::string* message) {
     if (job.codecs.empty() || job.codecs[0] != "bytes") {
         *code = "codec-unsupported";
@@ -972,15 +828,42 @@ bool decode_tile(const ChunkJob& job, const std::vector<uint8_t>& body, Tile* ti
         *message = "chunk data type \"" + job.dtype + "\" is not float32 or float16";
         return false;
     }
-    uint64_t cells = 1;
-    for (const double dim : job.chunk_shape) {
-        if (dim < 1) { *code = "chunk-shape-invalid"; *message = "chunk_shape holds a non-positive extent"; return false; }
-        cells *= static_cast<uint64_t>(dim);
+    int lat_dim = -1, lon_dim = -1;
+    for (size_t i = 0; i < layout.dims.size(); i++) {
+        if (layout.dims[i] == "latitude") lat_dim = static_cast<int>(i);
+        if (layout.dims[i] == "longitude") lon_dim = static_cast<int>(i);
     }
+    if (lat_dim < 0 || lon_dim < 0) {
+        *code = "dims-invalid";
+        *message = "weathernext_dims must name latitude and longitude";
+        return false;
+    }
+    // Chunk shape in dims order: 1 on every non-spatial dimension, the padded extents on latitude / longitude.
+    if (layout.chunk_lat < 1 || layout.chunk_lon < 1) {
+        *code = "chunk-shape-invalid";
+        *message = "weathernext_chunk_lat / weathernext_chunk_lon hold a non-positive extent";
+        return false;
+    }
+    const uint64_t chunk_lat = static_cast<uint64_t>(layout.chunk_lat);
+    const uint64_t chunk_lon = static_cast<uint64_t>(layout.chunk_lon);
+    const uint64_t cells = chunk_lat * chunk_lon;
     if (body.size() != cells * item_size) {
         *code = "chunk-size-mismatch";
         *message = "decoded " + std::to_string(body.size()) + " bytes, expected " +
                    std::to_string(cells) + " x " + std::to_string(item_size);
+        return false;
+    }
+    const uint64_t nlat = job.nlat;
+    const uint64_t nlon = job.nlon;
+    if (nlat > chunk_lat || nlon > chunk_lon) {
+        *code = "chunk-index-invalid";
+        *message = "the job's tile (" + std::to_string(nlat) + " x " + std::to_string(nlon) +
+                   ") exceeds the chunk extents";
+        return false;
+    }
+    if (nlat * nlon > kMaxInlineCells) {
+        *code = "tile-too-large";
+        *message = "tile exceeds the inline cell limit";
         return false;
     }
     std::vector<float> all(static_cast<size_t>(cells));
@@ -999,35 +882,6 @@ bool decode_tile(const ChunkJob& job, const std::vector<uint8_t>& body, Tile* ti
             all[i] = half_to_float(half);
         }
     }
-
-    int lat_dim = -1, lon_dim = -1;
-    for (size_t i = 0; i < job.dims.size(); i++) {
-        if (job.dims[i] == "latitude") lat_dim = static_cast<int>(i);
-        if (job.dims[i] == "longitude") lon_dim = static_cast<int>(i);
-    }
-    if (lat_dim < 0 || lon_dim < 0) {
-        *code = "dims-invalid";
-        *message = "dims must name latitude and longitude";
-        return false;
-    }
-    const uint64_t chunk_lat = static_cast<uint64_t>(job.chunk_shape[lat_dim]);
-    const uint64_t chunk_lon = static_cast<uint64_t>(job.chunk_shape[lon_dim]);
-    const uint64_t i0 = static_cast<uint64_t>(job.chunk_index[lat_dim]) * chunk_lat;
-    const uint64_t j0 = static_cast<uint64_t>(job.chunk_index[lon_dim]) * chunk_lon;
-    const uint64_t grid_nlat = static_cast<uint64_t>(job.nlat);
-    const uint64_t grid_nlon = static_cast<uint64_t>(job.nlon);
-    if (i0 >= grid_nlat || j0 >= grid_nlon) {
-        *code = "chunk-index-invalid";
-        *message = "chunk index lies outside the declared grid";
-        return false;
-    }
-    const uint64_t nlat = std::min<uint64_t>(chunk_lat, grid_nlat - i0);
-    const uint64_t nlon = std::min<uint64_t>(chunk_lon, grid_nlon - j0);
-    if (nlat * nlon > kMaxInlineCells) {
-        *code = "tile-too-large";
-        *message = "tile exceeds the inline cell limit";
-        return false;
-    }
     const uint64_t lat_stride = lat_dim < lon_dim ? chunk_lon : 1;
     const uint64_t lon_stride = lat_dim < lon_dim ? 1 : chunk_lat;
     tile->values.assign(static_cast<size_t>(nlat * nlon), 0.0f);
@@ -1045,28 +899,22 @@ bool decode_tile(const ChunkJob& job, const std::vector<uint8_t>& body, Tile* ti
         }
     }
     if (missing == nlat * nlon) { vmin = 0; vmax = 0; }
-    const uint64_t tiles_per_row = (grid_nlon + chunk_lon - 1) / chunk_lon;
-    const uint64_t tile_rows = (grid_nlat + chunk_lat - 1) / chunk_lat;
     tile->nlat = static_cast<uint32_t>(nlat);
     tile->nlon = static_cast<uint32_t>(nlon);
-    tile->lat0 = job.lat0 + static_cast<double>(i0) * job.dlat;
-    tile->lon0 = job.lon0 + static_cast<double>(j0) * job.dlon;
-    tile->tile_index = static_cast<uint32_t>(static_cast<uint64_t>(job.chunk_index[lat_dim]) * tiles_per_row +
-                                             static_cast<uint64_t>(job.chunk_index[lon_dim]));
-    tile->tile_count = static_cast<uint32_t>(tile_rows * tiles_per_row);
+    tile->lat0 = job.lat0;
+    tile->lon0 = job.lon0;
+    tile->tile_index = job.tile_index;
+    tile->tile_count = job.tile_count;
     tile->value_min = vmin;
     tile->value_max = vmax;
     tile->missing = missing;
-    tile->periodic_lon = job.periodic_lon && nlon == grid_nlon;
+    tile->periodic_lon = job.periodic_lon;
     return true;
 }
 
 std::vector<uint8_t> build_wxf_record(const ChunkJob& job, const Tile& tile, int64_t retrieved_ms) {
     ::flatbuffers::FlatBufferBuilder fbb(1024 + tile.values.size() * 4);
-    const std::string field_id = job.model_id + "|" + format_iso_seconds(job.init_time_ms) + "|" +
-                                 job.member_kind + format_number(job.member_index) + "|" + job.array +
-                                 "|" + lead_label(job.lead_hours);
-    const auto field_id_off = fbb.CreateString(field_id);
+    const auto field_id_off = fbb.CreateString(job.field_id);
     const auto model_id_off = fbb.CreateString(job.model_id);
     const auto model_version_off = fbb.CreateString(job.model_version);
     const auto variable_name_off = fbb.CreateString(job.array);
@@ -1090,22 +938,19 @@ std::vector<uint8_t> build_wxf_record(const ChunkJob& job, const Tile& tile, int
     grid.add_PERIODIC_LON(tile.periodic_lon);
     const auto grid_off = grid.Finish();
 
-    const uint64_t valid_ms = static_cast<uint64_t>(job.init_time_ms) +
-                              static_cast<uint64_t>(std::llround(job.lead_hours * 3600000.0));
-
     WXFBuilder b(fbb);
     b.add_FIELD_ID(field_id_off);
-    b.add_MODEL_CLASS(model_class_for(job.model_class));
+    b.add_MODEL_CLASS(job.model_class);
     b.add_MODEL_ID(model_id_off);
     b.add_MODEL_VERSION(model_version_off);
-    b.add_INIT_TIME_MS(static_cast<uint64_t>(job.init_time_ms));
-    b.add_LEAD_HOURS(static_cast<float>(job.lead_hours));
-    b.add_VALID_TIME_MS(valid_ms);
-    b.add_HORIZON_HOURS(static_cast<uint16_t>(job.horizon_hours));
-    b.add_MEMBER_KIND(member_kind_for(job.member_kind));
-    b.add_MEMBER_INDEX(static_cast<uint16_t>(job.member_index));
-    b.add_ENSEMBLE_SIZE(static_cast<uint16_t>(job.ensemble_size));
-    b.add_VARIABLE(variable_for_array(job.array));
+    b.add_INIT_TIME_MS(job.init_time_ms);
+    b.add_LEAD_HOURS(job.lead_hours);
+    b.add_VALID_TIME_MS(job.valid_time_ms);
+    b.add_HORIZON_HOURS(job.horizon_hours);
+    b.add_MEMBER_KIND(job.member_kind);
+    b.add_MEMBER_INDEX(job.member_index);
+    b.add_ENSEMBLE_SIZE(job.ensemble_size);
+    b.add_VARIABLE(job.variable);
     b.add_VARIABLE_NAME(variable_name_off);
     b.add_UNITS(units_off);
     b.add_LEVEL_KIND(wxfLevelKind_EntireAtmosphere);
@@ -1147,6 +992,11 @@ std::string common_source_url(const std::vector<ChunkJob>& jobs) {
     const size_t slash = prefix.rfind('/');
     return slash == std::string::npos ? prefix : prefix.substr(0, slash + 1);
 }
+
+// ---------------------------------------------------------------------------
+// Cyclone tracks.
+// ---------------------------------------------------------------------------
+
 
 // ---------------------------------------------------------------------------
 // Cyclone tracks.
@@ -1254,6 +1104,8 @@ bool build_point(::flatbuffers::FlatBufferBuilder& fbb, const Row& row, int64_t 
     return true;
 }
 
+
+// The cyclone job, from the response's CONTEXT ($TCT header record).
 struct CycloneJob {
     Attribution attribution;
     std::string model_id;
@@ -1262,6 +1114,30 @@ struct CycloneJob {
     double ensemble_size = 0;
     double wind_averaging_period_s = 0;
 };
+
+bool read_cyclone_job(const HttpResponse& response, const std::string& provider_id, CycloneJob* job, std::string* err) {
+    if (!response.context || response.context_length < 8) { *err = "the response carries no CONTEXT job record"; return false; }
+    flatbuffers::Verifier verifier(response.context, response.context_length);
+    if (!VerifySizePrefixedTCTBuffer(verifier)) { *err = "the response CONTEXT is not a size-prefixed $TCT record"; return false; }
+    const TCT* t = GetSizePrefixedTCT(response.context);
+    job->attribution.provider_id = provider_id;
+    job->attribution.source_name = kCycloneSourceName;
+    job->attribution.archive_source = kCycloneArchiveSource;
+    job->attribution.archive_name = kCycloneArchiveName;
+    job->attribution.source_url = str_of(t->SOURCE_URL());
+    job->attribution.origin_id = str_of(t->ORIGIN_ID());
+    job->attribution.dataset_id = str_of(t->DATASET_ID());
+    job->attribution.license_class = EnumNamewxfLicenseClass(t->LICENSE_CLASS());
+    job->attribution.license_url = str_of(t->LICENSE_URL());
+    job->attribution.citation = str_of(t->CITATION());
+    job->model_id = str_of(t->MODEL_ID());
+    job->model_version = str_of(t->MODEL_VERSION());
+    job->model_class = EnumNamewxfModelClass(t->MODEL_CLASS());
+    job->ensemble_size = t->ENSEMBLE_SIZE();
+    job->wind_averaging_period_s = t->WIND_AVERAGING_PERIOD_S();
+    return true;
+}
+
 
 bool build_tct_record(const CycloneJob& job, std::vector<CyclonePoint>& points, int64_t retrieved_ms,
                       std::vector<uint8_t>* out, std::string* err) {
@@ -1357,6 +1233,7 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -1365,38 +1242,36 @@ bool find_batched_input_port(char* message, size_t message_len) {
 
 extern "C" {
 
-// parse_cloud_chunks: jobs[k] + responses[k] -> $WXF tiles + ingest meta.
+// parse_cloud_chunks: every HttpResponse on "responses" (job in CONTEXT) -> $WXF tiles + one IngestRequest.
 int parse_cloud_chunks(void) {
-    const std::vector<const plugin_input_frame_t*> job_frames = frames_on("jobs");
     const std::vector<const plugin_input_frame_t*> response_frames = frames_on("responses");
-    if (job_frames.empty()) {
-        plugin_set_error("missing-job-frame", "parse_cloud_chunks requires at least one chunk job frame.");
-        return 400;
-    }
-    if (job_frames.size() != response_frames.size()) {
-        std::string msg = "parse_cloud_chunks received " + std::to_string(job_frames.size()) +
-                          " job frames but " + std::to_string(response_frames.size()) +
-                          " response frames; jobs and responses pair by position, so a mismatch "
-                          "cannot be attributed and is refused.";
-        plugin_set_error("job-response-count-mismatch", msg.c_str());
+    if (response_frames.empty()) {
+        plugin_set_error("missing-response-frame", "parse_cloud_chunks requires at least one chunk HttpResponse frame.");
         return 400;
     }
 
-    std::vector<ChunkJob> jobs(job_frames.size());
+    const NodeConfig config = NodeConfig::load();
+    const std::string provider_id = config.text("weathernext_provider_id", kDefaultProviderID);
+    ChunkLayout layout;
+    layout.chunk_lat = config.number("weathernext_chunk_lat", 64);
+    layout.chunk_lon = config.number("weathernext_chunk_lon", 64);
+    layout.dims = split_list(config.text("weathernext_dims", kDefaultDims));
+
+    std::vector<ChunkJob> jobs(response_frames.size());
     std::vector<HttpResponse> responses(response_frames.size());
-    for (size_t k = 0; k < job_frames.size(); k++) {
+    for (size_t k = 0; k < response_frames.size(); k++) {
         std::string err;
-        if (!read_chunk_job(frame_text(job_frames[k]), &jobs[k], &err)) {
-            plugin_set_error("invalid-chunk-job", ("chunk job " + std::to_string(k) + ": " + err).c_str());
-            return 400;
-        }
         if (!decode_http_response(response_frames[k], &responses[k], &err)) {
             plugin_set_error("invalid-response-frame", ("chunk " + std::to_string(k) + ": " + err).c_str());
             return 400;
         }
+        if (!read_chunk_job(responses[k], provider_id, &jobs[k], &err)) {
+            plugin_set_error("invalid-chunk-job", ("chunk job " + std::to_string(k) + ": " + err).c_str());
+            return 400;
+        }
         if (responses[k].status != 200) {
             std::string msg = "chunk " + std::to_string(k) + " (" + jobs[k].attribution.source_url +
-                              ") fetch returned HTTP status " + std::to_string(responses[k].status);
+                              ") fetch returned HTTP status " + failed_status(responses[k]);
             plugin_set_error("fetch-failed", msg.c_str());
             return 502;
         }
@@ -1410,7 +1285,7 @@ int parse_cloud_chunks(void) {
         batch.update(responses[k].body.data(), responses[k].body.size());
         Tile tile;
         std::string code, message;
-        if (!decode_tile(jobs[k], responses[k].body, &tile, &code, &message)) {
+        if (!decode_tile(jobs[k], layout, responses[k].body, &tile, &code, &message)) {
             plugin_set_error(code.c_str(), ("chunk " + std::to_string(k) + ": " + message).c_str());
             return 422;
         }
@@ -1422,17 +1297,16 @@ int parse_cloud_chunks(void) {
 
     const std::string batch_id = batch.hex_digest();
     const std::string source_url = common_source_url(jobs);
-    const std::string provenance = build_provenance_json(
-        kParserVersionClouds, source_url, 200, responses[0], batch_id, normalized.hex_digest(), count,
-        "{\"WXF.fbs\":" + std::to_string(count) + "}", retrieved_at_ms(responses[0]));
-    const std::string meta = build_ingest_meta("WXF.fbs", jobs[0].attribution, source_url, batch_id,
-                                               /*with_archive=*/false, provenance);
-    if (push_json("wxf_meta", meta) < 0) return 500;
+    const std::vector<uint8_t> meta = build_ingest_request(
+        "WXF.fbs", jobs[0].attribution, source_url, batch_id, /*with_archive=*/false, kParserVersionClouds, 200,
+        responses[0], normalized.hex_digest(), count, retrieved_at_ms(responses[0]));
+    if (push_ingest_request("wxf_meta", meta) < 0) return 500;
     if (push_record_stream("wxf_records", "WXF.fbs", "$WXF", "WXF", stream) < 0) return 500;
     return 0;
 }
 
-// parse_cyclone_tracks: cyclone CSV -> $TCT per (storm, member) + meta + raw.
+// parse_cyclone_tracks: cyclone CSV HttpResponse (job in CONTEXT) -> $TCT per (storm, member) + IngestRequest +
+// the HttpResponse itself on "raw" (its BODY is the document storage-ingest archives).
 int parse_cyclone_tracks(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
@@ -1440,33 +1314,21 @@ int parse_cyclone_tracks(void) {
         return 500;
     }
 
-    const std::string job_json = frame_text(frame_at("job", 0));
-    if (job_json.empty()) {
-        plugin_set_error("missing-job-frame", "parse_cyclone_tracks requires the job JSON frame.");
-        return 400;
-    }
     HttpResponse response;
     std::string err;
     if (!decode_http_response(frame_at("response", 0), &response, &err)) {
         plugin_set_error("missing-response-frame", err.c_str());
         return 400;
     }
-    if (response.status != 200) {
-        plugin_set_error("fetch-failed",
-                         ("cyclone track fetch returned HTTP status " + std::to_string(response.status)).c_str());
-        return 502;
-    }
-
+    const NodeConfig config = NodeConfig::load();
     CycloneJob job;
-    read_attribution(job_json, &job.attribution);
-    json_string_field(job_json, "model_id", &job.model_id);
-    json_string_field(job_json, "model_version", &job.model_version);
-    json_string_field(job_json, "model_class", &job.model_class);
-    json_number_field(job_json, "ensemble_size", &job.ensemble_size);
-    json_number_field(job_json, "wind_averaging_period_s", &job.wind_averaging_period_s);
-    if (job.attribution.source_name.empty()) {
-        plugin_set_error("missing-source-name", "job must carry source_name.");
+    if (!read_cyclone_job(response, config.text("weathernext_provider_id", kDefaultProviderID), &job, &err)) {
+        plugin_set_error("invalid-cyclone-job", err.c_str());
         return 400;
+    }
+    if (response.status != 200) {
+        plugin_set_error("fetch-failed", ("cyclone track fetch returned HTTP status " + failed_status(response)).c_str());
+        return 502;
     }
 
     std::vector<Row> rows;
@@ -1529,15 +1391,17 @@ int parse_cyclone_tracks(void) {
     Sha256 batch;
     batch.update(response.body.data(), response.body.size());
     const std::string batch_id = batch.hex_digest();
-    const std::string provenance = build_provenance_json(
-        kParserVersionCyclones, job.attribution.source_url, response.status, response, batch_id,
-        normalized.hex_digest(), count, "{\"TCT.fbs\":" + std::to_string(count) + "}", retrieved_ms);
-    const std::string meta = build_ingest_meta("TCT.fbs", job.attribution, job.attribution.source_url,
-                                               batch_id, /*with_archive=*/true, provenance);
-    if (push_json("tct_meta", meta) < 0) return 500;
+    const std::vector<uint8_t> meta = build_ingest_request(
+        "TCT.fbs", job.attribution, job.attribution.source_url, batch_id, /*with_archive=*/true,
+        kParserVersionCyclones, response.status, response, normalized.hex_digest(), count, retrieved_ms);
+    if (push_ingest_request("tct_meta", meta) < 0) return 500;
     if (push_record_stream("tct_records", "TCT.fbs", "$TCT", "TCT", stream) < 0) return 500;
-    if (push_bytes("raw", response.body) < 0) return 500;
+    if (plugin_push_output_ex("raw", "HttpResponse.fbs", R::HttpResponseIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                              "HttpResponse", 0, 0, response.bytes, static_cast<uint32_t>(response.length)) < 0) {
+        return 500;
+    }
     return 0;
 }
 
 }  // extern "C"
+

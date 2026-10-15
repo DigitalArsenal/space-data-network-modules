@@ -1,470 +1,392 @@
 /*
- * fit_pipeline.cpp — OD fit pipeline (App 2, task A2.3).
+ * fit_pipeline.cpp - OD fit pipeline on typed contracts (1.0).
  *
- * A scheduler-driven (TIMERS) module that turns stored operator-ephemeris OEM
- * records into SDN-fitted supplemental GP (SupGP / OMM) records:
+ * On a TimerTick, reads the stored operator ephemerides ($OEM records) through the typed storage.query hostcall,
+ * fits SGP4 supplemental-GP mean elements per object with analysis/od's own fitter, and emits the fits as SDS
+ * records: $OMM on "omm" and $OBD on "obd", built by analysis/od's own builders (the bytes analysis/od's `fit` emits
+ * for the same states and settings). Every record it does not fit is a FlowNotice on "status", with a per-provider
+ * summary. Storing and publishing the fits is the flow's job (hostcap/storage-ingest), not this module's.
  *
- *   storage.query(schema="OEM")            [consumption lane, cap: storage_query]
- *      -> canonical OEM JSON record per object (Starlink compact / ISS verbose)
- *      -> odpipe::oem_record_to_series      [reuse od frame/time machinery]
- *      -> od::fit_sgp4_series               [REUSE the existing OD fit — no fork]
- *      -> schema-exact OMM JSON + provenance COMMENT/lineage
- *      -> storage.ingest_with_source(OMM, SourceTags) -> keyslot.sign(CID)
- *      -> schema-exact PNM -> pubsub.publish(<provider OMM topic>)  [provider_source.hpp]
+ *   tick (TICK) -> storage.query(SCHEMA, LIMIT): records_meta (StoredRecordMeta) + records (size-prefixed bytes)
+ *     -> od::read_oem_flatbuffer           (analysis/od: frame / time / center rules, TEME)
+ *     -> od::fit_sgp4_series               (analysis/od: the one OD fit)
+ *     -> od::build_omm_flatbuffer / build_obd_flatbuffer -> omm / obd
  *
- * OUTPUT SOURCE-TAG PROVENANCE (A2.2c-3/A2.6 residual): fitted OMMs are stored
- * via storage.ingest_with_source so each carries SourceTags. SourceName is the
- * PRODUCER identity "od-fit-pipeline" (distinguishing our fits from raw provider
- * OEM on a multi-provider store), while the UPSTREAM provider stays recorded in
- * the record JSON's USER_DEFINED_SDN_SOURCE_NAME — the A2.7 synthesis module
- * consumes BOTH. batch_id is a deterministic fingerprint of the input record set
- * for the pass (idempotent across re-runs on an unchanged store; changes when new
- * source ephemeris arrives), so all OMMs from one fitting pass group together.
- *
- * Provider-agnostic: the provider set + per-provider fit config (max iterations —
- * reusing the OD max-iteration cap — fit window, subsample, convergence) are
- * DATA (request payload > plugin.getConfig module config > compiled fallback),
- * never hardcoded per provider. Records that cannot be fitted yet (unsupported
- * frame/time/center, undecodable shells, too few samples, non-converged fit) are
- * SKIPPED WITH AN HONEST REASON in the summary — never silently dropped or wrongly
- * fitted.
- *
- * Cron contract (SDN plugins/manager.go CronMethodSpec): a timer method receives
- * NO input (Input:"none", invoked with nil) and returns JSON — this module needs
- * ZERO Go changes; declaring a `timers` block in the manifest is sufficient. A
- * manual invoke MAY pass a JSON config payload to override the provider set.
- *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * Config (plugin.getConfig, one ModuleConfig): querySchema ("OEM"), queryLimit (500), providers (a list of
+ * {sourceName, dataSource, requireConverged, fit: {maxIterations, fitWindowSec, subsample, convergenceTol}}; when
+ * given it replaces the compiled set), idRegistry ({<OBJECT_NAME>: {NORAD_CAT_ID, OBJECT_ID}}, empty by default).
+ * A host that cannot answer plugin.getConfig leaves the compiled set (spacex-starlink / SpaceX-E and iss / ISS-E,
+ * 50 iterations each).
  */
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "provider_source.hpp"       // ps:: hostcall/storage_write/keyslot/pubsub/json/sha256/base64
-#include "od/sgp4_fitter.h"          // od::fit_sgp4_series, elements_to_json, FitterConfig
+#include "od/obd_fb_builder.h"
+#include "od/oem_fb_reader.h"
+#include "od/omm_fb_builder.h"
+#include "od/sgp4_fitter.h"
 #include "od/state_series.h"
-#include "oem_record_series.hpp"     // odpipe:: OEM-record -> StateSeries + JSON slicing
-#include "id_registry.hpp"           // odpipe:: object-ID cross-reference seam (A2.4-prereq)
 
-namespace ps = provider_source;
-
-extern "C" {
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
+#include "space_data_module_invoke.h"
+#include "FlowNotice_generated.h"
+#include "TimerTick_generated.h"
+#include "typedHostcall.hpp"
 
 namespace {
 
-// ── per-provider fit + publish configuration (data-driven) ───────────────────
+namespace R = sdn::runtime;
+namespace A = sdn::runtime::Aligned;
+
+// -- per-provider fit configuration (data-driven) ------------------------------------------------------------------
 
 struct ProviderFit {
-    std::string source_name;      // SourceTags.SourceName written by the adapter (grouping key)
-    std::string data_source;      // CelesTrak-comparable token, e.g. "SpaceX-E" (labels the OMM)
-    std::string output_topic;     // pubsub topic for the fitted-OMM PNMs
-    std::string signing_slot = "node-signing";
-    std::string signature_type = "ed25519";
-    std::string file_id_prefix;   // FILE_ID partition prefix (default derived from source_name)
-    // Fit config — reuses the OD max-iteration cap (clamped 1..300 by the fitter path).
-    int max_iterations = 0;       // 0 = solver default
+    std::string source_name;  // the stored record's SOURCE_NAME (grouping key)
+    std::string data_source;  // labels the fit ($OBD SENSORS[0].SENSOR_ID), e.g. "SpaceX-E"
+    int max_iterations = 0;   // 0 = solver default; clamped 1..300 as analysis/od's fit does
     double fit_window_sec = 11520.0;
-    int subsample = 0;            // 0 = auto (~144 pts over the window)
+    int subsample = 0;        // 0 = the fitter's default
     double convergence_tol = 0.0002;
     bool require_converged = true;
 };
 
-struct PipelineConfig {
-    std::string query_schema = "OEM";
-    long query_limit = 500;
-    std::vector<ProviderFit> providers;
-    // Owner-supplied OBJECT_NAME -> {NORAD, COSPAR} registry (EMPTY by default).
-    // Used to resolve IDs for position-only feeds that identify by slot/name/PRN.
-    std::vector<odpipe::IdRegistryEntry> id_registry;
+struct IdRegistryEntry {
+    std::string key;  // the record's OBJECT_NAME (slot / name / PRN)
+    int norad = 0;
+    std::string object_id;
 };
 
-// Compiled fallback: the two public Tier-1 adapters (A2.2c). Overridden whenever
-// a config is supplied — this only keeps a bare cron tick useful out of the box.
+struct PipelineConfig {
+    std::string query_schema = "OEM";
+    uint32_t query_limit = 500;
+    std::vector<ProviderFit> providers;
+    std::vector<IdRegistryEntry> id_registry;
+};
+
 PipelineConfig default_config() {
     PipelineConfig c;
     ProviderFit sx;
     sx.source_name = "spacex-starlink";
     sx.data_source = "SpaceX-E";
-    sx.output_topic = "sdn/supgp/spacex-starlink";
-    sx.file_id_prefix = "sdn-supgp-spacex-starlink";
     sx.max_iterations = 50;
     c.providers.push_back(sx);
     ProviderFit iss;
     iss.source_name = "iss";
     iss.data_source = "ISS-E";
-    iss.output_topic = "sdn/supgp/iss";
-    iss.file_id_prefix = "sdn-supgp-iss";
     iss.max_iterations = 50;
     c.providers.push_back(iss);
     return c;
 }
 
-void parse_provider(const std::string& obj, ProviderFit* p) {
-    std::string s;
-    if (odpipe::str_field(obj, "sourceName", &s)) p->source_name = s;
-    if (odpipe::str_field(obj, "dataSource", &s)) p->data_source = s;
-    if (odpipe::str_field(obj, "outputTopic", &s)) p->output_topic = s;
-    if (odpipe::str_field(obj, "signingSlot", &s)) p->signing_slot = s;
-    if (odpipe::str_field(obj, "signatureType", &s)) p->signature_type = s;
-    if (odpipe::str_field(obj, "fileIdPrefix", &s)) p->file_id_prefix = s;
-    std::string fit = odpipe::block_slice(obj, "fit", '{', '}');
-    if (!fit.empty()) {
-        double d = 0.0;
-        if (odpipe::num_field(fit, "maxIterations", &d) && d > 0) p->max_iterations = static_cast<int>(d);
-        if (odpipe::num_field(fit, "fitWindowSec", &d) && d > 0) p->fit_window_sec = d;
-        if (odpipe::num_field(fit, "subsample", &d) && d >= 0) p->subsample = static_cast<int>(d);
-        if (odpipe::num_field(fit, "convergenceTol", &d) && d > 0) p->convergence_tol = d;
+void read_provider(const sdm_piv::ConfigTable& t, ProviderFit* p) {
+    p->source_name = std::string(t.string("sourceName"));
+    p->data_source = std::string(t.string("dataSource"));
+    const sdm_piv::ConfigTable fit = t.table("fit");
+    if (fit) {
+        double d = fit.number("maxIterations", 0);
+        if (d > 0) p->max_iterations = static_cast<int>(d);
+        d = fit.number("fitWindowSec", 0);
+        if (d > 0) p->fit_window_sec = d;
+        d = fit.number("subsample", -1);
+        if (d >= 0) p->subsample = static_cast<int>(d);
+        d = fit.number("convergenceTol", 0);
+        if (d > 0) p->convergence_tol = d;
     }
-    if (obj.find("\"requireConverged\":false") != std::string::npos) p->require_converged = false;
-    if (obj.find("\"requireConverged\":true") != std::string::npos) p->require_converged = true;
-    if (p->output_topic.empty() && !p->source_name.empty()) p->output_topic = "sdn/supgp/" + p->source_name;
-    if (p->file_id_prefix.empty() && !p->source_name.empty()) p->file_id_prefix = "sdn-supgp-" + p->source_name;
+    p->require_converged = t.boolean("requireConverged", true);
 }
 
-// Merge a JSON config object (from the request payload or plugin.getConfig) over
-// the compiled fallback. A `providers` array, when present, REPLACES the set.
-void apply_config_json(const std::string& json, PipelineConfig* cfg) {
-    if (json.empty()) return;
-    std::string s;
-    if (odpipe::str_field(json, "querySchema", &s) && !s.empty()) cfg->query_schema = s;
-    double d = 0.0;
-    if (odpipe::num_field(json, "queryLimit", &d) && d > 0) cfg->query_limit = static_cast<long>(d);
-    std::string providers = odpipe::block_slice(json, "providers", '[', ']');
-    if (!providers.empty()) {
-        std::vector<std::string> objs = odpipe::split_array_objects(providers);
-        if (!objs.empty()) {
-            cfg->providers.clear();
-            for (const std::string& o : objs) {
-                ProviderFit p;
-                parse_provider(o, &p);
-                if (!p.source_name.empty()) cfg->providers.push_back(p);
-            }
-        }
-    }
-    // idRegistry, when present, REPLACES the ID cross-reference set (owner data).
-    std::string registry = odpipe::block_slice(json, "idRegistry", '{', '}');
-    if (!registry.empty()) cfg->id_registry = odpipe::parse_id_registry(registry);
-}
-
-// Config resolution: request payload > plugin.getConfig module config > fallback.
-PipelineConfig resolve_config(const uint8_t* req, uint32_t len) {
+PipelineConfig resolve_config() {
     PipelineConfig cfg = default_config();
-
-    // plugin.getConfig — the node's per-instance module config (result object).
-    std::vector<uint8_t> env = ps::hostcall("plugin.getConfig", "{}");
-    if (ps::cap_ok(env)) {
-        std::string meta = ps::envelope_meta_json(env);
-        std::string result = odpipe::block_slice(meta, "result", '{', '}');
-        if (!result.empty()) apply_config_json(result, &cfg);
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return cfg;  // no node config: the compiled set
+    const std::string_view schema = config.string("querySchema");
+    if (!schema.empty()) cfg.query_schema = std::string(schema);
+    const double limit = config.number("queryLimit", 0);
+    if (limit > 0) cfg.query_limit = static_cast<uint32_t>(std::min(limit, 4294967295.0));
+    const size_t n = config.tables("providers");
+    if (n > 0) {
+        std::vector<ProviderFit> providers;
+        for (size_t i = 0; i < n; ++i) {
+            ProviderFit p;
+            read_provider(config.table("providers", i), &p);
+            if (!p.source_name.empty()) providers.push_back(p);
+        }
+        if (!providers.empty()) cfg.providers = providers;
     }
-
-    // Request payload (manual invoke) wins last. A cron tick passes nil/empty.
-    if (req != nullptr && len > 0) {
-        size_t i = 0;
-        while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-        if (i < len && req[i] == '{') {
-            std::string json(reinterpret_cast<const char*>(req), len);
-            apply_config_json(json, &cfg);
+    // idRegistry: one nested table per OBJECT_NAME key; it REPLACES the (empty) default.
+    const sdm_piv::ConfigTable registry = config.table("idRegistry");
+    if (registry && registry.entries()) {
+        for (const auto* entry : *registry.entries()) {
+            if (!entry->KEY() || entry->KIND() != R::configValueKind_TableList || !entry->TABLES() ||
+                entry->TABLES()->size() != 1) {
+                continue;
+            }
+            const sdm_piv::ConfigTable value(entry->TABLES()->Get(0)->ENTRIES());
+            IdRegistryEntry e;
+            e.key = entry->KEY()->str();
+            e.norad = static_cast<int>(value.number("NORAD_CAT_ID", 0));
+            e.object_id = std::string(value.string("OBJECT_ID"));
+            if (!e.key.empty() && (e.norad != 0 || !e.object_id.empty())) cfg.id_registry.push_back(e);
         }
     }
     return cfg;
 }
 
-// ── consumption lane: storage.query(schema=...) -> record objects ────────────
-// Requires the storage_query capability grant. Returns the raw Record JSON
-// objects (each carries CID, Data(base64 record bytes), SourceTags{SourceName}).
+const IdRegistryEntry* id_registry_lookup(const PipelineConfig& cfg, const std::string& key) {
+    if (key.empty()) return nullptr;
+    for (const IdRegistryEntry& e : cfg.id_registry) {
+        if (e.key == key) return &e;
+    }
+    return nullptr;
+}
+
+// -- the store's records -------------------------------------------------------------------------------------------
 
 struct StoredRecord {
     std::string cid;
+    std::string provider_id;
     std::string source_name;
-    std::string oem_json;        // decoded canonical OEM record bytes
-    std::string record_sha256;   // SHA-256 of the consumed record bytes (fit lineage)
+    const uint8_t* data = nullptr;  // the $OEM FlatBuffer (root, not size-prefixed), in the hostcall response
+    size_t size = 0;
 };
 
-bool storage_query_oem(const std::string& schema, long limit,
-                       std::vector<StoredRecord>* out, std::string* err) {
-    std::string payload = "{\"schema\":\"" + ps::json_escape(schema) +
-                          "\",\"limit\":" + std::to_string(limit) + "}";
-    std::vector<uint8_t> env = ps::hostcall("storage.query", payload);
-    if (!ps::cap_ok(env)) {
-        std::string meta = ps::envelope_meta_json(env);
-        std::string msg;
-        ps::json_string_field(meta, "message", &msg);
-        *err = msg.empty() ? "storage.query failed or storage_query capability not granted" : msg;
+std::string aligned_string(const flatbuffers::aligned_runtime::AlignedString<128>& s) { return s.str(); }
+
+// storage.query: one StoredRecordMeta per record on list "records_meta", the records on raw "records" as
+// [u32le length][bytes] runs in the same order. A stored record may itself be size-prefixed; either form is read.
+bool storage_query(const PipelineConfig& cfg, sdm_piv::Response* response, std::vector<StoredRecord>* out,
+                   std::string* error) {
+    A::StorageQueryParams params{};
+    if (!sdm_piv::put(params.SCHEMA, cfg.query_schema)) {
+        *error = "querySchema \"" + cfg.query_schema + "\" is longer than storage.query takes";
         return false;
     }
-    std::string meta = ps::envelope_meta_json(env);
-    std::string arr = odpipe::block_slice(meta, "result", '[', ']');
-    for (const std::string& rec : odpipe::split_array_objects(arr)) {
+    params.set_has_SCHEMA(true);
+    params.LIMIT = cfg.query_limit;
+    *response = sdm_piv::call("storage.query", "StorageQueryParams", params);
+    if (!response->ok()) {
+        *error = response->error_message();
+        if (error->empty()) *error = response->error_code();
+        if (error->empty()) *error = "storage.query failed";
+        return false;
+    }
+    const auto [meta, count] = response->list<A::StoredRecordMeta>("records_meta");
+    const std::string_view raw = response->raw("records");
+    size_t at = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (at + 4 > raw.size()) break;
+        uint32_t len = 0;
+        std::memcpy(&len, raw.data() + at, 4);
+        at += 4;
+        if (at + len > raw.size()) break;
         StoredRecord r;
-        odpipe::str_field(rec, "CID", &r.cid);
-        std::string data_b64;
-        if (!odpipe::str_field(rec, "Data", &data_b64) || data_b64.empty()) continue;
-        std::vector<uint8_t> bytes = ps::base64_decode(data_b64);
-        if (bytes.empty()) continue;
-        r.oem_json.assign(bytes.begin(), bytes.end());
-        r.record_sha256 = ps::sha256_hex(bytes.data(), bytes.size());
-        std::string tags = odpipe::block_slice(rec, "SourceTags", '{', '}');
-        if (!tags.empty()) odpipe::str_field(tags, "SourceName", &r.source_name);
-        out->push_back(std::move(r));
+        r.cid = aligned_string(meta[i].CID);
+        r.provider_id = aligned_string(meta[i].PROVIDER_ID);
+        r.source_name = aligned_string(meta[i].SOURCE_NAME);
+        r.data = reinterpret_cast<const uint8_t*>(raw.data() + at);
+        r.size = len;
+        if (r.size >= 12 && !od::is_oem_flatbuffer(r.data, r.size) && od::is_oem_flatbuffer(r.data + 4, r.size - 4)) {
+            uint32_t inner = 0;
+            std::memcpy(&inner, r.data, 4);
+            if (inner == r.size - 4) {
+                r.data += 4;
+                r.size -= 4;
+            }
+        }
+        at += len;
+        out->push_back(r);
     }
     return true;
 }
 
-// ── OMM record construction (schema-exact GP keys + honest provenance) ───────
+// The record is read in place from the hostcall response; FlatBuffers wants its root 4-aligned.
+std::vector<uint8_t> aligned_copy(const StoredRecord& r) { return std::vector<uint8_t>(r.data, r.data + r.size); }
 
-std::string build_omm_record(const od::FitResult& fit,
-                             const ProviderFit& prov,
-                             const StoredRecord& src,
-                             const std::string& id_status) {
-    // od::elements_to_json emits the schema-exact GP/OMM keys (NORAD_CAT_ID,
-    // MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER,
-    // MEAN_ANOMALY, BSTAR, EPOCH, DATA_SOURCE, RMS, CONVERGED, ...). We augment it
-    // with CCSDS-legit COMMENT provenance + USER_DEFINED_* machine-readable
-    // lineage back to the source ephemeris (for A2.7 catalog synthesis). The base
-    // serializer is reused verbatim (never mutated) so the existing gate is safe.
-    std::string omm = od::elements_to_json(fit.elements);
-    if (!omm.empty() && omm.back() == '}') omm.pop_back();
-    char rmsbuf[48];
-    snprintf(rmsbuf, sizeof(rmsbuf), "%.6f", fit.rms_km);
-    omm += ",\"COMMENT\":[";
-    omm += "\"SDN OD-fitted supplemental GP (SupGP/OMM) — App 2 A2.3 pipeline.\",";
-    omm += "\"Fitted from stored SDS OEM record via od::fit_sgp4_series.\",";
-    omm += "\"SOURCE_NAME=" + ps::json_escape(prov.source_name) +
-           " DATA_SOURCE=" + ps::json_escape(prov.data_source) + "\",";
-    omm += "\"SOURCE_CID=" + ps::json_escape(src.cid) + "\",";
-    omm += "\"SOURCE_SHA256=" + ps::json_escape(src.record_sha256) + "\",";
-    omm += std::string("\"FIT_RMS_KM=") + rmsbuf +
-           " ITERATIONS=" + std::to_string(fit.iterations) +
-           " CONVERGED=" + (fit.converged ? "true" : "false") + "\"";
-    omm += "],";
-    // Machine-readable lineage (USER_DEFINED_* is the SDS user-extension convention).
-    omm += "\"USER_DEFINED_SDN_SOURCE_CID\":\"" + ps::json_escape(src.cid) + "\",";
-    omm += "\"USER_DEFINED_SDN_SOURCE_SHA256\":\"" + ps::json_escape(src.record_sha256) + "\",";
-    omm += "\"USER_DEFINED_SDN_SOURCE_NAME\":\"" + ps::json_escape(prov.source_name) + "\",";
-    // ID provenance: "source" (real NORAD came with the ephemeris),
-    // "registry-mapped" (owner registry resolved it), or "unmapped-object-id"
-    // (no NORAD/COSPAR — honest empty IDs, fitted anyway, never fabricated).
-    omm += "\"USER_DEFINED_SDN_ID_STATUS\":\"" + ps::json_escape(id_status) + "\"";
-    omm += "}";
-    return omm;
-}
+// -- outputs -------------------------------------------------------------------------------------------------------
 
-std::string provenance_json(const od::FitResult& fit, const ProviderFit& prov, const StoredRecord& src) {
-    char rmsbuf[48];
-    snprintf(rmsbuf, sizeof(rmsbuf), "%.6f", fit.rms_km);
-    return std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(prov.source_name) + "\"," +
-           "\"DATA_SOURCE\":\"" + ps::json_escape(prov.data_source) + "\"," +
-           "\"RECORD_SCHEMA\":\"OMM\"," +
-           "\"FIT_METHOD\":\"sgp4-differential-correction\"," +
-           "\"SOURCE_RECORD_SCHEMA\":\"OEM\"," +
-           "\"SOURCE_CID\":\"" + ps::json_escape(src.cid) + "\"," +
-           "\"SOURCE_SHA256\":\"" + src.record_sha256 + "\"," +
-           "\"NORAD_CAT_ID\":" + std::to_string(fit.elements.norad_cat_id) + "," +
-           "\"FIT_RMS_KM\":" + rmsbuf + "," +
-           "\"FIT_ITERATIONS\":" + std::to_string(fit.iterations) + "," +
-           "\"CONVERGED\":" + (fit.converged ? "true" : "false") + "}";
-}
+uint64_t g_at_ms = 0;  // the tick's FIRED_MS (0 without a tick)
 
-// ── per-provider selection ───────────────────────────────────────────────────
-
-// Choose the provider a stored record belongs to. Grouping key is
-// SourceTags.SourceName (set once adapters write via storage.ingest_with_source).
-// Fallback: if the record carries no source tag and exactly one provider is
-// configured, attribute it to that provider (single-provider deployment); this
-// is called out as an honest gap in the module README.
-const ProviderFit* select_provider(const PipelineConfig& cfg, const std::string& source_name) {
-    if (!source_name.empty()) {
-        for (const ProviderFit& p : cfg.providers)
-            if (p.source_name == source_name) return &p;
-        return nullptr;  // tagged for a provider we are not configured to fit
+bool push_record(const char* port, const char* schema, const char* file_id, const char* root,
+                 const std::vector<uint8_t>& bytes) {
+    if (bytes.empty() ||
+        plugin_push_output_ex(port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root, 0, 8, bytes.data(),
+                              static_cast<uint32_t>(bytes.size())) < 0) {
+        plugin_set_error("emit-failed", (std::string("Failed to emit the ") + file_id + " frame.").c_str());
+        return false;
     }
-    if (cfg.providers.size() == 1) return &cfg.providers[0];
-    return nullptr;
+    return true;
 }
 
-// ── the pipeline method ──────────────────────────────────────────────────────
+bool push_notice(R::flowNoticeKind kind, const std::string& schema, const std::string& provider_id,
+                 const std::string& source_name, uint64_t count, const std::string& reason,
+                 const std::vector<std::string>& items) {
+    flatbuffers::FlatBufferBuilder b(256 + reason.size());
+    std::vector<flatbuffers::Offset<flatbuffers::String>> item_offsets;
+    for (const std::string& item : items) item_offsets.push_back(b.CreateString(item));
+    const auto items_vector = item_offsets.empty() ? 0 : b.CreateVector(item_offsets);
+    const auto schema_s = b.CreateString(schema);
+    const auto provider_s = provider_id.empty() ? 0 : b.CreateString(provider_id);
+    const auto source_s = source_name.empty() ? 0 : b.CreateString(source_name);
+    const auto reason_s = b.CreateString(reason);
+    R::FlowNoticeBuilder n(b);
+    n.add_KIND(kind);
+    n.add_SCHEMA(schema_s);
+    if (!provider_id.empty()) n.add_PROVIDER_ID(provider_s);
+    if (!source_name.empty()) n.add_SOURCE_NAME(source_s);
+    n.add_COUNT(count);
+    n.add_REASON(reason_s);
+    if (!items.empty()) n.add_ITEMS(items_vector);
+    n.add_AT_MS(g_at_ms);
+    R::FinishFlowNoticeBuffer(b, n.Finish());
+    if (plugin_push_output_ex("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(),
+                              PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0, b.GetBufferPointer(),
+                              static_cast<uint32_t>(b.GetSize())) < 0) {
+        plugin_set_error("emit-failed", "Failed to emit a FlowNotice.");
+        return false;
+    }
+    return true;
+}
+
+// -- the pipeline --------------------------------------------------------------------------------------------------
 
 struct ProviderStats {
-    long candidates = 0, fitted = 0, published = 0, signed_ = 0, stored = 0;
-    long id_mapped = 0, id_unmapped = 0;  // registry hits vs honest-empty IDs
-    std::vector<std::string> skips;  // "<norad>:<reason>"
+    long candidates = 0, fitted = 0, id_mapped = 0, id_unmapped = 0, skipped = 0;
+    std::vector<std::string> fitted_cids;  // in the order of the omm / obd records
 };
 
-std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
-    PipelineConfig cfg = resolve_config(req, req_len);
+constexpr size_t kMinSamples = 8;
 
-    std::vector<StoredRecord> records;
-    std::string query_err;
-    bool query_ok = storage_query_oem(cfg.query_schema, cfg.query_limit, &records, &query_err);
-
-    // batch_id: a deterministic fingerprint of the INPUT record set for this pass.
-    // Every fitted OMM stored below carries this same batch_id, so one fitting
-    // pass groups together (and re-running over an unchanged store re-derives the
-    // identical id — idempotent; a new-epoch OEM in the store yields a new id).
-    // Order-independent: hash the SORTED input CIDs (a set fingerprint, not a
-    // sequence one). Empty on an empty/failed read (no records to attribute).
-    std::string batch_id;
-    {
-        std::vector<std::string> cids;
-        cids.reserve(records.size());
-        for (const StoredRecord& r : records) cids.push_back(r.cid);
-        std::sort(cids.begin(), cids.end());
-        std::string joined;
-        for (const std::string& c : cids) { joined += c; joined.push_back('\n'); }
-        if (!joined.empty()) {
-            batch_id = ps::sha256_hex(
-                reinterpret_cast<const uint8_t*>(joined.data()), joined.size());
-        }
+int run_pipeline() {
+    // The tick is optional (a direct invoke needs none); its FIRED_MS stamps the notices.
+    g_at_ms = 0;
+    const uint32_t inputs = plugin_get_input_count();
+    for (uint32_t i = 0; i < inputs; ++i) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id || std::strcmp(frame->port_id, "tick") != 0 || !frame->payload) continue;
+        flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+        if (R::VerifyTimerTickBuffer(verifier)) g_at_ms = R::GetTimerTick(frame->payload)->FIRED_MS();
     }
 
-    // Per-provider tallies, indexed to cfg.providers order.
+    const PipelineConfig cfg = resolve_config();
+    sdm_piv::Response response(std::vector<uint8_t>{});
+    std::vector<StoredRecord> records;
+    std::string query_error;
+    if (!storage_query(cfg, &response, &records, &query_error)) {
+        return push_notice(R::flowNoticeKind_Missing, cfg.query_schema, "", "", 0,
+                           "storage-query-failed: " + query_error, {})
+                   ? 0
+                   : 500;
+    }
+
     std::vector<ProviderStats> stats(cfg.providers.size());
-    long unconfigured = 0, skipped_total = 0;
+    std::vector<std::string> unconfigured;
 
     for (const StoredRecord& rec : records) {
-        const ProviderFit* prov = select_provider(cfg, rec.source_name);
-        if (prov == nullptr) { unconfigured++; continue; }
-        size_t pidx = static_cast<size_t>(prov - &cfg.providers[0]);
-        ProviderStats& st = stats[pidx];
-        st.candidates++;
-
-        od::StateSeries series;
-        std::string skip;
-        if (!odpipe::oem_record_to_series(rec.oem_json, prov->data_source, &series, &skip)) {
-            st.skips.push_back(skip);
-            skipped_total++;
+        // The provider a record belongs to: its SOURCE_NAME; an untagged record goes to the one provider of a
+        // single-provider configuration.
+        const ProviderFit* prov = nullptr;
+        if (!rec.source_name.empty()) {
+            for (const ProviderFit& p : cfg.providers) {
+                if (p.source_name == rec.source_name) prov = &p;
+            }
+        } else if (cfg.providers.size() == 1) {
+            prov = &cfg.providers[0];
+        }
+        if (!prov) {
+            unconfigured.push_back(rec.cid);
             continue;
         }
+        ProviderStats& st = stats[static_cast<size_t>(prov - cfg.providers.data())];
+        st.candidates++;
+        auto skip = [&](const std::string& reason) {
+            st.skipped++;
+            return push_notice(R::flowNoticeKind_Skipped, cfg.query_schema, rec.provider_id, prov->source_name, 1,
+                               reason, {rec.cid});
+        };
 
-        // ID cross-reference: the source's NORAD wins; otherwise consult the
-        // owner registry by OBJECT_NAME (slot/name/PRN). No match -> honest-empty
-        // IDs, fitted and tagged "unmapped-object-id". IDs are NEVER fabricated.
-        std::string id_status;
-        if (series.meta.norad_cat_id > 0) {
-            id_status = "source";
-        } else {
-            odpipe::IdRegistryEntry e;
-            if (odpipe::id_registry_lookup(cfg.id_registry, series.meta.object_name, &e)) {
-                series.meta.norad_cat_id = e.norad;
-                if (!e.object_id.empty()) series.meta.object_id = e.object_id;
-                id_status = "registry-mapped";
+        const std::vector<uint8_t> bytes = aligned_copy(rec);
+        od::OEMParseResult parsed = od::read_oem_flatbuffer(bytes.data(), bytes.size());
+        if (!parsed.ok) {
+            if (!skip(parsed.error_code + ": " + parsed.error_message)) return 500;
+            continue;
+        }
+        od::StateSeries series = std::move(parsed.series);
+        if (series.samples.size() < kMinSamples) {
+            if (!skip("too-few-samples:" + std::to_string(series.samples.size()))) return 500;
+            continue;
+        }
+        series.meta.data_source = prov->data_source;
+
+        // IDs: the source's NORAD wins; otherwise the owner registry by OBJECT_NAME; otherwise honest-empty IDs
+        // (NORAD 0, OBJECT_ID ""), fitted anyway. Never fabricated.
+        bool unmapped = false;
+        if (series.meta.norad_cat_id <= 0) {
+            if (const IdRegistryEntry* e = id_registry_lookup(cfg, series.meta.object_name)) {
+                series.meta.norad_cat_id = e->norad;
+                if (!e->object_id.empty()) series.meta.object_id = e->object_id;
                 st.id_mapped++;
             } else {
-                id_status = "unmapped-object-id";
+                unmapped = true;
                 st.id_unmapped++;
             }
         }
 
         od::FitterConfig fc;
-        if (prov->max_iterations > 0) fc.max_iterations = prov->max_iterations;
+        if (prov->max_iterations > 0) fc.max_iterations = std::clamp(prov->max_iterations, 1, 300);
         fc.fit_window_sec = prov->fit_window_sec;
         if (prov->subsample > 0) fc.subsample = prov->subsample;
         fc.convergence_tol = prov->convergence_tol;
 
         od::FitResult fit = od::fit_sgp4_series(series, fc);
-        // Unmapped objects publish TRULY honest-empty IDs: clear the fitter's
-        // internal "unknown" placeholder (99999) so the record carries NORAD 0 /
-        // OBJECT_ID "" alongside the unmapped-object-id tag. Never a fabricated ID.
-        if (id_status == "unmapped-object-id") {
+        if (unmapped) {
             fit.elements.norad_cat_id = 0;
-            fit.elements.object_id = "";
+            fit.elements.object_id.clear();
         }
         if (prov->require_converged && !fit.converged) {
-            char b[64];
-            snprintf(b, sizeof(b), "%d:fit-not-converged:rms=%.3f", series.meta.norad_cat_id, fit.rms_km);
-            st.skips.push_back(b);
-            skipped_total++;
+            char reason[96];
+            std::snprintf(reason, sizeof(reason), "%d:fit-not-converged:rms=%.3f", series.meta.norad_cat_id,
+                          fit.rms_km);
+            if (!skip(reason)) return 500;
             continue;
         }
-        st.fitted++;
 
-        std::string omm = build_omm_record(fit, *prov, rec, id_status);
-
-        ps::ProviderConfig pcfg;
-        pcfg.signing_slot = prov->signing_slot;
-        pcfg.publish_topic = prov->output_topic;
-        pcfg.signature_type = prov->signature_type;
-        // SourceTags.SourceName/ProviderID are the PRODUCER ("od-fit-pipeline"),
-        // NOT the upstream provider — that stays in the record JSON's
-        // USER_DEFINED_SDN_SOURCE_NAME (via prov.source_name in build_omm_record).
-        // A2.7 synthesis consumes both to distinguish our fits from raw OEM.
-        pcfg.source_name = "od-fit-pipeline";
-        pcfg.data_source = prov->data_source;
-        pcfg.record_schema = "OMM";
-
-        std::string file_id = prov->file_id_prefix + ":OMM:" +
-                              std::to_string(fit.elements.norad_cat_id) + ":" + fit.elements.epoch_iso;
-        std::string file_name = std::to_string(fit.elements.norad_cat_id) + "_" +
-                                fit.elements.epoch_iso + ".omm.json";
-        std::string prov_json = provenance_json(fit, *prov, rec);
-
-        // source_url carries per-record lineage (the input OEM record's CID); the
-        // pass-level batch_id groups every OMM fitted in this run.
-        ps::PublishResult r = ps::publish_record_with_source(
-            pcfg, reinterpret_cast<const uint8_t*>(omm.data()), omm.size(),
-            file_name, file_id, fit.elements.epoch_iso, prov_json,
-            rec.cid, batch_id);
-        if (r.stored) st.stored++;
-        if (r.signed_) st.signed_++;
-        if (r.published) st.published++;
-    }
-
-    // ── summary JSON ──
-    std::string out = "{\"ok\":true,\"pipeline\":\"od-fit\",";
-    out += "\"query_ok\":" + std::string(query_ok ? "true" : "false") + ",";
-    if (!query_ok) out += "\"query_error\":\"" + ps::json_escape(query_err) + "\",";
-    out += "\"records_seen\":" + std::to_string(records.size()) + ",";
-    out += "\"unconfigured\":" + std::to_string(unconfigured) + ",";
-    out += "\"skipped_total\":" + std::to_string(skipped_total) + ",";
-    out += "\"providers\":[";
-    for (size_t i = 0; i < cfg.providers.size(); ++i) {
-        if (i) out += ",";
-        const ProviderFit& p = cfg.providers[i];
-        const ProviderStats& st = stats[i];
-        out += "{\"source_name\":\"" + ps::json_escape(p.source_name) + "\",";
-        out += "\"data_source\":\"" + ps::json_escape(p.data_source) + "\",";
-        out += "\"candidates\":" + std::to_string(st.candidates) + ",";
-        out += "\"fitted\":" + std::to_string(st.fitted) + ",";
-        out += "\"id_mapped\":" + std::to_string(st.id_mapped) + ",";
-        out += "\"id_unmapped\":" + std::to_string(st.id_unmapped) + ",";
-        out += "\"stored\":" + std::to_string(st.stored) + ",";
-        out += "\"signed\":" + std::to_string(st.signed_) + ",";
-        out += "\"published\":" + std::to_string(st.published) + ",";
-        out += "\"skipped\":[";
-        for (size_t k = 0; k < st.skips.size(); ++k) {
-            if (k) out += ",";
-            out += "\"" + ps::json_escape(st.skips[k]) + "\"";
+        const double fit_span_days =
+            series.samples.size() >= 2 ? series.samples.back().epoch_jd - series.samples.front().epoch_jd : 0.0;
+        if (!push_record("omm", "OMM.fbs", "$OMM", "OMM", od::build_omm_flatbuffer(fit.elements)) ||
+            !push_record("obd", "OBD.fbs", "$OBD", "OBD", od::build_obd_flatbuffer(fit.elements, fit_span_days))) {
+            return 500;
         }
-        out += "]}";
+        st.fitted++;
+        st.fitted_cids.push_back(rec.cid);
     }
-    out += "]}";
-    return out;
+
+    if (!unconfigured.empty() &&
+        !push_notice(R::flowNoticeKind_Skipped, cfg.query_schema, "", "", unconfigured.size(), "unconfigured",
+                     unconfigured)) {
+        return 500;
+    }
+    // One summary per provider: COUNT = records fitted, ITEMS = their source CIDs in the order of the omm records.
+    for (size_t i = 0; i < cfg.providers.size(); ++i) {
+        const ProviderStats& st = stats[i];
+        const std::string reason = "fitted " + std::to_string(st.fitted) + " of " + std::to_string(st.candidates) +
+                                   " (skipped " + std::to_string(st.skipped) + "; ids registry-mapped " +
+                                   std::to_string(st.id_mapped) + ", unmapped " + std::to_string(st.id_unmapped) +
+                                   "; " + std::to_string(records.size()) + " records read)";
+        if (!push_notice(R::flowNoticeKind_Info, cfg.query_schema, "", cfg.providers[i].source_name,
+                         static_cast<uint64_t>(st.fitted), reason, st.fitted_cids)) {
+            return 500;
+        }
+    }
+    return 0;
 }
 
 }  // namespace
 
-extern "C" {
-
-// Canonical streaming invoke entrypoint. The TIMERS method (cron: nil input) or a
-// manual invoke (optional JSON config payload) triggers one read+fit+publish pass.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pipeline(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
-    }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+extern "C" int fit_pipeline(void) {
+    plugin_reset_output_state();
+    return run_pipeline();
 }
-
-}  // extern "C"

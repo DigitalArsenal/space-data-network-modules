@@ -5,10 +5,13 @@ canonical, size-prefixed SDS CAT records.
 The same artifact runs in the browser and WasmEdge. HTTP retrieval,
 scheduling, provenance publication and storage belong to the SDN host flow.
 
-`parse_gcat` takes the TSV edition on `source` and returns `catalog` plus a
-JSON control `report`. The report contains source-native keys in exactly the
-same order as the records, the upstream update text, and counts of values
-that cannot be represented faithfully. A host must preserve this report
+`parse_gcat` takes the HttpResponse (HRSP) from hostcap/http-request on
+`response` (STATUS 200, BODY the TSV edition verbatim; any other status fails)
+and returns `catalog` (size-prefixed `$CAT`) plus a FlowNotice (FNTC, kind
+Info) `report`. The report's ITEMS are the source-native keys in exactly the
+same order as the records, COUNT the record count, and REASON the upstream
+update text and counts of values that cannot be represented faithfully, as
+`;`-separated `key=value` pairs. A host must preserve this report
 alongside the edition before presenting native-key catalog composition.
 The report is control metadata, not an SDS dataset offered in the Store.
 

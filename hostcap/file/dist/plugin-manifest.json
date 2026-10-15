@@ -1,10 +1,13 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.file",
   "name": "SDN Host File Node",
-  "version": "0.1.0",
-  "description": "Capability node wrapping the host filesystem hostcall group (filesystem.readFile / filesystem.writeFile). Method \"read_file\": input \"request\" JSON {\"path\":\"...\"} -> output \"content\" raw file bytes verbatim. Method \"write_file\": input \"content\" raw bytes plus \"request\" JSON {\"path\":\"...\"} -> output \"result\" JSON {\"ok\":true,\"bytesWritten\":N,\"path\":\"...\"}. HOST SUPPORT (verified 2026-07): the SDK NodeHost serves filesystem.* against a sandboxed root; the SDK BrowserHost serves filesystem.* only when constructed with a filesystem adapter (OPFS or in-memory) — absent adapter, calls fail closed. The Go server host (sdn-server modulert) has NO filesystem capability handler today (internal/modulert/caps has no filesystem.go), so server-side invokes fail with operation-not-supported until a filesystem cap handler lands. This gap is documented, not worked around.",
+  "version": "0.2.0",
+  "description": "Host filesystem connector (typed contracts 1.0). Method \"read_file\": \"request\" $FIL (SDS standard FIL) naming PATH -> filesystem.readFile (+ filesystem.stat) -> \"file\" $FIL {PATH, NAME, KIND File, SIZE, CONTENT verbatim, MODIFIED_AT_MS when the host reports it}. Method \"write_file\": \"file\" $FIL {PATH, CONTENT, APPEND} -> filesystem.writeFile (or filesystem.appendFile when APPEND) -> \"result\" $FIL {PATH, NAME, KIND File, SIZE bytes written, APPEND, WRITTEN_AT_MS from clock.now (0 when the clock is not granted)}, no CONTENT. All hostcalls are SDS $PIV invocations (raw \"path\" / \"data\" frames); no JSON. HOST SUPPORT: the SDK NodeHost serves filesystem.* against a sandboxed root; the SDK BrowserHost only with a filesystem adapter (absent adapter, calls fail closed). The Go server host (sdn-server modulert) has no filesystem handler today, so server-side invokes fail closed with the host's error until one lands.",
   "pluginFamily": "infrastructure",
-  "capabilities": ["filesystem"],
+  "capabilities": [
+    "filesystem",
+    "clock"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "host-filesystem",
@@ -12,14 +15,26 @@
       "direction": "bidirectional",
       "capability": "filesystem",
       "resource": "file://sandbox",
-      "description": "Host sandboxed filesystem hostcalls. Cross-host today: SDK NodeHost (built-in sandbox root) and SDK BrowserHost (requires a configured filesystem adapter). Go server host: not yet implemented.",
+      "description": "Host sandboxed filesystem hostcalls as SDS $PIV invocations (raw \"path\" / \"data\"; filesystem.stat -> FsStat) and clock.now for write times. SDK NodeHost (sandbox root) and SDK BrowserHost (filesystem adapter required); Go server host: not yet implemented.",
       "properties": {
-        "hostOps": ["filesystem.readFile", "filesystem.writeFile"]
+        "hostOps": [
+          "filesystem.readFile",
+          "filesystem.stat",
+          "filesystem.writeFile",
+          "filesystem.appendFile",
+          "clock.now"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "read_file",
@@ -29,84 +44,75 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-file-read-request-json",
+              "setId": "sds-fil-read-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"path\":\"<host-sandbox-relative path>\"}."
+              "description": "$FIL naming PATH (relative to the host's sandbox root); other fields are not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The file path to read."
+          "description": "The file to read."
         }
       ],
       "outputPorts": [
         {
-          "portId": "content",
+          "portId": "file",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-file-content-bytes",
+              "setId": "sds-fil-file",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Raw file bytes (aligned-binary wire format), passed through verbatim from the filesystem.readFile hostcall binary segment."
+              "description": "$FIL: PATH (as requested), NAME (last element), KIND File, SIZE, CONTENT (filesystem.readFile verbatim), MODIFIED_AT_MS (filesystem.stat; 0 when unavailable)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The file content bytes."
+          "description": "The file with its content."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Reads a file through filesystem.readFile and emits the bytes verbatim. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Reads PATH through filesystem.readFile and emits the file as one $FIL with CONTENT. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind, so a surplus is refused with error code \"batched-input-frames\", naming the port and the count (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "write_file",
       "displayName": "Write File",
       "inputPorts": [
         {
-          "portId": "content",
+          "portId": "file",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-file-write-content-bytes",
+              "setId": "sds-fil-write",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Raw bytes to write (aligned-binary wire format); forwarded verbatim as the hostcall binary segment."
+              "description": "$FIL: PATH (relative to the host's sandbox root), CONTENT (written verbatim; empty writes an empty file), APPEND (true appends to the existing file)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The content bytes to write."
-        },
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-hostcap-file-write-request-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"path\":\"<host-sandbox-relative path>\"}."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The destination path."
+          "description": "The file to write."
         }
       ],
       "outputPorts": [
@@ -114,24 +120,27 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-file-write-result-json",
+              "setId": "sds-fil-written",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"ok\":true,\"bytesWritten\":<content byte count>,\"path\":\"<host-resolved path when reported, else the requested path>\"}."
+              "description": "$FIL: PATH, NAME, KIND File, SIZE (bytes written), APPEND, WRITTEN_AT_MS (clock.now; 0 when unavailable); no CONTENT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The write result."
+          "description": "What was written."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes the content bytes through filesystem.writeFile and emits a JSON result frame. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Writes (or appends) CONTENT to PATH through filesystem.writeFile / filesystem.appendFile and emits what was written as one $FIL without content. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind, so a surplus is refused with error code \"batched-input-frames\", naming the port and the count (graph task modules-guest-nodes-drop-batched-frames)."
     }
   ],
   "buildArtifacts": [

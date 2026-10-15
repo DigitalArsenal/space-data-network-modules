@@ -6,7 +6,7 @@
     {
       "nodeId": "atmosphere",
       "pluginId": "atmosphere-model",
-      "methodId": "invoke",
+      "methodId": "query_atmosphere_state_batch",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
     }
@@ -23,11 +23,13 @@
     {
       "triggerId": "manual-request",
       "targetNodeId": "atmosphere",
-      "targetPortId": "request",
+      "targetPortId": "atmosphere",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["atmosphere-model"],
-  "description": "Minimal hosted-runtime example invoking the atmosphere plugin through the canonical command bridge."
+  "requiredPlugins": [
+    "atmosphere-model"
+  ],
+  "description": "Minimal hosted-runtime example sending an SDS $HFC atmosphere query to the atmosphere plugin."
 }

@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { ByteBuffer } from 'flatbuffers';
-import { CAT } from 'spacedatastandards.org/lib/js/CAT/CAT.js';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decode, harness, request as typed } from './frames.mjs';
 
 // The element sets are synthetic: the layout of Mike McCants' classified-satellite
 // editions (https://mmccants.org/tles/classfd.zip), which state no licence, with
@@ -17,25 +15,7 @@ const canyon = ['Synthetic Alpha',
 const prowler = ['Synthetic Beta',
   '1 90011U 91097E   21305.13119867 0.00000000  00000-0  00000-0 0    07',
   '2 90011  14.7421 350.9137 0040735 245.2740 114.3135  1.00206833    04'];
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json',import.meta.url)));
-async function harness(t) {
-  const host = await createBrowserModuleHarness({wasmSource:fs.readFileSync(new URL('../dist/isomorphic/module.wasm',import.meta.url)),manifest,surface:'direct'});
-  t.after(()=>host.destroy()); return host;
-}
-function request(source) {
-  const payload = new TextEncoder().encode(source);
-  return {methodId:'parse_mccants_tle_catalog',inputs:[{portId:'source',payload,typeRef:{wireFormat:'aligned-binary',requiredAlignment:1,byteLength:payload.length}}]};
-}
-function decode(result) {
-  assert.equal(result.statusCode,0,result.errorMessage);
-  const bytes=result.outputs.find(frame=>frame.portId==='catalog').payload, rows=[];
-  for(let at=0;at<bytes.length;) {
-    const length=new DataView(bytes.buffer,bytes.byteOffset+at,4).getUint32(0,true)+4;
-    assert.ok(length>12 && at+length<=bytes.length);
-    rows.push(CAT.getSizePrefixedRootAsCAT(new ByteBuffer(bytes.slice(at,at+length))).unpack()); at+=length;
-  }
-  return {rows,report:JSON.parse(new TextDecoder().decode(result.outputs.find(frame=>frame.portId==='report').payload))};
-}
+const request = source => typed('parse_mccants_tle_catalog', source);
 function withNumber(lines,number) {
   return lines.map((line,i)=> {
     if (!i) return line;
@@ -80,6 +60,14 @@ test('rejects damaged, incomplete, duplicate and misordered editions without par
     const result=await host.invoke(request(source)); assert.notEqual(result.statusCode,0); assert.equal(result.outputs?.length??0,0);
   }
   assert.equal(decode(await host.invoke(request(canyon.join('\n')))).rows.length,1);
+});
+test('refuses a non-200 response and a frame that is not an HttpResponse',async t=> {
+  const host=await harness(t);
+  const failed=await host.invoke(typed('parse_mccants_tle_catalog',canyon.join('\n'),404));
+  assert.notEqual(failed.statusCode,0); assert.equal(failed.outputs?.length??0,0);
+  const raw=new TextEncoder().encode(canyon.join('\n'));
+  const untyped=await host.invoke({methodId:'parse_mccants_tle_catalog',inputs:[{portId:'response',payload:raw,typeRef:{wireFormat:'aligned-binary',requiredAlignment:1,byteLength:raw.length}}]});
+  assert.notEqual(untyped.statusCode,0);
 });
 test('parses each complete upstream McCants edition when supplied',{skip:!process.env.MCCANTS_TEST_EDITION},async t=> {
   const source=fs.readFileSync(process.env.MCCANTS_TEST_EDITION,'utf8');

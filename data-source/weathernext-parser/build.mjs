@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -36,7 +37,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const inlineStandards = ["WXF", "TCT"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
@@ -56,6 +57,9 @@ const compilation = await compileModuleFromSource({
   // so it compiles on the single-thread STANDALONE_WASM lane like every other
   // flow node (celestrak-parser, satnogs-source, hostcap/*).
   threadModel: "single-thread",
+  // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig (the chunk extents, the
+  // dimension order and the provider id); symbols resolve at instantiation.
+  allowUndefinedImports: true,
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler.

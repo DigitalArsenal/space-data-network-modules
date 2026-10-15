@@ -1,13 +1,14 @@
 {
   "programId": "com.digitalarsenal.flows.standards-discovery",
   "name": "SDN Standards Discovery Flow",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 5,
-  "edges": 8,
+  "nodes": 4,
+  "edges": 4,
   "triggers": 1,
   "capabilities": [
+    "clock",
     "p2p_read"
   ],
   "engineLinkage": "bridge",
@@ -16,31 +17,29 @@
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "methodId": "discover",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "disc",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "methodId": "standards_snapshot",
-      "dispatchModel": "linked-direct"
-    },
-    {
-      "nodeId": "shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_standards",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -48,8 +47,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "version": "0.7.0",
-      "sha256": "bae707c220d812218b9c0c19112628390f9e7b7a667e3b834142bfc0eae54a56",
+      "version": "0.8.0",
+      "sha256": "e7e918bc425a36ca775464b81fd8e56489638fa8f7d57dedb9dffdeeb32c25ec",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -66,8 +65,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.p2p-discovery",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
-      "version": "0.3.0",
-      "sha256": "8cc8ee2b919b8f88fe7b5b3e87f3e06034c03fb45b7185b14bd003955016eeb4",
+      "version": "0.4.0",
+      "sha256": "5d8df7418cf31e2f2c3350e8eca5f63d0d0874a826ed88af54ec33b677385bb5",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -81,33 +80,17 @@
     },
     {
       "kind": "node",
-      "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "version": "0.3.2",
-      "sha256": "f910ba9c2f666c599e7e546533be08612a6cfacad73a437de794eaae296981a3",
-      "dispatchModel": "linked-direct",
-      "artifactPath": null,
-      "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_",
-      "methodSymbols": {
-        "shape_peers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_peers",
-        "shape_standards": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_standards",
-        "shape_pnm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_pnm",
-        "shape_latest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_latest"
-      }
-    },
-    {
-      "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "version": "0.2.1",
-      "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade",
+      "version": "0.3.0",
+      "sha256": "a9db6ccd69b665626bcaaa9659636491a7e29e491bdaadcf32bac98e9bc11b9e",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
       "methodSymbols": {
-        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond",
+        "respond_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond_query"
       }
     }
   ]

@@ -1,16 +1,19 @@
 {
   "name": "@digitalarsenal/sdn-flow-supplemental-omm",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "build": "node ./scripts/package-bundle.mjs --prepare && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ./flow.json --deps ./deps.json --out ./dist/.unsigned && node ./scripts/package-bundle.mjs",
-    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ./flow.json --deps ./deps.json",
+    "build": "node ./nodes/od/build.mjs && node ./nodes/status/build.mjs",
+    "check": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow check ./flow.json --deps ./deps.json",
+    "release": "node ./scripts/release.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "verify": "npm run test && npm run check"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   }
 }

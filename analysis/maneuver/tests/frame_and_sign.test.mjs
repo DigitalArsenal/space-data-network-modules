@@ -31,8 +31,8 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
+import { invokeOperation, probeOperation } from "./mpl_client.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MU_EARTH = 398600441800000.0;
@@ -57,7 +57,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     if (!harness) return;
     t.after(async () => harness.destroy());
 
-    const res = await invokeJsonRequest(harness, {
+    const res = await invokeOperation(harness, {
       operation: "transformDeltaV",
       params: { ...STATE, deltaV: [1, 0, 0], from: "RIC" },
     });
@@ -104,12 +104,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     let worst = 0;
     for (const deltaV of probes) {
-      const eci = await invokeJsonRequest(harness, {
+      const eci = await invokeOperation(harness, {
         operation: "transformDeltaV",
         params: { ...STATE, deltaV, from: "RIC" },
       });
       assert.equal(eci.frame, "ECI");
-      const back = await invokeJsonRequest(harness, {
+      const back = await invokeOperation(harness, {
         operation: "transformDeltaV",
         params: { ...STATE, deltaV: eci.deltaV, from: "ECI" },
       });
@@ -134,13 +134,13 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     t.after(async () => harness.destroy());
 
     // GEO -> LEO. Both burns brake.
-    const down = await invokeJsonRequest(harness, {
+    const down = await invokeOperation(harness, {
       operation: "hohmannTransfer",
       params: { r1: 42_164_000, r2: 6_678_137, mu: MU_EARTH },
     });
     // ...and the mirror image, which must come back positive. Without the
     // control, "always negative" would pass this test too.
-    const up = await invokeJsonRequest(harness, {
+    const up = await invokeOperation(harness, {
       operation: "hohmannTransfer",
       params: { r1: 6_678_137, r2: 42_164_000, mu: MU_EARTH },
     });
@@ -180,20 +180,8 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // "returned a structured refusal" from "trapped", which is the whole
     // distinction here.
     const probe = async (params) => {
-      const response = await harness.invoke({
-        methodId: "invoke",
-        inputs: [{
-          portId: "request",
-          payload: new TextEncoder().encode(
-            JSON.stringify({ operation: "transformDeltaV", params }),
-          ),
-        }],
-      });
-      const frame = response.outputs?.find((e) => e.portId === "response");
-      return {
-        statusCode: response.statusCode,
-        body: frame ? JSON.parse(new TextDecoder().decode(frame.payload)) : null,
-      };
+      const outcome = await probeOperation(harness, { operation: "transformDeltaV", params });
+      return { statusCode: outcome.statusCode, body: outcome.body };
     };
 
     // The D1 defect is that a frame was ASSUMED. An unknown frame name is a

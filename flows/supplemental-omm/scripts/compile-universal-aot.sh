@@ -19,7 +19,7 @@ if [ "$#" -ne 3 ]; then
 fi
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-pin_file="$script_dir/../../../node_modules/space-data-module-sdk/src/testing/wasmedgePin.json"
+pin_file="$script_dir/../node_modules/space-data-module-sdk/src/testing/wasmedgePin.json"
 if [ ! -f "$pin_file" ]; then
   echo "compile-universal-aot: missing SDK WasmEdge pin at $pin_file" >&2
   exit 69

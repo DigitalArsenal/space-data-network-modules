@@ -89,9 +89,33 @@
 // that number — import it from HERE, so the number the deployment states and
 // the number the test checks cannot drift apart.
 
+// TYPED CONTRACTS 1.0 (2026-10-13) MOVED THE CURVE ~3.5x UP, AND SDK 0.9.2 (2026-10-14) MOVED IT BACK BELOW WHERE IT
+// STARTED. Under 0.9.0 plugin.getConfig answered ConfigEntry ALIGNED records on list "entries", nested values
+// flattened to dotted keys - every number of the index one fixed-size record (~0.5 KiB) - and the 2.81 MB index
+// peaked at 2,422 pages (16.02 MB at 13,733). SDK 0.9.2 answers ONE ModuleConfig FlatBuffer (MCFG) on raw "config",
+// and terrain_available rides in it as a NumberList of [level, startX, startY, endX, endY] tuples (40 bytes a
+// rectangle against ~48 of JSON), verified once and walked IN PLACE out of the host's response
+// (sdm_piv::Config::numbers); what the instance keeps is the parsed rectangles. Re-measured on the shipped artifact,
+// same real pair, same 1-in-3 identity mix, both allocation orders (they now peak identically)
+// (data-source/terrain-source/tests/serving-memory.test.mjs's driveInstance; index bytes = the JSON size of the same
+// index, as above):
+//
+//     index bytes    peak pages    MiB     pages per index page   (0.9.0 typed / pre-typed JSON)
+//         45 B           256        16.0     —                      256 / 256
+//       0.36 MB          256        16.0     —                      380 / 256
+//       1.52 MB          339        21.2     3.6                     — / 359
+//       2.81 MB          478        29.9     5.2                   2422 / 601
+//       6.30 MB         1050        65.6     8.3                     — / 1232 (6.33 MB)
+//       8.66 MB         1517        94.8     9.5                   7349 / 1619
+//      12.66 MB         2026       126.6     9.2                     — / 2381
+//      16.02 MB         2486       155.4     9.1                  13733 / 3285 (16.46 MB)
+//
+// TWELVE pages per index page covers every point with 18-60% headroom (the order-swing lesson above is why the
+// margin stays well clear of the measured ~9.5); the regional index this lane actually deploys (10,219 B) still
+// rounds to 384 pages.
 export const HOST_DEFAULT_PAGES = 1024;
 export const BASE_PAGES = 256;
-export const PAGES_PER_INDEX_PAGE = 16;
+export const PAGES_PER_INDEX_PAGE = 12;
 const BLOCK = 128;
 
 /** Pages a serving instance needs for an availability index of `bytes` bytes. */

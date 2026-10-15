@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.record-retention",
   "name": "SDN Record Retention",
-  "version": "0.1.0",
-  "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it. Each target names a standard and its lane (provider and/or sources); the node's storage.expire host op deletes the lane's records that arrived on the node more than window_hours ago, paging the store's record index. Default target: WXF from provider noaa-ncep. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive.",
+  "version": "0.2.0",
+  "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it (typed contracts 1.0). Each target names a standard and its lane (provider and/or sources); the node's storage.expire host op (SDS $PIV: StorageExpireParams -> StorageExpireResult) deletes the lane's records that arrived on the node more than window_hours ago, paging the store's record index. Each lane pass is reported as a FlowNotice (FNTC): Expired (COUNT deleted, SCHEMA / PROVIDER_ID / SOURCE_NAME, AT_MS the cutoff), Missing (records the index listed that were no longer stored) or Skipped (max_deletes spent). Node CONFIG through plugin.getConfig (one ModuleConfig, read by dotted path): window_hours, batch, max_deletes, targets.<i>.schema / provider_id / sources.<j>. Default target: WXF from provider noaa-ncep. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive. No JSON.",
   "pluginFamily": "data_source",
   "capabilities": [
     "storage_write"
@@ -38,18 +38,16 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Timer tick, content ignored."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK); its payload is not read."
             }
           ],
           "minStreams": 0,
@@ -63,28 +61,27 @@
           "portId": "report",
           "required": false,
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 1024,
           "acceptedTypeSets": [
             {
-              "setId": "retention-report",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "One bounded JSON summary of the pass: window, cutoff, records deleted and not held; not a data record."
-              }
+              "description": "FlowNotice (module-sdk runtime type FNTC)."
             }
           ],
-          "description": "{window_hours, cutoff_ms, deleted, not_held, capped}"
+          "description": "One FlowNotice per lane pass: Expired (COUNT records deleted, SCHEMA / PROVIDER_ID / SOURCE_NAME the lane, AT_MS the cutoff, REASON the window and whether max_deletes capped it); Missing (COUNT records the index listed that were no longer stored, only when any); Skipped (a lane not visited because the pass's max_deletes was spent)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Deletes every configured target's records older than now minus window_hours (plugin config; compiled default 72 h over WXF from provider noaa-ncep), at most max_deletes a pass, through the node's storage.expire."
+      "description": "Deletes every configured target's records older than now (clock.now) minus window_hours (node config; compiled default 72 h over WXF from provider noaa-ncep), at most max_deletes a pass, through the node's storage.expire, and reports each lane as a FlowNotice."
     }
   ],
   "schemasUsed": [

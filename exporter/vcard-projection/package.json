@@ -1,14 +1,15 @@
 {
   "name": "vcard-projection",
-  "version": "0.1.0",
-  "description": "vCard 3.0 projection of $EPM — pure WASM exporter module",
+  "version": "0.2.0",
+  "description": "vCard 3.0 projection of $EPM to $VCF (and $VCF back to $EPM) — pure WASM exporter module, typed contracts 1.0",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "npm run build && space-data-module parity --wasm dist/isomorphic/module.wasm --fixture tests/parity/vcard.json --lanes browser,wasmedge,docker-wasmedge"
+    "test": "node --test tests/*.test.mjs",
+    "test:parity": "space-data-module parity --wasm dist/isomorphic/module.wasm --fixture tests/parity/vcard.json --lanes browser,wasmedge,docker-wasmedge"
   },
   "sdn-module": "./dist/isomorphic/module.wasm",
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.5"
   }
 }

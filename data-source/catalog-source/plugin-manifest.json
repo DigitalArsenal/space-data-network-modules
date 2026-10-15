@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.catalog-source",
   "name": "Catalog Source",
-  "version": "0.2.0",
-  "description": "Parse GCAT and McCants catalog editions into canonical CAT records while preserving source-native identities.",
+  "version": "0.3.0",
+  "description": "Parse GCAT and McCants catalog editions into canonical CAT records while preserving source-native identities (typed contracts 1.0: FlatBuffers only). Each method takes one HttpResponse (HRSP) whose BODY is the complete edition and emits a size-prefixed $CAT record stream plus one FlowNotice (FNTC, Info) report. No capabilities and no hostcalls.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -19,27 +19,25 @@
       "displayName": "Read GCAT standard or extended catalog",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/tab-separated-values",
-                "detail": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS 200 (any other status fails the node), BODY a complete GCAT satcat or satcat100k TSV edition, including its header verbatim, bounded to 128 MiB."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB."
+          "description": "One fetch response carrying the edition."
         }
       ],
       "outputPorts": [
@@ -52,10 +50,11 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical size-prefixed CAT records."
+              "description": "Canonical size-prefixed $CAT record stream ([u32le len][record])."
             }
           ],
           "minStreams": 1,
@@ -67,24 +66,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Parser diagnostics and original keys in record order.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
-              }
+              "description": "FlowNotice (FNTC) kind Info: SCHEMA CAT.fbs, SOURCE_NAME gcat, COUNT the records, ITEMS the source-native keys in record order, REASON the diagnostics as ';'-separated key=value pairs (sourceUpdate, unrepresentedDesignators, unrepresentedLaunchDates, unnumberedObjects)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+          "description": "Parser diagnostics and source-native keys in record order."
         }
       ],
       "maxBatch": 1,
@@ -95,27 +92,25 @@
       "displayName": "Read McCants catalog from an element edition",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/plain",
-                "detail": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS 200 (any other status fails the node), BODY one complete decompressed classfd.tle or inttles.tle edition (catalog identities only) verbatim, bounded to 128 MiB."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB."
+          "description": "One fetch response carrying the edition."
         }
       ],
       "outputPorts": [
@@ -128,10 +123,11 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical size-prefixed CAT records."
+              "description": "Canonical size-prefixed $CAT record stream ([u32le len][record])."
             }
           ],
           "minStreams": 1,
@@ -143,24 +139,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Parser diagnostics and original keys in record order.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
-              }
+              "description": "FlowNotice (FNTC) kind Info: SCHEMA CAT.fbs, SOURCE_NAME mccants, COUNT the records, ITEMS the source-native keys in record order, REASON the diagnostics as ';'-separated key=value pairs (unnumberedObjects, unrepresentedDesignators)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+          "description": "Parser diagnostics and source-native keys in record order."
         }
       ],
       "maxBatch": 1,
@@ -172,6 +166,16 @@
       "schemaName": "CAT.fbs",
       "fileIdentifier": "$CAT",
       "rootTypeName": "CAT"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
     }
   ],
   "buildArtifacts": [

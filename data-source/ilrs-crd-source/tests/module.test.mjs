@@ -13,6 +13,7 @@ import { ByteBuffer } from 'flatbuffers';
 import { TDM } from 'spacedatastandards.org/lib/js/TDM/TDM.js';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decodeFlowNotice, encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { crdFile, pass } from './fixtures/crd-format.mjs';
 
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
@@ -20,7 +21,11 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', i
 const standardsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const real = fs.readFileSync(fileURLToPath(new URL('./fixtures/lageos1_20261008.first-two-passes.np2', import.meta.url)));
 
-const request = (payload) => ({ methodId: 'read_crd', inputs: [{ portId: 'source', payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } }] });
+// Each file arrives as the HttpResponse (HRSP) hostcap/http-request answers, BODY the CRD text verbatim (typed contracts 1.0).
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const URL_ = 'https://edc.dgfi.tum.de/pub/slr/data/npt_crd_v2/lageos1/2026/lageos1_20261008.np2';
+const request = (body, { status = 200, error = '' } = {}) => ({ methodId: 'read_crd', inputs: [{ portId: 'source', typeRef: HRSP,
+  payload: encodeHttpResponse({ url: URL_, status, error, headers: { 'content-type': 'text/plain' }, body: new Uint8Array(body), retrievedMs: Date.UTC(2026, 9, 14) }) }] });
 const text = (value) => request(new TextEncoder().encode(value));
 async function harness(t) {
   const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
@@ -31,7 +36,27 @@ const tdms = (result) => {
   assert.equal(result.statusCode, 0, result.errorMessage);
   return result.outputs.filter((f) => f.portId === 'observations').map((f) => TDM.getRootAsTDM(new ByteBuffer(f.payload)).unpack());
 };
-const report = (result) => JSON.parse(new TextDecoder().decode(result.outputs.find((f) => f.portId === 'report').payload));
+// The report: one FlowNotice whose ITEMS are "name=value" (numbers as JSON writes them), read back into the counters, the
+// skipped sessions by reason and the normal points as [pass, epoch, timeOfFlightSeconds, rawRanges, binRmsPs, windowSeconds, configuration].
+const COLUMNS = ['pass', 'epoch', 'timeOfFlightSeconds', 'rawRanges', 'binRmsPs', 'windowSeconds', 'configuration'];
+const report = (result) => {
+  const n = decodeFlowNotice(result.outputs.find((f) => f.portId === 'report').payload);
+  assert.deepEqual([n.kind, n.schema, n.sourceName, n.reason], ['info', 'TDM', 'ilrs-crd', 'ilrs-crd']);
+  assert.equal(Number(n.count), result.outputs.filter((f) => f.portId === 'observations').length);
+  const out = { sessionsSkipped: {}, unknownRecordTypes: [], passes: [], normalPoints: [] };
+  for (const entry of n.items) {
+    const at = entry.indexOf('='), key = entry.slice(0, at), v = entry.slice(at + 1);
+    let m;
+    if ((m = key.match(/^normalPoint\.(\d+)\.(.+)$/))) {
+      const row = (out.normalPoints[m[1]] ??= COLUMNS.map(() => null));
+      row[COLUMNS.indexOf(m[2])] = ['pass', 'epoch', 'timeOfFlightSeconds', 'configuration'].includes(m[2]) ? v : Number(v);
+    } else if ((m = key.match(/^pass\.(\d+)\.(.+)$/))) (out.passes[m[1]] ??= {})[m[2]] = v;
+    else if (key.startsWith('sessionsSkipped.')) out.sessionsSkipped[key.slice(16)] = Number(v);
+    else if (key === 'unknownRecordType') out.unknownRecordTypes.push(v);
+    else out[key] = key === 'format' ? v : Number(v);
+  }
+  return out;
+};
 const ranges = (segment) => segment.OBSERVATIONS.filter((o) => o.KEYWORD === 'LASER_RANGE');
 const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual} vs ${expected}`);
 
@@ -133,4 +158,18 @@ test('a damaged file is refused whole: no partial output', async (t) => {
     assert.equal(refused.outputs?.length ?? 0, 0, `${name}: partial output`);
   }
   assert.equal(tdms(await host.invoke(text(ok))).length, 1);
+});
+
+test('HTTP 304 is one FlowNotice (Unchanged) and no TDM; another status or a transport error is refused whole', async (t) => {
+  const host = await harness(t);
+  const unchanged = await host.invoke(request(new Uint8Array(0), { status: 304 }));
+  assert.equal(unchanged.statusCode, 0, unchanged.errorMessage);
+  assert.equal(unchanged.outputs.length, 1);
+  const n = decodeFlowNotice(unchanged.outputs[0].payload);
+  assert.deepEqual([unchanged.outputs[0].portId, n.kind, n.reason, n.items], ['report', 'unchanged', 'not-modified', [URL_]]);
+  for (const [label, options] of [['HTTP 404', { status: 404 }], ['a transport error', { status: 0, error: 'connection reset' }]]) {
+    const refused = await host.invoke(request(real, options));
+    assert.notEqual(refused.statusCode, 0, label);
+    assert.equal(refused.outputs?.length ?? 0, 0, `${label}: partial output`);
+  }
 });

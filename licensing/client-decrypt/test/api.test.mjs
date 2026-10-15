@@ -14,7 +14,7 @@ import {
   keyMaterialAlgorithm,
   keyMaterialEncoding,
   keyMaterialRole,
-} from "../../../../spacedatastandards.org/lib/js/KMF/main.js";
+} from "spacedatastandards.org/lib/js/KMF/main.js";
 import {
   buildRecWrappedKmfContentKeyFrame,
   encodeGrantResponse,
@@ -29,12 +29,7 @@ import {
   randomBytes,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
-import {
-  verifyModuleArtifact,
-} from "space-data-module-sdk/bundle";
-
-const TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
-  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
+import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 
 function concat(...arrays) {
   const total = arrays.reduce((sum, array) => sum + array.length, 0);
@@ -217,31 +212,27 @@ test("package entrypoint exposes the awaited client-decrypt API", async (t) => {
     ...crypto.getRandomValues(new Uint8Array(96)),
   ]);
   const fixture = await buildGrantResponseFixture(plaintext, publicKey);
-  const contentStore = new Map([[fixture.bundleCid, fixture.encryptedBundleBytes]]);
-
+  // The module makes no hostcall: a host dispatch that refuses everything is never reached.
   const decryptor = await createClientDecrypt({
-    dispatch(operation, params) {
-      if (operation === "ipfs.cat") {
-        const cid = params?.cid ?? "";
-        const bytes = contentStore.get(cid);
-        if (!bytes) {
-          throw new Error(`CID not found: ${cid}`);
-        }
-        return bytes;
-      }
-      if (operation === "host.runtimeTarget") return "node";
-      if (operation === "host.listCapabilities") return ["ipfs"];
-      if (operation === "host.hasCapability") return params?.capability === "ipfs";
-      if (operation === "host.listOperations") return ["ipfs.cat"];
-      throw new Error(`Unsupported operation: ${operation}`);
+    dispatch(operation) {
+      throw new Error(`client-decrypt made a hostcall: ${operation}`);
     },
   });
   t.after(async () => {
     await decryptor.destroy();
   });
 
-  const decrypted = await decryptor.decryptArtifact(fixture.grantResponseBytes, privateKey);
+  // sdn-js passes ({ grantResponseBytes, encryptedBundleBytes }, privateKey).
+  const decrypted = await decryptor.decryptArtifact(
+    { grantResponseBytes: fixture.grantResponseBytes, encryptedBundleBytes: fixture.encryptedBundleBytes },
+    privateKey,
+  );
   assert.deepEqual(decrypted, plaintext);
+  await assert.rejects(
+    decryptor.decryptArtifact(fixture.grantResponseBytes, privateKey),
+    /protected_content/,
+    "without the bundle the module refuses: fetching it is the host's",
+  );
 });
 
 test("package entrypoint avoids literal node: imports so browser bundlers can parse it", () => {
@@ -260,21 +251,22 @@ test("package entrypoint resolves local wasm URL lazily for browser bundles", ()
   assert.match(source, /function getIsomorphicWasmPath\(\)/u);
 });
 
-test("built wasm artifacts carry the trusted module signature", async () => {
-  for (const artifactUrl of [
-    new URL("../dist/client-decrypt.wasm", import.meta.url),
-    getIsomorphicWasmPath(),
-  ]) {
-    const result = await verifyModuleArtifact(fs.readFileSync(artifactUrl), {
-      trustedPublicKeys: [TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
-      requireSignature: true,
-    });
-    assert.equal(result.verified, true);
-    assert.equal(result.signed, true);
-    assert.equal(
-      result.publicKeyHex,
-      TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX,
-    );
+test("the artifact validates, and every port names one concrete FlatBuffer type", async () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
+  const result = await validateArtifactWithStandards({
+    wasmPath: getIsomorphicWasmPath().pathname,
+    manifest,
+    standardsRoot: new URL("../node_modules/spacedatastandards.org/", import.meta.url).pathname,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.issues));
+  assert.deepEqual(manifest.capabilities, []);
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      const types = port.acceptedTypeSets.flatMap((set) => set.allowedTypes);
+      assert.equal(types.length, 1, `${method.methodId}.${port.portId}`);
+      assert.equal(types[0].wireFormat, "flatbuffer");
+      assert.ok(!types[0].acceptsAnyFlatbuffer);
+    }
   }
 });
 

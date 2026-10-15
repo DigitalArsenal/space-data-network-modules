@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import { EPOCHS, LEO, T0, add, block, burns, flatbuffers, gpHistory, history, iso, kepler, manifest, mul, oem, planned, rtn, toFixed, unit, version, MNV } from './fixtures.mjs';
-import { ommStream, sgp4Provider, keplerianProvider, TYPES, json } from '../study/lib/host.mjs';
+import { ommStream, sgp4Provider, keplerianProvider, TYPES, config } from '../study/lib/host.mjs';
 
 const typed = (portId, payload, typeRef) => ({ portId, payload: Buffer.from(payload), typeRef });
 const OEM_T = TYPES.OEM, MNV_T = TYPES.MNV, OMM_T = TYPES.OMM;
@@ -27,9 +27,9 @@ const { rows } = gpHistory(1);
 const elements = typed('element_sets', ommStream(rows.map((row) => ({ ...row, PROVENANCE: source }))), OMM_T);
 const options = { propagator_port_id: 'parity', detectors: ['D1', 'D2', 'D3'], report_levels: true };
 const queries = JSON.parse((await (async () => {
-  const { loadModule, jsonOf } = await import('../study/lib/host.mjs');
+  const { loadModule, queriesFrom } = await import('../study/lib/host.mjs');
   const m = await loadModule('analysis/maneuver-detection');
-  try { return JSON.stringify(jsonOf(await m.invoke('detect_maneuvers', [elements, json('options', options)]), 'propagation_requests')); } finally { await m.destroy(); }
+  try { return JSON.stringify(await queriesFrom(await m.invoke('detect_maneuvers', [elements, config(options)]))); } finally { await m.destroy(); }
 })()));
 const sgp4Answers = await (await sgp4Provider()).answer(queries, rows);
 const keplerAnswers = await (await keplerianProvider()).answer(queries, rows);
@@ -50,12 +50,12 @@ const mnv = (fields) => {
 };
 
 const cases = [
-  { id: 'detect-ephemerides-burn', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', burned, OEM_T), json('options', options)] } },
-  { id: 'detect-burn-pair', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', pair, OEM_T), json('options', { detectors: ['D1', 'D2'] })] } },
+  { id: 'detect-ephemerides-burn', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', burned, OEM_T), config(options)] } },
+  { id: 'detect-burn-pair', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', pair, OEM_T), config({ detectors: ['D1', 'D2'] })] } },
   { id: 'detect-earth-fixed', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', fixed, OEM_T)] } },
-  { id: 'detect-query-requests', request: { methodId: 'detect_maneuvers', inputs: [elements, json('options', options)] } },
-  { id: 'detect-query-sgp4', request: { methodId: 'detect_maneuvers', inputs: [elements, json('options', options), ...sgp4Answers.map((a) => typed('propagation', a, OEM_T))] } },
-  { id: 'detect-query-keplerian', request: { methodId: 'detect_maneuvers', inputs: [elements, json('options', options), ...keplerAnswers.map((a) => typed('propagation', a, OEM_T))] } },
+  { id: 'detect-query-requests', request: { methodId: 'detect_maneuvers', inputs: [elements, config(options)] } },
+  { id: 'detect-query-sgp4', request: { methodId: 'detect_maneuvers', inputs: [elements, config(options), ...sgp4Answers.map((a) => typed('propagation', a, OEM_T))] } },
+  { id: 'detect-query-keplerian', request: { methodId: 'detect_maneuvers', inputs: [elements, config(options), ...keplerAnswers.map((a) => typed('propagation', a, OEM_T))] } },
   { id: 'compare-planned', request: { methodId: 'compare_ephemerides', inputs: [...versions.map((v) => typed('versions', v, OEM_T)), typed('planned', planned(tig, 0.001), MNV_T)] } },
   { id: 'compare-planned-cross-track', request: { methodId: 'compare_ephemerides', inputs: [...crossVersions.map((v) => typed('versions', v, OEM_T)),
     typed('planned', planned(tig, 0.002, { DELTA_VEL_W: 0.002, PROVENANCE: source }), MNV_T)] } },
@@ -64,8 +64,8 @@ const cases = [
   { id: 'score', request: { methodId: 'score_detections', inputs: [
     typed('truth', Buffer.concat([mnv({ ID: 'a', EVENT_START_TIME: iso(T0), DELTA_VEL: 0.001 }), mnv({ ID: 'b', EVENT_START_TIME: iso(T0 + 864000), DELTA_VEL: 0.002 })]), MNV_T),
     typed('detected', Buffer.concat([mnv({ ID: 'x', EVENT_START_TIME: iso(T0 + 1800), DELTA_VEL: 0.0009 }), mnv({ ID: 'z', EVENT_START_TIME: iso(T0 + 432000), DELTA_VEL: 0.0001 })]), MNV_T),
-    json('options', { spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 15778800) }] })] } },
-  { id: 'refused-option', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', burned, OEM_T), json('options', { no_such_option: 1 })] } },
+    config({ spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 15778800) }] })] } },
+  { id: 'refused-option', request: { methodId: 'detect_maneuvers', inputs: [typed('ephemerides', burned, OEM_T), config({ no_such_option: 1 })] } },
 ];
 const plan = await normalizeParityFixture({ name: `maneuver-detection ${manifest.version} methods`, cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });

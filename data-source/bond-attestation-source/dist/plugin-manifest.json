@@ -1,0 +1,79 @@
+{
+  "pluginId": "org.spacedatanetwork.bond-attestation",
+  "name": "Security Bond Attestation",
+  "version": "1.1.0",
+  "description": "Takes a WHA request (ACCOUNTS: BTC, ETH, SOL wallets by CAIP-2 chain) and answers a WHA attestation: native balances, ERC-20/SPL tokens and USD quotes read from free public services through the host's http capability. Chain logic stays in WASM.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "clock"
+  ],
+  "protocols": [],
+  "timers": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "attest",
+      "displayName": "Attest Security Bond",
+      "description": "Reads each requested account's holdings from a free public service, prices them in USD and returns one WHA (PURPOSE security-bond, CURRENCY USD, AS_OF_MS from the clock). A lookup that fails contributes nothing, its chain is marked incomplete and named in ERRORS; a holding that could not be priced is VALUED false, never zero. An unknown chain or a malformed address answers ERRORS [\"invalid request\"] with nothing read.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "wha-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "WHA.fbs",
+                  "fileIdentifier": "$WHA",
+                  "rootTypeName": "WHA",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "attestation",
+          "acceptedTypeSets": [
+            {
+              "setId": "wha-attestation",
+              "allowedTypes": [
+                {
+                  "schemaName": "WHA.fbs",
+                  "fileIdentifier": "$WHA",
+                  "rootTypeName": "WHA",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WHA.fbs",
+      "fileIdentifier": "$WHA",
+      "rootTypeName": "WHA"
+    }
+  ],
+  "threadModel": "single-thread"
+}

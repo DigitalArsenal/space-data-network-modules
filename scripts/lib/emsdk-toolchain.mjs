@@ -88,8 +88,6 @@ const SHARED_EMSDK_CANDIDATES = Object.freeze([
   "licensing/client-decrypt/deps/emsdk",
   "propagator/atmosphere/deps/emsdk",
   "propagator/hpop/deps/emsdk",
-  "licensing/protection-key-server/deps/emsdk",
-  "licensing/protection-license-client/deps/emsdk",
   "analysis/conjunction-assessment/deps/emsdk",
 ]);
 

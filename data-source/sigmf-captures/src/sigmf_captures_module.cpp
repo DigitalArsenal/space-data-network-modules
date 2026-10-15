@@ -95,16 +95,38 @@
  *   [35.14, -106.51], i.e. lat/lon transposed by the contributor). Silently
  *   swapping them would be fabricating a position.
  *
- * ─── FLOW-NODE SHAPE ────────────────────────────────────────────────────────
+ * ─── FLOW-NODE SHAPE (typed contracts 1.0: FlatBuffers only) ──────────────
  * Two pure flow nodes, `capabilities: []`. This guest performs NO I/O: the
  * fetch is the generic hostcap/http-request connector and the store is the
- * generic hostcap/storage-ingest connector.
+ * generic hostcap/storage-ingest connector. Every frame is a FlatBuffer:
+ * module-sdk runtime types for the host contract, $IQC for the records.
+ * Nothing module-to-module is JSON or base64; the archive's metadata index is
+ * the one JSON document, parsed here.
  *
- *   request : timer tick   -> "request" (hostcap/http-request GET JSON)
- *                             "job"     (adapter + attribution JSON)
- *   parse   : job+response -> "iqc_meta"    (storage.ingest_with_source meta)
- *                             "iqc_records" (size-prefixed $IQC stream)
- *                             "raw"         (decoded payload, for archiving)
+ *   request : "tick" TimerTick (TICK) -> "request" ONE HttpRequest (HREQ, GET)
+ *             whose CONTEXT is the parse job: ONE size-prefixed IngestRequest
+ *             (INGQ) skeleton - SCHEMA IQC.fbs, TAGS (PROVIDER_ID,
+ *             SOURCE_NAME = the adapter's source name, SOURCE_URL), RECONCILE
+ *             None, ARCHIVE (sigmf, <adapter>-meta.json) - echoed verbatim by
+ *             the host in the HttpResponse.
+ *   parse   : "response" HttpResponse (HRSP; the job in CONTEXT)
+ *             -> "iqc_meta"    IngestRequest (INGQ): the job completed with
+ *                              BATCH_ID and PROVENANCE
+ *                "iqc_records" size-prefixed $IQC stream
+ *                "raw"         the HttpResponse verbatim (its BODY is the
+ *                              document storage-ingest archives)
+ *                "unchanged"   ONLY on HTTP 304: one FlowNotice (FNTC)
+ *                              Unchanged, REASON "not-modified", ITEMS the
+ *                              source URL; no meta/records/raw frames.
+ *             The adapter is resolved from the job's TAGS.SOURCE_NAME through
+ *             the registry (unknown fails closed); its base URL, account and
+ *             container are read from node CONFIG (iqengine_base_url /
+ *             iqengine_account / iqengine_container, the same keys and
+ *             defaults request used: both nodes share the flow service's
+ *             config).
+ *
+ * Node CONFIG arrives through the builtin plugin.getConfig hostcall as an SDS
+ * $PIV invocation (typedHostcall.hpp): one ModuleConfig FlatBuffer on raw "config".
  */
 
 #include <cstdint>
@@ -112,26 +134,29 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "TimerTick_generated.h"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+// $LKS, $RFB and $IQC (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) are inlined ahead of this file by
+// build.mjs.
 
 namespace {
+
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
+
+// ── Adapter + provider constantsnamespace {
 
 // ── Adapter + provider constants ────────────────────────────────────────────
 
@@ -143,9 +168,9 @@ constexpr const char* kIQEngineContainer = "local";
 constexpr const char* kIQEngineSourceName = "IQEngine";
 
 constexpr const char* kDefaultProviderID = "space-data-network-02";
-constexpr const char* kSourceName = "sigmf-captures";
 constexpr const char* kSourcePeer = "source:sigmf";
 constexpr const char* kContentKeyID = "public";
+constexpr const char* kParserName = "sigmf-captures";
 constexpr const char* kParserVersion = "sigmf-iqc-wasm/v1";
 constexpr const char* kArchiveSource = "sigmf";
 
@@ -310,19 +335,6 @@ bool json_bool_field(const std::string& obj, const std::string& key, bool* out) 
     return false;
 }
 
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else out.push_back(c);
-    }
-    return out;
-}
-
 std::vector<std::string> json_array_elements(const std::string& text) {
     std::vector<std::string> out;
     size_t i = text.find('[');
@@ -363,72 +375,6 @@ std::string url_encode_path(const std::string& s) {
 std::string basename_of(const std::string& path) {
     const size_t slash = path.find_last_of('/');
     return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
-// ---------------------------------------------------------------------------
-// Base64.
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -615,35 +561,24 @@ bool parse_http_date(const std::string& raw, int64_t* out) {
 }
 
 // ---------------------------------------------------------------------------
-// Frame IO helpers.
+// Frame IO helpers (typed contracts 1.0).
 // ---------------------------------------------------------------------------
 
-bool read_json_frame(const char* port, std::string* out) {
+// The first frame on `port` (port-filtered: never a port-blind frame-0 read).
+const plugin_input_frame_t* frame_for(const char* port) {
     const int32_t idx = plugin_find_input_index(port, 0);
-    if (idx < 0) return false;
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload || frame->payload_length == 0) return false;
-    out->assign(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-    return true;
+    if (idx < 0) return nullptr;
+    return plugin_get_input_frame(static_cast<uint32_t>(idx));
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, nullptr, 0, 0,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, nullptr, 0, 0,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
+int push_typed(const char* port, const char* schema, const char* identifier, const char* root,
+               const uint8_t* data, size_t size) {
+    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 root, 0, 0, data, static_cast<uint32_t>(size));
 }
 
 int push_iqc_stream(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, "IQC.fbs", "$IQC",
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "IQC", 0, 0,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
+    return push_typed(port, "IQC.fbs", "$IQC", "IQC", bytes.data(), bytes.size());
 }
 
 void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_t>& record) {
@@ -658,73 +593,68 @@ void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_
 // ---------------------------------------------------------------------------
 // Node CONFIG (builtin plugin.getConfig hostcall).
 //
-// The hostcall ABI answers with a length-prefixed ENVELOPE meta document,
-// `{"ok":true,"result":{...}}`; the config block is the `result` member and is
-// unwrapped here rather than relied upon to be findable by a needle scan at
-// arbitrary depth.
+// The hostcall is an SDS $PIV invocation (typedHostcall.hpp): the host answers
+// one ModuleConfig (MCFG) FlatBuffer on raw "config", read in place through
+// sdm_piv::get_config(). A host that answers no config, or an error, reads as
+// "no config" - every key then takes its default, exactly as before.
 // ---------------------------------------------------------------------------
 
-std::string load_config() {
-    static const char* op = "plugin.getConfig";
-    const std::string payload_json = "{}";
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)), req.data(),
-                  static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 4) return "{}";
-    std::vector<uint8_t> buf(static_cast<size_t>(len));
-    sdm_host_read_response(buf.data(), len);
-    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
-                          (static_cast<uint32_t>(buf[2]) << 16) |
-                          (static_cast<uint32_t>(buf[3]) << 24);
-    if (buf.size() < 4u + rlen) return "{}";
-    const std::string envelope(reinterpret_cast<const char*>(buf.data() + 4), rlen);
-    // Unwrap the envelope. A host that answers with the config object bare, or
-    // an error envelope with no result, both degrade to "no config" rather
-    // than to a misread of the envelope's own members.
-    const std::string result = trim(json_member(envelope, "result"));
-    if (!result.empty() && result.front() == '{') return result;
-    const std::string trimmed = trim(envelope);
-    if (!trimmed.empty() && trimmed.front() == '{' &&
-        json_member(trimmed, "ok").empty() && json_member(trimmed, "result").empty()) {
-        return trimmed;
-    }
-    return "{}";
+std::string format_config_number(double v) {
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
 }
 
-std::string config_string(const std::string& config, const char* key, const char* fallback) {
+struct Config {
+    sdm_piv::Config cfg;
+
+    const sdn::runtime::ConfigEntry* find(const char* key) const { return cfg.entry(key); }
+    // A string value (false when absent or not a string).
+    bool text(const char* key, std::string* out) const {
+        const sdn::runtime::ConfigEntry* e = find(key);
+        if (!e || e->KIND() != sdn::runtime::configValueKind_String) return false;
+        *out = e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string();
+        return true;
+    }
+};
+
+Config load_config() { return Config{sdm_piv::get_config()}; }
+
+std::string config_string(const Config& config, const char* key, const char* fallback) {
     std::string value;
-    if (json_string_field(config, key, &value) && !value.empty()) return value;
+    if (config.text(key, &value) && !value.empty()) return value;
     return fallback;
 }
 
 // A positive integer from node CONFIG. The node serves its YAML config block
-// verbatim, so an operator's `sigmf_record_cap: "2000"` arrives as a JSON
-// STRING, not a number: both spellings are the same value. Absent (or null)
-// means the default. Anything else present — "2k", 0, -5, 2.5, true — is
-// REFUSED rather than read as the default: host-02 staged a 2,000-record cap
-// as a quoted string and the module silently ingested all 36,636.
+// verbatim, so an operator's `sigmf_record_cap: "2000"` arrives as a STRING
+// entry, not a number: both spellings are the same value. Absent means the
+// default. Anything else present — "2k", 0, -5, 2.5, true — is REFUSED rather
+// than read as the default: host-02 staged a 2,000-record cap as a quoted
+// string and the module silently ingested all 36,636.
 enum class ConfigInteger { kAbsent, kValue, kInvalid };
 
-ConfigInteger config_positive_long(const std::string& config, const char* key, long* out) {
-    const std::string raw = trim(json_member(config, key));
-    if (raw.empty() || raw == "null") return ConfigInteger::kAbsent;
+ConfigInteger config_positive_long(const Config& config, const char* key, long* out, std::string* shown) {
+    const sdn::runtime::ConfigEntry* e = config.find(key);
+    if (!e) return ConfigInteger::kAbsent;
     std::string digits;
-    if (raw.front() == '"') {
-        std::string value;
-        if (!json_string_field(config, key, &value)) return ConfigInteger::kInvalid;
-        digits = trim(value);
+    if (e->KIND() == sdn::runtime::configValueKind_String) {
+        const std::string text = e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string();
+        digits = trim(text);
+        *shown = "\"" + text + "\"";
+    } else if (e->KIND() == sdn::runtime::configValueKind_Number) {
+        const double v = e->NUMBER_VALUE();
+        *shown = format_config_number(v);
+        // wasm32 `long` is 32 bits: nine digits always fit.
+        if (!(v > 0) || v != static_cast<double>(static_cast<long long>(v)) || v > 999999999.0) {
+            return ConfigInteger::kInvalid;
+        }
+        *out = static_cast<long>(v);
+        return ConfigInteger::kValue;
     } else {
-        digits = raw;
+        *shown = e->KIND() == sdn::runtime::configValueKind_Bool ? (e->BOOL_VALUE() ? "true" : "false") : "a list";
+        return ConfigInteger::kInvalid;
     }
-    // wasm32 `long` is 32 bits: nine digits always fit.
     if (digits.empty() || digits.size() > 9) return ConfigInteger::kInvalid;
     long value = 0;
     for (const char c : digits) {
@@ -738,11 +668,12 @@ ConfigInteger config_positive_long(const std::string& config, const char* key, l
 
 // config_positive_long with the default applied; false (and the flow error
 // already set) when the key is present but not a positive integer.
-bool config_positive_long_or(const std::string& config, const char* key, long fallback, long* out) {
+bool config_positive_long_or(const Config& config, const char* key, long fallback, long* out) {
     long value = fallback;
-    if (config_positive_long(config, key, &value) == ConfigInteger::kInvalid) {
-        const std::string msg = std::string(key) + " must be a positive integer (a JSON number or a " +
-                                "decimal string); got " + trim(json_member(config, key));
+    std::string shown;
+    if (config_positive_long(config, key, &value, &shown) == ConfigInteger::kInvalid) {
+        const std::string msg = std::string(key) + " must be a positive integer (a number or a " +
+                                "decimal string); got " + shown;
         plugin_set_error("invalid-config", msg.c_str());
         return false;
     }
@@ -1133,6 +1064,13 @@ const SourceAdapter* lookup_adapter(const std::string& id) {
     return nullptr;
 }
 
+const SourceAdapter* lookup_adapter_by_source_name(const std::string& source_name) {
+    for (const SourceAdapter& a : kAdapters) {
+        if (source_name == a.source_name) return &a;
+    }
+    return nullptr;
+}
+
 std::string registered_adapter_ids() {
     std::string out;
     for (const SourceAdapter& a : kAdapters) {
@@ -1335,26 +1273,73 @@ std::vector<uint8_t> build_iqc_record(const CaptureInput& in, const std::string&
 }
 
 // ---------------------------------------------------------------------------
-// Fetch context + ingest meta.
+// The parse job (HttpRequest.CONTEXT) and the fetch context.
 // ---------------------------------------------------------------------------
 
+// The job: ONE size-prefixed IngestRequest skeleton - the ingest attribution
+// parse completes (schema, provider, the adapter's source name, source URL,
+// reconcile mode, archive naming). It rides the request's CONTEXT and comes
+// back verbatim in the HttpResponse.
+std::vector<uint8_t> build_job(const std::string& source_url, const std::string& source_name,
+                               const std::string& provider, const std::string& archive_name) {
+    R::IngestRequestT job;
+    job.SCHEMA = "IQC.fbs";
+    job.TAGS = std::make_unique<R::SourceTagsT>();
+    job.TAGS->PROVIDER_ID = provider;
+    job.TAGS->SOURCE_NAME = source_name;
+    job.TAGS->SOURCE_URL = source_url;
+    // None (the legacy default): $IQC carries no orbital identity for the
+    // host's indexed reconcile; replay idempotence is content-address dedupe.
+    job.RECONCILE = R::reconcileMode_None;
+    job.ARCHIVE = std::make_unique<R::ArchiveTargetT>();
+    job.ARCHIVE->SOURCE = kArchiveSource;
+    job.ARCHIVE->NAME = archive_name;
+    ::flatbuffers::FlatBufferBuilder b(512);
+    R::FinishSizePrefixedIngestRequestBuffer(b, R::IngestRequest::Pack(b, &job));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+// An HttpRequest (HREQ). Headers are lower-cased and written sorted by NAME
+// (a FlatBuffers key).
+std::vector<uint8_t> build_http_get(const std::string& url,
+                                    std::vector<std::pair<std::string, std::string>> headers,
+                                    uint32_t timeout_ms, const std::vector<uint8_t>& context) {
+    ::flatbuffers::FlatBufferBuilder b(1024 + context.size());
+    std::sort(headers.begin(), headers.end());
+    std::vector<::flatbuffers::Offset<R::Header>> header_offsets;
+    for (const auto& [name, value] : headers) {
+        header_offsets.push_back(R::CreateHeaderDirect(b, name.c_str(), value.c_str()));
+    }
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), &header_offsets,
+                                                             nullptr, timeout_ms, 0, &context));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+std::string header_of(const R::HttpResponse& r, const char* lower_name) {
+    if (!r.HEADERS()) return std::string();
+    for (const R::Header* h : *r.HEADERS()) {
+        if (h && h->NAME() && h->NAME()->str() == lower_name) {
+            return h->VALUE() ? h->VALUE()->str() : std::string();
+        }
+    }
+    return std::string();
+}
+
+std::string str_of(const ::flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
 struct FetchContext {
-    std::string adapter;
     std::string source_url;
     std::string source_name;
     std::string provider_id;
     std::string archive_source;
     std::string archive_name;
-    std::string reconcile;
-    std::string base_url;
-    std::string account;
-    std::string container;
-    std::string dataset_id;
+    R::reconcileMode reconcile = R::reconcileMode_None;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string response_date;
     long status = 0;
+    int64_t retrieved_ms = 0;  // the host's receive time (HttpResponse.RETRIEVED_MS)
     // HTTP 304 Not Modified: the host sent the validators it recorded from
     // the previous pull (If-None-Match / If-Modified-Since) and the origin
     // answered that nothing changed. No body, no batch — the parser emits one
@@ -1362,60 +1347,68 @@ struct FetchContext {
     bool not_modified = false;
     std::vector<uint8_t> body;
     std::string batch_id;
+    const plugin_input_frame_t* response_frame = nullptr;
 };
 
 bool load_fetch_context(FetchContext* ctx) {
-    std::string job_json, response_json;
-    if (!read_json_frame("job", &job_json)) {
-        plugin_set_error("missing-job-frame", "parse requires the job JSON frame.");
+    const plugin_input_frame_t* frame = frame_for("response");
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-response-frame", "parse requires the HttpResponse (HRSP) frame on \"response\".");
         return false;
     }
-    if (!read_json_frame("response", &response_json)) {
-        plugin_set_error("missing-response-frame", "parse requires the http response JSON frame.");
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        plugin_set_error("invalid-response-frame", "the response frame is not an HttpResponse (HRSP).");
         return false;
     }
-    json_string_field(job_json, "adapter", &ctx->adapter);
-    json_string_field(job_json, "source_url", &ctx->source_url);
-    json_string_field(job_json, "source_name", &ctx->source_name);
-    json_string_field(job_json, "provider_id", &ctx->provider_id);
-    json_string_field(job_json, "archive_source", &ctx->archive_source);
-    json_string_field(job_json, "archive_name", &ctx->archive_name);
-    json_string_field(job_json, "reconcile", &ctx->reconcile);
-    json_string_field(job_json, "dataset_id", &ctx->dataset_id);
-    json_string_field(job_json, "base_url", &ctx->base_url);
-    json_string_field(job_json, "account", &ctx->account);
-    json_string_field(job_json, "container", &ctx->container);
+    ctx->response_frame = frame;
+    const R::HttpResponse& response = *R::GetHttpResponse(frame->payload);
+
+    // The job, echoed in CONTEXT.
+    const auto* context = response.CONTEXT();
+    if (!context || context->size() < 8) {
+        plugin_set_error("missing-job", "the HttpResponse carries no job in CONTEXT (a size-prefixed IngestRequest).");
+        return false;
+    }
+    ::flatbuffers::Verifier job_verifier(context->data(), context->size());
+    if (!R::VerifySizePrefixedIngestRequestBuffer(job_verifier)) {
+        plugin_set_error("invalid-job", "the response's CONTEXT is not a size-prefixed IngestRequest (INGQ).");
+        return false;
+    }
+    const R::IngestRequest& job = *R::GetSizePrefixedIngestRequest(context->data());
+    if (str_of(job.SCHEMA()) != "IQC.fbs") {
+        plugin_set_error("invalid-job", "the job's SCHEMA is not IQC.fbs.");
+        return false;
+    }
+    if (const R::SourceTags* tags = job.TAGS()) {
+        ctx->source_url = str_of(tags->SOURCE_URL());
+        ctx->source_name = str_of(tags->SOURCE_NAME());
+        ctx->provider_id = str_of(tags->PROVIDER_ID());
+    }
+    if (const R::ArchiveTarget* archive = job.ARCHIVE()) {
+        ctx->archive_source = str_of(archive->SOURCE());
+        ctx->archive_name = str_of(archive->NAME());
+    }
+    ctx->reconcile = job.RECONCILE();
     if (ctx->provider_id.empty()) ctx->provider_id = kDefaultProviderID;
     if (ctx->source_name.empty()) {
-        plugin_set_error("missing-source-name", "job must carry source_name.");
-        return false;
-    }
-    if (ctx->adapter.empty()) {
-        plugin_set_error("missing-adapter", "job must name a source adapter.");
+        plugin_set_error("missing-source-name", "job must carry TAGS.SOURCE_NAME (the adapter's source name).");
         return false;
     }
 
-    double status = 0;
-    if (!json_number_field(response_json, "status", &status)) {
-        plugin_set_error("missing-status", "http response frame carries no status.");
-        return false;
-    }
-    ctx->status = static_cast<long>(status);
+    ctx->status = response.STATUS();
     if (ctx->status != 200 && ctx->status != 304) {
-        char msg[96];
-        std::snprintf(msg, sizeof(msg), "source fetch returned HTTP status %ld", ctx->status);
-        plugin_set_error("fetch-failed", msg);
+        std::string msg = "source fetch returned HTTP status " + std::to_string(ctx->status);
+        if (response.ERROR() && response.ERROR()->size() > 0) msg += " (" + response.ERROR()->str() + ")";
+        plugin_set_error("fetch-failed", msg.c_str());
         return false;
     }
-    const std::string headers = json_member(response_json, "headers");
-    json_string_field(headers, "etag", &ctx->etag);
-    if (ctx->etag.empty()) json_string_field(headers, "ETag", &ctx->etag);
-    json_string_field(headers, "last-modified", &ctx->last_modified);
-    if (ctx->last_modified.empty()) json_string_field(headers, "Last-Modified", &ctx->last_modified);
-    json_string_field(headers, "content-type", &ctx->content_type);
-    if (ctx->content_type.empty()) json_string_field(headers, "Content-Type", &ctx->content_type);
-    json_string_field(headers, "date", &ctx->response_date);
-    if (ctx->response_date.empty()) json_string_field(headers, "Date", &ctx->response_date);
+    // Header names arrive lower-cased (RuntimeCommon Header.NAME).
+    ctx->etag = header_of(response, "etag");
+    ctx->last_modified = header_of(response, "last-modified");
+    ctx->content_type = header_of(response, "content-type");
+    ctx->response_date = header_of(response, "date");
+    ctx->retrieved_ms = static_cast<int64_t>(response.RETRIEVED_MS());
 
     if (ctx->status == 304) {
         // Nothing changed upstream: no body is expected and no batch exists.
@@ -1424,84 +1417,69 @@ bool load_fetch_context(FetchContext* ctx) {
         return true;
     }
 
-    std::string body_b64;
-    if (!json_string_field(response_json, "bodyB64", &body_b64) || body_b64.empty()) {
-        plugin_set_error("empty-body", "http response frame carries no body.");
+    if (!response.BODY() || response.BODY()->size() == 0) {
+        plugin_set_error("empty-body", "http response carries no body.");
         return false;
     }
-    if (!base64_decode(body_b64, &ctx->body)) {
-        plugin_set_error("invalid-body", "http response bodyB64 is not valid base64.");
-        return false;
-    }
+    ctx->body.assign(response.BODY()->data(), response.BODY()->data() + response.BODY()->size());
     ctx->batch_id = sha256_hex(ctx->body.data(), ctx->body.size());
     return true;
 }
 
-std::string build_provenance_json(const FetchContext& ctx, const std::string& retrieved_at,
-                                  const DecodeStats& stats, const std::string& normalized_sha256) {
-    char nbuf[64];
-    std::snprintf(nbuf, sizeof(nbuf), "{\"IQC.fbs\":%d}", stats.emitted);
-    std::string warnings;
-    if (stats.rows_unread_record_cap > 0) {
-        warnings = "\"sigmf_record_cap " + std::to_string(stats.record_cap) + " reached: " +
-                   std::to_string(stats.rows_unread_record_cap) + " of " +
-                   std::to_string(stats.rows) + " capture documents not read\"";
-    }
-    std::string out = std::string("{\"source_url\":\"") + json_escape(ctx.source_url) + "\"" +
-                      ",\"adapter\":\"" + json_escape(ctx.adapter) + "\"" +
-                      ",\"registered_adapters\":\"" + registered_adapter_ids() + "\"" +
-                      ",\"http_status\":" + std::to_string(ctx.status);
-    if (!ctx.etag.empty()) out += ",\"etag\":\"" + json_escape(ctx.etag) + "\"";
-    if (!ctx.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(ctx.last_modified) + "\"";
-    if (!ctx.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(ctx.content_type) + "\"";
-    out += std::string(",\"retrieved_at\":\"") + retrieved_at + "\"" +
-           ",\"parser_version\":\"" + kParserVersion + "\"" +
-           ",\"source_sha256\":\"" + ctx.batch_id + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + std::to_string(stats.emitted) +
-           ",\"schema_counts\":" + nbuf +
-           ",\"source_rows\":" + std::to_string(stats.rows) +
-           ",\"skipped_no_identity\":" + std::to_string(stats.skipped_no_identity) +
-           ",\"records_with_geolocation\":" + std::to_string(stats.geolocation_present) +
-           ",\"geolocation_refused_out_of_range\":" +
-           std::to_string(stats.geolocation_refused_out_of_range) +
-           ",\"records_with_license\":" + std::to_string(stats.with_license) +
-           ",\"records_with_annotations\":" + std::to_string(stats.with_annotations) +
-           ",\"records_with_multiple_segments\":" +
-           std::to_string(stats.with_multiple_segments) +
-           ",\"record_cap\":" + std::to_string(stats.record_cap) +
-           ",\"rows_unread_record_cap\":" + std::to_string(stats.rows_unread_record_cap) +
-           // Licence is PER RECORDING here, never per site: a record with no
-           // core:license carries no LICENSE, which means UNKNOWN TERMS.
-           ",\"license_model\":\"per-recording\"" +
-           ",\"custody\":\"UPSTREAM_ONLY\"" +
-           ",\"units\":{\"frequency\":\"Hz\",\"sample_rate\":\"Hz\"}" +
-           ",\"source_units\":{\"frequency\":\"Hz\",\"sample_rate\":\"Hz\"}" +
-           ",\"warnings\":[" + warnings + "],\"from_cache\":false}";
-    return out;
-}
-
-std::string build_ingest_meta(const FetchContext& ctx, const std::string& provenance_json) {
-    const std::string reconcile = ctx.reconcile.empty() ? std::string("none") : ctx.reconcile;
-    std::string meta = std::string("{\"schema\":\"IQC.fbs\"") +
-                       ",\"provider_id\":\"" + json_escape(ctx.provider_id) + "\"" +
-                       ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                       ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                       ",\"batch_id\":\"" + ctx.batch_id + "\"" +
-                       ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-                       ",\"source_peer\":\"" + kSourcePeer + "\"" +
-                       ",\"reconcile\":\"" + json_escape(reconcile) + "\"";
+// The ingest request (IngestRequest, INGQ) for storage-ingest: the job
+// completed with the batch id and the batch provenance. No batch LICENSE:
+// licence is PER RECORDING here ($IQC LICENSE from core:license), never per
+// site, so the batch tags name none (as the legacy meta named none).
+std::vector<uint8_t> build_ingest_meta(const FetchContext& ctx, int64_t retrieved_ms,
+                                       const DecodeStats& stats, const std::string& normalized_sha256) {
+    R::IngestRequestT q;
+    q.SCHEMA = "IQC.fbs";
+    q.TAGS = std::make_unique<R::SourceTagsT>();
+    q.TAGS->PROVIDER_ID = ctx.provider_id;
+    q.TAGS->SOURCE_NAME = ctx.source_name;
+    q.TAGS->BATCH_ID = ctx.batch_id;
+    q.TAGS->SOURCE_URL = ctx.source_url;
+    q.TAGS->CONTENT_KEY_ID = kContentKeyID;
+    q.TAGS->SOURCE_PEER = kSourcePeer;
+    q.RECONCILE = ctx.reconcile;
     if (!ctx.archive_source.empty() && !ctx.archive_name.empty()) {
-        meta += ",\"archive\":{\"source\":\"" + json_escape(ctx.archive_source) +
-                "\",\"name\":\"" + json_escape(ctx.archive_name) + "\"}";
+        q.ARCHIVE = std::make_unique<R::ArchiveTargetT>();
+        q.ARCHIVE->SOURCE = ctx.archive_source;
+        q.ARCHIVE->NAME = ctx.archive_name;
     }
-    meta += ",\"provenance\":{\"source\":\"" + std::string(kSourceName) + "\",\"json\":\"" +
-            base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()),
-                          provenance_json.size()) +
-            "\"}}";
-    return meta;
+    q.PROVENANCE = std::make_unique<R::ProvenanceT>();
+    R::ProvenanceT& p = *q.PROVENANCE;
+    p.SOURCE_URL = ctx.source_url;
+    p.HTTP_STATUS = static_cast<int32_t>(ctx.status);
+    p.ETAG = ctx.etag;
+    p.LAST_MODIFIED = ctx.last_modified;
+    p.CONTENT_TYPE = ctx.content_type;
+    p.RETRIEVED_MS = static_cast<uint64_t>(retrieved_ms);
+    p.PARSER = kParserName;
+    p.PARSER_VERSION = kParserVersion;
+    p.SOURCE_SHA256 = ctx.batch_id;
+    p.NORMALIZED_SHA256 = normalized_sha256;
+    p.NORMALIZED_COUNT = static_cast<uint64_t>(stats.emitted);
+    p.SCHEMAS = {"IQC.fbs"};
+    p.SCHEMA_COUNTS = {static_cast<uint64_t>(stats.emitted)};
+    // Recorded, not silently discarded: what the batch did NOT encode.
+    if (stats.rows_unread_record_cap > 0) {
+        p.WARNINGS.push_back("sigmf_record_cap " + std::to_string(stats.record_cap) + " reached: " +
+                             std::to_string(stats.rows_unread_record_cap) + " of " +
+                             std::to_string(stats.rows) + " capture documents not read");
+    }
+    if (stats.skipped_no_identity > 0) {
+        p.WARNINGS.push_back("capture documents skipped, no archive identity: " +
+                             std::to_string(stats.skipped_no_identity) + " of " + std::to_string(stats.rows));
+    }
+    if (stats.geolocation_refused_out_of_range > 0) {
+        p.WARNINGS.push_back("geolocation refused, outside WGS-84 range: " +
+                             std::to_string(stats.geolocation_refused_out_of_range));
+    }
+    p.FROM_CACHE = false;
+    ::flatbuffers::FlatBufferBuilder b(2048);
+    R::FinishIngestRequestBuffer(b, R::IngestRequest::Pack(b, &q));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // ---------------------------------------------------------------------------
@@ -1524,8 +1502,8 @@ std::string build_ingest_meta(const FetchContext& ctx, const std::string& proven
 // returned the first provider's records, byte-identical to that provider run
 // alone, with no error anywhere.
 //
-// `request` turns ONE timer tick into one request/job pair; `parse` pairs ONE
-// job contract with ONE fetched response. The `response` port is fed by
+// `request` turns ONE timer tick into one request (its job in CONTEXT); `parse`
+// reads ONE fetched response with the job it echoes. The `response` port is fed by
 // hostcap/http-request, which since the multi-provider fix emits one response
 // frame PER REQUEST frame it was handed, so a fan-out upstream would deliver
 // several responses here and only the first would ever be parsed.
@@ -1562,17 +1540,23 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
-// HTTP 304: one notice frame on the "unchanged" port, nothing on the record
-// ports. The ingest node never becomes ready (its required meta/records ports
-// stay empty), so nothing is stored and no batch is announced. Byte-for-byte
-// the celestrak-parser notice; mirrored here so every fleet retrieval lane
-// answers a conditional GET the same way.
+// HTTP 304: one FlowNotice (Unchanged) on the "unchanged" port, nothing on the
+// record ports. The ingest node never becomes ready (its required meta/records
+// ports stay empty), so nothing is stored and no batch is announced; every
+// fleet retrieval lane answers a conditional GET the same way.
 int emit_unchanged(const FetchContext& ctx) {
-    const std::string notice = std::string("{\"status\":304,\"unchanged\":true") +
-                               ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                               ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                               ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"}";
-    return push_json("unchanged", notice) < 0 ? 500 : 0;
+    R::FlowNoticeT notice;
+    notice.KIND = R::flowNoticeKind_Unchanged;
+    notice.SCHEMA = "IQC.fbs";
+    notice.PROVIDER_ID = ctx.provider_id;
+    notice.SOURCE_NAME = ctx.source_name;
+    notice.REASON = "not-modified";
+    notice.ITEMS = {ctx.source_url};
+    notice.AT_MS = static_cast<uint64_t>(ctx.retrieved_ms);
+    ::flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return push_typed("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice",
+                      b.GetBufferPointer(), b.GetSize()) < 0 ? 500 : 0;
 }
 
 }  // namespace
@@ -1580,7 +1564,8 @@ int emit_unchanged(const FetchContext& ctx) {
 extern "C" {
 
 // ---------------------------------------------------------------------------
-// request: timer tick -> the archive bulk-metadata fetch request + parse job.
+// request: TimerTick -> the archive bulk-metadata fetch request, its job in
+// CONTEXT.
 // ---------------------------------------------------------------------------
 int request(void) {
     char batch_message[384];
@@ -1588,8 +1573,18 @@ int request(void) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
+    const plugin_input_frame_t* tick = frame_for("tick");
+    if (!tick || !tick->payload || tick->payload_length == 0) {
+        plugin_set_error("missing-tick", "request requires one TimerTick (TICK) frame on \"tick\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier tick_verifier(tick->payload, tick->payload_length);
+    if (!R::VerifyTimerTickBuffer(tick_verifier)) {
+        plugin_set_error("invalid-tick", "the tick frame is not a TimerTick (TICK).");
+        return 400;
+    }
 
-    const std::string config = load_config();
+    const Config config = load_config();
     const std::string adapter_id = config_string(config, "sigmf_adapter", kAdapterIQEngine);
     const SourceAdapter* adapter = lookup_adapter(adapter_id);
     if (!adapter) {
@@ -1611,43 +1606,34 @@ int request(void) {
     // ONE bulk request per cycle. The per-file /meta route exists but walking
     // it would be a 36,636-request crawl of a community-run service.
     std::string url;
-    if (!json_string_field(config, "sigmf_source_url", &url) || url.empty()) {
+    if (!config.text("sigmf_source_url", &url) || url.empty()) {
         url = base + "/api/datasources/" + url_encode_path(account) + "/" +
               url_encode_path(container) + "/meta";
     }
 
-    std::string headers = std::string("{\"user-agent\":\"") + json_escape(kUserAgent) + "\"" +
-                          ",\"accept\":\"application/json\"";
+    std::vector<std::pair<std::string, std::string>> headers = {
+        {"user-agent", kUserAgent},
+        {"accept", "application/json"},
+    };
     std::string etag, last_modified;
-    if (json_string_field(config, "sigmf_if_none_match", &etag) && !etag.empty()) {
-        headers += ",\"if-none-match\":\"" + json_escape(etag) + "\"";
+    if (config.text("sigmf_if_none_match", &etag) && !etag.empty()) headers.push_back({"if-none-match", etag});
+    if (config.text("sigmf_if_modified_since", &last_modified) && !last_modified.empty()) {
+        headers.push_back({"if-modified-since", last_modified});
     }
-    if (json_string_field(config, "sigmf_if_modified_since", &last_modified) &&
-        !last_modified.empty()) {
-        headers += ",\"if-modified-since\":\"" + json_escape(last_modified) + "\"";
+
+    const std::vector<uint8_t> request = build_http_get(
+        url, std::move(headers), static_cast<uint32_t>(timeout_ms),
+        build_job(url, adapter->source_name, provider, adapter_id + "-meta.json"));
+    if (push_typed("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest",
+                   request.data(), request.size()) < 0) {
+        return 500;
     }
-    headers += "}";
-
-    const std::string request_json = std::string("{\"method\":\"GET\",\"url\":\"") +
-                                     json_escape(url) + "\",\"headers\":" + headers +
-                                     ",\"timeoutMs\":" + std::to_string(timeout_ms) + "}";
-    const std::string job_json = std::string("{\"adapter\":\"") + json_escape(adapter->id) + "\"" +
-                                 ",\"source_url\":\"" + json_escape(url) + "\"" +
-                                 ",\"source_name\":\"" + json_escape(adapter->source_name) + "\"" +
-                                 ",\"provider_id\":\"" + json_escape(provider) + "\"" +
-                                 ",\"base_url\":\"" + json_escape(base) + "\"" +
-                                 ",\"account\":\"" + json_escape(account) + "\"" +
-                                 ",\"container\":\"" + json_escape(container) + "\"" +
-                                 ",\"archive_source\":\"" + kArchiveSource + "\"" +
-                                 ",\"archive_name\":\"" + json_escape(adapter_id) + "-meta.json\"}";
-
-    if (push_json("request", request_json) < 0) return 500;
-    if (push_json("job", job_json) < 0) return 500;
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// parse: (job, response) -> $IQC record stream + ingest meta + raw payload.
+// parse: HttpResponse (job in CONTEXT) -> $IQC record stream + IngestRequest
+// + the response verbatim for archiving.
 // ---------------------------------------------------------------------------
 int parse(void) {
     char batch_message[384];
@@ -1660,10 +1646,12 @@ int parse(void) {
     if (!load_fetch_context(&ctx)) return 400;
     if (ctx.not_modified) return emit_unchanged(ctx);
 
-    const SourceAdapter* adapter = lookup_adapter(ctx.adapter);
+    // The adapter, from the job's source name through the registry. An
+    // unknown one fails closed: no stub adapter ever fabricates data.
+    const SourceAdapter* adapter = lookup_adapter_by_source_name(ctx.source_name);
     if (!adapter) {
-        const std::string msg = "unknown source adapter '" + ctx.adapter + "'; registered: " +
-                                registered_adapter_ids();
+        const std::string msg = "unknown source adapter for source name '" + ctx.source_name +
+                                "'; registered: " + registered_adapter_ids();
         plugin_set_error("unknown-adapter", msg.c_str());
         return 400;
     }
@@ -1676,24 +1664,25 @@ int parse(void) {
         return 422;
     }
 
-    const std::string config = load_config();
+    const Config config = load_config();
     long record_cap = kDefaultRecordCap;
     if (!config_positive_long_or(config, "sigmf_record_cap", kDefaultRecordCap, &record_cap)) {
         return 400;
     }
 
+    // The archive coordinates request used: the same CONFIG keys and defaults.
     IQEngineContext adapter_ctx;
-    adapter_ctx.base_url = ctx.base_url.empty() ? kIQEngineBaseURL : ctx.base_url;
-    adapter_ctx.account = ctx.account.empty() ? kIQEngineAccount : ctx.account;
-    adapter_ctx.container = ctx.container.empty() ? kIQEngineContainer : ctx.container;
+    adapter_ctx.base_url = config_string(config, "iqengine_base_url", kIQEngineBaseURL);
+    adapter_ctx.account = config_string(config, "iqengine_account", kIQEngineAccount);
+    adapter_ctx.container = config_string(config, "iqengine_container", kIQEngineContainer);
 
-    std::string retrieved_at;
-    int64_t date_unix = 0;
-    if (!ctx.response_date.empty() && parse_http_date(ctx.response_date, &date_unix)) {
-        retrieved_at = format_rfc3339(date_unix);
-    } else {
-        retrieved_at = format_rfc3339(now_unix_seconds());
+    // The records' retrieval time: the publisher's Date header, else the
+    // host's receive time, else the clock.
+    int64_t retrieved_unix = 0;
+    if (ctx.response_date.empty() || !parse_http_date(ctx.response_date, &retrieved_unix)) {
+        retrieved_unix = ctx.retrieved_ms > 0 ? ctx.retrieved_ms / 1000 : now_unix_seconds();
     }
+    const std::string retrieved_at = format_rfc3339(retrieved_unix);
     const std::string created_at = format_rfc3339(now_unix_seconds());
 
     DecodeStats stats;
@@ -1723,13 +1712,20 @@ int parse(void) {
         return 422;
     }
 
-    const std::string provenance =
-        build_provenance_json(ctx, retrieved_at, stats, normalized.hex_digest());
-    const std::string meta = build_ingest_meta(ctx, provenance);
+    const std::vector<uint8_t> meta =
+        build_ingest_meta(ctx, retrieved_unix * 1000, stats, normalized.hex_digest());
 
-    if (push_json("iqc_meta", meta) < 0) return 500;
+    if (push_typed("iqc_meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest",
+                   meta.data(), meta.size()) < 0) {
+        return 500;
+    }
     if (push_iqc_stream("iqc_records", stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
+    // The response verbatim: storage-ingest archives its BODY under the
+    // request's ARCHIVE naming.
+    if (push_typed("raw", "HttpResponse.fbs", R::HttpResponseIdentifier(), "HttpResponse",
+                   ctx.response_frame->payload, ctx.response_frame->payload_length) < 0) {
+        return 500;
+    }
     return 0;
 }
 

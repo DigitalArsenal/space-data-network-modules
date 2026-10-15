@@ -1,5 +1,6 @@
 {
   "name": "space-data-network-module-od-fit-pipeline",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -14,6 +15,6 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.5"
   }
 }

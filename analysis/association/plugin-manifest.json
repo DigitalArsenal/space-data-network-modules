@@ -1,13 +1,13 @@
 {
   "pluginId": "com.digitalarsenal.analysis.association",
   "name": "Observation association",
-  "version": "0.2.0",
-  "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. Also solves general rectangular assignment problems.",
+  "version": "0.3.0",
+  "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. The evidence (every candidate, d2, p-value, posterior, residuals, geometry, outcome) is one $ASG association report; the options are the node config (plugin.getConfig). Also solves general rectangular assignment problems ($ASG problem in, $ASG solution out).",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "inherently-sequential-algorithm",
-    "detail": "Each scan is one shortest-augmenting-path assignment whose augmentations depend on the previous dual variables; scans are small (tens of observations) and the gate evaluation is a few hundred microseconds per observation, so parallel reductions would change floating-point association order with no useful speedup. No host calls, threads, propagation or network access."
+    "detail": "Each scan is one shortest-augmenting-path assignment whose augmentations depend on the previous dual variables; scans are small (tens of observations) and the gate evaluation is a few hundred microseconds per observation, so parallel reductions would change floating-point association order with no useful speedup. One host call (plugin.getConfig for the options); no threads, propagation or network access."
   },
   "capabilities": [],
   "externalInterfaces": [],
@@ -44,6 +44,11 @@
       "schemaName": "EOP.fbs",
       "fileIdentifier": "$EOP",
       "rootTypeName": "EOP"
+    },
+    {
+      "schemaName": "ASG.fbs",
+      "fileIdentifier": "$ASG",
+      "rootTypeName": "ASG"
     }
   ],
   "methods": [
@@ -62,13 +67,6 @@
                   "fileIdentifier": "$RDO",
                   "rootTypeName": "RDO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RDO.fbs",
-                  "fileIdentifier": "$RDO",
-                  "rootTypeName": "RDO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Radar observation ($RDO)."
@@ -90,13 +88,6 @@
                   "fileIdentifier": "$EOO",
                   "rootTypeName": "EOO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "EOO.fbs",
-                  "fileIdentifier": "$EOO",
-                  "rootTypeName": "EOO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Electro-optical observation ($EOO)."
@@ -118,13 +109,6 @@
                   "fileIdentifier": "$RFO",
                   "rootTypeName": "RFO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RFO.fbs",
-                  "fileIdentifier": "$RFO",
-                  "rootTypeName": "RFO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "RF observation ($RFO)."
@@ -146,13 +130,6 @@
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Catalog predictions with covariance."
@@ -174,13 +151,6 @@
                   "fileIdentifier": "$EOP",
                   "rootTypeName": "EOP",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "EOP.fbs",
-                  "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "IERS Earth orientation."
@@ -190,28 +160,6 @@
           "maxStreams": 366,
           "required": false,
           "description": "$EOP rows bracketing the observations (one row, several frames, or a size-prefixed stream). Required whenever an Earth-fixed sensor or prediction meets an inertial one."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "association-options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Gate probability, light time, minimum unambiguous posterior, clutter density, Doppler frequency sigma and scan grouping as a JSON object; every field optional."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "JSON options; every field optional."
         }
       ],
       "outputPorts": [
@@ -226,13 +174,6 @@
                   "fileIdentifier": "$RDO",
                   "rootTypeName": "RDO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RDO.fbs",
-                  "fileIdentifier": "$RDO",
-                  "rootTypeName": "RDO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Radar observation ($RDO)."
@@ -254,13 +195,6 @@
                   "fileIdentifier": "$EOO",
                   "rootTypeName": "EOO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "EOO.fbs",
-                  "fileIdentifier": "$EOO",
-                  "rootTypeName": "EOO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Electro-optical observation ($EOO)."
@@ -282,13 +216,6 @@
                   "fileIdentifier": "$RFO",
                   "rootTypeName": "RFO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RFO.fbs",
-                  "fileIdentifier": "$RFO",
-                  "rootTypeName": "RFO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "RF observation ($RFO)."
@@ -310,13 +237,6 @@
                   "fileIdentifier": "$RDO",
                   "rootTypeName": "RDO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RDO.fbs",
-                  "fileIdentifier": "$RDO",
-                  "rootTypeName": "RDO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Radar observation ($RDO)."
@@ -338,13 +258,6 @@
                   "fileIdentifier": "$EOO",
                   "rootTypeName": "EOO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "EOO.fbs",
-                  "fileIdentifier": "$EOO",
-                  "rootTypeName": "EOO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Electro-optical observation ($EOO)."
@@ -366,13 +279,6 @@
                   "fileIdentifier": "$RFO",
                   "rootTypeName": "RFO",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "RFO.fbs",
-                  "fileIdentifier": "$RFO",
-                  "rootTypeName": "RFO",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "RF observation ($RFO)."
@@ -387,27 +293,27 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "association-report-v1",
+              "setId": "asg-association-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per observation: measured values, sigmas, gate, every candidate with its Mahalanobis distance d2, chi-square p-value, posterior probability, residuals and predicted geometry; the assignment, ambiguity and the UCT list. The scientific result is the re-emitted SDS records."
-              }
+              "description": "$ASG with ASSOCIATION_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The association evidence as JSON."
+          "description": "The association evidence: one $ASG whose ASSOCIATION_REPORT holds the options used, the chi-square gates, the counts and, per observation, its measurements and sigmas, every listed candidate (d2, p-value, posterior, residuals, predicted values, light time, geometry when the geometry option is on), the outcome (associated or UCT, with the reason) and ambiguity."
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": ""
     },
     {
       "methodId": "solve_assignment",
@@ -417,23 +323,22 @@
           "portId": "problem",
           "acceptedTypeSets": [
             {
-              "setId": "assignment-problem-v1",
+              "setId": "asg-problem",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "A dense cost matrix (null = forbidden) or sparse [row, column, cost] entries, with an optional non-assignment cost per row."
-              }
+              "description": "$ASG with PROBLEM set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "{cost: [[...]]} or {rows, columns, entries: [[i, j, c], ...]}, optional unassigned_cost (number or one per row)."
+          "description": "One $ASG whose PROBLEM is a dense cost matrix (DENSE_COST, NaN or +Infinity = forbidden) or sparse ENTRIES (absent pairs forbidden), with optional UNASSIGNED_COST (one value, or one per row) and OBJECTIVE."
         }
       ],
       "outputPorts": [
@@ -441,23 +346,22 @@
           "portId": "solution",
           "acceptedTypeSets": [
             {
-              "setId": "assignment-solution-v1",
+              "setId": "asg-solution",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ASG.fbs",
+                  "fileIdentifier": "$ASG",
+                  "rootTypeName": "ASG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The minimum-cost assignment: column per row (-1 = unassigned) and the total cost."
-              }
+              "description": "$ASG with SOLUTION set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "{assignment, total_cost, rows, columns}."
+          "description": "One $ASG whose SOLUTION gives the column of each row (-1 = unassigned), the total cost (assigned plus unassigned costs paid), the counts and the method."
         }
       ],
       "maxBatch": 1,

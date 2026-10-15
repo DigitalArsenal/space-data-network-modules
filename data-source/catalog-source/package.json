@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-catalog-source",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -11,7 +11,7 @@
   "devDependencies": {
     "esbuild": "0.25.12",
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.212.0"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   }
 }

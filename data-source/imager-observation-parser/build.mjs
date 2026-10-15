@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 import { minizSourceFragments } from "./miniz-source.mjs";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -34,7 +35,7 @@ function inlineLocalHeader(source) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const wxf = await fs.readFile(path.join(standardsRoot, "lib", "cpp", "WXF", "main_generated.h"), "utf8");
+const wxf = await generateSdsHeader("WXF", import.meta.url);
 if (!/add_CHUNK_CODECS|add_QUANTIZED_U8/.test(wxf)) {
   throw new Error(`${standardsRoot} predates SDS 1.238.0 ($WXF imager fields): set SPACE_DATA_STANDARDS_ROOT`);
 }
@@ -63,6 +64,9 @@ const compilation = await compileModuleFromSource({
   // hands it (manifest sequentialJustification) and never spawns a thread: the single-thread STANDALONE_WASM lane
   // with growable memory, like every other parser node here (a full-disk field needs a few hundred MB).
   threadModel: "single-thread",
+  // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig (imager_widths, an SDS
+  // $PIV invocation); symbols resolve at instantiation.
+  allowUndefinedImports: true,
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler.

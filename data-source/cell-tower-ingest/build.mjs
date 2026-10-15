@@ -3,60 +3,44 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "cell_tower_ingest_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-// THE STANDARDS ROOT IS ONE DECISION, NOT TWO.
-//
-// The compiler already honours SPACE_DATA_STANDARDS_ROOT; the $IRM header read
-// below did not, and resolved a fixed sibling path instead. In a per-task
-// worktree that sibling is ANOTHER LANE'S checkout — this build silently
-// inlined $IRM from a tree at an unrelated revision, mid-regeneration, and
-// then failed outright when that lane deleted its generated headers. A build
-// that compiles against whatever happens to be next door on disk is not
-// reproducible, and its artifact cannot be attributed to any pin.
-const standardsRoot =
-  process.env.SPACE_DATA_STANDARDS_ROOT ??
-  fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
-process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
+// THE STANDARDS ROOT IS ONE DECISION, NOT TWO: SPACE_DATA_STANDARDS_ROOT wins (a per-task worktree), else the sibling
+// spacedatastandards.org checkout. The compiler and the headers inlined below read the same tree.
+process.env.SPACE_DATA_STANDARDS_ROOT ??= fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT;
 
-// $IRM (Ingest Resume Mark) is INLINED INTO THE TRANSLATION UNIT.
-//
-// The durable resume mark is a schema-typed SDS record now that Themis has
-// minted and ratified $IRM (spacedatastandards.org 1.196.0), so this plugin
-// both WRITES one (publish_request) and READS one back (ingest_plan,
-// cache_freshness, the tile lane). Hand-decoding two doubles out of a $TBS row
-// is one thing; hand-BUILDING a record with three nested tables, two ubyte
-// vectors and a string vector is another, and getting a vtable wrong there
-// produces a mark that stores cleanly and resumes into nonsense.
-//
-// flatc emits every SDS header with the same include guard
-// (FLATBUFFERS_GENERATED_MAIN_H_) and a self-named `#include
-// "main_generated.h"`; inlining a standard requires stripping both. Same
-// pattern as data-source/cell-tower-source and data-source/satnogs-source.
-//
-// $IRM is self-contained: its three nested tables and three enums all live in
-// the same schema, so there is no include graph to topologically order.
-function inlineGeneratedHeader(source) {
-  return source
-    .replace(
-      /#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/,
-      "",
-    )
-    .replace(/#include "main_generated\.h"\s*\n/g, "")
-    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
+// SDK-owned HTTP envelope ABI header (schemas/HttpRequestAbi.fbs -> $HTQ), resolved through the SDK package itself.
+const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve("space-data-module-sdk/compiler"))), "..", "..");
+const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
+
+// Typed contracts 1.0: every frame this plugin reads or writes is a FlatBuffer. The SDK compiler stages the runtime
+// headers (HttpRequest/HttpResponse/IngestRequest/IngestResult/FlowNotice/TimerTick, typedHostcall.hpp); the SDS
+// standards are inlined here, each guard renamed per code (every SDS header is "main_generated.h") and its flatc
+// version static_assert relaxed, as foundation/http-route does:
+//   APR (run contracts and refusals), DAV (the cache lane's dataset availability), QRP (tile pages), IRM (the resume
+//   mark), FSO / FSB (the FlatSQL query frames out, the result chunks in).
+const SDS = ["APR", "DAV", "QRP", "IRM", "FSO", "FSB"];
+async function sdsHeader(code) {
+  const header = await generateSdsHeader(code, import.meta.url);
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const irmHeader = inlineGeneratedHeader(
-  await fs.readFile(path.join(standardsRoot, "lib", "cpp", "IRM", "main_generated.h"), "utf8"),
-);
-const implementationSource = await fs.readFile(sourcePath, "utf8");
-const sourceCode = `${irmHeader}\n${implementationSource}`;
+const sourceCode = [
+  await fs.readFile(path.join(sdkHttpCppRoot, "HttpRequestAbi_generated.h"), "utf8"),
+  ...(await Promise.all(SDS.map(sdsHeader))),
+  await fs.readFile(sourcePath, "utf8"),
+].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -66,23 +50,11 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred.
-  //
-  // This node is single-threaded: it spawns nothing, shares nothing, and holds
-  // only the frames of the invocation it is serving. The artifact this repo has
-  // been shipping already carries `threadModel: single-thread`
-  // (dist/guest-link/metadata.json) — it was simply never DECLARED, so it rode
-  // the SDK's inference. That inference has since moved to EMSCRIPTEN_PTHREADS
-  // for runtimeTargets [browser, wasmedge], at which point the build starts
-  // claiming a pthreads contract the emitted wasm does not have and the SDK's
-  // isomorphic-pthreads artifact guard correctly REFUSES it ("does not import
-  // the wasi thread-spawn host function ... must not ship"). Declaring the truth
-  // builds against reality instead of against whatever the SDK last guessed.
-  // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
-  // form of this note lives.
+  // THREAD MODEL — declared explicitly, never inferred. Every method is a pure single-pass transform over the frames
+  // of one invocation plus one plugin.getConfig hostcall; nothing spawns a thread. Same single-thread
+  // STANDALONE_WASM lane as every node of the cellular flows.
   threadModel: "single-thread",
-  // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // Imports the sync space_data_module_host hostcall bridge (typedHostcall.hpp, sdm_piv) for plugin.getConfig.
   allowUndefinedImports: true,
 });
 

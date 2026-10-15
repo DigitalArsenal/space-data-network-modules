@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/osm-source",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "OSM context epoch source: serves the current FlatGeobuf epoch record for the imagery-detection context (route: /api/v1/osm/tileset.json and the discovery document). Pure transform over one $HTQ request; the epoch bytes are served by the node's IPFS gateway, never by this module.",
@@ -19,7 +19,7 @@
   ],
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "^1.196.0"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "^1.249.0"
   }
 }

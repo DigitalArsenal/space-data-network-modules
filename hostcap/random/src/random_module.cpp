@@ -1,167 +1,37 @@
 /*
- * hostcap/random (loop C.3c2).
+ * hostcap/random — the host CSPRNG connector (typed contracts 1.0).
  *
- * Capability node for the host random.bytes hostcall. One method:
+ *   bytes — an optional "request" frame, a $RND (SDS standard RND) stating LENGTH (0 or absent = 32)
+ *           -> random.bytes (SDS $PIV: "params" RandomBytesParams {LENGTH}, the bytes on raw "data")
+ *              and clock.now (SDS $PIV: "result" TimeValue, UNIX_MS) for the generation time
+ *           -> one "bytes" frame, a $RND: LENGTH, BYTES (the host's bytes verbatim), SOURCE SystemCsprng,
+ *              GENERATED_AT_MS.
  *
- *   bytes — optional "request" JSON frame {"length":N} (default 32,
- *           max 65536); calls random.bytes and passes the returned raw
- *           bytes (hostcall binary segment 0) through VERBATIM on the
- *           "bytes" port.
- *
- * Both hosts deliver the random bytes as binary envelope segment 0: the
- * SDK JS hosts return a Uint8Array (detached into a segment by the wire
- * codec) and the Go host returns {"__type":"bytes"} which detaches the
- * same way. The Go host silently clamps length to 8192 — downstream
- * consumers must use the emitted frame's actual length.
- *
- * Hostcall ABI and envelope helpers follow the data-source/retrieval
- * pattern; see space-data-module-sdk/src/host/hostcallWire.js.
+ * LENGTH is 1..8192 (HostOps.fbs RandomBytesParams; the Go node refuses more as too-large): a larger request is
+ * refused here with "invalid-length" before any hostcall. A request asking for a SOURCE other than Unspecified or
+ * SystemCsprng is refused ("unsupported-source"): the host offers only its system CSPRNG. A host answer whose byte
+ * count differs from LENGTH is refused, never passed on short. No JSON anywhere.
  */
 
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "RND_generated.h"  // spacedatastandards.org lib/cpp/RND/main_generated.h, inlined by build.mjs
 
 namespace {
 
-constexpr long kDefaultLength = 32;
-constexpr long kMaxLength = 65536;
+namespace A = sdn::runtime::Aligned;
 
-// ---------------------------------------------------------------------------
-// Hostcall wire envelope helpers.
-// ---------------------------------------------------------------------------
+constexpr uint32_t kDefaultLength = 32;
+constexpr uint32_t kMaxLength = 8192;
 
-void write_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
-
-uint32_t read_u32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    write_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) {
-        sdm_host_read_response(buf.data(), len);
-    }
-    return buf;
-}
-
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    const uint32_t meta_len = read_u32le(env.data());
-    if (env.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-bool envelope_first_segment(const std::vector<uint8_t>& env,
-                            const uint8_t** seg_out, uint32_t* seg_len_out) {
-    *seg_out = nullptr;
-    *seg_len_out = 0;
-    if (env.size() < 4) return false;
-    const uint32_t meta_len = read_u32le(env.data());
-    size_t off = 4u + meta_len;
-    if (off + 4 > env.size()) return false;
-    const uint32_t seg_count = read_u32le(env.data() + off);
-    off += 4;
-    if (seg_count == 0 || off + 4 > env.size()) return false;
-    const uint32_t seg_len = read_u32le(env.data() + off);
-    off += 4;
-    if (off + seg_len > env.size()) return false;
-    *seg_out = env.data() + off;
-    *seg_len_out = seg_len;
-    return true;
-}
-
-bool meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// ---------------------------------------------------------------------------
-// Minimal JSON field extraction (control metadata only).
-// ---------------------------------------------------------------------------
-
-bool is_json_ws(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-int fail_from_meta(const char* code, const std::string& meta, const char* fallback) {
-    std::string message;
-    json_string_field(meta, "message", &message);
+int fail(const char* code, const sdm_piv::Response& response, const char* fallback) {
+    const std::string message = response.error_message();
     plugin_set_error(code, message.empty() ? fallback : message.c_str());
     return 502;
 }
@@ -170,47 +40,63 @@ int fail_from_meta(const char* code, const std::string& meta, const char* fallba
 
 extern "C" {
 
-// bytes: resolve the byte count (request frame > default 32, max 65536),
-// call random.bytes, and pass the returned bytes through verbatim.
+// bytes: the optional $RND request -> random.bytes + clock.now -> one "bytes" frame, a $RND.
 int bytes(void) {
-    long length = kDefaultLength;
-    if (plugin_get_input_count() > 0) {
-        const plugin_input_frame_t* frame = plugin_get_input_frame(0);
-        if (frame && frame->payload && frame->payload_length > 0) {
-            const std::string request(reinterpret_cast<const char*>(frame->payload),
-                                      frame->payload_length);
-            double d = 0.0;
-            if (json_number_field(request, "length", &d)) {
-                length = static_cast<long>(d);
-            }
+    uint32_t length = kDefaultLength;
+    const plugin_input_frame_t* request = nullptr;
+    const uint32_t input_count = plugin_get_input_count();
+    for (uint32_t i = 0; i < input_count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id || std::strcmp(frame->port_id, "request") != 0) continue;
+        if (request) {
+            // Single-stream port: a surplus request is refused, never silently dropped.
+            plugin_set_error("batched-input-frames",
+                             "bytes takes at most one $RND frame on \"request\"; the surplus frames are refused.");
+            return 400;
         }
+        request = frame;
+    }
+    if (request) {
+        flatbuffers::Verifier verifier(request->payload, request->payload_length);
+        if (!request->payload || !VerifyRNDBuffer(verifier)) {
+            plugin_set_error("invalid-request", "the request frame is not a $RND (Random Data).");
+            return 400;
+        }
+        const RND* rnd = GetRND(request->payload);
+        if (rnd->SOURCE() != rndSource_Unspecified && rnd->SOURCE() != rndSource_SystemCsprng) {
+            plugin_set_error("unsupported-source", "the host offers only its system CSPRNG (SOURCE SystemCsprng).");
+            return 400;
+        }
+        if (rnd->LENGTH() != 0) length = rnd->LENGTH();
     }
     if (length < 1 || length > kMaxLength) {
-        plugin_set_error("invalid-length",
-                         "random bytes length must be between 1 and 65536.");
+        plugin_set_error("invalid-length", "random bytes length must be between 1 and 8192.");
         return 400;
     }
 
-    char length_buf[32];
-    std::snprintf(length_buf, sizeof(length_buf), "%ld", length);
-    const std::vector<uint8_t> env =
-        hostcall("random.bytes", std::string("{\"length\":") + length_buf + "}");
-    const std::string meta = envelope_meta_json(env);
-    if (!meta_ok(meta)) {
-        return fail_from_meta("random-unavailable", meta, "random.bytes hostcall failed.");
-    }
-
-    const uint8_t* seg = nullptr;
-    uint32_t seg_len = 0;
-    if (!envelope_first_segment(env, &seg, &seg_len)) {
-        plugin_set_error("random-unavailable",
-                         "random.bytes response carried no binary segment.");
+    A::RandomBytesParams params{};
+    params.LENGTH = length;
+    const auto random = sdm_piv::call("random.bytes", "RandomBytesParams", params);
+    if (!random.ok()) return fail("random-unavailable", random, "random.bytes hostcall failed.");
+    const std::string_view data = random.raw("data");
+    if (data.size() != length) {
+        char message[128];
+        std::snprintf(message, sizeof message, "random.bytes answered %zu bytes for a request of %u.", data.size(),
+                      static_cast<unsigned>(length));
+        plugin_set_error("random-unavailable", message);
         return 502;
     }
-    const int32_t pushed = plugin_push_output_ex(
-        "bytes", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1, seg, seg_len);
+
+    const auto now = sdm_piv::call("clock.now");
+    const auto* now_value = now.ok() ? now.result<A::TimeValue>("TimeValue") : nullptr;
+    if (!now_value) return fail("clock-unavailable", now, "clock.now hostcall failed.");
+
+    flatbuffers::FlatBufferBuilder b(length + 128);
+    const auto bytes_offset = b.CreateVector(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+    FinishRNDBuffer(b, CreateRND(b, length, bytes_offset, rndSource_SystemCsprng,
+                                 static_cast<int64_t>(now_value->UNIX_MS)));
+    const int32_t pushed = plugin_push_output_ex("bytes", "RND.fbs", RNDIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                                 "RND", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
     return pushed < 0 ? 500 : 0;
 }
 

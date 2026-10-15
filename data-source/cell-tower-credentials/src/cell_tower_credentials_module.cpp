@@ -1,6 +1,7 @@
 /*
  * data-source/cell-tower-credentials — the credential mediator for the
- * cellular-network-aggregate flow.
+ * cellular-network-aggregate flow (typed contracts 1.0: FlatBuffers only, every
+ * hostcall an SDS $PIV invocation through sdm_piv).
  *
  * OWNER DIRECTIVE 2026-08-08 #2, verbatim: "If it needs a login, it should have
  * somewhere to put a username / password, and if those are entered, it should
@@ -10,171 +11,81 @@
  * ─── WHY THIS IS ITS OWN PLUGIN ────────────────────────────────────────────
  * It exists so that `cell-tower-source` does not have to. That plugin parses
  * provider bodies, is instantiated by the SDK browser harness in its own tests,
- * and must stay `capabilities: []`. Two facts force the split rather than merely
- * suggest it (Janus ruling, 2026-08-09, from SDK source):
- *
- *   1. `wallet_sign` — the capability that gates `keyslot.unwrap`, because the
- *      host has NO separate `keyslot` capability name (caps/keyslot.go:26-31,
- *      capability_policy.go) — is in the SDK's
- *      `BrowserIncompatibleCapabilitySet` (pluginCompliance.js:52). Declaring it
- *      alongside a `browser` runtime target is a hard compile error.
- *   2. `secrets.*` has no browser-host implementation at all, so a method that
- *      calls it traps under the harness.
- *
- * The flow compiler validates each dependency's manifest separately and lets a
- * node's capability slice NARROW but never escalate (flowCompiler.js:1378-1392,
- * 1703-1726). So one wasmedge-only sibling holds every grant the operator makes
- * for credentials, and the code that touches provider payloads holds none. The
- * blast radius of a credential grant is this file.
+ * and must stay `capabilities: []`. `wallet_sign` (which gates keyslot.unwrap —
+ * the host has NO separate `keyslot` capability name) is browser-incompatible by
+ * SDK compliance, and `secrets.*` has no browser-host implementation. So one
+ * wasmedge-only sibling holds every grant the operator makes for credentials,
+ * and the code that touches provider payloads holds none.
  *
  * ─── THE ONE METHOD ────────────────────────────────────────────────────────
- *   mediate : task -> body + decision
+ *   mediate : catalog ($QRP page) | credential ($APR) | requests (HREQ)
+ *          -> decision ($QRP) + page ($QRP) | requests (HREQ) + status (FNTC)
  *
- * `task` is the control frame `route` emits. Three ops, and `route` has already
- * resolved the provider against its compiled registry and DERIVED the lane id,
- * so nothing a caller typed ever becomes a lane name:
- *
- *   {"op":"catalog","catalog":{...}}
- *       Finish the catalog: append `keySlot` and flip `credentialConfigured`
- *       (and `defaultSelected`) for each lane the node actually holds.
- *
- *   {"op":"put","providerId":"...","lane":"cell_...","envelope":{slotId,
- *    ephemeralPublicKey,nonce,ciphertext}}
- *       keyslot.unwrap -> secrets.put. The plaintext exists in this module's
- *       memory for the few instructions between the two and is never pushed to
- *       an output port, never logged, never returned.
- *
- *   {"op":"descriptors","descriptors":[...],"request_providers":[...]}
- *       secrets.get -> substitute `{{credential}}` into the request descriptors
- *       the router could not finish, and hand both lists back with their
- *       POSITIONAL correlation intact. This is the op that makes a stored
- *       credential do something; see handle_descriptors.
- *
- *   {"op":"clear","providerId":"...","lane":"cell_..."}
- *       secrets.clear.
+ *   catalog     Finish the router's $QRP projection page: fill the key slot
+ *               cells (node.publicKey) and flip credentialConfigured /
+ *               defaultSelected for each lane secrets.status reports held.
+ *   credential  ROUTE credential-put: keyslot.unwrap -> secrets.put. The
+ *               plaintext exists in this module's memory for the few
+ *               instructions between the two and is never pushed to an output
+ *               port, never logged, never returned, and wiped afterwards.
+ *               ROUTE credential-clear: secrets.clear.
+ *   requests    secrets.get -> substitute `{{credential}}` into the provider
+ *               fetches the router could not finish. Attribution downstream is
+ *               by each request's CONTEXT, so dropping one cannot misattribute
+ *               another (the old positional correlation list is gone).
  *
  * ─── FIVE THINGS THIS DELIBERATELY DOES NOT DO ─────────────────────────────
  *   1. No plaintext branch. There is no code path that accepts an unsealed
  *      credential, so a browser that cannot seal cannot send.
- *   2. No echo. The reply says which lane is stored, never what is in it. A
- *      write grant must not become a read oracle by reflection.
- *   3. No invented key slot. `keySlot` is emitted ONLY when the host answers
- *      `node.publicKey`; absent it the catalog omits the field entirely and the
- *      GUI's own contract disables the form rather than collect into a void.
+ *   2. No echo. The page says which lane is stored, never what is in it.
+ *   3. No invented key slot. The key slot cells are filled ONLY when the host
+ *      answers node.publicKey; absent it they stay Null and the GUI's own
+ *      contract disables the form.
  *   4. No lane the caller named. `route` derives `cell_<providerId>` from its
  *      compiled registry; this node additionally refuses any lane that does not
- *      start with `cell_`, so a malformed frame cannot reach `secrets:spacetrack`
- *      or any other operator lane however the policy rows read.
+ *      start with `cell_`.
  *   5. No presence oracle on clear. Clearing an absent lane answers exactly like
  *      clearing a present one.
  *
- * ─── ENVELOPE, COPIED FROM THE HOST, NOT INVENTED ──────────────────────────
+ * ─── ENVELOPE ──────────────────────────────────────────────────────────────
  * `keyslot.unwrap` is ephemeral-sender ECIES: X25519(slotPrivate, ephemeralPub)
- * -> HKDF-SHA256 (info "sdn-server/keyslot.unwrap/v1") -> AES-256-GCM
- * (caps/keyslot.go:160-230). The browser half already speaks exactly this
- * (gallery/_shared/cellularSdnStream.js `sealToKeySlot`). This module performs
- * NO crypto of its own — it hands the envelope to the host oracle, which holds
- * the private half and returns only the plaintext.
+ * -> HKDF-SHA256 (info "sdn-server/keyslot.unwrap/v1") -> AES-256-GCM. The
+ * browser seals {"username","secret"} and sends {slotId, ephemeralPublicKey,
+ * nonce, ciphertext} (base64 fields) as the PUT body — the client's own JSON
+ * representation, which arrives here verbatim as the $APR BODY and is decoded at
+ * this edge into the raw ephemeral_public_key / nonce / ciphertext frames of the
+ * hostcall. This module performs NO crypto of its own.
  *
- * The published half is `node.publicKey`, which is the X25519 public half OF THE
- * SLOT SCALAR ITSELF (node.go `deriveX25519PublicKeyHex`) and is UNGATED on the
- * bridge. It arrives as HEX; the browser's WebCrypto import takes BASE64. The
- * conversion happens here, once, in the place that publishes the field, so the
- * two halves cannot disagree about the encoding — a published half nothing could
- * consume is precisely the defect that made this slot dead as shipped.
+ * The published half is node.publicKey (the X25519 public half of the slot
+ * scalar), which the host answers as hex text on raw "value". It travels as raw
+ * key bytes in a Bytes cell; foundation/http-respond renders a Bytes cell as
+ * base64 in the Json representation, which is what the browser's WebCrypto
+ * import takes.
  */
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "FlowNotice_generated.h"
 
 namespace {
 
-// ── hostcall wire ──────────────────────────────────────────────────────────
-// Envelope: u32 metaLen | meta JSON | u32 segCount | (u32 segLen | bytes)*.
-// Mirrors space-data-module-sdk/src/host/hostcallWire.js. This module never
-// sends a binary segment: every payload it hands the host is small JSON.
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 
-void wire_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
+constexpr const char* kWrappingSlotId = "provider-wrapping";
+constexpr const char* kLanePrefix = "cell_";
 
-uint32_t wire_rd32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-// ⛔ THE RETURN VALUE OF THIS FUNCTION CAN CARRY A SECRET: `keyslot.unwrap`'s
-// meta holds the plaintext. It is never pushed to an output port, never
-// concatenated into a reply and never printed. Every caller below extracts one
-// field and lets the rest go out of scope.
-std::string host_meta(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    wire_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    if (!payload_json.empty()) {
-        std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    }
-    wire_u32le(req.data() + 4 + payload_json.size(), 0u);
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 0) return std::string();
-    std::vector<uint8_t> buf(static_cast<size_t>(len), 0);
-    sdm_host_read_response(buf.data(), len);
-    if (buf.size() < 4) return std::string();
-    const uint32_t meta_len = wire_rd32le(buf.data());
-    if (buf.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), meta_len);
-}
-
-bool host_meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// ── minimal JSON (control frames only; never pointed at provider payloads) ──
-std::string json_escape(const std::string& in) {
-    std::string out;
-    out.reserve(in.size() + 8);
-    for (char c : in) {
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    char buf[8];
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-                    out += buf;
-                } else {
-                    out += c;
-                }
-        }
-    }
-    return out;
-}
-
+// ── client-JSON readers (the browser's own request representation only) ─────
 std::string json_unescape(const std::string& in) {
     std::string out;
     out.reserve(in.size());
@@ -204,8 +115,6 @@ std::string json_unescape(const std::string& in) {
     return out;
 }
 
-// Finds "key": and returns the raw value slice, unescaping a string value.
-// Depth-aware enough for the flat control frames this node sees.
 bool json_raw_field(const std::string& src, const std::string& key, std::string* out) {
     const std::string needle = "\"" + key + "\"";
     size_t at = src.find(needle);
@@ -213,7 +122,7 @@ bool json_raw_field(const std::string& src, const std::string& key, std::string*
     at = src.find(':', at + needle.size());
     if (at == std::string::npos) return false;
     ++at;
-    while (at < src.size() && (src[at] == ' ' || src[at] == '\n' || src[at] == '\t')) ++at;
+    while (at < src.size() && (src[at] == ' ' || src[at] == '\n' || src[at] == '\t' || src[at] == '\r')) ++at;
     if (at >= src.size()) return false;
     size_t end = at;
     if (src[at] == '"') {
@@ -238,131 +147,21 @@ bool json_raw_field(const std::string& src, const std::string& key, std::string*
     return true;
 }
 
-std::string json_string(const std::string& src, const std::string& key,
-                        const std::string& fallback) {
+std::string json_string(const std::string& src, const std::string& key) {
     std::string raw;
-    if (!json_raw_field(src, key, &raw)) return fallback;
-    return raw;
+    return json_raw_field(src, key, &raw) ? raw : std::string();
 }
 
-// Split a JSON array of OBJECTS into its top-level elements, brace-counted so a
-// nested object (every descriptor carries a `headers` object) does not end the
-// element early. Strings are tracked because a URL may legitimately contain a
-// brace.
-std::vector<std::string> json_object_array(const std::string& array) {
-    std::vector<std::string> out;
-    int depth = 0;
-    size_t start = 0;
-    bool in_string = false;
-    for (size_t i = 0; i < array.size(); ++i) {
-        const char c = array[i];
-        if (in_string) {
-            if (c == '\\') ++i;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') { in_string = true; continue; }
-        if (c == '{') { if (depth++ == 0) start = i; continue; }
-        if (c == '}') {
-            if (--depth == 0) out.push_back(array.substr(start, i - start + 1));
-        }
-    }
-    return out;
-}
-
-std::vector<std::string> json_string_array(const std::string& array) {
-    std::vector<std::string> out;
-    for (size_t i = 0; i < array.size(); ++i) {
-        if (array[i] != '"') continue;
-        size_t end = i + 1;
-        while (end < array.size() && !(array[end] == '"' && array[end - 1] != '\\')) ++end;
-        if (end >= array.size()) break;
-        out.push_back(json_unescape(array.substr(i + 1, end - i - 1)));
-        i = end;
-    }
-    return out;
-}
-
-// Replace every occurrence of `token`, advancing PAST the substitution rather
-// than re-searching from the start, so a value containing the token cannot loop
-// forever. (A credential containing "{{credential}}" is absurd but it is also
-// entirely under an attacker's control if a lane is ever populated remotely.)
-void substitute_all(std::string* text, const std::string& token, const std::string& value) {
-    if (!text || token.empty()) return;
-    size_t at = 0;
-    while ((at = text->find(token, at)) != std::string::npos) {
-        text->replace(at, token.size(), value);
-        at += value.size();
-    }
-}
-
-// Percent-encode for a query-parameter VALUE. A credential is arbitrary bytes;
-// an unencoded one carrying '&' or '#' would silently truncate the query and
-// send a request that means something other than what was built.
-std::string url_encode(const std::string& in) {
-    static const char* hex = "0123456789ABCDEF";
-    std::string out;
-    out.reserve(in.size() * 3);
-    for (const unsigned char c : in) {
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-            c == '-' || c == '_' || c == '.' || c == '~') {
-            out += static_cast<char>(c);
-        } else {
-            out += '%';
-            out += hex[c >> 4];
-            out += hex[c & 0x0F];
-        }
-    }
-    return out;
-}
-
-// Rewrite one top-level string field's VALUE in place. Used to swap the
-// completed URL back into the descriptor the router built, rather than
-// re-serializing the descriptor here: the descriptor's shape (headers, body,
-// timeout, wire format) belongs to the router, and a second copy of it in this
-// file would drift from the first.
-bool replace_json_string_field(std::string* object, const std::string& key,
-                               const std::string& value) {
-    if (!object) return false;
-    const std::string needle = "\"" + key + "\":\"";
-    const size_t at = object->find(needle);
-    if (at == std::string::npos) return false;
-    const size_t start = at + needle.size();
-    size_t end = start;
-    while (end < object->size() && !((*object)[end] == '"' && (*object)[end - 1] != '\\')) ++end;
-    if (end >= object->size()) return false;
-    object->replace(start, end - start, json_escape(value));
-    return true;
-}
-
-// Remove one top-level string field, with the comma that joins it to its
-// neighbour. Absent is success: the marker this erases is optional by design.
-bool erase_json_string_field(std::string* object, const std::string& key) {
-    if (!object) return false;
-    const std::string needle = "\"" + key + "\":\"";
-    const size_t at = object->find(needle);
-    if (at == std::string::npos) return true;
-    const size_t start = at + needle.size();
-    size_t end = start;
-    while (end < object->size() && !((*object)[end] == '"' && (*object)[end - 1] != '\\')) ++end;
-    if (end >= object->size()) return false;
-    size_t from = at, to = end + 1;
-    if (from > 0 && (*object)[from - 1] == ',') --from;          // ,"k":"v"
-    else if (to < object->size() && (*object)[to] == ',') ++to;  // "k":"v",
-    object->erase(from, to - from);
-    return true;
-}
-
-// ── base64 ─────────────────────────────────────────────────────────────────
 int b64_value(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
     if (c >= 'a' && c <= 'z') return c - 'a' + 26;
     if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
+    if (c == '+' || c == '-') return 62;
+    if (c == '/' || c == '_') return 63;
     return -1;
 }
 
+// The browser's base64 envelope fields -> raw bytes (decoded at the client edge, never re-encoded).
 bool base64_decode(const std::string& text, std::string* out) {
     out->clear();
     out->reserve((text.size() / 4) * 3);
@@ -382,42 +181,9 @@ bool base64_decode(const std::string& text, std::string* out) {
     return true;
 }
 
-std::string base64_encode(const uint8_t* data, size_t size) {
-    static const char* kAlphabet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve(((size + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 2 < size) {
-        const uint32_t triple = (static_cast<uint32_t>(data[i]) << 16) |
-                                (static_cast<uint32_t>(data[i + 1]) << 8) |
-                                static_cast<uint32_t>(data[i + 2]);
-        out += kAlphabet[(triple >> 18) & 0x3f];
-        out += kAlphabet[(triple >> 12) & 0x3f];
-        out += kAlphabet[(triple >> 6) & 0x3f];
-        out += kAlphabet[triple & 0x3f];
-        i += 3;
-    }
-    if (i + 1 == size) {
-        const uint32_t triple = static_cast<uint32_t>(data[i]) << 16;
-        out += kAlphabet[(triple >> 18) & 0x3f];
-        out += kAlphabet[(triple >> 12) & 0x3f];
-        out += "==";
-    } else if (i + 2 == size) {
-        const uint32_t triple = (static_cast<uint32_t>(data[i]) << 16) |
-                                (static_cast<uint32_t>(data[i + 1]) << 8);
-        out += kAlphabet[(triple >> 18) & 0x3f];
-        out += kAlphabet[(triple >> 12) & 0x3f];
-        out += kAlphabet[(triple >> 6) & 0x3f];
-        out += '=';
-    }
-    return out;
-}
-
-bool hex_to_base64(const std::string& hex, std::string* out) {
+bool hex_decode(std::string_view hex, std::vector<uint8_t>* out) {
     if (hex.empty() || (hex.size() % 2) != 0) return false;
-    std::vector<uint8_t> bytes;
-    bytes.reserve(hex.size() / 2);
+    out->clear();
     for (size_t i = 0; i < hex.size(); i += 2) {
         int nibble[2] = {-1, -1};
         for (int pass = 0; pass < 2; ++pass) {
@@ -427,390 +193,513 @@ bool hex_to_base64(const std::string& hex, std::string* out) {
             else if (c >= 'A' && c <= 'F') nibble[pass] = c - 'A' + 10;
             else return false;
         }
-        bytes.push_back(static_cast<uint8_t>((nibble[0] << 4) | nibble[1]));
+        out->push_back(static_cast<uint8_t>((nibble[0] << 4) | nibble[1]));
     }
-    *out = base64_encode(bytes.data(), bytes.size());
     return true;
 }
 
-// ── the node's wrapping slot ───────────────────────────────────────────────
-// `provider-wrapping` is the slot id declared in
-// sdn-server/internal/node/licensing_bootstrap.go:35.
-constexpr const char* kWrappingSlotId = "provider-wrapping";
+void substitute_all(std::string* text, const std::string& token, const std::string& value) {
+    if (!text || token.empty()) return;
+    size_t at = 0;
+    while ((at = text->find(token, at)) != std::string::npos) {
+        text->replace(at, token.size(), value);
+        at += value.size();
+    }
+}
 
-// LANE PREFIX GUARD. `route` derives every lane as `cell_<providerId>` from its
-// own compiled registry, so this can only fail on a malformed frame — which is
-// exactly when it matters. An operator lane approved for something else must be
-// unreachable through this flow even if a policy row is one day written too
-// broadly.
-constexpr const char* kLanePrefix = "cell_";
+std::string url_encode(const std::string& in) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(in.size() * 3);
+    for (const unsigned char c : in) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+            c == '.' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 0x0F];
+        }
+    }
+    return out;
+}
+
+// Overwrite before release: the secret must not linger in the guest heap.
+void wipe(std::string* s) {
+    if (!s) return;
+    for (char& c : *s) c = '\0';
+    s->clear();
+}
 
 bool lane_is_ours(const std::string& lane) {
-    return lane.size() > std::strlen(kLanePrefix) &&
-           lane.compare(0, std::strlen(kLanePrefix), kLanePrefix) == 0 &&
+    return lane.size() > std::strlen(kLanePrefix) && lane.compare(0, std::strlen(kLanePrefix), kLanePrefix) == 0 &&
            lane.find('"') == std::string::npos && lane.find('\\') == std::string::npos;
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 nullptr, 0, 0, reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
+// ── frames ───────────────────────────────────────────────────────────────────
+std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
+    std::vector<const plugin_input_frame_t*> out;
+    for (uint32_t ordinal = 0;; ordinal++) {
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
+        if (f) out.push_back(f);
+    }
+    return out;
 }
 
-// `route` MUST be the string "error" for any non-200: foundation/http-respond
-// reads decision.status ONLY in that branch (http_respond_module.cpp:395-401),
-// so naming anything else turns a refusal into a silent empty 200.
-int emit(int status, const std::string& body_json) {
-    const std::string decision =
-        std::string("{\"route\":\"") + (status == 200 ? "cellular-credential" : "error") +
-        "\",\"format\":\"json\",\"status\":" + std::to_string(status) + "}";
-    if (push_json("decision", decision) < 0) return 500;
-    if (push_json("body", body_json) < 0) return 500;
-    return 0;
+// A buffer copied into 8-aligned storage (frames inside a stream may sit at any 4-byte boundary).
+struct Aligned {
+    std::vector<uint64_t> words;
+    size_t size = 0;
+    const uint8_t* data() const { return reinterpret_cast<const uint8_t*>(words.data()); }
+    void assign(const uint8_t* p, size_t n) {
+        words.assign((n + 7) / 8, 0);
+        if (n) std::memcpy(words.data(), p, n);
+        size = n;
+    }
+};
+
+// The frames of a size-prefixed stream (zero-length prefixes are padding and skipped).
+std::vector<std::pair<const uint8_t*, size_t>> stream_frames(const uint8_t* data, size_t length) {
+    std::vector<std::pair<const uint8_t*, size_t>> out;
+    size_t at = 0;
+    while (data && at + 4 <= length) {
+        const uint32_t n = static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) |
+                           (static_cast<uint32_t>(data[at + 2]) << 16) | (static_cast<uint32_t>(data[at + 3]) << 24);
+        at += 4;
+        if (n == 0) continue;
+        if (at + n > length) break;
+        out.push_back({data + at, n});
+        at += n;
+    }
+    return out;
 }
 
-int emit_error(int status, const char* code, const std::string& message) {
-    return emit(status, std::string("{\"code\":\"") + code + "\",\"error\":\"" +
-                            json_escape(message) + "\"}");
+bool has_identifier(const uint8_t* p, size_t n, const char* id) { return n >= 8 && std::memcmp(p + 4, id, 4) == 0; }
+
+qrpRepresentation representation_from(aprRepresentation a) {
+    if (a == aprRepresentation_FlatBuffer) return qrpRepresentation_FlatBuffer;
+    if (a == aprRepresentation_Json) return qrpRepresentation_Json;
+    return qrpRepresentation_Default;
+}
+
+int push_qrp(const char* port, const QRPT& q, bool size_prefixed) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    const auto root = QRP::Pack(b, &q);
+    if (size_prefixed) FinishSizePrefixedQRPBuffer(b, root);
+    else FinishQRPBuffer(b, root);
+    return plugin_push_output_ex(port, "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "QRP", 0, 8,
+                                 b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+// A refusal: one $QRP KIND Error decision, no page. http-respond respond_query answers HTTP_STATUS with it.
+int emit_error(qrpRepresentation representation, uint16_t status, const char* code, const std::string& message) {
+    QRPT q;
+    q.KIND = qrpKind_Error;
+    q.STATUS = qrpStatus_Error;
+    q.HTTP_STATUS = status;
+    q.ERROR_CODE = code;
+    q.MESSAGE = message;
+    q.REPRESENTATION = representation;
+    return push_qrp("decision", q, false) < 0 ? 500 : 0;
+}
+
+std::unique_ptr<QRPColumnT> column(const char* name, const char* type) {
+    auto c = std::make_unique<QRPColumnT>();
+    c->NAME = name;
+    c->TYPE = type;
+    return c;
+}
+std::unique_ptr<QRPValueT> text_cell(const std::string& v) {
+    auto c = std::make_unique<QRPValueT>();
+    c->KIND = qrpValueKind_Text;
+    c->TEXT_VALUE = v;
+    return c;
+}
+std::unique_ptr<QRPValueT> bool_cell(bool v) {
+    auto c = std::make_unique<QRPValueT>();
+    c->KIND = qrpValueKind_Bool;
+    c->BOOL_VALUE = v;
+    return c;
+}
+std::unique_ptr<QRPValueT> bytes_cell(const std::vector<uint8_t>& v) {
+    auto c = std::make_unique<QRPValueT>();
+    c->KIND = qrpValueKind_Bytes;
+    c->BYTES_VALUE = v;
+    return c;
+}
+
+// A success: a $QRP Request decision + a one-row projection page describing the lane's new state.
+int emit_lane_state(qrpRepresentation representation, const std::string& provider_id, const std::string& lane,
+                    bool configured, const char* verb_column) {
+    QRPT decision;
+    decision.KIND = qrpKind_Request;
+    decision.REPRESENTATION = representation;
+    if (push_qrp("decision", decision, false) < 0) return 500;
+    QRPT page;
+    page.KIND = qrpKind_Page;
+    page.STATUS = qrpStatus_Ok;
+    page.REPRESENTATION = representation;
+    page.COLUMNS.push_back(column("providerId", "string"));
+    page.COLUMNS.push_back(column("credentialLane", "string"));
+    page.COLUMNS.push_back(column("credentialConfigured", "bool"));
+    page.COLUMNS.push_back(column(verb_column, "bool"));
+    auto row = std::make_unique<QRPRowT>();
+    row->CELLS.push_back(text_cell(provider_id));
+    row->CELLS.push_back(text_cell(lane));
+    row->CELLS.push_back(bool_cell(configured));
+    row->CELLS.push_back(bool_cell(true));
+    page.ROWS.push_back(std::move(row));
+    return push_qrp("page", page, true) < 0 ? 500 : 0;
+}
+
+A::SecretParams secret_params(const std::string& lane) {
+    A::SecretParams p{};
+    sdm_piv::put(p.ID, lane);  // cell_<id>: the router's registry ids are far below the 128-byte bound
+    p.set_has_ID(true);
+    return p;
 }
 
 bool credential_configured(const std::string& lane) {
-    const std::string meta = host_meta("secrets.status", "{\"id\":\"" + json_escape(lane) + "\"}");
-    if (!host_meta_ok(meta)) return false;
-    return meta.find("\"configured\":true") != std::string::npos;
+    const auto response = sdm_piv::call("secrets.status", "SecretParams", secret_params(lane));
+    const auto* result = response.result<A::SecretResult>("SecretResult");
+    return response.ok() && result && result->CONFIGURED;
+}
+
+int column_index(const QRPT& page, const char* name) {
+    for (size_t i = 0; i < page.COLUMNS.size(); ++i)
+        if (page.COLUMNS[i] && page.COLUMNS[i]->NAME == name) return static_cast<int>(i);
+    return -1;
 }
 
 // ---------------------------------------------------------------------------
-// op = catalog.
-//
-// Two edits to the catalog `route` built, both anchored on the provider object
-// so neither can land on the wrong one:
-//   - `"credentialLane":"<lane>"` is unique per provider and is the anchor. The
-//     two flags that follow it in emission order (`authoritative`,
-//     `defaultSelected`) and the one that precedes it (`credentialConfigured`)
-//     are rewritten within that object only.
-//   - `keySlot` is appended as a top-level sibling.
-// A textual edit is used rather than re-serialising because the registry lives
-// in the OTHER plugin: rebuilding the catalog here would mean a second copy of
-// 13 providers' licences and attributions, and two copies drift.
+// catalog: the router's projection page -> the finished page.
 // ---------------------------------------------------------------------------
-int handle_catalog(const std::string& task) {
-    std::string catalog = json_string(task, "catalog", "");
-    if (catalog.empty() || catalog[0] != '{') {
-        return emit_error(500, "no-catalog", "the router emitted no catalog to finish");
-    }
-
-    // Flip the flags for every lane the node actually holds. The lanes are read
-    // OUT OF THE CATALOG, so this node needs no registry of its own; a lane it
-    // is not approved for simply answers "not configured" and is left alone.
-    size_t cursor = 0;
-    const std::string lane_key = "\"credentialLane\":\"";
-    for (;;) {
-        const size_t lane_at = catalog.find(lane_key, cursor);
-        if (lane_at == std::string::npos) break;
-        const size_t lane_start = lane_at + lane_key.size();
-        const size_t lane_end = catalog.find('"', lane_start);
-        if (lane_end == std::string::npos) break;
-        const std::string lane = catalog.substr(lane_start, lane_end - lane_start);
-        cursor = lane_end;
-
-        // Only ask about a provider that says it needs a login. The object
-        // begins at the nearest preceding '{'.
-        const size_t obj_start = catalog.rfind('{', lane_at);
-        const size_t obj_end = catalog.find('}', lane_end);
-        if (obj_start == std::string::npos || obj_end == std::string::npos) continue;
-        const std::string object = catalog.substr(obj_start, obj_end - obj_start + 1);
-        if (object.find("\"credentialRequired\":true") == std::string::npos) continue;
-        if (!lane_is_ours(lane)) continue;
-        if (!credential_configured(lane)) continue;
-
-        std::string updated = object;
-        const std::string configured_false = "\"credentialConfigured\":false";
-        const size_t cf = updated.find(configured_false);
-        if (cf != std::string::npos) {
-            updated.replace(cf, configured_false.size(), "\"credentialConfigured\":true");
-        }
-        const std::string selected_false = "\"defaultSelected\":false";
-        const size_t sf = updated.find(selected_false);
-        if (sf != std::string::npos) {
-            updated.replace(sf, selected_false.size(), "\"defaultSelected\":true");
-        }
-        catalog.replace(obj_start, obj_end - obj_start + 1, updated);
-        // The object grew; resume after the rewritten object, never inside it.
-        cursor = obj_start + updated.size();
-    }
-
-    // keySlot LAST, and only if the host answered. A placeholder would be worse
-    // than omission: the GUI disables the form on an absent slot, but a form
-    // that seals to a wrong key loses what is typed into it.
-    const std::string node_key_meta = host_meta("node.publicKey", "{}");
-    std::string slot_public_b64;
-    if (host_meta_ok(node_key_meta)) {
-        const std::string hex = json_string(node_key_meta, "result", "");
-        if (!hex.empty() && hex_to_base64(hex, &slot_public_b64)) {
-            const size_t close = catalog.rfind('}');
-            if (close != std::string::npos) {
-                catalog.insert(close, std::string(",\"keySlot\":{\"slotId\":\"") +
-                                          kWrappingSlotId + "\",\"publicKey\":\"" +
-                                          json_escape(slot_public_b64) +
-                                          "\",\"algorithm\":\"X25519\"}");
-            }
+int handle_catalog(const plugin_input_frame_t* frame) {
+    const auto frames = stream_frames(frame->payload, frame->payload_length);
+    // The page header is a size-prefixed record: written with FinishSizePrefixed (alignment relative to the prefix,
+    // as foundation/http-respond reads pages) or finished plainly and prefixed. Both are accepted.
+    const QRP* root = nullptr;
+    Aligned header;
+    if (!frames.empty() && has_identifier(frames[0].first, frames[0].second, "$QRP")) {
+        header.assign(frames[0].first - 4, frames[0].second + 4);
+        flatbuffers::Verifier prefixed(header.data(), header.size);
+        if (VerifySizePrefixedQRPBuffer(prefixed)) {
+            root = GetSizePrefixedQRP(header.data());
+        } else {
+            header.assign(frames[0].first, frames[0].second);
+            flatbuffers::Verifier plain(header.data(), header.size);
+            if (VerifyQRPBuffer(plain)) root = GetQRP(header.data());
         }
     }
-
-    if (push_json("decision",
-                  "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
-        return 500;
+    if (!root) {
+        return emit_error(qrpRepresentation_Default, 500, "no-catalog",
+                          "the router emitted no $QRP catalog page to finish");
     }
-    return push_json("body", catalog) < 0 ? 500 : 0;
+    QRPT page;
+    root->UnPackTo(&page);
+
+    auto ensure = [&](const char* name, const char* type) {
+        int at = column_index(page, name);
+        if (at >= 0) return at;
+        page.COLUMNS.push_back(column(name, type));
+        for (auto& row : page.ROWS) {
+            if (!row) continue;
+            while (row->CELLS.size() + 1 < page.COLUMNS.size()) row->CELLS.push_back(std::make_unique<QRPValueT>());
+            row->CELLS.push_back(std::make_unique<QRPValueT>());
+        }
+        return static_cast<int>(page.COLUMNS.size() - 1);
+    };
+    const int c_required = column_index(page, "credentialRequired");
+    const int c_lane = column_index(page, "credentialLane");
+    const int c_configured = ensure("credentialConfigured", "bool");
+    const int c_selected = ensure("defaultSelected", "bool");
+    const int c_slot = ensure("keySlotId", "string");
+    const int c_key = ensure("keySlotPublicKey", "bytes");
+    const int c_alg = ensure("keySlotAlgorithm", "string");
+
+    auto cell = [](QRPRowT& row, int at) -> QRPValueT& {
+        while (row.CELLS.size() <= static_cast<size_t>(at)) row.CELLS.push_back(std::make_unique<QRPValueT>());
+        if (!row.CELLS[static_cast<size_t>(at)]) row.CELLS[static_cast<size_t>(at)] = std::make_unique<QRPValueT>();
+        return *row.CELLS[static_cast<size_t>(at)];
+    };
+
+    // A lane is flipped only when the row says a credential is required AND secrets.status says one is held. That
+    // is presence only; no value is read here.
+    for (auto& row_ptr : page.ROWS) {
+        if (!row_ptr || c_required < 0 || c_lane < 0) continue;
+        QRPRowT& row = *row_ptr;
+        const QRPValueT& required = cell(row, c_required);
+        const QRPValueT& lane_cell = cell(row, c_lane);
+        if (required.KIND != qrpValueKind_Bool || !required.BOOL_VALUE) continue;
+        if (lane_cell.KIND != qrpValueKind_Text) continue;
+        const std::string lane = lane_cell.TEXT_VALUE;
+        if (!lane_is_ours(lane) || !credential_configured(lane)) continue;
+        QRPValueT& configured = cell(row, c_configured);
+        configured.KIND = qrpValueKind_Bool;
+        configured.BOOL_VALUE = true;
+        QRPValueT& selected = cell(row, c_selected);
+        selected.KIND = qrpValueKind_Bool;
+        selected.BOOL_VALUE = true;
+    }
+
+    // The wrapping key slot, ONLY when the host published one. node.publicKey answers hex text on raw "value"; a
+    // value that is already 32 raw bytes is taken as it is. Anything else leaves the cells Null: never invented.
+    const auto key_response = sdm_piv::call("node.publicKey");
+    std::vector<uint8_t> key;
+    if (key_response.ok()) {
+        const std::string_view value = key_response.raw("value");
+        if (!hex_decode(value, &key)) {
+            key.clear();
+            if (value.size() == 32) key.assign(value.begin(), value.end());
+        }
+        if (key.size() != 32) key.clear();
+    }
+    if (!key.empty()) {
+        for (auto& row_ptr : page.ROWS) {
+            if (!row_ptr) continue;
+            QRPValueT& slot = cell(*row_ptr, c_slot);
+            slot = QRPValueT();
+            slot.KIND = qrpValueKind_Text;
+            slot.TEXT_VALUE = kWrappingSlotId;
+            QRPValueT& public_key = cell(*row_ptr, c_key);
+            public_key = QRPValueT();
+            public_key.KIND = qrpValueKind_Bytes;
+            public_key.BYTES_VALUE = key;
+            QRPValueT& algorithm = cell(*row_ptr, c_alg);
+            algorithm = QRPValueT();
+            algorithm.KIND = qrpValueKind_Text;
+            algorithm.TEXT_VALUE = "X25519";
+        }
+    }
+
+    page.KIND = qrpKind_Page;
+    QRPT decision;
+    decision.KIND = qrpKind_Request;
+    decision.REPRESENTATION = page.REPRESENTATION;
+    decision.SCHEMA_NAME = page.SCHEMA_NAME;
+    if (push_qrp("decision", decision, false) < 0) return 500;
+    return push_qrp("page", page, true) < 0 ? 500 : 0;
+}
+
+std::string parameter(const APRT& apr, const char* name) {
+    for (const auto& p : apr.PARAMETERS)
+        if (p && p->NAME == name) return p->VALUE;
+    return std::string();
 }
 
 // ---------------------------------------------------------------------------
-// op = put. The whole of owner directive #2.
+// put: keyslot.unwrap -> secrets.put. The plaintext is never pushed anywhere.
 // ---------------------------------------------------------------------------
-int handle_put(const std::string& task) {
-    const std::string provider_id = json_string(task, "providerId", "");
-    const std::string lane = json_string(task, "lane", "");
+int handle_put(const APRT& task, qrpRepresentation representation) {
+    const std::string provider_id = parameter(task, "providerId");
+    const std::string lane = parameter(task, "credentialLane");
     if (!lane_is_ours(lane)) {
-        return emit_error(400, "bad-lane",
-                          "this node writes only cellular provider credential lanes");
+        return emit_error(representation, 400, "bad-lane", "this node writes only cellular provider credential lanes");
     }
-
-    const std::string envelope = json_string(task, "envelope", "");
-    const std::string slot_id = json_string(envelope, "slotId", "");
-    const std::string ephemeral = json_string(envelope, "ephemeralPublicKey", "");
-    const std::string nonce = json_string(envelope, "nonce", "");
-    const std::string ciphertext = json_string(envelope, "ciphertext", "");
-    if (slot_id.empty() || ephemeral.empty() || ciphertext.empty()) {
-        // There is NO plaintext branch anywhere in this file.
-        return emit_error(400, "unsealed-credential",
+    const std::string envelope(task.BODY.begin(), task.BODY.end());
+    const std::string slot_id = json_string(envelope, "slotId");
+    std::string ephemeral, nonce, ciphertext;
+    const bool decoded = base64_decode(json_string(envelope, "ephemeralPublicKey"), &ephemeral) &&
+                         base64_decode(json_string(envelope, "nonce"), &nonce) &&
+                         base64_decode(json_string(envelope, "ciphertext"), &ciphertext);
+    if (slot_id.empty() || !decoded || ephemeral.empty() || ciphertext.empty()) {
+        return emit_error(representation, 400, "unsealed-credential",
                           "a credential must arrive as a sealed keyslot envelope "
                           "(slotId, ephemeralPublicKey, nonce, ciphertext)");
     }
     if (slot_id != kWrappingSlotId) {
-        return emit_error(400, "unknown-key-slot",
-                          std::string("this node seals provider credentials to the \"") +
-                              kWrappingSlotId + "\" slot only");
+        return emit_error(representation, 400, "unknown-key-slot",
+                          std::string("this node seals provider credentials to the \"") + kWrappingSlotId +
+                              "\" slot only");
     }
 
-    const std::string unwrap_meta =
-        host_meta("keyslot.unwrap",
-                  std::string("{\"slotId\":\"") + kWrappingSlotId +
-                      "\",\"ephemeralPublicKey\":\"" + json_escape(ephemeral) +
-                      "\",\"nonce\":\"" + json_escape(nonce) + "\",\"ciphertext\":\"" +
-                      json_escape(ciphertext) + "\"}");
+    A::KeyslotParams kp{};
+    sdm_piv::put(kp.SLOT_ID, kWrappingSlotId);
+    kp.set_has_SLOT_ID(true);
+    kp.ALGORITHM = A::cryptoAlgorithm_X25519;
     std::string plaintext;
-    if (!host_meta_ok(unwrap_meta) ||
-        !base64_decode(json_string(unwrap_meta, "plaintext", ""), &plaintext) ||
-        plaintext.empty()) {
-        // ONE reason for every failure mode. Distinguishing "wrong slot key"
-        // from "corrupt ciphertext" from "not our envelope" tells a prober
-        // something; it tells the operator nothing they cannot get from the
-        // node's own log.
-        return emit_error(400, "unwrap-failed", "the node could not open this envelope");
+    {
+        const auto unwrap = sdm_piv::call("keyslot.unwrap", "KeyslotParams", kp,
+                                          {sdm_piv::raw("ephemeral_public_key", ephemeral),
+                                           sdm_piv::raw("nonce", nonce), sdm_piv::raw("ciphertext", ciphertext)});
+        if (unwrap.ok()) plaintext.assign(unwrap.raw("data"));
     }
-
-    // The sealed document is {"username","secret"} — the browser's own shape
-    // (cellularSdnStream.js sealAndStoreCredential). A username may legitimately
-    // be empty (a token-only provider such as OpenCelliD); a secret may not,
-    // because an empty secret would CLEAR the lane through a route whose caller
-    // believes it is setting one.
-    const std::string username = json_string(plaintext, "username", "");
-    const std::string secret = json_string(plaintext, "secret", "");
+    if (plaintext.empty()) {
+        return emit_error(representation, 400, "unwrap-failed", "the node could not open this envelope");
+    }
+    std::string username = json_string(plaintext, "username");
+    std::string secret = json_string(plaintext, "secret");
+    wipe(&plaintext);
     if (secret.empty()) {
-        return emit_error(
-            400, "empty-secret",
-            "the sealed credential carried no secret; refusing to clear the lane through PUT");
+        wipe(&username);
+        return emit_error(representation, 400, "empty-secret",
+                          "the sealed credential carried no secret; refusing to clear the lane through PUT");
     }
-
-    const std::string put_meta =
-        host_meta("secrets.put", "{\"id\":\"" + json_escape(lane) + "\",\"username\":\"" +
-                                     json_escape(username) + "\",\"secret\":\"" +
-                                     json_escape(secret) + "\"}");
-    if (!host_meta_ok(put_meta)) {
-        // The refusal names the MISSING GRANT, which is an operator-actionable
-        // fact carrying no credential, so it travels.
-        return emit(403, std::string("{\"code\":\"store-refused\",\"providerId\":\"") +
-                             json_escape(provider_id) + "\",\"credentialLane\":\"" +
-                             json_escape(lane) +
-                             "\",\"error\":\"the node refused to store this credential; this "
-                             "module needs an approved secrets:" +
-                             json_escape(lane) + ":write policy row\"}");
+    A::SecretParams sp = secret_params(lane);
+    if (!username.empty()) {
+        if (!sdm_piv::put(sp.USERNAME, username)) {
+            wipe(&username);
+            wipe(&secret);
+            return emit_error(representation, 400, "username-too-long",
+                              "the sealed username is longer than the 255 bytes the credential store holds; "
+                              "refused rather than stored truncated");
+        }
+        sp.set_has_USERNAME(true);
     }
+    bool stored = false;
+    {
+        const auto put = sdm_piv::call("secrets.put", "SecretParams", sp, {sdm_piv::raw("secret", secret)});
+        stored = put.ok();
+    }
+    wipe(&secret);
+    wipe(&username);
+    sp.USERNAME.clear();
+    if (!stored) {
+        return emit_error(representation, 403, "store-refused",
+                          "the node refused to store the credential for provider \"" + provider_id + "\" on lane " +
+                              lane + "; this module needs an approved secrets:" + lane + ":write policy row");
+    }
+    return emit_lane_state(representation, provider_id, lane, true, "stored");
+}
 
-    return emit(200, std::string("{\"providerId\":\"") + json_escape(provider_id) +
-                         "\",\"credentialLane\":\"" + json_escape(lane) +
-                         "\",\"credentialConfigured\":true,\"stored\":true}");
+// clear: answers identically whether or not a credential was there.
+int handle_clear(const APRT& task, qrpRepresentation representation) {
+    const std::string provider_id = parameter(task, "providerId");
+    const std::string lane = parameter(task, "credentialLane");
+    if (!lane_is_ours(lane)) {
+        return emit_error(representation, 400, "bad-lane", "this node clears only cellular provider credential lanes");
+    }
+    const auto clear = sdm_piv::call("secrets.clear", "SecretParams", secret_params(lane));
+    if (!clear.ok()) {
+        return emit_error(representation, 403, "clear-refused",
+                          "the node refused to clear the credential for provider \"" + provider_id + "\" on lane " +
+                              lane + "; this module needs an approved secrets:" + lane + ":write policy row");
+    }
+    return emit_lane_state(representation, provider_id, lane, false, "cleared");
+}
+
+int handle_credential(const plugin_input_frame_t* frame) {
+    Aligned buffer;
+    buffer.assign(frame->payload, frame->payload_length);
+    flatbuffers::Verifier verifier(buffer.data(), buffer.size);
+    if (!has_identifier(buffer.data(), buffer.size, "$APR") || !VerifyAPRBuffer(verifier)) {
+        return emit_error(qrpRepresentation_Default, 500, "invalid-task",
+                          "the credential task is not an $APR record");
+    }
+    APRT task;
+    GetAPR(buffer.data())->UnPackTo(&task);
+    const qrpRepresentation representation = representation_from(task.ACCEPT);
+    if (task.ROUTE == "credential-put") return handle_put(task, representation);
+    if (task.ROUTE == "credential-clear") return handle_clear(task, representation);
+    return emit_error(representation, 500, "unknown-op", "the router emitted an operation this node does not know");
+}
+
+// The run contract a provider fetch carries in CONTEXT: the first $APR of the size-prefixed stream.
+bool context_contract(const flatbuffers::Vector<uint8_t>* context, APRT* out) {
+    if (!context) return false;
+    for (const auto& [p, n] : stream_frames(context->data(), context->size())) {
+        Aligned buffer;
+        buffer.assign(p, n);
+        flatbuffers::Verifier verifier(buffer.data(), buffer.size);
+        if (!has_identifier(buffer.data(), buffer.size, "$APR") || !VerifyAPRBuffer(verifier)) continue;
+        GetAPR(buffer.data())->UnPackTo(out);
+        return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
-// op = descriptors — THE CREDENTIALED FETCH.
-//
-// This is the operation that makes a stored credential do something. `route` in
-// cell-tower-source builds every request descriptor, but it holds NO secrets
-// capability (it is `capabilities: []` so it stays browser-instantiable for its
-// own tests), so a credentialed provider's URL leaves it with the literal
-// `{{credential}}` still in it and a `credentialLane` naming the lane that
-// fills it. This node has the grant; it substitutes, and hands the finished
-// list on to the http node.
-//
-// THE INVARIANT THIS MUST NOT BREAK. `parse` correlates a response frame to a
-// provider BY POSITION in `request_providers`, because `hostcap/http-request`
-// echoes nothing from the request it was handed. So descriptors[i] must keep
-// naming request_providers[i] after this node has run. That is why both lists
-// are rewritten HERE, together, in one pass: when a lane turns out to be empty
-// the descriptor is dropped AND its correlation entry is dropped with it. A
-// node that filtered only the descriptors would shift every provider after the
-// gap by one and attribute real towers to the wrong operator — the failure mode
-// this flow has already been bitten by once.
-//
-// WHY A DROP AND NOT A REFUSAL. An empty lane is an ordinary operator state,
-// not an error: the other providers in the same run have real answers and the
-// request should still get them. The dropped provider is named in
-// `credentialSkipped` so the run can say it asked and could not, which is the
-// same contract `route`'s own skip list carries.
-//
-// NO ECHO, still. The substituted URL goes to the http node and nowhere else.
-// It is never logged (`hostcap/http-request`'s host capability writes no URL to
-// the journal), never returned in the reply, and the token is never named in
-// `credentialSkipped` — which reports lanes, not values.
-int handle_descriptors(const std::string& task) {
-    std::string descriptors_raw;
-    if (!json_raw_field(task, "descriptors", &descriptors_raw) || descriptors_raw.empty() ||
-        descriptors_raw[0] != '[') {
-        return emit_error(500, "no-descriptors", "the router emitted no descriptor list");
-    }
-    std::string providers_raw;
-    if (!json_raw_field(task, "request_providers", &providers_raw) || providers_raw.empty() ||
-        providers_raw[0] != '[') {
-        return emit_error(500, "no-correlation",
-                          "the router emitted descriptors with no correlation list");
-    }
-
-    const std::vector<std::string> descriptors = json_object_array(descriptors_raw);
-    const std::vector<std::string> providers = json_string_array(providers_raw);
-    if (descriptors.size() != providers.size()) {
-        // Refuse rather than guess an alignment. A mismatched pair is the one
-        // condition under which every attribution downstream is unsound.
-        return emit_error(500, "correlation-mismatch",
-                          "descriptor and correlation lists differ in length");
-    }
-
-    std::string out_descriptors = "[";
-    std::string out_providers = "[";
-    std::string skipped = "[";
-    size_t kept = 0, skipped_count = 0;
-
-    for (size_t i = 0; i < descriptors.size(); ++i) {
-        const std::string& descriptor = descriptors[i];
-        const std::string lane = json_string(descriptor, "credentialLane", "");
-        if (lane.empty()) {
-            // Not a credentialed descriptor. Passes through byte-for-byte.
-            if (kept++) { out_descriptors += ","; out_providers += ","; }
-            out_descriptors += descriptor;
-            out_providers += "\"" + json_escape(providers[i]) + "\"";
+// requests: fill {{credential}} from secrets.get; drop what cannot be filled.
+// ---------------------------------------------------------------------------
+int handle_requests(const std::vector<const plugin_input_frame_t*>& frames) {
+    std::vector<std::string> skipped;
+    for (const plugin_input_frame_t* frame : frames) {
+        if (!frame->payload) continue;
+        Aligned buffer;
+        buffer.assign(frame->payload, frame->payload_length);
+        flatbuffers::Verifier verifier(buffer.data(), buffer.size);
+        if (!R::VerifyHttpRequestBuffer(verifier)) {
+            plugin_set_error("invalid-request-frame", "a requests frame is not an HttpRequest (HREQ).");
+            return 400;
+        }
+        const R::HttpRequest* request = R::GetHttpRequest(buffer.data());
+        const std::string url = request->URL() ? request->URL()->str() : std::string();
+        if (url.find("{{credential") == std::string::npos) {
+            if (plugin_push_output_ex("requests", "HttpRequest.fbs", R::HttpRequestIdentifier(),
+                                      PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "HttpRequest", 0, 8, frame->payload,
+                                      frame->payload_length) < 0) {
+                return 500;
+            }
             continue;
         }
-        const std::string provider_id = json_string(descriptor, "provider_id", "");
+        APRT contract;
+        const bool has_contract = context_contract(request->CONTEXT(), &contract);
+        const std::string provider_id = has_contract ? parameter(contract, "provider") : std::string();
+        const std::string lane = has_contract ? parameter(contract, "credentialLane") : std::string();
+        const std::string who = provider_id.empty() ? std::string("unknown") : provider_id;
         if (!lane_is_ours(lane)) {
-            if (skipped_count++) skipped += ",";
-            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
-                       "\",\"reason\":\"not a cellular credential lane\"}";
+            skipped.push_back(who + "=not-a-cellular-lane");
             continue;
         }
-
-        // `secrets.get` is gated by the READ grant (`secrets:<lane>`), which is
-        // separate from the `:write` grant `put`/`clear` use — an operator can
-        // approve storing a credential without approving its use, and this is
-        // the call that needs the other half.
-        const std::string get_meta =
-            host_meta("secrets.get", "{\"id\":\"" + json_escape(lane) + "\"}");
         std::string secret, username;
-        if (host_meta_ok(get_meta)) {
-            secret = json_string(get_meta, "secret", "");
-            username = json_string(get_meta, "username", "");
+        {
+            const auto get = sdm_piv::call("secrets.get", "SecretParams", secret_params(lane));
+            if (get.ok()) {
+                secret.assign(get.raw("secret"));
+                if (const auto* result = get.result<A::SecretResult>("SecretResult")) username = result->USERNAME.str();
+            }
         }
         if (secret.empty()) {
-            // Either the operator has not entered this credential or this
-            // module is not approved for the lane. The two are deliberately NOT
-            // distinguished in the reply: telling a caller which one it is
-            // makes an unapproved lane's existence observable.
-            if (skipped_count++) skipped += ",";
-            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
-                       "\",\"credentialLane\":\"" + json_escape(lane) +
-                       "\",\"credentialConfigured\":false"
-                       ",\"reason\":\"no credential is stored for this lane on this node\"}";
+            wipe(&username);
+            skipped.push_back(who + "=no-credential");
             continue;
         }
-
-        const std::string url = json_string(descriptor, "url", "");
         std::string filled = url;
-        substitute_all(&filled, "{{credential}}", url_encode(secret));
-        // Some providers key on a username too; substitute it when the
-        // descriptor asks for one, so a two-field credential needs no second op.
-        substitute_all(&filled, "{{credential_user}}", url_encode(username));
-        // The plaintext's lifetime ends here. It exists for the few
-        // instructions between the hostcall and the substitution, exactly as it
-        // does in `put` between unwrap and store.
-        secret.assign(secret.size(), '\0');
-        secret.clear();
-        username.clear();
-
+        std::string encoded_secret = url_encode(secret);
+        std::string encoded_user = url_encode(username);
+        substitute_all(&filled, "{{credential}}", encoded_secret);
+        substitute_all(&filled, "{{credential_user}}", encoded_user);
+        wipe(&secret);
+        wipe(&username);
+        wipe(&encoded_secret);
+        wipe(&encoded_user);
         if (filled.find("{{credential") != std::string::npos) {
-            // A placeholder this node does not know how to fill would be
-            // fetched verbatim. Drop it rather than spend the provider's quota
-            // on a request that cannot succeed.
-            if (skipped_count++) skipped += ",";
-            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
-                       "\",\"reason\":\"the descriptor carries a credential placeholder this "
-                       "node does not fill\"}";
+            wipe(&filled);
+            skipped.push_back(who + "=unfilled-placeholder");
             continue;
         }
-
-        // Rebuild the descriptor with the finished URL, and DROP the
-        // `credentialLane` marker: it has done its job, and a lane name is
-        // operator configuration that has no business travelling further than
-        // the node that acts on it.
-        std::string rebuilt = descriptor;
-        if (!replace_json_string_field(&rebuilt, "url", filled) ||
-            !erase_json_string_field(&rebuilt, "credentialLane")) {
-            if (skipped_count++) skipped += ",";
-            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
-                       "\",\"reason\":\"the descriptor could not be rewritten\"}";
-            continue;
+        R::HttpRequestT rebuilt;
+        request->UnPackTo(&rebuilt);
+        rebuilt.URL = filled;
+        wipe(&filled);
+        flatbuffers::FlatBufferBuilder b(1024 + rebuilt.URL.size() + rebuilt.BODY.size() + rebuilt.CONTEXT.size());
+        R::FinishHttpRequestBuffer(b, R::HttpRequest::Pack(b, &rebuilt));
+        wipe(&rebuilt.URL);
+        const int32_t pushed =
+            plugin_push_output_ex("requests", "HttpRequest.fbs", R::HttpRequestIdentifier(),
+                                  PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "HttpRequest", 0, 8, b.GetBufferPointer(),
+                                  static_cast<uint32_t>(b.GetSize()));
+        std::memset(b.GetBufferPointer(), 0, b.GetSize());
+        if (pushed < 0) return 500;
+    }
+    if (!skipped.empty()) {
+        R::FlowNoticeT notice;
+        notice.KIND = R::flowNoticeKind_Skipped;
+        notice.SCHEMA = "TBS.fbs";
+        notice.REASON = "credential-unavailable";
+        notice.COUNT = skipped.size();
+        notice.ITEMS = skipped;
+        flatbuffers::FlatBufferBuilder b(256);
+        R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+        if (plugin_push_output_ex("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(),
+                                  PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0, b.GetBufferPointer(),
+                                  static_cast<uint32_t>(b.GetSize())) < 0) {
+            return 500;
         }
-        if (kept++) { out_descriptors += ","; out_providers += ","; }
-        out_descriptors += rebuilt;
-        out_providers += "\"" + json_escape(providers[i]) + "\"";
     }
-    out_descriptors += "]";
-    out_providers += "]";
-    skipped += "]";
-
-    return emit(200, std::string("{\"descriptors\":") + out_descriptors +
-                         ",\"request_providers\":" + out_providers +
-                         ",\"credentialSkipped\":" + skipped + "}");
-}
-
-int handle_clear(const std::string& task) {
-    const std::string provider_id = json_string(task, "providerId", "");
-    const std::string lane = json_string(task, "lane", "");
-    if (!lane_is_ours(lane)) {
-        return emit_error(400, "bad-lane",
-                          "this node clears only cellular provider credential lanes");
-    }
-    const std::string meta = host_meta("secrets.clear", "{\"id\":\"" + json_escape(lane) + "\"}");
-    if (!host_meta_ok(meta)) {
-        return emit(403, std::string("{\"code\":\"clear-refused\",\"providerId\":\"") +
-                             json_escape(provider_id) + "\",\"credentialLane\":\"" +
-                             json_escape(lane) +
-                             "\",\"error\":\"the node refused to clear this credential; this "
-                             "module needs an approved secrets:" +
-                             json_escape(lane) + ":write policy row\"}");
-    }
-    return emit(200, std::string("{\"providerId\":\"") + json_escape(provider_id) +
-                         "\",\"credentialLane\":\"" + json_escape(lane) +
-                         "\",\"credentialConfigured\":false,\"cleared\":true}");
+    return 0;
 }
 
 }  // namespace
@@ -818,18 +707,33 @@ int handle_clear(const std::string& task) {
 extern "C" {
 
 int mediate(void) {
-    const int32_t idx = plugin_find_input_index("task", 0);
-    if (idx < 0) return 400;
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload) return 400;
-    const std::string task(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-
-    const std::string op = json_string(task, "op", "");
-    if (op == "catalog") return handle_catalog(task);
-    if (op == "descriptors") return handle_descriptors(task);
-    if (op == "put") return handle_put(task);
-    if (op == "clear") return handle_clear(task);
-    return emit_error(500, "unknown-op", "the router emitted an operation this node does not know");
+    const auto catalog = frames_on("catalog");
+    const auto credential = frames_on("credential");
+    const auto requests = frames_on("requests");
+    // catalog and credential answer ONE HTTP exchange each: a surplus is refused by name, never merged.
+    for (const auto* list : {&catalog, &credential}) {
+        if (list->size() > 1) {
+            char message[256];
+            std::snprintf(message, sizeof message,
+                          "This invocation carries %zu frames on single-stream input port \"%s\"; the surplus is "
+                          "refused rather than silently discarded.",
+                          list->size(), list == &catalog ? "catalog" : "credential");
+            plugin_set_error("batched-input-frames", message);
+            return 500;
+        }
+    }
+    const int kinds = (catalog.empty() ? 0 : 1) + (credential.empty() ? 0 : 1) + (requests.empty() ? 0 : 1);
+    if (kinds == 0) {
+        plugin_set_error("missing-task", "mediate requires a frame on catalog, credential or requests.");
+        return 400;
+    }
+    if (kinds > 1) {
+        plugin_set_error("ambiguous-task", "mediate received more than one task kind; one invocation has one task.");
+        return 500;
+    }
+    if (!catalog.empty()) return handle_catalog(catalog[0]);
+    if (!credential.empty()) return handle_credential(credential[0]);
+    return handle_requests(requests);
 }
 
 }  // extern "C"

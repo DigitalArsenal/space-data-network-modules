@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.3.0",
-  "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection; integrate the composed catalog with every source's products: identity links tested on trajectories, the product chosen by measured error, its covariance and label, merged maneuvers.",
+  "version": "0.4.0",
+  "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection; integrate the composed catalog with every source's products: identity links tested on trajectories, the product chosen by measured error, its covariance and label, merged maneuvers. Recipes, requests and reports are SDS $XMT (Catalog Cross-Match).",
   "pluginFamily": "analysis",
   "capabilities": [],
   "invokeSurfaces": [
@@ -22,24 +22,22 @@
           "portId": "recipe",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "xmt-compose-recipe",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with COMPOSE_RECIPE set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age."
+          "description": "One size-prefixed $XMT with COMPOSE_RECIPE set."
         },
         {
           "portId": "catalogs",
@@ -50,7 +48,8 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical size-prefixed CAT streams, one per recipe layer in the same order."
@@ -72,7 +71,8 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Selected CAT records with original bytes preserved; unresolved identifier conflicts are excluded."
@@ -87,24 +87,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "xmt-compose-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Composition decisions and source/frame provenance for the editor.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with COMPOSE_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Composition decisions and source/frame provenance for the editor."
+          "description": "One size-prefixed $XMT with COMPOSE_REPORT set."
         }
       ],
       "maxBatch": 17,
@@ -118,24 +116,22 @@
           "portId": "recipe",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "xmt-integrate-recipe",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with INTEGRATE_RECIPE set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy."
+          "description": "One size-prefixed $XMT with INTEGRATE_RECIPE set."
         },
         {
           "portId": "catalog",
@@ -146,7 +142,8 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The composed catalog: canonical size-prefixed CAT records, each object once (the output of compose, or one snapshot)."
@@ -166,7 +163,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Normalized common-grid OEM trajectories of the identity candidates, one size-prefixed record per candidate in the recipe's order."
@@ -186,7 +184,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Every source's element sets, canonical size-prefixed OMM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
@@ -206,7 +205,8 @@
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Every source's states and covariance with the covariance label, canonical size-prefixed OCM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
@@ -226,7 +226,8 @@
                 {
                   "schemaName": "MNV.fbs",
                   "fileIdentifier": "$MNV",
-                  "rootTypeName": "MNV"
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Every source's maneuvers, canonical size-prefixed MNV records, each tagged source:<id>."
@@ -248,7 +249,8 @@
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The input objects in order, original bytes kept; MANEUVERABLE is set where the maneuver history shows a maneuver."
@@ -268,7 +270,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte."
@@ -288,7 +291,8 @@
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The selected product's state and covariance with the covariance label, byte for byte."
@@ -308,7 +312,8 @@
                 {
                   "schemaName": "MNV.fbs",
                   "fileIdentifier": "$MNV",
-                  "rootTypeName": "MNV"
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The maneuvers of every source, merged within the policy's tolerances; a merged event keeps each source's confirmation in its tags."
@@ -323,24 +328,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "xmt-integrate-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with INTEGRATE_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy."
+          "description": "One size-prefixed $XMT with INTEGRATE_REPORT set."
         }
       ],
       "maxBatch": 260,
@@ -354,24 +357,22 @@
           "portId": "recipe",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "xmt-match-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
-              }
+              "description": "One size-prefixed $XMT with MATCH_REQUEST set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+          "description": "One size-prefixed $XMT with MATCH_REQUEST set."
         },
         {
           "portId": "ephemerides",
@@ -382,7 +383,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical common-grid OEM trajectories; one size-prefixed record per candidate, uniform Earth-centered inertial UTC states."
@@ -399,24 +401,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "xmt-match-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Composition decisions and source/frame provenance for the editor.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with MATCH_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Composition decisions and source/frame provenance for the editor."
+          "description": "One size-prefixed $XMT with MATCH_REPORT set."
         }
       ],
       "maxBatch": 65,
@@ -430,24 +430,22 @@
           "portId": "recipe",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "xmt-epoch-fit-policy",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
-              }
+              "description": "One size-prefixed $XMT with EPOCH_FIT_POLICY set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+          "description": "One size-prefixed $XMT with EPOCH_FIT_POLICY set."
         },
         {
           "portId": "seed",
@@ -461,7 +459,8 @@
                 {
                   "schemaName": "OPM.fbs",
                   "fileIdentifier": "$OPM",
-                  "rootTypeName": "OPM"
+                  "rootTypeName": "OPM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -479,18 +478,13 @@
                 {
                   "schemaName": "NCD.fbs",
                   "fileIdentifier": "$NCD",
-                  "rootTypeName": "NCD"
-                },
-                {
-                  "schemaName": "NCD.fbs",
-                  "fileIdentifier": "$NCD",
                   "rootTypeName": "NCD",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
-          ]
+          ],
+          "description": "One size-prefixed $NCD (PROVIDER_DEFINED vimpel-ephemeris-text) followed by the provider's ephemeris text it describes, byte for byte."
         },
         {
           "portId": "ephemerides",
@@ -504,7 +498,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -516,24 +511,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "xmt-epoch-fit-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Composition decisions and source/frame provenance for the editor.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with EPOCH_FIT_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Composition decisions and source/frame provenance for the editor."
+          "description": "One size-prefixed $XMT with EPOCH_FIT_REPORT set."
         }
       ],
       "maxBatch": 4,
@@ -547,24 +540,22 @@
           "portId": "recipe",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "xmt-epoch-fit-policy",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
-              }
+              "description": "One size-prefixed $XMT with EPOCH_FIT_POLICY set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+          "description": "One size-prefixed $XMT with EPOCH_FIT_POLICY set."
         },
         {
           "portId": "seed",
@@ -578,7 +569,8 @@
                 {
                   "schemaName": "OPM.fbs",
                   "fileIdentifier": "$OPM",
-                  "rootTypeName": "OPM"
+                  "rootTypeName": "OPM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -596,18 +588,13 @@
                 {
                   "schemaName": "NCD.fbs",
                   "fileIdentifier": "$NCD",
-                  "rootTypeName": "NCD"
-                },
-                {
-                  "schemaName": "NCD.fbs",
-                  "fileIdentifier": "$NCD",
                   "rootTypeName": "NCD",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
-          ]
+          ],
+          "description": "One size-prefixed $NCD (PROVIDER_DEFINED vimpel-ephemeris-text) followed by the provider's ephemeris text it describes, byte for byte."
         },
         {
           "portId": "ephemerides",
@@ -621,7 +608,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -633,24 +621,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "xmt-epoch-fit-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Composition decisions and source/frame provenance for the editor.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $XMT with EPOCH_FIT_REPORT set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Composition decisions and source/frame provenance for the editor."
+          "description": "One size-prefixed $XMT with EPOCH_FIT_REPORT set."
         },
         {
           "portId": "candidate",
@@ -664,7 +650,8 @@
                 {
                   "schemaName": "OPM.fbs",
                   "fileIdentifier": "$OPM",
-                  "rootTypeName": "OPM"
+                  "rootTypeName": "OPM",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }

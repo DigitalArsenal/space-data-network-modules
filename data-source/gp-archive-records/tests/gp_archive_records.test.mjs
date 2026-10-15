@@ -4,17 +4,15 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import * as flatbuffers from "flatbuffers";
-import { CAT } from "spacedatastandards.org/lib/js/CAT/main.js";
-import { MPE, meanElementSource } from "spacedatastandards.org/lib/js/MPE/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { CAT_FIELDS, MPE_FIELDS, encodeFieldBatch } from "./field-batch.mjs";
+import { CAT, CAT_FIELDS, MPE, MPE_FIELDS, encodeRecord, encodeStream, meanElementSource } from "./records.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../node_modules/spacedatastandards.org/", import.meta.url));
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT;
 
 // Archive encoding v1 vectors (tests/archive-v1-vectors.json; doubles as
 // IEEE-754 bit patterns, non-UTF-8 strings as <FIELD>_BASE64). Every expected
@@ -32,7 +30,7 @@ const VECTORS = JSON.parse(fs.readFileSync(new URL("./archive-v1-vectors.json", 
 const manifest = () => JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 const wasm = () => fs.readFileSync(fileURLToPath(WASM_PATH));
 
-// A vector's field values as the field batch encoder takes them.
+// A vector's field values as the record encoder takes them.
 function fieldValues(vector, fields) {
   const values = {};
   for (const [name, kind] of fields) {
@@ -48,8 +46,10 @@ function fieldValues(vector, fields) {
   return values;
 }
 
-const mpeBatch = (vectors) => encodeFieldBatch(MPE_FIELDS, vectors.map((v) => fieldValues(v, MPE_FIELDS)));
-const catBatch = (vectors) => encodeFieldBatch(CAT_FIELDS, vectors.map((v) => fieldValues(v, CAT_FIELDS)));
+const mpeBatch = (vectors, options) =>
+  encodeStream(MPE, MPE_FIELDS, vectors.map((v) => fieldValues(v, MPE_FIELDS)), options);
+const catBatch = (vectors, options) =>
+  encodeStream(CAT, CAT_FIELDS, vectors.map((v) => fieldValues(v, CAT_FIELDS)), options);
 
 function splitStream(bytes) {
   const frames = [];
@@ -83,7 +83,12 @@ async function invoke(h, methodId, payload) {
     inputs: [
       {
         portId: "records",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+        typeRef: {
+          schemaName: `${methodId === "build_mpe" ? "MPE" : "CAT"}.fbs`,
+          fileIdentifier: methodId === "build_mpe" ? "$MPE" : "$CAT",
+          rootTypeName: methodId === "build_mpe" ? "MPE" : "CAT",
+          wireFormat: "flatbuffer",
+        },
         payload,
       },
     ],
@@ -163,7 +168,7 @@ test("archive encoding v1 layout: every MPE field present, in the importer's ord
     MEAN_ANOMALY: 325.0288,
     BSTAR: 0,
   };
-  const [frame] = await build(h, "build_mpe", encodeFieldBatch(MPE_FIELDS, [input]));
+  const [frame] = await build(h, "build_mpe", encodeStream(MPE, MPE_FIELDS, [input]));
   // Every key lands in the schema field of the same name (read back through the
   // generated SDS JavaScript bindings).
   const mpe = MPE.getSizePrefixedRootAsMPE(new flatbuffers.ByteBuffer(new Uint8Array(frame))).unpack();
@@ -184,7 +189,7 @@ test("archive encoding v1 layout: CAT adds OBJECT_ID, NORAD_CAT_ID, OBJECT_NAME 
     { OBJECT_ID: "1998-067A", NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)" },
     { OBJECT_ID: "NORAD:0", NORAD_CAT_ID: 0, OBJECT_NAME: "UNKNOWN" },
   ];
-  const [present, absent] = await build(h, "build_cat", encodeFieldBatch(CAT_FIELDS, rows));
+  const [present, absent] = await build(h, "build_cat", encodeStream(CAT, CAT_FIELDS, rows, { forceDefaults: false }));
   const cat = CAT.getSizePrefixedRootAsCAT(new flatbuffers.ByteBuffer(new Uint8Array(present))).unpack();
   assert.equal(cat.OBJECT_ID, "1998-067A");
   assert.equal(cat.NORAD_CAT_ID, 25544);
@@ -196,32 +201,41 @@ test("archive encoding v1 layout: CAT adds OBJECT_ID, NORAD_CAT_ID, OBJECT_NAME 
   assert.equal(fieldOffsets(absent)[2] ?? 0, 0, "NORAD_CAT_ID 0 is not written");
 });
 
-test("header fields may come in any order", async (t) => {
+test("an archive-v1 stream re-builds to itself, padding included", async (t) => {
   const h = await harness(t);
-  const reversed = [...MPE_FIELDS].reverse();
-  const [frame] = await build(h, "build_mpe", encodeFieldBatch(reversed, [fieldValues(VECTORS.mpe[0], MPE_FIELDS)]));
-  assert.equal(frame.toString("hex"), VECTORS.mpe[0].expected);
+  for (const [method, vectors] of [["build_mpe", VECTORS.mpe], ["build_cat", VECTORS.cat]]) {
+    const frames = vectors.map((v) => Buffer.from(v.expected, "hex"));
+    const padded = Buffer.concat(frames.flatMap((f) => [f, Buffer.alloc((8 - (f.length % 8)) % 8)]));
+    const response = await invoke(h, method, new Uint8Array(padded));
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(Buffer.from(response.outputs[0].payload).toString("hex"), padded.toString("hex"), method);
+  }
 });
 
-test("an empty batch builds an empty stream", async (t) => {
+test("an empty stream builds an empty stream", async (t) => {
   const h = await harness(t);
-  assert.deepEqual(await build(h, "build_mpe", encodeFieldBatch(MPE_FIELDS, [])), []);
-  assert.deepEqual(await build(h, "build_cat", encodeFieldBatch(CAT_FIELDS, [])), []);
+  assert.deepEqual(await build(h, "build_mpe", new Uint8Array(0)), []);
+  assert.deepEqual(await build(h, "build_cat", new Uint8Array(0)), []);
 });
 
-test("malformed batches are refused whole", async (t) => {
+test("malformed streams and records are refused whole", async (t) => {
   const h = await harness(t);
   const good = fieldValues(VECTORS.mpe[0], MPE_FIELDS);
-  const valid = encodeFieldBatch(MPE_FIELDS, [good, good]);
-  const withHeader = (fields) => encodeFieldBatch(fields, [good]);
+  const valid = encodeStream(MPE, MPE_FIELDS, [good, good]);
+  const cat = { OBJECT_ID: "1998-067A", NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS" };
   const cases = [
-    ["build_mpe", withHeader(MPE_FIELDS.filter(([name]) => name !== "BSTAR")), /missing field BSTAR/],
-    ["build_mpe", withHeader([...MPE_FIELDS, ["MEAN_ELEMENT_THEORY", "uint32"]]), /unknown field MEAN_ELEMENT_THEORY/],
-    ["build_mpe", withHeader([...MPE_FIELDS, ["EPOCH", "double"]]), /duplicate field EPOCH/],
+    ["build_mpe", Buffer.concat([valid, encodeRecord(MPE, MPE_FIELDS, good, { omit: ["BSTAR"] })]), /\$MPE record 2 lacks BSTAR/],
+    ["build_mpe", encodeRecord(MPE, MPE_FIELDS, { ...good, ECCENTRICITY: 0 }, { forceDefaults: false }), /lacks ECCENTRICITY/],
+    [
+      "build_mpe",
+      encodeRecord(MPE, MPE_FIELDS, good, { extra: (b, T) => T.addMeanElementTheory(b, meanElementSource.SGP4XP) }),
+      /MEAN_ELEMENT_THEORY other than SGP4/,
+    ],
     ["build_mpe", valid.subarray(0, valid.length - 1), /record 1 is truncated/],
-    ["build_mpe", Buffer.concat([valid, Buffer.from([0])]), /Trailing bytes/],
-    ["build_mpe", Buffer.from("[]"), /not a GPAF field batch/],
-    ["build_cat", withHeader(MPE_FIELDS), /unknown field ENTITY_ID/],
+    ["build_mpe", Buffer.concat([valid, Buffer.from([0])]), /truncated size prefix/],
+    ["build_mpe", encodeRecord(CAT, CAT_FIELDS, cat), /record 0 is not a verifiable size-prefixed \$MPE/],
+    ["build_cat", encodeRecord(CAT, CAT_FIELDS, cat, { omit: ["OBJECT_NAME"] }), /lacks OBJECT_NAME/],
+    ["build_cat", encodeRecord(CAT, CAT_FIELDS, cat, { extra: (b, T) => T.addPeriod(b, 92.9) }), /sets field slot \d+, which archive v1 does not carry/],
   ];
   for (const [methodId, payload, message] of cases) {
     const response = await invoke(h, methodId, new Uint8Array(payload));

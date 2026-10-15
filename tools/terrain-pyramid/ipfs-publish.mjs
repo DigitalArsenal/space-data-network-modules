@@ -56,6 +56,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { buildDttRecord, writeDttRecord } from "./dtt-projection.mjs";
+import { configFrame, storeAnswer, typedInput } from "../../data-source/terrain-source/typed-frames.mjs";
 import { MAX_TERRAIN_RECORD_BYTES, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -1224,20 +1225,15 @@ const harness = await createBrowserModuleHarness({
   wasmSource: wasm,
   manifest,
   surface: "direct",
+  // The config is handed in on the "config" frame below, so the module makes no hostcall at all here.
   hostcallDispatch: (operation) => {
-    if (operation === "plugin.getConfig") return servingConfig;
     throw new Error(`unexpected hostcall operation: ${operation}`);
   },
 });
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
+// Typed contracts 1.0: the serving config travels on the module's "config" port as a ModuleConfig (the same entries
+// plugin.getConfig answers, nested values under dotted keys), and route's typed outputs are handed on verbatim.
+const servingConfigFrame = configFrame(servingConfig);
 
 // A file on IPFS has ONE representation, and it is the identity one — so every
 // request into the module asks for identity rather than taking the module's
@@ -1258,6 +1254,7 @@ async function routed(urlPath) {
           headers: { "accept-encoding": "identity" },
         }),
       },
+      servingConfigFrame,
     ],
   });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
@@ -1301,7 +1298,7 @@ async function renderLayerJson() {
   assert.ok(plan, "route did not produce a layer plan");
   const rendered = await harness.invoke({
     methodId: "layer_json",
-    inputs: [frame("plan", plan.payload)],
+    inputs: [typedInput("plan", plan.payload), servingConfigFrame],
   });
   assert.equal(rendered.statusCode, 0, `${rendered.errorCode}: ${rendered.errorMessage}`);
   const http = decodeHttpResponse(new Uint8Array(rendered.outputs[0].payload));
@@ -1318,7 +1315,8 @@ async function synthesizeTile(level, x, y) {
   assert.ok(context, `route refused to plan ${level}/${x}/${y}`);
   const responded = await harness.invoke({
     methodId: "respond",
-    inputs: [frame("stream", new Uint8Array(4)), frame("context", context.payload)],
+    // The store's answer to a miss: one empty $FSB chunk and a COMPLETE $FSO status.
+    inputs: [...storeAnswer(new Uint8Array(4)), typedInput("context", context.payload), servingConfigFrame],
   });
   assert.equal(responded.statusCode, 0, `${responded.errorCode}: ${responded.errorMessage}`);
   const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));

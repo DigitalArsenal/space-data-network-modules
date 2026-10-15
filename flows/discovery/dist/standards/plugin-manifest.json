@@ -1,32 +1,28 @@
 {
   "pluginId": "com.digitalarsenal.flows.standards-discovery",
   "name": "SDN Standards Discovery Flow",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "HTTP standards-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (standards | not_found), hostcap/p2p-discovery standards issues the policy-mediated p2p.standards_snapshot hostcall (newest stored signed $PNM per (peer, standard), attribution from the record store's provenance) and re-emits the decision, foundation/discovery-shape standards splices the $PNM frames verbatim / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "description": "Gateway standards flow (mount GET /api/v1/standards): foundation/http-route discover decides the request as an $APR (standards); hostcap/p2p-discovery standards_snapshot reads the host's newest signed $PNM per (peer, standard) through p2p.standards_snapshot (typed $PIV, capability p2p_read) and answers a $PNV beside the $APR; foundation/http-respond respond renders the $HTR ($PNV FlatBuffers by default, JSON on request). foundation/discovery-shape is retired. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
+    "clock",
     "p2p_read"
   ],
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.7.0",
-      "maxVersion": "0.7.0"
+      "minVersion": "0.8.0",
+      "maxVersion": "0.8.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
-    },
-    {
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "minVersion": "0.3.2",
-      "maxVersion": "0.3.2"
+      "minVersion": "0.4.0",
+      "maxVersion": "0.4.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.2.1",
-      "maxVersion": "0.2.1"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     }
   ],
   "externalInterfaces": [
@@ -36,13 +32,27 @@
       "direction": "bidirectional",
       "capability": "p2p_read",
       "resource": "sdn://p2p/discovery",
-      "description": "Policy-mediated read-only host discovery snapshots (peerstore + DHT + EPM registry + stored PNMs).",
+      "description": "Policy-mediated read-only host discovery snapshots (peerstore + DHT + EPM registry + stored PNMs) as SDS $PIV hostcalls; node.peerId (ungated) names the verifier.",
       "properties": {
         "hostOps": [
           "p2p.peers_snapshot",
           "p2p.standards_snapshot",
           "p2p.pnm_history",
-          "p2p.latest_dataset"
+          "p2p.latest_dataset",
+          "node.peerId"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now stamps NST.GENERATED_AT / PNV.GENERATED_AT_MS (0 when the clock is refused). Built-in on the Go node; capability-gated on the SDK hosts.",
+      "properties": {
+        "hostOps": [
+          "clock.now"
         ]
       }
     }
@@ -62,16 +72,17 @@
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs)."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+          "description": "One $HTQ HttpRequest envelope as delivered verbatim by the host pipe."
         }
       ],
       "outputPorts": [
@@ -84,7 +95,8 @@
                 {
                   "schemaName": "HttpResponseAbi.fbs",
                   "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
@@ -93,7 +105,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
+          "description": "Exactly one $HTR per HTTP exchange."
         }
       ],
       "maxBatch": 1,
@@ -104,7 +116,20 @@
     {
       "schemaName": "HttpRequestAbi.fbs",
       "fileIdentifier": "$HTQ",
-      "rootTypeName": "HttpRequest"
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
     },
     {
       "schemaName": "EPM.fbs",
@@ -119,7 +144,140 @@
     {
       "schemaName": "HttpResponseAbi.fbs",
       "fileIdentifier": "$HTR",
-      "rootTypeName": "HttpResponse"
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NHS.fbs",
+      "fileIdentifier": "$NHS",
+      "rootTypeName": "NHS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NEV.fbs",
+      "fileIdentifier": "$NEV",
+      "rootTypeName": "NEV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CSM.fbs",
+      "fileIdentifier": "$CSM",
+      "rootTypeName": "CSM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     }
   ],
   "runtimeTargets": [
@@ -154,15 +312,6 @@
       "uiY": 0
     },
     {
-      "nodeId": "shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_standards",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
@@ -183,134 +332,85 @@
   ],
   "flowEdges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-disc-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "disc",
-      "toPortId": "request",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "disc-decision",
-      "fromNodeId": "disc",
-      "fromPortId": "decision",
-      "toNodeId": "shape",
       "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "disc-snapshot",
-      "fromNodeId": "disc",
-      "fromPortId": "snapshot",
-      "toNodeId": "shape",
-      "toPortId": "snapshot",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "shape-decision",
-      "fromNodeId": "shape",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "shape-body",
-      "fromNodeId": "shape",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "pnm_body",
       "contract": {
         "canonicalType": {
-          "schemaName": "PNM.fbs",
-          "fileIdentifier": "$PNM",
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
           "schemaVersion": null,
           "schemaHash": [],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
-          "rootTypeName": "PNM",
+          "rootTypeName": "APR",
           "fixedStringLength": 0,
           "byteLength": 0,
           "requiredAlignment": 0
         },
-        "alignedType": {
-          "schemaName": "PNM.fbs",
-          "fileIdentifier": "$PNM",
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "disc-decision-respond-decision",
+      "fromNodeId": "disc",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
           "schemaVersion": null,
           "schemaHash": [],
           "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "PNM",
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
           "fixedStringLength": 0,
           "byteLength": 0,
-          "requiredAlignment": 1
+          "requiredAlignment": 0
         },
+        "alignedType": null,
         "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
+        "alignedEligible": false,
         "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
-      }
-    },
-    {
-      "edgeId": "shape-opaque-body",
-      "fromNodeId": "shape",
-      "fromPortId": "opaque_body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "shape-etag",
-      "fromNodeId": "shape",
-      "fromPortId": "etag",
+      "edgeId": "disc-notices-respond-notices",
+      "fromNodeId": "disc",
+      "fromPortId": "notices",
       "toNodeId": "respond",
-      "toPortId": "etag",
+      "toPortId": "notices",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "PNV.fbs",
+          "fileIdentifier": "$PNV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PNV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",

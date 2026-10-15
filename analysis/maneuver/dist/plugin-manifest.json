@@ -1,8 +1,8 @@
 {
   "pluginId": "maneuver-planner",
   "name": "Maneuver Planning Plugin",
-  "version": "0.6.2",
-  "description": "Classical orbital maneuver and ROE targeting operations exposed through a canonical SDK command bridge.",
+  "version": "0.7.0",
+  "description": "Orbital maneuver planning over the $MPL (maneuver plan) standard: classical transfers, Lambert, phasing, relative-motion (ROE) targeting, collision avoidance, approach corridors, closed-loop rendezvous and orbit geometry. One $MPL request in, the same $MPL answered out.",
   "pluginFamily": "maneuver",
   "capabilities": [],
   "externalInterfaces": [],
@@ -22,68 +22,64 @@
   },
   "methods": [
     {
-      "methodId": "invoke",
-      "displayName": "Invoke Maneuver Operation",
-      "description": "Executes one named maneuver operation. The port carries a JSON command envelope, not a FlatBuffer: {\"operation\": \"<name>\", \"params\": { ... }} in, a JSON object out. Every failure is a structured error result with an errorCode; no input traps the module.",
+      "methodId": "plan",
+      "displayName": "Plan Maneuver",
+      "description": "Solves the problem a $MPL request names (PROBLEM plus the matching REQUEST sub-table, km / km/s / deg units) and answers with the same $MPL: the request echoed, PLANNER and STATUS set, and the burns, arcs, totals, options and the problem's solution detail filled. A request the planner refuses is answered with STATUS and ERROR_CODE/ERROR_MESSAGE on the plan and the same reason as the invoke error; no input traps the module.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "maneuver.command.json",
+              "setId": "sds-mpl-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MPL.fbs",
+                  "fileIdentifier": "$MPL",
+                  "rootTypeName": "MPL",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.spacedatanetwork.maneuver-command+json",
-                "detail": "This port does not carry a FlatBuffer and never has. The bridge is JSON-over-bytes: a UTF-8 {\"operation\": string, \"params\": object} envelope whose param set is per-operation and is enumerated in analysis/maneuver/README.md. Declaring a concrete SDS identity here would be a fiction of a different shape from the wildcard — the storefront would advertise a schema the bytes do not have, and a consumer that trusted it would decode garbage. There is no ratified SDS record for a maneuver COMMAND envelope today; $MVW (maneuver work order) is the identity this port should carry once minted, and it moves in the same rebuild that adopts it.",
-                "pendingStandard": "$MVW",
-                "reviewedAt": "2026-08-10",
-                "reviewTask": "modules-maneuver-planner-rebuild-batch"
-              },
-              "description": "UTF-8 JSON command envelope. Not a FlatBuffer; see wildcardJustification."
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "required": true
+          "required": true,
+          "description": "$MPL request: PROBLEM and REQUEST filled, result fields empty."
         }
       ],
       "outputPorts": [
         {
-          "portId": "response",
+          "portId": "plan",
           "acceptedTypeSets": [
             {
-              "setId": "maneuver.result.json",
+              "setId": "sds-mpl-plan",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MPL.fbs",
+                  "fileIdentifier": "$MPL",
+                  "rootTypeName": "MPL",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.spacedatanetwork.maneuver-result+json",
-                "detail": "The response is a UTF-8 JSON object whose keys depend on the operation invoked — delta-v scalars, signed RIC component arrays, transfer geometry, solver convergence evidence, and for a refused request an {error, errorCode} pair. Same reasoning as the request port: the bytes are JSON, so no FlatBuffer identity describes them, and $MVW is the pending standard identity for the answer side as well.",
-                "pendingStandard": "$MVW",
-                "reviewedAt": "2026-08-10",
-                "reviewTask": "modules-maneuver-planner-rebuild-batch"
-              },
-              "description": "UTF-8 JSON result object. Not a FlatBuffer; see wildcardJustification."
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
-          "required": false
+          "required": false,
+          "description": "$MPL answer: the request echoed with STATUS, BURNS, ARCS, TOTAL_DELTA_V_KM_S, TOTAL_TIME_S, SOLVER, OPTIONS, TRAJECTORY and the PHASING / RELATIVE / RENDEZVOUS / GEOMETRY detail of the problem."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
   ],
-  "schemasUsed": [],
+  "schemasUsed": [
+    {
+      "schemaName": "MPL.fbs",
+      "fileIdentifier": "$MPL",
+      "rootTypeName": "MPL"
+    }
+  ],
   "buildArtifacts": [
     {
       "artifactId": "maneuver-planner-isomorphic",

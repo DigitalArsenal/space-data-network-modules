@@ -19,7 +19,7 @@ const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire
 const require = createRequire(path.join(root, 'package.json'));
 const flatbuffers = require('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(root, `lib/js/${code}/main.js`)));
-const [OEM, NCD, EOP] = await Promise.all(['OEM', 'NCD', 'EOP'].map(load));
+const [OEM, NCD, EOP, CVR] = await Promise.all(['OEM', 'NCD', 'EOP', 'CVR'].map(load));
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const readerDir = new URL('../../../files/orbit-products/', import.meta.url);
@@ -118,10 +118,10 @@ async function run(t, satellites, identities) {
     const f = read.outputs.find((o) => o.portId === port);
     return { portId: port, payload: Buffer.from(f.payload), typeRef: { schemaName: `${schema}.fbs`, fileIdentifier: `$${schema}`, rootTypeName: schema, wireFormat: 'flatbuffer' } };
   };
-  const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
+  // The identities are node config: plugin.getConfig answers one ModuleConfig.
+  const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct', hostOptions: { config: identities } });
   t.after(() => h.destroy());
-  const result = await h.invoke({ methodId: 'reference_states', inputs: [frame('ephemeris', 'OEM'), frame('descriptor', 'NCD'), eop(),
-    { portId: 'identities', payload: Buffer.from(JSON.stringify(identities)), typeRef: { schemaName: 'application/json' } }] });
+  const result = await h.invoke({ methodId: 'reference_states', inputs: [frame('ephemeris', 'OEM'), frame('descriptor', 'NCD'), eop()] });
   if (result.statusCode !== 0) return { error: result.errorMessage, sha: createHash('sha256').update(bytes).digest('hex') };
   const blocks = result.outputs.filter((o) => o.portId === 'reference')
     .map((o) => OEM.OEM.getSizePrefixedRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(o.payload))).unpack().EPHEMERIS_DATA_BLOCK[0]);
@@ -225,7 +225,28 @@ async function compare(t, ephemeris, reference) {
   t.after(() => h.destroy());
   const r = await h.invoke({ methodId: 'compare_to_reference', inputs: [{ portId: 'ephemeris', ...ephemeris }, { portId: 'reference', ...reference }] });
   assert.equal(r.statusCode, 0, r.errorMessage);
-  return JSON.parse(Buffer.from(r.outputs.find((o) => o.portId === 'report').payload).toString('utf8'));
+  const out = (port) => new flatbuffers.ByteBuffer(new Uint8Array(r.outputs.find((o) => o.portId === port).payload));
+  const cvr = CVR.CVR.getSizePrefixedRootAsCVR(out('report')).unpack();
+  const block = OEM.OEM.getSizePrefixedRootAsOEM(out('residuals')).unpack().EPHEMERIS_DATA_BLOCK[0];
+  assert.equal(block.REFERENCE_FRAME.NAME, 'GCRF');
+  const covAt = new Map(block.COVARIANCE_MATRIX_LINES.map((c) => [c.EPOCH, c]));
+  const rows = block.EPHEMERIS_DATA_LINES.map((l) => {
+    const err = [l.X, l.Y, l.Z];
+    const row = { epoch: l.EPOCH, errorKm: err, errorNormKm: Math.hypot(...err) };
+    const c = covAt.get(l.EPOCH);
+    if (c) {
+      const g = [[c.CX_X, c.CY_X, c.CZ_X], [c.CY_X, c.CY_Y, c.CZ_Y], [c.CZ_X, c.CZ_Y, c.CZ_Z]];
+      const det = g[0][0] * (g[1][1] * g[2][2] - g[1][2] * g[2][1]) - g[0][1] * (g[1][0] * g[2][2] - g[1][2] * g[2][0]) + g[0][2] * (g[1][0] * g[2][1] - g[1][1] * g[2][0]);
+      const inv = [[g[1][1] * g[2][2] - g[1][2] * g[2][1], g[0][2] * g[2][1] - g[0][1] * g[2][2], g[0][1] * g[1][2] - g[0][2] * g[1][1]],
+        [g[1][2] * g[2][0] - g[1][0] * g[2][2], g[0][0] * g[2][2] - g[0][2] * g[2][0], g[0][2] * g[1][0] - g[0][0] * g[1][2]],
+        [g[1][0] * g[2][1] - g[1][1] * g[2][0], g[0][1] * g[2][0] - g[0][0] * g[2][1], g[0][0] * g[1][1] - g[0][1] * g[1][0]]].map((r) => r.map((x) => x / det));
+      row.d2 = err.reduce((s, ei, i) => s + err.reduce((u, ej, j) => u + ei * inv[i][j] * ej, 0), 0);
+    }
+    return row;
+  });
+  const compared = Number(/compared (\d+)/.exec(cvr.EVIDENCE)[1]);
+  const outsideSpan = Number(/outside span (\d+)/.exec(cvr.EVIDENCE)[1]);
+  return { rows, compared, outsideSpan, covariance: /covariance yes/.test(cvr.EVIDENCE), meanD2Over3: cvr.MEAN_D2_OVER_3, coverage95: cvr.COVERAGE_95, samples: cvr.SAMPLES };
 }
 
 test('compare_to_reference: TEME -> GCRF reproduces the Vallado 2006 pair', async (t) => {
@@ -236,6 +257,7 @@ test('compare_to_reference: TEME -> GCRF reproduces the Vallado 2006 pair', asyn
   assert.equal(report.outsideSpan, 1);
   assert.ok(report.rows[0].errorNormKm < 0.002, `TEME -> GCRF differs from Vallado by ${report.rows[0].errorNormKm * 1000} m`);
   assert.equal(report.covariance, false);
+  assert.ok(Number.isNaN(report.meanD2Over3) && report.samples === 0, 'no covariance: no realism statistic');
 });
 
 test('compare_to_reference: Mahalanobis distance on the position covariance', async (t) => {

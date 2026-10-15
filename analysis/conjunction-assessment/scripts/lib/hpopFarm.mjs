@@ -10,6 +10,7 @@
 // in `environment` (kernel.prw, earth_orientation.prw and space_weather.prw,
 // PRW records), each object carrying its Cd*A/m (from its B*) and Cr*A/m;
 // 'gravity-only' names the point mass and degree/order 20 field.
+import { decodeFlowNotice } from 'space-data-module-sdk/runtime-contracts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -74,9 +75,15 @@ async function epochStates(epochStateDir, omms) {
   try {
     const payload = mpeStream(omms);
     const response = await harness.invoke({ methodId: 'derive', inputs: [{ portId: 'elements', payload,
-      typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE', wireFormat: 'aligned-binary', requiredAlignment: 8, byteLength: payload.byteLength } }] });
+      typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE', wireFormat: 'flatbuffer' } }] });
     if (response.statusCode !== 0) throw new Error(`epoch-state: ${response.errorCode}: ${response.errorMessage}`);
-    const report = JSON.parse(new TextDecoder().decode(response.outputs.find((f) => f.portId === 'report').payload));
+    // report: a FlowNotice (Info); ITEMS are "key=value" counts, then one "failure index=… entity_id=… reason=…" per refused set.
+    const notice = decodeFlowNotice(response.outputs.find((f) => f.portId === 'report').payload);
+    const report = { reason: notice.reason, count: notice.count, failures: [] };
+    for (const item of notice.items) {
+      if (item.startsWith('failure ')) report.failures.push(Object.fromEntries([...item.slice(8).matchAll(/(\w+)=(\S+)/g)].map((m) => [m[1], m[2]])));
+      else { const at = item.indexOf('='); if (at > 0) report[item.slice(0, at)] = item.slice(at + 1); }
+    }
     const states = new Map();
     const statesFrame = response.outputs.find((f) => f.portId === 'states');
     for (const frame of statesFrame ? sizePrefixed(statesFrame.payload) : []) {

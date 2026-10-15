@@ -1,8 +1,8 @@
 {
   "pluginId": "licensing",
   "name": "Licensing",
-  "version": "0.1.0",
-  "description": "Unified SDN licensing module with server and client role entrypoints for protected module delivery.",
+  "version": "0.2.0",
+  "description": "Unified SDN licensing module with server and client role entrypoints for protected module delivery (typed contracts 1.0: every port one SDS FlatBuffer type, every hostcall an SDS $PIV invocation through sdm_piv, no JSON). No key material travels in a record or on a port: content keys, the requester signing seed and the DEK are read as raw secret frames through secrets.get, by the IDs this module's config (plugin.getConfig, ModuleConfig) names - content_keys: [{key_id (the $PLG KEY_ID, default PLUGIN_ID:VERSION), secret_id, algorithm \"aes-256-gcm\" | \"x25519\"}], requester_signing_secret_id (32-byte Ed25519 seed), dek_secret_id (32-byte AES-256-GCM key). The provider's signing and wrapping keys stay host-side behind keyslot.sign (slots named by the $LCF config).",
   "pluginFamily": "infrastructure",
   "capabilities": [
     "clock",
@@ -13,6 +13,7 @@
     "protocol_dial",
     "crypto_sign",
     "crypto_verify",
+    "secrets",
     "logging"
   ],
   "protocols": [
@@ -20,8 +21,8 @@
       "protocolId": "module-delivery",
       "methodId": "server_handle_message",
       "inputPortId": "request",
-      "outputPortId": "response",
-      "description": "Handle the canonical SDS module-delivery licensing flow.",
+      "outputPortId": "challenge",
+      "description": "Handle the canonical SDS module-delivery licensing flow. The stream carries $LCH requests (answered on \"challenge\") and $LPF proofs (answered on \"grant\"); the protocol spec names one port pair, so the host must route a $LPF to \"proof\" by its file identifier.",
       "wireId": "/space-data-network/module-delivery/1.0.0",
       "transportKind": "libp2p",
       "role": "handle",
@@ -32,74 +33,402 @@
   ],
   "timers": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "server_configure_runtime",
       "displayName": "Server Configure Runtime",
-      "description": "Initialize the licensing server runtime.",
-      "inputPorts": [{"portId": "config", "acceptedTypeSets": [{"setId": "config", "allowedTypes": [{"schemaName": "LCF.fbs", "fileIdentifier": "$LCF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
-      "outputPorts": [{"portId": "status", "acceptedTypeSets": [{"setId": "status", "allowedTypes": [{"schemaName": "LCF.fbs", "fileIdentifier": "$LCF"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "description": "Initialize the licensing server runtime from an $LCF Configure record; answers an $LCF Status.",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCF.fbs",
+                  "fileIdentifier": "$LCF",
+                  "rootTypeName": "LCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCF.fbs",
+                  "fileIdentifier": "$LCF",
+                  "rootTypeName": "LCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "server_publish_module",
       "displayName": "Server Publish Module",
-      "description": "Publish an encrypted module artifact.",
+      "description": "Publish an encrypted module artifact: the ciphertext is the $FIL CONTENT, added to IPFS; the content key is the secret config content_keys names for the descriptor's KEY_ID. Answers the $PLG with its CID, hash and size.",
       "inputPorts": [
-        {"portId": "module_descriptor", "acceptedTypeSets": [{"setId": "module_descriptor", "allowedTypes": [{"schemaName": "PLG.fbs", "fileIdentifier": "$PLG"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "protected_content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "content_key", "acceptedTypeSets": [{"setId": "content_key", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {
+          "portId": "module_descriptor",
+          "acceptedTypeSets": [
+            {
+              "setId": "module_descriptor",
+              "allowedTypes": [
+                {
+                  "schemaName": "PLG.fbs",
+                  "fileIdentifier": "$PLG",
+                  "rootTypeName": "PLG",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "protected_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "protected_content",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$FIL whose CONTENT is the encrypted module delivery bytes."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
       ],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "PLG.fbs", "fileIdentifier": "$PLG"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response",
+              "allowedTypes": [
+                {
+                  "schemaName": "PLG.fbs",
+                  "fileIdentifier": "$PLG",
+                  "rootTypeName": "PLG",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "server_handle_message",
       "displayName": "Server Handle Message",
-      "description": "Handle a canonical SDS licensing/module-delivery message.",
-      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}, {"schemaName": "LPF.fbs", "fileIdentifier": "$LPF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}, {"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "description": "Handle one canonical SDS module-delivery message: an $LCH request on \"request\" is answered with an $LCH on \"challenge\"; an $LPF proof on \"proof\" with an $LGR grant or denial on \"grant\". Exactly one input per invoke.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCH.fbs",
+                  "fileIdentifier": "$LCH",
+                  "rootTypeName": "LCH",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "proof",
+          "acceptedTypeSets": [
+            {
+              "setId": "proof",
+              "allowedTypes": [
+                {
+                  "schemaName": "LPF.fbs",
+                  "fileIdentifier": "$LPF",
+                  "rootTypeName": "LPF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "challenge",
+          "acceptedTypeSets": [
+            {
+              "setId": "challenge",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCH.fbs",
+                  "fileIdentifier": "$LCH",
+                  "rootTypeName": "LCH",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "grant",
+          "acceptedTypeSets": [
+            {
+              "setId": "grant",
+              "allowedTypes": [
+                {
+                  "schemaName": "LGR.fbs",
+                  "fileIdentifier": "$LGR",
+                  "rootTypeName": "LGR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "client_request_grant",
       "displayName": "Client Request Grant",
-      "description": "Run the client-side grant request flow.",
+      "description": "Run the client-side grant request flow over the module-delivery protocol, signing with the requester seed read from secrets.get (config requester_signing_secret_id).",
       "inputPorts": [
-        {"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "requester_signing_key", "acceptedTypeSets": [{"setId": "requester_signing_key", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCH.fbs",
+                  "fileIdentifier": "$LCH",
+                  "rootTypeName": "LCH",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
       ],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response",
+              "allowedTypes": [
+                {
+                  "schemaName": "LGR.fbs",
+                  "fileIdentifier": "$LGR",
+                  "rootTypeName": "LGR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "client_fetch_and_decrypt",
       "displayName": "Client Fetch And Decrypt",
-      "description": "Fetch a protected artifact and decrypt it.",
+      "description": "Fetch a protected artifact (the $FIL CONTENT given, else ipfs.cat of the granted WASM_CID) and decrypt it with the granted key; answers the plaintext as $FIL CONTENT.",
       "inputPorts": [
-        {"portId": "grant_response", "acceptedTypeSets": [{"setId": "grant_response", "allowedTypes": [{"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}
+        {
+          "portId": "grant_response",
+          "acceptedTypeSets": [
+            {
+              "setId": "grant_response",
+              "allowedTypes": [
+                {
+                  "schemaName": "LGR.fbs",
+                  "fileIdentifier": "$LGR",
+                  "rootTypeName": "LGR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "protected_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "protected_content",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
       ],
-      "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [
+        {
+          "portId": "plaintext",
+          "acceptedTypeSets": [
+            {
+              "setId": "plaintext",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "decrypt_and_verify",
       "displayName": "Decrypt And Verify",
-      "description": "Decrypt AES-256-GCM content then verify the inner signature.",
+      "description": "Decrypt AES-256-GCM content ($FIL CONTENT) with the DEK read from secrets.get (config dek_secret_id), then verify the inner Ed25519 signature against the $KMF verification key; answers the plaintext as $FIL CONTENT.",
       "inputPorts": [
-        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "signer_key", "acceptedTypeSets": [{"setId": "signer", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {
+          "portId": "protected_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "protected_content",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "signer_key",
+          "acceptedTypeSets": [
+            {
+              "setId": "signer_key",
+              "allowedTypes": [
+                {
+                  "schemaName": "KMF.fbs",
+                  "fileIdentifier": "$KMF",
+                  "rootTypeName": "KMF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
       ],
-      "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [
+        {
+          "portId": "plaintext",
+          "acceptedTypeSets": [
+            {
+              "setId": "plaintext",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }

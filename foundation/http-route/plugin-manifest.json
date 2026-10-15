@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.foundation.http-route",
   "name": "SDN HTTP Route",
-  "version": "0.7.0",
-  "description": "Single-purpose flow node: parses one $HTQ HttpRequest envelope into one routing-decision JSON frame. All HTTP semantics live inside the module (TRUE isomorphism). Method 'route' (data retrieval): URL path suffix matching ('/<code>/bulk' -> omm_bulk for ANY SDS standard code, with the matched schema carried in query.schema (e.g. '/rfb/bulk' -> 'RFB.fbs'; the route id keeps its historical name because it is the retrieval node's method id, and that method has always been schema-generic), '/query' -> data_query, else not_found), query-string parsing (epoch as RFC3339 'YYYY-MM-DDTHH:MM:SSZ' or unix-seconds number; mode|profile; limit; source; format defaulting to 'flatbuffer'), case-insensitive If-None-Match header extraction, and POST body passthrough for data_query SQL. Decision frame contract (UTF-8 JSON bytes, aligned-binary wire format): {\"route\":\"omm_bulk\"|\"data_query\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} always present; \"ifNoneMatch\":\"<verbatim header>\" only when the request carried If-None-Match; \"query\":{\"schema\":\"<CODE>.fbs\",\"source\"?,\"profile\"?,\"epoch\"?:<unix-seconds number>,\"limit\"?:<positive integer>} only when route=omm_bulk (absent keys defer to the retrieval module's config/compiled defaults); \"sql\":\"...\",\"params\":[...] only when route=data_query (body is either a JSON object {\"sql\",\"params\"} passed through or raw SQL text; a data_query request without a SQL body degrades to route=not_found); \"error\":\"...\" only when route=not_found (including a per-schema bulk read asking for format=json on a standard other than $OMM: the flow's json branch is an $OMM encoder, so the request is refused rather than mis-encoded). Exactly one decision frame is emitted per request. Method 'discover' (gateway discovery, loops G.2+G.3+G.4): suffix routes '/peers' -> peers_list, '/peers/<segment>' -> peer_get (+\"peerId\": percent-decoded segment), '/peers/<segment>/pnm' -> pnm_history (+\"peerId\", +\"limit\": ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), '/peers/<segment>/<standard>/latest' -> latest_dataset (+\"peerId\", +\"standard\"), '/standards' -> standards, else not_found; one trailing slash tolerated; non-GET/HEAD methods degrade to not_found; same format/ifNoneMatch handling. Method 'route_node_status' (M1 node-status flow, mount /api/v1/node/status, gateway loop U4.1): GET/HEAD -> route=status (always format=json — the response is a live status OBJECT, not an SDS record collection, so there is no flatbuffer presentation to negotiate and no conditional-GET contract — the snapshot changes on every call); anything else -> route=error status=405. PATH is not inspected (mount-exact, mirrors route_public_query): the mount carries exactly one resource. Method 'route_node_activity' (M2 node-activity flow, mount /api/v1/node/activity, gateway loop U4.2): GET/HEAD -> route=activity, format=json, limit=<the ?limit query param, clamped in-wasm to [1, 256], default 50> (hostcap/node-activity forwards the clamped limit to the node_activity_read.activity hostcall; always format=json — the response is a live activity-log OBJECT, not an SDS record collection, so there is no flatbuffer presentation to negotiate and no conditional-GET contract); anything else -> route=error status=405. PATH is not inspected (mount-exact, mirrors route_node_status): the mount carries exactly one resource.",
+  "version": "0.8.0",
+  "description": "The HTTP edge's parser (typed contracts 1.0): one $HTQ HttpRequest envelope (the SDK's WASM-served HTTP request) in, exactly ONE typed routing decision out. Query/data routes are decided as an SDS $QRP (Query Page) KIND Request, the other routes as an SDS $APR (API Request); refusals are decisions too ($QRP KIND Error with ERROR_CODE, or $APR STATUS + ERROR_CODE + ERROR_MESSAGE), answered by foundation/http-respond. A method that can decide more than one way answers on more than one port, so every port carries exactly one type. Methods: route (data retrieval: /<code>/bulk -> bulk, /query -> query, else refusal), discover (peers_list, peer_get, pnm_history, latest_dataset, standards), route_public_query (POST -> query, GET/HEAD -> surface), route_node_status (status), route_node_activity (activity + limit). All HTTP semantics live here: path routing, query-string parsing (epoch as RFC3339 or unix seconds -> PROFILE_EPOCH_MS; profile|mode -> TIME_PROFILE; limit; source), If-None-Match (QRP ETAG / APR IF_NONE_MATCH), representation (?format=json or an Accept header naming application/json -> Json; ?format=flatbuffer or an Accept naming FlatBuffers -> FlatBuffer; else Default), and the client's request body (JSON or raw SQL) parsed into typed fields (SQL, PARAMETERS as QRPValue). JSON appears only as the client's own request representation; nothing between modules is JSON. Pure compute: no capabilities, no hostcalls.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
@@ -17,7 +17,7 @@
   "methods": [
     {
       "methodId": "route",
-      "displayName": "Route HTTP Request",
+      "displayName": "Route Data Request",
       "inputPorts": [
         {
           "portId": "request",
@@ -28,7 +28,8 @@
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
@@ -37,36 +38,81 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+          "description": "One $HTQ HttpRequest envelope as delivered verbatim by the host pipe."
         }
       ],
       "outputPorts": [
         {
-          "portId": "decision",
+          "portId": "bulk",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-route-decision-json",
+              "setId": "sds-qrp-request-bulk",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision frame: UTF-8 JSON bytes carried with the aligned-binary wire format (alignment 1). See the module description for the exact JSON contract. SDK manifest rules cannot express a JSON-bytes type, so the port declares the generic flatbuffer ref; runtime frames carry aligned-binary TAB descriptors."
+              "description": "$QRP KIND Request for \"/<code>/bulk\" (ANY SDS standard code; the path's shape is parsed by src/bulk_route.h): SCHEMA_NAME the code (\"OMM\"), FILE_IDENTIFIER \"$<CODE>\", SOURCE_NAME (?source), TIME_PROFILE (?profile, alias ?mode: nearest|as_of|forward|latest|all; absent = Unspecified: the serving node's configured default applies; all = every record in the window), PROFILE_EPOCH_MS (?epoch RFC3339 or unix seconds; 0 = now), LIMIT (?limit, positive integer; 0 = the default), REPRESENTATION, ETAG = If-None-Match verbatim."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Exactly one routing-decision JSON frame per request."
+          "required": false,
+          "description": "Exactly one of bulk / query / refusal carries a frame per request."
+        },
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-request-sql",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Request for \"/query\": SQL (from a JSON body {\"sql\",\"params\"} or raw SQL text), PARAMETERS typed QRPValue (tagged {\"t\":\"i64|f64|str|bool|null|bytes\",\"v\"} or bare JSON scalars; bytes base64), REPRESENTATION, ETAG."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Exactly one of bulk / query / refusal carries a frame per request."
+        },
+        {
+          "portId": "refusal",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-error",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Error (STATUS Error): ERROR_CODE + MESSAGE + HTTP_STATUS, with the request's REPRESENTATION and ETAG (If-None-Match) so the responder renders it. Codes: no-route 404, method-not-allowed 405, not-acceptable 406, and 400 for missing-sql, invalid-body, invalid-params, invalid-sort, invalid-profile, invalid-epoch."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The request refused; wire it straight to foundation/http-respond respond_query \"decision\"."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses the $HTQ request (path suffix routing, query-string parameters, If-None-Match, data_query SQL body passthrough) and emits exactly one routing-decision JSON frame. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Parses the $HTQ request for the data-retrieval surface (path suffix routing, query-string parameters, representation, If-None-Match, the POST /query body) into ONE typed decision: a $QRP Request on \"bulk\" or \"query\", or a $QRP Error on \"refusal\". A bulk read asking for JSON of a standard other than $OMM is refused (not-acceptable): the responder renders JSON for $OMM records only. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second request frame in one invocation is refused with error code \"batched-input-frames\" naming the port and the count rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "discover",
-      "displayName": "Route Discovery HTTP Request",
+      "displayName": "Route Discovery Request",
       "inputPorts": [
         {
           "portId": "request",
@@ -77,16 +123,17 @@
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs)."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+          "description": "One $HTQ HttpRequest envelope as delivered verbatim by the host pipe."
         }
       ],
       "outputPorts": [
@@ -94,24 +141,27 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-route-decision-json",
+              "setId": "sds-apr-discovery",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Discovery routing-decision frame: UTF-8 JSON bytes carried with the aligned-binary wire format (alignment 1). Contract: {\"route\":\"peers_list\"|\"peer_get\"|\"standards\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} + optional \"ifNoneMatch\", \"peerId\" (peer_get), \"error\" (not_found)."
+              "description": "$APR: METHOD, PATH, ROUTE peers_list | peer_get (PARAMETERS peerId) | pnm_history (peerId, limit clamped [1,100], default 1) | latest_dataset (peerId, standard) | standards; IF_NONE_MATCH; ACCEPT. A non-GET/HEAD request or an unmatched path is refused: STATUS 404, ERROR_CODE no-route."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one discovery routing-decision JSON frame per request."
+          "description": "Exactly one $APR per request."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses the $HTQ request for the network-discovery surface: /peers -> peers_list, /peers/{peerId} -> peer_get, /peers/{peerId}/pnm -> pnm_history (peerId + limit; ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), /standards -> standards, else (or non-GET/HEAD) not_found. G.4 adds the provider-scoped dataset route: .../peers/<peerId>/<standard>/latest -> latest_dataset with \"peerId\" + \"standard\" (the SDS standard segment, e.g. \"omm\") in the decision. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Parses the $HTQ request for the network-discovery surface into one $APR: .../peers -> peers_list, .../peers/<peerId> -> peer_get, .../peers/<peerId>/pnm -> pnm_history (?limit clamped in-wasm to [1,100], default 1 = the newest publication), .../peers/<peerId>/<standard>/latest -> latest_dataset, .../standards -> standards (suffix-matched, one trailing slash tolerated, segments percent-decoded); anything else, or a non-GET/HEAD method, is the 404 refusal. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second request frame in one invocation is refused with error code \"batched-input-frames\" naming the port and the count rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "route_public_query",
@@ -121,15 +171,16 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request",
+              "setId": "sdn-http-request-envelope",
               "allowedTypes": [
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $HTQ HttpRequest envelope."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
@@ -140,27 +191,72 @@
       ],
       "outputPorts": [
         {
-          "portId": "decision",
+          "portId": "query",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-public-query-decision-json",
+              "setId": "sds-qrp-request-public",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision JSON: route=public_query (POST body {sql,params,format,limit,sort,profile,epoch,source} or raw SQL text) | query_surface (GET/HEAD; the queryable-surface listing) | error (400 missing sql) | not_found. Plus format/ifNoneMatch."
+              "description": "$QRP KIND Request for POST: SQL and PARAMETERS, or a named TIME_PROFILE (nearest|as_of|forward, with SCHEMA_NAME OMM: the unified OMM view) with PROFILE_EPOCH_MS and SOURCE_NAME; SORT_FIELD + SORT_DESC (\"COLUMN [ASC|DESC]\"), LIMIT, REPRESENTATION (?format wins over the body's \"format\"), ETAG."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Exactly one routing decision per request (gateway loop G.5)."
+          "required": false,
+          "description": "Exactly one of query / surface / refusal carries a frame per request."
+        },
+        {
+          "portId": "surface",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-request-surface",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Request for GET/HEAD: the queryable-surface listing; carries REPRESENTATION and ETAG only."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Exactly one of query / surface / refusal carries a frame per request."
+        },
+        {
+          "portId": "refusal",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-error",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Error (STATUS Error): ERROR_CODE + MESSAGE + HTTP_STATUS, with the request's REPRESENTATION and ETAG (If-None-Match) so the responder renders it. Codes: no-route 404, method-not-allowed 405, not-acceptable 406, and 400 for missing-sql, invalid-body, invalid-params, invalid-sort, invalid-profile, invalid-epoch."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The request refused; wire it straight to foundation/http-respond respond_query \"decision\"."
         }
       ],
-      "description": "Parse a public /api/v1/query request (gateway loop G.5): POST = sandboxed raw SELECT (body JSON object or raw SQL text; ?format wins over the body format field), GET/HEAD = queryable-surface listing, others = not_found. Pure parsing \u2014 sort/limit/profile compose in hostcap/flatsql-query sandbox_query, and ALL enforcement is in the engine sandbox. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Parses a public /api/v1/query request (gateway loop G.5) into one typed decision: POST -> \"query\" (the body is the client's JSON {sql, params, format, limit, sort, profile, epoch, source} or raw SQL text), GET/HEAD -> \"surface\", any other method -> \"refusal\" (405 method-not-allowed); a POST with neither SQL nor a profile is refused 400 missing-sql. Pure parsing: sort/limit/profile compose in hostcap/flatsql-query sandbox_query and the engine enforces the sandbox. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second request frame in one invocation is refused with error code \"batched-input-frames\" naming the port and the count rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "route_node_status",
@@ -170,15 +266,16 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request",
+              "setId": "sdn-http-request-envelope",
               "allowedTypes": [
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $HTQ HttpRequest envelope."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
@@ -192,24 +289,27 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-node-status-decision-json",
+              "setId": "sds-apr-node-status",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision JSON: {\"route\":\"status\",\"format\":\"json\"} for GET/HEAD, or {\"route\":\"error\",\"status\":405,\"format\":\"json\",\"error\":\"...\"} for any other method. PATH is not inspected \u2014 the mount carries exactly one resource."
+              "description": "$APR: ROUTE status for GET/HEAD (ACCEPT from ?format / Accept), or STATUS 405 ERROR_CODE method-not-allowed for any other method. PATH is not inspected: the mount carries one resource."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one routing decision per request (M1 node-status flow)."
+          "description": "Exactly one $APR per request (M1 node-status flow)."
         }
       ],
-      "description": "Parse a GET /api/v1/node/status request (M1 node-status flow): GET/HEAD -> route=status (hostcap/node-status forwards to the node_status_read.status hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the status snapshot changes on every call (uptime, bandwidth counters), so a conditional-GET contract would be pointless. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Parses a GET /api/v1/node/status request into one $APR: GET/HEAD -> route status (hostcap/node-status answers it with an $NHS), anything else -> STATUS 405. No conditional GET: the snapshot changes on every call. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second request frame in one invocation is refused with error code \"batched-input-frames\" naming the port and the count rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "route_node_activity",
@@ -219,15 +319,16 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request",
+              "setId": "sdn-http-request-envelope",
               "allowedTypes": [
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $HTQ HttpRequest envelope."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
@@ -241,31 +342,47 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-node-activity-decision-json",
+              "setId": "sds-apr-node-activity",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision JSON: {\"route\":\"activity\",\"format\":\"json\",\"limit\":N} for GET/HEAD (N = the ?limit query param clamped in-wasm to [1, 256], default 50), or {\"route\":\"error\",\"status\":405,\"format\":\"json\",\"error\":\"...\"} for any other method. PATH is not inspected \u2014 the mount carries exactly one resource."
+              "description": "$APR: ROUTE activity with PARAMETERS limit (?limit clamped in-wasm to [1,256], default 50; a value that is not a whole integer falls back to 50) for GET/HEAD, or STATUS 405 ERROR_CODE method-not-allowed for any other method."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one routing decision per request (M2 node-activity flow)."
+          "description": "Exactly one $APR per request (M2 node-activity flow)."
         }
       ],
-      "description": "Parse a GET /api/v1/node/activity request (M2 node-activity flow): GET/HEAD -> route=activity, format=json, limit=<?limit query param clamped in-wasm to [1, 256], default 50> (hostcap/node-activity forwards the clamped limit to the node_activity_read.activity hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the activity log changes on every call, so a conditional-GET contract would be pointless. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Parses a GET /api/v1/node/activity request into one $APR: GET/HEAD -> route activity + the clamped limit (hostcap/node-activity forwards it to node_activity_read.activity and answers with an $NEV), anything else -> STATUS 405. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so a second request frame in one invocation is refused with error code \"batched-input-frames\" naming the port and the count rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames)."
     }
   ],
   "schemasUsed": [
     {
       "schemaName": "HttpRequestAbi.fbs",
       "fileIdentifier": "$HTQ",
-      "rootTypeName": "HttpRequest"
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [

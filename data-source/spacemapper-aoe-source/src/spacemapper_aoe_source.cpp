@@ -1,6 +1,9 @@
 // data-source/spacemapper-aoe-source: SpaceMapper's AOE element sets as SDS records.
 //
-//   parse_aoe   AOE catalog records (JSON lines or a JSON array of the objects the site's pages embed) -> $OMM, the id crosswalk
+//   parse_aoe   HttpResponse (HRSP) whose BODY is AOE catalog records (JSON lines or a JSON array of the objects the site's
+//               pages embed) -> $OMM, the id crosswalk as $CAT candidates, the batch's IngestRequest (INGQ); 304 -> FlowNotice
+//
+// Typed contracts 1.0: every port is one FlatBuffers type. JSON is only AOE's own foreign format inside the response body.
 //
 // SpaceMapper (Beijing Kaiyun United Information Technology) publishes the AOE catalog on public pages
 // (spacemapper.cn, channel KY among others). Fetching and decoding a page is the host flow's: this module reads the
@@ -30,7 +33,11 @@
 #include <string>
 #include <vector>
 
-using Json = nlohmann::json;
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+
+namespace R = sdn::runtime;
 
 namespace {
 
@@ -209,11 +216,11 @@ uint64_t positive(const flatjson::Record& r, const char* key) {
 struct Counters {
   size_t read = 0, emitted = 0, duplicates = 0, rejected = 0, checksum_mismatches = 0, alpha5 = 0, without_norad = 0;
   std::map<std::string, size_t> reasons;
-  Json examples = Json::array();
+  std::vector<std::string> examples;
   void reject(size_t index, const std::string& why) {
     ++rejected;
     ++reasons[why];
-    if (examples.size() < kMaxExamples) examples.push_back({{"record", index}, {"reason", why}});
+    if (examples.size() < kMaxExamples) examples.push_back("record " + std::to_string(index) + ": " + why);
   }
 };
 
@@ -224,13 +231,45 @@ struct Object {
   uint64_t record_id = 0;
 };
 
+int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
+  return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data, static_cast<uint32_t>(size));
+}
+
+spaceObjectClass object_class(const std::string& type) {
+  const std::string t = upper(type);
+  if (t == "PAYLOAD") return spaceObjectClass::PAYLOAD;
+  if (t == "ROCKET BODY") return spaceObjectClass::ROCKET_BODY;
+  if (t == "DEBRIS") return spaceObjectClass::DEBRIS;
+  return spaceObjectClass::UNKNOWN;
+}
+
 }  // namespace
 
 extern "C" int parse_aoe(void) {
-  if (plugin_get_input_count() != 1) return fail("invalid-aoe-source", "Exactly one set of AOE records is required.");
+  if (plugin_get_input_count() != 1) return fail("invalid-aoe-source", "Exactly one HttpResponse of AOE records is required.");
   const auto* input = plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) {
-    return fail("invalid-aoe-source", "The source must be bounded AOE records: JSON lines or a JSON array of objects.");
+  if (!input || !input->port_id || std::strcmp(input->port_id, "response") || !input->payload) {
+    return fail("invalid-aoe-source", "The input must be one HttpResponse (HRSP) on response.");
+  }
+  flatbuffers::Verifier verifier(input->payload, input->payload_length);
+  if (!R::VerifyHttpResponseBuffer(verifier)) return fail("invalid-aoe-source", "The input must be one HttpResponse (HRSP) on response.");
+  const R::HttpResponse& http = *R::GetHttpResponse(input->payload);
+  const std::string source_url = http.URL() ? http.URL()->str() : std::string();
+  if (http.STATUS() == 304) {
+    R::FlowNoticeT n;
+    n.KIND = R::flowNoticeKind_Unchanged;
+    n.SCHEMA = "OMM.fbs";
+    n.SOURCE_NAME = "spacemapper-aoe";
+    n.REASON = "not-modified";
+    n.COUNT = 1;
+    if (!source_url.empty()) n.ITEMS.push_back(source_url);
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &n));
+    return push("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
+  }
+  const auto* body = http.BODY();
+  if (http.STATUS() != 200 || !body || !body->size() || body->size() > kMaxBytes) {
+    return fail("invalid-aoe-source", "The response must be HTTP 200 with bounded AOE records: JSON lines or a JSON array of objects.");
   }
   Counters counters;
   std::set<uint64_t> record_ids;
@@ -338,32 +377,66 @@ extern "C" int parse_aoe(void) {
     }
     return true;
   };
-  if (!flatjson::for_each_record(reinterpret_cast<const char*>(input->payload), input->payload_length, on_record, &error)) {
+  if (!flatjson::for_each_record(reinterpret_cast<const char*>(body->data()), body->size(), on_record, &error)) {
     return fail("invalid-aoe-source", oversize ? "The $OMM output exceeds its byte budget." : error);
   }
   if (counters.emitted == 0) return fail("invalid-aoe-source", "No AOE element set could be read.");
-  Json reasons = Json::object();
-  for (const auto& entry : counters.reasons) reasons[entry.first] = entry.second;
-  Json rows = Json::array();
+  // The crosswalk: one $CAT per object, what AOE states about it from its newest set, as a candidate. CATALOG_URI and
+  // CATALOG_OBJECT_ID (aoe:<id>) name AOE's own namespace; a NORAD number or designator AOE gives is its claim, never a join.
+  std::vector<uint8_t> crosswalk;
   for (const auto& entry : objects) {
     const Object& o = entry.second;
-    rows.push_back({"aoe:" + std::to_string(entry.first), o.cat_id ? Json(o.cat_id) : Json(nullptr), o.norad ? Json(o.norad) : Json(nullptr), o.sat_id ? Json(o.sat_id) : Json(nullptr),
-                    o.cospar.empty() ? Json(nullptr) : Json(o.cospar), o.name, o.type, o.channel});
+    CATT cat;
+    cat.OBJECT_NAME = o.name;
+    cat.OBJECT_ID = o.cospar;
+    cat.NORAD_CAT_ID = static_cast<uint32_t>(o.norad);
+    cat.OBJECT_TYPE = object_class(o.type);
+    cat.CATALOG_URI = "urn:sdn:spacemapper-aoe";
+    cat.CATALOG_OBJECT_ID = "aoe:" + std::to_string(entry.first);
+    flatbuffers::FlatBufferBuilder fbb(256);
+    FinishSizePrefixedCATBuffer(fbb, CreateCAT(fbb, &cat));
+    crosswalk.insert(crosswalk.end(), fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
   }
-  Json conflicts = Json::array();
-  for (uint64_t key : conflicting) conflicts.push_back("aoe:" + std::to_string(key));
-  const Json report = {{"version", 1}, {"source", "spacemapper-aoe"}, {"records", counters.read}, {"emitted", counters.emitted}, {"duplicateRecordIds", counters.duplicates},
-                       {"rejected", counters.rejected}, {"rejections", reasons}, {"rejectionExamples", counters.examples}, {"alpha5CatalogNumbers", counters.alpha5},
-                       {"checksumMismatches", counters.checksum_mismatches}, {"withoutNoradNumber", counters.without_norad}, {"objects", objects.size()}};
-  // The ids AOE states, as candidates: an AOE id is AOE's own, and a number it gives is a claim, never a join.
-  const Json crosswalk = {{"version", 1}, {"source", "spacemapper-aoe"}, {"kind", "id-crosswalk"}, {"status", "candidate"},
-                          {"columns", {"native", "catId", "noradId", "satId", "cospar", "name", "objectType", "channel"}}, {"objects", rows}, {"conflicts", conflicts}};
-  const std::string report_text = report.dump(), crosswalk_text = crosswalk.dump();
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(report_text.data()),
-                            static_cast<uint32_t>(report_text.size())) < 0 ||
-      plugin_push_output_ex("crosswalk", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(crosswalk_text.data()),
-                            static_cast<uint32_t>(crosswalk_text.size())) < 0) {
+  // The report, typed: the counts as PROVENANCE.ATTRIBUTES (sorted by NAME, the key), the rejection examples and the
+  // conflicting AOE ids as WARNINGS.
+  std::map<std::string, std::string> attributes = {
+      {"records", std::to_string(counters.read)}, {"emitted", std::to_string(counters.emitted)}, {"duplicateRecordIds", std::to_string(counters.duplicates)},
+      {"rejected", std::to_string(counters.rejected)}, {"alpha5CatalogNumbers", std::to_string(counters.alpha5)},
+      {"checksumMismatches", std::to_string(counters.checksum_mismatches)}, {"withoutNoradNumber", std::to_string(counters.without_norad)},
+      {"objects", std::to_string(objects.size())}};
+  for (const auto& entry : counters.reasons) attributes["rejection:" + entry.first] = std::to_string(entry.second);
+  const std::string hash = ephem::sha256_hex(body->data(), body->size());
+  R::IngestRequestT meta;
+  meta.SCHEMA = "OMM.fbs";
+  meta.TAGS = std::make_unique<R::SourceTagsT>();
+  meta.TAGS->SOURCE_NAME = "spacemapper-aoe";
+  meta.TAGS->SOURCE_URL = source_url;
+  meta.TAGS->BATCH_ID = hash;
+  meta.RECONCILE = R::reconcileMode_Duplicates;
+  meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  auto& p = *meta.PROVENANCE;
+  p.SOURCE_URL = source_url;
+  p.HTTP_STATUS = http.STATUS();
+  p.RETRIEVED_MS = http.RETRIEVED_MS();
+  p.PARSER = "spacemapper-aoe-source";
+  p.PARSER_VERSION = "aoe-records-1";
+  p.SOURCE_SHA256 = hash;
+  p.NORMALIZED_COUNT = counters.emitted;
+  p.SCHEMAS = {"OMM.fbs", "CAT.fbs"};
+  p.SCHEMA_COUNTS = {counters.emitted, objects.size()};
+  p.WARNINGS = counters.examples;
+  for (uint64_t key : conflicting) p.WARNINGS.push_back("conflict aoe:" + std::to_string(key) + ": its sets state different NORAD numbers, designators or satellite ids");
+  for (const auto& entry : attributes) {
+    auto h = std::make_unique<R::HeaderT>();
+    h->NAME = entry.first;
+    h->VALUE = entry.second;
+    p.ATTRIBUTES.push_back(std::move(h));
+  }
+  flatbuffers::FlatBufferBuilder mb(1024);
+  R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+  if (push("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", mb.GetBufferPointer(), mb.GetSize()) < 0 ||
+      push("crosswalk", "CAT.fbs", "$CAT", "CAT", crosswalk.data(), crosswalk.size()) < 0) {
     return 1;
   }
-  return plugin_push_output_ex("omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OMM", 0, 0, output.data(), static_cast<uint32_t>(output.size())) < 0 ? 1 : 0;
+  return push("omm", "OMM.fbs", "$OMM", "OMM", output.data(), output.size()) < 0 ? 1 : 0;
 }

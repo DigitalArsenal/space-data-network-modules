@@ -11,6 +11,7 @@
 // all geometry is in the module.
 import { decodeCatalogResult, indexInputs, releaseIndex, screenWindows, sgp4Sources, splitCatalog, windowRequest } from './catalogScreen.mjs';
 import { sampleWindowGrid, screenStoredWindow, spliceGridRows } from './continuousScreen.mjs';
+import { excludedFrame, exclusionsOf, gridFrame, gridOf, rolesOf } from './scrFrames.mjs';
 import * as flatbuffers from 'flatbuffers';
 import { CQR, PRWInstanceT } from 'spacedatastandards.org/lib/js/CQR/main.js';
 
@@ -39,9 +40,9 @@ export function packFrames(frames) {
 }
 export const unpackFrames = splitCatalog;
 
-/** A window's exclusions as bytes: sorted [row, first failing JD] pairs, JSON. */
-export const exclusionsBytes = (excluded) => new TextEncoder().encode(JSON.stringify([...excluded].sort((a, b) => a[0] - b[0])));
-export const exclusionsOf = (bytes) => new Map(JSON.parse(new TextDecoder().decode(bytes)));
+/** A window's exclusions as bytes: a $SCR EXCLUSIONS of the rows in order with their first failing JD. */
+export const exclusionsBytes = (excluded) => excludedFrame(new Map([...excluded].sort((a, b) => a[0] - b[0])));
+export { exclusionsOf };
 
 /**
  * Runs one unit through the module.
@@ -50,7 +51,7 @@ export const exclusionsOf = (bytes) => new Map(JSON.parse(new TextDecoder().deco
  * @param {Function} o.invoke  (methodId, inputs) => module response.
  * @param {(hash: string) => Promise<Uint8Array>} o.fetch  Content by SHA-256 (verified by the caller's store).
  * @param {number} o.threads  Module threads on this machine.
- * @returns {Promise<Uint8Array>}  The output: grid units, the window's CAG1 blocks for the rows and the
+ * @returns {Promise<Uint8Array>}  The output: grid units, the window's $SCR GRID blocks for the rows and the
  *   exclusions; screen units, every refine_candidates result frame in order.
  */
 export async function runUnit(record, o) {
@@ -74,11 +75,11 @@ export async function runUnit(record, o) {
   }
   if (record.kind === 'ca.screen/1') {
     const blocks = await Promise.all(record.grid.map((h) => o.fetch(h)));
-    const objects = new DataView(blocks[0].buffer, blocks[0].byteOffset).getUint32(12, true);
+    const objects = gridOf(blocks[0]).objects;
     const grid = { blocks, objects, excluded: exclusionsOf(await o.fetch(record.excluded)) };
     const rolesBytes = await o.fetch(record.roles);
     const results = [];
-    await screenStoredWindow({ invoke: o.invoke, decodeCatalogResult, grid, roles: rolesBytes.subarray(8),
+    await screenStoredWindow({ invoke: o.invoke, decodeCatalogResult, grid, roles: rolesOf(rolesBytes),
       request: windowRequest(0, 'TEME', window, controls, instance), onResult: (payload) => results.push(payload.slice()),
       refineIndex: async (rows) => {
         const handle = await prepare(rows.map((r) => sources[r]));
@@ -95,18 +96,21 @@ export const unitEvents = (output) => unpackFrames(output).flatMap((frame) => de
 /** A grid unit's output: { blocks, excluded (row in the unit -> JD) }. */
 export function gridOutput(output) {
   const frames = unpackFrames(output);
-  return { blocks: frames.slice(0, -1), excluded: exclusionsOf(frames.at(-1)), objects: new DataView(frames[0].buffer, frames[0].byteOffset).getUint32(12, true) };
+  return { blocks: frames.slice(0, -1), excluded: exclusionsOf(frames.at(-1)), objects: gridOf(frames[0]).objects };
 }
 
 /**
  * A window's grid from the outputs of its grid units, each with the catalog
- * rows it sampled, in row order: { blocks (CAG1), excluded (row -> JD), objects }.
+ * rows it sampled, in row order: { blocks ($SCR GRID), excluded (row -> JD), objects }.
  */
 export function assembleWindowGrid(parts) {
   let grid = null;
   for (const { output, rows } of parts) {
     const part = gridOutput(output);
-    grid ??= { blocks: part.blocks.map((b) => { const h = b.slice(0, 16); new DataView(h.buffer).setUint32(12, 0, true); return h; }), excluded: new Map(), objects: 0 };
+    grid ??= { blocks: part.blocks.map((b) => {
+      const g = gridOf(b);
+      return gridFrame({ firstStep: g.firstStep, stepCount: g.stepCount, objects: 0, stepS: g.stepS, states: new Float32Array(0), bands: new Float32Array(0) });
+    }), excluded: new Map(), objects: 0 };
     spliceGridRows(grid, part, rows);
   }
   return grid;

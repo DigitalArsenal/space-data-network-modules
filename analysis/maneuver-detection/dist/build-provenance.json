@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.246.0",
+  "spacedatastandards": "1.249.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -13,7 +13,14 @@
     "CAT",
     "PPE",
     "OEM",
-    "MNV"
+    "MNV",
+    "MDE",
+    "FRM",
+    "PCE",
+    "NCD",
+    "EOP",
+    "SPW",
+    "PRW"
   ],
   "sources": [
     "src/common.cpp",
@@ -25,6 +32,7 @@
     "src/mnv.cpp",
     "src/compare.cpp",
     "src/score.cpp",
+    "src/mde.cpp",
     "src/maneuver_detection.cpp"
   ],
   "threadModel": "single-thread"

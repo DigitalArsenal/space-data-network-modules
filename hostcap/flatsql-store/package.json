@@ -1,0 +1,22 @@
+{
+  "name": "@digitalarsenal/sdn-module-hostcap-flatsql-store",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "build:guest-link-threads": "bash build-guest-link-threads.sh",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.5"
+  }
+}

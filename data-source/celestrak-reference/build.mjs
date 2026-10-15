@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -30,12 +31,14 @@ function inlineGeneratedHeader(source) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-// Topological order over the flatc include graph: RFM/TIM/MET feed OMM,
-// IDM feeds PLD and SIT, PLD + LCC feed CAT, EGP is standalone.
-const inlineStandards = ["RFM", "TIM", "MET", "IDM", "PLD", "LCC", "OMM", "CAT", "EGP", "SIT"];
+// Topological order over the flatc include graph: RFM/TIM/MET/PVN/CVR feed OMM,
+// IDM feeds PLD and SIT, PLD + LCC feed CAT, EGP is standalone, ICN (the job carried in
+// HttpRequest.CONTEXT) is standalone. The module-sdk runtime headers (HttpRequest, HttpResponse,
+// IngestRequest, FlowNotice, typedHostcall.hpp) are staged by the SDK compiler.
+const inlineStandards = ["RFM", "TIM", "MET", "PVN", "CVR", "IDM", "PLD", "LCC", "OMM", "CAT", "EGP", "SIT", "ICN"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
@@ -55,7 +58,7 @@ const compilation = await compileModuleFromSource({
   // hostcap/http-request).
   threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; the symbols resolve at instantiation (same lane as
+  // plugin.getConfig (an SDS $PIV hostcall through typedHostcall.hpp); the symbols resolve at instantiation (same lane as
   // celestrak-request and weathernext-source).
   allowUndefinedImports: true,
 });

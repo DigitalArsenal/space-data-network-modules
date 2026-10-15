@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { json, invoke, outputs } from './erm-harness.mjs';
 import { privatePath, privateSkip } from '../../../tests/lib/privateFixtures.mjs';
 
 // fit_elements and element_residuals through the built artifact. Expected
@@ -27,8 +27,6 @@ const require = createRequire(path.join(root, 'package.json'));
 const flatbuffers = require('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(root, `lib/js/${code}/main.js`)));
 const [OMM, OEM] = await Promise.all(['OMM', 'OEM'].map(load));
-const wasm = fs.readFileSync(fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)));
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const ref = JSON.parse(fs.readFileSync(new URL('./fit-reference.json', import.meta.url)));
 const DEG = Math.PI / 180;
 
@@ -68,17 +66,16 @@ function ommSet(norad, epoch, el) {
   return Buffer.from(b.asUint8Array());
 }
 const elements = (...bufs) => ({ portId: 'elements', payload: Buffer.concat(bufs), typeRef: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' } });
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+// Each port's value in its readable form; the harness sends it as the method's $ERM record. The outputs by port: the
+// report decoded, the fitted $OMM records as bytes.
 async function call(t, methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h.destroy());
-  const r = await h.invoke({ methodId, inputs });
+  const r = await invoke(methodId, inputs);
   assert.equal(r.statusCode, 0, r.errorMessage);
-  const out = {};
-  for (const o of r.outputs) out[o.portId] = Buffer.from(o.payload);
-  return out;
+  return outputs(r);
 }
-const report = (out, port = 'report') => JSON.parse(out[port].toString());
+const report = (out, port = 'report') => out[port];
+// The fitted elements, from the $OMM the fit emits beside its report.
+const fittedElements = (out) => OMM.OMM.getSizePrefixedRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(out.elements))).unpack();
 const iso = (s) => (s.endsWith('Z') ? s : `${s}Z`);
 // Equinoctial parameters of classical elements (n rev/day -> rad/min), as the module reports them.
 function equinoctial(el) {
@@ -142,7 +139,6 @@ test('fit_elements on random SGP4 ephemerides: elements recovered, half-split cl
     // The OMM carries the same elements at full precision.
     const omm = OMM.OMM.getSizePrefixedRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(out.elements)));
     assert.equal(omm.EPOCH(), r.epoch);
-    assert.equal(omm.MEAN_MOTION(), r.elements.MEAN_MOTION);
     assert.equal(omm.covarianceLength(), 21);
     // At another epoch SGP4 cannot reproduce a trajectory generated from a
     // different epoch exactly (its secular and drag polynomials are in time
@@ -161,8 +157,8 @@ test('fit_elements on 50 m noise: the same least-squares optimum, RMS and covari
   assert.equal(r.converged, true, r.error);
   assert.ok(Math.abs(r.rms.rms3dKm - c.scipyStats.rms3dKm) < 1e-9, `RMS ${r.rms.rms3dKm} vs scipy ${c.scipyStats.rms3dKm}`);
   assert.ok(Math.abs(r.rms.rmsPerCoordinateKm - c.scipyStats.rmsPerCoordinateKm) < 1e-9);
-  const got = [r.elements.MEAN_MOTION, r.elements.ECCENTRICITY, r.elements.INCLINATION, r.elements.RA_OF_ASC_NODE, r.elements.ARG_OF_PERICENTER,
-    r.elements.MEAN_ANOMALY, r.elements.BSTAR];
+  const el = fittedElements(out);
+  const got = [el.MEAN_MOTION, el.ECCENTRICITY, el.INCLINATION, el.RA_OF_ASC_NODE, el.ARG_OF_PERICENTER, el.MEAN_ANOMALY, el.BSTAR];
   const cov = c.scipyCovarianceClassical;
   const sigma = [0, 2, 5, 9, 14, 20, 27].map((i) => Math.sqrt(cov[i]));
   got.forEach((x, k) => {
@@ -202,4 +198,30 @@ test('fit_elements on the NASA ISS OEM: the same fit as scipy; element_residuals
   assert.ok(Math.abs(seg.rmsPerCoordinateKm - s.window6h.rmsPerCoordinateKm) < 1e-9, `${seg.rmsPerCoordinateKm} vs ${s.window6h.rmsPerCoordinateKm}`);
   // CelesTrak's rms file value is this per-coordinate RMS over the segment (3D / sqrt 3), to its three decimals.
   assert.ok(Math.abs(seg.rmsPerCoordinateKm - Number(row.RMS)) < 0.002, `${seg.rmsPerCoordinateKm} vs published ${row.RMS}`);
+});
+
+test('element_residuals scores the ISS fit\'s own $OMM on the NASA ISS OEM as the fit scored it, per window and with samples', async (t) => {
+  const c = ref.iss;
+  const eph = ephemeris(block(25544, c.frame, { lines: c.states.map(([e, ...x]) => [iso(e), x]) }));
+  const out = await call(t, 'fit_elements', [eph, json('options', { epoch: iso(c.epoch), fitBstar: true })]);
+  const fit = report(out).fits[0];
+  const set = fittedElements(out);
+  const res = await call(t, 'element_residuals', [{ ...elements(out.elements) }, eph, json('options', { samples: true, requests: [{ norad: 25544, set: set.EPOCH, label: 'iss',
+    windows: [{ from: iso(c.states[0][0]), to: iso(c.states.at(-1)[0]), label: 'all' }, { from: iso(c.states[0][0]), to: iso(c.states[9][0]) }] },
+  { norad: 25544, set: '2026-01-01T00:00:00Z', windows: [] }] })]);
+  const [iss, missing] = report(res, 'residuals').results;
+  assert.equal(iss.label, 'iss');
+  const [all, first] = iss.windows;
+  assert.equal(all.label, 'all');
+  assert.equal(all.n, fit.rms.n);
+  assert.ok(Math.abs(all.rms3dKm - fit.rms.rms3dKm) < 1e-9, `${all.rms3dKm} vs the fit's ${fit.rms.rms3dKm}`);
+  assert.equal(first.n, 10);
+  assert.equal(first.samples.length, 10);
+  assert.equal(missing.error, 'element set not found');
+  // Per-object settings override the shared ones where they differ: the same fit as above, and an object without
+  // states is reported.
+  const per = report(await call(t, 'fit_elements', [eph, json('options', { fitBstar: false, closure: false,
+    fits: [{ norad: 25544, epoch: iso(c.epoch), fitBstar: true, closure: true }, { norad: 99999 }] })])).fits;
+  assert.deepEqual(per[0].equinoctial, fit.equinoctial);
+  assert.equal(per[1].error, 'no ephemeris states for this object');
 });

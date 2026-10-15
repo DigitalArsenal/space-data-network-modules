@@ -119,7 +119,7 @@ including migrated module families and Basilisk-derived module families.
     reference). Distinct from the legacy `analysis/maneuver`, which is
     near-Earth classical/ROE targeting.
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
-  - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
+  - `licensing/` — `core`, `client-decrypt`
   - `delivery/` — legacy `plugin-delivery` compatibility fixture
 - Closed-tier modules live in the private `space-data-network-closed-modules`
   repo under `packages/<name>`, not here. The `comms/` RF family

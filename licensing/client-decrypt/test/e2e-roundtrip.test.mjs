@@ -16,6 +16,7 @@
  * Run: node test/e2e-roundtrip.test.mjs
  */
 
+import { decodeFileContent, decryptArtifactInputs } from "../index.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -53,10 +54,10 @@ function findDeliveryWasm() {
   if (process.env.PLUGIN_DELIVERY_WASM) return process.env.PLUGIN_DELIVERY_WASM;
   const monorepoIsomorphic = path.resolve(
     __dirname,
-    "../../plugin-delivery/dist/isomorphic/module.wasm",
+    "../../../delivery/plugin-delivery/dist/isomorphic/module.wasm",
   );
   if (fs.existsSync(monorepoIsomorphic)) return monorepoIsomorphic;
-  const monorepoLegacy = path.resolve(__dirname, "../../plugin-delivery/dist/plugin-delivery.wasm");
+  const monorepoLegacy = path.resolve(__dirname, "../../../delivery/plugin-delivery/dist/plugin-delivery.wasm");
   if (fs.existsSync(monorepoLegacy)) return monorepoLegacy;
   const sibling = path.resolve(__dirname, "../../space-data-network-plugin-delivery/dist/plugin-delivery.wasm");
   if (fs.existsSync(sibling)) return sibling;
@@ -259,9 +260,9 @@ await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (X25519 SDS grant)"
   const { grantResponseBytes, packed } = await buildSdsGrant(artifact, publicKey, "x25519");
   const result = await decryptHarness.invoke({
     methodId: "decrypt_artifact",
-    inputs: [{ payload: grantResponseBytes }, { payload: privateKey }, { payload: packed }],
+    inputs: decryptArtifactInputs({ grantResponseBytes: grantResponseBytes, privateKey: privateKey, encryptedBundle: packed }),
   });
-  assert.deepEqual(result.outputs[0].payload, artifact);
+  assert.deepEqual(decodeFileContent(result.outputs[0].payload), artifact);
 });
 
 await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (secp256k1 SDS grant)", async () => {
@@ -271,9 +272,9 @@ await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (secp256k1 SDS gran
   const { grantResponseBytes, packed } = await buildSdsGrant(artifact, publicKey, "secp256k1");
   const result = await decryptHarness.invoke({
     methodId: "decrypt_artifact",
-    inputs: [{ payload: grantResponseBytes }, { payload: privateKey }, { payload: packed }],
+    inputs: decryptArtifactInputs({ grantResponseBytes: grantResponseBytes, privateKey: privateKey, encryptedBundle: packed }),
   });
-  assert.deepEqual(result.outputs[0].payload, artifact);
+  assert.deepEqual(decodeFileContent(result.outputs[0].payload), artifact);
 });
 
 // ── Cross-plugin tests (require plugin-delivery WASM) ───────────────────────
@@ -330,14 +331,17 @@ if (hasDeliveryWasm) {
     try {
       const decryptResult = await crossPluginDecryptHarness.invoke({
         methodId: "decrypt_artifact",
-        inputs: [
-          { payload: deliverResult.outputs[0].payload },
-          { payload: privateKey },
-        ],
+        // The bundle plugin-delivery published, handed over as protected_content (the ipfs.cat fallback is
+        // decrypt.test.mjs's).
+        inputs: decryptArtifactInputs({
+          grantResponseBytes: deliverResult.outputs[0].payload,
+          privateKey,
+          encryptedBundle: contentStore.get(grant.bundleDescriptor.cid),
+        }),
       });
       assert.ok(decryptResult.outputs?.length >= 1);
       assert.deepEqual(
-        decryptResult.outputs[0].payload,
+        decodeFileContent(decryptResult.outputs[0].payload),
         artifact,
         "C++ decrypt of C++ encrypted IPFS artifact must match original",
       );
@@ -364,9 +368,13 @@ if (hasDeliveryWasm) {
     try {
       const cr = await crossPluginDecryptHarness.invoke({
         methodId: "decrypt_artifact",
-        inputs: [{ payload: dr.outputs[0].payload }, { payload: privateKey }],
+        inputs: decryptArtifactInputs({
+          grantResponseBytes: dr.outputs[0].payload,
+          privateKey,
+          encryptedBundle: contentStore.get(decodeGrantResponse(dr.outputs[0].payload).bundleDescriptor.cid),
+        }),
       });
-      assert.deepEqual(cr.outputs[0].payload, artifact, "64 KB cross-plugin round-trip");
+      assert.deepEqual(decodeFileContent(cr.outputs[0].payload), artifact, "64 KB cross-plugin round-trip");
     } finally {
       await crossPluginDecryptHarness.destroy();
     }

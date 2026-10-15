@@ -4,16 +4,10 @@
 #define EMSCRIPTEN_KEEPALIVE
 #endif
 
-#include "atmosphere/plugin_runtime.h"
+// The module's methods are the typed SDK methods in src/plugin_entrypoints.cpp;
+// this file keeps the Emscripten keep-alive helpers only.
 
 #include <cstdlib>
-#include <string>
-
-namespace {
-
-std::string g_last_result;
-
-}  // namespace
 
 extern "C" {
 
@@ -25,14 +19,6 @@ void* wasm_malloc(int size) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_free(void* ptr) {
     std::free(ptr);
-}
-
-EMSCRIPTEN_KEEPALIVE
-const char* wasm_invoke_json(const char* request_json, int len) {
-    const auto result = atmosphere::invoke_json_request(
-        std::string_view(request_json, static_cast<size_t>(len)));
-    g_last_result = result.json;
-    return g_last_result.c_str();
 }
 
 }  // extern "C"

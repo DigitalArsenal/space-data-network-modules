@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-open-meteo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "esbuild": "0.25.12",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.215.0"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   }
 }

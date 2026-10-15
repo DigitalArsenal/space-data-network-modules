@@ -7,10 +7,12 @@
 //   states    $OEM   each set's states at its epoch plus ages (analysis/epoch-state derive_omm), GCRF
 //   operator  $OEM   optional: the operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES), or
 //             $OCM   a fit's state and formal covariance (COVARIANCE_DATA)
-//   recipe    JSON   the source's attribution, the models and their held-out verdicts, the measured realism factors
+//   models    $ERM   MODEL records: the element-set models (E14 S3-KC) with their held-out verdicts, SOURCES and POOLED
+//   config           the recipe (plugin.getConfig, keys under "attach.", else the root): the source's attribution, the
+//                    producer, latestOnly, maxOperatorRows and the measured realism factors (src/erm_bridge.cpp)
 //   -> ocm    $OCM   state and covariance per object: PROVENANCE (PVN) names the source, COV_REALISM holds one CVR per covariance epoch
 //      omm    $OMM   the element set with its COVARIANCE, its PROVENANCE and the CVR of the row the covariance is of (COV_REALISM)
-//      report JSON   per object: the rule that applied, why the earlier rules did not, every row's cell and verdict
+//      report $ERM   ATTACH_REPORT, per object: the rule that applied, why the earlier rules did not, every row's cell and verdict
 //
 // The first rule that applies gives the covariance of an object's product:
 //   1  the operator's covariance, as supplied (a state block with covariance lines)
@@ -25,7 +27,7 @@
 // measured. The verdict is computed from the numbers, never read from the model file.
 //
 // attribute_maneuvers
-//   maneuvers $MNV, recipe JSON -> maneuvers $MNV: every record names its source in PROVENANCE (a PRODUCER the record
+//   maneuvers $MNV, config (keys under "attribute.", else the root) -> maneuvers $MNV, report $ERM ATTACH_REPORT: every record names its source in PROVENANCE (a PRODUCER the record
 //   already names, the detector, stays), and the report counts them.
 //
 // Errors are returned, not thrown: the module is built without exceptions.
@@ -994,7 +996,25 @@ std::vector<uint8_t> build_omm(const Recipe& r, const SetRec& s, const Product* 
 extern "C" int attach_covariance() {
   using namespace sp;
   Recipe recipe;
-  std::string error = read_recipe(json_input("recipe"), &recipe);
+  std::string error;
+  Json recipe_json = ermb::recipe_from_config("attach", &error);
+  if (!error.empty()) return fail("invalid-recipe", error);
+  // The models: $ERM MODEL records on the models port (one record each, size-prefixed, any number of frames).
+  if (!recipe_json.contains("models")) recipe_json["models"] = Json::array();
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (!f || !f->port_id || std::strcmp(f->port_id, "models") != 0) continue;
+    for (size_t at = 0; at < f->payload_length;) {
+      const uint8_t* p = f->payload + at;
+      size_t len = f->payload_length - at;
+      if (len >= 8 && flatbuffers::BufferHasIdentifier(p, ERMIdentifier(), true)) len = std::min(len, size_t(4) + flatbuffers::ReadScalar<uint32_t>(p));
+      const std::unique_ptr<ERMT> e = ermb::read_erm(p, len);
+      if (!e || !e->MODEL) return fail("invalid-models", "models carries $ERM MODEL records" + (e ? std::string() : ": " + ermb::last_error));
+      recipe_json["models"].push_back(ermb::model_out(*e->MODEL));
+      at += len;
+    }
+  }
+  error = read_recipe(recipe_json, &recipe);
   if (!error.empty()) return fail("invalid-recipe", error);
 
   std::vector<RawRecord> raw_sets, raw_states, raw_operator, raw_fits;
@@ -1130,9 +1150,10 @@ extern "C" int attach_covariance() {
 extern "C" int attribute_maneuvers() {
   using namespace sp;
   Attribution a;
-  const Json recipe = json_input("recipe");
-  if (recipe.is_discarded()) return fail("invalid-recipe", "recipe must be JSON.");
-  std::string error = read_attribution(recipe, &a);
+  std::string error;
+  const Json recipe = ermb::recipe_from_config("attribute", &error);
+  if (!error.empty()) return fail("invalid-recipe", error);
+  error = read_attribution(recipe, &a);
   if (!error.empty()) return fail("invalid-recipe", error);
   std::string producer = json_string(recipe, "producer");
   if (producer.empty()) producer = kDefaultProducer;

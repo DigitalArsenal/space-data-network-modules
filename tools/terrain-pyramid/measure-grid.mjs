@@ -27,6 +27,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
+import { decodeTileReport, granuleFrame, planInputs } from "../../data-source/terrain-source/typed-frames.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -45,18 +46,9 @@ const tileY = Number(args.y);
 assert.ok(Number.isInteger(tileX) && Number.isInteger(tileY), "--x and --y are required");
 
 const encoder = new TextEncoder();
-const frame = (portId, bytes) => ({
-  portId,
-  typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.length },
-  payload: bytes,
-});
-const jsonFrame = (portId, value) => frame(portId, encoder.encode(JSON.stringify(value)));
+// Typed contracts 1.0: the plan is the $DTT header stream (+ ModuleConfig options), each granule an HttpResponse.
 
 const granule = fs.readFileSync(path.resolve(args.granule));
-const hrb = Buffer.alloc(8 + granule.length);
-hrb.write("$HRB", 0, "latin1");
-hrb.writeUInt32LE(200, 4);
-granule.copy(hrb, 8);
 
 const { createBrowserModuleHarness } = await import(path.join(SDK_DIR, "src/testing/index.js"));
 
@@ -93,7 +85,7 @@ async function encodeAt(gridSize) {
     const response = await harness.invoke({
       methodId: "tile",
       inputs: [
-        jsonFrame("plan", {
+        ...planInputs({
           tilesetId: "measure",
           level,
           x: tileX,
@@ -107,7 +99,7 @@ async function encodeAt(gridSize) {
             license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
           },
         }),
-        frame("dem", new Uint8Array(hrb)),
+        granuleFrame("dem", granule, 200),
       ],
     });
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
@@ -116,7 +108,7 @@ async function encodeAt(gridSize) {
     const length = buf.readUInt32LE(0);
     const record = buf.subarray(4, 4 + length);
     // the payload bytes, straight out of the report
-    const report = JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload));
+    const report = decodeTileReport(response.outputs.find((o) => o.portId === "report").payload);
     // pull the gzipped payload back out of the record by scanning for the gzip magic
     const gz = record.indexOf(Buffer.from([0x1f, 0x8b, 0x08]));
     const mesh = decodeMesh(zlib.gunzipSync(record.subarray(gz, gz + report.payloadBytes)));

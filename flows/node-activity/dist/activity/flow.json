@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.node-activity",
   "name": "SDN Node Activity Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "M2 node-activity flow (mount GET /api/v1/node/activity): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_node_activity classifies it (GET/HEAD -> route=activity, limit=<the ?limit query param clamped in-wasm to [1, 256], default 50>; anything else -> route=error status=405 — PATH is not inspected, the mount carries exactly one resource), hostcap/node-activity activity forwards {\"limit\":N} (the decision's clamped limit, defensively re-clamped to [1, 256] with the same default of 50) to the policy-mediated READ-ONLY node_activity_read.activity hostcall (capability node_activity_read; the host's capPrefixFromName has no mapping for it, so the capability name itself is the op prefix) and emits the raw hostcall result OBJECT verbatim on \"body\" (a live activity-log snapshot — recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit — NOT an SDS record collection, so the bare-array json convention used by the other gateway flows does not apply), and foundation/http-respond assembles the final $HTR envelope (200/405/503) delivered to the host-model egress sink. JSON-ONLY for v1: there is no SDS schema for node activity events (checked spacedatastandards.org/schema — no matching record type), so a flatbuffer presentation is blocked on a future SDS schema addition rather than a hand-written table (generated-types-only rule; fb blocked-on-schema). No ETag/conditional-GET: the activity log changes on every call, so a conditional-GET contract would be pointless. Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs — METHOD/PATH/QUERY/HEADERS/BODY/REMOTE) carries no caller-trust field a flow can read, so the route is declared anonymous:false (operator-gated at the host's auth wall, mirroring flows/node-status's precedent) until the envelope carries trust information a shape node could read to serve a reduced anonymous subset.",
+  "description": "M2 node-activity flow (mount GET /api/v1/node/activity): foundation/http-route route_node_activity decides the $HTQ request as an $APR (GET/HEAD -> route activity + the limit clamped [1,256], default 50; anything else STATUS 405); hostcap/node-activity reads the log through the READ-ONLY node_activity_read.activity hostcall (typed $PIV, capability node_activity_read) and answers an $NEV beside the $APR (or STATUS 503); foundation/http-respond respond renders the $HTR: the $NEV verbatim as FlatBuffers by default, JSON on request. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",
@@ -36,7 +36,7 @@
   ],
   "edges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-activity-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "activity",
@@ -45,7 +45,7 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "activity-decision",
+      "edgeId": "activity-decision-respond-decision",
       "fromNodeId": "activity",
       "fromPortId": "decision",
       "toNodeId": "respond",
@@ -54,16 +54,16 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "activity-body",
+      "edgeId": "activity-activity-respond-activity",
       "fromNodeId": "activity",
-      "fromPortId": "body",
+      "fromPortId": "activity",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "activity",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
@@ -104,55 +104,96 @@
         "method": "GET",
         "operationId": "getNodeActivity",
         "summary": "Recent node activity log",
-        "description": "Returns this node's recent activity events as a single JSON object (not a record collection): a count plus a newest-first list of peer_connected/peer_disconnected/pnm_publication/record_stored/grant_issued events. Query parameter ?limit=N bounds the number of events returned; the route node clamps it in-wasm to [1, 256] with a default of 50 (missing, empty, non-numeric, zero, negative, or out-of-range values all fall back to the clamped/default value rather than erroring). Always JSON — there is no SDS schema for node activity events, so no flatbuffer presentation exists (blocked on a future SDS schema addition, not a hand-written table). No ETag/If-None-Match: the activity log changes on every call. Operator-gated (anonymous:false) at the host's auth wall; the flow itself has no access to caller-trust information to shape a reduced anonymous subset.",
+        "description": "Returns this node's recent event log (newest first, ?limit clamped to [1,256], default 50) as one $NEV (SDS Node Event): peers connecting and leaving, publications sent, records stored, grants issued. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists. No ETag: the log changes on every call. Operator-gated (anonymous:false).",
         "anonymous": false,
         "params": [
           {
             "name": "limit",
             "in": "query",
             "required": false,
-            "schema": { "type": "integer", "minimum": 1, "maximum": 256, "default": 50 },
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256,
+              "default": 50
+            },
             "description": "Maximum number of activity events to return, newest first. Clamped in-wasm to [1, 256]; defaults to 50 when omitted, empty, non-numeric, zero, negative, or out of range."
           }
         ],
         "responses": {
           "200": {
-            "description": "Recent activity log object.",
+            "description": "The node's $NEV. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists.",
             "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$NEV (SDS NEV.fbs): the node event log read"
+                }
+              },
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "count": { "type": "integer", "description": "Number of events in this response." },
-                    "events": {
-                      "type": "array",
-                      "description": "Activity events, newest first.",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ts": { "type": "string", "format": "date-time", "description": "RFC3339 event timestamp." },
-                          "kind": {
-                            "type": "string",
-                            "enum": ["peer_connected", "peer_disconnected", "pnm_publication", "record_stored", "grant_issued"]
-                          },
-                          "peer_id": { "type": "string", "description": "Omitted when the event carries no peer id." },
-                          "detail": { "type": "string" }
-                        }
-                      }
-                    }
-                  }
-                },
-                "description": "Bare top-level JSON object (not an array): this endpoint answers one activity-log snapshot, not an SDS record collection."
+                  "description": "The $NEV as JSON (NODE_ID, GENERATED_AT_MS, EVENTS[{TIME_MS, KIND, PEER_ID, SUBJECT, COUNT, DETAIL}], TOTAL_EVENTS, OLDEST_TIME_MS)."
+                }
               }
             }
           },
           "405": {
-            "description": "Non-GET/HEAD method.",
-            "content": { "application/json": { "schema": { "type": "object" }, "description": "{\"error\": \"...\"}" } }
+            "description": "Any method other than GET/HEAD.",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           },
           "503": {
-            "description": "The node_activity_read.activity hostcall failed or returned no result (honest unavailability — never a silent empty body).",
-            "content": { "application/json": { "schema": { "type": "object" }, "description": "{\"error\": \"...\"}" } }
+            "description": "The node_activity_read.activity hostcall failed (activity-unavailable).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }

@@ -1,9 +1,9 @@
 /*
  * data-source/oem-source-iss (SDN OD-Flow Phase 1b).
  *
- * A single-source flow node: on a timer "tick" it emits the ISS operator
- * ephemeris as an SDS $OEM FlatBuffer (aligned-binary, typed $OEM) on the "oem"
- * output port. The $OEM is built in-module from the checked-in NASA ISS OEM
+ * A single-source flow node: a TimerTick (TICK, typed contracts 1.0; its fields
+ * are not read) makes it emit the ISS operator ephemeris as one SDS $OEM
+ * FlatBuffer (wire format flatbuffer) on the "oem" output port. The $OEM is built in-module from the checked-in NASA ISS OEM
  * fixture (EME2000, TIME_SYSTEM UTC, CENTER Earth) — the INVERSE of analysis/od's
  * oem_fb_reader, and the SAME state series the sacred RMS-parity gate uses. It
  * mirrors build_oem_fb() from analysis/od/tests test_oem_fb_parity.cpp exactly.
@@ -67,8 +67,8 @@ std::vector<uint8_t> build_iss_oem_compact() {
 
 extern "C" {
 
-// emit: timer tick -> one ISS $OEM ephemeris frame on the "oem" port as
-// ALIGNED_BINARY (align 8). Nothing is stored.
+// emit: TimerTick -> one ISS $OEM FlatBuffer frame on the "oem" port. Nothing
+// is stored.
 int emit(void) {
     plugin_reset_output_state();
     std::vector<uint8_t> oem = build_iss_oem();
@@ -78,8 +78,8 @@ int emit(void) {
     }
     const int32_t rc = plugin_push_output_ex(
         "oem", "OEM.fbs", "$OEM",
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OEM",
-        /*fixed_string_length=*/0, /*required_alignment=*/8,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM",
+        /*fixed_string_length=*/0, /*required_alignment=*/0,
         oem.data(), static_cast<uint32_t>(oem.size()));
     return rc < 0 ? 500 : 0;
 }
@@ -97,8 +97,8 @@ int emit_compact(void) {
     }
     const int32_t rc = plugin_push_output_ex(
         "oem", "OEM.fbs", "$OEM",
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OEM",
-        /*fixed_string_length=*/0, /*required_alignment=*/8,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM",
+        /*fixed_string_length=*/0, /*required_alignment=*/0,
         oem.data(), static_cast<uint32_t>(oem.size()));
     return rc < 0 ? 500 : 0;
 }

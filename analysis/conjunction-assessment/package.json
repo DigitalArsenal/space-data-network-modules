@@ -1,5 +1,6 @@
 {
   "name": "space-data-network-plugin-conjunction-assessment",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -15,7 +16,7 @@
   ],
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/buildTreeHygiene.test.mjs tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/pivInvokeContract.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs tests/socratesScreenCatalogParity.test.mjs tests/aerospaceScreenCatalogParity.test.mjs tests/aerospaceRealWindowParity.test.mjs tests/cqrAuthoritative.test.mjs tests/cqrStreaming.test.mjs tests/coarseExclusion.test.mjs tests/screeningWindowUnion.test.mjs tests/realCatalogExclusion.test.mjs tests/pairCallsOneInstance.test.mjs tests/sdnOmmPartitionedRunner.test.mjs tests/gpuScreenParity.test.mjs tests/windowedScreenParity.test.mjs tests/continuousScreening.test.mjs tests/sourceCovariance.test.mjs tests/empiricalCovariance.test.mjs tests/ephemerisUpload.test.mjs",
+    "test": "node --test tests/buildTreeHygiene.test.mjs tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/pivInvokeContract.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs tests/socratesScreenCatalogParity.test.mjs tests/aerospaceScreenCatalogParity.test.mjs tests/aerospaceRealWindowParity.test.mjs tests/cqrAuthoritative.test.mjs tests/cqrStreaming.test.mjs tests/coarseExclusion.test.mjs tests/screeningWindowUnion.test.mjs tests/realCatalogExclusion.test.mjs tests/pairCallsOneInstance.test.mjs tests/sdnOmmPartitionedRunner.test.mjs tests/gpuScreenParity.test.mjs tests/windowedScreenParity.test.mjs tests/continuousScreening.test.mjs tests/sourceCovariance.test.mjs tests/empiricalCovariance.test.mjs tests/ephemerisUpload.test.mjs tests/possibilityScreening.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:archive-smoke": "node --test tests/archiveStreamingSmoke.test.mjs",
     "test:replay": "node --test tests/wasmedgeStandaloneHarness.test.mjs tests/socratesReplayHarness.test.mjs",
@@ -31,8 +32,8 @@
     "esbuild": "0.28.2",
     "flatbuffers": "25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.8.26",
-    "spacedatastandards.org": "1.231.0",
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0",
     "tar": "^7.5.13"
   }
 }

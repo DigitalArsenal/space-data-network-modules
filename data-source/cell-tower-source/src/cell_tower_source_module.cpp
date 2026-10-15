@@ -8,17 +8,23 @@
  * deconflict them, and have the final result sent using a spacedatastandard
  * streamed to OrbPro and displayed."
  *
- * ─── FLOW-NODE SHAPE ────────────────────────────────────────────────────────
+ * ─── FLOW-NODE SHAPE (typed contracts 1.0: FlatBuffers only) ────────────────
  * Three pure flow nodes. The module performs NO I/O of its own: fetching is the
- * generic hostcap/http-request connector node, exactly as satnogs-source and
- * mlab-starlink-connectivity do. No new host capability exists or is needed.
+ * generic hostcap/http-request connector node. No host capability is needed.
  *
- *   route     : $HTQ request        -> "requests" (N hostcap/http-request GETs)
- *                                      "job"      (the run contract for parse)
- *                                      "reply"    (early error reply, or empty)
- *   parse     : job + responses     -> "reports"  (normalized reports, JSON)
- *   deconflict: job + reports       -> "records"  (size-prefixed $TBS stream)
- *                                      "summary"  (counts for the HTTP reply)
+ *   route     : $HTQ request        -> "requests" (N HttpRequest, each carrying
+ *                                                  the run contract $APR in CONTEXT)
+ *                                      "decision"/"availability" (refusal $APR, or
+ *                                                  the answer of a run with nothing
+ *                                                  to fetch: $APR + empty $DAV)
+ *                                      "catalog"  ($QRP projection page -> mediator)
+ *                                      "credential" ($APR task -> mediator)
+ *   parse     : HttpResponses        -> "job"     (the $APR contract, passed on)
+ *                                      "reports" ($TBS, one SINGLE_SOURCE record each)
+ *                                      "resume"  ($IRM: the bulk lane's next mark)
+ *   deconflict: job + reports        -> "records" (size-prefixed $TBS stream)
+ *                                      "decision" ($APR + the run's counters)
+ *                                      "availability" ($DAV of the dataset)
  *
  * The BROWSER supplies the configuration per request and renders the result. It
  * never fetches a provider, never merges, never scores. That inversion is the
@@ -123,6 +129,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <string>
@@ -132,6 +139,8 @@
 #include <ctime>
 
 #include "space_data_module_invoke.h"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
 
 namespace {
 
@@ -154,10 +163,10 @@ constexpr double kPositionToleranceM = 250.0;
 constexpr double kEarthRadiusM = 6378137.0;
 
 // ── minimal JSON helpers ───────────────────────────────────────────────────
-// The flow's intra-node frames are UTF-8 JSON (the hostcap http-request
-// descriptor shape is defined by the host op, not by SDS), so a small reader is
-// all that is needed. Nothing here parses provider payloads: those go through
-// the per-adapter decoders below.
+// JSON exists here ONLY as an external representation: the client's own HTTP
+// request body (PROVIDERS, METHOD, LIMIT, ...) and the providers' own JSON
+// payloads. Nothing between flow nodes is JSON — every intra-flow frame is a
+// FlatBuffer.
 
 std::string json_escape(const std::string& in) {
     std::string out;
@@ -666,77 +675,6 @@ std::string iso_now() {
     return std::string(buf);
 }
 
-// The connector's default response frame carries the body BASE64-ENCODED
-// (`bodyB64`), because a raw body is not JSON-safe. This flow opts into the
-// connector's raw-body-v1 lane for large provider documents; the base64 codec
-// stays here for backward compatibility with already-published JSON frames and
-// direct module tests.
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-// Encode a REQUEST body. `hostcap/http-request` reads the outgoing body from
-// `bodyB64` and ignores a plain `body` key (http_request_module.cpp:645-652), so
-// a descriptor that spells it `body` sends a bodiless request — which for
-// ComReg's POST-only RPC is a 200 with an empty mast list, i.e. the
-// parses-to-zero-rows failure again, arriving through the request side instead
-// of the decode side.
-std::string base64_encode(const std::string& in) {
-    static const char* kAlphabet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve(((in.size() + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 2 < in.size()) {
-        const uint32_t v = (static_cast<uint8_t>(in[i]) << 16) |
-                           (static_cast<uint8_t>(in[i + 1]) << 8) |
-                           static_cast<uint8_t>(in[i + 2]);
-        out += kAlphabet[(v >> 18) & 63];
-        out += kAlphabet[(v >> 12) & 63];
-        out += kAlphabet[(v >> 6) & 63];
-        out += kAlphabet[v & 63];
-        i += 3;
-    }
-    if (i + 1 == in.size()) {
-        const uint32_t v = static_cast<uint8_t>(in[i]) << 16;
-        out += kAlphabet[(v >> 18) & 63];
-        out += kAlphabet[(v >> 12) & 63];
-        out += "==";
-    } else if (i + 2 == in.size()) {
-        const uint32_t v = (static_cast<uint8_t>(in[i]) << 16) |
-                           (static_cast<uint8_t>(in[i + 1]) << 8);
-        out += kAlphabet[(v >> 18) & 63];
-        out += kAlphabet[(v >> 12) & 63];
-        out += kAlphabet[(v >> 6) & 63];
-        out += '=';
-    }
-    return out;
-}
-
-bool base64_decode(const std::string& text, std::string* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<char>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
-}
-
 double haversine_m(double lat1, double lon1, double lat2, double lon2) {
     const double to_rad = 3.14159265358979323846 / 180.0;
     const double dlat = (lat2 - lat1) * to_rad;
@@ -1071,69 +1009,69 @@ size_t gzip_header_length(const uint8_t* data, size_t size) {
 // The mark is version-and-size stamped and a mismatch RESTARTS the download
 // rather than resuming into a differently-shaped struct. A rebuilt module is
 // exactly when that would otherwise go wrong.
-constexpr uint32_t kBulkResumeVersion = 1;
+// The stamps the $IRM resume mark carries (IRMDecodeContext). cell-tower-ingest
+// writes the same literals: it forwards the decode context of a stored mark only
+// when DECODER_STATE_FORMAT is this one.
+constexpr const char* kDecoderStateFormat = "cell-tower-source/tinfl-v1";
+constexpr const char* kDecoderStateVersion = "1";
+constexpr const char* kDecoderStateMediaType = "application/octet-stream";
+constexpr const char* kDecoderBuildId = "miniz-3.1.2";
 
 struct BulkResume {
     bool valid = false;
     bool header_done = false;   // the gzip header has been consumed
     uint64_t next_byte = 0;     // next COMPRESSED byte to request (absolute)
-    uint64_t total_bytes = 0;   // content length, 0 = not yet known
-    uint64_t rows_seen = 0;     // CSV data rows decoded so far, all chunks
-    uint64_t sites_emitted = 0; // sites emitted so far, all chunks
+    uint64_t rows_seen = 0;     // CSV data rows decoded in THIS chunk
+    uint64_t sites_emitted = 0; // sites emitted in THIS chunk
     bool complete = false;      // the deflate stream reached its end
-    std::string decoder;        // opaque: tinfl state + window + out_pos + pending
+    // The decoder at the seam, as the $IRM carries it: DECODER_STATE (the raw
+    // tinfl_decompressor), WINDOW (the 32 KiB dictionary), WINDOW_POSITION and
+    // PARTIAL_RECORD (the line straddling the seam). Empty = not resumable.
+    std::string state;
+    std::string window;
+    uint32_t window_pos = 0;
+    std::string pending;
+    // The stamps as read off an incoming mark (validated by bulk_state_decode).
+    std::string state_format;
+    std::string state_version;
+    uint64_t state_byte_length = 0;
+    uint64_t window_byte_length = 0;
 };
 
-// Serialize the decoder half of the mark. Layout is
-// [version:4][sizeof(tinfl_decompressor):4][out_pos:4][pending_len:4][tinfl][window][pending]
-std::string bulk_state_encode(const DeflateLineStream& s) {
-    const uint32_t tinfl_size = static_cast<uint32_t>(sizeof(tinfl_decompressor));
-    const uint32_t out_pos = static_cast<uint32_t>(s.out_pos);
-    const uint32_t pending_len = static_cast<uint32_t>(s.pending.size());
-    std::string raw;
-    raw.reserve(16 + tinfl_size + TINFL_LZ_DICT_SIZE + pending_len);
-    auto put32 = [&raw](uint32_t v) {
-        raw += static_cast<char>(v & 0xFF);
-        raw += static_cast<char>((v >> 8) & 0xFF);
-        raw += static_cast<char>((v >> 16) & 0xFF);
-        raw += static_cast<char>((v >> 24) & 0xFF);
-    };
-    put32(kBulkResumeVersion);
-    put32(tinfl_size);
-    put32(out_pos);
-    put32(pending_len);
-    raw.append(reinterpret_cast<const char*>(s.inflator), tinfl_size);
-    raw.append(reinterpret_cast<const char*>(s.window.data()), TINFL_LZ_DICT_SIZE);
-    raw.append(s.pending);
-    return base64_encode(raw);
+// Capture the decoder half of the mark.
+void bulk_state_encode(const DeflateLineStream& s, BulkResume* r) {
+    r->state.assign(reinterpret_cast<const char*>(s.inflator), sizeof(tinfl_decompressor));
+    r->window.assign(reinterpret_cast<const char*>(s.window.data()), TINFL_LZ_DICT_SIZE);
+    r->window_pos = static_cast<uint32_t>(s.out_pos);
+    r->pending = s.pending;
+    r->state_format = kDecoderStateFormat;
+    r->state_version = kDecoderStateVersion;
+    r->state_byte_length = sizeof(tinfl_decompressor);
+    r->window_byte_length = TINFL_LZ_DICT_SIZE;
+}
+
+void bulk_state_clear(BulkResume* r) {
+    r->state.clear();
+    r->window.clear();
+    r->window_pos = 0;
+    r->pending.clear();
 }
 
 // Restore a decoder from a mark. Returns false — meaning RESTART, never
-// "resume anyway" — on any version, size or length disagreement.
-bool bulk_state_decode(const std::string& encoded, DeflateLineStream* s) {
-    if (encoded.empty() || !s || !s->inflator) return false;
-    std::string raw;
-    if (!base64_decode(encoded, &raw)) return false;
-    if (raw.size() < 16) return false;
-    auto get32 = [&raw](size_t at) -> uint32_t {
-        return static_cast<uint32_t>(static_cast<uint8_t>(raw[at])) |
-               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 1])) << 8) |
-               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 2])) << 16) |
-               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 3])) << 24);
-    };
-    if (get32(0) != kBulkResumeVersion) return false;
-    const uint32_t tinfl_size = get32(4);
-    if (tinfl_size != static_cast<uint32_t>(sizeof(tinfl_decompressor))) return false;
-    const uint32_t out_pos = get32(8);
-    const uint32_t pending_len = get32(12);
-    if (out_pos >= TINFL_LZ_DICT_SIZE) return false;
-    if (raw.size() != 16u + tinfl_size + TINFL_LZ_DICT_SIZE + pending_len) return false;
-    std::memcpy(s->inflator, raw.data() + 16, tinfl_size);
-    std::memcpy(s->window.data(), raw.data() + 16 + tinfl_size, TINFL_LZ_DICT_SIZE);
-    s->out_pos = out_pos;
-    s->pending.assign(raw, 16u + tinfl_size + TINFL_LZ_DICT_SIZE, pending_len);
+// "resume anyway" — on any format, version, size or length disagreement.
+bool bulk_state_decode(const BulkResume& r, DeflateLineStream* s) {
+    if (!s || !s->inflator || r.state.empty()) return false;
+    if (r.state_format != kDecoderStateFormat || r.state_version != kDecoderStateVersion) return false;
+    if (r.state_byte_length != sizeof(tinfl_decompressor) || r.state.size() != sizeof(tinfl_decompressor)) return false;
+    if (r.window_byte_length != TINFL_LZ_DICT_SIZE || r.window.size() != TINFL_LZ_DICT_SIZE) return false;
+    if (r.window_pos >= TINFL_LZ_DICT_SIZE) return false;
+    std::memcpy(s->inflator, r.state.data(), sizeof(tinfl_decompressor));
+    std::memcpy(s->window.data(), r.window.data(), TINFL_LZ_DICT_SIZE);
+    s->out_pos = r.window_pos;
+    s->pending = r.pending;
     return true;
 }
+
 
 // Split a ';'-delimited line (ANFR). Kept separate from split_csv_line rather
 // than parameterised: the ANFR exports are not RFC4180 and do not quote, so
@@ -1360,11 +1298,11 @@ bool decode_opencellid_bulk_gz(const ProviderSpec& spec, const std::string& body
     if (resume->header_done) {
         // Mid-stream. A mark this build cannot read means RESTART, announced by
         // leaving next_byte at 0, never a resume into a foreign struct.
-        if (!bulk_state_decode(resume->decoder, &stream)) {
+        if (!bulk_state_decode(*resume, &stream)) {
             resume->valid = false;
             resume->next_byte = 0;
             resume->header_done = false;
-            resume->decoder.clear();
+            bulk_state_clear(resume);
             return false;
         }
     } else {
@@ -1492,14 +1430,14 @@ bool decode_opencellid_bulk_gz(const ProviderSpec& spec, const std::string& body
     resume->complete = stream.done;
     resume->valid = true;
     if (!stream.done && stream.ok && !capped) {
-        resume->decoder = bulk_state_encode(stream);
+        bulk_state_encode(stream, resume);
         // Advance by what was actually CONSUMED, not by the chunk length. The
         // two differ whenever tinfl stops holding a partial symbol, and paying
         // that difference forward would drop those bytes — a silent corruption
         // at every seam rather than a visible failure.
         resume->next_byte += header_bytes + consumed;
     } else {
-        resume->decoder.clear();
+        bulk_state_clear(resume);
     }
     return stream.ok;
 }
@@ -1572,50 +1510,158 @@ std::string upper_ascii(const std::string& in) {
     return out;
 }
 
-// ── report <-> JSON (the intra-flow "reports" frame) ────────────────────────
-std::string report_to_json(const Report& r) {
-    std::string j = "{\"provider_id\":\"" + json_escape(r.provider_id) + "\"";
-    j += ",\"radio\":" + std::to_string(static_cast<int>(r.radio));
-    j += ",\"latitude\":" + std::to_string(r.latitude);
-    j += ",\"longitude\":" + std::to_string(r.longitude);
-    if (!r.native_id.empty()) j += ",\"native_id\":\"" + json_escape(r.native_id) + "\"";
-    if (r.mcc >= 0) j += ",\"mcc\":" + std::to_string(r.mcc);
-    if (r.mnc >= 0) j += ",\"mnc\":" + std::to_string(r.mnc);
-    if (r.lac >= 0) j += ",\"lac\":" + std::to_string(r.lac);
-    if (r.tac >= 0) j += ",\"tac\":" + std::to_string(r.tac);
-    if (!r.cell_id.empty()) j += ",\"cell_id\":\"" + json_escape(r.cell_id) + "\"";
-    if (r.range_m >= 0) j += ",\"range_m\":" + std::to_string(r.range_m);
-    if (r.samples >= 0) j += ",\"samples\":" + std::to_string(r.samples);
-    if (r.has_signal) j += ",\"average_signal_dbm\":" + std::to_string(r.average_signal_dbm);
-    if (r.observed_at >= 0) j += ",\"observed_at\":" + std::to_string(r.observed_at);
-    if (!r.site_name.empty()) j += ",\"site_name\":\"" + json_escape(r.site_name) + "\"";
-    if (!r.operator_name.empty()) j += ",\"operator\":\"" + json_escape(r.operator_name) + "\"";
-    if (!r.country_code.empty()) j += ",\"country_code\":\"" + json_escape(r.country_code) + "\"";
-    return j + "}";
+// ── report <-> $TBS (the intra-flow "reports" stream) ──────────────────────
+//
+// One normalized report = one $TBS record whose CONSENSUS says SINGLE_SOURCE
+// ("exactly one provider reported the site; nothing was reconciled") and whose
+// SOURCES holds that one provider. It asserts no deconfliction: that is
+// deconflict's job, and its records say which merge they came from.
+//
+// PRESENCE IS THE SENTINEL. The builder forces defaults, so a field written as
+// 0 survives as present; a field the source did not report is never written.
+// The reader tests presence, never value == 0 — MCC 0 and "no MCC" stay apart
+// across the hop, exactly as -1 kept them apart in the old JSON frame.
+void append_size_prefixed(std::vector<uint8_t>* stream, const uint8_t* data, size_t size) {
+    const uint32_t len = static_cast<uint32_t>(size);
+    stream->push_back(static_cast<uint8_t>(len & 0xff));
+    stream->push_back(static_cast<uint8_t>((len >> 8) & 0xff));
+    stream->push_back(static_cast<uint8_t>((len >> 16) & 0xff));
+    stream->push_back(static_cast<uint8_t>((len >> 24) & 0xff));
+    stream->insert(stream->end(), data, data + size);
 }
 
-Report report_from_json(const std::string& j) {
+void report_to_tbs(const Report& r, const std::string& retrieved_at, std::vector<uint8_t>* stream) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    b.ForceDefaults(true);
+    const ProviderSpec* spec = find_provider(r.provider_id);
+    const auto provider_id = b.CreateString(r.provider_id);
+    const auto retrieved = b.CreateString(retrieved_at);
+    const auto license = b.CreateString(spec ? spec->license : "unknown");
+    const auto authority = spec ? b.CreateString(spec->authority) : 0;
+    const auto source_url = spec ? b.CreateString(spec->url) : 0;
+    const auto license_url = spec ? b.CreateString(spec->license_url) : 0;
+    const auto attribution = spec ? b.CreateString(spec->attribution) : 0;
+    const auto source_native = r.native_id.empty() ? 0 : b.CreateString(r.native_id);
+    TBSProvenanceBuilder pb(b);
+    pb.add_PROVIDER_ID(provider_id);
+    pb.add_RETRIEVED_AT(retrieved);
+    pb.add_LICENSE(license);
+    if (authority.o) pb.add_AUTHORITY(authority);
+    if (source_url.o) pb.add_SOURCE_URL(source_url);
+    if (license_url.o) pb.add_LICENSE_URL(license_url);
+    if (attribution.o) pb.add_ATTRIBUTION(attribution);
+    if (source_native.o) pb.add_NATIVE_ID(source_native);
+    pb.add_REPORTED_LATITUDE(r.latitude);
+    pb.add_REPORTED_LONGITUDE(r.longitude);
+    pb.add_CONTRIBUTED(true);
+    const auto source = pb.Finish();
+    const auto sources = b.CreateVector(&source, 1);
+
+    const auto winner = b.CreateString(r.provider_id);
+    TBSConsensusBuilder cb(b);
+    cb.add_METHOD(tbsMergeMethod_SINGLE_SOURCE);
+    cb.add_PROVIDERS_CONSULTED(1);
+    cb.add_PROVIDERS_AGREEING(1);
+    cb.add_WINNING_PROVIDER_ID(winner);
+    const auto consensus = cb.Finish();
+
+    const auto id = b.CreateString(r.provider_id + ":" + (r.cell_id.empty() ? "geo" : r.cell_id));
+    const auto native_id = r.native_id.empty() ? 0 : b.CreateString(r.native_id);
+    const auto cell_id = r.cell_id.empty() ? 0 : b.CreateString(r.cell_id);
+    const auto last_observed = r.observed_at >= 0 ? b.CreateString(std::to_string(r.observed_at)) : 0;
+    const auto operator_name = r.operator_name.empty() ? 0 : b.CreateString(r.operator_name);
+    const auto site_name = r.site_name.empty() ? 0 : b.CreateString(r.site_name);
+    const auto country_code = r.country_code.empty() ? 0 : b.CreateString(r.country_code);
+
+    TBSBuilder tb(b);
+    tb.add_ID(id);
+    tb.add_RADIO(static_cast<tbsRadioClass>(r.radio));
+    tb.add_LATITUDE(r.latitude);
+    tb.add_LONGITUDE(r.longitude);
+    if (native_id.o) tb.add_NATIVE_ID(native_id);
+    if (r.mcc >= 0) tb.add_MCC(static_cast<uint32_t>(r.mcc));
+    if (r.mnc >= 0) tb.add_MNC(static_cast<uint32_t>(r.mnc));
+    if (r.lac >= 0) tb.add_LAC(static_cast<uint32_t>(r.lac));
+    if (r.tac >= 0) tb.add_TAC(static_cast<uint32_t>(r.tac));
+    if (cell_id.o) tb.add_CELL_ID(cell_id);
+    if (r.range_m >= 0) tb.add_RANGE_M(r.range_m);
+    if (r.samples >= 0) tb.add_SAMPLES(static_cast<uint32_t>(r.samples));
+    if (r.has_signal) tb.add_AVERAGE_SIGNAL_DBM(r.average_signal_dbm);
+    if (last_observed.o) tb.add_LAST_OBSERVED(last_observed);
+    if (operator_name.o) tb.add_OPERATOR(operator_name);
+    if (site_name.o) tb.add_SITE_NAME(site_name);
+    if (country_code.o) tb.add_COUNTRY_CODE(country_code);
+    tb.add_SOURCES(sources);
+    tb.add_CONSENSUS(consensus);
+    FinishTBSBuffer(b, tb.Finish());
+    append_size_prefixed(stream, b.GetBufferPointer(), b.GetSize());
+}
+
+// Presence of a scalar the builder may have elided: the table's own vtable says
+// whether the field was written (the generated tables keep CheckField private).
+bool has_field(const void* table, flatbuffers::voffset_t vt) {
+    const uint8_t* t = reinterpret_cast<const uint8_t*>(table);
+    const uint8_t* vtable = t - flatbuffers::ReadScalar<flatbuffers::soffset_t>(t);
+    const flatbuffers::voffset_t vtable_len = flatbuffers::ReadScalar<flatbuffers::voffset_t>(vtable);
+    return vt < vtable_len && flatbuffers::ReadScalar<flatbuffers::voffset_t>(vtable + vt) != 0;
+}
+
+Report report_from_tbs(const TBS* t) {
     Report r;
-    r.provider_id = json_string(j, "provider_id", "");
-    r.native_id = json_string(j, "native_id", "");
-    r.radio = static_cast<int8_t>(json_number(j, "radio", RC_UNKNOWN));
-    r.latitude = json_number(j, "latitude", 0);
-    r.longitude = json_number(j, "longitude", 0);
-    r.mcc = static_cast<long>(json_number(j, "mcc", -1));
-    r.mnc = static_cast<long>(json_number(j, "mnc", -1));
-    r.lac = static_cast<long>(json_number(j, "lac", -1));
-    r.tac = static_cast<long>(json_number(j, "tac", -1));
-    r.cell_id = json_string(j, "cell_id", "");
-    r.range_m = json_number(j, "range_m", -1);
-    r.samples = static_cast<long>(json_number(j, "samples", -1));
-    const double sig = json_number(j, "average_signal_dbm", 1e9);
-    if (sig < 1e8) { r.average_signal_dbm = sig; r.has_signal = true; }
-    r.observed_at = static_cast<long long>(json_number(j, "observed_at", -1));
-    r.site_name = json_string(j, "site_name", "");
-    r.operator_name = json_string(j, "operator", "");
-    r.country_code = json_string(j, "country_code", "");
+    const auto str = [](const flatbuffers::String* s) { return s ? s->str() : std::string(); };
+    if (t->SOURCES() && t->SOURCES()->size() && t->SOURCES()->Get(0)->PROVIDER_ID()) {
+        r.provider_id = t->SOURCES()->Get(0)->PROVIDER_ID()->str();
+    } else if (t->CONSENSUS() && t->CONSENSUS()->WINNING_PROVIDER_ID()) {
+        r.provider_id = t->CONSENSUS()->WINNING_PROVIDER_ID()->str();
+    }
+    r.native_id = str(t->NATIVE_ID());
+    r.radio = static_cast<int8_t>(t->RADIO());
+    r.latitude = t->LATITUDE();
+    r.longitude = t->LONGITUDE();
+    if (has_field(t, TBS::VT_MCC)) r.mcc = static_cast<long>(t->MCC());
+    if (has_field(t, TBS::VT_MNC)) r.mnc = static_cast<long>(t->MNC());
+    if (has_field(t, TBS::VT_LAC)) r.lac = static_cast<long>(t->LAC());
+    if (has_field(t, TBS::VT_TAC)) r.tac = static_cast<long>(t->TAC());
+    r.cell_id = str(t->CELL_ID());
+    if (has_field(t, TBS::VT_RANGE_M)) r.range_m = t->RANGE_M();
+    if (has_field(t, TBS::VT_SAMPLES)) r.samples = static_cast<long>(t->SAMPLES());
+    if (has_field(t, TBS::VT_AVERAGE_SIGNAL_DBM)) {
+        r.average_signal_dbm = t->AVERAGE_SIGNAL_DBM();
+        r.has_signal = true;
+    }
+    if (t->LAST_OBSERVED() && t->LAST_OBSERVED()->size()) {
+        r.observed_at = std::strtoll(t->LAST_OBSERVED()->c_str(), nullptr, 10);
+    }
+    r.site_name = str(t->SITE_NAME());
+    r.operator_name = str(t->OPERATOR());
+    r.country_code = str(t->COUNTRY_CODE());
     return r;
 }
+
+// Walk a size-prefixed stream; zero-length prefixes are padding. Each frame is
+// handed to `fn` from an 8-aligned copy when its address is not aligned.
+template <typename Fn>
+bool for_each_frame(const uint8_t* data, size_t size, Fn fn) {
+    size_t at = 0;
+    std::vector<uint8_t> scratch;
+    while (at + 4 <= size) {
+        const uint32_t len = static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) |
+                             (static_cast<uint32_t>(data[at + 2]) << 16) |
+                             (static_cast<uint32_t>(data[at + 3]) << 24);
+        at += 4;
+        if (len == 0) continue;
+        if (len > size - at) return false;
+        const uint8_t* frame = data + at;
+        if (reinterpret_cast<uintptr_t>(frame) % 8) {
+            scratch.assign(frame, frame + len);
+            frame = scratch.data();
+        }
+        if (!fn(frame, static_cast<size_t>(len))) return false;
+        at += len;
+    }
+    return at == size;
+}
+
 
 // Splits a JSON array of objects into its top-level object slices.
 std::vector<std::string> split_json_objects(const std::string& src) {
@@ -1713,28 +1759,6 @@ const char* detect_body_format(const std::string& body) {
     // through to positional attribution, which is still corroborated
     // downstream — never be vetoed by an unknown shape.
     return nullptr;
-}
-
-// Decode hostcap/http-request's opt-in raw response lane. Keeping the status in
-// an eight-byte prefix and the body verbatim avoids inflating a 27 MB national
-// GeoJSON document to 36 MB of base64 plus several same-sized JSON/string
-// copies inside the flow's 128 MB linear-memory ceiling.
-//
-//   0..3  "$HRB"
-//   4..7  signed HTTP status, little endian
-//   8..N  response body
-bool decode_raw_http_response(const plugin_input_frame_t* frame, int* status,
-                              std::string* body) {
-    if (!frame || !frame->payload || frame->payload_length < 8) return false;
-    const uint8_t* p = frame->payload;
-    if (p[0] != '$' || p[1] != 'H' || p[2] != 'R' || p[3] != 'B') return false;
-    const uint32_t raw_status = static_cast<uint32_t>(p[4]) |
-                                (static_cast<uint32_t>(p[5]) << 8) |
-                                (static_cast<uint32_t>(p[6]) << 16) |
-                                (static_cast<uint32_t>(p[7]) << 24);
-    *status = static_cast<int32_t>(raw_status);
-    body->assign(reinterpret_cast<const char*>(p + 8), frame->payload_length - 8);
-    return true;
 }
 
 // Decode an Overpass `elements` array into reports.
@@ -2423,6 +2447,182 @@ double confidence_of(const std::vector<Report>& reports, const std::vector<size_
     return std::round(raw * 1000.0) / 1000.0;
 }
 
+// ── frame helpers ──────────────────────────────────────────────────────────
+using Bytes = std::vector<uint8_t>;
+namespace R = sdn::runtime;
+
+int push_frame(const char* port, const char* schema, const char* identifier, const char* root,
+               const uint8_t* data, size_t size) {
+    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
+                                 data, static_cast<uint32_t>(size));
+}
+
+int push_tbs_stream(const char* port, const std::vector<uint8_t>& bytes) {
+    return push_frame(port, "TBS.fbs", "$TBS", "TBS", bytes.data(), bytes.size());
+}
+
+int64_t now_ms() {
+    struct timeval tv;
+    if (gettimeofday(&tv, nullptr) != 0) return 0;
+    return static_cast<int64_t>(tv.tv_sec) * 1000 + static_cast<int64_t>(tv.tv_usec / 1000);
+}
+
+// RFC 3339 UTC fixed-millisecond, the $TBS provenance timestamp form.
+std::string iso_of_ms(uint64_t ms) {
+    const time_t secs = static_cast<time_t>(ms / 1000);
+    struct tm utc;
+    if (gmtime_r(&secs, &utc) == nullptr) return std::string();
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.tm_year + 1900,
+                  utc.tm_mon + 1, utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec,
+                  static_cast<int>(ms % 1000));
+    return std::string(buf);
+}
+
+// Presence of a scalar the builder may have elided. The generated tables
+// inherit flatbuffers::Table privately, so the check goes through the base.
+
+const plugin_input_frame_t* frame_for(const char* port_id) {
+    const int32_t idx = plugin_find_input_index(port_id, 0);
+    return idx < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(idx));
+}
+
+// SURPLUS-FRAME REFUSAL on a single-stream port (graph task
+// modules-guest-nodes-drop-batched-frames): the compiled runtime drains a
+// node's queue port-blind, so two frames on one of these ports are refused by
+// name rather than one of them silently destroyed.
+bool refuse_batched(const char* port) {
+    uint32_t on_port = 0;
+    for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+        const plugin_input_frame_t* f = plugin_get_input_frame(i);
+        if (f && f->port_id && std::strcmp(f->port_id, port) == 0) ++on_port;
+    }
+    if (on_port <= 1) return false;
+    char message[256];
+    std::snprintf(message, sizeof(message),
+                  "This invocation carries %u frames on single-stream input port \"%s\"; the surplus is "
+                  "refused rather than silently discarded.",
+                  on_port, port);
+    plugin_set_error("batched-input-frames", message);
+    return true;
+}
+
+// ── the run contract ($APR) ────────────────────────────────────────────────
+//
+// The client's request, normalized once by `route` (or authored by the ingest
+// planner) and carried in every provider HttpRequest's CONTEXT. Every later
+// stage reads the APR instead of re-parsing the transport, and the stage that
+// answers passes it on beside its answer — which is the APR's own design. Stage
+// observations ride as RESPONSE_HEADERS: they are what the answer carries.
+Bytes apr_bytes(const APRT& apr) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    FinishAPRBuffer(b, APR::Pack(b, &apr));
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+// A record of a size-prefixed stream may have been written either way: Finish<X>Buffer then prefixed (its alignment
+// is relative to its own first byte) or FinishSizePrefixed<X>Buffer (its alignment is relative to the PREFIX). The
+// second fails the verifier when read from its first byte, so it is re-read as the prefix-inclusive buffer, copied to
+// an 8-aligned scratch. Returns the record's root bytes (in `scratch` when re-aligned), or nullptr when it verifies
+// neither way.
+template <typename VerifyPlain, typename VerifyPrefixed>
+const uint8_t* verified_record(const uint8_t* data, size_t size, std::vector<uint64_t>* scratch, VerifyPlain plain,
+                               VerifyPrefixed prefixed) {
+    {
+        flatbuffers::Verifier v(data, size);
+        if (plain(v)) return data;
+    }
+    scratch->assign((size + 4 + 7) / 8, 0);
+    uint8_t* bytes = reinterpret_cast<uint8_t*>(scratch->data());
+    const uint32_t n = static_cast<uint32_t>(size);
+    bytes[0] = static_cast<uint8_t>(n);
+    bytes[1] = static_cast<uint8_t>(n >> 8);
+    bytes[2] = static_cast<uint8_t>(n >> 16);
+    bytes[3] = static_cast<uint8_t>(n >> 24);
+    std::memcpy(bytes + 4, data, size);
+    flatbuffers::Verifier v(bytes, size + 4);
+    return prefixed(v) ? bytes + 4 : nullptr;
+}
+
+std::unique_ptr<APRT> apr_unpack(const uint8_t* data, size_t size) {
+    std::vector<uint64_t> scratch;
+    const uint8_t* root = verified_record(
+        data, size, &scratch, [](flatbuffers::Verifier& v) { return VerifyAPRBuffer(v); },
+        [](flatbuffers::Verifier& v) { return VerifySizePrefixedAPRBuffer(v); });
+    if (!root) return nullptr;
+    return std::unique_ptr<APRT>(GetAPR(root)->UnPack());
+}
+
+std::string apr_param(const APRT& apr, const char* name, const std::string& fallback = std::string()) {
+    for (const auto& p : apr.PARAMETERS)
+        if (p && p->NAME == name) return p->VALUE;
+    return fallback;
+}
+
+bool apr_has_param(const APRT& apr, const char* name) {
+    for (const auto& p : apr.PARAMETERS)
+        if (p && p->NAME == name) return true;
+    return false;
+}
+
+void apr_add_param(APRT* apr, const std::string& name, const std::string& value) {
+    auto p = std::make_unique<APRParameterT>();
+    p->NAME = name;
+    p->VALUE = value;
+    apr->PARAMETERS.push_back(std::move(p));
+}
+
+void apr_drop_param(APRT* apr, const char* name) {
+    auto& v = apr->PARAMETERS;
+    v.erase(std::remove_if(v.begin(), v.end(), [&](const std::unique_ptr<APRParameterT>& p) { return p && p->NAME == name; }),
+            v.end());
+}
+
+std::string apr_header(const APRT& apr, const char* name) {
+    for (const auto& h : apr.RESPONSE_HEADERS)
+        if (h && h->NAME == name) return h->VALUE;
+    return std::string();
+}
+
+void apr_set_header(APRT* apr, const std::string& name, const std::string& value) {
+    for (auto& h : apr->RESPONSE_HEADERS) {
+        if (h && h->NAME == name) { h->VALUE = value; return; }
+    }
+    auto h = std::make_unique<APRParameterT>();
+    h->NAME = name;
+    h->VALUE = value;
+    apr->RESPONSE_HEADERS.push_back(std::move(h));
+}
+
+int push_apr(const char* port, const APRT& apr) {
+    const Bytes bytes = apr_bytes(apr);
+    return push_frame(port, "APR.fbs", "$APR", "APR", bytes.data(), bytes.size());
+}
+
+std::vector<std::string> split_list(const std::string& text) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (size_t i = 0; i <= text.size(); ++i) {
+        if (i == text.size() || text[i] == ',') {
+            if (!cur.empty()) out.push_back(cur);
+            cur.clear();
+        } else {
+            cur += text[i];
+        }
+    }
+    return out;
+}
+
+// A CONTEXT stream: size-prefixed records, padded to 8 with zero-length prefixes.
+void stream_append(Bytes* stream, const Bytes& record) {
+    append_size_prefixed(stream, record.data(), record.size());
+    while (stream->size() % 8) stream->insert(stream->end(), {0, 0, 0, 0});
+}
+
+bool has_identifier(const uint8_t* buf, size_t size, const char* id) {
+    return size >= 8 && std::memcmp(buf + 4, id, 4) == 0;
+}
+
 // ── $HTQ request envelope ──────────────────────────────────────────────────
 //
 // The host is a DUMB PIPE (module-sdk schemas/HttpRequestAbi.fbs): it delivers
@@ -2431,57 +2631,86 @@ double confidence_of(const std::vector<Report>& reports, const std::vector<size_
 // this flow has ONE http trigger and dispatches on PATH internally: the host
 // takes the FIRST http-request trigger and breaks (flowrt/httpmount.go:562-570),
 // so a second trigger is silently unreachable rather than a second route.
-//
-// Hand-decoded rather than inlining the generated header: the envelope is one
-// table with six fields, and the module already inlines $TBS. Slots are
-// METHOD=0, PATH=1, QUERY=2, HEADERS=3, BODY=4, REMOTE=5.
-struct HtqReader {
-    const uint8_t* buf = nullptr;
-    uint32_t len = 0;
-    uint32_t root = 0;
-    uint32_t vtable = 0;
-    uint16_t vtable_len = 0;
-
-    bool init(const uint8_t* data, uint32_t size) {
-        if (!data || size < 8) return false;
-        buf = data; len = size;
-        root = rd32(0);
-        if (root + 4 > len) return false;
-        const int32_t soffset = static_cast<int32_t>(rd32(root));
-        const int64_t vt = static_cast<int64_t>(root) - soffset;
-        if (vt < 0 || vt + 4 > len) return false;
-        vtable = static_cast<uint32_t>(vt);
-        vtable_len = rd16(vtable);
-        return true;
-    }
-    uint32_t rd32(uint32_t at) const {
-        return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
-               (static_cast<uint32_t>(buf[at + 2]) << 16) | (static_cast<uint32_t>(buf[at + 3]) << 24);
-    }
-    uint16_t rd16(uint32_t at) const {
-        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
-    }
-    uint16_t slot(int index) const {
-        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
-        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
-        return rd16(at);
-    }
-    std::string str(int index) const {
-        const uint16_t rel = slot(index);
-        if (!rel) return std::string();
-        const uint32_t at = root + rel;
-        if (at + 4 > len) return std::string();
-        const uint32_t off = at + rd32(at);
-        if (off + 4 > len) return std::string();
-        const uint32_t n = rd32(off);
-        if (off + 4 + n > len) return std::string();
-        return std::string(reinterpret_cast<const char*>(buf + off + 4), n);
-    }
-    std::string bytes(int index) const { return str(index); }  // same layout for [ubyte]
+struct Htq {
+    std::string method, path, query, body, if_none_match, accept, content_type;
 };
 
+bool read_htq(const plugin_input_frame_t* frame, Htq* out) {
+    if (!frame || !frame->payload || frame->payload_length < 8) return false;
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) || !sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        return false;
+    }
+    const sdn::http::HttpRequest* r = sdn::http::GetHttpRequest(frame->payload);
+    if (r->METHOD()) out->method = r->METHOD()->str();
+    if (r->PATH()) out->path = r->PATH()->str();
+    if (r->QUERY()) out->query = r->QUERY()->str();
+    if (r->BODY()) out->body.assign(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
+    if (const auto* headers = r->HEADERS()) {
+        for (const auto* h : *headers) {
+            if (!h || !h->NAME()) continue;
+            std::string name = h->NAME()->str();
+            for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            const std::string value = h->VALUE() ? h->VALUE()->str() : std::string();
+            if (name == "if-none-match" && out->if_none_match.empty()) out->if_none_match = value;
+            if (name == "accept" && out->accept.empty()) out->accept = value;
+            if (name == "content-type" && out->content_type.empty()) out->content_type = value;
+        }
+    }
+    return true;
+}
 
-// ── $TBS encoding ──────────────────────────────────────────────────────────
+aprMethod method_of(const std::string& m) {
+    const std::string v = upper_ascii(m);
+    if (v == "GET") return aprMethod_GET;
+    if (v == "HEAD") return aprMethod_HEAD;
+    if (v == "POST") return aprMethod_POST;
+    if (v == "PUT") return aprMethod_PUT;
+    if (v == "PATCH") return aprMethod_PATCH;
+    if (v == "DELETE") return aprMethod_DELETE;
+    if (v == "OPTIONS") return aprMethod_OPTIONS;
+    return aprMethod_Unspecified;
+}
+
+// Representation, exactly as foundation/http-route decides it: ?format wins,
+// then the Accept header, else the service default.
+aprRepresentation representation_of(const Htq& h) {
+    size_t at = 0;
+    while (at <= h.query.size()) {
+        size_t end = h.query.find('&', at);
+        if (end == std::string::npos) end = h.query.size();
+        const std::string pair = h.query.substr(at, end - at);
+        const size_t eq = pair.find('=');
+        if (eq != std::string::npos && url_decode(pair.substr(0, eq)) == "format") {
+            std::string v = url_decode(pair.substr(eq + 1));
+            for (char& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (v == "json") return aprRepresentation_Json;
+            if (v == "flatbuffer" || v == "flatbuffers" || v == "fb") return aprRepresentation_FlatBuffer;
+            if (!v.empty()) return aprRepresentation_Default;
+        }
+        at = end + 1;
+    }
+    std::string accept = h.accept;
+    for (char& c : accept) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (accept.find("flatbuffers") != std::string::npos) return aprRepresentation_FlatBuffer;
+    if (accept.find("application/json") != std::string::npos) return aprRepresentation_Json;
+    return aprRepresentation_Default;
+}
+
+APRT base_apr(const Htq& h, const char* route) {
+    APRT a;
+    a.RECEIVED_AT_MS = now_ms();
+    a.METHOD = method_of(h.method);
+    a.PATH = h.path;
+    a.ROUTE = route;
+    a.SCHEMA_NAME = "TBS.fbs";
+    a.ACCEPT = representation_of(h);
+    a.IF_NONE_MATCH = h.if_none_match;
+    a.CONTENT_TYPE = h.content_type;
+    return a;
+}
+
+// $TBS encoding of a deconflicted site.
 // SOURCES and CONSENSUS are `required` in the IDL, so both are always built.
 // Optional scalars are only added when the source actually reported them:
 // FlatBuffers omits default-valued fields, which is what keeps "the provider
@@ -2572,24 +2801,183 @@ void build_tbs_record(const std::vector<Report>& reports, const std::vector<size
     out->assign(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-// ── frame helpers ──────────────────────────────────────────────────────────
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 nullptr, 0, 0, reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
+// ── the resume mark ($IRM) ─────────────────────────────────────────────────
+//
+// parse writes the next mark of a bulk (csv-gz) lane: the mark it was handed in
+// CONTEXT, copied field for field, with the position, the state and the
+// decoder at the new seam. Fields this node does not own are carried untouched.
+flatbuffers::Offset<flatbuffers::String> copy_str(flatbuffers::FlatBufferBuilder& b, const flatbuffers::String* s) {
+    return s ? b.CreateString(s->c_str(), s->size()) : 0;
 }
 
-int push_tbs_stream(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, "TBS.fbs", "$TBS", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 "TBS", 0, 0, bytes.data(), static_cast<uint32_t>(bytes.size()));
+flatbuffers::Offset<flatbuffers::Vector<uint8_t>> copy_bytes(flatbuffers::FlatBufferBuilder& b,
+                                                             const flatbuffers::Vector<uint8_t>* v) {
+    return v ? b.CreateVector(v->data(), v->size()) : 0;
 }
 
-std::string input_text(const char* port_id, uint32_t ordinal) {
-    const int32_t idx = plugin_find_input_index(port_id, ordinal);
-    if (idx < 0) return std::string();
-    const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!f || !f->payload) return std::string();
-    return std::string(reinterpret_cast<const char*>(f->payload), f->payload_length);
+Bytes build_resume_irm(const IRM* in, const std::string& provider, const std::string& source_url,
+                       const BulkResume& resume, const std::string& header_line) {
+    flatbuffers::FlatBufferBuilder b(2048 + resume.state.size() + resume.window.size() + resume.pending.size());
+    const std::string stamp = iso_of_ms(static_cast<uint64_t>(now_ms()));
+
+    // SOURCE
+    const IRMSource* src = in ? in->SOURCE() : nullptr;
+    const auto s_url = src && src->SOURCE_URL() ? copy_str(b, src->SOURCE_URL()) : b.CreateString(source_url);
+    const auto s_obj = src ? copy_str(b, src->SOURCE_OBJECT_ID()) : 0;
+    const auto s_cid = src ? copy_str(b, src->SOURCE_CID()) : 0;
+    const auto s_media = src ? copy_str(b, src->MEDIA_TYPE()) : 0;
+    const auto s_etag = src ? copy_str(b, src->ENTITY_TAG()) : 0;
+    const auto s_lm = src ? copy_str(b, src->LAST_MODIFIED()) : 0;
+    const auto s_sha = src ? copy_str(b, src->SOURCE_SHA256()) : 0;
+    const auto s_ver = src ? copy_str(b, src->SOURCE_VERSION()) : 0;
+    const auto s_vat = src ? copy_str(b, src->VALIDATED_AT()) : 0;
+    IRMSourceBuilder sb(b);
+    sb.add_SOURCE_URL(s_url);
+    if (s_obj.o) sb.add_SOURCE_OBJECT_ID(s_obj);
+    if (s_cid.o) sb.add_SOURCE_CID(s_cid);
+    if (s_media.o) sb.add_MEDIA_TYPE(s_media);
+    if (src) sb.add_TOTAL_BYTES(src->TOTAL_BYTES());
+    if (s_etag.o) sb.add_ENTITY_TAG(s_etag);
+    if (s_lm.o) sb.add_LAST_MODIFIED(s_lm);
+    if (s_sha.o) sb.add_SOURCE_SHA256(s_sha);
+    if (s_ver.o) sb.add_SOURCE_VERSION(s_ver);
+    if (src) sb.add_VALIDATOR_MATCH(src->VALIDATOR_MATCH());
+    if (s_vat.o) sb.add_VALIDATED_AT(s_vat);
+    const auto source_off = sb.Finish();
+
+    // DECODE_CONTEXT: the decoder at the new seam (only while resumable).
+    const bool resumable = !resume.state.empty();
+    const IRMDecodeContext* dc = in ? in->DECODE_CONTEXT() : nullptr;
+    const auto d_format = b.CreateString("text/csv");
+    const auto d_header = header_line.empty() ? 0 : b.CreateString(header_line);
+    const auto d_compression = b.CreateString("gzip");
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> d_columns = 0;
+    if (dc && dc->COLUMN_NAMES()) {
+        std::vector<flatbuffers::Offset<flatbuffers::String>> cols;
+        for (const auto* c : *dc->COLUMN_NAMES()) cols.push_back(copy_str(b, c));
+        d_columns = b.CreateVector(cols);
+    }
+    const auto d_delim = dc ? copy_str(b, dc->DELIMITER()) : 0;
+    const auto d_quote = dc ? copy_str(b, dc->QUOTE()) : 0;
+    const auto d_escape = dc ? copy_str(b, dc->ESCAPE()) : 0;
+    const auto d_term = dc ? copy_str(b, dc->LINE_TERMINATOR()) : 0;
+    const auto d_charset = dc ? copy_str(b, dc->CHARSET()) : 0;
+    flatbuffers::Offset<flatbuffers::Vector<uint8_t>> d_state = 0, d_window = 0, d_partial = 0;
+    flatbuffers::Offset<flatbuffers::String> d_sfmt = 0, d_sver = 0, d_build = 0, d_smedia = 0;
+    if (resumable) {
+        d_state = b.CreateVector(reinterpret_cast<const uint8_t*>(resume.state.data()), resume.state.size());
+        d_window = b.CreateVector(reinterpret_cast<const uint8_t*>(resume.window.data()), resume.window.size());
+        d_partial = b.CreateVector(reinterpret_cast<const uint8_t*>(resume.pending.data()), resume.pending.size());
+        d_sfmt = b.CreateString(kDecoderStateFormat);
+        d_sver = b.CreateString(kDecoderStateVersion);
+        d_build = b.CreateString(kDecoderBuildId);
+        d_smedia = b.CreateString(kDecoderStateMediaType);
+    }
+    IRMDecodeContextBuilder db(b);
+    db.add_FORMAT(d_format);
+    if (d_header.o) {
+        db.add_HEADER_LINE(d_header);
+        db.add_HEADER_BYTE_LENGTH(static_cast<uint64_t>(header_line.size()));
+    }
+    if (d_columns.o) db.add_COLUMN_NAMES(d_columns);
+    if (d_delim.o) db.add_DELIMITER(d_delim);
+    if (d_quote.o) db.add_QUOTE(d_quote);
+    if (d_escape.o) db.add_ESCAPE(d_escape);
+    if (d_term.o) db.add_LINE_TERMINATOR(d_term);
+    if (d_charset.o) db.add_CHARSET(d_charset);
+    db.add_COMPRESSION(d_compression);
+    if (resumable) {
+        db.add_DECODER_STATE(d_state);
+        db.add_DECODER_STATE_FORMAT(d_sfmt);
+        db.add_DECODER_STATE_VERSION(d_sver);
+        db.add_DECODER_STATE_BYTE_LENGTH(static_cast<uint64_t>(resume.state.size()));
+        db.add_DECODER_BUILD_ID(d_build);
+        db.add_DECODER_STATE_MEDIA_TYPE(d_smedia);
+        db.add_WINDOW(d_window);
+        db.add_WINDOW_BYTE_LENGTH(static_cast<uint64_t>(resume.window.size()));
+        db.add_WINDOW_POSITION(resume.window_pos);
+        db.add_PARTIAL_RECORD(d_partial);
+    }
+    const auto decode_off = db.Finish();
+
+    // LAST_CHUNK: the chunk this mark was advanced from.
+    const IRMChunk* lc = in ? in->LAST_CHUNK() : nullptr;
+    const auto c_batch = lc ? copy_str(b, lc->BATCH_ID()) : 0;
+    IRMChunkBuilder cb(b);
+    cb.add_CHUNK_INDEX(in ? in->NEXT_CHUNK_INDEX() : 0);
+    if (c_batch.o) cb.add_BATCH_ID(c_batch);
+    cb.add_RANGE_FIRST_BYTE(in ? in->NEXT_OFFSET() : 0);
+    cb.add_RECORDS_DECODED(static_cast<uint32_t>(resume.rows_seen));
+    const auto chunk_off = cb.Finish();
+
+    // FAULT, carried.
+    flatbuffers::Offset<IRMFault> fault_off = 0;
+    if (in && in->FAULT()) {
+        const IRMFault* f = in->FAULT();
+        const auto code = f->CODE() ? copy_str(b, f->CODE()) : b.CreateString("");
+        const auto msg = copy_str(b, f->MESSAGE());
+        const auto at = copy_str(b, f->OCCURRED_AT());
+        const auto retry = copy_str(b, f->RETRY_NOT_BEFORE());
+        IRMFaultBuilder fb(b);
+        fb.add_CODE(code);
+        if (msg.o) fb.add_MESSAGE(msg);
+        fb.add_CHUNK_INDEX(f->CHUNK_INDEX());
+        fb.add_CONSECUTIVE_FAILURES(f->CONSECUTIVE_FAILURES());
+        if (at.o) fb.add_OCCURRED_AT(at);
+        if (retry.o) fb.add_RETRY_NOT_BEFORE(retry);
+        fault_off = fb.Finish();
+    }
+
+    const auto job_id = in && in->JOB_ID() ? copy_str(b, in->JOB_ID()) : b.CreateString(provider + "@" + source_url);
+    const auto provider_off = in && in->PROVIDER_ID() ? copy_str(b, in->PROVIDER_ID()) : b.CreateString(provider);
+    const auto ingestor = in && in->INGESTOR_ID() ? copy_str(b, in->INGESTOR_ID()) : b.CreateString("cell-tower-source");
+    const auto target = in ? copy_str(b, in->TARGET_STANDARD()) : 0;
+    const auto reconcile = in ? copy_str(b, in->RECONCILE_MODE()) : 0;
+    const auto merge = in ? copy_str(b, in->MERGE_POLICY()) : 0;
+    const auto created = in ? copy_str(b, in->CREATED_AT()) : 0;
+    const auto started = in ? copy_str(b, in->STARTED_AT()) : 0;
+    const auto updated = b.CreateString(stamp);
+    const auto completed = resume.complete ? b.CreateString(stamp) : (in ? copy_str(b, in->COMPLETED_AT()) : 0);
+    const auto expires = in ? copy_str(b, in->EXPIRES_AT()) : 0;
+    const auto notes = in ? copy_str(b, in->NOTES()) : 0;
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> tags = 0;
+    if (in && in->TAGS()) {
+        std::vector<flatbuffers::Offset<flatbuffers::String>> t;
+        for (const auto* s : *in->TAGS()) t.push_back(copy_str(b, s));
+        tags = b.CreateVector(t);
+    }
+
+    IRMBuilder ib(b);
+    ib.add_JOB_ID(job_id);
+    ib.add_SEQUENCE(in ? in->SEQUENCE() : 0);
+    ib.add_PROVIDER_ID(provider_off);
+    ib.add_INGESTOR_ID(ingestor);
+    ib.add_SOURCE(source_off);
+    ib.add_STATE(resume.complete ? irmJobState_COMPLETE : irmJobState_IN_PROGRESS);
+    ib.add_RANGE_MODE(in ? in->RANGE_MODE() : irmRangeMode_INCLUSIVE_BYTE_RANGE);
+    ib.add_NEXT_OFFSET(resume.next_byte);
+    ib.add_NEXT_CHUNK_INDEX(in ? in->NEXT_CHUNK_INDEX() : 0);
+    if (in) ib.add_CHUNK_BYTE_BUDGET(in->CHUNK_BYTE_BUDGET());
+    ib.add_DECODE_CONTEXT(decode_off);
+    ib.add_LAST_CHUNK(chunk_off);
+    if (in) {
+        ib.add_CHUNKS_COMMITTED(in->CHUNKS_COMMITTED());
+        ib.add_BYTES_COMMITTED(in->BYTES_COMMITTED());
+        ib.add_RECORDS_COMMITTED(in->RECORDS_COMMITTED());
+    }
+    if (target.o) ib.add_TARGET_STANDARD(target);
+    if (reconcile.o) ib.add_RECONCILE_MODE(reconcile);
+    if (merge.o) ib.add_MERGE_POLICY(merge);
+    if (fault_off.o) ib.add_FAULT(fault_off);
+    if (created.o) ib.add_CREATED_AT(created);
+    if (started.o) ib.add_STARTED_AT(started);
+    ib.add_UPDATED_AT(updated);
+    if (completed.o) ib.add_COMPLETED_AT(completed);
+    if (expires.o) ib.add_EXPIRES_AT(expires);
+    if (tags.o) ib.add_TAGS(tags);
+    if (notes.o) ib.add_NOTES(notes);
+    FinishIRMBuffer(b, ib.Finish());
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // ---------------------------------------------------------------------------
@@ -2607,7 +2995,8 @@ std::string credential_lane(const std::string& provider_id) {
 }
 
 // ---------------------------------------------------------------------------
-// catalog: the provider list this node can actually reach.
+// catalog: the provider list this node can actually reach, as a $QRP
+// projection page (one row per provider) for the credential mediator.
 //
 // The GUI calls this FIRST and renders exactly what it is told, so the catalog
 // is the module's, never a list compiled into the page. It reports each
@@ -2615,110 +3004,140 @@ std::string credential_lane(const std::string& provider_id) {
 // page can disable what it cannot use instead of offering a control that fails.
 //
 // It reports NO credential values and no key material — only whether a lane is
-// configured. `keySlot` is emitted ONLY when the node published a real slot to
-// seal to; while it is absent the GUI must refuse to collect a credential
-// rather than show a form with nowhere safe to send it.
+// configured, and that is FALSE HERE BY CONSTRUCTION: this plugin holds no
+// credential capability and must not (`secrets.status` has no browser-host
+// implementation). The credential MEDIATOR — the wasmedge-only sibling that the
+// operator grants secrets/keyslot to — flips credentialConfigured per lane and
+// fills the keySlot cells. The three keySlot cells are Null here: this node
+// never invents a key slot.
 // ---------------------------------------------------------------------------
-int emit_catalog(void) {
-    std::string out = "{\"providers\":[";
+std::unique_ptr<QRPValueT> qv_text(const std::string& v) {
+    auto q = std::make_unique<QRPValueT>();
+    q->KIND = qrpValueKind_Text;
+    q->TEXT_VALUE = v;
+    return q;
+}
+std::unique_ptr<QRPValueT> qv_bool(bool v) {
+    auto q = std::make_unique<QRPValueT>();
+    q->KIND = qrpValueKind_Bool;
+    q->BOOL_VALUE = v;
+    return q;
+}
+std::unique_ptr<QRPValueT> qv_null() {
+    auto q = std::make_unique<QRPValueT>();
+    q->KIND = qrpValueKind_Null;
+    return q;
+}
+
+int emit_catalog(const Htq& h) {
+    QRPT page;
+    page.KIND = qrpKind_Page;
+    page.STATUS = qrpStatus_Ok;
+    page.REPRESENTATION = static_cast<qrpRepresentation>(representation_of(h));
+    page.GENERATED_AT_MS = now_ms();
+    static const char* kColumns[][2] = {
+        {"id", "string"}, {"name", "string"}, {"authority", "string"}, {"license", "string"},
+        {"attribution", "string"}, {"credentialRequired", "bool"}, {"credentialConfigured", "bool"},
+        {"credentialLane", "string"}, {"authoritative", "bool"}, {"defaultSelected", "bool"},
+        {"methods", "string"}, {"keySlotId", "string"}, {"keySlotPublicKey", "bytes"},
+        {"keySlotAlgorithm", "string"}};
+    for (const auto& c : kColumns) {
+        auto col = std::make_unique<QRPColumnT>();
+        col->NAME = c[0];
+        col->TYPE = c[1];
+        page.COLUMNS.push_back(std::move(col));
+    }
+    const std::string methods = "SINGLE_SOURCE,HIGHEST_SAMPLE_COUNT,MOST_RECENT,AUTHORITY_PRECEDENCE,CENTROID";
     for (size_t i = 0; i < kProviderCount; ++i) {
         const ProviderSpec& p = kProviders[i];
-        if (i) out += ",";
-        out += std::string("{\"id\":\"") + p.id + "\"";
-        out += ",\"name\":\"" + json_escape(p.authority) + "\"";
-        out += ",\"authority\":\"" + json_escape(p.authority) + "\"";
-        out += ",\"license\":\"" + json_escape(p.license) + "\"";
-        out += ",\"attribution\":\"" + json_escape(p.attribution) + "\"";
-        out += ",\"credentialRequired\":" + std::string(p.login_required ? "true" : "false");
-        // FALSE HERE BY CONSTRUCTION, and finished downstream. This plugin holds
-        // no credential capability and must not: `secrets.status` has no
-        // browser-host implementation, so calling it from a method the browser
-        // harness instantiates would trap the very tests that keep the adapters
-        // honest (Janus ruling, 2026-08-09). The credential MEDIATOR — a
-        // wasmedge-only sibling plugin, the only node in this flow the operator
-        // grants secrets/keyslot to — flips this per lane and appends `keySlot`.
-        out += ",\"credentialConfigured\":false";
-        out += ",\"credentialLane\":\"" + json_escape(credential_lane(p.id)) + "\"";
-        out += ",\"authoritative\":" + std::string(p.authoritative ? "true" : "false");
+        auto row = std::make_unique<QRPRowT>();
+        row->CELLS.push_back(qv_text(p.id));
+        row->CELLS.push_back(qv_text(p.authority));
+        row->CELLS.push_back(qv_text(p.authority));
+        row->CELLS.push_back(qv_text(p.license));
+        row->CELLS.push_back(qv_text(p.attribution));
+        row->CELLS.push_back(qv_bool(p.login_required));
+        row->CELLS.push_back(qv_bool(false));
+        row->CELLS.push_back(qv_text(credential_lane(p.id)));
+        row->CELLS.push_back(qv_bool(p.authoritative));
         // A provider needing a login is not pre-ticked: offering it would
         // produce a run that silently skips it. The mediator flips this too,
         // for a provider whose credential IS held.
-        out += ",\"defaultSelected\":" + std::string(p.login_required ? "false" : "true");
-        out += "}";
+        row->CELLS.push_back(qv_bool(!p.login_required));
+        row->CELLS.push_back(qv_text(methods));
+        row->CELLS.push_back(qv_null());
+        row->CELLS.push_back(qv_null());
+        row->CELLS.push_back(qv_null());
+        page.ROWS.push_back(std::move(row));
     }
-    out += "],\"methods\":[\"SINGLE_SOURCE\",\"HIGHEST_SAMPLE_COUNT\",\"MOST_RECENT\""
-           ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
-    out += "}";
+    flatbuffers::FlatBufferBuilder b(4096);
+    FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &page));
+    Bytes stream(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    while (stream.size() % 8) stream.insert(stream.end(), {0, 0, 0, 0});
     // THE CATALOG IS NOT ANSWERED FROM HERE. It goes to the credential
-    // mediator, which is the node that can ask the host for the wrapping key
-    // slot and the per-lane configured flags, and which owns the reply.
-    // Emitting a `catalog`/`reply` pair here as well would race two bodies into
-    // one responder — and the port name matters for the reason recorded on the
-    // 2026-08-08 defect: `decision` is NOT a declared output of `route`, and a
-    // frame pushed to an undeclared port is not dropped, it survives in the
-    // pooled instance and is served to a later, unrelated caller.
-    return push_json("credential", "{\"op\":\"catalog\",\"catalog\":" + out + "}") < 0 ? 500 : 0;
+    // mediator, which can ask the host for the wrapping key slot and the
+    // per-lane configured flags, and which owns the reply. Answering here as
+    // well would race two bodies into one responder.
+    return push_frame("catalog", "QRP.fbs", "$QRP", "QRP", stream.data(), stream.size()) < 0 ? 500 : 0;
 }
 
-// ---------------------------------------------------------------------------
-// The credential route's REFUSALS — the ones decidable without any capability.
-//
-// An unknown provider, a provider that needs no login, and a wrong verb are all
-// answerable from the compiled registry alone, so they are answered here rather
-// than spent as a hop into the mediator. Everything that needs the host (open
-// the envelope, write the lane, clear the lane) goes to the mediator.
-//
-// `route` MUST be the string "error" for any non-200, because
-// foundation/http-respond reads decision.status ONLY in that branch
-// (http_respond_module.cpp:395-401); naming anything else turns a refusal into
-// a silent empty 200.
-// ---------------------------------------------------------------------------
-int emit_route_error(int status, const char* code, const std::string& message) {
-    if (push_json("reply", std::string("{\"route\":\"error\",\"format\":\"json\",\"status\":") +
-                               std::to_string(status) + "}") < 0) {
-        return 500;
-    }
-    return push_json("catalog", std::string("{\"code\":\"") + code + "\",\"error\":\"" +
-                                    json_escape(message) + "\"}") < 0
-               ? 500
-               : 0;
+// A REFUSAL is the request's $APR with STATUS + ERROR_CODE + ERROR_MESSAGE, for
+// foundation/http-respond's `respond` (it answers the status itself).
+int emit_refusal(APRT apr, uint16_t status, const char* code, const std::string& message) {
+    apr.STATUS = status;
+    apr.ERROR_CODE = code;
+    apr.ERROR_MESSAGE = message;
+    return push_apr("decision", apr) < 0 ? 500 : 0;
 }
 
 // PUT|DELETE /credentials/<providerId>. The lane id is DERIVED, never supplied:
 // `cell_<providerId>` where the provider id came out of THIS module's compiled
 // registry. A caller therefore cannot name a lane — it names a provider, and an
 // unknown provider is refused right here, before anything with a capability
-// sees it. That is what stops a request reaching `secrets:spacetrack` or any
-// other operator lane through this route, whatever the policy rows say.
-int dispatch_credential(const std::string& verb, const std::string& provider_id,
-                        const std::string& body) {
+// sees it.
+int dispatch_credential(const Htq& h, const std::string& verb, const std::string& provider_id) {
     const ProviderSpec* spec = find_provider(provider_id);
+    APRT apr = base_apr(h, verb == "DELETE" ? "credential-clear" : "credential-put");
     if (!spec) {
-        return emit_route_error(404, "unknown-provider",
-                                "no provider \"" + provider_id + "\" in this node's registry");
+        return emit_refusal(std::move(apr), 404, "unknown-provider",
+                            "no provider \"" + provider_id + "\" in this node's registry");
     }
     if (!spec->login_required) {
-        return emit_route_error(400, "credential-not-required",
-                                std::string("provider \"") + spec->id +
-                                    "\" is reachable without a login; it has no credential lane");
+        return emit_refusal(std::move(apr), 400, "credential-not-required",
+                            std::string("provider \"") + spec->id +
+                                "\" is reachable without a login; it has no credential lane");
     }
-    const std::string lane = credential_lane(spec->id);
-    if (verb == "DELETE") {
-        return push_json("credential", std::string("{\"op\":\"clear\",\"providerId\":\"") +
-                                           json_escape(spec->id) + "\",\"lane\":\"" +
-                                           json_escape(lane) + "\"}") < 0
-                   ? 500
-                   : 0;
-    }
+    apr.METHOD = verb == "DELETE" ? aprMethod_DELETE : aprMethod_PUT;
+    apr_add_param(&apr, "providerId", spec->id);
+    apr_add_param(&apr, "credentialLane", credential_lane(spec->id));
     // The body is the browser's keyslot envelope, verbatim. It is NOT parsed
     // here: this node cannot open it and has no business inspecting it. It is
     // forwarded whole to the one node that can.
-    return push_json("credential", std::string("{\"op\":\"put\",\"providerId\":\"") +
-                                       json_escape(spec->id) + "\",\"lane\":\"" +
-                                       json_escape(lane) + "\",\"envelope\":" +
-                                       (body.empty() ? std::string("{}") : body) + "}") < 0
-               ? 500
-               : 0;
+    if (verb != "DELETE") apr.BODY.assign(h.body.begin(), h.body.end());
+    return push_apr("credential", apr) < 0 ? 500 : 0;
+}
+
+struct Descriptor {
+    std::string provider_id;
+    std::string method;
+    std::string url;
+    std::vector<std::pair<std::string, std::string>> headers;
+    std::string body;
+    uint32_t timeout_ms = 40000;
+    std::string credential_lane;
+};
+
+Bytes http_request(const Descriptor& d, const Bytes& context) {
+    flatbuffers::FlatBufferBuilder b(1024 + context.size() + d.body.size());
+    auto headers = d.headers;
+    std::sort(headers.begin(), headers.end());
+    std::vector<flatbuffers::Offset<R::Header>> header_offsets;
+    for (const auto& kv : headers) header_offsets.push_back(R::CreateHeaderDirect(b, kv.first.c_str(), kv.second.c_str()));
+    const std::vector<uint8_t> body(d.body.begin(), d.body.end());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, d.method.c_str(), d.url.c_str(), &header_offsets,
+                                                             d.body.empty() ? nullptr : &body, d.timeout_ms, 0,
+                                                             &context));
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 }  // namespace
@@ -2726,37 +3145,33 @@ int dispatch_credential(const std::string& verb, const std::string& provider_id,
 extern "C" {
 
 // ---------------------------------------------------------------------------
-// route: one $HTQ request -> N provider fetch descriptors + the run contract.
+// route: one $HTQ request -> N provider HttpRequests (each carrying the run
+// contract $APR in CONTEXT), or a refusal, or a hand-off to the mediator.
 //
 // The provider set and merge method are read from the REQUEST, never from node
 // config, so two viewers can ask for different things at the same time without
 // either of them changing what the node is.
 // ---------------------------------------------------------------------------
 int route(void) {
-    const int32_t idx = plugin_find_input_index("request", 0);
-    if (idx < 0) return 400;
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload) return 400;
-
-    HtqReader htq;
-    if (!htq.init(frame->payload, frame->payload_length)) {
-        push_json("reply",
-                  "{\"route\":\"error\",\"format\":\"json\",\"status\":400"
-                  ",\"code\":\"bad-envelope\""
-                  ",\"error\":\"request envelope is not a readable $HTQ frame\"}");
-        return 0;
+    if (refuse_batched("request")) return 500;
+    const plugin_input_frame_t* frame = frame_for("request");
+    Htq h;
+    if (!read_htq(frame, &h)) {
+        APRT apr;
+        apr.RECEIVED_AT_MS = now_ms();
+        apr.SCHEMA_NAME = "TBS.fbs";
+        return emit_refusal(std::move(apr), 400, "bad-envelope",
+                            "request envelope is not a readable $HTQ frame");
     }
-    // $HTQ vtable slots (HttpRequestAbi.fbs): 0 METHOD, 1 PATH, 2 QUERY,
-    // 3 HEADERS, 4 BODY, 5 REMOTE.
-    const std::string method_verb = upper_ascii(htq.str(0));
-    const std::string path = htq.str(1);
-    const std::string body = htq.bytes(4);
+    const std::string method_verb = upper_ascii(h.method);
+    const std::string& path = h.path;
+    const std::string& body = h.body;
 
     // ONE trigger, dispatched here. The catalog read, the credential lane and
     // the aggregation are three routes of one flow, because the host mounts one
     // trigger per flow.
     if (path.size() >= 10 && path.compare(path.size() - 10, 10, "/providers") == 0) {
-        return emit_catalog();
+        return emit_catalog(h);
     }
 
     // /credentials/<providerId>. Matched on the SEGMENT, not with a suffix
@@ -2769,72 +3184,79 @@ int route(void) {
             const std::string provider_id =
                 url_decode(path.substr(at + std::strlen(kCredentialsSegment)));
             if (provider_id.empty() || provider_id.find('/') != std::string::npos) {
-                return emit_route_error(
-                    404, "no-provider",
+                return emit_refusal(
+                    base_apr(h, "credential-put"), 404, "no-provider",
                     "the credential route addresses one provider: /credentials/<providerId>");
             }
             if (method_verb == "PUT" || method_verb == "POST" || method_verb == "DELETE") {
-                return dispatch_credential(method_verb == "DELETE" ? "DELETE" : "PUT", provider_id,
-                                           body);
+                return dispatch_credential(h, method_verb == "DELETE" ? "DELETE" : "PUT", provider_id);
             }
-            return emit_route_error(
-                405, "method-not-allowed",
+            return emit_refusal(
+                base_apr(h, "credential-put"), 405, "method-not-allowed",
                 "the credential route takes PUT (store) and DELETE (clear); a credential is "
                 "never readable back");
         }
     }
 
+    APRT apr = base_apr(h, "aggregate");
     std::vector<std::string> wanted = json_string_array(body, "PROVIDERS");
     const std::string method_name = json_string(body, "METHOD", "HIGHEST_SAMPLE_COUNT");
     const double limit = json_number(body, "LIMIT", 2000);
+    // THE RECEIVED PARAMETERS, in the contract every later stage reads.
+    {
+        std::string raw;
+        if (json_raw_field(body, "PROVIDERS", &raw)) {
+            std::string joined;
+            for (size_t i = 0; i < wanted.size(); ++i) joined += (i ? "," : "") + wanted[i];
+            apr_add_param(&apr, "PROVIDERS", joined);
+        }
+        if (json_raw_field(body, "METHOD", &raw)) apr_add_param(&apr, "METHOD", method_name);
+        if (json_raw_field(body, "LIMIT", &raw)) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.0f", limit);
+            apr_add_param(&apr, "LIMIT", buf);
+        }
+        if (json_raw_field(body, "FULL_POPULATION", &raw))
+            apr_add_param(&apr, "FULL_POPULATION", json_bool(body, "FULL_POPULATION", false) ? "true" : "false");
+        if (json_raw_field(body, "CREDENTIAL_MEDIATOR", &raw))
+            apr_add_param(&apr, "CREDENTIAL_MEDIATOR", json_bool(body, "CREDENTIAL_MEDIATOR", false) ? "true" : "false");
+        if (json_raw_field(body, "BBOX", &raw)) {
+            std::string parts[4];
+            const char* keys[4] = {"south", "west", "north", "east"};
+            std::string joined;
+            for (int k = 0; k < 4; ++k) {
+                json_raw_field(raw, keys[k], &parts[k]);
+                joined += (k ? "," : "") + parts[k];
+            }
+            apr_add_param(&apr, "BBOX", joined);
+        }
+        if (json_raw_field(body, "REFRESH", &raw))
+            apr_add_param(&apr, "REFRESH", json_bool(body, "REFRESH", false) ? "true" : "false");
+    }
     // THE INGEST LANE. Opt-in, never a default.
     //
     // Every cap below this line exists to bound what an ANONYMOUS caller can
     // make this node fetch and merge, and together they are why the BAKOM lane
     // answered a worldwide request with ~364 of 22,347 Swiss sites: route asked
     // for a 2 MiB Range, parse stopped decoding at the per-provider row cap, and
-    // deconflict stopped writing at LIMIT. None of the three is a decode bug and
-    // none of them was visible in the answer.
-    //
-    // FULL_POPULATION is the ingest path saying "I am not a page; give me the
-    // whole register." It lifts all three caps. The ANONYMOUS defaults are
-    // unchanged — and, more importantly, a capped run now SAYS it was capped
-    // (see `truncated` in the deconflict summary), because this file's own rule
-    // is that a default which crops must never be indistinguishable from a
-    // complete answer.
+    // deconflict stopped writing at LIMIT. FULL_POPULATION is the ingest path
+    // saying "I am not a page; give me the whole register." It lifts all three
+    // caps, and a capped run SAYS it was capped (x-sdn-truncated).
     const bool full_population = json_bool(body, "FULL_POPULATION", false);
 
-    // THE CREDENTIAL MEDIATOR IS WIRED. Opt-in, never a default — see the
-    // login_required skip below for why this is a property of the FLOW and not
-    // of the credential. A caller that sets this is asserting that a
-    // `cell-tower-credentials` node sits between this one and the http node and
-    // will substitute `{{credential}}` before anything is fetched.
+    // THE CREDENTIAL MEDIATOR IS WIRED. Opt-in, never a default. A caller that
+    // sets this is asserting that a `cell-tower-credentials` node sits between
+    // this one and the http node and will substitute `{{credential}}` before
+    // anything is fetched.
     const bool credential_mediator = json_bool(body, "CREDENTIAL_MEDIATOR", false);
-
-    // THE BULK RESUME MARK, arriving from the previous invocation. The bulk
-    // gzip lanes are fetched as a sequence of byte ranges and this is where the
-    // next range starts; absent, the download starts at zero. `parse` writes
-    // the next one (see forwarded_job).
-    const std::string bulk_resume_in = json_string(body, "BULK_RESUME", "");
-    const double bulk_next_byte = json_number(bulk_resume_in, "next_byte", 0);
-    const bool bulk_complete = json_bool(bulk_resume_in, "complete", false);
 
     // BBOX in Overpass order (south,west,north,east).
     //
     // THE DEFAULT IS THE WHOLE PLANET (owner 2026-08-10: "should not be
-    // viewport, should just be world-wide").
-    //
-    // It used to be a small box around Houston, and that single line is what
-    // the owner saw as "a square in Texas / Louisiana" on a world globe. The
-    // demo sent no BBOX, so every run silently answered for one US metro. The
-    // lesson is not "the box was too small" — it is that a DEFAULT WHICH CROPS
-    // IS INDISTINGUISHABLE FROM A COMPLETE ANSWER. Nothing in the response said
-    // a region had been chosen on the caller's behalf.
-    //
-    // Providers that genuinely cannot serve an unbounded region are not
-    // silently given a substitute box: they are skipped and SAY so (see the
-    // `lane` field and the skip below). A named region is still honoured
-    // exactly as before, which is what keeps the bounded providers usable.
+    // viewport, should just be world-wide"). A DEFAULT WHICH CROPS IS
+    // INDISTINGUISHABLE FROM A COMPLETE ANSWER, so providers that cannot serve an
+    // unbounded region are skipped and SAY so rather than being given a
+    // substitute box.
     double bb_south = -90.0, bb_west = -180.0, bb_north = 90.0, bb_east = 180.0;
     bool bbox_named = false;
     const std::string bbox_raw = json_string(body, "BBOX", "");
@@ -2851,9 +3273,6 @@ int route(void) {
             bbox_named = true;
         }
     }
-    // "Worldwide" for the purpose of provider eligibility means the caller did
-    // not name a workable region, OR named one that spans essentially the whole
-    // planet. Both are unbounded as far as a public interpreter is concerned.
     const bool worldwide =
         !bbox_named || (bb_north - bb_south > 170.0 && bb_east - bb_west > 340.0);
     auto fmt_coord = [](double v) {
@@ -2861,7 +3280,6 @@ int route(void) {
         std::snprintf(buf, sizeof(buf), "%.6f", v);
         return std::string(buf);
     };
-    // Overpass order is south,west,north,east.
     const std::string bbox = fmt_coord(bb_south) + "," + fmt_coord(bb_west) + "," +
                              fmt_coord(bb_north) + "," + fmt_coord(bb_east);
 
@@ -2875,132 +3293,52 @@ int route(void) {
         // An unknown strategy is REFUSED, never silently defaulted: answering a
         // question the caller did not ask, under a name they chose, is worse
         // than saying no.
-        // route MUST be "error": foundation/http-respond reads decision.status
-        // ONLY in that branch (http_respond_module.cpp:395-401). Naming any
-        // other route made this 400 fall through as a silent empty 200 on the
-        // live mount — a refusal that reports success is worse than no refusal.
-        push_json("reply",
-                  std::string("{\"route\":\"error\",\"format\":\"json\",\"status\":400"
-                              ",\"code\":\"unknown-method\",\"error\":\"unknown METHOD \\\"") +
-                      json_escape(method_name) + "\\\"\"}");
-        return 0;
+        return emit_refusal(std::move(apr), 400, "unknown-method", "unknown METHOD \"" + method_name + "\"");
     }
+    (void)method;
 
     if (wanted.empty()) {
-        push_json("reply",
-                  "{\"route\":\"error\",\"format\":\"json\",\"status\":400"
-                  ",\"code\":\"no-providers\""
-                  ",\"error\":\"PROVIDERS must name at least one provider\"}");
-        return 0;
+        return emit_refusal(std::move(apr), 400, "no-providers", "PROVIDERS must name at least one provider");
     }
 
-    std::vector<std::string> descriptors;
-    // Parallel to `descriptors`: which provider each one belongs to. See the
-    // correlation-list note where the job is built.
-    std::vector<std::string> descriptor_providers;
-    std::string consulted = "[";
-    std::string skipped = "[";
-    size_t emitted = 0, skipped_count = 0;
+    std::vector<Descriptor> descriptors;
+    std::string consulted, skipped;
+    size_t emitted = 0;
+    auto skip = [&](const std::string& id, const char* code) {
+        skipped += (skipped.empty() ? "" : ",") + id + "=" + code;
+    };
     for (const std::string& id : wanted) {
         const ProviderSpec* spec = find_provider(id);
-        if (!spec) {
-            if (skipped_count++) skipped += ",";
-            skipped += "{\"provider_id\":\"" + json_escape(id) + "\",\"reason\":\"unknown provider\"}";
-            continue;
-        }
+        if (!spec) { skip(id, "unknown-provider"); continue; }
         // A provider whose real endpoint this module cannot decode yet is
-        // skipped WITH THE MISSING CAPABILITY NAMED. It is never fetched: its
-        // payload is a ZIP or a protobuf, and handing that to a CSV/JSON
-        // decoder returns 200 and parses to zero rows — the precise failure
-        // this task exists to prevent, reproduced one layer along.
-        if (std::strcmp(spec->lane, "unavailable") == 0) {
-            if (skipped_count++) skipped += ",";
-            skipped += std::string("{\"provider_id\":\"") + spec->id +
-                       "\",\"bulkIngestOnly\":true,\"reason\":\"" +
-                       json_escape(spec->blocked_by ? spec->blocked_by
-                                                    : "not consumable by this module yet") +
-                       "\"}";
-            continue;
-        }
+        // skipped WITH THE MISSING CAPABILITY NAMED, never fetched.
+        if (std::strcmp(spec->lane, "unavailable") == 0) { skip(spec->id, "unavailable"); continue; }
         // A bounded-region provider cannot answer a worldwide request. Say so
-        // instead of substituting a region the caller never asked for — the
-        // silent substitution is exactly what put one US metro on a world globe.
+        // instead of substituting a region the caller never asked for.
         if (worldwide && std::strcmp(spec->lane, "query") == 0 && !spec->login_required) {
-            if (skipped_count++) skipped += ",";
-            skipped += std::string("{\"provider_id\":\"") + spec->id +
-                       "\",\"needsRegion\":true,\"reason\":\"this endpoint answers a BOUNDED "
-                       "region only; an unbounded query against a public interpreter times out "
-                       "and is an abuse of a donated service. Name a BBOX to include it.\"}";
+            skip(spec->id, "needs-region");
             continue;
         }
-        // A bulk download the resume mark says is FINISHED is not re-fetched.
-        // The mark is per-run state, so this is what stops the chunk sequence
-        // rather than an unbounded loop asking for ranges past the end of the
-        // file — which a CDN answers with 416 and no body, i.e. a provider that
-        // fetches forever and contributes nothing.
-        if (std::strcmp(spec->format, "csv-gz") == 0 && bulk_complete) {
-            if (skipped_count++) skipped += ",";
-            skipped += std::string("{\"provider_id\":\"") + spec->id +
-                       "\",\"bulkComplete\":true,\"reason\":\"the bulk export has been read to "
-                       "its end in this run; the resume mark says there is nothing left to "
-                       "fetch\"}";
-            continue;
-        }
-        if (spec->login_required && !credential_mediator) {
-            // THE SKIP THAT LIFTS, AND WHAT LIFTS IT (mod-cell-tower-opencellid-bulk).
-            //
-            // This used to say the endpoint "is not verified against a live
-            // account yet". That is no longer true and the reason was stale:
-            // the row endpoint was verified live against the owner's account on
-            // 2026-08-09, the bulk route on 2026-08-14, and the token has been
-            // in the node credential store on lane `cell_opencellid` since
-            // 2026-08-09.
-            //
-            // What actually blocks the fetch is narrower and structural: THIS
-            // module cannot build the URL. The token lives behind
-            // `secrets:cell_opencellid`, which only `cell-tower-credentials`
-            // holds — this plugin is `capabilities: []` by design so that it can
-            // stay browser-instantiable for its own tests. So the descriptor
-            // leaves here with `{{credential}}` UNSUBSTITUTED and the mediator
-            // completes it.
-            //
-            // FAIL CLOSED ON THE WIRING, not on the credential. If the flow has
-            // no mediator node, a descriptor carrying the literal `{{credential}}`
-            // would be fetched verbatim and OpenCelliD would answer 200 with
-            // `{"status":"error","message":"INVALID_TOKEN"}` — a request that
-            // spends quota to produce zero rows. So the credentialed lane is
-            // emitted ONLY when the caller declares the mediator is wired, and
-            // `CREDENTIAL_MEDIATOR` defaults to false. Whether a credential is
-            // actually HELD is the mediator's question, not this node's: it
-            // reads `secrets.status`/`secrets.get`, and drops the descriptor
-            // (and its correlation entry) when the lane is empty.
-            if (skipped_count++) skipped += ",";
-            skipped += std::string("{\"provider_id\":\"") + spec->id +
-                       "\",\"credentialLane\":\"" + json_escape(credential_lane(spec->id)) +
-                       "\",\"needsMediator\":true,\"reason\":\"this provider needs a login. Its "
-                       "endpoint is verified and a credential lane exists, but this module holds "
-                       "no secrets capability and cannot build the authenticated URL. Route the "
-                       "request through the cell-tower-credentials mediator and set "
-                       "CREDENTIAL_MEDIATOR to include it.\"}";
-            continue;
-        }
-        if (emitted++) { consulted += ","; }
-        consulted += std::string("\"") + spec->id + "\"";
+        // FAIL CLOSED ON THE WIRING, not on the credential. The credentialed
+        // descriptor leaves here with `{{credential}}` UNSUBSTITUTED (this module
+        // holds no secrets capability) and the mediator completes it — so it is
+        // emitted ONLY when the caller declares the mediator is wired. Fetched
+        // verbatim, OpenCelliD answers 200 INVALID_TOKEN: quota spent for zero rows.
+        if (spec->login_required && !credential_mediator) { skip(spec->id, "needs-mediator"); continue; }
+        if (emitted++) consulted += ",";
+        consulted += spec->id;
 
-        // Build this provider's URL list: primary plus any mirrors. Mirrors are
-        // fetched in the SAME run, not as retry-on-failure — a flow node has no
-        // state between invocations to remember where a retry got to. All of
-        // them carry the SAME provider_id, so they count as one provider
-        // consulted and their overlapping rows collapse in deconfliction.
+        // Primary plus mirrors, fetched in the SAME run (a flow node has no state
+        // between invocations to remember where a retry got to). All carry the
+        // SAME provider id, so they count as one provider consulted and their
+        // overlapping rows collapse in deconfliction.
         std::vector<std::string> urls;
         urls.push_back(spec->url);
         for (size_t m = 0; m < 3; ++m) {
             if (spec->mirrors[m] && spec->mirrors[m][0]) urls.push_back(spec->mirrors[m]);
         }
 
-        // Per-provider row cap. Bounds the work an anonymous caller can ask the
-        // node to do at the EXPENSIVE end — the fetch and the merge — where the
-        // job's LIMIT only caps records emitted at the cheap end.
+        // Per-provider row cap at the EXPENSIVE end (fetch + merge).
         double rows = limit;
         if (rows < 1) rows = 1;
         if (rows > 1000 && !full_population) rows = 1000;
@@ -3008,6 +3346,8 @@ int route(void) {
         std::snprintf(rows_buf, sizeof(rows_buf), "%.0f", rows);
 
         for (const std::string& base : urls) {
+            Descriptor d;
+            d.provider_id = spec->id;
             std::string url = base;
             if (spec->query_template && spec->query_template[0]) {
                 std::string q = spec->query_template;
@@ -3021,29 +3361,10 @@ int route(void) {
                     url += "?data=" + url_encode(q);
                 } else if (std::strcmp(spec->query_kind, "opencellid") == 0 ||
                            std::strcmp(spec->query_kind, "opencellid-bulk") == 0) {
-                    // The template is ALREADY in `name=value&name=value` form,
-                    // so it is appended whole rather than encoded as one blob:
-                    // encoding it would turn its own `&` and `=` into data and
-                    // send a single parameter with a very long name.
-                    //
-                    // Neither template was ever assembled before this task,
-                    // because both providers were skipped at route time — so
-                    // the row lane's URL had been a bare
-                    // `https://opencellid.org/cell/getInArea` with no key and
-                    // no BBOX since the day it was compiled in. That is the
-                    // kind of defect a skip hides: the code path that builds
-                    // the request had never once run.
-                    //
-                    // BBOX ORDER: OpenCelliD takes lat,lon,lat,lon where every
-                    // other provider here takes south,west,north,east. Those
-                    // are the same four numbers in the same order — latmin,
-                    // lonmin, latmax, lonmax — which is why the template names
-                    // {{south}},{{west}},{{north}},{{east}} and needs no
-                    // swap. Written out because "they happen to coincide" is
-                    // the sort of thing that gets 'fixed' into a bug.
-                    //
-                    // `{{credential}}` is deliberately left UNSUBSTITUTED: this
-                    // module holds no secrets capability. The mediator fills it.
+                    // The template is ALREADY in `name=value&...` form, so it is
+                    // appended whole; `{{credential}}` stays for the mediator.
+                    // BBOX ORDER: OpenCelliD's lat,lon,lat,lon is the same
+                    // latmin,lonmin,latmax,lonmax as everyone's south,west,north,east.
                     url += "?" + q;
                 } else if (std::strcmp(spec->query_kind, "soql") == 0) {
                     // `$where`/`$limit` are the API's own parameter NAMES and
@@ -3051,407 +3372,312 @@ int route(void) {
                     url += "?$where=" + url_encode(q) + "&$limit=" + rows_buf;
                 }
             }
-            // The 2 MiB Range prefix is the anonymous lane's bandwidth bound,
-            // NOT a property of the source: the file is one ordered national
-            // FeatureCollection, so a prefix is a geographic crop by document
-            // order. The ingest lane fetches the whole 27 MB asset.
-            //
-            // A ZIP gets NO such prefix, at any lane. The central directory
-            // that names the members lives at the END of the archive, so a
-            // truncated ZIP is not a smaller ZIP — it is an undecodable one,
-            // and it would parse to zero rows: the failure this registry
-            // exists to prevent. The bulk archives are fetched whole or not
-            // at all, which is what their `bulk` lane already asserts.
-            std::string bounded_headers =
-                (std::strcmp(spec->format, "swiss-geojson") == 0 && !full_population)
-                    ? ",\"range\":\"bytes=0-2097151\""
-                    : "";
-
-            // THE BULK gzip CHUNK WINDOW.
-            //
-            // A ZIP gets no Range at any lane because its central directory is
-            // at the END. A gzip is the opposite case: it is a forward stream
-            // with no index, so a PREFIX is always decodable and a sequence of
-            // adjacent windows reconstructs the whole thing exactly — provided
-            // the decoder state crosses the seam, which is what BulkResume
-            // carries. So this lane is chunked, and MUST be: the export is
-            // roughly 40 million cells and the flow's linear memory ceiling is
-            // 128 MB.
-            //
-            // The window is 32 MiB. That is a memory bound, not a source
-            // property: the compressed chunk, the inflate window and the
-            // decoded Reports all have to fit at once, alongside whatever the
-            // other providers in the same run are holding.
+            d.url = url;
+            // ComReg's SiteViewer is a POST-only RPC that returns the national
+            // mast list for an empty JSON body: verb and body are its contract.
+            const bool post_json = std::strcmp(spec->query_kind, "post-json") == 0;
+            d.method = post_json ? "POST" : "GET";
+            // ComReg always answers protobuf, so the honest Accept says what the
+            // module will decode.
+            d.headers.push_back({"accept", std::strcmp(spec->format, "comreg-protobuf") == 0
+                                               ? "application/x-protobuf"
+                                               : "application/json"});
+            d.headers.push_back({"user-agent", "spacedatanetwork-cell-tower-source/0.2"});
+            // The 2 MiB Range prefix is the anonymous lane's bandwidth bound on
+            // BAKOM's one national FeatureCollection; the ingest lane fetches the
+            // whole asset. A ZIP never gets a prefix (its directory is at the END).
+            if (std::strcmp(spec->format, "swiss-geojson") == 0 && !full_population) {
+                d.headers.push_back({"range", "bytes=0-2097151"});
+            }
+            // THE BULK gzip CHUNK WINDOW: a gzip is a forward stream, so a PREFIX
+            // is always decodable. The request-scoped lane reads the export's
+            // first 32 MiB window; continuation past it is the ingest lane's
+            // durable $IRM resume mark, not a request parameter.
             if (std::strcmp(spec->format, "csv-gz") == 0) {
                 constexpr long long kBulkChunkBytes = 32ll * 1024 * 1024;
-                const long long from = static_cast<long long>(bulk_next_byte);
-                char window[96];
-                std::snprintf(window, sizeof(window), ",\"range\":\"bytes=%lld-%lld\"", from,
-                              from + kBulkChunkBytes - 1);
-                bounded_headers += window;
+                char window[64];
+                std::snprintf(window, sizeof(window), "bytes=0-%lld", kBulkChunkBytes - 1);
+                d.headers.push_back({"range", window});
             }
-            // Request SHAPE, declared per provider rather than assumed. Every
-            // other provider answers a bare GET; ComReg's SiteViewer backend
-            // is a POST-only RPC that returns the national mast list for an
-            // empty JSON body, so the verb and the body are part of its
-            // contract exactly as the query template is part of Overpass's.
-            const bool post_json = std::strcmp(spec->query_kind, "post-json") == 0;
-            const std::string verb = post_json ? "POST" : "GET";
-            // ComReg ignores `Accept: application/json` and always answers
-            // application/x-protobuf, so the honest header says what the
-            // module will actually decode.
-            const std::string accept =
-                (std::strcmp(spec->format, "comreg-protobuf") == 0)
-                    ? "application/x-protobuf"
-                    : "application/json";
-            std::string extra = bounded_headers;
-            if (post_json) extra += ",\"content-type\":\"application/json\"";
-            // THE MEDIATOR'S MARK. A descriptor whose URL still carries
-            // `{{credential}}` names the lane that fills it, so the mediator
-            // needs no registry of its own — the same reason the catalog op
-            // reads its lanes out of the catalog rather than compiling in a
-            // second copy of this table. A descriptor without this field is
-            // fetched exactly as it stands.
-            const std::string credential_mark =
-                spec->login_required
-                    ? std::string(",\"credentialLane\":\"") +
-                          json_escape(credential_lane(spec->id)) + "\""
-                    : std::string();
-            descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
-                                  "\",\"method\":\"" + verb + "\",\"url\":\"" + json_escape(url) +
-                                  "\"" + credential_mark +
-                                  ",\"headers\":{\"accept\":\"" + accept + "\"" +
-                                  extra +
-                                  ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
-                                  (post_json
-                                       ? std::string(",\"bodyB64\":\"") +
-                                             base64_encode(spec->query_template &&
-                                                                   spec->query_template[0]
-                                                               ? spec->query_template
-                                                               : "{}") +
-                                             "\""
-                                       : std::string()) +
-                                  ",\"timeoutMs\":" +
-                                  (full_population ? "300000" : "40000") +
-                                  ",\"responseWire\":\"raw-body-v1\"}");
-            descriptor_providers.push_back(spec->id);
+            if (post_json) {
+                d.headers.push_back({"content-type", "application/json"});
+                d.body = spec->query_template && spec->query_template[0] ? spec->query_template : "{}";
+            }
+            d.timeout_ms = full_population ? 300000 : 40000;
+            // THE MEDIATOR'S MARK: a URL still carrying `{{credential}}` names the
+            // lane that fills it (in CONTEXT), so the mediator needs no registry.
+            if (spec->login_required) d.credential_lane = credential_lane(spec->id);
+            descriptors.push_back(std::move(d));
         }
     }
-    consulted += "]";
-    skipped += "]";
 
-    // THE CORRELATION LIST — one entry per descriptor, in emission order.
-    //
-    // `parse` cannot read the provider off a response frame, because the frame
-    // is not ours: `hostcap/http-request` emits EXACTLY
-    // {"status","headers","bodyB64"} (http_request_module.cpp:399) and echoes
-    // nothing from the request it was handed. `parse` used to read
-    // `provider_id` straight off that frame, found "" on every one, and skipped
-    // all of them — so the node fetched every provider for real and answered
-    // 200 with zero records and no error line, live on host-01.
-    //
-    // It passed every local run because `tests/live-probe.mjs` performs the
-    // fetch in JS and SYNTHESISES `provider_id` into the response object it
-    // feeds parse; the probe never instantiates the hostcap node whose output
-    // shape is the whole question. A stand-in that supplies the field under
-    // test cannot fail the way production does.
-    //
-    // So the correlation travels through the job, which route and parse both
-    // see, instead of through a frame neither of them owns.
-    std::string request_providers = "[";
-    for (size_t i = 0; i < descriptor_providers.size(); ++i) {
-        if (i) request_providers += ",";
-        request_providers += "\"" + json_escape(descriptor_providers[i]) + "\"";
-    }
-    request_providers += "]";
+    if (!consulted.empty()) apr_set_header(&apr, "x-sdn-providers-consulted", consulted);
+    if (!skipped.empty()) apr_set_header(&apr, "x-sdn-providers-skipped", skipped);
 
-    const std::string job = std::string("{\"method\":") + std::to_string(static_cast<int>(method)) +
-                            ",\"method_name\":\"" + json_escape(method_name) + "\"" +
-                            ",\"limit\":" + std::to_string(static_cast<long>(limit)) +
-                            ",\"full_population\":" + (full_population ? "true" : "false") +
-                            ",\"credential_mediator\":" + (credential_mediator ? "true" : "false") +
-                            ",\"bulk_resume\":" +
-                            (bulk_resume_in.empty() ? std::string("{}") : bulk_resume_in) +
-                            ",\"providers_consulted\":" + consulted +
-                            ",\"request_providers\":" + request_providers +
-                            ",\"skipped\":" + skipped + "}";
-
-    // ZERO FETCHABLE PROVIDERS — SHORT-CIRCUIT, never start the pipeline.
-    //
-    // `parse.responses` is a REQUIRED input with minStreams 1, so a run with no
-    // fetches leaves that node unable to fire, the chain stalls, and the host
-    // finds nothing to send: a silent 502 with no log line anywhere (host-01,
-    // 2026-08-08, `opencellid` as the sole provider — it needs a credential the
-    // node cannot yet store, so every selected provider was skipped).
-    //
-    // The request was valid and the honest answer is an empty result WITH the
-    // reasons, so this emits a decision and no body. `respond.body` is optional
-    // and absent means an empty 200, which is exactly the shape wanted here.
-    // Starting a pipeline that cannot complete is never better than answering.
+    // ZERO FETCHABLE PROVIDERS — ANSWER, never start the pipeline: parse's
+    // `responses` would never fill and the chain would stall into a silent 502.
+    // The request was valid and the honest answer is an empty dataset WITH the
+    // reasons (x-sdn-providers-skipped).
     if (descriptors.empty()) {
-        const std::string empty_reply =
-            std::string("{\"route\":\"cellular-aggregate\",\"format\":\"record-stream\""
-                        ",\"status\":200,\"reportsIn\":0,\"sitesOut\":0,\"collapsed\":0"
-                        ",\"multiProviderSites\":0,\"providersConsulted\":0"
-                        ",\"method\":\"") + json_escape(method_name) + "\"" +
-            ",\"skipped\":" + skipped + "}";
-        if (push_json("reply", empty_reply) < 0) return 500;
-        return 0;
+        apr_set_header(&apr, "x-sdn-sites-out", "0");
+        if (push_apr("decision", apr) < 0) return 500;
+        DAVT dav;
+        dav.STANDARD = "TBS";
+        dav.SCHEMA_NAME = "TBS.fbs";
+        dav.SOURCE_NAME = "cellular-aggregate";
+        dav.KNOWN = true;
+        dav.AVAILABLE = true;
+        dav.FRESH = true;
+        dav.RECORD_COUNT = 0;
+        dav.PUBLISHED_AT_MS = now_ms();
+        flatbuffers::FlatBufferBuilder b(512);
+        FinishDAVBuffer(b, DAV::Pack(b, &dav));
+        return push_frame("availability", "DAV.fbs", "$DAV", "DAV", b.GetBufferPointer(), b.GetSize()) < 0 ? 500 : 0;
     }
 
-    // The job goes FIRST: parse and deconflict both need the run contract, and a
-    // response frame arriving before it would have nothing to be interpreted
-    // against.
-    if (push_json("job", job) < 0) return 500;
-    // ONE FRAME PER DESCRIPTOR. hostcap/http-request consumes a single
-    // {method,url,headers,timeoutMs}; the earlier single-frame JSON array
-    // matched nothing, so ZERO fetches were attempted and the route answered
-    // 200-with-no-records in 27 ms without ever contacting a provider. An empty
-    // answer that never asked is indistinguishable from an honest empty answer,
-    // which is exactly why this was invisible.
-    for (const std::string& descriptor : descriptors) {
-        if (push_json("requests", descriptor) < 0) return 500;
+    // ONE HttpRequest PER DESCRIPTOR, each carrying the run contract with the
+    // fetch's own provider bound in CONTEXT. hostcap/http-request echoes CONTEXT
+    // on every answer (failures included), so parse attributes a body by what
+    // the frame SAYS, never by its position in the queue.
+    const std::string fetches = std::to_string(descriptors.size());
+    for (const Descriptor& d : descriptors) {
+        APRT copy;
+        GetAPR(apr_bytes(apr).data())->UnPackTo(&copy);
+        apr_add_param(&copy, "provider", d.provider_id);
+        apr_add_param(&copy, "fetches", fetches);
+        if (!d.credential_lane.empty()) apr_add_param(&copy, "credentialLane", d.credential_lane);
+        Bytes context;
+        stream_append(&context, apr_bytes(copy));
+        const Bytes request = http_request(d, context);
+        if (push_frame("requests", "HttpRequest.fbs", "HREQ", "HttpRequest", request.data(), request.size()) < 0) {
+            return 500;
+        }
     }
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// parse: job + N http responses -> normalized reports.
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// parse is a FAN-IN node, and the run does not fit in one invocation.
+// parse: N HttpResponses (each carrying its run contract in CONTEXT) ->
+// normalized reports ($TBS SINGLE_SOURCE stream), the contract, and the bulk
+// lane's next resume mark.
 //
-// route emits ONE `job` frame and N `requests` frames. The runtime FIFO-consumes
-// `job` on the first invocation and NEVER re-delivers it, so everything derived
-// from it has to survive between invocations — hence this state. It is reset
-// when a `job` frame arrives, which is exactly once per run, and again after the
-// run's single emission, so a pooled instance never carries a run into the next.
-//
-// (Two defects lived here at once. `job` was declared required:true, so draining
-// that one frame left this node permanently unready and every later response sat
-// in the queue forever; and `responses` was capped at maxStreams 1, so only the
-// first descriptor's body was ever delivered. Together they made a two-provider
-// request return precisely the first-named provider's answer — the order of the
-// PROVIDERS array decided the result.)
-static std::string g_job;
-static std::vector<std::string> g_request_providers;
-// Providers this run actually consulted — the candidate set for format-based
-// attribution when a body can only belong to one of them.
+// parse is a FAN-IN node, and the run does not fit in one invocation: it is
+// invoked as soon as ONE response is queued. So the run accumulates across
+// invocations and is emitted ONCE: when every fetch of the run (the contract's
+// "fetches") is accounted for, or — the backstop — on a quiet tick
+// (plugin_set_yielded + backlog_remaining make this node ready again with an
+// empty queue; an invocation that brings no new frame means nothing further is
+// coming). State resets after that one emission, so a pooled instance never
+// carries a run into the next.
+// ---------------------------------------------------------------------------
+static Bytes g_job;                   // the run contract, as the first response carried it
+static Bytes g_irm;                   // the resume mark the run continues (ingest lane)
+static size_t g_irm_base = 0;         // its root's offset in g_irm (4 when kept with its size prefix)
 static std::vector<std::string> g_providers_consulted;
 static std::vector<Report> g_reports;
+static std::vector<std::string> g_report_retrieved;  // parallel to g_reports
 static size_t g_response_cursor = 0;
+static size_t g_expected = 0;
 static bool g_have_job = false;
-// Emit exactly once per run: respond/egress carry ONE HTTP body.
-static bool g_emitted = false;
-// Did any provider's decoder stop at the per-provider row cap this run? Run-
-// scoped like the rest of the accumulator, because parse spans invocations.
 static bool g_row_capped = false;
-// The bulk gzip decoder's state across CHUNKS of one download. Run-scoped like
-// the rest, and reset with them: a resume mark from a previous run names byte
-// offsets in a file that has since been republished.
+static bool g_full_population = false;
+static size_t g_provider_row_cap = SIZE_MAX;
+static std::string g_csv_header;
+static std::string g_bulk_provider;
+static std::string g_bulk_url;
 static BulkResume g_bulk_resume;
-// Bounds the yield loop so a lost frame can never hang the request forever.
 static uint32_t g_idle_ticks = 0;
 
 void reset_run_state(void) {
-    g_bulk_resume = BulkResume();
     g_job.clear();
-    g_request_providers.clear();
+    g_irm.clear();
+    g_irm_base = 0;
     g_providers_consulted.clear();
     g_reports.clear();
+    g_report_retrieved.clear();
     g_response_cursor = 0;
+    g_expected = 0;
     g_have_job = false;
-    g_emitted = false;
     g_row_capped = false;
+    g_full_population = false;
+    g_provider_row_cap = SIZE_MAX;
+    g_csv_header.clear();
+    g_bulk_provider.clear();
+    g_bulk_url.clear();
+    g_bulk_resume = BulkResume();
     g_idle_ticks = 0;
 }
 
+// Adopt the resume mark a fetch continues ($IRM in CONTEXT).
+void adopt_irm(const IRM* irm) {
+    g_bulk_resume = BulkResume();
+    g_bulk_resume.next_byte = irm->NEXT_OFFSET();
+    g_bulk_resume.complete = irm->STATE() == irmJobState_COMPLETE;
+    if (const IRMDecodeContext* dc = irm->DECODE_CONTEXT()) {
+        if (dc->HEADER_LINE()) g_csv_header = dc->HEADER_LINE()->str();
+        if (dc->DECODER_STATE() && dc->DECODER_STATE()->size()) {
+            g_bulk_resume.state.assign(reinterpret_cast<const char*>(dc->DECODER_STATE()->data()),
+                                       dc->DECODER_STATE()->size());
+            if (dc->WINDOW())
+                g_bulk_resume.window.assign(reinterpret_cast<const char*>(dc->WINDOW()->data()), dc->WINDOW()->size());
+            if (dc->PARTIAL_RECORD())
+                g_bulk_resume.pending.assign(reinterpret_cast<const char*>(dc->PARTIAL_RECORD()->data()),
+                                             dc->PARTIAL_RECORD()->size());
+            g_bulk_resume.window_pos = static_cast<uint32_t>(dc->WINDOW_POSITION());
+            if (dc->DECODER_STATE_FORMAT()) g_bulk_resume.state_format = dc->DECODER_STATE_FORMAT()->str();
+            if (dc->DECODER_STATE_VERSION()) g_bulk_resume.state_version = dc->DECODER_STATE_VERSION()->str();
+            g_bulk_resume.state_byte_length = dc->DECODER_STATE_BYTE_LENGTH();
+            g_bulk_resume.window_byte_length = dc->WINDOW_BYTE_LENGTH();
+        }
+    }
+    // A mark past byte 0 is past the gzip header, decoder or not. A mark that
+    // is past the header but carries no usable decoder RESTARTS (exactly as an
+    // undecodable mark always did) instead of inflating mid-symbol.
+    g_bulk_resume.header_done = !g_bulk_resume.state.empty() || g_bulk_resume.next_byte > 0;
+}
+
 int parse(void) {
-    const std::string job = input_text("job", 0);
-    if (!job.empty()) {
-        // A new run begins. Never accumulate across runs.
-        reset_run_state();
-        g_job = job;
-        g_request_providers = json_string_array(job, "request_providers");
-        g_providers_consulted = json_string_array(job, "providers_consulted");
-        // A RUN CONTRACT NAMING A PROVIDER THIS BUILD DOES NOT HAVE IS REFUSED
-        // HERE, LOUDLY, BEFORE A SINGLE BODY IS LOOKED AT.
-        //
-        // This is the defect the cellular worldwide ingest died of for three
-        // days (graph: sdn-cellular-ingest-lands-no-batch). host-02's flow
-        // config named provider `mls`; nothing in this table answered to that
-        // name; the per-frame `find_provider` below returned nullptr and
-        // `continue`d. The run then fetched 3,145,728 B, decoded nothing,
-        // emitted an empty `reports` list, returned 0, and the daemon booked
-        // "run completed but landed no batch" with no cause anywhere — three
-        // times, ~177 s each.
-        //
-        // `route` has always refused an unknown id with a named skip reason
-        // (see the `wanted` loop). The INGEST lane authors its own job and
-        // never passed through that check, so the one lane running unattended
-        // on a timer was the one lane that could fail in silence. An unknown
-        // provider id is a CONFIGURATION fault, not an upstream one: it is
-        // deterministic, it cannot heal on the next tick, and there is no
-        // version of it that should read as success.
-        for (const std::string& id : g_request_providers) {
-            if (find_provider(id)) continue;
-            std::string message = "run contract names provider \"" + id +
-                                  "\", which is not in this module's registry. Known providers:";
-            for (size_t i = 0; i < kProviderCount; ++i) {
-                message += (i ? ", " : " ");
-                message += kProviders[i].id;
-            }
-            message += ". Nothing was decoded and nothing will be: fix the "
-                       "configured provider id.";
-            plugin_set_error("unknown-provider", message.c_str());
-            return 400;
-        }
-        // Adopt the resume mark route carried through. The DECODER half is what
-        // makes this a resume rather than a restart; without it the next chunk
-        // would inflate from a byte that is not a symbol boundary and fail.
-        const std::string mark = json_string(job, "bulk_resume", "");
-        if (!mark.empty() && mark != "{}") {
-            g_bulk_resume.next_byte =
-                static_cast<uint64_t>(json_number(mark, "next_byte", 0));
-            g_bulk_resume.rows_seen = static_cast<uint64_t>(json_number(mark, "rows_seen", 0));
-            g_bulk_resume.sites_emitted =
-                static_cast<uint64_t>(json_number(mark, "sites_emitted", 0));
-            g_bulk_resume.header_done = json_bool(mark, "header_done", false);
-            g_bulk_resume.complete = json_bool(mark, "complete", false);
-            g_bulk_resume.decoder = json_string(mark, "decoder", "");
-        }
-        g_have_job = true;
-    }
-
-    // Emission-order provider list written by route (see the correlation-list
-    // note there). Response frame k answers descriptor k, and the cursor is
-    // RUN-scoped rather than invocation-scoped: a per-invocation counter
-    // restarted at 0 every time and mapped later batches onto provider 0.
-    const std::vector<std::string>& request_providers = g_request_providers;
-    std::vector<Report>& reports = g_reports;
-    // Per-provider decode cap. The ingest lane decodes every row the body
-    // carries; the anonymous lane keeps its 1,000-row bound.
-    const bool full_population = json_bool(g_job, "full_population", false);
-    size_t provider_row_cap = SIZE_MAX;
-    if (!full_population) {
-        long capped = static_cast<long>(json_number(g_job, "limit", 2000));
-        if (capped < 1) capped = 1;
-        if (capped > 1000) capped = 1000;
-        provider_row_cap = static_cast<size_t>(capped);
-    }
-
     const uint32_t count = plugin_get_input_count();
     size_t new_responses = 0;
     for (uint32_t i = 0; i < count; ++i) {
         const plugin_input_frame_t* f = plugin_get_input_frame(i);
         if (!f || !f->port_id || std::strcmp(f->port_id, "responses") != 0) continue;
-        std::string frame;
-        std::string payload;
-        int status = 0;
-        const bool raw_response = decode_raw_http_response(f, &status, &payload);
-        if (!raw_response) {
-            frame.assign(reinterpret_cast<const char*>(f->payload), f->payload_length);
-            status = static_cast<int>(json_number(frame, "status", 0));
-            const std::string body_b64 = json_string(frame, "bodyB64", "");
-            if (!body_b64.empty() && !base64_decode(body_b64, &payload)) payload.clear();
+        if (!f->payload || f->payload_length == 0) continue;
+        flatbuffers::Verifier verifier(f->payload, f->payload_length);
+        if (!R::VerifyHttpResponseBuffer(verifier)) {
+            plugin_set_error("invalid-response-frame", "a responses frame is not an HttpResponse (HRSP).");
+            return 400;
         }
-        const size_t k = g_response_cursor++;
+        const R::HttpResponse* response = R::GetHttpResponse(f->payload);
+
+        // THE CONTEXT: the run contract ($APR), and on the ingest lane the mark
+        // the fetch continues ($IRM). A response that cannot say which run and
+        // which provider it answers is refused, never guessed at.
+        std::unique_ptr<APRT> apr;
+        const IRM* irm = nullptr;
+        Bytes irm_copy;
+        size_t irm_base = 0;
+        if (const auto* ctx = response->CONTEXT()) {
+            for_each_frame(ctx->data(), ctx->size(), [&](const uint8_t* rec, size_t len) {
+                if (has_identifier(rec, len, "$APR") && !apr) {
+                    apr = apr_unpack(rec, len);
+                } else if (has_identifier(rec, len, "$IRM") && !irm) {
+                    std::vector<uint64_t> scratch;
+                    const uint8_t* root = verified_record(
+                        rec, len, &scratch, [](flatbuffers::Verifier& v) { return VerifyIRMBuffer(v); },
+                        [](flatbuffers::Verifier& v) { return VerifySizePrefixedIRMBuffer(v); });
+                    if (root) {
+                        // Kept with its alignment base (the record, or its size prefix) so it outlives the scratch.
+                        irm_base = root == rec ? 0 : 4;
+                        irm_copy.assign(root - irm_base, root + len);
+                        irm = GetIRM(irm_copy.data() + irm_base);
+                    }
+                }
+                return true;
+            });
+        }
+        if (!apr) {
+            plugin_set_error("missing-context",
+                             "an HttpResponse carries no $APR run contract in CONTEXT; it cannot be attributed "
+                             "to a run or a provider, and is refused rather than guessed at.");
+            return 400;
+        }
+        std::string provider_id = apr_param(*apr, "provider");
+
+        if (!g_have_job) {
+            // A NEW RUN. The contract is adopted once; its per-fetch bindings are
+            // stripped from the copy that travels on.
+            APRT job;
+            GetAPR(apr_bytes(*apr).data())->UnPackTo(&job);
+            apr_drop_param(&job, "provider");
+            apr_drop_param(&job, "fetches");
+            apr_drop_param(&job, "credentialLane");
+            g_job = apr_bytes(job);
+            g_expected = static_cast<size_t>(std::strtoul(apr_param(*apr, "fetches", "0").c_str(), nullptr, 10));
+            g_providers_consulted = split_list(apr_header(*apr, "x-sdn-providers-consulted"));
+            g_full_population = apr_param(*apr, "FULL_POPULATION") == "true";
+            // Per-provider decode cap. The ingest lane decodes every row the body
+            // carries; the anonymous lane keeps its 1,000-row bound.
+            if (!g_full_population) {
+                long capped = static_cast<long>(std::atof(apr_param(*apr, "LIMIT", "2000").c_str()));
+                if (capped < 1) capped = 1;
+                if (capped > 1000) capped = 1000;
+                g_provider_row_cap = static_cast<size_t>(capped);
+            }
+            if (irm) {
+                g_irm = irm_copy;
+                g_irm_base = irm_base;
+                adopt_irm(GetIRM(g_irm.data() + g_irm_base));
+            }
+            g_have_job = true;
+        }
+
+        // A RUN CONTRACT NAMING A PROVIDER THIS BUILD DOES NOT HAVE IS REFUSED
+        // HERE, LOUDLY (graph: sdn-cellular-ingest-lands-no-batch — an ingest
+        // configured for `mls` fetched 3 MB, decoded nothing and booked "landed
+        // no batch" with no cause anywhere, three days running). A configuration
+        // fault cannot heal on the next tick and must never read as success.
+        if (!provider_id.empty() && !find_provider(provider_id)) {
+            std::string message = "run contract names provider \"" + provider_id +
+                                  "\", which is not in this module's registry. Known providers:";
+            for (size_t k = 0; k < kProviderCount; ++k) {
+                message += (k ? ", " : " ");
+                message += kProviders[k].id;
+            }
+            message += ". Nothing was decoded and nothing will be: fix the configured provider id.";
+            plugin_set_error("unknown-provider", message.c_str());
+            return 400;
+        }
+
+        ++g_response_cursor;
         ++new_responses;
+        const int status = response->STATUS();
+        std::string payload;
+        if (response->BODY()) payload.assign(reinterpret_cast<const char*>(response->BODY()->data()), response->BODY()->size());
 
-        // Prefer a provider the frame states about ITSELF. No host emits this
-        // today, so this is forward compatibility, not the live path: if the
-        // hostcap ever grows a correlation echo, attribution stops depending on
-        // frame order the moment it does, with no change here.
-        std::string provider_id = raw_response ? std::string() : json_string(frame, "provider_id", "");
-
-        // POSITION IS THE FALLBACK, NOT THE PRIMARY. It cannot be the primary:
-        // `hostcap/http-request` pushes NO frame for a failed fetch, so one
-        // slow mirror silently removes a slot and every later body inherits the
-        // wrong provider's index. That is not hypothetical here — Overpass
-        // publishes three endpoints precisely because they fail, and one of
-        // them answered a five-node query in 30.7 s from this host, so it
-        // times out on real ones routinely.
-        //
-        // So attribute by what the body IS, whenever that is unambiguous:
-        // among the providers this run actually consulted, if exactly ONE uses
-        // the format this body is in, the body can only be that provider's, no
-        // matter which slot it arrived in or how many siblings went missing.
-        // Ambiguity (two consulted providers sharing a format) falls back to
-        // position, still corroborated below.
+        // A context without a provider binding (a hand-authored contract) falls
+        // back to what the body IS: among the providers this run consulted, if
+        // exactly ONE uses this body's format, the body can only be that one.
         const char* observed_format = payload.empty() ? nullptr : detect_body_format(payload);
         if (provider_id.empty() && observed_format) {
             const ProviderSpec* only = nullptr;
             bool ambiguous = false;
-            for (size_t c = 0; c < g_providers_consulted.size(); ++c) {
-                const ProviderSpec* candidate = find_provider(g_providers_consulted[c]);
-                if (!candidate) continue;
-                if (std::strcmp(candidate->format, observed_format) != 0) continue;
+            for (const std::string& c : g_providers_consulted) {
+                const ProviderSpec* candidate = find_provider(c);
+                if (!candidate || std::strcmp(candidate->format, observed_format) != 0) continue;
                 if (only && only != candidate) { ambiguous = true; break; }
                 only = candidate;
             }
             if (only && !ambiguous) provider_id = only->id;
         }
-        if (provider_id.empty() && k < request_providers.size()) {
-            provider_id = request_providers[k];
-        }
         const ProviderSpec* spec = find_provider(provider_id);
-        // A body that could not be attributed to ANY provider is dropped: that
-        // is the deliberate fail-closed above, and it is a per-frame verdict.
-        // A body attributed to a NAMED id that this build has no entry for is a
-        // different animal — the run contract is wrong — and the job-capture
-        // guard above has already refused it. Reaching here means an id got in
-        // some other way, so it is refused too rather than dropped quietly.
-        if (!spec) {
-            if (provider_id.empty()) continue;
-            const std::string message = "response frame is attributed to provider \"" +
-                                        provider_id +
-                                        "\", which is not in this module's registry; refusing to "
-                                        "report an unattributable decode as an empty register.";
-            plugin_set_error("unknown-provider", message.c_str());
-            return 400;
-        }
+        if (!spec) continue;  // unattributable: dropped, per-frame, never guessed
         // A provider that failed is simply absent from the answer. It stays in
-        // providers_consulted, so "asked and got nothing" remains visible and
-        // never reads as "agreed".
+        // providers consulted, so "asked and got nothing" never reads as "agreed".
         if (status < 200 || status >= 300) continue;
         if (payload.empty()) continue;
 
-        // FAIL CLOSED ON A CONTRADICTED ATTRIBUTION.
-        //
-        // Positional correlation is only as good as the flow preserving frame
-        // order along route.requests -> http -> parse.responses. These
-        // descriptors have very different latencies (an Overpass mirror runs
-        // seconds behind a Socrata row query), so if the runtime ever emits in
-        // COMPLETION order instead, index k would name the wrong provider —
-        // and this record type's whole point is that a deconflicted site
-        // cannot be re-serialized unattributed. Exporting a mast under a
-        // regulator's name that never asserted it is the one outcome worth
-        // losing data to avoid.
-        //
-        // So the body must corroborate the provider the index named. The
-        // signatures are structural, not heuristic: an Overpass answer is one
-        // object carrying `elements`, an open-data row answer is a top-level
-        // array. On a mismatch this drops the frame rather than decoding it
-        // against a guess — the run reports fewer providers, never a wrong one.
-        const char* observed = detect_body_format(payload);
-        if (observed && std::strcmp(observed, spec->format) != 0) continue;
+        // FAIL CLOSED ON A CONTRADICTED ATTRIBUTION: the body must corroborate
+        // the provider it is attributed to (an Overpass answer carries
+        // `elements`, a row API answers an array, an OpenCelliD error envelope
+        // is a format no provider declares). On a mismatch the frame is dropped
+        // rather than decoded against a guess.
+        if (observed_format && std::strcmp(observed_format, spec->format) != 0) continue;
 
-        // `csv_header` is the header row a PREVIOUS chunk saw, carried forward
-        // on the run contract by the ingest lane's durable resume mark. Empty
-        // on chunk 0 and on every request-scoped path, where the body carries
-        // its own header.
+        const size_t before = g_reports.size();
+        std::vector<Report>& reports = g_reports;
+        const size_t provider_row_cap = g_provider_row_cap;
+        // `csv_header` is the header row a PREVIOUS chunk saw, carried on the
+        // durable resume mark. Empty on chunk 0 and on every request-scoped path.
         if (std::strcmp(spec->format, "csv") == 0)
-            decode_csv(*spec, payload, &reports, json_string(job, "csv_header", ""));
+            decode_csv(*spec, payload, &reports, g_csv_header);
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "swiss-geojson") == 0) {
-            decode_swiss_geojson(*spec, payload, provider_row_cap, &reports,
-                                 &g_row_capped);
+            decode_swiss_geojson(*spec, payload, provider_row_cap, &reports, &g_row_capped);
         }
-        // The four national bulk archives. Each takes the per-provider row cap
-        // and reports `hit_cap` for the same reason the BAKOM lane does: with
-        // members of 428 MB and 198,524 supports, "you asked for this many" and
-        // "the register has this many" must never be confused.
+        // The four national bulk archives: "you asked for this many" and "the
+        // register has this many" must never be confused, hence `hit_cap`.
         else if (std::strcmp(spec->format, "zip-acma") == 0) {
             decode_acma_zip(*spec, payload, provider_row_cap, &reports, &g_row_capped);
         }
@@ -3464,181 +3690,109 @@ int parse(void) {
         else if (std::strcmp(spec->format, "comreg-protobuf") == 0) {
             decode_comreg_protobuf(*spec, payload, provider_row_cap, &reports, &g_row_capped);
         }
-        // The OpenCelliD bulk gzip. Unlike every other decoder this one is
-        // STATEFUL across invocations: it reads the resume mark the previous
-        // chunk left in the job and writes the one the next chunk needs.
+        // The bulk gzip. Unlike every other decoder this one is STATEFUL across
+        // chunks: it reads the resume mark the fetch continues and writes the
+        // one the next chunk needs.
         else if (std::strcmp(spec->format, "csv-gz") == 0) {
+            g_bulk_provider = spec->id;
+            g_bulk_url = response->URL() ? response->URL()->str() : std::string(spec->url);
             decode_opencellid_bulk_gz(*spec, payload, provider_row_cap, &g_bulk_resume, &reports,
                                       &g_row_capped);
         }
-        // JSON adapters land with the per-provider decoders; until each is
-        // written and fixtured, an unsupported format contributes nothing
-        // rather than a guess.
-    }
-
-    // IS THE FAN-IN DONE? Emit exactly once per run, or not at all yet.
-    //
-    // Counting to N (= descriptors emitted) is NOT a safe completion test:
-    // `hostcap/http-request` answers a failed fetch with
-    // `plugin_set_error(...); return 502` and pushes NO response frame
-    // (http_request_module.cpp:368-370), so any provider or mirror that 504s
-    // leaves the count permanently short. Mirrors exist precisely BECAUSE
-    // upstreams fail — this session alone saw the main Overpass endpoint 504
-    // while a mirror answered — so a count-based wait would hang on the normal
-    // case, and a hung chain on this mount is a silent 502
-    // (graph: sdn-cellular-sole-provider-508 / sdn-cellular-sole-provider-502).
-    //
-    // The sound signal is the scheduler's own ordering. Ready nodes are taken
-    // FIRST-BY-INDEX and nothing runs concurrently (HERMES, flow_runtime.cpp:
-    // 1045-1047), and `http` sits at a LOWER index than `parse`. So `parse`
-    // only ever runs when `http` has nothing left to do: an invocation that
-    // brings NO new response frame means every request has already been either
-    // answered or failed, and nothing further is coming.
-    //
-    // `plugin_set_yielded` + `plugin_set_backlog_remaining` are what buy that
-    // extra tick — they make this node ready again with an EMPTY queue
-    // (JANUS, flow_runtime.cpp:381-388) — so the quiet invocation always
-    // happens rather than being waited for.
-    // Emit at the end of the first invocation that carries responses.
-    //
-    // Waiting for a count of N descriptors is NOT safe: `hostcap/http-request`
-    // answers a failed fetch with `plugin_set_error(...); return 502` and pushes
-    // NO response frame (http_request_module.cpp:368-370), so any provider or
-    // mirror that 504s leaves a count-based wait permanently short. Mirrors
-    // exist precisely BECAUSE upstreams fail — this session alone saw the main
-    // Overpass endpoint 504 while a mirror answered — so counting to N would
-    // hang on the ordinary case, and a hung chain on this mount is a silent 502
-    // (graph: sdn-cellular-sole-provider-502).
-    //
-    // Waiting is also unnecessary. Ready nodes are taken FIRST-BY-INDEX and
-    // nothing runs concurrently (HERMES, flow_runtime.cpp:1045-1047,1337-1338),
-    // and `http` sits at a LOWER index than `parse`. So `http` drains its whole
-    // request queue before `parse` is ever chosen, and every response that will
-    // exist is already queued when `parse` first runs. With `responses` no
-    // longer capped at maxStreams 1, one invocation sees all of them.
-    //
-    // The accumulator above still spans invocations, so this stays correct if
-    // that ordering ever loosens; `g_emitted` is what keeps "once per run" true
-    // either way, because `merge` -> `respond` -> `egress` can only carry ONE
-    // HTTP body and a second emission would corrupt the transport.
-    if (g_emitted) return 0;
-
-    // WAIT FOR THE WHOLE FAN-IN. `parse` is invoked as soon as ONE response is
-    // queued — it does NOT get to see them all in a single invocation, which
-    // was measured live: emitting on the first batch produced exactly the
-    // first-named provider's answer and dropped every later frame, and swapping
-    // the PROVIDERS order swapped the result (88 vs 332 records).
-    //
-    // Emit as soon as every descriptor is accounted for. When some are NOT —
-    // `hostcap/http-request` pushes NO frame for a failed fetch
-    // (http_request_module.cpp:368-370), and Overpass ships three endpoints
-    // precisely because they fail — the count never completes, so waiting on it
-    // alone would hang, and a hung chain on this mount is a silent 502
-    // (graph: sdn-cellular-sole-provider-502).
-    //
-    // So the count is the fast path and a QUIET TICK is the backstop:
-    // `plugin_set_yielded` + `plugin_set_backlog_remaining` make this node ready
-    // again with an EMPTY queue (JANUS, flow_runtime.cpp:381-388), and an
-    // invocation that brings no new frame means nothing further is coming.
-    const size_t expected = g_request_providers.size();
-    const bool all_accounted_for = expected > 0 && g_response_cursor >= expected;
-    if (!all_accounted_for) {
-        if (new_responses > 0) {
-            // Something arrived but not everything: ask for another look.
-            if (++g_idle_ticks < 64) {
-                plugin_set_yielded(1);
-                plugin_set_backlog_remaining(1);
-                return 0;
-            }
-            // Runaway guard. Answer short rather than never.
-        } else if (g_response_cursor == 0) {
-            // Nothing has arrived at all yet; nothing to answer with.
-            return 0;
-        }
-        // else: a quiet tick after real responses — the fan-in is finished with
-        // fewer frames than descriptors, which is the failed-fetch case.
+        // An unsupported format contributes nothing rather than a guess.
+        const std::string retrieved =
+            response->RETRIEVED_MS() ? iso_of_ms(response->RETRIEVED_MS()) : iso_of_ms(static_cast<uint64_t>(now_ms()));
+        g_report_retrieved.resize(g_reports.size(), retrieved);
+        (void)before;
     }
 
     if (!g_have_job) {
-        // Responses with no run contract: nothing can be attributed, and
-        // guessing is the one thing this record type must not do. Stay quiet
-        // rather than emit an unattributed stream.
+        // Nothing has arrived at all; nothing to answer with.
         return 0;
     }
-
-    std::string out = "[";
-    for (size_t i = 0; i < reports.size(); ++i) {
-        if (i) out += ",";
-        out += report_to_json(reports[i]);
-    }
-    out += "]";
-
-    // Mark BEFORE pushing. A pooled instance is reset by the next run's `job`
-    // frame; what must not happen is a SECOND emission inside this run.
-    g_emitted = true;
-
-    // Hand the row-cap verdict to deconflict on the job it forwards. The job
-    // is JSON built by route, so appending before the closing brace is the
-    // whole edit — and deconflict reads it with the same json_bool as the rest.
-    std::string forwarded_job = g_job;
-    if (!forwarded_job.empty() && forwarded_job[forwarded_job.size() - 1] == '}') {
-        forwarded_job.erase(forwarded_job.size() - 1);
-        forwarded_job += ",\"row_capped\":" + std::string(g_row_capped ? "true" : "false");
-        // THE NEXT CHUNK'S RESUME MARK travels the same way, and only when a
-        // bulk lane actually ran. `decoder` is the serialized inflate state;
-        // it is opaque, it is never a credential, and it is the reason the next
-        // range can start mid-symbol instead of re-reading the whole prefix.
-        //
-        // The key is `bulk_resume_NEXT`, not `bulk_resume`. The job already
-        // carries the INBOUND mark under the latter, and these frames are read
-        // with a first-match scan (`json_raw_field`), so appending a second
-        // `bulk_resume` would leave every reader seeing the stale one — a
-        // download that restarts from the same offset forever, reporting
-        // progress each time.
-        if (g_bulk_resume.valid) {
-            char counters[192];
-            std::snprintf(counters, sizeof(counters),
-                          ",\"bulk_resume_next\":{\"next_byte\":%llu,\"rows_seen\":%llu"
-                          ",\"sites_emitted\":%llu,\"header_done\":%s,\"complete\":%s",
-                          static_cast<unsigned long long>(g_bulk_resume.next_byte),
-                          static_cast<unsigned long long>(g_bulk_resume.rows_seen),
-                          static_cast<unsigned long long>(g_bulk_resume.sites_emitted),
-                          g_bulk_resume.header_done ? "true" : "false",
-                          g_bulk_resume.complete ? "true" : "false");
-            forwarded_job += counters;
-            if (!g_bulk_resume.decoder.empty()) {
-                forwarded_job += ",\"decoder\":\"" + g_bulk_resume.decoder + "\"";
-            }
-            forwarded_job += "}";
+    const bool all_accounted_for = g_expected > 0 && g_response_cursor >= g_expected;
+    if (!all_accounted_for && new_responses > 0) {
+        // Something arrived but not provably everything: ask for another look.
+        if (++g_idle_ticks < 64) {
+            plugin_set_yielded(1);
+            plugin_set_backlog_remaining(1);
+            return 0;
         }
-        forwarded_job += "}";
+        // Runaway guard. Answer short rather than never.
     }
-    if (push_json("job", forwarded_job) < 0) return 500;
-    if (push_json("reports", out) < 0) return 500;
+    // else: every fetch accounted for, or a quiet tick after real responses.
+
+    std::vector<uint8_t> stream;
+    for (size_t i = 0; i < g_reports.size(); ++i) {
+        report_to_tbs(g_reports[i], i < g_report_retrieved.size() ? g_report_retrieved[i] : iso_now(), &stream);
+    }
+
+    APRT job;
+    GetAPR(g_job.data())->UnPackTo(&job);
+    if (g_row_capped) apr_set_header(&job, "x-sdn-row-capped", "true");
+
+    Bytes resume;
+    if (g_bulk_resume.valid) {
+        const IRM* in = g_irm.empty() ? nullptr : GetIRM(g_irm.data() + g_irm_base);
+        resume = build_resume_irm(in, g_bulk_provider, g_bulk_url, g_bulk_resume, g_csv_header);
+    }
+    reset_run_state();
+
+    if (push_apr("job", job) < 0) return 500;
+    if (push_tbs_stream("reports", stream) < 0) return 500;
+    if (!resume.empty() &&
+        push_frame("resume", "IRM.fbs", "$IRM", "IRM", resume.data(), resume.size()) < 0) {
+        return 500;
+    }
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// deconflict: job + reports -> size-prefixed $TBS stream + run summary.
+// deconflict: the run contract + reports -> size-prefixed $TBS stream, the
+// contract passed on with this run's counters, and the dataset's availability.
 // ---------------------------------------------------------------------------
 int deconflict(void) {
-    const std::string job = input_text("job", 0);
-    const std::string reports_json = input_text("reports", 0);
-
-    const int8_t method = static_cast<int8_t>(json_number(job, "method", MM_HIGHEST_SAMPLE_COUNT));
+    if (refuse_batched("job") || refuse_batched("reports")) return 500;
+    const plugin_input_frame_t* job_frame = frame_for("job");
+    std::unique_ptr<APRT> job = job_frame && job_frame->payload ? apr_unpack(job_frame->payload, job_frame->payload_length) : nullptr;
+    if (!job) {
+        plugin_set_error("missing-job-frame", "deconflict requires the $APR run contract on port \"job\".");
+        return 400;
+    }
+    const std::string method_name = apr_param(*job, "METHOD", "HIGHEST_SAMPLE_COUNT");
+    int8_t method;
+    if (method_name == "SINGLE_SOURCE") method = MM_SINGLE_SOURCE;
+    else if (method_name == "HIGHEST_SAMPLE_COUNT") method = MM_HIGHEST_SAMPLE_COUNT;
+    else if (method_name == "MOST_RECENT") method = MM_MOST_RECENT;
+    else if (method_name == "AUTHORITY_PRECEDENCE") method = MM_AUTHORITY_PRECEDENCE;
+    else if (method_name == "CENTROID") method = MM_CENTROID;
+    else {
+        const std::string message = "the run contract names merge METHOD \"" + method_name + "\", which $TBS does not define";
+        plugin_set_error("unknown-method", message.c_str());
+        return 400;
+    }
     // The ingest lane writes every deconflicted site; the anonymous lane stops
-    // at LIMIT. Either way the summary reports whether it stopped early, so a
-    // cropped answer is never indistinguishable from a complete one.
-    const bool full_population = json_bool(job, "full_population", false);
-    const long limit = full_population
-                           ? 0  // 0 == unbounded, the existing `limit > 0` sense
-                           : static_cast<long>(json_number(job, "limit", 2000));
-    const std::vector<std::string> consulted_ids = json_string_array(job, "providers_consulted");
-    const size_t consulted = consulted_ids.size();
+    // at LIMIT. Either way the answer reports whether it stopped early.
+    const bool full_population = apr_param(*job, "FULL_POPULATION") == "true";
+    const long limit = full_population ? 0  // 0 == unbounded
+                                        : static_cast<long>(std::atof(apr_param(*job, "LIMIT", "2000").c_str()));
+    const size_t consulted = split_list(apr_header(*job, "x-sdn-providers-consulted")).size();
 
     std::vector<Report> reports;
-    for (const std::string& obj : split_json_objects(reports_json)) {
-        reports.push_back(report_from_json(obj));
+    if (const plugin_input_frame_t* rf = frame_for("reports")) {
+        if (rf->payload && rf->payload_length) {
+            bool well_formed = true;
+            const bool framed = for_each_frame(rf->payload, rf->payload_length, [&](const uint8_t* rec, size_t len) {
+                flatbuffers::Verifier v(rec, len);
+                if (!has_identifier(rec, len, "$TBS") || !VerifyTBSBuffer(v)) { well_formed = false; return false; }
+                reports.push_back(report_from_tbs(GetTBS(rec)));
+                return true;
+            });
+            if (!framed || !well_formed) {
+                plugin_set_error("invalid-reports", "the reports frame is not a size-prefixed $TBS record stream.");
+                return 400;
+            }
+        }
     }
 
     std::vector<std::vector<size_t>> groups;
@@ -3653,11 +3807,9 @@ int deconflict(void) {
     size_t multi = 0;
     size_t written = 0;
     // TRUNCATED means "this answer is not the whole population", whichever cap
-    // did it: the decoder stopping at the per-provider row cap (reported by
-    // parse on the job) or the writer stopping at LIMIT below. Reporting only
-    // the second would still let a row-capped run read as complete, which is
-    // the exact ambiguity behind "~364 Swiss sites".
-    bool truncated = json_bool(job, "row_capped", false);
+    // did it: the decoder stopping at the per-provider row cap (parse's
+    // x-sdn-row-capped) or the writer stopping at LIMIT below.
+    bool truncated = apr_header(*job, "x-sdn-row-capped") == "true";
     for (const std::vector<size_t>& group : groups) {
         if (limit > 0 && static_cast<long>(written) >= limit) { truncated = true; break; }
         const size_t win = select_winner(reports, group, method);
@@ -3678,44 +3830,36 @@ int deconflict(void) {
         build_tbs_record(reports, group, win, method, lat, lon, spread,
                          static_cast<uint32_t>(consulted), static_cast<uint32_t>(agreeing.size()),
                          confidence, stamp, &record);
-        const uint32_t len = static_cast<uint32_t>(record.size());
-        stream.push_back(static_cast<uint8_t>(len & 0xff));
-        stream.push_back(static_cast<uint8_t>((len >> 8) & 0xff));
-        stream.push_back(static_cast<uint8_t>((len >> 16) & 0xff));
-        stream.push_back(static_cast<uint8_t>((len >> 24) & 0xff));
-        stream.insert(stream.end(), record.begin(), record.end());
+        append_size_prefixed(&stream, record.data(), record.size());
         ++written;
     }
 
-    const std::string summary =
-        std::string("{\"route\":\"cellular-aggregate\",\"format\":\"record-stream\""
-                    ",\"status\":200,\"reportsIn\":") + std::to_string(reports.size()) +
-        ",\"sitesOut\":" + std::to_string(written) +
-        ",\"collapsed\":" + std::to_string(reports.size() > written ? reports.size() - written : 0) +
-        ",\"multiProviderSites\":" + std::to_string(multi) +
-        ",\"providersConsulted\":" + std::to_string(consulted) +
-        ",\"method\":\"" + json_escape(json_string(job, "method_name", "")) + "\"" +
-        // A CROPPED ANSWER MUST SAY SO. `truncated` is true exactly when a cap
-        // stopped this run short of the population it decoded — the thing that
-        // made "~364 Swiss sites" read as a complete worldwide answer for as
-        // long as it did.
-        ",\"fullPopulation\":" + (full_population ? "true" : "false") +
-        ",\"truncated\":" + (truncated ? "true" : "false") +
-        // THE RESUME MARK IS PART OF THE ANSWER, not internal bookkeeping.
-        //
-        // A bulk run that read 32 MiB of a multi-gigabyte export has given a
-        // TRUE but PARTIAL answer, and this file's standing rule is that a
-        // partial answer must never be indistinguishable from a complete one.
-        // Handing the mark back is also the only way the caller can ask for the
-        // next chunk: this node keeps nothing between invocations, so the
-        // continuation lives with whoever is driving the ingest.
-        (json_string(job, "bulk_resume_next", "").empty()
-             ? std::string()
-             : ",\"bulkResume\":" + json_string(job, "bulk_resume_next", "{}")) +
-        ",\"skipped\":" + json_string(job, "skipped", "[]") + "}";
+    // A CROPPED ANSWER MUST SAY SO — and the counters ride the answer as headers.
+    apr_set_header(job.get(), "x-sdn-reports-in", std::to_string(reports.size()));
+    apr_set_header(job.get(), "x-sdn-sites-out", std::to_string(written));
+    apr_set_header(job.get(), "x-sdn-collapsed",
+                   std::to_string(reports.size() > written ? reports.size() - written : 0));
+    apr_set_header(job.get(), "x-sdn-multi-provider-sites", std::to_string(multi));
+    apr_set_header(job.get(), "x-sdn-merge-method", method_name);
+    apr_set_header(job.get(), "x-sdn-full-population", full_population ? "true" : "false");
+    apr_set_header(job.get(), "x-sdn-truncated", truncated ? "true" : "false");
+
+    DAVT dav;
+    dav.STANDARD = "TBS";
+    dav.SCHEMA_NAME = "TBS.fbs";
+    dav.SOURCE_NAME = "cellular-aggregate";
+    dav.KNOWN = true;
+    dav.AVAILABLE = true;
+    dav.FRESH = true;
+    dav.RECORD_COUNT = written;
+    dav.BYTE_COUNT = stream.size();
+    dav.PUBLISHED_AT_MS = now_ms();
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishDAVBuffer(b, DAV::Pack(b, &dav));
 
     if (push_tbs_stream("records", stream) < 0) return 500;
-    if (push_json("decision", summary) < 0) return 500;
+    if (push_apr("decision", *job) < 0) return 500;
+    if (push_frame("availability", "DAV.fbs", "$DAV", "DAV", b.GetBufferPointer(), b.GetSize()) < 0) return 500;
     return 0;
 }
 

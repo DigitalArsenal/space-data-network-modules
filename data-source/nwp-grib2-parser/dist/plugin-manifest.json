@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
   "name": "Numerical Weather Prediction GRIB2 Parser Node",
-  "version": "0.2.0",
-  "description": "Parser flow node for numerical-weather-prediction model fields in GRIB2 (NOAA/NCEP GFS and GEFS from NOAA Open Data Dissemination's anonymous public buckets, fetched message by message through the .idx inventory). parse turns each instantaneous field into $WXF record(s) carrying the GRIB2 packing's own integers exactly - value = (R + X 2^E) / 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D, times 1/100 for a percentage (the fraction $WXF defines) - coded InlineEncodedChunk (delta/zigzag/shuffle), rows south to north and longitude from 0 east, every stride-th point (GEFS 0.5 deg spread at the 1 deg points), whole or in band_rows bands, named as the world-clouds reference names them (wind_east_850hPa, geopotential_height_500hPa, cloud_cover_low, air_temperature_2m, ..._spread). Raw: nothing is resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives). GRIB2 is read by the vendored grib2mini (grid 3.0, product 4.0/4.1/4.2, packing 5.0/5.2/5.3, bitmaps), checked against ecCodes on NOAA's own files; interval statistics, other grids or packings, unmapped parameters and integers wider than 16 bits are refused by name. capabilities: none, so the node runs in the browser and on WasmEdge alike.",
+  "version": "0.3.0",
+  "description": "Parser flow node (typed contracts 1.0: FlatBuffers only, no JSON and no base64) for numerical-weather-prediction model fields in GRIB2 (NOAA/NCEP GFS and GEFS from NOAA Open Data Dissemination's anonymous public buckets, fetched message by message through the .idx inventory). parse reads the HttpResponses (HRSP) of the byte ranges, each carrying its job in CONTEXT - the size-prefixed $WXF header record nwp-field-source's plan built for the (product, lead): FIELD_ID <model_key>:<run>:f<LLL>:<product>, VARIABLE_NAME the product, MODEL_CLASS/MODEL_ID, LEAD_HOURS, MEMBER_KIND/ENSEMBLE_SIZE, GRID.DLAT the records' spacing (the stride), GRID.NLAT the rows a record, TILE_COUNT the square tiles, SOURCE_URL and attribution - and turns each instantaneous field into $WXF record(s) carrying the GRIB2 packing's own integers exactly - value = (R + X 2^E) / 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D, times 1/100 for a percentage (the fraction $WXF defines) - coded InlineEncodedChunk (delta/zigzag/shuffle), rows south to north and longitude from 0 east, every stride-th point (GEFS 0.5 deg spread at the 1 deg points), whole, in bands of GRID.NLAT rows or cut into tiles (gfs-0p25-sea: 512 11.25 deg tiles, one batch a tile through the backlog), named as the world-clouds reference names them (wind_east_850hPa, geopotential_height_500hPa, cloud_cover_low, air_temperature_2m, ..._spread). Raw: nothing is resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives). GRIB2 is read by the vendored grib2mini (grid 3.0, product 4.0/4.1/4.2, packing 5.0/5.2/5.3, bitmaps), checked against ecCodes on NOAA's own files; interval statistics, other grids or packings, unmapped parameters and integers wider than 16 bits are refused by name. Each batch's IngestRequest (INGQ: SCHEMA WXF.fbs, source tags, reconcile Duplicates, provenance) goes out on wxf_meta beside its record stream. capabilities: none and no hostcall, so the node runs in the browser and on WasmEdge alike.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -22,53 +22,28 @@
     {
       "methodId": "parse",
       "displayName": "Parse GRIB2 Fields into $WXF Records",
-      "description": "Each GRIB job and its HTTP response (paired by position; a response is whole GRIB2 messages of one byte range) -> one $WXF record per field (or per band of band_rows rows) with the packing integers, plus one storage.ingest_with_source meta for the batch. A count mismatch, a non-2xx status, an unreadable message or a field this parser does not publish is refused with a named error, never guessed.",
+      "description": "HttpResponses of byte ranges, each carrying its job ($WXF header) in CONTEXT (a response is whole GRIB2 messages of one byte range) -> one $WXF record per field (or per band of GRID.NLAT rows, or per tile) with the packing integers, plus one IngestRequest for the batch. One batch per invocation (a tiled job: one batch a tile, the rest as backlog). A response without a $WXF job, a non-2xx status, an unreadable message or a field this parser does not publish is refused with a named error, never guessed.",
       "inputPorts": [
-        {
-          "portId": "jobs",
-          "acceptedTypeSets": [
-            {
-              "setId": "nwp-grib-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON GRIB job: url, product, model_key, model_id, model_class, run, lead, stride, band_rows, spread, ensemble_size, attribution.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-range fetch-job attribution (product, model, run, lead, stride, bands, licence and citation) emitted by the nwp-field-source select node inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 32,
-          "required": true,
-          "description": "One GRIB job per request frame the select node emitted, in emission order."
-        },
         {
           "portId": "responses",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "hostcap/http-request response, one per job: an aligned-binary $HRB raw-body-v1 frame (status plus the GRIB2 bytes of one range) or the legacy JSON {status,headers,bodyB64} lane.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
-              }
+              "description": "HttpResponse (module-sdk runtime type HRSP) from hostcap/http-request: STATUS (200/206), HEADERS (etag, last-modified, content-type, date for provenance), BODY whole GRIB2 messages of one byte range, CONTEXT the job: one size-prefixed $WXF header record (no values)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 32,
           "required": true,
-          "description": "One HTTP response per file job, positionally aligned."
+          "description": "The byte-range responses of one batch (a lead-file, at most 16 ranges); paired with their jobs by CONTEXT."
         }
       ],
       "outputPorts": [
@@ -76,24 +51,22 @@
           "portId": "wxf_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the $WXF batch (schema/provider/source/batch/reconcile/licence/provenance).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA WXF.fbs, TAGS (PROVIDER_ID noaa-ncep, SOURCE_NAME the product, BATCH_ID the sha-256 of the batch's GRIB2 bytes or <model>:<run>:f<LLL>:s4:<x>:<y> for a tile, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER, LICENSE, LICENSE_URL, CITATION), RECONCILE Duplicates, PROVENANCE."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "WXF ingest meta."
+          "description": "The batch's ingest request."
         },
         {
           "portId": "wxf_records",

@@ -1,8 +1,14 @@
-// data-source/mlab-starlink-connectivity SDK-compat tests.
+// data-source/mlab-starlink-connectivity SDK-compat tests on the typed
+// contracts (1.0): FlatBuffers only, no JSON and no base64 between modules.
 //
-// The two pure flow nodes run in the SDK browser harness against a fixture cut
-// from the LIVE M-Lab per-ASN statistics export (see fixtures/PROVENANCE.md),
-// and their outputs are asserted against the Themis $CNP rulings:
+// The two pure flow nodes run in the SDK browser harness: a TimerTick in,
+// the HttpRequest out (its job a size-prefixed IngestRequest in CONTEXT); the
+// HttpResponse in with the module's own job echoed, carrying a fixture cut
+// from the LIVE M-Lab per-ASN statistics export (see fixtures/PROVENANCE.md);
+// the IngestRequest, the $CNP stream, the HttpResponse verbatim (raw) or the
+// FlowNotice (304) out. Node CONFIG is the SDS $PIV plugin.getConfig answer
+// (one ModuleConfig on raw "config"). The outputs are asserted against
+// the Themis $CNP rulings:
 //
 //   1. A quantity exists only as a CNPMetric, and CNPMetric REQUIRES UNITS and
 //      PROVENANCE. There is no encoding for a number without them.
@@ -15,10 +21,10 @@
 //      NON_COMMERCIAL_ONLY false.
 //   6. cnpMethod.MODELED never appears — every number here is measured.
 //
-// The FlatBuffer reader below is deliberately hand-rolled rather than a
-// generated decoder: the point of these assertions is that the BYTES on the
-// wire say what the standard says they should, so the test must not share a
-// codepath with the builder under test.
+// The $CNP reader below is deliberately hand-rolled rather than a generated
+// decoder: the point of these assertions is that the BYTES on the wire say
+// what the standard says they should, so the test must not share a codepath
+// with the builder under test.
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
@@ -29,6 +35,16 @@ import { fileURLToPath } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import {
+  decodeFlowNotice,
+  decodeHostCall,
+  decodeHttpRequest,
+  decodeHttpResponse,
+  decodeIngestRequest,
+  encodeHttpResponse,
+  encodeTimerTick,
+  identifierOf,
+} from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -37,7 +53,6 @@ const STANDARDS_ROOT =
   process.env.SPACE_DATA_STANDARDS_ROOT ??
   fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const STATS_JSON = fs.readFileSync(
@@ -47,12 +62,11 @@ const STATS_ROWS = JSON.parse(STATS_JSON.toString("utf8"));
 
 const SOURCE_URL =
   "https://statistics.measurementlab.net/v0/asn/14593/2024/histogram_daily_stats.json";
+const RETRIEVED_MS = Date.UTC(2026, 9, 13, 12, 0, 0);
 
-const JOB = {
-  source_url: SOURCE_URL,
-  source_name: "mlab-ndt-statistics",
-  archive_source: "mlab",
-  archive_name: "histogram_daily_stats.json",
+const TYPE = {
+  TICK: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" },
+  HRSP: { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" },
 };
 
 function readManifest() {
@@ -63,29 +77,58 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    // Control frames are variable-length UTF-8 JSON and ride the opaque
-    // flatbuffer lane, exactly as the flow runtime does on an `opaque: true`
-    // edge.
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
-}
-
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-async function createHarness(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-  });
+// The SDK harness's BrowserHost answers plugin.getConfig from `config` (one ModuleConfig on raw "config", as the Go node
+// answers it). The hostcall import is wrapped only to record the module's calls.
+async function createHarness(t, config = {}) {
+  const calls = [];
+  const instantiate = WebAssembly.instantiate;
+  WebAssembly.instantiate = async (module, imports) => {
+    let memory;
+    const host = imports.space_data_module_host;
+    if (!host) return instantiate(module, imports);
+    const wrapped = {
+      ...imports,
+      space_data_module_host: {
+        ...host,
+        call: (opPtr, opLen, ptr, len) => {
+          calls.push(decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice()));
+          return host.call(opPtr, opLen, ptr, len);
+        },
+      },
+    };
+    const result = await instantiate(module, wrapped);
+    memory = (result.instance ?? result).exports.memory;
+    return result;
+  };
+  let harness;
+  try {
+    harness = await createBrowserModuleHarness({
+      wasmSource: new Uint8Array(readWasm()),
+      manifest: readManifest(),
+      surface: "direct",
+      hostOptions: { config },
+    });
+  } finally {
+    WebAssembly.instantiate = instantiate;
+  }
   t.after(() => harness.destroy());
+  harness.calls = calls;
   return harness;
+}
+
+const tick = () => ({
+  portId: "tick",
+  typeRef: TYPE.TICK,
+  payload: encodeTimerTick({ triggerId: "timer-mlab-connectivity", firedMs: RETRIEVED_MS }),
+});
+
+function ok(response) {
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  return response;
 }
 
 function outputsByPort(response) {
@@ -94,10 +137,29 @@ function outputsByPort(response) {
   return map;
 }
 
-function jsonFrame(map, portId) {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
+// The job a size-prefixed IngestRequest: [u32 length][INGQ buffer].
+function readJob(context) {
+  assert.equal(new DataView(context.buffer, context.byteOffset).getUint32(0, true), context.length - 4);
+  assert.equal(identifierOf(context.subarray(4)), "INGQ", "CONTEXT is one size-prefixed IngestRequest");
+  return decodeIngestRequest(context.slice(4));
+}
+
+// The request node's own HttpRequest for `config` - the job every parse below is handed back.
+async function requestFor(t, config = {}) {
+  const harness = await createHarness(t, config);
+  const response = ok(await harness.invoke({ methodId: "request", inputs: [tick()] }));
+  assert.equal(response.outputs.length, 1);
+  assert.equal(response.outputs[0].portId, "request");
+  return decodeHttpRequest(response.outputs[0].payload);
+}
+
+// The HttpResponse hostcap/http-request answers: STATUS, lower-cased HEADERS, BODY verbatim, the request's CONTEXT.
+function httpResponse(request, status, body, headers = {}) {
+  return {
+    portId: "response",
+    typeRef: TYPE.HRSP,
+    payload: encodeHttpResponse({ url: request.url, status, headers, body, context: request.context, retrievedMs: RETRIEVED_MS }),
+  };
 }
 
 function splitStream(payload) {
@@ -119,9 +181,6 @@ function fileIdentifier(record) {
   return decoder.decode(record.subarray(4, 8));
 }
 
-function httpResponse(bodyBytes, headers = {}) {
-  return { status: 200, headers, bodyB64: Buffer.from(bodyBytes).toString("base64") };
-}
 
 // ---------------------------------------------------------------------------
 // Generic FlatBuffer table reader. Slot numbers below are the VT_* constants
@@ -262,17 +321,14 @@ function readProvenance(p) {
   };
 }
 
-async function runParse(t, body, headers = {}, job = JOB) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "parse",
-    inputs: [jsonInput("job", job), jsonInput("response", httpResponse(body, headers))],
-  });
+async function runParse(t, body, headers = {}, { status = 200, config = {} } = {}) {
+  const request = await requestFor(t);
+  const harness = await createHarness(t, config);
+  return harness.invoke({ methodId: "parse", inputs: [httpResponse(request, status, body, headers)] });
 }
 
-async function parsedRecords(t, body = STATS_JSON, headers = {}) {
-  const response = await runParse(t, body, headers);
-  assert.equal(response.statusCode, 0, response.errorMessage);
+async function parsedRecords(t, body = STATS_JSON, headers = {}, options = {}) {
+  const response = ok(await runParse(t, body, headers, options));
   const outputs = outputsByPort(response);
   return {
     response,
@@ -301,6 +357,28 @@ test("mlab-starlink-connectivity artifact passes SDK compliance against the stan
     standardsRoot: STANDARDS_ROOT,
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  // Every port names ONE concrete FlatBuffer type: no wildcard, no JSON lane.
+  const ids = {};
+  for (const method of readManifest().methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+      const [type] = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(type.acceptsAnyFlatbuffer, undefined, port.portId);
+      assert.equal(type.wireFormat, "flatbuffer", port.portId);
+      assert.equal(port.acceptedTypeSets[0].wildcardJustification, undefined, port.portId);
+      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+    }
+  }
+  assert.deepEqual(ids, {
+    "request.tick": "TICK",
+    "request.request": "HREQ",
+    "parse.response": "HRSP",
+    "parse.cnp_meta": "INGQ",
+    "parse.cnp_records": "$CNP",
+    "parse.raw": "HRSP",
+    "parse.unchanged": "FNTC",
+  });
 });
 
 test("is a pure node: canonical ABI, WASI-only imports besides the config bridge", async () => {
@@ -332,28 +410,68 @@ test("manifest declares zero host capabilities (http + storage are the hostcap c
   ]);
 });
 
-test("request: timer tick -> ONE whole-file anonymous fetch + attribution job", async (t) => {
+test("request: TimerTick -> ONE whole-file anonymous fetch, its job a size-prefixed IngestRequest in CONTEXT", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({ methodId: "request", inputs: [jsonInput("tick", {})] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const outputs = outputsByPort(response);
-
-  const request = jsonFrame(outputs, "request");
+  const response = ok(await harness.invoke({ methodId: "request", inputs: [tick()] }));
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["request"], "one frame: the job rides the request");
+  assert.equal(identifierOf(response.outputs[0].payload), "HREQ");
+  const request = decodeHttpRequest(response.outputs[0].payload);
   assert.equal(request.method, "GET");
   // The default URL is the documented per-ASN statistics path for AS14593.
   assert.equal(request.url, SOURCE_URL);
   // NO BigQuery, no auth, no key: an anonymous HTTPS GET of a static artifact.
   assert.ok(!/bigquery/i.test(request.url), "must not reach for BigQuery");
-  assert.equal(request.headers.authorization, undefined);
-  assert.equal(request.headers["x-api-key"], undefined);
+  assert.deepEqual(Object.keys(request.headers), ["accept", "user-agent"], "no validators unless CONFIG sets them; no credentials");
+  assert.equal(request.headers.accept, "application/json");
   assert.match(request.headers["user-agent"], /^SDN-CatalogEnrichmentBot\/0\.1 \(\+https:\/\//);
-  assert.equal(typeof request.timeoutMs, "number");
+  assert.equal(request.timeoutMs, 120000);
+  assert.equal(request.body.length, 0);
+  // the node config came through the typed plugin.getConfig hostcall
+  assert.deepEqual(harness.calls.map((c) => c.op), ["plugin.getConfig"]);
 
-  const job = jsonFrame(outputs, "job");
-  assert.equal(job.source_name, "mlab-ndt-statistics");
-  assert.equal(job.source_url, SOURCE_URL);
-  assert.equal(job.archive_source, "mlab");
-  assert.ok(job.provider_id.length > 0);
+  const job = readJob(request.context);
+  assert.equal(job.schema, "CNP.fbs");
+  assert.equal(job.tags.sourceName, "mlab-ndt-statistics");
+  assert.equal(job.tags.sourceUrl, SOURCE_URL);
+  assert.equal(job.tags.providerId, "space-data-network-02");
+  assert.equal(job.tags.batchId, "", "the batch id is the payload's hash: parse sets it");
+  assert.equal(job.reconcile, "none");
+  assert.deepEqual(job.archive, { source: "mlab", name: "histogram_daily_stats.json" });
+  assert.equal(job.provenance, null);
+});
+
+test("request: node CONFIG composes the URL, timeout, provider and validators", async (t) => {
+  const request = await requestFor(t, {
+    mlab_asn: 7922,
+    mlab_year: "2023",
+    mlab_http_timeout_ms: 30000,
+    mlab_provider_id: "space-data-network-07",
+    mlab_if_none_match: 'W/"abc"',
+    mlab_if_modified_since: "Thu, 28 Mar 2024 03:00:45 GMT",
+    // a number written as a string is not a number (the JSON config never read one either)
+    mlab_record_cap: "3",
+  });
+  assert.equal(request.url, "https://statistics.measurementlab.net/v0/asn/7922/2023/histogram_daily_stats.json");
+  assert.equal(request.timeoutMs, 30000);
+  assert.equal(request.headers["if-none-match"], 'W/"abc"');
+  assert.equal(request.headers["if-modified-since"], "Thu, 28 Mar 2024 03:00:45 GMT");
+  const job = readJob(request.context);
+  assert.equal(job.tags.providerId, "space-data-network-07");
+  assert.equal(job.tags.sourceUrl, request.url);
+
+  const explicit = await requestFor(t, { mlab_stats_url: "https://storage.googleapis.com/statistics-mlab-oti/v0/asn/14593/2024/histogram_daily_stats.json" });
+  assert.equal(explicit.url, "https://storage.googleapis.com/statistics-mlab-oti/v0/asn/14593/2024/histogram_daily_stats.json");
+  assert.equal(readJob(explicit.context).tags.sourceUrl, explicit.url);
+});
+
+test("request: a tick that is not a TimerTick is refused", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "request",
+    inputs: [{ portId: "tick", typeRef: TYPE.TICK, payload: encodeHttpResponse({ status: 200 }) }],
+  });
+  assert.equal(response.errorCode, "invalid-tick");
+  assert.equal(response.outputs.length, 0);
 });
 
 test("parse: the eight bucket rows of a date collapse into ONE $CNP per day", async (t) => {
@@ -531,29 +649,51 @@ test("parse: SOURCES lists the provider consulted for the key", async (t) => {
   }
 });
 
-test("parse: ingest meta + batch provenance record what was NOT encoded", async (t) => {
-  const { outputs, records } = await parsedRecords(t, STATS_JSON, {
+test("parse: the IngestRequest + batch provenance record what was NOT encoded; raw is the response verbatim", async (t) => {
+  const { outputs, records, response } = await parsedRecords(t, STATS_JSON, {
     "last-modified": "Thu, 28 Mar 2024 03:00:45 GMT",
+    etag: '"mlab-2024"',
+    "content-type": "application/json",
   });
-  const meta = jsonFrame(outputs, "cnp_meta");
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["cnp_meta", "cnp_records", "raw"]);
+  assert.equal(identifierOf(outputs.get("cnp_meta").payload), "INGQ");
+  const meta = decodeIngestRequest(outputs.get("cnp_meta").payload);
   assert.equal(meta.schema, "CNP.fbs");
-  assert.equal(meta.source_name, "mlab-ndt-statistics");
-  assert.equal(meta.batch_id, sha256Hex(STATS_JSON));
+  assert.deepEqual(meta.tags, {
+    providerId: "space-data-network-02",
+    sourceName: "mlab-ndt-statistics",
+    batchId: sha256Hex(STATS_JSON),
+    sourceUrl: SOURCE_URL,
+    contentKeyId: "public",
+    sourcePeer: "source:mlab",
+    license: "CC0-1.0",
+    licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+    citation: `The M-Lab NDT Data Set ${FIXTURE_DATES[0]}–${FIXTURE_DATES.at(-1)}. https://measurementlab.net/tests/ndt`,
+    shareAlike: false,
+  });
   assert.equal(meta.reconcile, "none");
   assert.deepEqual(meta.archive, { source: "mlab", name: "histogram_daily_stats.json" });
 
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.parser_version, "mlab-cnp-wasm/v1");
-  assert.equal(provenance.source_sha256, sha256Hex(STATS_JSON));
-  assert.equal(provenance.normalized_count, records.length);
-  assert.equal(provenance.schema_counts["CNP.fbs"], records.length);
-  assert.equal(provenance.license, "CC0-1.0");
-  assert.equal(provenance.non_commercial_only, false);
-  assert.deepEqual(provenance.units, { throughput: "Mbps", rtt: "ms" });
-  // No silent unit conversion: source units and encoded units are identical.
-  assert.deepEqual(provenance.source_units, provenance.units);
-  assert.equal(provenance.bucket_rows, STATS_ROWS.length);
-  assert.equal(provenance.days_in_payload, FIXTURE_DATES.length);
+  const p = meta.provenance;
+  assert.equal(p.sourceUrl, SOURCE_URL);
+  assert.equal(p.httpStatus, 200);
+  assert.equal(p.etag, '"mlab-2024"');
+  assert.equal(p.lastModified, "Thu, 28 Mar 2024 03:00:45 GMT");
+  assert.equal(p.contentType, "application/json");
+  // no Date header: the host's receive time (whole seconds, as the records carry it)
+  assert.equal(p.retrievedMs, Math.floor(RETRIEVED_MS / 1000) * 1000);
+  assert.equal(p.parser, "mlab-starlink-connectivity");
+  assert.equal(p.parserVersion, "mlab-cnp-wasm/v1");
+  assert.equal(p.sourceSha256, sha256Hex(STATS_JSON));
+  assert.equal(p.normalizedCount, records.length);
+  assert.deepEqual(p.schemaCounts, { "CNP.fbs": records.length });
+  assert.equal(p.fromCache, false);
+  // the normalized hash: sha256 over "CNP.fbs\0<record>\0" for each record, in order
+  const h = createHash("sha256");
+  for (const rec of splitStream(outputs.get("cnp_records").payload)) {
+    h.update("CNP.fbs"); h.update(Buffer.from([0])); h.update(rec); h.update(Buffer.from([0]));
+  }
+  assert.equal(p.normalizedSha256, h.digest("hex"));
   // The histogram and the geometric means have no honest CNPStatistic
   // encoding, so they are named as dropped rather than silently lost.
   for (const column of [
@@ -563,46 +703,49 @@ test("parse: ingest meta + batch provenance record what was NOT encoded", async 
     "dl_LOG_AVG_rnd1",
     "ul_minRTT_LOG_AVG_rnd2",
   ]) {
-    assert.ok(
-      provenance.unencoded_source_columns.includes(column),
-      `${column} must be declared unencoded`,
-    );
+    assert.ok(p.warnings.includes(`unencoded source column: ${column}`), `${column} must be declared unencoded`);
   }
+  assert.equal(p.warnings.length, 14, "no days dropped at the default window");
 
-  // raw payload is the fetched bytes verbatim.
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(STATS_JSON));
+  // raw is the HttpResponse verbatim: its BODY is the fetched bytes, its CONTEXT the job.
+  assert.equal(identifierOf(outputs.get("raw").payload), "HRSP");
+  const raw = decodeHttpResponse(outputs.get("raw").payload);
+  assert.deepEqual(Buffer.from(raw.body), Buffer.from(STATS_JSON));
+  assert.equal(raw.status, 200);
+  assert.equal(readJob(raw.context).tags.sourceUrl, SOURCE_URL);
+});
+
+test("parse: the records' retrieval time is the publisher's Date header when it sends one", async (t) => {
+  const { records, outputs } = await parsedRecords(t, STATS_JSON, { date: "Mon, 12 Oct 2026 08:30:00 GMT" });
+  for (const r of records) {
+    for (const m of r.metrics) assert.equal(readProvenance(m.provenance).RETRIEVED_AT, "2026-10-12T08:30:00Z");
+  }
+  assert.equal(decodeIngestRequest(outputs.get("cnp_meta").payload).provenance.retrievedMs, Date.UTC(2026, 9, 12, 8, 30));
 });
 
 test("parse: mlab_max_days keeps the most recent published days (sample, don't mirror)", async (t) => {
   // The fixture is small enough that the default 31-day window keeps all of
-  // it; the windowing itself is exercised by a 2-day cap through CONFIG.
-  // Node CONFIG arrives through the builtin plugin.getConfig hostcall, which
-  // answers with the `{ok,result}` envelope the real host uses.
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-    hostcallDispatch: (operation) =>
-      operation === "plugin.getConfig" ? { mlab_max_days: 2 } : null,
-  });
-  t.after(() => harness.destroy());
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [jsonInput("job", JOB), jsonInput("response", httpResponse(STATS_JSON))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const outputs = outputsByPort(response);
-  const records = splitStream(outputs.get("cnp_records").payload).map(readCnp);
+  // it; the windowing itself is exercised by a 2-day cap through CONFIG
+  // (the typed plugin.getConfig answer).
+  const { records, outputs } = await parsedRecords(t, STATS_JSON, {}, { config: { mlab_max_days: 2 } });
   assert.equal(records.length, 2);
   assert.deepEqual(
     records.map((r) => r.WINDOW_START.slice(0, 10)),
     FIXTURE_DATES.slice(-2),
   );
-  const provenance = JSON.parse(
-    Buffer.from(jsonFrame(outputs, "cnp_meta").provenance.json, "base64").toString("utf8"),
+  const meta = decodeIngestRequest(outputs.get("cnp_meta").payload);
+  assert.ok(
+    meta.provenance.warnings.includes(`days dropped by mlab_max_days: ${FIXTURE_DATES.length - 2} of ${FIXTURE_DATES.length}`),
+    meta.provenance.warnings.join("\n"),
   );
-  assert.equal(provenance.days_in_payload, FIXTURE_DATES.length);
-  assert.equal(provenance.days_dropped_by_window, FIXTURE_DATES.length - 2);
+  assert.equal(meta.tags.citation, `The M-Lab NDT Data Set ${FIXTURE_DATES.at(-2)}–${FIXTURE_DATES.at(-1)}. https://measurementlab.net/tests/ndt`);
+});
+
+test("parse: mlab_record_cap caps the records emitted", async (t) => {
+  const { records, outputs } = await parsedRecords(t, STATS_JSON, {}, { config: { mlab_record_cap: 3 } });
+  assert.equal(records.length, 3);
+  assert.deepEqual(records.map((r) => r.WINDOW_START.slice(0, 10)), FIXTURE_DATES.slice(0, 3));
+  assert.equal(decodeIngestRequest(outputs.get("cnp_meta").payload).provenance.normalizedCount, 3);
 });
 
 test("parse: a row whose value is null yields an ABSENT metric, never a zero", async (t) => {
@@ -643,15 +786,36 @@ test("parse: a row whose value is null yields an ABSENT metric, never a zero", a
 });
 
 test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
+  const response = await runParse(t, new Uint8Array(0), {}, { status: 404 });
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "fetch-failed");
+  assert.match(response.errorMessage, /HTTP status 404/);
+  assert.equal(response.outputs.length, 0);
+});
+
+test("parse: a failed exchange (STATUS 0, ERROR) fails closed and names why", async (t) => {
+  const request = await requestFor(t);
   const harness = await createHarness(t);
   const response = await harness.invoke({
     methodId: "parse",
-    inputs: [
-      jsonInput("job", JOB),
-      jsonInput("response", { status: 404, headers: {}, bodyB64: "" }),
-    ],
+    inputs: [{
+      portId: "response",
+      typeRef: TYPE.HRSP,
+      payload: encodeHttpResponse({ url: request.url, status: 0, error: "timeout after 120000 ms", context: request.context }),
+    }],
   });
-  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "fetch-failed");
+  assert.match(response.errorMessage, /HTTP status 0 \(timeout after 120000 ms\)/);
+  assert.equal(response.outputs.length, 0);
+});
+
+test("parse: a response without its job (CONTEXT) is refused", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse",
+    inputs: [{ portId: "response", typeRef: TYPE.HRSP, payload: encodeHttpResponse({ url: SOURCE_URL, status: 200, body: STATS_JSON }) }],
+  });
+  assert.equal(response.errorCode, "missing-job");
   assert.equal(response.outputs.length, 0);
 });
 
@@ -659,35 +823,27 @@ test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
 // recorded from the last 2xx for this URL (sdn-server
 // internal/modulert/caps/http_validators.go) and M-Lab confirmed the export is
 // current. No batch exists, so no record port may fire — only the single
-// "unchanged" notice, and the invocation SUCCEEDS. Refusing this run with
+// "unchanged" FlowNotice, and the invocation SUCCEEDS. Refusing this run with
 // status 400 is what failed the com.digitalarsenal.flows.mlab-connectivity-ingest
 // lane on host-02 every day while the source was healthy.
-test("parse answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
-  const job = { ...JOB, dataset_id: "mlab-asn14593-2024" };
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", {
-        status: 304,
-        headers: { Etag: 'W/"x"', "Last-Modified": "Thu, 28 Mar 2024 00:00:00 GMT" },
-        bodyB64: "",
-      }),
-    ],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
+test("parse answers HTTP 304 with one Unchanged FlowNotice and zero record frames", async (t) => {
+  const response = ok(await runParse(t, new Uint8Array(0), { etag: 'W/"x"', "last-modified": "Thu, 28 Mar 2024 00:00:00 GMT" }, { status: 304 }));
   assert.equal(response.outputs.length, 1, "exactly one frame");
   const outputs = outputsByPort(response);
   for (const port of ["cnp_meta", "cnp_records", "raw"]) {
     assert.equal(outputs.has(port), false, `${port} must stay silent`);
   }
-  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
-    status: 304,
-    unchanged: true,
-    source_name: job.source_name,
-    source_url: job.source_url,
-    dataset_id: job.dataset_id,
+  assert.equal(identifierOf(outputs.get("unchanged").payload), "FNTC");
+  assert.deepEqual(decodeFlowNotice(outputs.get("unchanged").payload), {
+    kind: "unchanged",
+    schema: "CNP.fbs",
+    providerId: "space-data-network-02",
+    sourceName: "mlab-ndt-statistics",
+    batchId: "",
+    count: 0,
+    reason: "not-modified",
+    items: [SOURCE_URL],
+    atMs: RETRIEVED_MS,
   });
 });
 

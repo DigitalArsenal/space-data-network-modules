@@ -4,29 +4,15 @@ Atmospheric model queries packaged as a `space-data-module-sdk` plugin for hoste
 
 ## What it does
 
-This plugin exposes atmosphere computations through these SDK methods:
+This plugin exposes atmosphere computations through these SDK methods. Every
+port carries one SDS FlatBuffer type (`wireFormat: flatbuffer`); there is no
+JSON or untyped method (the `invoke` JSON command bridge of 0.1.0 is gone).
 
-- `invoke`
-- `query_atmosphere_state_batch`
-- `query_wind_field`
-- `ocm_state_to_drag_acceleration_oem`
+- `query_atmosphere_state_batch`: `atmosphere` $HFC, `space_weather` $SPW (0-64) -> `states` $HFC
+- `query_wind_field`: `template` $WXF, `space_weather` $SPW (0-64) -> `eastward_wind` $WXF, `northward_wind` $WXF
+- `ocm_state_to_drag_acceleration_oem`: `vector_state` $OCM -> `drag_acceleration` $OEM
 
-`invoke` is the legacy command bridge. The request payload is UTF-8 JSON with this envelope:
-
-```json
-{
-  "operation": "queryAltitude",
-  "params": {
-    "altitudeM": 10000,
-    "model": "US76"
-  }
-}
-```
-
-The response payload is UTF-8 JSON returned on the `response` port.
-
-`query_atmosphere_state_batch` is the binary direct method for module-to-module
-use. It accepts SDS `HFC.fbs` (`$HFC`, root `HFC`) on the `atmosphere` port
+`query_atmosphere_state_batch` is the module-to-module atmosphere query. It accepts SDS `HFC.fbs` (`$HFC`, root `HFC`) on the `atmosphere` port
 and zero to 64 daily SDS `SPW.fbs` (`$SPW`, root `SPW`) records on the
 `space_weather` port, reads `ATMOSPHERE`, `ALTITUDE_M`, and sample metadata,
 and emits SDS `HFC.fbs` on the `states` port with:
@@ -88,11 +74,6 @@ Refusals carry stable error codes: `missing-space-weather`,
 `altitude-out-of-range`, `invalid-altitude`, `invalid-speed`,
 `unsupported-time-system`, `unsupported-atmosphere-model`.
 
-The JSON command bridge follows the same rule for `NRLMSISE00`: `solar`
-(`F107`, `F107A`, `Ap`), `position` and `epoch` are required, and
-`"apHistory": true` passes a full 7-element `Ap` array as the model's ap
-history. Unknown `model` names are refused.
-
 The C++ model layer also includes Basilisk `orbitalMotion.c` `debyeLength` and
 `atmosphericDrag` utilities with SI input/output for native parity coverage.
 `ocm_state_to_drag_acceleration_oem` exposes the drag utility through the
@@ -127,30 +108,17 @@ verification). Winds are horizontal (north, east in the local geodetic frame).
   fields, `MODEL_CLASS` `EmpiricalClimatology`, with the quiet or storm-time
   basis in `VARIABLE_NAME`, the citations in `CITATION` and the US
   Government-work basis in `LICENSE_URL`.
-- JSON `queryWind`: `altitudeM`, `position` {`latitudeDeg`,
-  `longitudeDeg`}, `epoch` {`year`, `dayOfYear`, `secondOfDay`} and a
-  required `ap3h` (negative for quiet time, HWM14's own convention).
+## Models
 
-## Supported operations
-
-- `version`
-- `queryAltitude`
-- `queryAltitudes`
-- `queryAtmosphereStateBatch`
-- `queryWind`
-- `ocm_state_to_drag_acceleration_oem`
-
-These operations route the US Standard Atmosphere 1976 implementation (geopotential-altitude formulation, 0-86 km geometric) and the REAL NRLMSISE-00 model (public-domain Picone/Hedin/Drob reference C port by D. Brodowski, vendored in `third_party/nrlmsise00/`) through the canonical SDK command bridge. NRLMSISE-00 mass density is the gtd7d drag-effective density (includes anomalous oxygen); outputs are verified against the canonical 17-case table distributed with the reference package.
+The methods route the US Standard Atmosphere 1976 implementation (geopotential-altitude formulation, 0-86 km geometric) and the REAL NRLMSISE-00 model (public-domain Picone/Hedin/Drob reference C port by D. Brodowski, vendored in `third_party/nrlmsise00/`). NRLMSISE-00 mass density is the gtd7d drag-effective density (includes anomalous oxygen); the native `test_nrlmsise_package` checks it against the canonical 17-case table distributed with the reference package.
 
 ## Runtime contract
 
 - Embedded manifest exports:
   - `plugin_get_manifest_flatbuffer`
   - `plugin_get_manifest_flatbuffer_size`
-- Command bridge export:
+- Invoke export:
   - `plugin_invoke_stream`
-- Browser shim export:
-  - `wasm_invoke_json`
 - Runtime targets:
   - `browser`
   - `wasi`
@@ -170,12 +138,14 @@ ctest --test-dir build --output-on-failure
 the NRLMSISE-00 C package, including the ap-history cases 16 and 17.
 `test_space_weather` checks the daily-record-to-model-input selection.
 
-Wasm build. `build.sh` regenerates the SDS bindings from the published
-`spacedatastandards.org` package with `generate-sds-headers.mjs`, so install
-the pinned packages first:
+Wasm build. `build.sh` regenerates the SDS bindings with
+`generate-sds-headers.mjs`, from `SPACE_DATA_STANDARDS_ROOT` (a
+spacedatastandards.org checkout) when it is set, else from the installed
+`spacedatastandards.org` package. FlatBuffers C++ headers 25.12.19 are found
+on the usual paths or `SDN_FLATBUFFERS_INCLUDE_DIR`:
 
 ```bash
-npm ci
+export SPACE_DATA_STANDARDS_ROOT=/path/to/spacedatastandards.org
 bash build.sh
 ```
 
@@ -199,7 +169,8 @@ PATH="$HOME/.wasmedge/bin:$PATH" npm test
 The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
 
 - SDK artifact compliance
-- browser and WasmEdge command invoke smoke via `dist/isomorphic/module.wasm`
+- browser and WasmEdge command invoke of an HFC query via `dist/isomorphic/module.wasm`
+- every port names one concrete FlatBuffer type; non-HFC bytes on `atmosphere` are refused (`invalid-hfc-buffer`)
 - binary SDS HFC direct-method invoke in browser and WasmEdge
 - HFC sample epoch, latitude, and longitude preservation through the direct
   binary method
@@ -209,7 +180,6 @@ The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
   evaluated with independently stated inputs, in browser and WasmEdge
 - refusal codes for missing weather, epochs, positions, out-of-range altitude,
   non-UTC time systems, duplicate days and unsupported models
-- NRLMSISE-00 published case 16 (ap history) through the JSON bridge
 - Basilisk `atmosphericDensity` reference density at 200 km through HFC
 - Basilisk `debyeLength` native reference values at 400 km, 1000 km, 10000 km,
   and 34000 km
@@ -217,8 +187,8 @@ The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
   OCM-to-OEM browser/WasmEdge SDK invocation
 - HFC dynamic pressure and Mach derived from speed samples
 - HWM14 winds against NRL's published check output (quiet and ap = 80) through
-  HFC (with and without SPW), JSON `queryWind` and `query_wind_field`; every
-  grid cell equal to the point query; SPW missing the sample day refused;
+  HFC (with and without SPW) and `query_wind_field`; every
+  grid cell equal to the HFC point value; SPW missing the sample day refused;
   byte-identical wind fields in the browser and WasmEdge
 - a hosted-runtime example contract check
 
@@ -228,15 +198,7 @@ A minimal single-plugin flow example lives at:
 
 - `tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json`
 
-It binds a manual trigger to the plugin's canonical `request` port and invokes method `invoke`.
-
-## Example request
-
-The fixture used by the compatibility tests lives at:
-
-- `tests/fixtures/request.altitude.json`
-
-It queries the US76 atmosphere state at 10 km altitude.
+It binds a manual trigger to the `atmosphere` port of `query_atmosphere_state_batch`.
 
 ## License
 

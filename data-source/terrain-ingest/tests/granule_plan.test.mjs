@@ -17,30 +17,24 @@
 //     than build tiles with most of their extent missing.
 
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import {
+  createHarness,
+  tickFrame,
+  irmRecord,
+  markFrames,
+  jobIdOf,
+  decodePlan,
+  decodeIrm,
+  decodeHttpRequest,
+  decodeModuleConfig,
+  outputs,
+} from "./typed.mjs";
 
-const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
-const WASM = fs.readFileSync(fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)));
 const S3 = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/";
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+const DATASET = "copernicus-glo30-quantized-mesh";
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
-
-// A 2x2-degree region built to two levels, so the walk covers four cells at
-// each of z8 and z9 and the partition has something to get wrong.
 const REGION = { name: "test-coast", west: 10, south: 45, east: 12, north: 47, max_level: 9 };
 const CONFIG = {
   tileset_id: "spaceaware-terrain",
@@ -52,35 +46,41 @@ const CONFIG = {
   regions: [REGION],
 };
 
-async function planOnce(t, { config = CONFIG, mark = null } = {}) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: WASM,
-    manifest: MANIFEST,
-    surface: "direct",
-    hostcallDispatch: (operation) => {
-      if (operation === "plugin.getConfig") return config;
-      throw new Error(`unexpected hostcall operation: ${operation}`);
-    },
-  });
-  t.after(() => harness.destroy());
-  const inputs = [jsonFrame("tick", { firedAt: "2026-08-26T00:00:00Z" })];
-  if (mark) inputs.push(jsonFrame("mark", mark));
+// One granule_plan invocation, its typed outputs decoded: the plan's $DTT headers (shared fields off the first, one
+// {x, y, childAvailability} per tile), the job ($IRM, the mark-to-be; its NOTES name region, level and cell), the
+// encoder options (ModuleConfig) and the eight granule HttpRequests.
+async function planOnce(t, { config = CONFIG, mark = null, firedAt = "2026-08-26T00:00:00Z" } = {}) {
+  const harness = await createHarness(t, config);
+  const inputs = [tickFrame(firedAt)];
+  if (mark) inputs.push(...markFrames([irmRecord(mark)]));
   const response = await harness.invoke({ methodId: "granule_plan", inputs });
   if (response.statusCode !== 0) return { error: response.errorCode, message: response.errorMessage };
+  const out = outputs(response);
   const byPort = new Map();
-  for (const out of response.outputs) byPort.set(out.portId, JSON.parse(decoder.decode(out.payload)));
+  for (const [port, frames] of out) {
+    const bytes = frames[0];
+    if (port === "plan") {
+      const headers = decodePlan(bytes);
+      byPort.set("plan", { ...headers[0], x: undefined, y: undefined, tiles: headers.map((h) => ({ x: h.x, y: h.y, childAvailability: h.childAvailability })) });
+    } else if (port === "job") {
+      const job = decodeIrm(bytes);
+      const [, region, level, lon, lat] = job.notes.match(/^region (.*), level (\d+), cell (-?\d+),(-?\d+),/);
+      byPort.set("job", { ...job, record: undefined, cell_index: job.firstIndex, region, level: Number(level), cell_lon: Number(lon), cell_lat: Number(lat) });
+    } else if (port === "options") {
+      byPort.set("options", decodeModuleConfig(bytes));
+    } else {
+      byPort.set(port, decodeHttpRequest(bytes));
+    }
+  }
   return { byPort, backlog: response.backlogRemaining };
 }
+const markFor = (config, next) => ({ jobId: jobIdOf(DATASET, config.tileset_id, config.dataset_epoch), next });
 
-// Walk the whole enumeration by following the mark the job frame implies.
 async function walkAll(t, config = CONFIG) {
   const cells = [];
   let next = 0;
   for (let guard = 0; guard < 200; guard++) {
-    const { byPort } = await planOnce(t, {
-      config,
-      mark: { tileset_id: config.tileset_id, dataset_epoch: config.dataset_epoch, next_tile_index: next },
-    });
+    const { byPort } = await planOnce(t, { config, mark: markFor(config, next) });
     if (!byPort || !byPort.has("plan")) break;
     const job = byPort.get("job");
     cells.push({ job, plan: byPort.get("plan"), byPort });
@@ -106,17 +106,19 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
   assert.equal(job.cell_lon, 9);
   assert.equal(job.cell_lat, 44);
   assert.equal(plan.tilesetId, "spaceaware-terrain");
-  assert.equal(plan.scheme, "GEOGRAPHIC_WGS84");
+  assert.equal(plan.tilingScheme, 1, "GEOGRAPHIC_WGS84");
   assert.equal(plan.rowOriginNorth, false);
   assert.equal(plan.gridSize, 65);
-  assert.equal(plan.skipOceanTiles, true, "ocean omission remains the default");
+  assert.equal(plan.payloadBytes, 0, "a plan header carries no mesh");
+  assert.equal(byPort.get("options").skipOceanTiles, true, "ocean omission remains the default");
+  assert.equal(byPort.get("options").maxGridSize, 65, "the ladder top defaults to grid_size");
   assert.ok(Array.isArray(plan.tiles) && plan.tiles.length > 0);
 
   // The provenance keys are the ones DTTProvenance is built from, verbatim.
-  assert.equal(plan.provenance.datasetEpoch, CONFIG.dataset_epoch);
-  assert.equal(plan.provenance.retrievedAt, CONFIG.retrieved_at);
-  assert.ok(plan.provenance.license.length > 0, "LICENSE is required and never defaulted away");
-  assert.ok(plan.provenance.sourceUrl.startsWith(S3));
+  assert.equal(plan.provenance.DATASET_EPOCH, CONFIG.dataset_epoch);
+  assert.equal(plan.provenance.RETRIEVED_AT, CONFIG.retrieved_at);
+  assert.ok(plan.provenance.LICENSE.length > 0, "LICENSE is required and never defaulted away");
+  assert.ok(plan.provenance.SOURCE_URL.startsWith(S3));
 
   // The 2x2 neighbourhood, always exactly four of each.
   const demUrls = [0, 1, 2, 3].map((s) => byPort.get(`dem_${s}`).url);
@@ -127,10 +129,12 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
     ["N45", "E009"],
     ["N45", "E010"],
   ]);
-  for (const descriptor of [0, 1, 2, 3].map((s) => byPort.get(`dem_${s}`))) {
-    assert.equal(descriptor.responseWire, "raw-body-v1", "binary granules never ride base64 JSON");
-    assert.equal(descriptor.allow_404, true, "the dataset publishes no object over open ocean");
-    assert.equal(descriptor.method, "GET");
+  for (const request of [0, 1, 2, 3].map((s) => byPort.get(`dem_${s}`))) {
+    // Typed contracts 1.0: the body arrives verbatim in the HttpResponse (no base64, no response-wire dialect), and
+    // a 404 is read by the encoder as open ocean.
+    assert.equal(request.method, "GET");
+    assert.deepEqual(request.headers, {});
+    assert.equal(request.timeoutMs, 90000);
   }
   for (const url of wbmUrls) assert.ok(url.includes("_WBM"), `water-body auxiliary, got ${url}`);
 });
@@ -139,12 +143,14 @@ test("native planner retains observed ocean records only on explicit boolean opt
   const baseline = (await planOnce(t)).byPort;
   for (const skipOceanTiles of [false, true]) {
     const { byPort } = await planOnce(t, { config: { ...CONFIG, skipOceanTiles } });
-    assert.equal(byPort.get("plan").skipOceanTiles, skipOceanTiles);
-    assert.deepEqual({ ...byPort.get("plan"), skipOceanTiles: true }, baseline.get("plan"),
+    assert.equal(byPort.get("options").skipOceanTiles, skipOceanTiles);
+    assert.deepEqual(byPort.get("plan"), baseline.get("plan"),
       "the opt-in changes no addresses, geometry options or source provenance");
     assert.deepEqual(byPort.get("job"), baseline.get("job"));
   }
-  for (const skipOceanTiles of ["false", 0, null, {}]) {
+  // (A typed config entry is a string, a number or a boolean; an absent key is the default, so null / {} are no
+  // longer statable - what is refused is any value that is not a boolean.)
+  for (const skipOceanTiles of ["false", 0, "true", 1]) {
     const response = await planOnce(t, { config: { ...CONFIG, skipOceanTiles } });
     assert.equal(response.error, "invalid-ocean-skip-option");
     assert.equal(response.byPort, undefined);
@@ -247,12 +253,12 @@ test("the mark resumes the walk exactly, and a drained walk is a clean no-op", a
   const all = await walkAll(t);
   const resumeAt = all[3].job.cell_index;
   const { byPort } = await planOnce(t, {
-    mark: { tileset_id: CONFIG.tileset_id, dataset_epoch: CONFIG.dataset_epoch, next_tile_index: resumeAt },
+    mark: markFor(CONFIG, resumeAt),
   });
   assert.deepEqual(byPort.get("plan"), all[3].plan, "resuming reproduces the same cell exactly");
 
   const drained = await planOnce(t, {
-    mark: { tileset_id: CONFIG.tileset_id, dataset_epoch: CONFIG.dataset_epoch, next_tile_index: 1e6 },
+    mark: markFor(CONFIG, 1e6),
   });
   assert.ok(!drained.byPort?.has("plan"), "a drained enumeration emits nothing");
   assert.ok(!drained.error, "…and is not an error");
@@ -261,7 +267,7 @@ test("the mark resumes the walk exactly, and a drained walk is a clean no-op", a
 test("a mark for another tileset or edition is IGNORED, never half-applied", async (t) => {
   const fresh = await planOnce(t);
   const foreign = await planOnce(t, {
-    mark: { tileset_id: "some-other-pyramid", dataset_epoch: "1999-01-01T00:00:00.000Z", next_tile_index: 3 },
+    mark: { jobId: jobIdOf(DATASET, "some-other-pyramid", "1999-01-01T00:00:00.000Z"), next: 3 },
   });
   assert.deepEqual(foreign.byPort.get("plan"), fresh.byPort.get("plan"), "the walk starts from the top");
 });
@@ -280,7 +286,8 @@ test("the planner fails closed on identity it must not invent", async (t) => {
   ]) {
     const config = { ...CONFIG };
     delete config[key];
-    const result = await planOnce(t, { config });
+    // The tick is the other source of RETRIEVED_AT: a tick that states no clock leaves nothing to stamp with.
+    const result = await planOnce(t, { config, firedAt: key === "retrieved_at" ? null : undefined });
     assert.equal(result.error, code, `missing ${key}`);
   }
   const noRegions = await planOnce(t, { config: { ...CONFIG, regions: [] } });

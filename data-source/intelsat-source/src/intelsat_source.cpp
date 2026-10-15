@@ -1,7 +1,7 @@
 /*
  * Intelsat (public ephemeris) data-source module (A2.2c-2, Tier-1 adapter).
  *
- * On a TIMERS-driven `pull` this:
+ * For each run this:
  *   1. GETs the public MyIntelsat ephemeris listing page
  *      (my.intelsat.com/ephemeris/public — unauthenticated HTML; the file
  *      dropdowns' <option value="..."> are the bare ephemeris filenames),
@@ -10,8 +10,7 @@
  *   4. parses the ECF position table,
  *   5. re-emits a schema-exact SDS OEM record with the frame PRESERVED AS
  *      DECLARED (Intelsat "ECF" = Earth-Centered-Fixed / ECEF — the OD side owns
- *      the ECEF->TEME transform per A2.2a), stores it, signs its content id, and
- *      publishes a schema-exact PNM pointer.
+ *      the ECEF->TEME transform per A2.2a).
  *
  * ─── HONEST FORMAT NOTES ────────────────────────────────────────────────────
  * Intelsat publishes TWO product families under CelesTrak's "Intelsat-11P":
@@ -38,11 +37,16 @@
  * and OBJECT_ID = "" (a name->NORAD registry mapping is a documented A2.4
  * residual, NOT inlined here).
  *
- * The fetch/hash/store/sign/publish skeleton lives in the shared
- * common/provider_source.hpp; only the Intelsat discovery + ECF parse + OEM
- * mapping stay here.
- *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * TYPED CONTRACTS 1.0 (FlatBuffers only, no JSON, no base64): the module makes no
+ * fetch and no store itself. `request` turns the flow's TimerTick (TICK) into a GET
+ * HttpRequest (HREQ) for hostcap/http-request; `select_file` turns the listing's HttpResponse
+ * into the GET of the file; `emit` turns the
+ * HttpResponse (HRSP) into $OEM FlatBuffers on "oem", consumed in memory by
+ * analysis/od.fit. Nothing is stored, signed or published (the former `pull`
+ * path declared a $PNM it never produced and is gone). Node config (listingUrl, ephemerisBase, target) is
+ * plugin.getConfig through sdm_piv (one ModuleConfig, read in place), the only
+ * hostcall. A transport error, another status than 200, an empty body or a
+ * file with nothing fittable fails closed (fetch-failed / fetch-empty).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -50,32 +54,16 @@
 #include <string>
 #include <vector>
 
-#include "provider_source.hpp"
+#include <string_view>
+
+#include <HttpRequest_generated.h>
+#include <HttpResponse_generated.h>
+#include <typedHostcall.hpp>
 
 // SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
 #include <cmath>
-#ifdef SING
-#undef SING
-#endif
-#ifdef DOMAIN
-#undef DOMAIN
-#endif
-#ifdef OVERFLOW
-#undef OVERFLOW
-#endif
-#ifdef UNDERFLOW
-#undef UNDERFLOW
-#endif
-#ifdef TLOSS
-#undef TLOSS
-#endif
-#ifdef PLOSS
-#undef PLOSS
-#endif
-#include "OEM_generated.h"
-#include "oem_fb_builder.hpp"
 
-namespace ps = provider_source;
+namespace R = sdn::runtime;
 
 // ── Provider constants ──────────────────────────────────────────────────────
 
@@ -88,16 +76,6 @@ static const char* kDefaultTarget = "is-21";
 // ECF category filename token (the honest state-vector product family).
 static const char* kEcfCategoryMarker = "_e_";
 
-static const char* kSigningKeySlot = "node-signing";
-static const char* kPublishTopic = "sdn/data-source/intelsat";
-
-extern "C" {
-// Guest allocator used by the host to pass request/response buffers.
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
 
 namespace {
 
@@ -218,43 +196,6 @@ std::vector<uint8_t> build_oem_fb(const EcfDoc& doc, const std::string& object_n
                                         static_cast<int>(full.size()));
 }
 
-std::string build_oem_record(const EcfDoc& doc, const std::string& object_name) {
-    std::string s;
-    s.reserve(doc.rows.size() * 110 + 640);
-    const std::string start_time = doc.rows.empty() ? std::string() : doc.rows.front().epoch;
-    const std::string stop_time = doc.rows.empty() ? std::string() : doc.rows.back().epoch;
-    s += "{";
-    s += "\"CCSDS_OEM_VERS\":2.0,";
-    s += "\"CREATION_DATE\":\"" + ps::json_escape(start_time) + "\",";
-    s += "\"ORIGINATOR\":\"Intelsat\",";
-    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
-    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
-    s += "\"COMMENT\":\"Intelsat public ECF ephemeris (position-only); frame preserved AS "
-         "DECLARED (Intelsat 'ECF' = Earth-Centered-Fixed / ECEF). Positions metres->km; NO "
-         "velocity (ECF carries none; none fabricated). No NORAD/COSPAR in source. OD owns "
-         "the frame transform.\",";
-    s += "\"OBJECT_NAME\":\"" + ps::json_escape(object_name) + "\",";
-    s += "\"OBJECT_ID\":\"\",";     // ECF carries no international designator (not fabricated)
-    s += "\"NORAD_CAT_ID\":0,";     // ECF carries no NORAD id (not fabricated)
-    s += "\"CENTER_NAME\":\"EARTH\",";
-    s += "\"REFERENCE_FRAME\":\"ECEF\",";  // declared Earth-fixed frame (Intelsat "ECF")
-    s += "\"TIME_SYSTEM\":\"UTC\",";
-    s += "\"START_TIME\":\"" + ps::json_escape(start_time) + "\",";
-    s += "\"STOP_TIME\":\"" + ps::json_escape(stop_time) + "\",";
-    s += "\"STEP_SIZE\":0,";        // verbose / explicit-epoch (no declared step in ECF header)
-    s += "\"STATE_VECTOR_SIZE\":3,";  // position-only (honest; no velocity in ECF)
-    s += "\"EPHEMERIS_DATA_LINES\":[";
-    for (size_t i = 0; i < doc.rows.size(); ++i) {
-        const EcfRow& r = doc.rows[i];
-        if (i) s += ",";
-        s += "{\"EPOCH\":\"" + ps::json_escape(r.epoch) + "\",";
-        s += "\"X\":" + ps::double_to_json(r.x_m / 1000.0) + ",";
-        s += "\"Y\":" + ps::double_to_json(r.y_m / 1000.0) + ",";
-        s += "\"Z\":" + ps::double_to_json(r.z_m / 1000.0) + "}";
-    }
-    s += "]}]}";
-    return s;
-}
 
 // ── Intelsat listing discovery ──────────────────────────────────────────────
 // Extract ECF filenames for the target satellite from the listing page. A
@@ -307,26 +248,66 @@ std::vector<std::string> split_filename_fields(const std::string& fn) {
     return out;
 }
 
-// ── Config (optional, from the invoke request payload) ───────────────────────
 
-struct PullConfig {
-    std::string listing_url = kDefaultListingURL;
-    std::string ephemeris_base = kDefaultEphemerisBase;
-    std::string target = kDefaultTarget;
-};
+// ── Typed contracts 1.0: node config, HttpRequest out, HttpResponse in, $OEM out ─────────────────
+// Config is plugin.getConfig through sdm_piv (one ModuleConfig, read in place); the fetch is the flow's
+// hostcap/http-request (an HttpRequest out, its HttpResponse back in); every frame is a FlatBuffer.
 
-PullConfig parse_config(const uint8_t* req, uint32_t len) {
-    PullConfig c;
-    if (req == nullptr || len == 0) return c;
-    size_t i = 0;
-    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-    if (i >= len || req[i] != '{') return c;  // binary PIV request leaves defaults intact
-    std::string json(reinterpret_cast<const char*>(req), len);
-    std::string v;
-    if (ps::json_string_field(json, "listingUrl", &v) && !v.empty()) c.listing_url = v;
-    if (ps::json_string_field(json, "ephemerisBase", &v) && !v.empty()) c.ephemeris_base = v;
-    if (ps::json_string_field(json, "target", &v) && !v.empty()) c.target = v;
-    return c;
+int fail(const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return 1;
+}
+
+// A config string, or `fallback` when the key is absent or empty.
+std::string config_text(const sdm_piv::Config& config, const char* key, const char* fallback) {
+    const std::string_view v = config.string(key);
+    return v.empty() ? std::string(fallback) : std::string(v);
+}
+
+// One GET HttpRequest (HREQ) on `port`, as the legacy ps::http_get asked for it (method and URL only).
+int push_get(const char* port, const std::string& url) {
+    flatbuffers::FlatBufferBuilder b(256 + url.size());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str()));
+    return plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, b.GetBufferPointer(), b.GetSize());
+}
+
+// The HttpResponse (HRSP) on `port`: STATUS 200 with a body, or nullptr with the error set (a transport ERROR, another
+// status or an empty body fails closed, as the legacy fetch did).
+const R::HttpResponse* response_on(const char* port, const char* what) {
+    const int32_t index = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* f = index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
+    if (!f || !f->payload || !f->payload_length) {
+        fail("missing-response-frame", std::string("an HttpResponse frame is required on '") + port + "'");
+        return nullptr;
+    }
+    flatbuffers::Verifier verifier(f->payload, f->payload_length, 64, 1000000, false);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        fail("invalid-response-frame", std::string("the '") + port + "' frame is not an HttpResponse (HRSP)");
+        return nullptr;
+    }
+    const R::HttpResponse* r = R::GetHttpResponse(f->payload);
+    const std::string url = r->URL() ? r->URL()->str() : std::string();
+    if (r->ERROR() && r->ERROR()->size()) {
+        fail("fetch-failed", std::string(what) + " " + url + ": " + r->ERROR()->str());
+        return nullptr;
+    }
+    if (r->STATUS() != 200 || !r->BODY() || r->BODY()->size() == 0) {
+        fail("fetch-empty", std::string(what) + " " + url + " returned HTTP status " + std::to_string(r->STATUS()) +
+                                (r->BODY() && r->BODY()->size() ? "" : " with no body"));
+        return nullptr;
+    }
+    return r;
+}
+
+std::string body_of(const R::HttpResponse& r) {
+    return std::string(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size());
+}
+
+// One $OEM FlatBuffer (not size-prefixed) on "oem".
+int push_oem(const std::vector<uint8_t>& oem) {
+    return plugin_push_output_ex("oem", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
+                                 static_cast<uint32_t>(oem.size()));
 }
 
 std::string join_url(const std::string& base, const std::string& file) {
@@ -334,71 +315,49 @@ std::string join_url(const std::string& base, const std::string& file) {
     return base + "/" + file;
 }
 
-// ── The pull method ──────────────────────────────────────────────────────────
-
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
-    std::string sat_marker = "_" + cfg.target + "_";
-
-    // $OEM STREAM (in-memory, never stored): [u32le count] then
-    // count x ( [u32le len][non-size-prefixed $OEM] ). Intelsat = one object.
-    std::string stream(4, '\0');
-    uint32_t count = 0;
-    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
-        s[at + 0] = static_cast<char>(v & 0xFF);
-        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
-    };
-
-    ps::HttpResult listing = ps::http_get(cfg.listing_url);
-    std::string filename;
-    if (listing.status == 200 && !listing.body.empty())
-        filename = select_newest_ecf(listing.body, sat_marker, kEcfCategoryMarker);
-
-    if (!filename.empty()) {
-        std::vector<std::string> fields = split_filename_fields(filename);
-        std::string file_url = join_url(cfg.ephemeris_base, filename + ".txt");
-        ps::HttpResult ecf = ps::http_get(file_url);
-        if (ecf.status == 200 && !ecf.body.empty()) {
-            EcfDoc doc;
-            std::string content(ecf.body.begin(), ecf.body.end());
-            parse_ecf(content, &doc);
-            if (!doc.rows.empty()) {
-                std::string object_name = !doc.object_name.empty() ? doc.object_name
-                            : (fields.size() >= 5 ? fields[4] : cfg.target);
-                std::vector<uint8_t> oem = build_oem_fb(doc, object_name);
-                if (!oem.empty()) {
-                    const size_t hdr = stream.size();
-                    stream.append(4, '\0');
-                    put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-                    stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-                    count++;
-                }
-            }
-        }
-    }
-
-    put_u32le(stream, 0, count);
-    return stream;
-}
-
 }  // namespace
 
 extern "C" {
 
-// Canonical streaming invoke entrypoint. The TIMERS `pull` entry (and any manual
-// invoke) triggers a discover+fetch+parse+store+sign+publish cycle for the
-// newest Intelsat ECF ephemeris of the configured satellite.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pull(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
+// request: a TimerTick (its fields are not read) -> the GET of the public ephemeris listing (config listingUrl).
+int request(void) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    return push_get("request", config_text(config, "listingUrl", kDefaultListingURL)) < 0 ? 1 : 0;
+}
+
+// select_file: the listing's HttpResponse -> the GET of the newest ECF ("_e_") file of the target satellite (config target,
+// ephemerisBase).
+int select_file(void) {
+    const R::HttpResponse* listing = response_on("listing", "the Intelsat listing");
+    if (!listing) return 1;
+    const sdm_piv::Config config = sdm_piv::get_config();
+    const std::string target = config_text(config, "target", kDefaultTarget);
+    const std::vector<uint8_t> body(listing->BODY()->begin(), listing->BODY()->end());
+    const std::string filename = select_newest_ecf(body, "_" + target + "_", kEcfCategoryMarker);
+    if (filename.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider: the listing names no ECF file of " + target);
+    return push_get("request", join_url(config_text(config, "ephemerisBase", kDefaultEphemerisBase), filename + ".txt")) < 0 ? 1 : 0;
+}
+
+// emit: the ECF file's HttpResponse -> one position-only ECEF $OEM. OBJECT_NAME is the file header's name, else the
+// filename's satellite field (the response URL's last segment), else the configured target. Nothing is stored.
+int emit(void) {
+    const R::HttpResponse* response = response_on("response", "the Intelsat ECF file");
+    if (!response) return 1;
+    EcfDoc doc;
+    parse_ecf(body_of(*response), &doc);
+    if (doc.rows.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider: the ECF has no data rows");
+    std::string filename = response->URL() ? response->URL()->str() : std::string();
+    filename = filename.substr(filename.find_last_of('/') == std::string::npos ? 0 : filename.find_last_of('/') + 1);
+    if (filename.size() > 4 && filename.compare(filename.size() - 4, 4, ".txt") == 0) filename.resize(filename.size() - 4);
+    const std::vector<std::string> fields = split_filename_fields(filename);
+    std::string object_name = doc.object_name;
+    if (object_name.empty()) {
+        const sdm_piv::Config config = sdm_piv::get_config();
+        object_name = fields.size() >= 5 ? fields[4] : config_text(config, "target", kDefaultTarget);
     }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+    const std::vector<uint8_t> oem = build_oem_fb(doc, object_name);
+    if (oem.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider");
+    return push_oem(oem) < 0 ? 1 : 0;
 }
 
 }  // extern "C"

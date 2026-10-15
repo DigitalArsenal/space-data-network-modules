@@ -10,20 +10,33 @@ It does **not** duplicate the Tier-1 adapters (which ingest operator-raw or
 our-fit lanes). It fills the gap for Tier-2 providers where a hard OD parity gate
 is impossible without owner-gated data access.
 
-## What it does
+## What it does (typed contracts 1.0: FlatBuffers only)
 
-On a `pull` (2h timer, or manual invoke) it iterates a data-driven SOURCE-token
-registry and, per token, issues **one** query:
+Two flow nodes; the flow fetches, stores and publishes, the module performs no I/O
+(its one hostcall is `plugin.getConfig`, one ModuleConfig read in place):
 
-```
-GET https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=<token>&FORMAT=JSON
-```
+- **`request`** — the flow's TimerTick (`TICK`) → one GET `HttpRequest` (`HREQ`)
+  per SOURCE token of the registry, for `hostcap/http-request`:
 
-parses the CCSDS OMM set (JSON array; CSV auto-detected and parsed as a fallback),
-and for each object: builds a schema-exact SDS **OMM** record → `storage.ingest_
-with_source` (SourceTags) → `keyslot.sign(CID)` → schema-exact **PNM** →
-`pubsub.publish` on the provider's own channel `sdn/data-source/<sourceName>`.
-Built on the shared `common/provider_source.hpp` template.
+  ```
+  GET https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=<token>&FORMAT=JSON
+  ```
+
+  Each request's `CONTEXT` is the parse job, ONE size-prefixed SDS `$ICN` record
+  (CONNECTOR_ID `celestrak-supgp-<token>`, DATASET_ID `supgp-<token>`, SOURCE_NAME
+  the provider's source name, PROVIDER_ID, ENDPOINT_URL, CelesTrak origin and usage
+  terms), echoed by `hostcap/http-request` in its `HttpResponse`.
+- **`parse`** — one `HttpResponse` (`HRSP`) → that token's batch for
+  `hostcap/storage-ingest`: an `IngestRequest` on `omm_meta` (SCHEMA `OMM.fbs`,
+  SOURCE_NAME the provider's, BATCH_ID sha256 of the body, archive
+  `celestrak/celestrak_supgp_<token>.<json|csv>`, provenance with the token, format
+  and `CelesTrak SupGP` as attributes), the size-prefixed `$OMM` stream on
+  `omm_records`, the response itself on `raw`. HTTP 304 is a FlowNotice Unchanged
+  on `unchanged`; a transport error, another status or a body without a valid
+  object is a FlowNotice Missing on `status`. JSON or CSV is detected from the body.
+
+Signing and publication (the legacy `keyslot.sign` + PNM on
+`sdn/data-source/<sourceName>`) are the flow's publication step, not this module's.
 
 ## The registry (final, with live/dead evidence)
 
@@ -62,22 +75,22 @@ These are **CelesTrak-FITTED SGP4 mean elements**, NOT our OD and NOT the
 operator's raw product. Every record is marked non-independent so synthesis and
 the status board keep them in their own lane and they **never count as "our OD":**
 
-- **SourceTags.SourceName** = the provider registry token (distinct per provider,
-  and distinct from every Tier-1 adapter's SourceName). This is the classifier /
-  grouping / PNM-topic key.
-- Record body carries flat `USER_DEFINED_*` markers:
-  `USER_DEFINED_SDN_DATA_SOURCE = "CelesTrak SupGP"`,
-  `USER_DEFINED_SDN_INDEPENDENT = "false"` (the NON-INDEPENDENT flag),
-  `USER_DEFINED_SDN_SOURCE_NAME = <sourceName>` (synthesis fallback key),
-  plus `USER_DEFINED_SDN_CELESTRAK_DATA_SOURCE` (CelesTrak's own token, e.g.
-  `AST-E`) and `USER_DEFINED_SDN_CELESTRAK_RMS` (CelesTrak's fit residual).
-- A CCSDS `COMMENT` array states the same in prose.
+- **SourceTags.SOURCE_NAME** (the IngestRequest's tags) = the provider's source
+  name (distinct per provider, and distinct from every Tier-1 adapter's). This is
+  the classifier / grouping key.
+- Each `$OMM` carries CCSDS USER_DEFINED parameters (`USER_DEFINED_PARAMETERS`):
+  `SDN_SOURCE_NAME = <sourceName>`, `SDN_DATA_SOURCE = "CelesTrak SupGP"`,
+  `SDN_INDEPENDENT = "false"` (the NON-INDEPENDENT flag),
+  `SDN_CELESTRAK_DATA_SOURCE` (CelesTrak's own token, e.g. `AST-E`) and
+  `SDN_CELESTRAK_RMS` (CelesTrak's fit residual).
+- The `COMMENT` states the same in prose (its lines joined by a line feed).
 - `RMS` and `DATA_SOURCE` are **not** part of the canonical SDS OMM schema, so
   they live only under `USER_DEFINED`, never as bare record fields.
 - Frame/time are declared honestly: SupGP OMMs are SGP4 GP records by
   construction → `REFERENCE_FRAME = TEME`, `TIME_SYSTEM = UTC`,
   `MEAN_ELEMENT_THEORY = SGP4`, `CENTER_NAME = EARTH`. Element values are copied
-  faithfully to full double precision (both JSON and CSV paths agree).
+  faithfully to full double precision (both JSON and CSV paths agree); EPOCH is
+  kept as the feed writes it.
 
 ### catalog-synthesis config entry needed (DATA, not code — owned elsewhere)
 
@@ -102,7 +115,7 @@ at a NON-`hard-pass` level:
 Because `decide()` only special-cases `hard-pass` (every other string is treated
 as "never outranks"), a new `"non-independent"` level needs **zero code change** —
 it is published, kept when sole-source, and never outranks Space-Track GP, and it
-surfaces distinctly in `USER_DEFINED_SDN_CATALOG_GATE_STATUS` / the board. Using
+surfaces distinctly in the catalog's gate status / the board. Using
 the existing `"blocked"` for all seven has the identical runtime effect if a new
 level string is not wanted. (If left out entirely, `defaultLevelForUnlistedProvider
 = "interim"` also never outranks — but an explicit entry is the honest, auditable
@@ -123,14 +136,15 @@ live there — it would be an OEM-class product at a different endpoint. No fixt
 or format could be captured. Full analysis + the follow-up plan:
 `docs/gps-ephemeris-scout.md`.
 
-## Invoke overrides
+## Node config (plugin.getConfig)
 
 ```jsonc
-{ "token": "SES-E", "sourceName": "ses" }   // registry becomes JUST this token
+{ "token": "SES-E", "sourceName": "ses" }   // registry becomes JUST this token (sourceName defaults to its lower case)
 { "format": "CSV" }                          // fetch format for all tokens (JSON default)
 { "baseUrl": "https://…/sup-gp.php" }        // override the endpoint base
 { "sourceUrl": "https://…" }                 // full URL override (single-token)
-{ "objectCap": 25 }                          // per-token emit cap (D4/A2.6 blast radius)
+{ "objectCap": 25 }                          // per-token record cap (default 2000)
+{ "providerId": "…", "license": "…", "licenseUrl": "…", "citation": "…" }  // the job's tags
 ```
 
 Default per-token cap is 2000 (covers Kuiper-E's 393 with headroom).
@@ -138,21 +152,19 @@ Default per-token cap is 2000 (covers Kuiper-E's 393 with headroom).
 ## Politeness
 
 `analysis/conjunction-assessment/scripts/CELESTRAK_FETCH_POLICY.md` semantics: one
-query per token per cycle; default cadence **2h** (SupGP refreshes every 2h — "no
-need to check more often"); the registry is de-duplicated (a token is never
-re-fetched within a cycle); and the cycle **HALTS on any non-200** (CelesTrak's
-M2M rule) — tokens already processed keep their records, remaining tokens are not
-queried. Prod runs on the celestrak node (reachable); tests are fixture-driven.
+query per token per cycle (the registry is de-duplicated); the flow's trigger sets
+the cadence (**2h**: SupGP refreshes every 2h — "no need to check more often").
+The legacy in-module loop HALTED the remaining tokens on a non-200; the typed
+requests go out together and a failed token is a FlowNotice Missing of its own.
 
 ## Build & test
 
 ```
-SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org tree> node build.mjs   # default: node_modules/spacedatastandards.org
 node --test test/*.test.mjs
 ```
 
-Outputs `dist/celestrak-supgp.wasm` (signed) + `dist/isomorphic/module.wasm`
-(loadable). Suite: 12 pass / 0 fail (ABI, signed artifact, manifest+caps,
-2h-cadence timer, 7-provider default registry, single-token JSON, AST
-token/DATA_SOURCE/SourceName distinction, CSS-E multi-segment distinct FILE_IDs,
-CSV fallback, halt-on-non-200, fail-closed on non-OMM 200).
+Builds on the SDK compiler (`dist/isomorphic/module.wasm`, `dist/guest-link/`).
+The tests run that artifact in the SDK browser harness: the request jobs, every
+registry fixture parsed into `$OMM` with the feed's values, JSON = CSV, objectCap,
+304 / non-200 / transport error / no records / missing job, surplus frames.

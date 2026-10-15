@@ -15,6 +15,8 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { encodeIngestRequest, encodeIngestResult, encodeTimerTick } from "space-data-module-sdk/runtime-contracts";
+
 // The SDK browser harness gates on runtimeTargets and this artifact is
 // WasmEdge-only (secrets.* has no browser host), so the direct invocations run
 // through the repo's gate-free sync hostcall-bridge harness: the same
@@ -24,15 +26,14 @@ import { createSdkBrowserShimHarness } from "../../../tests/lib/sdkBrowserShimHa
 
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
-const encoder = new TextEncoder();
-
-function bytesInput(portId, text) {
-  const payload = encoder.encode(text);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
-  };
+// Typed frames (contracts 1.0): the port's own runtime type.
+const TYPED = {
+  tick: () => ({ typeRef: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" }, payload: encodeTimerTick({ triggerId: "t" }) }),
+  result: () => ({ typeRef: { schemaName: "IngestResult.fbs", fileIdentifier: "INGR", rootTypeName: "IngestResult", wireFormat: "flatbuffer" }, payload: encodeIngestResult({ schema: "WXF.fbs" }) }),
+  meta: () => ({ typeRef: { schemaName: "IngestRequest.fbs", fileIdentifier: "INGQ", rootTypeName: "IngestRequest", wireFormat: "flatbuffer" }, payload: encodeIngestRequest({ schema: "WXF.fbs", tags: {} }) }),
+};
+function bytesInput(portId) {
+  return { portId, ...TYPED[portId]() };
 }
 
 async function invoke(t, methodId, inputs) {
@@ -57,9 +58,9 @@ const CASES = [
 
 for (const [methodId, port, others] of CASES) {
   test(`${methodId} refuses two frames on the single-stream "${port}" port`, async (t) => {
-    const inputs = others.map((other, i) => bytesInput(other, `{"n":${i}}`));
-    inputs.push(bytesInput(port, '{"which":"first"}'));
-    inputs.push(bytesInput(port, '{"which":"second"}'));
+    const inputs = others.map((other) => bytesInput(other));
+    inputs.push(bytesInput(port));
+    inputs.push(bytesInput(port));
     const response = await invoke(t, methodId, inputs);
     assert.notEqual(response.statusCode, 0, "a batched invocation must not report success");
     assert.equal(response.errorCode, "batched-input-frames");

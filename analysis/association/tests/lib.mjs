@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import assert from 'node:assert/strict';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 
 const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
@@ -112,10 +113,19 @@ export function earthOrientation(rows) {
   return { portId: 'earth_orientation', typeRef: typeRef('EOP'), payload };
 }
 
-export const options = (value) => ({ portId: 'options', typeRef: { schemaName: 'application/json' }, payload: Buffer.from(JSON.stringify(value)) });
+// $ASG (the assignment problem, solution and association report) from the
+// standard's TypeScript bindings (lib/ts/ASG), bundled in memory with the
+// standards repo's own esbuild and its flatbuffers runtime.
+const esbuild = require('esbuild');
+const asgBundle = await esbuild.build({
+  stdin: { contents: 'export * from "./lib/ts/ASG/main.ts"; export * as flatbuffers from "flatbuffers";', resolveDir: root, loader: 'ts' },
+  bundle: true, format: 'esm', platform: 'node', write: false,
+});
+export const ASG = await import(`data:text/javascript;base64,${Buffer.from(asgBundle.outputFiles[0].contents).toString('base64')}`);
 
-async function invoke(methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+// The node config the module reads its options from (plugin.getConfig).
+async function invoke(methodId, inputs, config = {}) {
+  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct', hostOptions: { config } });
   try {
     return await h.invoke({ methodId, inputs });
   } finally {
@@ -129,20 +139,54 @@ const decoders = {
   rf: (p) => RFO.RFO.getRootAsRFO(new flatbuffers.ByteBuffer(p)).unpack(),
 };
 
-export async function associate(inputs) {
-  const result = await invoke('associate_observations', inputs);
+export function decodeAsn(payload) {
+  const bb = new ASG.flatbuffers.ByteBuffer(new Uint8Array(payload));
+  if (!ASG.ASG.bufferHasIdentifier(bb)) throw new Error('not an $ASG FlatBuffer');
+  return ASG.ASG.getRootAsASG(bb).unpack();
+}
+
+// The report's observation in test terms: its assigned candidate (null for a UCT).
+export const assignedOf = (o) => (o.ASSIGNED_CANDIDATE >= 0 ? o.CANDIDATES[o.ASSIGNED_CANDIDATE] : null);
+
+export async function associate(inputs, config = {}) {
+  const result = await invoke('associate_observations', inputs, config);
   if (result.statusCode !== 0) return { error: result.errorMessage };
   const records = { associated: [], ucts: [] };
   for (const f of result.outputs) {
     const m = /^(radar|optical|rf)_(associated|ucts)$/.exec(f.portId);
     if (m) records[m[2]].push({ family: m[1], record: decoders[m[1]](new Uint8Array(f.payload)) });
   }
-  const report = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
-  return { report, records };
+  const reportFrame = result.outputs.find((f) => f.portId === 'report');
+  if (reportFrame.typeRef?.fileIdentifier !== undefined) assert.equal(reportFrame.typeRef.fileIdentifier, '$ASG');
+  const report = decodeAsn(reportFrame.payload).ASSOCIATION_REPORT;
+  return { report, records, outputs: result.outputs };
+}
+
+// An $ASG problem frame: { cost: rows of numbers (null = forbidden) } or
+// { rows, columns, entries: [[i, j, c], ...] }, plus optional unassigned_cost
+// (a number or one per row) and objective ('Minimize' | 'Maximize').
+export function problemFrame({ cost, rows, columns, entries, unassigned_cost: unassigned, objective }) {
+  const p = new ASG.ASGProblemT();
+  if (cost) {
+    p.ROWS = cost.length;
+    p.COLUMNS = cost[0].length;
+    p.DENSE_COST = cost.flat().map((c) => (c === null ? Number.POSITIVE_INFINITY : c));
+  } else {
+    p.ROWS = rows;
+    p.COLUMNS = columns;
+    p.ENTRIES = entries.map(([i, j, c]) => Object.assign(new ASG.ASGCostEntryT(), { ROW: i, COLUMN: j, COST: c }));
+  }
+  if (unassigned !== undefined) p.UNASSIGNED_COST = Array.isArray(unassigned) ? unassigned : [unassigned];
+  if (objective) p.OBJECTIVE = ASG.asgObjective[objective];
+  const a = new ASG.ASGT();
+  a.PROBLEM = p;
+  const b = new ASG.flatbuffers.Builder(1 << 16);
+  b.finish(a.pack(b), '$ASG');
+  return { portId: 'problem', typeRef: typeRef('ASG'), payload: b.asUint8Array().slice() };
 }
 
 export async function solveAssignment(problem) {
-  const result = await invoke('solve_assignment', [{ portId: 'problem', typeRef: { schemaName: 'application/json' }, payload: Buffer.from(JSON.stringify(problem)) }]);
+  const result = await invoke('solve_assignment', [problemFrame(problem)]);
   if (result.statusCode !== 0) return { error: result.errorMessage };
-  return JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'solution').payload).toString());
+  return decodeAsn(result.outputs.find((f) => f.portId === 'solution').payload).SOLUTION;
 }

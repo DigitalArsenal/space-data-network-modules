@@ -1,7 +1,7 @@
 {
   "name": "space-data-network-plugin-licensing",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "bash build.sh",
@@ -10,7 +10,7 @@
   "devDependencies": {
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "file:../../../spacedatastandards.org"
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
   }
 }

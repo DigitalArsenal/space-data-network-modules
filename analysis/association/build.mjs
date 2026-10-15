@@ -9,18 +9,18 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 
 // One translation unit: the SDS observation, ephemeris and EOP headers, ERFA
 // and the foundation/frames axis engine with its $EOP series reader (the one
-// Earth-orientation chain in the tree), nlohmann::json for the control
-// frames, and the association source.
+// Earth-orientation chain in the tree), // SDS records only: the observations, ephemerides, EOP and the $ASG problem,
+// solution and report; the options are the node config (plugin.getConfig, read
+// through the SDK's typedHostcall.hpp, sdm_piv::get_config).
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
-const { header, version, families } = await generateSdsHeaders(['RDO', 'EOO', 'RFO', 'OEM', 'EOP'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['RDO', 'EOO', 'RFO', 'OEM', 'EOP', 'ASG'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
   .replace('#include "iau_body_models.hpp"', '')
   .replace(/extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/, '// ERFA is amalgamated ahead of this header by build.mjs.\n');
 const eopSeries = (await fs.readFile(path.join(framesSrc, 'eop_series.hpp'), 'utf8')).replace('#pragma once', '');
-const json = await fs.readFile(path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
 const sources = ['src/linear.hpp', 'src/chi_square.hpp', 'src/assignment.hpp', 'src/association.cpp'];
 const own = await Promise.all(sources.map((file) => fs.readFile(path.join(root, file), 'utf8')));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
@@ -31,8 +31,7 @@ const result = await compileModuleFromSource({
   manifest,
   sourceCode: [
     '#include "space_data_module_invoke.h"',
-    '#define JSON_NOEXCEPTION 1',
-    json,
+    '#include "typedHostcall.hpp"',
     header,
     erfa.source,
     bodyModels,
@@ -43,6 +42,8 @@ const result = await compileModuleFromSource({
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',
+  // plugin.getConfig: the space_data_module_host hostcall bridge resolves at instantiation.
+  allowUndefinedImports: true,
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));

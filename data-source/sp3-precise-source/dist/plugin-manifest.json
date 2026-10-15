@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.sp3-precise-source",
   "name": "SP3 Precise Orbit Source",
-  "version": "0.1.0",
-  "description": "Read precise orbit products in SP3-c and SP3-d (IGS and its analysis centres, BKG, ESA/ESOC: GPS, GLONASS, Galileo, BeiDou and low-Earth-orbit POD) into one canonical SDS OEM per satellite, in the frame and time system the header states, position-only states staying position-only. Download and decompression belong to the SDN host flow.",
+  "version": "0.2.0",
+  "description": "Read precise orbit products in SP3-c and SP3-d (IGS and its analysis centres, BKG, ESA/ESOC: GPS, GLONASS, Galileo, BeiDou and low-Earth-orbit POD) into one canonical SDS OEM per satellite, in the frame and time system the header states, position-only states staying position-only (typed contracts 1.0: FlatBuffers only, no JSON between modules). read_sp3 takes the hostcap/http-request HttpResponse, BODY the decompressed SP3 text verbatim, and writes the $OEM frames plus one FlowNotice report (Info: COUNT the $OEM emitted, ITEMS the header facts, the per-satellite counts and the SHA-256 of the file as name=value). HTTP 304 gives one FlowNotice (Unchanged) and no $OEM; another status or a transport error is refused. Download, decompression and storage belong to the SDN host flow; no hostcalls.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -23,24 +23,22 @@
           "portId": "source",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/plain",
-                "detail": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve."
-              }
+              "description": "The HttpResponse (HRSP) from hostcap/http-request for one SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC): BODY the decompressed text verbatim, bounded to 128 MiB (the host expands the gzip the data centres serve); STATUS 200, or 304 for unchanged."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One decompressed SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC) as text, bounded to 128 MiB; the host expands the gzip the data centres serve."
+          "description": "The HttpResponse (HRSP) from hostcap/http-request for one SP3-c or SP3-d precise orbit file (IGS, its analysis centres, BKG, ESA/ESOC): BODY the decompressed text verbatim, bounded to 128 MiB (the host expands the gzip the data centres serve); STATUS 200, or 304 for unchanged."
         }
       ],
       "outputPorts": [
@@ -53,7 +51,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One canonical $OEM per satellite with a position in the file, named for its SP3 vehicle id: Earth-fixed in the realization the header names (or the inertial frame it names), on the file's time system, position-only or with velocity as the file has it."
@@ -68,24 +67,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report",
+              "setId": "flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation."
-              }
+              "description": "One FlowNotice (FNTC): KIND Info, SCHEMA OEM, SOURCE_NAME sp3, COUNT the $OEM emitted, ITEMS the header facts (fileVersion, positionVelocity, agency, coordinateSystem, orbitType, dataUsed, timeSystem, frame, gpsWeek, epochIntervalSeconds, firstEpoch, declaredEpochs, satelliteCount, satellitesWithoutStates, sha256, bytes) and per satellite satellite.<id>.states/blocks/velocity/accuracyExponent/clock/predictedStates/maneuverFlags, as name=value; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The file's header facts (version, agency, coordinate system, orbit type, time system, epoch interval, first epoch), per satellite its states, blocks, velocity, accuracy exponent, clocks and flags, and the SHA-256 of the input; module control metadata the host keeps beside the file, not an observation."
+          "description": "One FlowNotice (FNTC): KIND Info, SCHEMA OEM, SOURCE_NAME sp3, COUNT the $OEM emitted, ITEMS the header facts (fileVersion, positionVelocity, agency, coordinateSystem, orbitType, dataUsed, timeSystem, frame, gpsWeek, epochIntervalSeconds, firstEpoch, declaredEpochs, satelliteCount, satellitesWithoutStates, sha256, bytes) and per satellite satellite.<id>.states/blocks/velocity/accuracyExponent/clock/predictedStates/maneuverFlags, as name=value; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
         }
       ],
       "maxBatch": 1,
@@ -96,7 +93,20 @@
     {
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
-      "rootTypeName": "OEM"
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
@@ -110,6 +120,6 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "One complete bounded orbit file is read in order into one record per satellite and one control frame; the host parallelizes independent files and this parser creates no threads."
+    "detail": "One complete bounded orbit file is read in order into one record per satellite and one FlowNotice; the host parallelizes independent files and this parser creates no threads."
   }
 }

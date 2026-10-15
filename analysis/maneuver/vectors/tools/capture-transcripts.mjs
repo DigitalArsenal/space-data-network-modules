@@ -22,6 +22,10 @@
  * against responses that no longer need guarding, which is how a workaround
  * outlives its cause.
  *
+ * SINCE 0.7.0 the wire is $MPL: each transcript records the command it was
+ * built from, the $MPL request bytes and the $MPL answer bytes (base64), so a
+ * consumer decodes the real frames with the standard's own bindings.
+ *
  * Regenerate whenever the artifact changes:
  *   node vectors/tools/capture-transcripts.mjs --out <path to fixture.json>
  */
@@ -31,10 +35,9 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createStandaloneHarness,
-  invokeJsonRequest,
-} from "space-data-module-sdk/testing/isomorphic";
+import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+
+import { M, encodeRequest, packPlan, probePlan } from "../../tests/mpl_client.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WASM = new URL("../../dist/isomorphic/module.wasm", import.meta.url);
@@ -158,9 +161,10 @@ const contentHash = createHash("sha256").update(await readFile(wasmPath)).digest
  */
 const REFUSALS = [
   {
-    id: "error-unknown-operation",
-    why: "the shape of every refusal: non-zero statusCode, a stable errorCode, and a response FRAME carrying {error, errorCode}. 0.1.0 trapped here and poisoned the instance.",
-    request: { operation: "noSuchOperation", params: {} },
+    id: "error-unspecified-problem",
+    why: "the shape of every refusal: non-zero statusCode, a stable errorCode, and a $MPL answer carrying STATUS, ERROR_CODE and ERROR_MESSAGE. 0.1.0 trapped here and poisoned the instance.",
+    request: { operation: "hohmannTransfer", params: { r1: 6678137, r2: 42164000 } },
+    edit: (plan) => { plan.PROBLEM = M.mplProblem.Unspecified; },
   },
   {
     id: "error-missing-parameter",
@@ -169,8 +173,8 @@ const REFUSALS = [
   },
   {
     id: "error-validator-message-is-reachable",
-    why: "the module's OWN validator, verbatim — '[phasing]: Number of revolutions must be >= 1'. Written by the author of computePhasingManeuver and unreachable for the whole life of 0.1.0.",
-    request: { operation: "phasingManeuver", params: { currentRadius: 6778137, phaseAngle: 0.5, numRevs: 0 } },
+    why: "the module's OWN validator, verbatim — '[phasing]: Orbit radius must be positive'. Written by the author of computePhasingManeuver and unreachable for the whole life of 0.1.0.",
+    request: { operation: "phasingManeuver", params: { currentRadius: -6778137, phaseAngle: 0.5, numRevs: 1 } },
   },
   {
     id: "error-lambert-no-solution",
@@ -181,32 +185,20 @@ const REFUSALS = [
 
 const harness = await createStandaloneHarness("browser", WASM);
 const transcripts = [];
-for (const entry of REQUESTS) {
+const b64 = (bytes) => Buffer.from(bytes).toString("base64");
+for (const entry of [...REQUESTS, ...REFUSALS]) {
+  const { plan } = encodeRequest(entry.request.operation, entry.request.params);
+  entry.edit?.(plan);
+  const requestBytes = packPlan(plan);
+  const outcome = await probePlan(harness, requestBytes);
   transcripts.push({
     id: entry.id,
     why: entry.why,
-    request: entry.request,
-    response: await invokeJsonRequest(harness, entry.request),
-  });
-}
-for (const entry of REFUSALS) {
-  const raw = await harness.invoke({
-    methodId: "invoke",
-    inputs: [
-      {
-        portId: "request",
-        payload: Buffer.from(JSON.stringify(entry.request), "utf8"),
-      },
-    ],
-  });
-  const frame = raw.outputs?.find((output) => output.portId === "response");
-  transcripts.push({
-    id: entry.id,
-    why: entry.why,
-    request: entry.request,
-    statusCode: raw.statusCode,
-    errorCode: raw.errorCode,
-    response: frame ? JSON.parse(new TextDecoder().decode(frame.payload)) : null,
+    command: entry.request,
+    requestMplBase64: b64(requestBytes),
+    statusCode: outcome.statusCode,
+    errorCode: outcome.errorCode,
+    answerMplBase64: outcome.frame ? b64(outcome.frame.payload) : null,
   });
 }
 await harness.destroy();
@@ -215,9 +207,10 @@ const payload = {
   "//":
     "RECORDED from the real maneuver-planner artifact by " +
     "analysis/maneuver/vectors/tools/capture-transcripts.mjs. NOT a mock. " +
+    "Frames are $MPL (maneuver plan) since 0.7.0. " +
     "Captured against maneuver-planner 0.2.0, which repaired the four things " +
     "the previous recording documented: the module now has a working error " +
-    "path (every refusal is {error, errorCode}, nothing traps), every " +
+    "path (every refusal is structured, nothing traps), every " +
     "operation that computes a RIC array serialises it, phasing clamps to the " +
     "Earth floor and says so, and solveLambert arrives. Refusal transcripts " +
     "are recorded too — a caller has to decode those as carefully as answers. " +

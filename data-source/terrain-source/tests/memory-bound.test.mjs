@@ -28,7 +28,22 @@ import { fileURLToPath } from "node:url";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { buildGeoTiff, buildOversizedTiffHeader, rawBodyFrameBytes, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  buildOversizedTiffHeader,
+  rawBodyFrameBytes,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -39,15 +54,9 @@ const GRID = 255; // the gridSize Janus fixed the bound at
 
 const encoder = new TextEncoder();
 
-function frame(portId, payload) {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-}
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 const PROVENANCE = {
   datasetId: "cop-dem-glo-30",
@@ -143,9 +152,9 @@ test("peak <= 1024 pages and ZERO growth over a 64-invoke A/B/A interleave", asy
   for (let n = 1; n <= 64; n++) {
     // A/B/A: largest, smallest, largest — repeated.
     const address = n % 3 === 2 ? SMALL : LARGE;
-    const response = await harness.invoke({
+    const response = await invokeTyped(harness, {
       methodId: "tile",
-      inputs: [jsonFrame("plan", planFor(address)), ...demFrames],
+      inputs: [typedFrame("plan", planFor(address)), ...demFrames],
     });
     assert.equal(response.statusCode, 0, `invoke ${n}: ${response.errorCode} ${response.errorMessage}`);
     const records = response.outputs.find((o) => o.portId === "records");
@@ -200,11 +209,11 @@ test("1,000 repeated invokes do not grow the guest by one page", async (t) => {
   t.after(() => harness.destroy());
   const pages = () => harness.memory.buffer.byteLength / PAGE_BYTES;
 
-  const inputs = [jsonFrame("plan", planFor(SMALL)), frame("dem", granules[0])];
+  const inputs = [typedFrame("plan", planFor(SMALL)), frame("dem", granules[0])];
   let settled = 0;
   let peak = 0;
   for (let n = 1; n <= 1000; n++) {
-    const response = await harness.invoke({ methodId: "tile", inputs });
+    const response = await invokeTyped(harness, { methodId: "tile", inputs });
     assert.equal(response.statusCode, 0, `invoke ${n}: ${response.errorCode}`);
     if (n === 4) settled = pages();
     peak = Math.max(peak, pages());
@@ -238,9 +247,9 @@ test("a window past the 256 MiB decode budget is refused BY NAME, before any all
   assert.ok(oversized.length < 4096, "the refusal fixture is a header, not a raster");
 
   const before = pages();
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
-    inputs: [jsonFrame("plan", planFor(LARGE)), frame("dem", rawBodyFrameBytes(oversized))],
+    inputs: [typedFrame("plan", planFor(LARGE)), frame("dem", rawBodyFrameBytes(oversized))],
   });
   assert.equal(response.errorCode, "decode-budget-exceeded");
   assert.match(response.errorMessage, /268435456-byte in-guest decode budget/);

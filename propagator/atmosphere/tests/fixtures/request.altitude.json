@@ -1,7 +1,0 @@
-{
-  "operation": "queryAltitude",
-  "params": {
-    "altitudeM": 10000,
-    "model": "US76"
-  }
-}

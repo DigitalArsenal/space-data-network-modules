@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -14,7 +15,22 @@ const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+// The ports carry SDS standards FSO, FSB and QRP. The SDK compiler stages only its runtime headers, so each standard's
+// own generated C++ header (scripts/lib/sds-cpp-headers.mjs, with the object API) is inlined in place of
+// `#include "<CODE>_generated.h"`: its include guard is renamed (every SDS header, and the SDK's sds/PIV header, is
+// "main_generated.h") and its flatc version static_assert relaxed, as the SDK does for its runtime headers.
+async function sdsHeader(code) {
+  const header = await generateSdsHeader(code, import.meta.url);
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
+}
+let sourceCode = await fs.readFile(sourcePath, "utf8");
+for (const code of ["FSO", "FSB", "QRP"]) {
+  const header = await sdsHeader(code);
+  sourceCode = sourceCode.replace(new RegExp(`^#include "${code}_generated\\.h".*$`, "m"), () => header);
+}
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

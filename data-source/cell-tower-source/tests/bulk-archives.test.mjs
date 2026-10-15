@@ -26,27 +26,12 @@
 //     contributes nothing.
 
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const sdkTestingEntry = fileURLToPath(
-  new URL(import.meta.resolve("space-data-module-sdk/testing")),
-);
-const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
-const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = sdkRequire("flatbuffers");
-const { HttpRequest } = sdkRequire(
-  path.join(sdkRoot, "src/generated/http/sdn/http/http-request.js"),
-);
+import { consultedOf, drainParse, failedFetch, harnessFor, reportsOf, responseFor, routeFor, skippedOf } from "./helpers.mjs";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const fixture = (name) =>
@@ -65,97 +50,26 @@ const ISED_SITES = 200;
 const ANFR_SITES = 200;
 const COMREG_MASTS = 250;
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
-}
-
-function htqRequest(body) {
-  const b = new flatbuffers.Builder(1024);
-  const methodOff = b.createString("POST");
-  const pathOff = b.createString("/api/v1/cellular/aggregate");
-  const queryOff = b.createString("");
-  const bodyOff = HttpRequest.createBodyVector(b, encoder.encode(JSON.stringify(body)));
-  HttpRequest.startHttpRequest(b);
-  HttpRequest.addMethod(b, methodOff);
-  HttpRequest.addPath(b, pathOff);
-  HttpRequest.addQuery(b, queryOff);
-  HttpRequest.addBody(b, bodyOff);
-  HttpRequest.finishHttpRequestBuffer(b, HttpRequest.endHttpRequest(b));
-  return { portId: "request", typeRef: { wireFormat: "flatbuffer" }, payload: b.asUint8Array() };
-}
-
-async function harnessFor(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-const byPort = (response) => {
-  const map = new Map();
-  for (const frame of response.outputs) map.set(frame.portId, frame);
-  return map;
-};
-const framesFor = (response, portId) => response.outputs.filter((f) => f.portId === portId);
-const jsonFrame = (map, portId) => {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
-};
-
 /** Drive route -> parse for one provider against one captured body. */
 async function decodeProvider(t, providerId, body, requestBody = {}) {
   const harness = await harnessFor(t);
-  const routedRaw = await harness.invoke({
-    methodId: "route",
-    inputs: [
-      htqRequest({
-        PROVIDERS: [providerId],
-        METHOD: "SINGLE_SOURCE",
-        LIMIT: 2000,
-        FULL_POPULATION: true,
-        ...requestBody,
-      }),
-    ],
+  const { descriptors, contract } = await routeFor(harness, {
+    PROVIDERS: [providerId],
+    METHOD: "SINGLE_SOURCE",
+    LIMIT: 2000,
+    FULL_POPULATION: true,
+    ...requestBody,
   });
-  const routed = byPort(routedRaw);
-  const job = jsonFrame(routed, "job");
-  const descriptors = framesFor(routedRaw, "requests").map((f) =>
-    JSON.parse(decoder.decode(f.payload)),
-  );
-
-  const responses = [
-    jsonInput("responses", {
-      status: 200,
-      headers: {},
-      bodyB64: Buffer.from(body).toString("base64"),
-    }),
-  ];
-  while (responses.length < descriptors.length) {
-    responses.push(jsonInput("responses", { status: 0, headers: {}, bodyB64: "" }));
-  }
-
-  let parsed = byPort(
-    await harness.invoke({ methodId: "parse", inputs: [jsonInput("job", job), ...responses] }),
-  );
-  for (let tick = 0; tick < 8 && !parsed.get("reports"); tick += 1) {
-    parsed = byPort(await harness.invoke({ methodId: "parse", inputs: [] }));
-  }
-  return { descriptors, reports: jsonFrame(parsed, "reports"), job };
+  const responses = descriptors.map((d, i) => (i === 0 ? responseFor(d, { body }) : failedFetch(d)));
+  const parsed = await drainParse(harness, responses);
+  return { descriptors, reports: reportsOf(parsed.get("reports").payload), contract };
 }
 
 // ── the four are actually reachable now ───────────────────────────────────
 
 test("none of the four is skipped as `unavailable` any more", async (t) => {
   // Before this task each of these was refused at route time with its missing
-  // capability named in the job's `skipped` array, and NO request descriptor
+  // capability named in the skipped ledger, and NO request descriptor
   // was ever emitted. That refusal is the thing being lifted, so it is what the
   // test reads — the catalog reply does not carry a lane field to assert on.
   for (const [id, body] of [
@@ -164,13 +78,12 @@ test("none of the four is skipped as `unavailable` any more", async (t) => {
     ["anfr-cartoradio", ANFR],
     ["comreg-siteviewer", COMREG],
   ]) {
-    const { descriptors, job } = await decodeProvider(t, id, body);
-    const skipped = job.skipped ?? [];
-    const mine = skipped.find((s) => s.provider_id === id);
+    const { descriptors, contract } = await decodeProvider(t, id, body);
+    const mine = skippedOf(contract).find((s) => s.provider_id === id);
     assert.equal(
       mine,
       undefined,
-      `${id} is still skipped at route time: ${mine && mine.reason}`,
+      `${id} is still skipped at route time: ${mine && mine.code}`,
     );
     assert.ok(descriptors.length >= 1, `${id} produced no request descriptor`);
   }
@@ -182,23 +95,17 @@ test("a worldwide request now includes all four national registers", async (t) =
   // and an `unavailable` one was skipped always. All four serve their whole
   // dataset in one response, so a worldwide run must consult them.
   const harness = await harnessFor(t);
-  const routedRaw = await harness.invoke({
-    methodId: "route",
-    inputs: [
-      htqRequest({
-        PROVIDERS: ["acma-rrl", "ised-sms-tafl", "anfr-cartoradio", "comreg-siteviewer"],
-        METHOD: "SINGLE_SOURCE",
-        LIMIT: 100,
-      }),
-    ],
+  const { contract } = await routeFor(harness, {
+    PROVIDERS: ["acma-rrl", "ised-sms-tafl", "anfr-cartoradio", "comreg-siteviewer"],
+    METHOD: "SINGLE_SOURCE",
+    LIMIT: 100,
   });
-  const job = jsonFrame(byPort(routedRaw), "job");
   assert.deepEqual(
-    job.skipped ?? [],
+    skippedOf(contract),
     [],
     "a national bulk register was skipped from a worldwide request",
   );
-  assert.equal(job.providers_consulted.length, 4);
+  assert.equal(consultedOf(contract).length, 4);
 });
 
 // ── ACMA (Australia) ──────────────────────────────────────────────────────
@@ -371,8 +278,9 @@ test("comreg-siteviewer: the request is the POST the backend requires", async (t
   assert.equal(descriptors[0].method, "POST");
   // hostcap/http-request reads the outgoing body from bodyB64 and ignores a
   // plain `body` key, so this must be base64 and must decode to {}.
-  assert.ok(descriptors[0].bodyB64, "no request body was sent");
-  assert.equal(Buffer.from(descriptors[0].bodyB64, "base64").toString("utf8"), "{}");
+  // The body travels RAW in the HttpRequest - no base64 between modules.
+  assert.equal(decoder.decode(descriptors[0].body), "{}", "no request body was sent");
+  assert.equal(descriptors[0].headers["content-type"], "application/json");
   assert.equal(descriptors[0].headers.accept, "application/x-protobuf");
 });
 
@@ -401,16 +309,16 @@ test("the row cap still applies to the bulk archives, and says so", async (t) =>
     ["anfr-cartoradio", ANFR],
     ["comreg-siteviewer", COMREG],
   ]) {
-    const { reports, job } = await decodeProvider(t, id, body, {
+    const { reports, contract } = await decodeProvider(t, id, body, {
       FULL_POPULATION: false,
       LIMIT: 25,
     });
     assert.equal(reports.length, 25, `${id} ignored the row cap`);
-    assert.equal(job.full_population, false);
+    assert.equal(contract.params.FULL_POPULATION, "false");
   }
 });
 
-test("each archive is attributed by what it IS, not by frame order", async (t) => {
+test("each archive is attributed by what it IS, not merely by the provider it is attributed to", async (t) => {
   // The three ZIPs share one magic number, so they are told apart by member
   // name. Feeding ACMA's body to a run that consulted only ISED must decode
   // NOTHING rather than decode Australian sites as Canadian ones.

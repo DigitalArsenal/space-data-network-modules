@@ -61,6 +61,143 @@ inline const char *EnumNamedssSyncState(dssSyncState e) {
   return EnumNamesdssSyncState()[index];
 }
 
+/// Retention policy for a lane on this node. Append new values only; never
+/// reorder or reuse existing values.
+enum class dssPinPolicy : int8_t {
+  None = 0,
+  /// Keep a bounded local cache.
+  Cache = 1,
+  /// Pin every publication.
+  Pin = 2,
+  /// Pin and archive every publication.
+  Archive = 3,
+  MIN = None,
+  MAX = Archive
+};
+
+inline const dssPinPolicy (&EnumValuesdssPinPolicy())[4] {
+  static const dssPinPolicy values[] = {
+    dssPinPolicy::None,
+    dssPinPolicy::Cache,
+    dssPinPolicy::Pin,
+    dssPinPolicy::Archive
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesdssPinPolicy() {
+  static const char * const names[5] = {
+    "None",
+    "Cache",
+    "Pin",
+    "Archive",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamedssPinPolicy(dssPinPolicy e) {
+  if (::flatbuffers::IsOutRange(e, dssPinPolicy::None, dssPinPolicy::Archive)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesdssPinPolicy()[index];
+}
+
+/// Action a client requests on a lane. Append new values only; never reorder
+/// or reuse existing values.
+enum class dssAction : int8_t {
+  None = 0,
+  /// Run one bounded catch-up pass now.
+  Sync = 1,
+  Subscribe = 2,
+  Unsubscribe = 3,
+  Pin = 4,
+  Unpin = 5,
+  /// Rebuild the local materialisation from pinned publications.
+  Hydrate = 6,
+  /// Set RETENTION and leave the subscription alone: the lane's rule, or,
+  /// when the frame names no PROVIDER_ID and no SOURCE_NAME, the default for
+  /// every lane of SCHEMA_NAME. A frame without RETENTION clears the choice,
+  /// so the default applies again.
+  SetRetention = 7,
+  MIN = None,
+  MAX = SetRetention
+};
+
+inline const dssAction (&EnumValuesdssAction())[8] {
+  static const dssAction values[] = {
+    dssAction::None,
+    dssAction::Sync,
+    dssAction::Subscribe,
+    dssAction::Unsubscribe,
+    dssAction::Pin,
+    dssAction::Unpin,
+    dssAction::Hydrate,
+    dssAction::SetRetention
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesdssAction() {
+  static const char * const names[9] = {
+    "None",
+    "Sync",
+    "Subscribe",
+    "Unsubscribe",
+    "Pin",
+    "Unpin",
+    "Hydrate",
+    "SetRetention",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamedssAction(dssAction e) {
+  if (::flatbuffers::IsOutRange(e, dssAction::None, dssAction::SetRetention)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesdssAction()[index];
+}
+
+/// Retention rule for a lane's publications on the subscribing node. Append
+/// new values only; never reorder or reuse existing values.
+enum class dssRetention : int8_t {
+  /// Each new publication replaces the previous batch; the lane holds one
+  /// current set.
+  ReplaceCurrent = 0,
+  /// Every publication is kept and pinned; history stays retrievable.
+  ArchiveAll = 1,
+  /// Every publication stays in the store; nothing is superseded and nothing
+  /// is pinned, so history stays queryable from the store.
+  KeepAll = 2,
+  MIN = ReplaceCurrent,
+  MAX = KeepAll
+};
+
+inline const dssRetention (&EnumValuesdssRetention())[3] {
+  static const dssRetention values[] = {
+    dssRetention::ReplaceCurrent,
+    dssRetention::ArchiveAll,
+    dssRetention::KeepAll
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesdssRetention() {
+  static const char * const names[4] = {
+    "ReplaceCurrent",
+    "ArchiveAll",
+    "KeepAll",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamedssRetention(dssRetention e) {
+  if (::flatbuffers::IsOutRange(e, dssRetention::ReplaceCurrent, dssRetention::KeepAll)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesdssRetention()[index];
+}
+
 struct DSST : public ::flatbuffers::NativeTable {
   typedef DSS TableType;
   dssSyncState STATUS = dssSyncState::IDLE;
@@ -97,6 +234,26 @@ struct DSST : public ::flatbuffers::NativeTable {
   std::vector<std::string> VERIFIED_CHUNKS{};
   std::string LAST_SYNCED_AT{};
   std::string ERROR{};
+  std::string SCHEMA_NAME{};
+  std::string PROVIDER_ID{};
+  std::string SOURCE_NAME{};
+  std::string DATASET_ID{};
+  std::string CONNECTOR_ID{};
+  std::string CHANNEL_ID{};
+  std::string TOPIC{};
+  bool SUBSCRIBED = false;
+  dssPinPolicy PIN_POLICY = dssPinPolicy::None;
+  std::string VISIBILITY{};
+  std::string ENCRYPTION_STATE{};
+  std::string GRANT_STATE{};
+  std::string FEED_HEAD{};
+  std::string LAST_PUBLICATION_CID{};
+  std::string LAST_PNM_CID{};
+  uint64_t DELTA_ROWS = 0;
+  uint64_t LAST_SYNC_STARTED_AT = 0;
+  dssAction REQUESTED_ACTION = dssAction::None;
+  std::string ORIGIN_ID{};
+  dssRetention RETENTION = dssRetention::ReplaceCurrent;
 };
 
 struct DSS FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -137,7 +294,27 @@ struct DSS FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SYNC_FILTER = 64,
     VT_VERIFIED_CHUNKS = 66,
     VT_LAST_SYNCED_AT = 68,
-    VT_ERROR = 70
+    VT_ERROR = 70,
+    VT_SCHEMA_NAME = 72,
+    VT_PROVIDER_ID = 74,
+    VT_SOURCE_NAME = 76,
+    VT_DATASET_ID = 78,
+    VT_CONNECTOR_ID = 80,
+    VT_CHANNEL_ID = 82,
+    VT_TOPIC = 84,
+    VT_SUBSCRIBED = 86,
+    VT_PIN_POLICY = 88,
+    VT_VISIBILITY = 90,
+    VT_ENCRYPTION_STATE = 92,
+    VT_GRANT_STATE = 94,
+    VT_FEED_HEAD = 96,
+    VT_LAST_PUBLICATION_CID = 98,
+    VT_LAST_PNM_CID = 100,
+    VT_DELTA_ROWS = 102,
+    VT_LAST_SYNC_STARTED_AT = 104,
+    VT_REQUESTED_ACTION = 106,
+    VT_ORIGIN_ID = 108,
+    VT_RETENTION = 110
   };
   dssSyncState STATUS() const {
     return static_cast<dssSyncState>(GetField<int8_t>(VT_STATUS, 0));
@@ -241,6 +418,89 @@ struct DSS FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *ERROR() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ERROR);
   }
+  /// Standard code of the lane, e.g. "OMM".
+  const ::flatbuffers::String *SCHEMA_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SCHEMA_NAME);
+  }
+  const ::flatbuffers::String *PROVIDER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER_ID);
+  }
+  const ::flatbuffers::String *SOURCE_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_NAME);
+  }
+  /// Stable dataset identifier within the origin.
+  const ::flatbuffers::String *DATASET_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DATASET_ID);
+  }
+  /// Ingest connector that produces the lane, when known.
+  const ::flatbuffers::String *CONNECTOR_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CONNECTOR_ID);
+  }
+  /// Channel identifier the lane is announced on.
+  const ::flatbuffers::String *CHANNEL_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CHANNEL_ID);
+  }
+  /// Publish/subscribe topic of the lane.
+  const ::flatbuffers::String *TOPIC() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TOPIC);
+  }
+  /// True when this node subscribes to the lane.
+  bool SUBSCRIBED() const {
+    return GetField<uint8_t>(VT_SUBSCRIBED, 0) != 0;
+  }
+  dssPinPolicy PIN_POLICY() const {
+    return static_cast<dssPinPolicy>(GetField<int8_t>(VT_PIN_POLICY, 0));
+  }
+  /// Visibility of the lane, e.g. "public", "private".
+  const ::flatbuffers::String *VISIBILITY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_VISIBILITY);
+  }
+  /// Encryption state of the lane's publications, e.g. "plain", "encrypted".
+  const ::flatbuffers::String *ENCRYPTION_STATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ENCRYPTION_STATE);
+  }
+  /// Grant state for an encrypted lane, e.g. "granted", "pending", "none".
+  const ::flatbuffers::String *GRANT_STATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_GRANT_STATE);
+  }
+  /// Feed head this node has materialised up to.
+  const ::flatbuffers::String *FEED_HEAD() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FEED_HEAD);
+  }
+  /// Content identifier of the newest publication manifest known.
+  const ::flatbuffers::String *LAST_PUBLICATION_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LAST_PUBLICATION_CID);
+  }
+  /// Content identifier of the newest publish notification known.
+  const ::flatbuffers::String *LAST_PNM_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LAST_PNM_CID);
+  }
+  /// Rows materialised since the previous SYNCED state.
+  uint64_t DELTA_ROWS() const {
+    return GetField<uint64_t>(VT_DELTA_ROWS, 0);
+  }
+  /// Unix milliseconds the current or last sync pass started; 0 = never.
+  uint64_t LAST_SYNC_STARTED_AT() const {
+    return GetField<uint64_t>(VT_LAST_SYNC_STARTED_AT, 0);
+  }
+  /// Action a client requests when sending this record to a node.
+  dssAction REQUESTED_ACTION() const {
+    return static_cast<dssAction>(GetField<int8_t>(VT_REQUESTED_ACTION, 0));
+  }
+  /// Upstream publisher of the lane's records.
+  const ::flatbuffers::String *ORIGIN_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ORIGIN_ID);
+  }
+  /// How this node keeps a lane's publications. ReplaceCurrent supersedes the
+  /// previous batch of the lane with each new publication so the lane holds
+  /// one current set; KeepAll keeps every publication in the store and pins
+  /// none; ArchiveAll keeps and pins every publication so history stays
+  /// retrievable by content identifier. A lane without a rule of its own
+  /// follows its standard's default. A Subscribe without RETENTION keeps the
+  /// lane's rule; SetRetention changes it.
+  dssRetention RETENTION() const {
+    return static_cast<dssRetention>(GetField<int8_t>(VT_RETENTION, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -293,6 +553,40 @@ struct DSS FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(LAST_SYNCED_AT()) &&
            VerifyOffset(verifier, VT_ERROR) &&
            verifier.VerifyString(ERROR()) &&
+           VerifyOffset(verifier, VT_SCHEMA_NAME) &&
+           verifier.VerifyString(SCHEMA_NAME()) &&
+           VerifyOffset(verifier, VT_PROVIDER_ID) &&
+           verifier.VerifyString(PROVIDER_ID()) &&
+           VerifyOffset(verifier, VT_SOURCE_NAME) &&
+           verifier.VerifyString(SOURCE_NAME()) &&
+           VerifyOffset(verifier, VT_DATASET_ID) &&
+           verifier.VerifyString(DATASET_ID()) &&
+           VerifyOffset(verifier, VT_CONNECTOR_ID) &&
+           verifier.VerifyString(CONNECTOR_ID()) &&
+           VerifyOffset(verifier, VT_CHANNEL_ID) &&
+           verifier.VerifyString(CHANNEL_ID()) &&
+           VerifyOffset(verifier, VT_TOPIC) &&
+           verifier.VerifyString(TOPIC()) &&
+           VerifyField<uint8_t>(verifier, VT_SUBSCRIBED, 1) &&
+           VerifyField<int8_t>(verifier, VT_PIN_POLICY, 1) &&
+           VerifyOffset(verifier, VT_VISIBILITY) &&
+           verifier.VerifyString(VISIBILITY()) &&
+           VerifyOffset(verifier, VT_ENCRYPTION_STATE) &&
+           verifier.VerifyString(ENCRYPTION_STATE()) &&
+           VerifyOffset(verifier, VT_GRANT_STATE) &&
+           verifier.VerifyString(GRANT_STATE()) &&
+           VerifyOffset(verifier, VT_FEED_HEAD) &&
+           verifier.VerifyString(FEED_HEAD()) &&
+           VerifyOffset(verifier, VT_LAST_PUBLICATION_CID) &&
+           verifier.VerifyString(LAST_PUBLICATION_CID()) &&
+           VerifyOffset(verifier, VT_LAST_PNM_CID) &&
+           verifier.VerifyString(LAST_PNM_CID()) &&
+           VerifyField<uint64_t>(verifier, VT_DELTA_ROWS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_LAST_SYNC_STARTED_AT, 8) &&
+           VerifyField<int8_t>(verifier, VT_REQUESTED_ACTION, 1) &&
+           VerifyOffset(verifier, VT_ORIGIN_ID) &&
+           verifier.VerifyString(ORIGIN_ID()) &&
+           VerifyField<int8_t>(verifier, VT_RETENTION, 1) &&
            verifier.EndTable();
   }
   DSST *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -406,6 +700,66 @@ struct DSSBuilder {
   void add_ERROR(::flatbuffers::Offset<::flatbuffers::String> ERROR) {
     fbb_.AddOffset(DSS::VT_ERROR, ERROR);
   }
+  void add_SCHEMA_NAME(::flatbuffers::Offset<::flatbuffers::String> SCHEMA_NAME) {
+    fbb_.AddOffset(DSS::VT_SCHEMA_NAME, SCHEMA_NAME);
+  }
+  void add_PROVIDER_ID(::flatbuffers::Offset<::flatbuffers::String> PROVIDER_ID) {
+    fbb_.AddOffset(DSS::VT_PROVIDER_ID, PROVIDER_ID);
+  }
+  void add_SOURCE_NAME(::flatbuffers::Offset<::flatbuffers::String> SOURCE_NAME) {
+    fbb_.AddOffset(DSS::VT_SOURCE_NAME, SOURCE_NAME);
+  }
+  void add_DATASET_ID(::flatbuffers::Offset<::flatbuffers::String> DATASET_ID) {
+    fbb_.AddOffset(DSS::VT_DATASET_ID, DATASET_ID);
+  }
+  void add_CONNECTOR_ID(::flatbuffers::Offset<::flatbuffers::String> CONNECTOR_ID) {
+    fbb_.AddOffset(DSS::VT_CONNECTOR_ID, CONNECTOR_ID);
+  }
+  void add_CHANNEL_ID(::flatbuffers::Offset<::flatbuffers::String> CHANNEL_ID) {
+    fbb_.AddOffset(DSS::VT_CHANNEL_ID, CHANNEL_ID);
+  }
+  void add_TOPIC(::flatbuffers::Offset<::flatbuffers::String> TOPIC) {
+    fbb_.AddOffset(DSS::VT_TOPIC, TOPIC);
+  }
+  void add_SUBSCRIBED(bool SUBSCRIBED) {
+    fbb_.AddElement<uint8_t>(DSS::VT_SUBSCRIBED, static_cast<uint8_t>(SUBSCRIBED), 0);
+  }
+  void add_PIN_POLICY(dssPinPolicy PIN_POLICY) {
+    fbb_.AddElement<int8_t>(DSS::VT_PIN_POLICY, static_cast<int8_t>(PIN_POLICY), 0);
+  }
+  void add_VISIBILITY(::flatbuffers::Offset<::flatbuffers::String> VISIBILITY) {
+    fbb_.AddOffset(DSS::VT_VISIBILITY, VISIBILITY);
+  }
+  void add_ENCRYPTION_STATE(::flatbuffers::Offset<::flatbuffers::String> ENCRYPTION_STATE) {
+    fbb_.AddOffset(DSS::VT_ENCRYPTION_STATE, ENCRYPTION_STATE);
+  }
+  void add_GRANT_STATE(::flatbuffers::Offset<::flatbuffers::String> GRANT_STATE) {
+    fbb_.AddOffset(DSS::VT_GRANT_STATE, GRANT_STATE);
+  }
+  void add_FEED_HEAD(::flatbuffers::Offset<::flatbuffers::String> FEED_HEAD) {
+    fbb_.AddOffset(DSS::VT_FEED_HEAD, FEED_HEAD);
+  }
+  void add_LAST_PUBLICATION_CID(::flatbuffers::Offset<::flatbuffers::String> LAST_PUBLICATION_CID) {
+    fbb_.AddOffset(DSS::VT_LAST_PUBLICATION_CID, LAST_PUBLICATION_CID);
+  }
+  void add_LAST_PNM_CID(::flatbuffers::Offset<::flatbuffers::String> LAST_PNM_CID) {
+    fbb_.AddOffset(DSS::VT_LAST_PNM_CID, LAST_PNM_CID);
+  }
+  void add_DELTA_ROWS(uint64_t DELTA_ROWS) {
+    fbb_.AddElement<uint64_t>(DSS::VT_DELTA_ROWS, DELTA_ROWS, 0);
+  }
+  void add_LAST_SYNC_STARTED_AT(uint64_t LAST_SYNC_STARTED_AT) {
+    fbb_.AddElement<uint64_t>(DSS::VT_LAST_SYNC_STARTED_AT, LAST_SYNC_STARTED_AT, 0);
+  }
+  void add_REQUESTED_ACTION(dssAction REQUESTED_ACTION) {
+    fbb_.AddElement<int8_t>(DSS::VT_REQUESTED_ACTION, static_cast<int8_t>(REQUESTED_ACTION), 0);
+  }
+  void add_ORIGIN_ID(::flatbuffers::Offset<::flatbuffers::String> ORIGIN_ID) {
+    fbb_.AddOffset(DSS::VT_ORIGIN_ID, ORIGIN_ID);
+  }
+  void add_RETENTION(dssRetention RETENTION) {
+    fbb_.AddElement<int8_t>(DSS::VT_RETENTION, static_cast<int8_t>(RETENTION), 0);
+  }
   explicit DSSBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -452,8 +806,30 @@ inline ::flatbuffers::Offset<DSS> CreateDSS(
     ::flatbuffers::Offset<::flatbuffers::String> SYNC_FILTER = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> VERIFIED_CHUNKS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LAST_SYNCED_AT = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> ERROR = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> ERROR = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SCHEMA_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DATASET_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CONNECTOR_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CHANNEL_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TOPIC = 0,
+    bool SUBSCRIBED = false,
+    dssPinPolicy PIN_POLICY = dssPinPolicy::None,
+    ::flatbuffers::Offset<::flatbuffers::String> VISIBILITY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ENCRYPTION_STATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> GRANT_STATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> FEED_HEAD = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LAST_PUBLICATION_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LAST_PNM_CID = 0,
+    uint64_t DELTA_ROWS = 0,
+    uint64_t LAST_SYNC_STARTED_AT = 0,
+    dssAction REQUESTED_ACTION = dssAction::None,
+    ::flatbuffers::Offset<::flatbuffers::String> ORIGIN_ID = 0,
+    dssRetention RETENTION = dssRetention::ReplaceCurrent) {
   DSSBuilder builder_(_fbb);
+  builder_.add_LAST_SYNC_STARTED_AT(LAST_SYNC_STARTED_AT);
+  builder_.add_DELTA_ROWS(DELTA_ROWS);
   builder_.add_FLATSQL_MATERIALIZATION_MS(FLATSQL_MATERIALIZATION_MS);
   builder_.add_VERIFICATION_MS(VERIFICATION_MS);
   builder_.add_NETWORK_TRANSFER_MS(NETWORK_TRANSFER_MS);
@@ -470,6 +846,20 @@ inline ::flatbuffers::Offset<DSS> CreateDSS(
   builder_.add_LOCAL_ROWS(LOCAL_ROWS);
   builder_.add_TOTAL_ROWS(TOTAL_ROWS);
   builder_.add_SYNCED_ROWS(SYNCED_ROWS);
+  builder_.add_ORIGIN_ID(ORIGIN_ID);
+  builder_.add_LAST_PNM_CID(LAST_PNM_CID);
+  builder_.add_LAST_PUBLICATION_CID(LAST_PUBLICATION_CID);
+  builder_.add_FEED_HEAD(FEED_HEAD);
+  builder_.add_GRANT_STATE(GRANT_STATE);
+  builder_.add_ENCRYPTION_STATE(ENCRYPTION_STATE);
+  builder_.add_VISIBILITY(VISIBILITY);
+  builder_.add_TOPIC(TOPIC);
+  builder_.add_CHANNEL_ID(CHANNEL_ID);
+  builder_.add_CONNECTOR_ID(CONNECTOR_ID);
+  builder_.add_DATASET_ID(DATASET_ID);
+  builder_.add_SOURCE_NAME(SOURCE_NAME);
+  builder_.add_PROVIDER_ID(PROVIDER_ID);
+  builder_.add_SCHEMA_NAME(SCHEMA_NAME);
   builder_.add_ERROR(ERROR);
   builder_.add_LAST_SYNCED_AT(LAST_SYNCED_AT);
   builder_.add_VERIFIED_CHUNKS(VERIFIED_CHUNKS);
@@ -484,6 +874,10 @@ inline ::flatbuffers::Offset<DSS> CreateDSS(
   builder_.add_SNAPSHOT_ID(SNAPSHOT_ID);
   builder_.add_PROVIDER_PUBLIC_KEY(PROVIDER_PUBLIC_KEY);
   builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
+  builder_.add_RETENTION(RETENTION);
+  builder_.add_REQUESTED_ACTION(REQUESTED_ACTION);
+  builder_.add_PIN_POLICY(PIN_POLICY);
+  builder_.add_SUBSCRIBED(SUBSCRIBED);
   builder_.add_WIRE_SPEED_TARGET_MET(WIRE_SPEED_TARGET_MET);
   builder_.add_HAS_WIRE_SPEED_TARGET_MET(HAS_WIRE_SPEED_TARGET_MET);
   builder_.add_HAS_WIRE_SPEED_UTILIZATION(HAS_WIRE_SPEED_UTILIZATION);
@@ -531,7 +925,27 @@ inline ::flatbuffers::Offset<DSS> CreateDSSDirect(
     const char *SYNC_FILTER = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *VERIFIED_CHUNKS = nullptr,
     const char *LAST_SYNCED_AT = nullptr,
-    const char *ERROR = nullptr) {
+    const char *ERROR = nullptr,
+    const char *SCHEMA_NAME = nullptr,
+    const char *PROVIDER_ID = nullptr,
+    const char *SOURCE_NAME = nullptr,
+    const char *DATASET_ID = nullptr,
+    const char *CONNECTOR_ID = nullptr,
+    const char *CHANNEL_ID = nullptr,
+    const char *TOPIC = nullptr,
+    bool SUBSCRIBED = false,
+    dssPinPolicy PIN_POLICY = dssPinPolicy::None,
+    const char *VISIBILITY = nullptr,
+    const char *ENCRYPTION_STATE = nullptr,
+    const char *GRANT_STATE = nullptr,
+    const char *FEED_HEAD = nullptr,
+    const char *LAST_PUBLICATION_CID = nullptr,
+    const char *LAST_PNM_CID = nullptr,
+    uint64_t DELTA_ROWS = 0,
+    uint64_t LAST_SYNC_STARTED_AT = 0,
+    dssAction REQUESTED_ACTION = dssAction::None,
+    const char *ORIGIN_ID = nullptr,
+    dssRetention RETENTION = dssRetention::ReplaceCurrent) {
   auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
   auto PROVIDER_PUBLIC_KEY__ = PROVIDER_PUBLIC_KEY ? _fbb.CreateString(PROVIDER_PUBLIC_KEY) : 0;
   auto SNAPSHOT_ID__ = SNAPSHOT_ID ? _fbb.CreateString(SNAPSHOT_ID) : 0;
@@ -546,6 +960,20 @@ inline ::flatbuffers::Offset<DSS> CreateDSSDirect(
   auto VERIFIED_CHUNKS__ = VERIFIED_CHUNKS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*VERIFIED_CHUNKS) : 0;
   auto LAST_SYNCED_AT__ = LAST_SYNCED_AT ? _fbb.CreateString(LAST_SYNCED_AT) : 0;
   auto ERROR__ = ERROR ? _fbb.CreateString(ERROR) : 0;
+  auto SCHEMA_NAME__ = SCHEMA_NAME ? _fbb.CreateString(SCHEMA_NAME) : 0;
+  auto PROVIDER_ID__ = PROVIDER_ID ? _fbb.CreateString(PROVIDER_ID) : 0;
+  auto SOURCE_NAME__ = SOURCE_NAME ? _fbb.CreateString(SOURCE_NAME) : 0;
+  auto DATASET_ID__ = DATASET_ID ? _fbb.CreateString(DATASET_ID) : 0;
+  auto CONNECTOR_ID__ = CONNECTOR_ID ? _fbb.CreateString(CONNECTOR_ID) : 0;
+  auto CHANNEL_ID__ = CHANNEL_ID ? _fbb.CreateString(CHANNEL_ID) : 0;
+  auto TOPIC__ = TOPIC ? _fbb.CreateString(TOPIC) : 0;
+  auto VISIBILITY__ = VISIBILITY ? _fbb.CreateString(VISIBILITY) : 0;
+  auto ENCRYPTION_STATE__ = ENCRYPTION_STATE ? _fbb.CreateString(ENCRYPTION_STATE) : 0;
+  auto GRANT_STATE__ = GRANT_STATE ? _fbb.CreateString(GRANT_STATE) : 0;
+  auto FEED_HEAD__ = FEED_HEAD ? _fbb.CreateString(FEED_HEAD) : 0;
+  auto LAST_PUBLICATION_CID__ = LAST_PUBLICATION_CID ? _fbb.CreateString(LAST_PUBLICATION_CID) : 0;
+  auto LAST_PNM_CID__ = LAST_PNM_CID ? _fbb.CreateString(LAST_PNM_CID) : 0;
+  auto ORIGIN_ID__ = ORIGIN_ID ? _fbb.CreateString(ORIGIN_ID) : 0;
   return CreateDSS(
       _fbb,
       STATUS,
@@ -581,7 +1009,27 @@ inline ::flatbuffers::Offset<DSS> CreateDSSDirect(
       SYNC_FILTER__,
       VERIFIED_CHUNKS__,
       LAST_SYNCED_AT__,
-      ERROR__);
+      ERROR__,
+      SCHEMA_NAME__,
+      PROVIDER_ID__,
+      SOURCE_NAME__,
+      DATASET_ID__,
+      CONNECTOR_ID__,
+      CHANNEL_ID__,
+      TOPIC__,
+      SUBSCRIBED,
+      PIN_POLICY,
+      VISIBILITY__,
+      ENCRYPTION_STATE__,
+      GRANT_STATE__,
+      FEED_HEAD__,
+      LAST_PUBLICATION_CID__,
+      LAST_PNM_CID__,
+      DELTA_ROWS,
+      LAST_SYNC_STARTED_AT,
+      REQUESTED_ACTION,
+      ORIGIN_ID__,
+      RETENTION);
 }
 
 ::flatbuffers::Offset<DSS> CreateDSS(::flatbuffers::FlatBufferBuilder &_fbb, const DSST *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -629,6 +1077,26 @@ inline void DSS::UnPackTo(DSST *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = VERIFIED_CHUNKS(); if (_e) { _o->VERIFIED_CHUNKS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->VERIFIED_CHUNKS[_i] = _e->Get(_i)->str(); } } else { _o->VERIFIED_CHUNKS.resize(0); } }
   { auto _e = LAST_SYNCED_AT(); if (_e) _o->LAST_SYNCED_AT = _e->str(); }
   { auto _e = ERROR(); if (_e) _o->ERROR = _e->str(); }
+  { auto _e = SCHEMA_NAME(); if (_e) _o->SCHEMA_NAME = _e->str(); }
+  { auto _e = PROVIDER_ID(); if (_e) _o->PROVIDER_ID = _e->str(); }
+  { auto _e = SOURCE_NAME(); if (_e) _o->SOURCE_NAME = _e->str(); }
+  { auto _e = DATASET_ID(); if (_e) _o->DATASET_ID = _e->str(); }
+  { auto _e = CONNECTOR_ID(); if (_e) _o->CONNECTOR_ID = _e->str(); }
+  { auto _e = CHANNEL_ID(); if (_e) _o->CHANNEL_ID = _e->str(); }
+  { auto _e = TOPIC(); if (_e) _o->TOPIC = _e->str(); }
+  { auto _e = SUBSCRIBED(); _o->SUBSCRIBED = _e; }
+  { auto _e = PIN_POLICY(); _o->PIN_POLICY = _e; }
+  { auto _e = VISIBILITY(); if (_e) _o->VISIBILITY = _e->str(); }
+  { auto _e = ENCRYPTION_STATE(); if (_e) _o->ENCRYPTION_STATE = _e->str(); }
+  { auto _e = GRANT_STATE(); if (_e) _o->GRANT_STATE = _e->str(); }
+  { auto _e = FEED_HEAD(); if (_e) _o->FEED_HEAD = _e->str(); }
+  { auto _e = LAST_PUBLICATION_CID(); if (_e) _o->LAST_PUBLICATION_CID = _e->str(); }
+  { auto _e = LAST_PNM_CID(); if (_e) _o->LAST_PNM_CID = _e->str(); }
+  { auto _e = DELTA_ROWS(); _o->DELTA_ROWS = _e; }
+  { auto _e = LAST_SYNC_STARTED_AT(); _o->LAST_SYNC_STARTED_AT = _e; }
+  { auto _e = REQUESTED_ACTION(); _o->REQUESTED_ACTION = _e; }
+  { auto _e = ORIGIN_ID(); if (_e) _o->ORIGIN_ID = _e->str(); }
+  { auto _e = RETENTION(); _o->RETENTION = _e; }
 }
 
 inline ::flatbuffers::Offset<DSS> CreateDSS(::flatbuffers::FlatBufferBuilder &_fbb, const DSST *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -673,6 +1141,26 @@ inline ::flatbuffers::Offset<DSS> DSS::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _VERIFIED_CHUNKS = _o->VERIFIED_CHUNKS.size() ? _fbb.CreateVectorOfStrings(_o->VERIFIED_CHUNKS) : 0;
   auto _LAST_SYNCED_AT = _o->LAST_SYNCED_AT.empty() ? 0 : _fbb.CreateString(_o->LAST_SYNCED_AT);
   auto _ERROR = _o->ERROR.empty() ? 0 : _fbb.CreateString(_o->ERROR);
+  auto _SCHEMA_NAME = _o->SCHEMA_NAME.empty() ? 0 : _fbb.CreateString(_o->SCHEMA_NAME);
+  auto _PROVIDER_ID = _o->PROVIDER_ID.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_ID);
+  auto _SOURCE_NAME = _o->SOURCE_NAME.empty() ? 0 : _fbb.CreateString(_o->SOURCE_NAME);
+  auto _DATASET_ID = _o->DATASET_ID.empty() ? 0 : _fbb.CreateString(_o->DATASET_ID);
+  auto _CONNECTOR_ID = _o->CONNECTOR_ID.empty() ? 0 : _fbb.CreateString(_o->CONNECTOR_ID);
+  auto _CHANNEL_ID = _o->CHANNEL_ID.empty() ? 0 : _fbb.CreateString(_o->CHANNEL_ID);
+  auto _TOPIC = _o->TOPIC.empty() ? 0 : _fbb.CreateString(_o->TOPIC);
+  auto _SUBSCRIBED = _o->SUBSCRIBED;
+  auto _PIN_POLICY = _o->PIN_POLICY;
+  auto _VISIBILITY = _o->VISIBILITY.empty() ? 0 : _fbb.CreateString(_o->VISIBILITY);
+  auto _ENCRYPTION_STATE = _o->ENCRYPTION_STATE.empty() ? 0 : _fbb.CreateString(_o->ENCRYPTION_STATE);
+  auto _GRANT_STATE = _o->GRANT_STATE.empty() ? 0 : _fbb.CreateString(_o->GRANT_STATE);
+  auto _FEED_HEAD = _o->FEED_HEAD.empty() ? 0 : _fbb.CreateString(_o->FEED_HEAD);
+  auto _LAST_PUBLICATION_CID = _o->LAST_PUBLICATION_CID.empty() ? 0 : _fbb.CreateString(_o->LAST_PUBLICATION_CID);
+  auto _LAST_PNM_CID = _o->LAST_PNM_CID.empty() ? 0 : _fbb.CreateString(_o->LAST_PNM_CID);
+  auto _DELTA_ROWS = _o->DELTA_ROWS;
+  auto _LAST_SYNC_STARTED_AT = _o->LAST_SYNC_STARTED_AT;
+  auto _REQUESTED_ACTION = _o->REQUESTED_ACTION;
+  auto _ORIGIN_ID = _o->ORIGIN_ID.empty() ? 0 : _fbb.CreateString(_o->ORIGIN_ID);
+  auto _RETENTION = _o->RETENTION;
   return CreateDSS(
       _fbb,
       _STATUS,
@@ -708,7 +1196,27 @@ inline ::flatbuffers::Offset<DSS> DSS::Pack(::flatbuffers::FlatBufferBuilder &_f
       _SYNC_FILTER,
       _VERIFIED_CHUNKS,
       _LAST_SYNCED_AT,
-      _ERROR);
+      _ERROR,
+      _SCHEMA_NAME,
+      _PROVIDER_ID,
+      _SOURCE_NAME,
+      _DATASET_ID,
+      _CONNECTOR_ID,
+      _CHANNEL_ID,
+      _TOPIC,
+      _SUBSCRIBED,
+      _PIN_POLICY,
+      _VISIBILITY,
+      _ENCRYPTION_STATE,
+      _GRANT_STATE,
+      _FEED_HEAD,
+      _LAST_PUBLICATION_CID,
+      _LAST_PNM_CID,
+      _DELTA_ROWS,
+      _LAST_SYNC_STARTED_AT,
+      _REQUESTED_ACTION,
+      _ORIGIN_ID,
+      _RETENTION);
 }
 
 inline const DSS *GetDSS(const void *buf) {

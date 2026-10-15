@@ -3,6 +3,27 @@
   "jb2008": "propagator/hpop/lib/jb2008.h",
   "nrlmsise00": "third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)",
   "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
-  "json": "propagator/sgp4/src/cpp/include/nlohmann/json.hpp",
+  "sdsHeaders": [
+    "schema/ATM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/RFM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/FRM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/TIM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PCE/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/IDM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PLD/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/LCC/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/CAT/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PPE/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/NCD/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/EOP/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/SPW/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PRW/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/MET/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/CVR/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PVN/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/OMM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/OEM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/DCL/main.fbs (scripts/lib/sds-cpp-headers.mjs)"
+  ],
   "threadModel": "single-thread"
 }

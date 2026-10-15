@@ -3,7 +3,8 @@
 // IGS products offered under the IGS terms of use and kept in files/orbit-products/fixtures with their provenance; expected
 // positions are the numbers printed in those files. Synthetic files stand for what is not ours to reproduce (the ESA/ESOC
 // GLONASS and low-Earth-orbit products): velocity records (decimetres per second in the file, kilometres per second in the
-// OEM), an absent position, other time systems and frames.
+// OEM), an absent position, other time systems and frames. Typed contracts 1.0: each file arrives as the HttpResponse
+// (HRSP) hostcap/http-request answers, and the report is a FlowNotice (FNTC).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -15,6 +16,7 @@ import { ByteBuffer } from 'flatbuffers';
 import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decodeFlowNotice, encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { sp3File } from './fixtures/sp3-format.mjs';
 
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
@@ -22,7 +24,10 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', i
 const standardsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const fixture = (name) => fs.readFileSync(fileURLToPath(new URL(`../../../files/orbit-products/fixtures/${name}`, import.meta.url)));
 
-const request = (payload) => ({ methodId: 'read_sp3', inputs: [{ portId: 'source', payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } }] });
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const URL_ = 'https://igs.bkg.bund.de/root_ftp/IGS/products/orbit.sp3';
+const request = (body, { status = 200, error = '' } = {}) => ({ methodId: 'read_sp3', inputs: [{ portId: 'source', typeRef: HRSP,
+  payload: encodeHttpResponse({ url: URL_, status, error, headers: { 'content-type': 'text/plain' }, body: new Uint8Array(body), retrievedMs: Date.UTC(2026, 9, 14) }) }] });
 async function harness(t) {
   const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
   t.after(() => host.destroy());
@@ -32,7 +37,24 @@ const oems = (result) => {
   assert.equal(result.statusCode, 0, result.errorMessage);
   return result.outputs.filter((f) => f.portId === 'oem').map((f) => OEM.getRootAsOEM(new ByteBuffer(f.payload)).unpack());
 };
-const report = (result) => JSON.parse(new TextDecoder().decode(result.outputs.find((f) => f.portId === 'report').payload));
+// The report: one FlowNotice, ITEMS "name=value" (numbers and booleans as JSON writes them), a satellite's "satellite.<id>.<name>=value".
+const report = (result) => {
+  const n = decodeFlowNotice(result.outputs.find((f) => f.portId === 'report').payload);
+  assert.deepEqual([n.kind, n.schema, n.sourceName, n.reason], ['info', 'OEM', 'sp3', 'sp3']);
+  assert.equal(Number(n.count), result.outputs.filter((f) => f.portId === 'oem').length);
+  const value = (v) => (v === 'true' ? true : v === 'false' ? false : /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(v) ? Number(v) : v);
+  const out = { satellites: [] };
+  for (const entry of n.items) {
+    const at = entry.indexOf('=');
+    const key = entry.slice(0, at), v = value(entry.slice(at + 1));
+    const sat = key.match(/^satellite\.([^.]+)\.(.+)$/);
+    if (!sat) { out[key] = key === 'fileVersion' || key === 'positionVelocity' || key === 'sha256' ? entry.slice(at + 1) : v; continue; }
+    let s = out.satellites.find((x) => x.id === sat[1]);
+    if (!s) out.satellites.push((s = { id: sat[1] }));
+    s[sat[2]] = v;
+  }
+  return out;
+};
 const block = (oem, k = 0) => oem.EPHEMERIS_DATA_BLOCK[k];
 const name = (oem) => block(oem).OBJECT.OBJECT_NAME;
 const CUSTOM_FRAME_WRAPPER = 4; // RFMUnion.CustomFrameWrapper (NONE, Celestial, Spacecraft, Orbit, Custom)
@@ -132,4 +154,19 @@ test('a header that names an inertial frame gives that frame; a time system with
     assert.equal(refused.outputs?.length ?? 0, 0, `${label}: partial output`);
   }
   assert.equal(oems(await host.invoke(request(Buffer.from(good)))).length, 1);
+});
+
+test('HTTP 304 is one FlowNotice (Unchanged) and no OEM; another status or a transport error is refused whole', async (t) => {
+  const host = await harness(t);
+  const unchanged = await host.invoke(request(new Uint8Array(0), { status: 304 }));
+  assert.equal(unchanged.statusCode, 0, unchanged.errorMessage);
+  assert.equal(unchanged.outputs.length, 1);
+  const n = decodeFlowNotice(unchanged.outputs[0].payload);
+  assert.deepEqual([unchanged.outputs[0].portId, n.kind, n.reason, n.items], ['report', 'unchanged', 'not-modified', [URL_]]);
+  const good = Buffer.from(sp3File({ sats: [{ id: 'G01', epochs: [[26000, 0, 0], [25990, 100, 5], [25960, 200, 10]] }] }));
+  for (const [label, options] of [['HTTP 404', { status: 404 }], ['a transport error', { status: 0, error: 'connection reset' }]]) {
+    const refused = await host.invoke(request(good, options));
+    assert.notEqual(refused.statusCode, 0, label);
+    assert.equal(refused.outputs?.length ?? 0, 0, `${label}: partial output`);
+  }
 });

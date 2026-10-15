@@ -1,11 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.data-source.retrieval",
   "name": "SDN Data Retrieval",
-  "version": "0.1.0",
-  "description": "Engine-native FlatSQL retrieval module: bulk per-epoch OMM stream retrieval (storage.flatsql_epoch_stream) and generic FlatSQL query streaming (storage.flatsql_query_stream). Streams pass through verbatim as ALIGNED size-prefixed FlatBuffer frames. Body-reference delivery (loop C.5c): when the request carries \"deliver\":\"ref\", it is forwarded to the storage op; a host that answers with result.ref (no stream segment) keeps the bytes host-side and this module emits a small {\"$sdnbodyref\":1,...} JSON descriptor frame on the stream/rows port instead of the bytes. Hosts that ignore \"deliver\" keep byte delivery and the stream passes through verbatim as before.",
+  "version": "0.2.0",
+  "description": "Engine-native FlatSQL retrieval for the data-retrieval flow (typed contracts 1.0: SDS $QRP in and out, no JSON, no CAQ). Method \"omm_bulk\" (the per-standard bulk route, any SDS standard the store holds): an optional $QRP Request (SCHEMA_NAME, SOURCE_NAME, TIME_PROFILE, PROFILE_EPOCH_MS, LIMIT) resolved request > module config (plugin.getConfig entries \"profiles.<SCHEMA>.profile|source|limit|epoch\") > compiled fallback (nearest, 50000, epoch = clock.now) -> storage.flatsql_epoch_stream (SDS $PIV EpochStreamParams; TIME_PROFILE Unspecified = not stated -> config -> nearest; the engine profiles are nearest, as_of, forward; Latest is refused) or, for TIME_PROFILE All (every record in the window), storage.flatsql_query_stream over the standard's table filtered by the source shadow \"<CODE>@<source>\" and, for $OMM only, by FROM_EPOCH_MS / TO_EPOCH_MS on USER_DEFINED_EPOCH_TIMESTAMP (a window on another standard or with a per-object profile is refused 400 window-unsupported). Method \"data_query\": a $QRP Request carrying SQL and typed PARAMETERS -> storage.flatsql_query_stream (raw sql + list sql_params SqlValue; a Bytes parameter or text over 255 bytes is refused, never truncated). Both answer \"decision\" (the request, or a $QRP KIND Error) and \"page\" (a $QRP page stream: the KIND Page header then the host's record frames verbatim, with RECORD_COUNT and a W/\"fnv1a64-...\" ETAG over the records). Values over a hostcall bound are refused by name, never truncated. Every $QRP Error carries HTTP_STATUS; success pages carry 200. Delivery: a request whose REPRESENTATION is not Json asks the host for DELIVER Ref; a host answering a BodyRef keeps the bytes for the egress and the page is the header ALONE with BODY_REF_TOKEN / BODY_REF_SIZE, RECORD_COUNT = the host's frame count and ETAG W/\"fnv1a64-<host hash>\". A host that ignores Ref, and every Json request, gets the bytes inline. The former engine-linked (SDN_FLATSQL_LINKED) lane is retired.",
   "pluginFamily": "data_source",
   "capabilities": [
-    "storage_query"
+    "storage_query",
+    "clock"
   ],
   "externalInterfaces": [
     {
@@ -14,12 +15,25 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine-native retrieval ops (storage.flatsql_epoch_stream, storage.flatsql_query_stream, storage.flatsql_cache_key).",
+      "description": "Host FlatSQL engine-native retrieval ops as SDS $PIV hostcalls: storage.flatsql_epoch_stream (EpochStreamParams -> StreamResult + raw stream) and storage.flatsql_query_stream (SqlStreamParams + raw sql + list sql_params -> StreamResult + raw stream).",
       "properties": {
         "hostOps": [
           "storage.flatsql_epoch_stream",
-          "storage.flatsql_query_stream",
-          "storage.flatsql_cache_key"
+          "storage.flatsql_query_stream"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults omm_bulk's epoch when neither the request nor the config states one; plugin.getConfig (ungated) supplies the per-standard profile defaults.",
+      "properties": {
+        "hostOps": [
+          "clock.now",
+          "plugin.getConfig"
         ]
       }
     }
@@ -35,122 +49,159 @@
   "methods": [
     {
       "methodId": "omm_bulk",
-      "displayName": "Bulk OMM Retrieval",
+      "displayName": "Bulk Records By Epoch Profile",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sds-caq-epoch-request",
+              "setId": "sds-qrp-request",
               "allowedTypes": [
                 {
-                  "schemaName": "CAQ.fbs",
-                  "fileIdentifier": "$CAQ",
-                  "rootTypeName": "CAQ"
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Optional SDS CAQ envelope. CAQRequest.QUERY carries a host-specific JSON override object {schema,source,profile,epoch,limit}; CAQRequest.MAX_COUNT (when > 0) overrides the row limit."
+              "description": "$QRP KIND Request: SCHEMA_NAME (standard code, default OMM), SOURCE_NAME, TIME_PROFILE (Unspecified = not stated; All = every record in the FROM_EPOCH_MS / TO_EPOCH_MS window), PROFILE_EPOCH_MS (0 = config or now), LIMIT (0 = config or 50000), REPRESENTATION, ETAG (If-None-Match). A KIND Error arriving here is passed on untouched."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional per-call overrides. Resolution order: request frame > module config (plugin.getConfig profiles) > compiled fallback (profile=nearest, epoch=now, limit=50000)."
+          "description": "Optional $QRP Request from foundation/http-route (the \"/<code>/bulk\" route). Without one, the config / compiled defaults apply."
         }
       ],
       "outputPorts": [
         {
-          "portId": "stream",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sds-omm-aligned-stream",
+              "setId": "sds-qrp-decision",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $OMM FlatBuffer stream passed through verbatim from storage.flatsql_epoch_stream."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Verbatim aligned size-prefixed OMM FlatBuffer stream."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Resolves a per-standard epoch query profile (request frame > config > defaults) and streams the matching OMM records from the host FlatSQL engine."
-    },
-    {
-      "methodId": "data_query",
-      "displayName": "FlatSQL Query",
-      "inputPorts": [
-        {
-          "portId": "query",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-caq-sql-query",
-              "allowedTypes": [
-                {
-                  "schemaName": "CAQ.fbs",
-                  "fileIdentifier": "$CAQ",
-                  "rootTypeName": "CAQ"
-                }
-              ],
-              "description": "SDS CAQ envelope. CAQRequest.QUERY carries either a plain SQL string or a JSON object {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]}."
+              "description": "$QRP KIND Request (served) or KIND Error. Error codes (HTTP_STATUS set): invalid-profile / invalid-parameter / window-unsupported / missing-sql / unsupported-parameter / query-failed (400), host-failed (502), unavailable (503)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "FlatSQL query request."
-        }
-      ],
-      "outputPorts": [
+          "description": "Exactly one $QRP per invoke: the request on success (omm_bulk without a request frame: the default Request it resolved), or a KIND Error (ERROR_CODE/MESSAGE, the request's REPRESENTATION and ETAG carried) when the request is refused or the host fails."
+        },
         {
-          "portId": "rows",
+          "portId": "page",
           "acceptedTypeSets": [
             {
-              "setId": "flatsql-aligned-row-stream",
+              "setId": "sds-qrp-page",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed FlatBuffer stream (schema depends on the query) passed through verbatim from storage.flatsql_query_stream. SDK manifest rules cannot express a generic aligned-binary type, so the port declares the generic flatbuffer ref; runtime frames carry the aligned-binary wire format in their TAB descriptors."
+              "description": "$QRP page stream: [u32 len][size-prefixed $QRP KIND Page header] (+ a zero u32 padding prefix when the header is not 8-byte aligned), then the host's size-prefixed record frames VERBATIM. Header: SCHEMA_NAME (standard code), FILE_IDENTIFIER (first record frame), RECORD_COUNT (frames that follow), ETAG W/\"fnv1a64-<16 hex>\" over the record stream bytes, REPRESENTATION and the resolved request echoed. With a host body reference (DELIVER Ref) the page is the header alone carrying BODY_REF_TOKEN / BODY_REF_SIZE; HTTP_STATUS 200."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Verbatim aligned size-prefixed FlatBuffer result stream."
+          "description": "Present only when the request was served: one $QRP page stream."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Executes a FlatSQL query through the host storage.flatsql_query_stream op and streams the raw aligned FlatBuffer result."
+      "description": "Resolves the per-standard epoch query profile (request > config > defaults), streams the matching records from storage.flatsql_epoch_stream, and answers the request on \"decision\" plus a $QRP page stream on \"page\". BATCHING: every input port is single-stream BY CONTRACT and ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch are declarative only), so a surplus frame is refused with error code \"batched-input-frames\" naming the port and the count rather than silently discarded (graph task modules-guest-nodes-drop-batched-frames)."
+    },
+    {
+      "methodId": "data_query",
+      "displayName": "FlatSQL Data Query",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-query",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Request: SQL (required), PARAMETERS (QRPValue Null/Bool/Int/Float/Text; Bytes and text over 255 bytes are refused), REPRESENTATION, ETAG. A KIND Error arriving here is passed on untouched."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $QRP Request from foundation/http-route (the \"/query\" route)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-decision",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP KIND Request (served) or KIND Error. Error codes (HTTP_STATUS set): invalid-profile / invalid-parameter / window-unsupported / missing-sql / unsupported-parameter / query-failed (400), host-failed (502), unavailable (503)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one $QRP per invoke: the request on success (omm_bulk without a request frame: the default Request it resolved), or a KIND Error (ERROR_CODE/MESSAGE, the request's REPRESENTATION and ETAG carried) when the request is refused or the host fails."
+        },
+        {
+          "portId": "page",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-page",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP page stream: [u32 len][size-prefixed $QRP KIND Page header] (+ a zero u32 padding prefix when the header is not 8-byte aligned), then the host's size-prefixed record frames VERBATIM. Header: SCHEMA_NAME (standard code), FILE_IDENTIFIER (first record frame), RECORD_COUNT (frames that follow), ETAG W/\"fnv1a64-<16 hex>\" over the record stream bytes, REPRESENTATION and the resolved request echoed. With a host body reference (DELIVER Ref) the page is the header alone carrying BODY_REF_TOKEN / BODY_REF_SIZE; HTTP_STATUS 200."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Present only when the request was served: one $QRP page stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Executes the request's SQL with its typed parameters through storage.flatsql_query_stream and answers the request on \"decision\" plus a $QRP page stream on \"page\" (SCHEMA_NAME / FILE_IDENTIFIER from the first record frame). BATCHING: every input port is single-stream BY CONTRACT and ENFORCED IN CODE: the compiled flow runtime drains a node's queue port-blind (maxStreams/maxBatch are declarative only), so a surplus frame is refused with error code \"batched-input-frames\" naming the port and the count rather than silently discarded (graph task modules-guest-nodes-drop-batched-frames)."
     }
   ],
   "schemasUsed": [
     {
-      "schemaName": "CAQ.fbs",
-      "fileIdentifier": "$CAQ",
-      "rootTypeName": "CAQ"
-    },
-    {
-      "schemaName": "OMM.fbs",
-      "fileIdentifier": "$OMM",
-      "rootTypeName": "OMM"
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [

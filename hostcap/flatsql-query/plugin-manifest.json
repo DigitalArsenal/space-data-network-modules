@@ -1,11 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
   "name": "SDN Host FlatSQL Query Node",
-  "version": "0.2.0",
-  "description": "Generalized engine query node wrapping the storage.flatsql_query_stream hostcall. Method \"query\": input \"query\" JSON {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]} -> the ALIGNED size-prefixed FlatBuffer result stream passes through VERBATIM on \"stream\". This is the generic engine query node; data-source/retrieval remains the profile-aware variant (epoch profiles, SDS CAQ request envelopes). Host support: server-only today \u2014 storage.flatsql_query_stream is served by the Go node (sdn-server modulert/caps/storage.go, capability storage_query); the SDK BrowserHost storage adapter exposes storage.query/write/delete but not the flatsql stream ops. TRANSITIONAL: flatsql is becoming a component DEPENDENCY with direct in-wasm linkage in a later task; this node uses the hostcall bridge until that lands. v0.2.0 adds sandbox_query (gateway loop G.5): the PUBLIC /api/v1/query surface over the policy-mediated READ-ONLY storage.query_sandboxed hostcall \u2014 the engine enforces the sandbox IN-WASM (authorizer over record tables/shadow tables/unified views, single-statement SELECT-only, statement timeout, row/byte caps; host config gateway.query). sort/limit/profile request params compose the effective SQL in this node; storage.query_surface serves the discoverable queryable-surface listing (tables/views/columns + effective caps) for GET.",
+  "version": "0.3.0",
+  "description": "Host FlatSQL query connector (typed contracts 1.0). No JSON between modules and no base64. Method \"query\" is the FlatSQL node's query_records contract (flatsql cpp/src/sdn_node.cpp) served over the host bridge: ONE $FSO control frame (OPERATION QUERY_RECORDS, QUERY = SQL bytes, PARAMETERS in FlatSQL's tagged encoding [u8 tag][u32le size][bytes], PARAMETER_COUNT, REQUEST_ID) becomes ONE storage.flatsql_query_stream hostcall (SDS $PIV: SqlStreamParams DELIVER Inline, raw sql, list sql_params SqlValue) and answers $FSB QUERY_RESULT chunks on \"records\" (DATA <= 1 MiB each, CHUNK_SEQUENCE from 0, FINAL on the last, at least one chunk) plus ONE $FSO on \"status\" (COMPLETE with AFFECTED_RECORDS = rows and RESULT_BYTES, or INVALID_ARGUMENT / RESOURCE_EXHAUSTED / INTERNAL_ERROR with ERROR_CODE and MESSAGE; a database-semantics failure answers on status alone, invoke status 0, as the FlatSQL node does). A parameter the bridge's SqlValue record cannot carry (bytes; a string over 255 bytes) is refused (unsupported-parameter), never truncated. Method \"sandbox_query\" serves the PUBLIC /api/v1/query surface: a QRP Request on \"query\" (SQL + PARAMETERS, SORT_FIELD/SORT_DESC and LIMIT composed here into the effective SQL, or a TIME_PROFILE over the unified OMM view: Nearest/AsOf/Forward per object with PROFILE_EPOCH_MS (0 = clock.now) and SOURCE_NAME, or All = every record of the source in the FROM_EPOCH_MS / TO_EPOCH_MS window; Unspecified = no profile, SQL required; a window with SQL or a per-object profile is refused 400 window-unsupported) goes to the READ-ONLY storage.query_sandboxed hostcall (the engine enforces the sandbox in-wasm: authorizer, single-statement SELECT, timeout, row/byte caps); a QRP Request on \"surface\" goes to storage.query_surface. It answers the request verbatim on \"decision\" plus ONE QRP-headed size-prefixed stream on \"page\" (a Page header - FILE_IDENTIFIER, SCHEMA_NAME, RECORD_COUNT, ETAG W/\"fnv1a64-...\" over the records - then the record frames verbatim; or a projection page with COLUMNS + ROWS; or the surface page with TABLES + MAX_ELAPSED_MS/MAX_ROWS/MAX_BYTES), or a QRP Error on \"decision\" with HTTP_STATUS set (missing-sql, ambiguous-query, invalid-profile, invalid-sort, window-unsupported, unsupported-parameter, query-failed 400; not-acceptable 406; timeout / too-large 422; host-failed 502). Pages carry HTTP_STATUS 200. Delivery: a non-Json request asks DELIVER Ref; a host BodyRef answer makes the page the header ALONE with BODY_REF_TOKEN / BODY_REF_SIZE (RECORD_COUNT = the host's frame count, ETAG W/\"fnv1a64-<host hash>\"), resolved by the egress; a host that ignores Ref, and every Json request, gets the bytes inline. Host support: storage.* is served by the Go node (capability storage_query); the SDK JS hosts have no typed adapter for these ops yet.",
   "pluginFamily": "infrastructure",
   "capabilities": [
-    "storage_query"
+    "storage_query",
+    "clock"
   ],
   "externalInterfaces": [
     {
@@ -14,12 +15,25 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface).",
       "properties": {
         "hostOps": [
           "storage.flatsql_query_stream",
           "storage.query_sandboxed",
           "storage.query_surface"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults a profile query's epoch to now (Go node built-in; capability-gated on the SDK hosts).",
+      "properties": {
+        "hostOps": [
+          "clock.now"
         ]
       }
     }
@@ -35,72 +49,123 @@
   "methods": [
     {
       "methodId": "query",
-      "displayName": "FlatSQL Query Stream",
+      "displayName": "FlatSQL Query Records",
       "inputPorts": [
         {
           "portId": "query",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-flatsql-query-json",
+              "setId": "sds-fso-query-records",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"sql\":\"...\" (required),\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]}. Tagged params forward verbatim to the host op (decoded by sdn-server decodeTaggedParams)."
+              "description": "$FSO (SDS FSO): OPERATION QUERY_RECORDS, QUERY = UTF-8 SQL bytes, PARAMETERS = FlatSQL tagged parameters (tags 0 null, 1 bool, 2 int64, 3 float64, 4 string, 5 bytes), PARAMETER_COUNT, REQUEST_ID (echoed)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The FlatSQL query request."
+          "description": "ONE FlatSQL control frame per invocation."
         }
       ],
       "outputPorts": [
         {
-          "portId": "stream",
+          "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "flatsql-aligned-row-stream",
+              "setId": "sds-fsb-query-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed FlatBuffer stream (schema depends on the query) passed through verbatim from storage.flatsql_query_stream. SDK manifest rules cannot express a generic aligned-binary type, so the port declares the generic flatbuffer ref; runtime frames carry the aligned-binary wire format in their TAB descriptors (requiredAlignment 8), matching data-source/retrieval's rows port."
+              "description": "$FSB (SDS FSB): KIND QUERY_RESULT, DATA = the aligned size-prefixed result stream in chunks of at most 1 MiB, CHUNK_SEQUENCE from 0, FINAL on the last, TOTAL_BYTES, RECORD_COUNT = rows, COLUMN_COUNT."
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 4096,
           "required": false,
-          "description": "Verbatim aligned size-prefixed FlatBuffer result stream."
+          "description": "The query result as ordered $FSB chunks (at least one)."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fso-status",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$FSO (SDS FSO): OPERATION QUERY_RECORDS, REQUEST_ID, STATUS COMPLETE (AFFECTED_RECORDS rows, RESULT_BYTES) or INVALID_ARGUMENT / RESOURCE_EXHAUSTED / INTERNAL_ERROR with ERROR_CODE (invalid-control-frame, unsupported-parameter, query-failed) and MESSAGE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one status frame per invocation."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Executes a FlatSQL query through the transitional storage.flatsql_query_stream hostcall bridge and streams the raw aligned result verbatim. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. Also fixed here: query read plugin_get_input_frame(0) with NO port filter, and sandbox_query fell back to frame 0 when it could not find its decision port. Frame 0 is not promised to be on any particular port, so either could have executed a frame belonging to a different port entirely - a CONFUSED frame, not merely a dropped one. Port-filtered access only."
+      "description": "Executes one FlatSQL query through the storage.flatsql_query_stream hostcall (typed: SDS $PIV) and answers the result as $FSB chunks plus one $FSO status - the FlatSQL node's query_records contract. BATCHING: every input port here is single-stream BY CONTRACT and ENFORCED IN CODE: maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime (space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget of 64), so a surplus frame on a port is refused with error code \"batched-input-frames\", naming the port and the count, rather than silently destroyed (graph task modules-guest-nodes-drop-batched-frames). Port-filtered access only."
     },
     {
       "methodId": "sandbox_query",
       "displayName": "Sandboxed Public Query",
       "inputPorts": [
         {
-          "portId": "decision",
+          "portId": "query",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-public-query-decision-json",
+              "setId": "sds-qrp-query-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision JSON from foundation/http-route route_public_query (route=public_query|query_surface|error|not_found)."
+              "description": "QRP KIND Request: SQL + PARAMETERS (QRPValue Null/Bool/Int/Float/Text), SORT_FIELD + SORT_DESC, LIMIT (TIME_PROFILE Unspecified); or TIME_PROFILE Nearest/AsOf/Forward with PROFILE_EPOCH_MS (0 = now) and SOURCE_NAME; or TIME_PROFILE All with SOURCE_NAME and an optional FROM_EPOCH_MS / TO_EPOCH_MS window; REPRESENTATION; ETAG (= If-None-Match)."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One routing decision per request."
+          "required": false,
+          "description": "A public query (exactly one of query / surface carries a frame)."
+        },
+        {
+          "portId": "surface",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-surface-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "QRP KIND Request with REPRESENTATION and ETAG only."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A request for the queryable-surface listing (exactly one of query / surface carries a frame)."
         }
       ],
       "outputPorts": [
@@ -108,114 +173,48 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-public-query-decision-json",
+              "setId": "sds-qrp-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The decision forwarded verbatim on success, or rewritten to route=error with status (400 validation / 406 projection-as-flatbuffer / 422 timeout|row-cap|byte-cap / 502 host failure), error message and machine-readable code."
+              "description": "The QRP request verbatim when served, else a QRP Error (ERROR_CODE, MESSAGE, HTTP_STATUS, REPRESENTATION and ETAG carried over)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Decision for foundation/http-respond."
+          "description": "Exactly one decision per invocation, for foundation/http-respond respond_query."
         },
         {
-          "portId": "body",
+          "portId": "page",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-public-query-body",
+              "setId": "sds-qrp-page-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Response body: aligned size-prefixed record frames verbatim / host body-reference descriptor (fb path), engine-assembled bare-array JSON with schema-exact column keys (projection results), or the queryable-surface JSON object (GET). Absent on error decisions and on the full-record json path (which rides the stream port)."
+              "description": "ONE size-prefixed stream: the QRP Page header (FinishSizePrefixed, padded to 8 bytes with a zero-length prefix) followed by the record frames verbatim (FILE_IDENTIFIER from the first frame, RECORD_COUNT, ETAG W/\"fnv1a64-<16 hex>\" over the records); a projection page (COLUMNS + ROWS, TOTAL_COUNT); or the surface page (TABLES + MAX_ELAPSED_MS / MAX_ROWS / MAX_BYTES). Header-only pages carry an ETAG over the header built without one. Every page carries HTTP_STATUS 200. With a host body reference the page is the header alone carrying BODY_REF_TOKEN / BODY_REF_SIZE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Body frame for http-respond (absent when the stream port carries the result or on errors)."
-        },
-        {
-          "portId": "omm_body",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-public-query-omm-body",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
-                }
-              ],
-              "description": "Full-record $OMM result stream on the flatbuffer response path."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Typed $OMM body for foundation/http-respond."
-        },
-        {
-          "portId": "etag",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-etag-string",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Weak FNV-1a-64 entity tag (W/\"fnv1a64-<16 hex>\") over the raw result stream (shared by both encodings) or over the JSON payload for rows/surface results."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Entity tag for conditional GET."
-        },
-        {
-          "portId": "stream",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-public-query-omm-stream",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
-                }
-              ],
-              "description": "Full-record result stream on the json path, fed to foundation/omm-json for the bare-array presentation."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "json path only: the raw record stream for the JSON presentation adapter."
+          "description": "The answer, only when served."
         }
       ],
-      "description": "Execute one sandboxed public query (gateway loop G.5). route=public_query: compose the effective SQL (raw sql wrapped with validated sort/limit, or a named epoch profile nearest|as_of|forward over the unified OMM view with default epoch=now) and call the READ-ONLY storage.query_sandboxed host op (want=stream + body-ref for flatbuffer, want=auto for json). route=query_surface: storage.query_surface listing. Sandbox rejections map to 400/406/422; the engine enforces read-only/single-statement/timeout/caps IN-WASM. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. Also fixed here: query read plugin_get_input_frame(0) with NO port filter, and sandbox_query fell back to frame 0 when it could not find its decision port. Frame 0 is not promised to be on any particular port, so either could have executed a frame belonging to a different port entirely - a CONFUSED frame, not merely a dropped one. Port-filtered access only.",
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Executes one sandboxed public query (storage.query_sandboxed; WANT Stream for FlatBuffer/Default, Auto for Json; DELIVER Ref for FlatBuffer/Default, Inline for Json) or lists the queryable surface (storage.query_surface), composing profile SQL and sort/limit in-wasm. BATCHING: every input port here is single-stream BY CONTRACT and ENFORCED IN CODE: maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime (space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget of 64), so a surplus frame on a port is refused with error code \"batched-input-frames\", naming the port and the count, rather than silently destroyed (graph task modules-guest-nodes-drop-batched-frames). Port-filtered access only."
     }
   ],
   "buildArtifacts": [

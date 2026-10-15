@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "clock_module.cpp");
@@ -14,7 +16,14 @@ const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+// The "time" port carries the SDS standard TIM ($TIM). The SDK compiler stages only its runtime headers, so the
+// standard's generated C++ header (scripts/lib/sds-cpp-headers.mjs, from the standards' schema) is inlined in place of
+// `#include "TIM_generated.h"`: its include guard is renamed (the SDK's sds/PIV and sds/TAB headers are also
+// "main_generated.h") and its flatc version static_assert relaxed, as the SDK does for its runtime headers.
+const timHeader = (await generateSdsHeader("TIM", import.meta.url))
+  .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_SDS_TIM_MAIN_H_")
+  .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "");
+const sourceCode = (await fs.readFile(sourcePath, "utf8")).replace(/^#include "TIM_generated\.h".*$/m, () => timHeader);
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
