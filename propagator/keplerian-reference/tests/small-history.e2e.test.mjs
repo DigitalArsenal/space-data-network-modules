@@ -1,12 +1,13 @@
-// E2E for keplerian-reference 1.8.1/1.8.2: a row's drawn place depends on the epoch
-// asked for and nothing else. 1.8.0 replaced a row's elements in place from
-// wherever the clock had last been, with a fixed 6-day RK4 step that was twice
-// (3200) Phaethon's dynamical time at perihelion: after the clock visited
+// E2E for keplerian-reference 1.8.1-1.9.0: a row's drawn place depends on the
+// epoch asked for and nothing else. 1.8.0 replaced a row's elements in place
+// from wherever the clock had last been, with a fixed 6-day RK4 step that was
+// twice (3200) Phaethon's dynamical time at perihelion: after the clock visited
 // -50 days, Phaethon brought back to its element epoch was 12,886 km off
 // (verifier, 2026-10-14). Now the perturbed path runs on checkpoints keyed to
-// the element epoch, each reached only from its neighbour toward the epoch,
-// with the step refined near the Sun. 1.8.2 caches anchor checkpoints on the
-// way out and a work slot readied ahead of a clock running toward the epoch.
+// the element epoch (each row's own grid phase; 4 days for a near-Earth orbit,
+// 8 for the rest), each reached only from its neighbour toward the epoch, with
+// the step refined near the Sun. 1.9.0 keeps one anchor checkpoint, moved as
+// the row passes checkpoints, for a run back toward the epoch.
 //   1. Bit-identical states and snapshots whatever the clock visited first
 //      (the 1,004-row astorb sample and three low-perihelion asteroids).
 //   2. The low-perihelion rows against JPL Horizons (geometric heliocentric
@@ -94,7 +95,7 @@ test("a snapshot of the 1,004-row astorb sample is bit-identical after a -50 day
   assert.deepEqual(back, fresh);
 });
 
-test("a clock run back toward the epoch and across it draws what a fresh catalog draws at every epoch (1.8.2 anchors and work slot)", () => {
+test("a clock run back toward the epoch and across it draws what a fresh catalog draws at every epoch (the anchor)", () => {
   const n = ingest(sample);
   const days = [];
   for (let d = 58; d >= -58; d -= 1.5) days.push(d);
@@ -103,6 +104,28 @@ test("a clock run back toward the epoch and across it draws what a fresh catalog
     ingest(sample);
     assert.deepEqual(run[i], snapshot(n, EPOCH + d * DAY), `${d} d`);
   });
+});
+
+test("random clock histories (runs either way at 0.3-4 days a snapshot, jumps, epoch crossings) draw what a fresh catalog draws", () => {
+  const n = ingest(sample);
+  const targets = [-57.3, -41, -22.2, -6.5, -1.9, 0.4, 3.3, 12.1, 26.9, 44.4, 57.7];
+  const fresh = targets.map((d) => {
+    ingest(sample);
+    return snapshot(n, EPOCH + d * DAY);
+  });
+  let seed = 20261014;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  for (let trial = 0; trial < 6; trial += 1) {
+    ingest(sample);
+    let d = rnd() * 116 - 58;
+    for (let step = 0; step < 40; step += 1) {
+      if (rnd() < 0.1) d = rnd() * 116 - 58;
+      else d = Math.max(-58, Math.min(58, d + (rnd() < 0.5 ? -1 : 1) * (0.3 + rnd() * 3.7)));
+      snapshot(n, EPOCH + d * DAY);
+    }
+    const k = Math.floor(rnd() * targets.length);
+    assert.deepEqual(snapshot(n, EPOCH + targets[k] * DAY), fresh[k], `trial ${trial} at ${targets[k]} d`);
+  }
 });
 
 test("low-perihelion asteroids follow JPL Horizons within 300 km over +-55 days after any clock history (2005 MB: its epoch offset + 1,500 km)", () => {

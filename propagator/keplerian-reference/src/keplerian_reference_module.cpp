@@ -52,6 +52,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <new>
+#include <type_traits>
 #include <vector>
 
 // -----------------------------------------------------------------------------
@@ -803,34 +805,52 @@ constexpr int32_t kErrOutsideValidity = -10;
 constexpr double kDefaultSmallValiditySeconds = 60.0 * 86400.0;
 double g_small_validity = kDefaultSmallValiditySeconds;
 
-/// The perturbed path is carried on a fixed grid of checkpoints keyed to each
-/// row's element epoch, epoch_et + k * kCheckpointStep: a snapshot at et uses
-/// the conic osculating at the nearest checkpoint (at most 2 days away).
+/// The perturbed path is carried on a grid of checkpoints keyed to each row's
+/// element epoch: checkpoint j osculates at epoch_et + (j + phase) * step, and
+/// a snapshot at et uses the conic osculating at the nearest one (at most half
+/// a step away). The step is the row's: 4 days for a near-Earth orbit
+/// (perihelion within kNearEarthPerihelion), where the Earth's pull at a close
+/// approach bends the path within days, and 8 days for every other orbit,
+/// whose path leaves a conic by under 0.1" over 4 days (the planets' pull at
+/// a main-belt asteroid is about 1e-6 m/s^2: under 80 km over 4 days on the
+/// test sample, seen from 1.5 AU or more). The phase is the row's own, one of kPhases values (a hash
+/// of its elements), so the rows of a catalog cross their grid steps at
+/// different epochs, not all in the same snapshot, and the rows of one phase
+/// still share the planets' places (a cache) when they step.
 constexpr double kCheckpointStep = 4.0 * 86400.0;
+constexpr double kWideCheckpointStep = 8.0 * 86400.0;
+constexpr double kNearEarthPerihelion = 1.3 * 149597870700.0;
+constexpr int kPhases = 16;
 
-/// Checkpoints kept besides the current one (keplerian-reference 1.8.2).
-/// 1.8.1 re-ran the whole chain from the record at every grid crossing toward
-/// the epoch: 117 ms against 1.8.0's 42 ms for a 56-day sweep of 1,004 rows,
-/// and 1.0-1.9 s snapshot spikes for 806k rows in the console. Now:
-///  - kAnchors anchors, the checkpoints at the validity span's grid split in
-///    kAnchors + 1 parts, cached on the way out: a move toward the epoch
-///    restarts from the nearest one;
-///  - a work slot: the checkpoint one nearer the epoch than the current one,
-///    kept on the way out; while the clock runs toward the epoch, each
-///    snapshot that needs no step carries it one step toward the next
-///    checkpoint the clock will need, so a crossing finds it ready.
-/// A snapshot of a clock running either way therefore costs about one grid
-/// step at most, as in 1.8.0 (a jump costs the steps from the nearest cached
-/// one).
-constexpr int kAnchors = 2;
+/// keplerian-reference 1.9.0. Checkpoints form a chain out from the element
+/// epoch on each side (the epoch, then j = 0, 1, 2 ... after it, j = -1, -2
+/// ... before it), each integrated from the one before it through its float32
+/// differences, so checkpoint j is a function of j alone and the drawn place
+/// depends on the epoch asked for and nothing else (1.8.1). A row keeps its
+/// current checkpoint and one anchor, a checkpoint it passed nearer the epoch:
+/// a step out costs one grid step, and a step back toward the epoch continues
+/// from the anchor (or the epoch). Whenever the row passes checkpoints it
+/// keeps as its anchor the one nearest m - 1 - floor(sqrt(2m)) for its new
+/// distance m from the epoch, the single-checkpoint reversal that makes a run
+/// back to the epoch cost about 2.3 grid steps a checkpoint on average over
+/// the 15 of the 60-day span. A row is 128 bytes: 1.8.2 kept two anchors and
+/// a work slot (272-byte rows; with every asteroid +1.19 GB, and 0.8-1.1 s
+/// snapshots at 2-3 d/s toward the epoch with every row crossing in the same
+/// snapshot, verifier 2026-10-14).
 
-/// A checkpoint's elements as float32 differences from the epoch elements
-/// (see SmallBody).
+/// A checkpoint's conic as float32 differences from the record's conic
+/// carried to it (see conic_at): semi-major axis (m), eccentricity, mean
+/// anomaly (rad), and the rotation of the perifocal frame (axis times angle,
+/// rad; the mean motion follows from the semi-major axis).
 struct CheckpointDelta {
-  float da = 0.0f, de = 0.0f, dn = 0.0f, dm = 0.0f;
-  float dp[3] = {0.0f, 0.0f, 0.0f};
-  float dq[3] = {0.0f, 0.0f, 0.0f};
+  float da = 0.0f, de = 0.0f, dm = 0.0f;
+  float rot[3] = {0.0f, 0.0f, 0.0f};
 };
+
+/// No checkpoint: the record's own conic (the epoch).
+constexpr int16_t kNoCheckpoint = INT16_MIN;
+/// No H.
+constexpr int16_t kNoMagnitude = INT16_MIN;
 
 struct SmallBody {
   // The record's osculating elements at its element epoch, exactly as decoded
@@ -841,24 +861,18 @@ struct SmallBody {
   double e = 0.0;
   double n = 0.0;               // rad/s
   double m0 = 0.0;              // rad at epoch
-  double p[3] = {0, 0, 0};      // perifocal x (to pericentre), ICRF
-  double q[3] = {0, 0, 0};      // perifocal y, ICRF
-  // A cache of the perturbed path: the osculating elements at checkpoint k as
-  // float32 differences from the epoch elements carried there on their own
-  // conic (mean anomaly) or kept as they are (the rest). Checkpoint k is only
-  // ever computed from checkpoint k -/+ 1 through these rounded values, so its
-  // elements are the same whatever order the clock asked for them in, and any
-  // cached copy of it (an anchor, the work slot) is as good as the chain.
-  CheckpointDelta cur;
-  int32_t k = 0;
-  float h = NAN;
-  float g = 0.15f;
-  int16_t anchor_k[kAnchors] = {0, 0};  // 0: empty
-  int16_t work_k = 0;                   // 0: empty
-  int8_t toward = 0;                    // the clock's last move was toward the epoch
-  CheckpointDelta anchor[kAnchors];
-  CheckpointDelta work;
+  double frame[4] = {1, 0, 0, 0};  // perifocal frame, unit quaternion (w, x, y, z): p = R x, q = R y (ICRF)
+  CheckpointDelta cur;          // checkpoint k
+  CheckpointDelta anchor;       // checkpoint anchor_k
+  int16_t k = kNoCheckpoint;
+  int16_t anchor_k = kNoCheckpoint;
+  int16_t h = kNoMagnitude;     // H x 100
+  int16_t g = 1500;             // G (H-G slope parameter) x 10^4
 };
+static_assert(sizeof(SmallBody) == 128, "a small-body row is 128 bytes (the console's memory budget)");
+
+inline double magnitude_of(const SmallBody& b) { return b.h == kNoMagnitude ? NAN : b.h * 0.01; }
+inline double slope_of(const SmallBody& b) { return b.g * 1.0e-4; }
 
 /// A two-body conic: the elements a row's places are computed from.
 struct Conic {
@@ -867,21 +881,137 @@ struct Conic {
   double p[3], q[3];
 };
 
-/// The row's conic at checkpoint k, from the cached differences d.
-inline void conic_at(const SmallBody& b, const CheckpointDelta& d, int32_t k, Conic& c) {
-  c.osc_et = b.epoch_et + k * kCheckpointStep;
-  c.a = b.a + d.da;
-  c.e = b.e + d.de;
-  c.n = b.n + d.dn;
-  c.m0 = b.m0 + b.n * (k * kCheckpointStep) + d.dm;
-  for (int i = 0; i < 3; ++i) {
-    c.p[i] = b.p[i] + d.dp[i];
-    c.q[i] = b.q[i] + d.dq[i];
-  }
+/// The row's grid phase in [0, 1): a hash of its element bits.
+inline double grid_phase(const SmallBody& b) {
+  uint64_t x = 0, y = 0;
+  std::memcpy(&x, &b.m0, sizeof(x));
+  std::memcpy(&y, &b.a, sizeof(y));
+  x ^= y * 0x9E3779B97F4A7C15ull;
+  x ^= x >> 30;
+  x *= 0xBF58476D1CE4E5B9ull;
+  x ^= x >> 27;
+  x *= 0x94D049BB133111EBull;
+  x ^= x >> 31;
+  return static_cast<double>(x >> 60) / kPhases;
 }
 
-/// The row's conic at its cached checkpoint (the epoch elements at k = 0).
-inline void conic_of(const SmallBody& b, Conic& c) { conic_at(b, b.cur, b.k, c); }
+/// The row's grid step (s).
+inline double grid_step(const SmallBody& b) {
+  return b.a * (1.0 - b.e) < kNearEarthPerihelion ? kCheckpointStep : kWideCheckpointStep;
+}
+
+/// The epoch checkpoint j osculates at.
+inline double checkpoint_et(const SmallBody& b, int32_t j) {
+  return b.epoch_et + (j + grid_phase(b)) * grid_step(b);
+}
+
+/// The x and y columns (p, q) of the rotation of unit quaternion r.
+inline void quat_axes(const double r[4], double p[3], double q[3]) {
+  const double w = r[0], x = r[1], y = r[2], z = r[3];
+  p[0] = 1.0 - 2.0 * (y * y + z * z);
+  p[1] = 2.0 * (x * y + w * z);
+  p[2] = 2.0 * (x * z - w * y);
+  q[0] = 2.0 * (x * y - w * z);
+  q[1] = 1.0 - 2.0 * (x * x + z * z);
+  q[2] = 2.0 * (y * z + w * x);
+}
+
+/// out = a * b (the rotation b, then a).
+inline void quat_mul(const double a[4], const double b[4], double out[4]) {
+  out[0] = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
+  out[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
+  out[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
+  out[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
+}
+
+/// The unit quaternion of the rotation whose x and y columns are the
+/// orthonormal p and q (Shepperd's method).
+inline void quat_from_axes(const double p[3], const double q[3], double out[4]) {
+  const double w[3] = {p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]};
+  const double m00 = p[0], m11 = q[1], m22 = w[2];
+  const double trace = m00 + m11 + m22;
+  if (trace > 0.0) {
+    const double s = 2.0 * std::sqrt(1.0 + trace);
+    out[0] = 0.25 * s;
+    out[1] = (q[2] - w[1]) / s;
+    out[2] = (w[0] - p[2]) / s;
+    out[3] = (p[1] - q[0]) / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const double s = 2.0 * std::sqrt(1.0 + m00 - m11 - m22);
+    out[0] = (q[2] - w[1]) / s;
+    out[1] = 0.25 * s;
+    out[2] = (q[0] + p[1]) / s;
+    out[3] = (w[0] + p[2]) / s;
+  } else if (m11 > m22) {
+    const double s = 2.0 * std::sqrt(1.0 + m11 - m00 - m22);
+    out[0] = (w[0] - p[2]) / s;
+    out[1] = (q[0] + p[1]) / s;
+    out[2] = 0.25 * s;
+    out[3] = (w[1] + q[2]) / s;
+  } else {
+    const double s = 2.0 * std::sqrt(1.0 + m22 - m00 - m11);
+    out[0] = (p[1] - q[0]) / s;
+    out[1] = (w[0] + p[2]) / s;
+    out[2] = (w[1] + q[2]) / s;
+    out[3] = 0.25 * s;
+  }
+  const double norm = std::sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3]);
+  for (int i = 0; i < 4; ++i) out[i] /= norm;
+}
+
+/// The unit quaternion of a rotation vector v (axis times angle, rad).
+inline void quat_from_rotation(const float v[3], double out[4]) {
+  const double x = v[0], y = v[1], z = v[2];
+  const double angle2 = x * x + y * y + z * z;
+  double c, s;  // cos(angle / 2), sin(angle / 2) / angle
+  if (angle2 < 1.0e-6) {
+    // Series to well below double precision for a perturbation's small turn.
+    c = 1.0 - angle2 / 8.0 + angle2 * angle2 / 384.0;
+    s = 0.5 - angle2 / 48.0 + angle2 * angle2 / 3840.0;
+  } else {
+    const double angle = std::sqrt(angle2);
+    c = std::cos(0.5 * angle);
+    s = std::sin(0.5 * angle) / angle;
+  }
+  out[0] = c;
+  out[1] = x * s;
+  out[2] = y * s;
+  out[3] = z * s;
+}
+
+/// The record's own conic, osculating at its element epoch.
+inline void epoch_conic(const SmallBody& b, Conic& c) {
+  c.osc_et = b.epoch_et;
+  c.a = b.a;
+  c.e = b.e;
+  c.n = b.n;
+  c.m0 = b.m0;
+  quat_axes(b.frame, c.p, c.q);
+}
+
+/// Checkpoint j's conic from its differences d: the record's conic carried to
+/// t_j on itself (mean anomaly), plus d.
+inline void conic_at(const SmallBody& b, const CheckpointDelta& d, int32_t j, Conic& c) {
+  c.osc_et = checkpoint_et(b, j);
+  c.a = b.a + d.da;
+  c.e = b.e + d.de;
+  const double gm = b.n * b.n * b.a * b.a * b.a;
+  c.n = std::sqrt(gm / (c.a * c.a * c.a));
+  c.m0 = b.m0 + b.n * (c.osc_et - b.epoch_et) + d.dm;
+  double turn[4], r[4];
+  quat_from_rotation(d.rot, turn);
+  quat_mul(turn, b.frame, r);
+  quat_axes(r, c.p, c.q);
+}
+
+/// The row's conic at its checkpoint (the record's own before the first).
+inline void conic_of(const SmallBody& b, Conic& c) {
+  if (b.k == kNoCheckpoint) {
+    epoch_conic(b, c);
+  } else {
+    conic_at(b, b.cur, b.k, c);
+  }
+}
 
 /// The rows, in blocks of 65,536: a catalog grows shard by shard without the
 /// reallocations (and the transient double copy) of one contiguous vector,
@@ -896,14 +1026,18 @@ class SmallStore {
   SmallBody& operator[](size_t i) { return blocks_[i >> kBlockShift][i & (kBlockRows - 1)]; }
   const SmallBody& operator[](size_t i) const { return blocks_[i >> kBlockShift][i & (kBlockRows - 1)]; }
   void push_back(const SmallBody& b) {
-    if ((size_ >> kBlockShift) >= blocks_.size()) blocks_.push_back(new SmallBody[kBlockRows]);
-    (*this)[size_++] = b;
+    if ((size_ >> kBlockShift) >= blocks_.size()) blocks_.push_back(new_block());
+    new (&(*this)[size_++]) SmallBody(b);
   }
   /// Allocates the blocks for n rows now, so no later push_back allocates
   /// (the threaded catalog's pool threads never meet the caller on the
-  /// allocator's lock). Reserved blocks stay through truncate.
+  /// allocator's lock). Reserved blocks stay through truncate. A block is
+  /// raw storage: a row is written only when it is pushed, so the pages of
+  /// rows a catalog reserves but never fills (a selection keeps fewer rows
+  /// than its manifest counts, the last block's tail) are never touched and
+  /// cost the page no memory.
   void reserve(size_t n) {
-    while (blocks_.size() * kBlockRows < n) blocks_.push_back(new SmallBody[kBlockRows]);
+    while (blocks_.size() * kBlockRows < n) blocks_.push_back(new_block());
     reserved_ = blocks_.size();
   }
   /// Drops rows past n (a refused ingest leaves the store as it was).
@@ -912,7 +1046,7 @@ class SmallStore {
     size_ = n;
     const size_t keep = std::max<size_t>((n + kBlockRows - 1) >> kBlockShift, reserved_);
     while (blocks_.size() > keep) {
-      delete[] blocks_.back();
+      ::operator delete(blocks_.back());
       blocks_.pop_back();
     }
   }
@@ -922,6 +1056,11 @@ class SmallStore {
   }
 
  private:
+  static SmallBody* new_block() {
+    static_assert(std::is_trivially_copyable<SmallBody>::value && std::is_trivially_destructible<SmallBody>::value,
+                  "rows live in raw storage");
+    return static_cast<SmallBody*>(::operator new(sizeof(SmallBody) * kBlockRows));
+  }
   std::vector<SmallBody*> blocks_;
   size_t size_ = 0;
   size_t reserved_ = 0;
@@ -1016,8 +1155,9 @@ int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out
   }
   const double h = sbd.read_double(ORBPRO_SBD_VT_ABSOLUTE_MAGNITUDE, NAN);
   const double g = sbd.read_double(ORBPRO_SBD_VT_SLOPE_PARAMETER, NAN);
-  out->h = static_cast<float>(h);
-  out->g = std::isnan(g) ? 0.15f : static_cast<float>(g);
+  out->h = std::isfinite(h) ? static_cast<int16_t>(std::lround(std::max(-300.0, std::min(300.0, h)) * 100.0))
+                            : kNoMagnitude;
+  out->g = static_cast<int16_t>(std::lround(std::max(-3.0, std::min(3.0, std::isnan(g) ? 0.15 : g)) * 1.0e4));
 
   // Perifocal axes in the element frame (3-1-3 rotation).
   const double cn = std::cos(node), sn = std::sin(node);
@@ -1037,10 +1177,7 @@ int32_t decode_small_body(const uint8_t* buffer, uint32_t length, SmallBody* out
   out->e = e;
   out->n = std::sqrt(gm / (a * a * a));
   out->m0 = m0;
-  for (int c = 0; c < 3; ++c) {
-    out->p[c] = p[c];
-    out->q[c] = q[c];
-  }
+  quat_from_axes(p, q, out->frame);
   return kOk;
 }
 
@@ -1098,11 +1235,11 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
 // Osculating elements are a two-body orbit only at their epoch: the planets
 // pull a body off the conic (Psyche 1.4" at +45 days, 3" at +60 days against
 // JPL Horizons on two-body alone). Each row is therefore carried along its
-// perturbed path on a fixed grid of checkpoints keyed to its element epoch
-// (kCheckpointStep): checkpoint k + 1 (or k - 1 before the epoch) is checkpoint
-// k integrated one grid step (Encke's method: the deviation from the
-// osculating conic, RK4) under the Sun and the eight planets (Mercury, Venus,
-// the Earth-Moon barycentre, the Mars, Jupiter, Saturn, Uranus and Neptune
+// perturbed path on its grid of checkpoints (its grid step and phase):
+// each checkpoint is the one before it on its side of the element epoch
+// integrated one grid step (Encke's method: the deviation from the osculating
+// conic, RK4) under the Sun and the eight planets (Mercury, Venus, the
+// Earth-Moon barycentre, the Mars, Jupiter, Saturn, Uranus and Neptune
 // systems; DE440 GMs), and its osculating elements there. A snapshot uses the
 // nearest checkpoint's conic; over the 2 days at most from it the conic is
 // exact to well under 0.1".
@@ -1111,8 +1248,8 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
 // elements in place from wherever the clock had last been, so a row visited
 // 50 days back and then brought to its epoch was 12,886 km off for Phaethon):
 // the epoch elements are kept, a checkpoint is only ever computed from its
-// neighbour toward the epoch, and moving back toward the epoch (or across it)
-// restarts the chain from the epoch elements.
+// neighbour toward the epoch, and a run back toward the epoch (or across it)
+// continues from a checkpoint on the same chain (the anchor) or the epoch.
 //
 // The RK4 step is the grid step, refined near a planet (a tenth of the
 // planet's distance's crossing time at 30 km/s within 0.2 AU) and near the
@@ -1153,22 +1290,35 @@ constexpr double kPlanetGm[kPlanets] = {2.2031868551e13, 3.24858592e14, 4.035032
                                         1.267127641e17, 3.79405848418e16, 5.7945564e15, 6.836527100580e15};
 
 struct PlanetPlaces {
-  double et = NAN;
+  uint64_t key;  // the epoch's bits ^ kNoPlaces (0, as zero-initialised: no epoch)
   double r[kPlanets][3];
 };
-// Snapshots ask every row for the same epochs, so the places are kept for the
-// last few dozen epochs asked for.
-// Per thread: the threaded catalog's pool threads each keep their own.
-thread_local PlanetPlaces g_places[48];
-thread_local int g_places_next = 0;
+/// A NaN's bits: no epoch asked for has them, so a zeroed entry matches none
+/// (and the table needs no initialiser: it costs the module no data bytes).
+constexpr uint64_t kNoPlaces = 0x7FF8000000C0FFEEull;
+// The rows of a grid phase step at the same epochs, so the places are kept
+// for the epochs asked for, in a table indexed by a hash of the epoch. A place
+// is a function of its epoch alone, so the table changes no result. Per
+// thread: a threaded catalog's pool threads each use a table of
+// kPoolPlaceSlots the catalog reserves for them (the 16 phases' checkpoints
+// and midpoints over the span fit in it); any other thread a small one of its
+// own.
+constexpr uint32_t kPlaceSlots = 64;
+constexpr uint32_t kPoolPlaceSlots = 1024;
+thread_local PlanetPlaces g_places[kPlaceSlots];
+thread_local PlanetPlaces* g_place_table = nullptr;  // a pool thread's (kPoolPlaceSlots)
 
 const PlanetPlaces& planet_places(double et) {
-  for (const PlanetPlaces& p : g_places) {
-    if (p.et == et) return p;
-  }
-  PlanetPlaces& p = g_places[g_places_next];
-  g_places_next = (g_places_next + 1) % 48;
-  p.et = NAN;
+  uint64_t bits = 0;
+  std::memcpy(&bits, &et, sizeof(bits));
+  uint64_t slot = bits ^ (bits >> 33);
+  slot *= 0xFF51AFD7ED558CCDull;
+  slot ^= slot >> 33;
+  PlanetPlaces& p = g_place_table != nullptr ? g_place_table[slot & (kPoolPlaceSlots - 1)]
+                                              : g_places[slot & (kPlaceSlots - 1)];
+  const uint64_t key = bits ^ kNoPlaces;
+  if (p.key == key) return p;
+  p.key = 0;
   const double t = et / (36525.0 * 86400.0);
   const double ce = std::cos(kObliquityJ2000), se = std::sin(kObliquityJ2000);
   for (int k = 0; k < kPlanets; ++k) {
@@ -1189,7 +1339,7 @@ const PlanetPlaces& planet_places(double et) {
     p.r[k][1] = ce * ye - se * ze;
     p.r[k][2] = se * ye + ce * ze;
   }
-  p.et = et;  // last: a cache entry is complete before it matches
+  p.key = key;  // last: a cache entry is complete before it matches
   return p;
 }
 
@@ -1302,173 +1452,95 @@ bool advance_conic(Conic& c, double t_end) {
   return true;
 }
 
-/// `c` as checkpoint k's float32 differences from the epoch elements (the
-/// mean anomaly's from the epoch conic carried to the checkpoint, wrapped to
-/// +-pi).
-void delta_of(const SmallBody& b, const Conic& c, int32_t k, CheckpointDelta& d) {
-  const double base_m = b.m0 + b.n * (k * kCheckpointStep);
+/// `c` (osculating at checkpoint j) as differences from the record's conic
+/// carried there (the mean anomaly's wrapped to +-pi; the frame's turn from
+/// the record's, as axis times angle).
+void delta_of(const SmallBody& b, const Conic& c, CheckpointDelta& d) {
+  const double base_m = b.m0 + b.n * (c.osc_et - b.epoch_et);
   d.da = static_cast<float>(c.a - b.a);
   d.de = static_cast<float>(c.e - b.e);
-  d.dn = static_cast<float>(c.n - b.n);
   d.dm = static_cast<float>(std::remainder(c.m0 - base_m, kTwoPi));
-  for (int i = 0; i < 3; ++i) {
-    d.dp[i] = static_cast<float>(c.p[i] - b.p[i]);
-    d.dq[i] = static_cast<float>(c.q[i] - b.q[i]);
+  double now[4], back[4], turn[4];
+  quat_from_axes(c.p, c.q, now);
+  back[0] = b.frame[0];
+  for (int i = 1; i < 4; ++i) back[i] = -b.frame[i];
+  quat_mul(now, back, turn);
+  if (turn[0] < 0.0) {
+    for (double& t : turn) t = -t;
   }
+  const double s = std::sqrt(turn[1] * turn[1] + turn[2] * turn[2] + turn[3] * turn[3]);
+  const double f = s > 1.0e-300 ? 2.0 * std::atan2(s, turn[0]) / s : 2.0;
+  for (int i = 0; i < 3; ++i) d.rot[i] = static_cast<float>(turn[i + 1] * f);
 }
 
-/// The grid spacing of the anchors: the validity span's checkpoints split
-/// into kAnchors + 1 parts (5 for the default 60 days: anchors at 20 and 40
-/// days).
-inline int32_t anchor_spacing() {
-  const double kmax = std::ceil(g_small_validity / kCheckpointStep);
-  const double s = std::ceil(kmax / (kAnchors + 1));
-  return (std::isfinite(s) && s >= 1.0) ? static_cast<int32_t>(std::min(s, 8192.0)) : 1;
+/// A checkpoint's place on its side's chain: its side (+1 after the epoch,
+/// -1 before it) and its distance in steps from the epoch (0: the epoch).
+inline int32_t side_of(int32_t j) { return j >= 0 ? 1 : -1; }
+inline int32_t distance_of(int32_t j) {
+  return j == kNoCheckpoint ? 0 : (j >= 0 ? j + 1 : -j);
+}
+inline int32_t checkpoint_at(int32_t side, int32_t distance) {
+  return distance == 0 ? kNoCheckpoint : (side > 0 ? distance - 1 : -distance);
 }
 
-/// Keeps checkpoint k (differences d) as an anchor when it falls on one.
-inline void keep_anchor(SmallBody& b, const CheckpointDelta& d, int32_t k) {
-  const int32_t m = std::abs(k);
-  const int32_t spacing = anchor_spacing();
-  if (m == 0 || m % spacing != 0 || m > 32767) return;
-  const int32_t slot = m / spacing - 1;
-  if (slot >= kAnchors) return;
-  b.anchor[slot] = d;
-  b.anchor_k[slot] = static_cast<int16_t>(k);
+/// Where a row's anchor serves a run back to the epoch from distance m best.
+inline int32_t anchor_target(int32_t m) {
+  const int32_t back = 1 + static_cast<int32_t>(std::sqrt(2.0 * m));
+  return std::max(0, m - back);
 }
 
-/// A cached checkpoint s is a start for checkpoint `want` when it lies between
-/// the epoch and want: same side, |s| <= |want|.
-inline bool start_for(int32_t s, int32_t want) {
-  return s != 0 && (s > 0) == (want > 0) && std::abs(s) <= std::abs(want);
-}
-
-/// The nearest cached checkpoint between the epoch and `want` other than the
-/// current one: an anchor or the work slot (*d, its index), or the epoch
-/// (returns 0, *d null).
-inline int32_t nearest_cached(const SmallBody& b, int32_t want, const CheckpointDelta** d) {
-  int32_t best = 0;
-  *d = nullptr;
-  for (int i = 0; i < kAnchors; ++i) {
-    if (start_for(b.anchor_k[i], want) && std::abs(b.anchor_k[i]) > std::abs(best)) {
-      best = b.anchor_k[i];
-      *d = &b.anchor[i];
-    }
-  }
-  if (start_for(b.work_k, want) && std::abs(b.work_k) > std::abs(best)) {
-    best = b.work_k;
-    *d = &b.work;
-  }
-  return best;
-}
-
-/// One grid step of the chain from checkpoint k (differences d) away from the
-/// epoch, in place. False when the step fails.
-inline bool step_out(const SmallBody& b, CheckpointDelta& d, int32_t& k, int32_t dir) {
+/// One step of the chain out from checkpoint j (differences d; the epoch for
+/// kNoCheckpoint) to `next`, in place.
+inline bool step_out(const SmallBody& b, CheckpointDelta& d, int32_t j, int32_t next) {
   Conic c;
-  conic_at(b, d, k, c);
-  const int32_t next = k + dir;
-  if (!advance_conic(c, b.epoch_et + next * kCheckpointStep)) return false;
-  delta_of(b, c, next, d);
-  k = next;
+  if (j == kNoCheckpoint) {
+    epoch_conic(b, c);
+  } else {
+    conic_at(b, d, j, c);
+  }
+  if (!advance_conic(c, checkpoint_et(b, next))) return false;
+  delta_of(b, c, d);
   return true;
 }
 
-/// While the clock runs toward the epoch, carries the work slot one grid step
-/// toward the checkpoint the clock needs next (one nearer the epoch than the
-/// current one), from the nearest cached checkpoint below it.
-void small_prework(SmallBody& b, double et) {
-  if (!b.toward || std::abs(b.k) < 2 || std::abs(b.k) > 32767) return;
-  // About a quarter of the rows take a step at a given epoch (a hash of the epoch's
-  // minute and the row's mean anomaly bits), so the prework spreads over the
-  // snapshots instead of every row stepping in the same ones.
-  uint32_t bits = 0;
-  const float m0 = static_cast<float>(b.m0);
-  std::memcpy(&bits, &m0, sizeof(bits));
-  const double minute = std::floor(std::fabs(et) / 60.0);
-  if (std::isfinite(minute)) {
-    uint32_t h = static_cast<uint32_t>(std::fmod(minute, 4294967296.0)) ^ (bits * 0x9E3779B9u);
-    h ^= h >> 16;
-    h *= 0x7FEB352Du;
-    h ^= h >> 15;
-    if ((h & 3u) != 0u) return;
-  }
-  const int32_t dir = b.k > 0 ? 1 : -1;
-  const int32_t target = b.k - dir;
-  for (int i = 0; i < kAnchors; ++i) {
-    if (b.anchor_k[i] == target) return;
-  }
-  if (b.work_k == target) return;
-  if (!start_for(b.work_k, target)) {
-    const CheckpointDelta* d = nullptr;
-    const int32_t base = nearest_cached(b, target, &d);
-    b.work = d != nullptr ? *d : CheckpointDelta{};
-    b.work_k = static_cast<int16_t>(base);
-    if (base == target) return;
-  }
-  int32_t k = b.work_k;
-  if (!step_out(b, b.work, k, dir)) {
-    b.work_k = 0;
-    return;
-  }
-  b.work_k = static_cast<int16_t>(k);
-  keep_anchor(b, b.work, k);
-  if (std::abs(target) - std::abs(k) == 2) {
-    // Two short of the target: an anchor slot the run toward the epoch has
-    // left behind (beyond the target, on the other side, or empty) keeps this
-    // checkpoint, so the target after next is ready and the one after that a
-    // step away (a run toward the epoch costs 1.2 steps a crossing instead of
-    // 2 with spacing 5).
-    for (int i = 0; i < kAnchors; ++i) {
-      const int32_t ak = b.anchor_k[i];
-      if (ak == 0 || (ak > 0) != (target > 0) || std::abs(ak) > std::abs(target)) {
-        b.anchor[i] = b.work;
-        b.anchor_k[i] = static_cast<int16_t>(k);
-        break;
-      }
-    }
-  }
-}
-
-/// The row's checkpoint nearest `et`, from its perturbed path: continued from
-/// the cached checkpoint nearest `et` between the epoch and `et` (the current
-/// one, an anchor or the work slot), or from the epoch elements, so the
-/// elements used at et are a function of et alone. A failed step keeps the
-/// last good checkpoint.
+/// The row on the checkpoint nearest `et`, continued along its side's chain
+/// from the nearest of its current checkpoint, its anchor and the epoch that
+/// lies between the epoch and that checkpoint. A failed step leaves the row on
+/// the last checkpoint it reached (the same one whatever the start, since
+/// every start is on the same chain).
 bool small_rebase(SmallBody& b, double et) {
-  const double steps = (et - b.epoch_et) / kCheckpointStep;
-  if (!std::isfinite(steps) || std::fabs(steps) > 1.0e6) return false;
+  const double steps = (et - b.epoch_et) / grid_step(b) - grid_phase(b);
+  if (!std::isfinite(steps) || std::fabs(steps) > 32000.0) return false;
   const int32_t want = static_cast<int32_t>(std::lround(steps));
-  if (want == b.k) {
-    small_prework(b, et);
-    return true;
-  }
-  b.toward = (b.k != 0 && want != 0 && (b.k > 0) == (want > 0) && std::abs(want) < std::abs(b.k)) ? 1 : 0;
-  const CheckpointDelta* d = nullptr;
-  const int32_t cached = nearest_cached(b, want, &d);
-  if (start_for(b.k, want) && std::abs(b.k) >= std::abs(cached)) {
-    // continue from the current checkpoint
-  } else if (d != nullptr) {
-    b.cur = *d;
-    b.k = cached;
-  } else {
+  if (want == b.k) return true;
+  const int32_t side = side_of(want);
+  const int32_t target = distance_of(want);
+  // The start: the farthest cached checkpoint on this side not beyond `want`.
+  int32_t from = 0;
+  if (b.k != kNoCheckpoint && side_of(b.k) == side && distance_of(b.k) <= target) from = distance_of(b.k);
+  const bool anchorStart = b.anchor_k != kNoCheckpoint && side_of(b.anchor_k) == side &&
+                           distance_of(b.anchor_k) <= target && distance_of(b.anchor_k) > from;
+  if (anchorStart) {
+    from = distance_of(b.anchor_k);
+    b.cur = b.anchor;
+  } else if (from == 0) {
     b.cur = CheckpointDelta{};
-    b.k = 0;
   }
-  if (b.k == want) {
-    small_prework(b, et);
-    return true;
-  }
-  const int32_t dir = want > b.k ? 1 : -1;
-  while (b.k != want) {
-    if (b.k + dir == want && b.k != 0) {
-      // The checkpoint one nearer the epoch than `want` comes free on the way:
-      // the work slot keeps it, so a reversal of the clock finds it ready.
-      b.work = b.cur;
-      b.work_k = static_cast<int16_t>(b.k);
+  b.k = static_cast<int16_t>(checkpoint_at(side, from));
+  // The anchor for a later run back from `target`: the one it has, or a
+  // checkpoint this run passes, whichever is nearer the best place.
+  const int32_t best = anchor_target(target);
+  int32_t kept = (b.anchor_k != kNoCheckpoint && side_of(b.anchor_k) == side && distance_of(b.anchor_k) < target)
+                     ? distance_of(b.anchor_k) : 0;
+  for (int32_t m = from; m < target; ++m) {
+    if (m > 0 && std::abs(m - best) < std::abs(kept - best)) {
+      b.anchor = b.cur;
+      b.anchor_k = static_cast<int16_t>(checkpoint_at(side, m));
+      kept = m;
     }
-    if (!step_out(b, b.cur, b.k, dir)) return false;
-    keep_anchor(b, b.cur, b.k);
+    const int32_t next = checkpoint_at(side, m + 1);
+    if (!step_out(b, b.cur, b.k, next)) return false;
+    b.k = static_cast<int16_t>(next);
   }
   return true;
 }
@@ -1499,7 +1571,7 @@ bool small_snapshot_row(const SmallBody& b, double et, const double* observer, f
   out[0] = static_cast<float>(r[0]);
   out[1] = static_cast<float>(r[1]);
   out[2] = static_cast<float>(r[2]);
-  if (std::isnan(b.h) || observer == nullptr) {
+  if (b.h == kNoMagnitude || observer == nullptr) {
     out[3] = NAN;
     return true;
   }
@@ -1510,7 +1582,7 @@ bool small_snapshot_row(const SmallBody& b, double et, const double* observer, f
                     ? -(r[0] * to_obs[0] + r[1] * to_obs[1] + r[2] * to_obs[2]) / (rr * dd)
                     : 1.0;
   cosa = cosa > 1.0 ? 1.0 : (cosa < -1.0 ? -1.0 : cosa);
-  out[3] = static_cast<float>(hg_magnitude(b.h, b.g, rr / kAuMeters, dd / kAuMeters, std::acos(cosa)));
+  out[3] = static_cast<float>(hg_magnitude(magnitude_of(b), slope_of(b), rr / kAuMeters, dd / kAuMeters, std::acos(cosa)));
   return true;
 }
 
@@ -1620,7 +1692,7 @@ bool small_apparent_row(const SmallBody& b, double et, const double* observer, f
     return false;
   }
   for (int c = 0; c < 3; ++c) out[c] = static_cast<float>(observer[c] + seen[c]);
-  if (std::isnan(b.h)) {
+  if (b.h == kNoMagnitude) {
     out[3] = NAN;
     return true;
   }
@@ -1629,7 +1701,7 @@ bool small_apparent_row(const SmallBody& b, double et, const double* observer, f
   const double rr = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
   double cosa = (rr > 0.0 && d > 0.0) ? (r[0] * seen[0] + r[1] * seen[1] + r[2] * seen[2]) / (rr * d) : 1.0;
   cosa = cosa > 1.0 ? 1.0 : (cosa < -1.0 ? -1.0 : cosa);
-  out[3] = static_cast<float>(hg_magnitude(b.h, b.g, rr / kAuMeters, d / kAuMeters, std::acos(cosa)));
+  out[3] = static_cast<float>(hg_magnitude(magnitude_of(b), slope_of(b), rr / kAuMeters, d / kAuMeters, std::acos(cosa)));
   return true;
 }
 

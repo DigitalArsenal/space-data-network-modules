@@ -96,12 +96,14 @@ test("the astorb $SBD stream ingests: every record, in order, with its display f
   });
 });
 
-// The record's conic is drawn as it is near the element epoch: within two
-// days of it (the module's rebase span) a row is the osculating conic
-// itself, so it must match a plain two-body oracle of the record to the metre
-// (decoding, units, frames). Farther out the row follows its perturbed path
-// (next test).
-test("A8: every row within 1 m of the two-body oracle of its record within the rebase span (double and float32 snapshot)", async () => {
+// Near the element epoch a row is drawn from its nearest checkpoint, half a
+// grid step away at most on its own grid (keplerian-reference 1.9.0: each
+// row's grid has its own phase, and a step of 4 days for a near-Earth orbit,
+// 8 for the rest), so it leaves the record's two-body conic only by the
+// planets' pull over those days: under 80 km on this sample. A decoding, unit
+// or frame error is millions. Farther out the row follows its perturbed path
+// against Horizons (next test).
+test("A8: every row within 150 km of the two-body oracle of its record within two days of the element epoch (double and float32 snapshot)", async () => {
   const { x, copyIn } = await load();
   x.kepler_small_ingest_sbd_stream(copyIn(stream), stream.length);
   const n = records.length;
@@ -125,7 +127,7 @@ test("A8: every row within 1 m of the two-body oracle of its record within the r
     }
   }
   console.log(`oracle: ${n} rows x 5 epochs, worst |dr| ${worst.toExponential(2)} m; float32 snapshot worst relative ${worstSnapshotRelative.toExponential(2)}`);
-  assert.ok(worst < 1.0, `worst ${worst} m`);
+  assert.ok(worst < 150e3, `worst ${worst} m`);
   assert.ok(worstSnapshotRelative < 1.2e-7);
 });
 

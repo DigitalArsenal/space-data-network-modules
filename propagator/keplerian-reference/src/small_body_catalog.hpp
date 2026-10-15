@@ -97,6 +97,7 @@ struct Catalog {
   SmallBody promoted[kPromoted];
   int threads = 0;
   pthread_t pool[kMaxThreads];
+  PlanetPlaces* places = nullptr;  // kPoolPlaceSlots per pool thread
 };
 
 Catalog* g_catalog = nullptr;
@@ -190,6 +191,7 @@ inline void finish(Catalog& c, int32_t seq) {
 void* pool_main(void* arg) {
   const int index = static_cast<int>(reinterpret_cast<intptr_t>(arg));
   Catalog& c = *g_catalog;
+  g_place_table = c.places + static_cast<size_t>(index) * kPoolPlaceSlots;
   // Jobs are numbered from 1: a thread that starts after the first job was
   // begun still takes it (the caller begins the next only when every pool
   // thread has finished this one).
@@ -329,6 +331,7 @@ uint32_t kepler_catalog_init(uint32_t capacity, uint32_t name_bytes, uint32_t th
   t[S_QUERY] = addr(c->query);
   t[S_PROMOTED] = addr(c->promoted);
   const int wanted = static_cast<int>(std::min<uint32_t>(threads, kMaxThreads));
+  if (wanted > 0) c->places = new PlanetPlaces[static_cast<size_t>(wanted) * kPoolPlaceSlots]();
   for (int i = 0; i < wanted; ++i) {
     if (pthread_create(&c->pool[i], nullptr, pool_main, reinterpret_cast<void*>(static_cast<intptr_t>(i))) != 0) break;
     pthread_detach(c->pool[i]);
