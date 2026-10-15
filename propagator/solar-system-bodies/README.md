@@ -50,7 +50,9 @@ camera, the lighting, the sky observer, the apparent places and magnitudes
 (four times a second, or when the observer moved far for the nearest body),
 the light-time shifts and the drawn places; the level of detail of every body
 that is not central (lit ellipsoid or point, point size and opacity from V,
-the pick target and whether a moon gives way to a small parent's disc, the
+the pick target and whether a moon gives way to its parent: while its pick
+target reaches the parent's centre, or overlaps a parent a few pixels across
+(0.3.1: a click on a planet's centre is the planet), the
 model matrix and the light), the stand-in places of far points and labels,
 label decluttering on screen, the barycentre and Milky Way labels, the Milky
 Way's frame and fade, the sky box fade, Saturn's ring frame, each body's
@@ -67,7 +69,9 @@ OrbPro mirrors its index constants in `Scene/CelestialBodyLayout.js`). Calls:
 `ssb_scene_scopes`, `ssb_scene_earth_scope`, `ssb_scene_ensure_rotation`,
 `ssb_scene_body_transform`, `ssb_scene_switch`, `ssb_scene_keep_outside`,
 `ssb_scene_carry`, `ssb_scene_beyond_hill`, `ssb_scene_small_body_observer`,
-`ssb_sky_alpha`. The per-frame path allocates nothing.
+`ssb_scene_body_on_ray` (0.3.1: whether a body other than the central one is
+drawn on a pick ray, so a wheel zoom over the central body's surface needs no
+depth read-back), `ssb_sky_alpha`. The per-frame path allocates nothing.
 
 ## Threads (0.3.0)
 

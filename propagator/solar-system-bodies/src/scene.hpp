@@ -159,6 +159,7 @@ constexpr double kSystemLabelDistance = 1.0e14;
 constexpr double kGalaxyLabelDistance = 3.0e19;
 constexpr double kProxyDistance = 1.0e9;
 constexpr double kPickPixels = 10.0;
+constexpr double kPickMargin = 1.5;
 constexpr double kMinimumLabelSeparation = 36.0;
 constexpr int kDeclutterFrames = 3;
 constexpr double kSkyFadeStart = 1.0e15, kSkyFadeEnd = 1.0e16;
@@ -738,8 +739,8 @@ inline bool onSmallParent(uint32_t i, const double* position, const double* cam,
     const int32_t pi = s.parents[i];
     const uint32_t ci = static_cast<uint32_t>(s.params[P_CENTRAL]);
     if (s.kinds[i] != 2 || pi < 0 || !(s.flags[pi] & F_SHOW)) return false;
-    /* A central parent is the origin; it counts too while it is a few
-     * pixels across (the Earth seen from far out: its Moon gives way to it). */
+    /* A central parent is the origin; it counts too (the Earth seen from far
+     * out: its Moon gives way to it). */
     const bool parentCentral = static_cast<uint32_t>(pi) == ci;
     if (!parentCentral && s.status[pi] != 0) return false;
     double toParent[3];
@@ -747,11 +748,20 @@ inline bool onSmallParent(uint32_t i, const double* position, const double* cam,
     const double pd = mag(toParent);
     const double pr = maxRadius(s, static_cast<uint32_t>(pi));
     const double parentPixels = pr / std::max(pd, pr) / pixelAngle;
-    if (!(parentPixels < kPickPixels)) return false;
     double toBody[3];
     for (int k = 0; k < 3; ++k) toBody[k] = position[k] - cam[k];
     const double separation = angleBetween(toParent, toBody) / pixelAngle;
-    return separation < parentPixels + 0.5 * kPickPixels;
+    /* The moon's pick target reaches half its size from its centre. While it
+     * reaches the parent's centre the moon gives way, whatever the parent's
+     * size, so a click on a planet's centre is the planet (from 3000 radii a
+     * click on Jupiter's centre picked Ganymede 5.3 px away, verifier
+     * 2026-10-14; from 40 radii one on Saturn's picked Enceladus in front of
+     * its disc); the margin covers the cursor's pixel and the pick's own 3x3
+     * window. While the parent is a few pixels across the moon also gives way
+     * wherever its target overlaps the parent's. */
+    if (separation < 0.5 * kPickPixels + kPickMargin) return true;
+    if (!(parentPixels < kPickPixels)) return false;
+    return separation < parentPixels + 0.5 * kPickPixels + kPickMargin;
 }
 
 /* Whether a position written last frame is still within a tenth of a pixel
@@ -1143,6 +1153,33 @@ inline bool switchCentral(uint32_t b, double maxRadiusOfBody) {
     return true;
 }
 
+/* Whether a body other than the central one is drawn on a ray (a pick at a
+ * pixel): its drawn place within its largest radius of the ray, or within
+ * `angle` (rad: half a pick target) when it is drawn smaller, nearer than
+ * `farthest` along it. ray: origin (3), unit direction (3), farthest, angle. */
+inline bool bodyOnRay(const double* ray) {
+    Scene& s = scene();
+    if (s.out[O_FRAME_VALID] == 0.0 || s.n < 2) return false;
+    const uint32_t ci = static_cast<uint32_t>(s.params[P_CENTRAL]);
+    const double* o = ray;
+    const double* d = ray + 3;
+    const double farthest = ray[6], angle = ray[7];
+    for (uint32_t i = 0; i < s.n; ++i) {
+        if (i == ci || s.status[i] != 0) continue;
+        const int32_t f = s.drawFlags[i];
+        if ((f & D_HIDE) || !(f & (D_ELLIPSOID | D_PICK_SHOW))) continue;
+        double to[3];
+        for (int k = 0; k < 3; ++k) to[k] = s.drawn[3 * i + k] - o[k];
+        const double along = to[0] * d[0] + to[1] * d[1] + to[2] * d[2];
+        const double r = maxRadius(s, i);
+        if (along <= -r || along - r > farthest) continue;
+        double off[3];
+        for (int k = 0; k < 3; ++k) off[k] = to[k] - along * d[k];
+        if (mag(off) <= std::max(r, along * angle)) return true;
+    }
+    return false;
+}
+
 /* Keeps a camera position at least 1 km outside every body that is not
  * central (the central body's surface is the globe's). Returns whether it
  * moved it. */
@@ -1234,6 +1271,10 @@ SSB_EXPORT("ssb_scene_keep_outside") int32_t ssb_scene_keep_outside(double* came
     return ssb_scene::keepOutside(camera) ? 1 : 0;
 }
 SSB_EXPORT("ssb_scene_carry") void ssb_scene_carry(void) { ssb_scene::carry(); }
+SSB_EXPORT("ssb_scene_body_on_ray") int32_t ssb_scene_body_on_ray(const double* ray) {
+    return ssb_scene::bodyOnRay(ray) ? 1 : 0;
+}
+
 /* Whether a camera position (central frame) is beyond the central body's
  * Hill sphere at the last frame (no Hill sphere: never). */
 SSB_EXPORT("ssb_scene_beyond_hill") int32_t ssb_scene_beyond_hill(const double* camera) {
