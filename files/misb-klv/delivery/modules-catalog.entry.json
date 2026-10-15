@@ -1,0 +1,22 @@
+{
+  "MODULE_ID": "com.digitalarsenal.files.misb-klv",
+  "PLUGIN_ID": "com.digitalarsenal.files.misb-klv",
+  "NAME": "MISB ST 0601 full-motion video",
+  "DESCRIPTION": "Full-motion video with MISB ST 0601 metadata for a video layer draped on the globe: demultiplexes an MPEG-2 transport stream, remuxes its H.264 to fragmented MP4 and writes a per-frame footprint table.",
+  "VERSION": "0.2.0",
+  "EPOCH": 1,
+  "CONTENT_HASH": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
+  "ARTIFACT_SIZE_BYTES": 175171,
+  "ARTIFACT_PATH": "/modules/com.digitalarsenal.files.misb-klv/0.2.0/module.wasm",
+  "TRUST_TIER": "OPTIONAL",
+  "DEFAULT_ENABLED": false,
+  "ACCESS_POLICY": "ANONYMOUS",
+  "ENTRY_STATE": "ACTIVE",
+  "PLUGIN_TYPE": "Parser",
+  "RUNTIME_TARGETS": [
+    "browser",
+    "wasmedge"
+  ],
+  "LICENSE": "",
+  "source_artifact": "artifacts/4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80.wasm"
+}
