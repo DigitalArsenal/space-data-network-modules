@@ -1,0 +1,21 @@
+{
+  "note": "Committed artifacts still signed by the REVOKED dev module signer (keyId sdm-dev-test-2026; its private seed is public in space-data-module-sdk test/support, security audit SEC-005). They await the owner's key-rotation decision and are then re-signed with the release key, one by one, removing each from this list in the same commit. tests/module_signing_hygiene.test.mjs holds the list exact: no other committed artifact may carry this signer, and each listed one must still carry it. Re-sign: SDM_MODULE_SIGNING_KEYPAIR_PATH=<release keypair> node scripts/sign-module-artifact.mjs <artifact>.",
+  "revokedSignerPublicKeyHex": "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78",
+  "revokedSignerKeyId": "sdm-dev-test-2026",
+  "artifacts": [
+    "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+    "analysis/epoch-state/dist/isomorphic/module.wasm",
+    "analysis/launch-ascent/dist/isomorphic/module.wasm",
+    "analysis/reentry/dist/isomorphic/module.wasm",
+    "analysis/vcm-adapter/dist/isomorphic/module.wasm",
+    "basilisk/runtime/dist/isomorphic/module.wasm",
+    "data-source/gp-archive-records/dist/isomorphic/module.wasm",
+    "data-source/gps-source/dist/gps-source.wasm",
+    "data-source/oneweb-source/dist/oneweb-source.wasm",
+    "data-source/spk-source/dist/isomorphic/module.wasm",
+    "files/ccsds-messages/dist/isomorphic/module.wasm",
+    "files/orbit-products/dist/isomorphic/module.wasm",
+    "foundation/frames/dist/isomorphic/module.wasm",
+    "propagator/hypersonics/dist/isomorphic/module.wasm"
+  ]
+}

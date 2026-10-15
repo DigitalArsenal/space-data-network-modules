@@ -31,6 +31,13 @@ import {
 } from "space-data-module-sdk/bundle";
 import { getWasmWallet } from "space-data-module-sdk/utils/wasm-crypto";
 
+import {
+  assertModuleSignerNotRevoked,
+  assertProtectedByPublisher,
+  ed25519PublicKeyHexFromSeed,
+  resolvePublisherIdentity,
+} from "../../../scripts/lib/module-signing-key.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, "..");
 const distDir = path.join(pkgRoot, "dist");
@@ -51,11 +58,21 @@ function parseEnvFile(text) {
 }
 
 const env = parseEnvFile(await readFile(walletEnvPath, "utf8"));
-const mnemonic = env.SDN_TRACKED_DEV_ADMIN_MNEMONIC;
-if (!mnemonic) {
+if (!env.SDN_TRACKED_DEV_ADMIN_MNEMONIC) {
   console.error("wallet env file has no SDN_TRACKED_DEV_ADMIN_MNEMONIC");
   process.exit(1);
 }
+// Checked HERE, not left to protectModuleArtifact: given a mnemonic that fails
+// BIP-39 validation the SDK signs with a fresh random one instead (SEC-035).
+const wallet = await getWasmWallet();
+let identity;
+try {
+  identity = await resolvePublisherIdentity(wallet, env.SDN_TRACKED_DEV_ADMIN_MNEMONIC, "SDN_TRACKED_DEV_ADMIN_MNEMONIC");
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+const mnemonic = identity.mnemonic;
 
 const manifest = JSON.parse(
   await readFile(path.join(distDir, "plugin-manifest.json"), "utf8"),
@@ -79,24 +96,33 @@ if (protection.encrypted) {
   console.error("unexpected ENC on a signed-only artifact");
   process.exit(1);
 }
+try {
+  assertProtectedByPublisher(protection, identity);
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 
 // 2. ed25519 module signature (MBL sds.signature entry), seeded from the
 // wallet's canonical signing key. PNM/MBL records in the trailer are
 // preserved by signModuleArtifact.
-const wallet = await getWasmWallet();
-const seed = wallet.mnemonic.toSeed(mnemonic);
-const root = wallet.hdkey.fromSeed(seed);
-const signingKey = wallet.getSigningKey(root, 0, 0, 0);
+const signingKey = identity.signingKey;
 const privateKeySeedHex = Buffer.from(signingKey.privateKey).toString("hex");
+const ed25519PublicKeyHex = ed25519PublicKeyHexFromSeed(privateKeySeedHex);
+assertModuleSignerNotRevoked(ed25519PublicKeyHex);
 
 const signed = await signModuleArtifact(protection.bundledWasmBytes, {
   privateKeySeedHex,
   keyId: `sdn-admin ${signingKey.path}`,
 });
+if (signed.signature.publicKeyHex.toLowerCase() !== ed25519PublicKeyHex) {
+  console.error("the signed artifact names a signer other than the wallet's derived key");
+  process.exit(1);
+}
 
-// 3. Verify before writing anything.
+// 3. Verify before writing anything, against the derived key only.
 const verification = await verifyModuleArtifact(signed.wasmBytes, {
-  trustedPublicKeys: signed.signature.publicKeyHex,
+  trustedPublicKeys: [ed25519PublicKeyHex],
   requireSignature: true,
 });
 if (!verification.verified) {

@@ -3,6 +3,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { loadModuleSigningKeypair, signModuleArtifactWithConfiguredKey } from "./lib/module-signing-key.mjs";
+
+// Refuse before compiling anything when no signing key is configured.
+loadModuleSigningKeypair(process.env);
+
 const packageDir = process.cwd();
 const repoRoot = path.resolve(packageDir, "../..");
 const packageJsonPath = path.join(packageDir, "package.json");
@@ -18,21 +23,6 @@ const localSharedSourceCandidates = [
 ];
 const outputDir = path.join(packageDir, "dist/isomorphic");
 const outputPath = path.join(outputDir, "module.wasm");
-const moduleSigningKeypairCandidates = [
-  process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH,
-  path.resolve(
-    repoRoot,
-    "../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
-  ),
-  path.resolve(
-    repoRoot,
-    "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
-  ),
-  path.resolve(
-    repoRoot,
-    "../space-data-module-sdk/test/support/dev-module-signing-keypair.json",
-  ),
-].filter(Boolean);
 
 async function directoryExists(candidate) {
   try {
@@ -169,29 +159,11 @@ async function resolveCompileOptions(packageJson) {
   return compileOptions;
 }
 
-async function resolveModuleSigningKeypairPath() {
-  for (const candidate of moduleSigningKeypairCandidates) {
-    if (await fileExists(candidate)) {
-      return candidate;
-    }
-  }
-  throw new Error(
-    "Module signing keypair not found. Set SDM_MODULE_SIGNING_KEYPAIR_PATH " +
-      `or provide one of: ${moduleSigningKeypairCandidates.join(", ")}`,
-  );
-}
-
+// Signed with the key SDM_MODULE_SIGNING_KEYPAIR_PATH names, and only that key:
+// no default, no SDK dev-fixture fallback, the revoked dev signer refused
+// (scripts/lib/module-signing-key.mjs).
 async function signCompiledArtifact(wasmBytes) {
-  const keypairPath = await resolveModuleSigningKeypairPath();
-  const keypair = JSON.parse(await readFile(keypairPath, "utf8"));
-  const signed = await bundle.signModuleArtifact(wasmBytes, {
-    privateKeySeedHex: keypair.privateKeySeedHex,
-    keyId: keypair.keyId ?? null,
-  });
-  await bundle.verifyModuleArtifact(signed.wasmBytes, {
-    trustedPublicKeys: [keypair.publicKeyHex],
-    requireSignature: true,
-  });
+  const signed = await signModuleArtifactWithConfiguredKey(bundle, wasmBytes);
   return signed.wasmBytes;
 }
 
