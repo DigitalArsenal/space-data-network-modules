@@ -18,7 +18,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const packageRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const artifactPath = path.join(packageRoot, "dist", "isomorphic", "module.wasm");
+// The runner instantiates without threads: the sequential conformance build.
+const artifactPath = path.join(packageRoot, "dist", "sequential", "module.wasm");
 const vectorsPath = path.join(packageRoot, "vectors", "vectors.json");
 
 const packageRequire = createRequire(path.join(packageRoot, "package.json"));
