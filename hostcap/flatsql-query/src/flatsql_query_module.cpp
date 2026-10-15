@@ -249,7 +249,7 @@ uint16_t http_status_of(const std::string& code) {
     if (code == "no-route" || code == "not-found") return 404;
     if (code == "method-not-allowed") return 405;
     if (code == "not-acceptable") return 406;
-    if (code == "timeout" || code == "too-large") return 422;
+    if (code == "timeout" || code == "too-large" || code == "row-cap" || code == "byte-cap") return 422;
     if (code == "host-failed") return 502;
     if (code == "unavailable") return 503;
     return 400;
@@ -370,6 +370,9 @@ int serve_surface(const plugin_input_frame_t* frame, const QRP& request, const Q
         table->RECORDS = tables[t].RECORDS;
         for (size_t c = 0; c < column_count; c++) {
             if (columns[c].TABLE.str() != table->NAME) continue;
+            // A PLACEHOLDER column exists only for the engine's >=1-column invariant (a one-byte read of slot 0, never
+            // the field's value). QRPColumn cannot mark it, so it is not advertised: `_data` is the honest column.
+            if (columns[c].PLACEHOLDER) continue;
             auto column = std::make_unique<QRPColumnT>();
             column->NAME = columns[c].NAME.str();
             table->COLUMNS.push_back(std::move(column));
@@ -477,6 +480,20 @@ int serve_query(const plugin_input_frame_t* frame, const QRP& request, const Qrp
         if (message.empty()) message = "sandboxed query failed";
         if (code == "timeout") return refuse(ctx, "timeout", message);
         if (code == "too-large") return refuse(ctx, "too-large", message);
+        // The engine's own rejection code: the node answers every sandbox rejection with the hostcall code "sandbox"
+        // and its engine message "sandbox: <code>: <detail>" (flatsqlrt.SandboxError). That code is the public one:
+        // timeout and row-cap / byte-cap are 422, the statement refusals (not-authorized, multi-statement,
+        // empty-statement, read-only, not-select, params) are 400.
+        if (code == "sandbox") {
+            const std::string_view prefix = "sandbox: ";
+            const size_t colon = message.rfind(prefix, 0) == 0 ? message.find(':', prefix.size()) : std::string::npos;
+            const std::string engine_code = colon == std::string::npos ? std::string() : message.substr(prefix.size(), colon - prefix.size());
+            if (engine_code == "timeout" || engine_code == "row-cap" || engine_code == "byte-cap" || engine_code == "not-authorized" ||
+                engine_code == "multi-statement" || engine_code == "empty-statement" || engine_code == "read-only" ||
+                engine_code == "not-select" || engine_code == "params") {
+                return refuse(ctx, engine_code, message);
+            }
+        }
         if (message.find("not-a-record-stream") != std::string::npos) {
             return refuse(ctx, "not-acceptable", message + " — request format=json for projection results");
         }

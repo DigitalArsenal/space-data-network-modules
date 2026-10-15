@@ -185,6 +185,21 @@ test("respond: a dataset is its $DAV + records as one stream, an OMM array as JS
   assert.deepEqual([records[0].EPOCH, records[0].BSTAR, records[0].COVARIANCE, records[0].EPHEMERIS_TYPE, records[0].USER_DEFINED_EPOCH_TIMESTAMP], ["2026-10-13T06:00:00.000Z", 0.00012, [1, 2.5], "SGP4", 1791871200]);
   assert.equal(records[1].OBJECT_ID, null);
 
+  // A published shard as the node's store serves it: each stored (size-prefixed) record inside a shard frame of its
+  // own, [u32 frame][u32 record][record]. Its identifier and root sit one prefix further in; FlatBuffers stay verbatim.
+  const shard = concat(...[0, 1].map((i) => {
+    const record = build("OMM", [{ NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)", MEAN_MOTION: 15.5 }, { NORAD_CAT_ID: 20580, OBJECT_NAME: "HST", MEAN_MOTION: 15.1 }][i], { sizePrefixed: true });
+    const prefix = new Uint8Array(4);
+    new DataView(prefix.buffer).setUint32(0, record.length, true);
+    return concat(prefix, record);
+  }));
+  const shardJson = await answer(harness, "respond", [apr({ ...latest, ACCEPT: aprRepresentation.Json }), frame("availability", "DAV", dav), frame("omm_records", "OMM", shard)]);
+  assert.deepEqual([shardJson.status, shardJson.header("x-sdn-record-count"), shardJson.header("etag")], [200, "2", ETAG]);
+  assert.deepEqual(shardJson.json().map((r) => [r.NORAD_CAT_ID, r.OBJECT_NAME]), [[25544, "ISS (ZARYA)"], [20580, "HST"]]);
+  const shardFb = await answer(harness, "respond", [apr(latest), frame("availability", "DAV", dav), frame("omm_records", "OMM", shard)]);
+  assert.equal(shardFb.header("x-sdn-record-count"), "2");
+  assert.deepEqual(shardFb.body.slice(shardFb.body.length - shard.length), shard, "the shard verbatim after the $DAV");
+
   const notModified = await answer(harness, "respond", [apr({ ...latest, IF_NONE_MATCH: ETAG }), frame("availability", "DAV", dav), frame("omm_records", "OMM", OMM_RECORDS)]);
   assert.deepEqual([notModified.status, notModified.header("etag"), notModified.body.length], [304, ETAG, 0]);
 

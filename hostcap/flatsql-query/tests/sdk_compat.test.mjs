@@ -322,8 +322,11 @@ test("sandbox_query: the surface request lists tables, columns and the serving l
     assert.equal(op, "storage.query_surface");
     return {
       result: { TIMEOUT_MS: 5000, MAX_ROWS: 100000n, MAX_BYTES: 67108864n },
-      lists: { tables: [{ NAME: "OMM", KIND: "standard", SOURCE: "OMM", RECORDS: 31000n }, { NAME: "OMM@celestrak", KIND: "lane", SOURCE: "celestrak", RECORDS: -1n }],
-        columns: [{ TABLE: "OMM", NAME: "NORAD_CAT_ID" }, { TABLE: "OMM", NAME: "EPOCH" }, { TABLE: "OMM@celestrak", NAME: "_data", PLACEHOLDER: true }] },
+      lists: { tables: [{ NAME: "OMM", KIND: "standard", SOURCE: "OMM", RECORDS: 31000n }, { NAME: "OMM@celestrak", KIND: "lane", SOURCE: "celestrak", RECORDS: -1n }, { NAME: "LDM", KIND: "view", SOURCE: "LDM", RECORDS: 0n }],
+        // LDM's first field is a sub-table: its SITE column is the engine's >=1-column placeholder (a one-byte read of
+        // slot 0, never the site), which the host marks PLACEHOLDER. It is not advertised; `_data` is the honest column.
+        columns: [{ TABLE: "OMM", NAME: "NORAD_CAT_ID" }, { TABLE: "OMM", NAME: "EPOCH" }, { TABLE: "OMM@celestrak", NAME: "_data" },
+          { TABLE: "LDM", NAME: "SITE", PLACEHOLDER: true }, { TABLE: "LDM", NAME: "_data" }] },
     };
   });
   const frame = qrpFrame("surface", { ETAG: "W/\"old\"" });
@@ -332,7 +335,7 @@ test("sandbox_query: the surface request lists tables, columns and the serving l
   assert.equal(calls.length, 1);
   assert.deepEqual([page.header.MAX_ELAPSED_MS, Number(page.header.MAX_ROWS), Number(page.header.MAX_BYTES)], [5000, 100000, 67108864]);
   assert.deepEqual(page.header.TABLES.map((tb) => [tb.NAME, tb.KIND, tb.SOURCE, Number(tb.RECORDS), tb.COLUMNS.map((c) => c.NAME)]),
-    [["OMM", "standard", "OMM", 31000, ["NORAD_CAT_ID", "EPOCH"]], ["OMM@celestrak", "lane", "celestrak", -1, ["_data"]]]);
+    [["OMM", "standard", "OMM", 31000, ["NORAD_CAT_ID", "EPOCH"]], ["OMM@celestrak", "lane", "celestrak", -1, ["_data"]], ["LDM", "view", "LDM", 0, ["_data"]]]);
   assert.match(page.header.ETAG, /^W\/"fnv1a64-/);
 
   const { harness: down } = await harnessFor(t, () => fail("failed", "engine not open"));
@@ -362,11 +365,20 @@ test("sandbox_query: refusals before the host and every host error map to QRP Er
     ["too-large", "row-cap: more than 100000 rows", "too-large"],
     ["invalid-params", "not-a-record-stream: projection requested as flatbuffer", "not-acceptable"],
     ["sandbox", "not-authorized: table _secrets", "query-failed"],
+    // The node's own sandbox rejections: hostcall code "sandbox", engine message "sandbox: <code>: <detail>"
+    // (flatsqlrt.SandboxError). The engine's code is the public one.
+    ["sandbox", "sandbox: not-authorized: UPDATE is not permitted (read-only SELECT sandbox)", "not-authorized"],
+    ["sandbox", "sandbox: multi-statement: more than one statement", "multi-statement"],
+    ["sandbox", "sandbox: timeout: statement exceeded its deadline", "timeout"],
+    ["sandbox", "sandbox: row-cap: result exceeds 100 rows", "row-cap"],
+    ["sandbox", "sandbox: byte-cap: result exceeds 1048576 bytes", "byte-cap"],
+    ["sandbox", "sandbox: something-new: an engine code this module does not know", "query-failed"],
     ["not-authorized", "authorizer denied", "query-failed"],
     ["failed", "SQL error: near \"SELEC\": syntax error", "query-failed"],
     ["failed", "engine crashed", "host-failed"],
   ];
-  const statusOf = { timeout: 422, "too-large": 422, "not-acceptable": 406, "query-failed": 400, "host-failed": 502 };
+  const statusOf = { timeout: 422, "too-large": 422, "row-cap": 422, "byte-cap": 422, "not-acceptable": 406, "query-failed": 400,
+    "not-authorized": 400, "multi-statement": 400, "host-failed": 502 };
   for (const [code, message, expected] of cases) {
     const { harness: h } = await harnessFor(t, () => fail(code, message));
     const { decision, page } = sandboxOutputs(await h.invoke({ methodId: "sandbox_query", inputs: [qrpFrame("query", { SQL: "SELECT 1" })] }));
