@@ -58,7 +58,7 @@ test("the SDN module surface is exported alongside it", async () => {
   }
 });
 
-test("imports are WASI only — no emscripten glue, no forbidden classes", async () => {
+test("imports are WASI, the shared memory and wasi-threads' thread-spawn only — no emscripten glue", async () => {
   const { imports } = await moduleExports();
   const forbidden = imports.filter(
     (name) =>
@@ -70,23 +70,17 @@ test("imports are WASI only — no emscripten glue, no forbidden classes", async
   for (const name of imports) {
     assert.match(
       name,
-      /^wasi_snapshot_preview1\./,
-      `unexpected non-WASI import ${name}; a new host capability is an owner decision`,
+      /^(wasi_snapshot_preview1\.|wasi\.thread-spawn$|env\.memory$)/,
+      `unexpected import ${name}; a new host capability is an owner decision`,
     );
   }
+  assert.ok(imports.includes("wasi.thread-spawn"), "a pthreads module imports wasi.thread-spawn");
 });
 
-test("the manifest declares family propagator and the sequential model honestly", () => {
+test("the manifest declares family propagator and the pthreads model (owner 2026-10-13)", () => {
   assert.equal(manifest.pluginFamily, "propagator");
-  assert.equal(manifest.threadModel, "wasi-sequential");
-  assert.ok(
-    manifest.sequentialJustification?.kind === "caller-level-parallelism",
-    "a sequential propagator must justify itself",
-  );
-  assert.ok(
-    (manifest.sequentialJustification?.detail ?? "").length >= 24,
-    "the justification must be substantive",
-  );
+  assert.equal(manifest.threadModel, "emscripten-pthreads");
+  assert.equal(manifest.sequentialJustification, undefined);
 });
 
 test("every port is TYPED to a ratified $ identifier, with no wildcard", () => {
