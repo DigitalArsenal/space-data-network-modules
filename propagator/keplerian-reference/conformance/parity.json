@@ -1,0 +1,155 @@
+{
+  "ok": true,
+  "fixture": "keplerian-reference 1.8.2 (pthreads) ingest_omm",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "1774182b45e14079c1bef14febb77e55d1fadb38f1e231a225cdcf47775dd2f3",
+  "moduleSha256": "1774182b45e14079c1bef14febb77e55d1fadb38f1e231a225cdcf47775dd2f3",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 4,
+      "durationMs": 5672
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 4,
+      "durationMs": 73
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 4,
+      "durationMs": 3714
+    }
+  ],
+  "cases": [
+    "ingest",
+    "unphysical",
+    "refused-identifier",
+    "missing-frame"
+  ],
+  "comparisons": 18,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "ingest",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "browser",
+      "caseId": "unphysical",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "69a1fc42830811cdadf2407ed0085bd57a8996772cd637703cbdff9460ee10ed",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-identifier",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "e5da69190e4e3b737f9954e3fcee2a271aa9cfb1ef054a355b3b9ec57a4fba41",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "browser",
+      "caseId": "missing-frame",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": 0,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ingest",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "unphysical",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "69a1fc42830811cdadf2407ed0085bd57a8996772cd637703cbdff9460ee10ed",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-identifier",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "e5da69190e4e3b737f9954e3fcee2a271aa9cfb1ef054a355b3b9ec57a4fba41",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "missing-frame",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": 0,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ingest",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "stdoutLength": 60
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "unphysical",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "69a1fc42830811cdadf2407ed0085bd57a8996772cd637703cbdff9460ee10ed",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-identifier",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "e5da69190e4e3b737f9954e3fcee2a271aa9cfb1ef054a355b3b9ec57a4fba41",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "missing-frame",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "spawnCount": 0,
+      "stdoutSha256": "865bb6a84104b12107014c69dd9f9a758ee27647425947d7823b8267f7ff0c87",
+      "stdoutLength": 148
+    }
+  ]
+}

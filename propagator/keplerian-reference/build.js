@@ -117,6 +117,79 @@ const OMM_FIELDS = [
 ];
 
 const omm = await resolveOmmVtableSlots(OMM_FIELDS);
+
+/**
+ * The $SBD fields the small-body path reads (kepler_small_*), derived from the
+ * same pinned catalog: asteroids and comets are $SBD small-body records, never
+ * $OMM.
+ */
+async function resolveCatalogEntry(fileIdentifier) {
+  const standards = await import("space-data-module-sdk/standards");
+  const loader =
+    standards.loadStandardsCatalog ??
+    standards.resolveStandardsCatalog ??
+    standards.getStandardsCatalog;
+  const loaded = await loader();
+  const catalog = Array.isArray(loaded) ? loaded : loaded.catalog;
+  const entry = catalog.find((candidate) => candidate.fileIdentifier === fileIdentifier);
+  if (!entry) {
+    throw new Error(`The pinned spacedatastandards.org catalog has no ${fileIdentifier} entry (SBD needs 1.248.0 or later).`);
+  }
+  return entry;
+}
+
+function stripComments(idl) {
+  return idl.replace(/\/\/.*$/gm, "");
+}
+
+function tableSlots(idl, tableName, fieldNames) {
+  const text = stripComments(idl);
+  const unions = new Set([...text.matchAll(/union\s+(\w+)/g)].map((m) => m[1]));
+  const body = new RegExp(`table\\s+${tableName}\\s*\\{([\\s\\S]*?)\\}`).exec(text);
+  if (!body) throw new Error(`table ${tableName} is not in the pinned IDL.`);
+  const declared = [];
+  for (const match of body[1].matchAll(/([A-Za-z_]\w*)\s*:\s*\[?\s*([A-Za-z_][\w.]*)/g)) {
+    if (unions.has(match[2])) declared.push(`${match[1]}_type`);
+    declared.push(match[1]);
+  }
+  const slots = new Map();
+  for (const name of fieldNames) {
+    const index = declared.indexOf(name);
+    if (index < 0) throw new Error(`table ${tableName} declares no field ${name}; refusing to build.`);
+    slots.set(name, 4 + 2 * index);
+  }
+  return slots;
+}
+
+const SBD_FIELDS = [
+  "NUMBER",
+  "DESIGNATION",
+  "NAME",
+  "ORBIT_CLASS",
+  "CENTER_NAME",
+  "REF_FRAME",
+  "TIME_SYSTEM",
+  "EPOCH",
+  "SEMI_MAJOR_AXIS",
+  "ECCENTRICITY",
+  "INCLINATION",
+  "RA_OF_ASC_NODE",
+  "ARG_OF_PERICENTER",
+  "MEAN_ANOMALY",
+  "GM",
+  "PERICENTER_DISTANCE",
+  "PERICENTER_EPOCH",
+  "ABSOLUTE_MAGNITUDE",
+  "SLOPE_PARAMETER",
+  "DIAMETER",
+];
+const sbd = await resolveCatalogEntry("$SBD");
+const sbdSlots = tableSlots(sbd.idl, "SBD", SBD_FIELDS);
+const smallBodyDefines = [
+  `// --- GENERATED from the pinned SDS $SBD schema, version ${sbd.version} ---`,
+  ...[...sbdSlots].map(([name, slot]) => `#define ORBPRO_SBD_VT_${name} ${slot}`),
+  `// --- END GENERATED ---`,
+].join("\n");
 const ommSlotDefines = [
   `// --- GENERATED from the pinned SDS $OMM schema, version ${omm.version} ---`,
   `// hash ${omm.hash}`,
@@ -124,7 +197,7 @@ const ommSlotDefines = [
   `#define ORBPRO_OMM_SCHEMA_VERSION "${omm.version}"`,
   ...[...omm.slots].map(([name, slot]) => `#define ORBPRO_OMM_VT_${name} ${slot}`),
   `// --- END GENERATED ---`,
-].join("\n");
+].join("\n") + "\n" + smallBodyDefines;
 
 const INCLUDE_LINE = '#include "orbpro/orbpro_propagator_abi.h"';
 if (!rawSource.includes(INCLUDE_LINE)) {
@@ -151,7 +224,14 @@ const sourceCode = rawSource
       `// --- END INLINED ${path.basename(abiHeaderPath)} ---`,
     ].join("\n"),
   )
-  .replace(SLOTS_MARKER, ommSlotDefines);
+  .replace(SLOTS_MARKER, ommSlotDefines) +
+  // The small-body layer's display decisions (snapshot schedule, fade,
+  // promoted radius), appended to the same translation unit.
+  "\n" +
+  (await fs.readFile(path.join(packageRoot, "src", "small_body_display.hpp"), "utf8")) +
+  // The threaded small-body catalog surface (pool of pthreads, zero-copy).
+  "\n" +
+  (await fs.readFile(path.join(packageRoot, "src", "small_body_catalog.hpp"), "utf8"));
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -188,3 +268,32 @@ console.log(
   `Built ${path.relative(packageRoot, outputPath)} ` +
     `(${compilation.compiler}, threadModel=${compilation.threadModel})`,
 );
+
+// THE SINGLE-THREAD PATH, only where the SDK's tri-runtime tools need it: the
+// SDK's propagator conformance runner and the WasmEdge CLI instantiate a
+// module with no shared memory and no thread-spawn. The same source without
+// the threaded catalog surface, as the sequential model, for them.
+const sequentialPath = path.join(distRoot, "sequential", "module.wasm");
+await fs.mkdir(path.dirname(sequentialPath), { recursive: true });
+const sequentialManifest = {
+  ...manifest,
+  threadModel: "wasi-sequential",
+  sequentialJustification: {
+    kind: "caller-level-parallelism",
+    detail:
+      "The conformance artifact for the SDK's propagator runner and the WasmEdge CLI, which instantiate without threads: the same propagator source without the threaded small-body catalog surface (dist/isomorphic is the pthreads build every host uses).",
+  },
+};
+const sequential = await compileModuleFromSource({
+  manifest: sequentialManifest,
+  sourceCode: sourceCode.slice(0, sourceCode.lastIndexOf("// propagator/keplerian-reference — the small-body catalog surface")),
+  language: "c++",
+  outputPath: sequentialPath,
+  threadModel: "wasi-sequential",
+});
+if (!sequential.report?.ok) {
+  throw new Error(
+    `Sequential conformance artifact failed SDK validation:\n${JSON.stringify(sequential.report?.issues ?? [], null, 2)}`,
+  );
+}
+console.log(`Built ${path.relative(packageRoot, sequentialPath)} (${sequential.compiler}, threadModel=wasi-sequential)`);
