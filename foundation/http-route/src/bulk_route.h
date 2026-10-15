@@ -76,8 +76,8 @@ inline std::string bulk_route_schema(const std::string& path) {
 // json_encode_available reports whether the flow can present this standard's
 // records as JSON.
 //
-// The composed flow's json branch is foundation/omm-json — an $OMM encoder. A
-// non-OMM stream sent through it would be decoded as OMM and emitted as
+// foundation/http-respond renders the client JSON, and it has a JSON rendering
+// for $OMM records only. A non-OMM stream rendered as OMM would be emitted as
 // confident nonsense, which is worse than a refusal. Until a schema-generic
 // encoder node exists, ?format=json is honoured for $OMM alone and every other
 // standard is told so explicitly.

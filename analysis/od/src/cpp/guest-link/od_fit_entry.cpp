@@ -42,7 +42,7 @@ extern "C" int fit(void) {
   // $OEM in -> fit -> $OMM out. Options empty: identity/labels ride in the $OEM
   // (CAT NORAD/OBJECT_ID) or, in a flow, in node CONFIG (not this hop).
   od::PluginFitFBResult r =
-      od::fit_ephemeris_fb(f->payload, f->payload_length, std::string_view{});
+      od::fit_ephemeris_fb(f->payload, f->payload_length, od::FitOptions{});
   if (!r.ok) {
     plugin_set_error(r.error_code.c_str(), r.error_message.c_str());
     return 1;

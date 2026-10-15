@@ -7,17 +7,21 @@
 // which epoch is this node serving, and where do its files live relative to
 // this origin.
 //
-// Config (plugin.getConfig, or the optional "config" input frame):
+// Config: one ModuleConfig (MCFG) - plugin.getConfig over the SDS $PIV hostcall
+// (sdm_piv::get_config(), typedHostcall.hpp), or the optional "config" input
+// frame, the same ModuleConfig. Read in place, once per instance (per distinct
+// frame):
 //   osm_mount_path     the mount prefix (default "/api/v1/osm/")
 //   osm_gateway_path   the node's gateway path (default "/ipfs/")
 //   osm_epoch_cid      the pinned epoch directory's CID (required for a record)
 //   osm_epoch_record   the record build-fgb.mjs wrote (osm-context.fgb.json),
-//                      as an OBJECT, verbatim (required for a record)
+//                      as an OBJECT (a TableList of one table in the
+//                      ModuleConfig; required for a record)
 //   osm_attribution    discovery-document attribution
 //                      (default "© OpenStreetMap contributors")
 //
-// The helpers (JSON readers, SHA-256 multihash ETag, the $HTR push, the
-// getConfig bridge, the batched-frame refusal) are the ones terrain-source
+// The helpers (SHA-256 multihash ETag, the $HTR push, the batched-frame
+// refusal) are the ones terrain-source
 // carries, trimmed to what a record route needs; the comments there say why
 // each exists and are not repeated here.
 
@@ -31,91 +35,11 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "ModuleConfig_generated.h"
+// The SDK's $HTQ / $HTR envelope headers are inlined ahead of this file by source.mjs.
 
 namespace {
-
-bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char esc = json[i + 1];
-            if (esc == 'n') value.push_back('\n');
-            else if (esc == 't') value.push_back('\t');
-            else if (esc == 'r') value.push_back('\r');
-            else value.push_back(esc);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-std::string json_string(const std::string& json, const char* key, const char* fallback) {
-    std::string v;
-    if (json_string_field(json, key, &v)) return v;
-    return fallback;
-}
-
-// The RAW JSON value (object/array/scalar) under `key`, verbatim.
-bool json_raw_value(const std::string& json, const char* key, std::string* out) {
-    const std::string needle = std::string("\"") + key + "\"";
-    size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    size_t i = json.find(':', k + needle.size());
-    if (i == std::string::npos) return false;
-    i++;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    if (json[i] == '{' || json[i] == '[') {
-        const char open = json[i];
-        const char close = open == '{' ? '}' : ']';
-        int depth = 0;
-        bool in_string = false;
-        for (size_t j = i; j < json.size(); j++) {
-            const char c = json[j];
-            if (in_string) {
-                if (c == '\\') j++;
-                else if (c == '"') in_string = false;
-                continue;
-            }
-            if (c == '"') in_string = true;
-            else if (c == open) depth++;
-            else if (c == close && --depth == 0) {
-                *out = json.substr(i, j - i + 1);
-                return true;
-            }
-        }
-        return false;
-    }
-    size_t j = i;
-    if (json[i] == '"') {
-        for (j = i + 1; j < json.size(); j++) {
-            if (json[j] == '\\') j++;
-            else if (json[j] == '"') { j++; break; }
-        }
-    } else {
-        while (j < json.size() && json[j] != ',' && json[j] != '}' && json[j] != ']' &&
-               !is_ws(json[j])) {
-            j++;
-        }
-    }
-    *out = json.substr(i, j - i);
-    return !out->empty();
-}
 
 std::string json_escape(const std::string& s) {
     std::string out;
@@ -133,16 +57,6 @@ std::string json_escape(const std::string& s) {
     }
     return out;
 }
-
-std::string input_text_at(const char* port_id, uint32_t ordinal) {
-    const int32_t idx = plugin_find_input_index(port_id, ordinal);
-    if (idx < 0) return std::string();
-    const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!f || !f->payload) return std::string();
-    return std::string(reinterpret_cast<const char*>(f->payload), f->payload_length);
-}
-
-std::string input_text(const char* port_id) { return input_text_at(port_id, 0); }
 
 // Every port here is single-stream; a surplus frame is refused, not dropped
 // (the compiled flow runtime drains a node's queue port-blind).
@@ -270,62 +184,7 @@ std::string sha256_multihash(const std::string& bytes) {
 
 }  // namespace
 
-// ── plugin.getConfig bridge (compiled OUT for the host-bridge-less lanes) ──
-#ifdef OSM_SOURCE_NO_HOST_BRIDGE
 namespace {
-int32_t sdm_host_call(const uint8_t*, int32_t, const uint8_t*, int32_t) { return 0; }
-int32_t sdm_host_response_len(void) { return 0; }
-int32_t sdm_host_read_response(uint8_t*, int32_t) { return 0; }
-}  // namespace
-#else
-extern "C" {
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-}
-#endif
-
-namespace {
-
-std::string fetch_config() {
-    static const char* op = "plugin.getConfig";
-    const std::string payload_json = "{}";
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 4) return "{}";
-    std::vector<uint8_t> buf(static_cast<size_t>(len));
-    sdm_host_read_response(buf.data(), len);
-    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
-                          (static_cast<uint32_t>(buf[2]) << 16) |
-                          (static_cast<uint32_t>(buf[3]) << 24);
-    if (buf.size() < 4u + rlen) return "{}";
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
-}
-
-// Read once per instance: a mount's config is materialised at mount
-// construction and cannot change under a running instance (terrain-source
-// measured why this matters).
-const std::string& load_config() {
-    static std::string cached;
-    static bool loaded = false;
-    if (!loaded) {
-        cached = fetch_config();
-        loaded = true;
-    }
-    return cached;
-}
 
 struct HeaderEntry {
     std::string name;
@@ -385,41 +244,196 @@ int push_public_json(const std::string& body, const std::string& if_none_match) 
     return push_htr(200, headers, reinterpret_cast<const uint8_t*>(body.data()), body.size());
 }
 
-struct ServingConfig {
-    std::string mount_prefix = "/api/v1/osm/";
-    std::string gateway_path = "/ipfs/";
-    std::string epoch_cid;
-    std::string record;  // the builder's record object, verbatim JSON
-    std::string attribution = "© OpenStreetMap contributors";
+// ── the record, rendered from the typed config ─────────────────────────────
+//
+// The ModuleConfig keeps every value the record holds (strings, numbers,
+// booleans, lists, nested objects as TableLists) but neither JSON's key order
+// nor its nulls: entries are sorted by KEY and a null is left out (Go node and
+// SDK alike). The record is served in the builder's own key order
+// (tools/osm-context/build-fgb.mjs, FORMAT osm-context-fgb/1), the keys it always
+// writes as null (FILES[].WHERE, PROVENANCE.OCEAN) answered as null when absent,
+// and any key the builder does not write appended after them in KEY order, so
+// nothing configured is dropped.
+
+std::string json_number(double v) {
+    char buf[40];
+    if (v == static_cast<double>(static_cast<int64_t>(v)) && v > -1e18 && v < 1e18) {
+        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
+        return buf;
+    }
+    for (int precision = 15; precision <= 17; precision++) {
+        std::snprintf(buf, sizeof(buf), "%.*g", precision, v);
+        if (std::strtod(buf, nullptr) == v) break;
+    }
+    return buf;
+}
+
+std::string json_string_value(std::string_view s) { return "\"" + json_escape(std::string(s)) + "\""; }
+
+struct KeyOrder {
+    const char* key;
+    bool null_when_absent;
 };
+
+// The builder's key orders, per nested table of the record.
+const KeyOrder kFileOrder[] = {{"NAME", false},  {"CATEGORY", false},      {"KIND", false},
+                               {"MEDIA_TYPE", false}, {"BYTES", false},    {"SHA256", false},
+                               {"FEATURE_COUNT", false}, {"LAYER", false}, {"WHERE", true}};
+const KeyOrder kProvenanceOrder[] = {{"SOURCE", false},    {"SOURCE_URL", false}, {"RETRIEVED_AT", false},
+                                     {"PROCESSOR", false}, {"LICENSE", false},    {"SHARE_ALIKE", false},
+                                     {"ATTRIBUTION", false}, {"OCEAN", true}};
+const KeyOrder kOceanOrder[] = {{"SOURCE_URL", false}, {"SHA256", false}, {"FILES_DATED", false}, {"LICENSE", false}};
+
+std::string render_table(const sdm_piv::ConfigTable& table, const KeyOrder* order, size_t order_count);
+
+// Which nested values are objects (one table) and which are lists of objects;
+// a TableList cannot say, the record's format does.
+bool is_object_key(std::string_view key) { return key == "PAYLOAD" || key == "PROVENANCE" || key == "OCEAN"; }
+
+std::string render_entry(const sdn::runtime::ConfigEntry* e) {
+    const std::string_view key = e->KEY() ? std::string_view(e->KEY()->c_str(), e->KEY()->size()) : std::string_view();
+    switch (e->KIND()) {
+        case sdn::runtime::configValueKind_String:
+            return json_string_value(e->STRING_VALUE() ? e->STRING_VALUE()->string_view() : std::string_view());
+        case sdn::runtime::configValueKind_Number:
+            return json_number(e->NUMBER_VALUE());
+        case sdn::runtime::configValueKind_Bool:
+            return e->BOOL_VALUE() ? "true" : "false";
+        case sdn::runtime::configValueKind_StringList: {
+            std::string out = "[";
+            if (e->STRINGS()) {
+                for (const auto* item : *e->STRINGS()) {
+                    if (out.size() > 1) out += ",";
+                    out += json_string_value(item ? item->string_view() : std::string_view());
+                }
+            }
+            return out + "]";
+        }
+        case sdn::runtime::configValueKind_NumberList: {
+            std::string out = "[";
+            if (e->NUMBERS()) {
+                for (const double item : *e->NUMBERS()) {
+                    if (out.size() > 1) out += ",";
+                    out += json_number(item);
+                }
+            }
+            return out + "]";
+        }
+        case sdn::runtime::configValueKind_TableList: {
+            const KeyOrder* order = nullptr;
+            size_t order_count = 0;
+            if (key == "FILES") { order = kFileOrder; order_count = sizeof(kFileOrder) / sizeof(kFileOrder[0]); }
+            else if (key == "PROVENANCE") { order = kProvenanceOrder; order_count = sizeof(kProvenanceOrder) / sizeof(kProvenanceOrder[0]); }
+            else if (key == "OCEAN") { order = kOceanOrder; order_count = sizeof(kOceanOrder) / sizeof(kOceanOrder[0]); }
+            const auto* tables = e->TABLES();
+            if (is_object_key(key) && tables && tables->size() == 1) {
+                return render_table(sdm_piv::ConfigTable(tables->Get(0)->ENTRIES()), order, order_count);
+            }
+            std::string out = "[";
+            if (tables) {
+                for (const auto* t : *tables) {
+                    if (out.size() > 1) out += ",";
+                    out += render_table(sdm_piv::ConfigTable(t ? t->ENTRIES() : nullptr), order, order_count);
+                }
+            }
+            return out + "]";
+        }
+        default:
+            return "null";
+    }
+}
+
+std::string render_table(const sdm_piv::ConfigTable& table, const KeyOrder* order, size_t order_count) {
+    std::string out = "{";
+    auto add = [&](std::string_view key, const std::string& value) {
+        if (out.size() > 1) out += ",";
+        out += json_string_value(key) + ":" + value;
+    };
+    for (size_t i = 0; i < order_count; i++) {
+        const sdn::runtime::ConfigEntry* e = nullptr;
+        if (table.entries()) {
+            for (const auto* candidate : *table.entries()) {
+                if (candidate->KEY() && candidate->KEY()->string_view() == order[i].key) { e = candidate; break; }
+            }
+        }
+        if (e) add(order[i].key, render_entry(e));
+        else if (order[i].null_when_absent) add(order[i].key, "null");
+    }
+    if (table.entries()) {
+        for (const auto* e : *table.entries()) {
+            if (!e->KEY()) continue;
+            const std::string_view key = e->KEY()->string_view();
+            bool ordered = false;
+            for (size_t i = 0; i < order_count && !ordered; i++) ordered = key == order[i].key;
+            if (!ordered) add(key, render_entry(e));
+        }
+    }
+    return out + "}";
+}
+
+// The nested table's entry by exact key (no dotted-path resolution: record keys
+// never contain dots, and an exact lookup cannot wander into a neighbour).
+const sdn::runtime::ConfigEntry* exact_entry(const sdm_piv::ConfigTable& table, const char* key) {
+    if (!table.entries()) return nullptr;
+    for (const auto* e : *table.entries()) {
+        if (e->KEY() && e->KEY()->string_view() == key) return e;
+    }
+    return nullptr;
+}
+
+std::string table_string(const sdm_piv::ConfigTable& table, const char* key) {
+    const auto* e = exact_entry(table, key);
+    return e && e->KIND() == sdn::runtime::configValueKind_String && e->STRING_VALUE() ? e->STRING_VALUE()->str()
+                                                                                     : std::string();
+}
 
 std::string ensure_trailing_slash(std::string s) {
     if (s.empty() || s.back() != '/') s.push_back('/');
     return s;
 }
 
-ServingConfig build_serving_config(const std::string& config) {
+struct ServingConfig {
+    std::string mount_prefix = "/api/v1/osm/";
+    std::string gateway_path = "/ipfs/";
+    std::string epoch_cid;
+    bool has_record = false;
+    std::string record_body;    // the record as served (rendered once; empty without one or a CID)
+    std::string epoch_id;       // the record's TILESET_ID
+    std::string dataset_epoch;  // the record's DATASET_EPOCH
+    std::string attribution = "© OpenStreetMap contributors";
+};
+
+bool looks_like_cid(const std::string& cid);
+std::string render_record(const sdm_piv::ConfigTable& record, const ServingConfig& cfg);
+
+// Everything the route needs, copied out of the ModuleConfig (so the host's
+// response is held only while it is read).
+ServingConfig build_serving_config(const sdm_piv::ConfigTable& config) {
     ServingConfig sc;
-    sc.mount_prefix = ensure_trailing_slash(json_string(config, "osm_mount_path", "/api/v1/osm/"));
-    sc.gateway_path = ensure_trailing_slash(json_string(config, "osm_gateway_path", "/ipfs/"));
-    sc.epoch_cid = json_string(config, "osm_epoch_cid", "");
-    std::string record;
-    if (json_raw_value(config, "osm_epoch_record", &record) && !record.empty() &&
-        record[0] == '{') {
-        sc.record = record;
+    sc.mount_prefix = ensure_trailing_slash(std::string(config.string("osm_mount_path", "/api/v1/osm/")));
+    sc.gateway_path = ensure_trailing_slash(std::string(config.string("osm_gateway_path", "/ipfs/")));
+    sc.epoch_cid = std::string(config.string("osm_epoch_cid", ""));
+    sc.attribution = std::string(config.string("osm_attribution", "© OpenStreetMap contributors"));
+    const auto* record_entry = exact_entry(config, "osm_epoch_record");
+    if (record_entry && record_entry->KIND() == sdn::runtime::configValueKind_TableList && record_entry->TABLES() &&
+        record_entry->TABLES()->size() == 1) {
+        const sdm_piv::ConfigTable record(record_entry->TABLES()->Get(0)->ENTRIES());
+        sc.has_record = true;
+        sc.epoch_id = table_string(record, "TILESET_ID");
+        sc.dataset_epoch = table_string(record, "DATASET_EPOCH");
+        if (looks_like_cid(sc.epoch_cid)) sc.record_body = render_record(record, sc);
     }
-    sc.attribution = json_string(config, "osm_attribution", "© OpenStreetMap contributors");
     return sc;
 }
 
 const ServingConfig& serving_config() {
-    static ServingConfig cached;
-    static bool built = false;
-    if (!built) {
-        cached = build_serving_config(load_config());
-        built = true;
+    static ServingConfig* cached = nullptr;
+    if (!cached) {
+        const sdm_piv::Config config = sdm_piv::get_config();
+        cached = new ServingConfig(build_serving_config(config.ok() ? static_cast<const sdm_piv::ConfigTable&>(config)
+                                                                    : sdm_piv::ConfigTable()));
     }
-    return cached;
+    return *cached;
 }
 
 // A CID is base58btc (Qm..., 46 chars) or base32 lower-case (b..., >= 59).
@@ -443,36 +457,29 @@ bool looks_like_cid(const std::string& cid) {
 }
 
 // The record as served: the builder's document with PAYLOAD.CID set to the
-// pinned CID and EPOCH_BASE_PATH added. Everything else is copied verbatim
-// (the raw values, never re-serialised) so the served record is the builder's
-// record.
-std::string render_record(const ServingConfig& cfg) {
-    const std::string& r = cfg.record;
+// pinned CID and EPOCH_BASE_PATH added, the rest rendered from the typed config
+// in the builder's key order (see render_table).
+std::string render_record(const sdm_piv::ConfigTable& r, const ServingConfig& cfg) {
     std::string out = "{";
     const char* copied[] = {"FORMAT", "TILESET_ID", "REGION", "CRS"};
     for (const char* key : copied) {
-        std::string raw;
-        if (json_raw_value(r, key, &raw)) {
-            out += std::string("\"") + key + "\":" + raw + ",";
-        }
+        if (const auto* e = exact_entry(r, key)) out += std::string("\"") + key + "\":" + render_entry(e) + ",";
     }
     std::string size_bytes = "0";
     std::string media_type = "\"application/vnd.ipld.dag-pb\"";
-    std::string payload;
-    if (json_raw_value(r, "PAYLOAD", &payload)) {
-        std::string v;
-        if (json_raw_value(payload, "SIZE_BYTES", &v)) size_bytes = v;
-        if (json_raw_value(payload, "MEDIA_TYPE", &v)) media_type = v;
+    const auto* payload = exact_entry(r, "PAYLOAD");
+    if (payload && payload->KIND() == sdn::runtime::configValueKind_TableList && payload->TABLES() &&
+        payload->TABLES()->size() == 1) {
+        const sdm_piv::ConfigTable p(payload->TABLES()->Get(0)->ENTRIES());
+        if (const auto* e = exact_entry(p, "SIZE_BYTES")) size_bytes = render_entry(e);
+        if (const auto* e = exact_entry(p, "MEDIA_TYPE")) media_type = render_entry(e);
     }
     out += "\"PAYLOAD\":{\"CID\":\"" + json_escape(cfg.epoch_cid) + "\",\"SIZE_BYTES\":" +
            size_bytes + ",\"MEDIA_TYPE\":" + media_type + "},";
     out += "\"EPOCH_BASE_PATH\":\"" + json_escape(cfg.gateway_path + cfg.epoch_cid + "/") + "\",";
     const char* tail[] = {"FILES", "DATASET_EPOCH", "PROVENANCE"};
     for (const char* key : tail) {
-        std::string raw;
-        if (json_raw_value(r, key, &raw)) {
-            out += std::string("\"") + key + "\":" + raw + ",";
-        }
+        if (const auto* e = exact_entry(r, key)) out += std::string("\"") + key + "\":" + render_entry(e) + ",";
     }
     if (out.back() == ',') out.pop_back();
     out += "}";
@@ -514,14 +521,29 @@ int route(void) {
     }
     const std::string path = request->PATH() ? request->PATH()->str() : "";
 
+    // The optional "config" frame: a ModuleConfig, the same entries
+    // plugin.getConfig answers (built once per distinct frame). Absent, the
+    // config is read over the hostcall once per instance.
     static std::string* frame_config_key = new std::string();
     static ServingConfig* frame_config_value = new ServingConfig();
-    const std::string frame_config = input_text("config");
-    if (!frame_config.empty() && *frame_config_key != frame_config) {
-        *frame_config_value = build_serving_config(frame_config);
-        *frame_config_key = frame_config;
+    const int32_t config_index = plugin_find_input_index("config", 0);
+    const plugin_input_frame_t* config_frame =
+        config_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(config_index)) : nullptr;
+    const bool framed = config_frame && config_frame->payload && config_frame->payload_length > 0;
+    if (framed) {
+        const std::string bytes(reinterpret_cast<const char*>(config_frame->payload), config_frame->payload_length);
+        if (*frame_config_key != bytes) {
+            ::flatbuffers::Verifier config_verifier(config_frame->payload, config_frame->payload_length);
+            if (config_frame->payload_length < 8 || !sdn::runtime::VerifyModuleConfigBuffer(config_verifier)) {
+                plugin_set_error("invalid-config-frame", "the config frame is not a ModuleConfig (MCFG).");
+                return 400;
+            }
+            *frame_config_value = build_serving_config(
+                sdm_piv::ConfigTable(sdn::runtime::GetModuleConfig(config_frame->payload)->ENTRIES()));
+            *frame_config_key = bytes;
+        }
     }
-    const ServingConfig& cfg = frame_config.empty() ? serving_config() : *frame_config_value;
+    const ServingConfig& cfg = framed ? *frame_config_value : serving_config();
 
     // If-None-Match, bounded at the door (every ETag here is 71 bytes).
     constexpr size_t kMaxIfNoneMatchBytes = 256;
@@ -544,12 +566,12 @@ int route(void) {
                              "no-store");
     }
     const std::string rest = path.substr(mount_prefix.size());
-    const bool configured = !cfg.record.empty() && looks_like_cid(cfg.epoch_cid);
+    const bool configured = cfg.has_record && looks_like_cid(cfg.epoch_cid);
 
     if (rest == "tileset.json") {
         if (!configured) {
             std::string missing;
-            if (cfg.record.empty()) missing += "\"osm_epoch_record\"";
+            if (!cfg.has_record) missing += "\"osm_epoch_record\"";
             if (!looks_like_cid(cfg.epoch_cid)) {
                 if (!missing.empty()) missing += ",";
                 missing += "\"osm_epoch_cid\"";
@@ -561,13 +583,13 @@ int route(void) {
                 "restart\",\"missingConfigKeys\":[" + missing + "]}",
                 "no-store");
         }
-        return push_public_json(render_record(cfg), if_none_match);
+        return push_public_json(cfg.record_body, if_none_match);
     }
 
     if (rest.empty() || rest == "catalogue.json") {
-        const std::string epoch_id = configured ? json_string(cfg.record, "TILESET_ID", "") : "";
+        const std::string epoch_id = configured ? cfg.epoch_id : std::string();
         const std::string dataset_epoch =
-            configured ? json_string(cfg.record, "DATASET_EPOCH", "") : "";
+            configured ? cfg.dataset_epoch : std::string();
         const std::string base = configured ? cfg.gateway_path + cfg.epoch_cid + "/" : "";
         std::string body = "{\"epochId\":" +
                            (epoch_id.empty() ? std::string("null") : "\"" + json_escape(epoch_id) + "\"") +

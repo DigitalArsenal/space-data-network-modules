@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.6.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter). fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows.",
+  "version": "0.7.0",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter). fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows. Typed contracts 1.0 (FlatBuffers only, no JSON): every model, accumulator, option, request and report port carries one SDS Orbit Error Model ($ERM) record with the matching arm set (MODEL, ACCUMULATOR, STRATA_SETTINGS, GATE, SCALE_OPTIONS, SCREENING_SETTINGS, SCREENING_CASES, SCREENING_REPORT, ARC_OPTIONS, ARC_PLAN, ARC_PREDICTIONS, COVERAGE_OPTIONS, PROPAGATOR_COVERAGE, COMMON_EPOCH, COVARIANCE_MAP, PAIR_STATISTICS, CALIBRATION, CALIBRATED_COVARIANCES, CONSIDER_COVARIANCES, NOISE_RESPONSES, ELEMENT_FITS, ATTACH_REPORT); the catalog-pipeline products are $OMM, $OCM and $MNV with $CVR and $PVN. attach_covariance and attribute_maneuvers read their recipe from the node config (plugin.getConfig, one ModuleConfig): keys under \"attach.\" and \"attribute.\" (a flow configures several nodes), else the same keys at the root; attach_covariance takes its models as $ERM MODEL records on the models port.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Deterministic SGP4 propagation and statistics over caller-supplied element sets and reference states. No host calls, threads or network access; batches are combined through the prior accumulator."
+    "detail": "Deterministic SGP4 propagation and statistics over caller-supplied element sets and reference states. One host call, plugin.getConfig (attach_covariance and attribute_maneuvers read their recipe from the node config); no threads or network access; batches are combined through the prior accumulator."
   },
   "schemasUsed": [
     {
@@ -38,6 +38,11 @@
       "schemaName": "MNV.fbs",
       "fileIdentifier": "$MNV",
       "rootTypeName": "MNV"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
     }
   ],
   "methods": [
@@ -89,67 +94,61 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "A gp-error-model (finalize or scale_model output) whose position covariance each reference-mode sample is tested against: zero-mean Mahalanobis d^2 with the clipped covariance when present."
+          "description": "One $ERM MODEL record (form StratifiedStatistics: finalize or scale_model output) whose position covariance each reference-mode sample is tested against."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "error-model-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Strata and clipping: regimes [{id, altitudeKm [lo, hi], eccentricity [lo, hi]}], ageBinsDays [[lo, hi]], referenceStepSeconds, clip {k, strata [{regime, age, centre[3], scale[3]}]}; every field optional."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Strata and clipping as JSON; every field optional. Defaults: ten regimes by mean altitude and eccentricity, age bins 0-0.5, 0.5-1, 1-2, 2-3, 3-5, 5-7 days, reference step 300 s, no clipping."
+          "description": "One $ERM STRATA_SETTINGS record: regimes, age bins, reference step and clip; empty lists mean the defaults (ten regimes by mean altitude and eccentricity, six age bins to 7 days, 300 s step, no clip)."
         },
         {
           "portId": "prior",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-accumulator-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "An accumulator from an earlier batch with the same strata, mode and clip, added to."
+          "description": "One $ERM ACCUMULATOR record from an earlier batch with the same strata, mode and clip, added to."
         }
       ],
       "outputPorts": [
@@ -157,23 +156,21 @@
           "portId": "accumulator",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-accumulator-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The accumulator after this batch, as JSON."
+          "description": "One $ERM ACCUMULATOR record: the accumulator after this batch."
         }
       ],
       "maxBatch": 1,
@@ -187,45 +184,41 @@
           "portId": "accumulator",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-accumulator-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The accumulator after the last batch."
+          "description": "One $ERM ACCUMULATOR record: the accumulator after the last batch."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "gate-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "gate {tolerance, tailLimit, minimumSamples, minimumObjects}; defaults 0.05, 0.01, 30, 3."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Coverage gate settings as JSON: {\"gate\": {\"tolerance\": 0.05, \"tailLimit\": 0.01, \"minimumSamples\": 30, \"minimumObjects\": 3}}."
+          "description": "One $ERM GATE record: the coverage gate (tolerance, tail limit, minimum samples and objects)."
         }
       ],
       "outputPorts": [
@@ -233,23 +226,21 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, median, robust sigma and the clipped mean and covariance, with the basis and units."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The error model as JSON."
+          "description": "One $ERM MODEL record, form StratifiedStatistics: per stratum mean, covariance, quantiles, robust sigma, clipped statistics and coverage."
         }
       ],
       "maxBatch": 1,
@@ -263,67 +254,61 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The gp-error-model to scale."
+          "description": "One $ERM MODEL record (StratifiedStatistics) to scale."
         },
         {
           "portId": "truth",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A gp-error-model in reference mode (clipped), from a window other than the one the scaled model will be tested on."
+          "description": "One $ERM MODEL record (StratifiedStatistics, basis ReferenceStates, clipped) from a window other than the one the scaled model will be tested on."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "scale-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "minimumSamples (default 30)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "{\"minimumSamples\": 30}: strata with fewer clipped reference samples stay unscaled."
+          "description": "One $ERM SCALE_OPTIONS record: strata with fewer clipped reference samples than MINIMUM_SAMPLES stay unscaled."
         }
       ],
       "outputPorts": [
@@ -331,23 +316,21 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The model with scaled position covariance and per-stratum factors."
+          "description": "One $ERM MODEL record: the model with scaled position covariance and per-stratum factors (SCALE)."
         }
       ],
       "maxBatch": 1,
@@ -401,45 +384,41 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "gp-error-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The gp-error-model whose stratum covariance each case uses (clipped when present), usually the scaled model."
+          "description": "One $ERM MODEL record (StratifiedStatistics) whose stratum covariance each case uses (clipped when present), usually the scaled model."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "screening-evaluation-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hardBodyRadiusM, missDistancesM, directions, pairsPerStratum, pcThreshold, necessityLevel, boundCoverage, seed, and the accumulate options (regimes, ageBinsDays, referenceStepSeconds)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Evaluation settings as JSON; every field optional."
+          "description": "One $ERM SCREENING_SETTINGS record (strata, hard-body radius, thresholds, directions, misses, pairs per stratum, seed)."
         }
       ],
       "outputPorts": [
@@ -447,23 +426,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "screening-evaluation-report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Alert rates of the probabilistic, bounded-set and possibility methods by stratum, encounter geometry and true miss, with the definitions."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The evaluation report as JSON."
+          "description": "One $ERM SCREENING_REPORT record."
         }
       ],
       "maxBatch": 1,
@@ -517,45 +494,41 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-covariance-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per regime P0 (RTN lower triangle, km, km/s) and optional white-acceleration process noise."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "An hpop-covariance-model: with it, each arc carries P0 in GCRF (SI) and its regime's process noise."
+          "description": "One $ERM MODEL record, form PropagatorCovariance: with it, each arc carries P0 in GCRF (SI) and its regime's process noise."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-arcs-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "targetAgesDays, epochToleranceSeconds, targetToleranceSeconds, regimes, ageBinsDays."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Arc settings as JSON; every field optional."
+          "description": "One $ERM ARC_OPTIONS record: strata, target ages and tolerances."
         }
       ],
       "outputPorts": [
@@ -563,23 +536,21 @@
           "portId": "plan",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-arc-plan-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per element set: target epochs at the requested prediction ages, the reference state at each, and optionally P0 and process noise."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The arc plan as JSON."
+          "description": "One $ERM ARC_PLAN record."
         }
       ],
       "maxBatch": 1,
@@ -593,89 +564,81 @@
           "portId": "plan",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-arc-plan-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The plan from hpop_arcs."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The arc plan."
+          "description": "One $ERM ARC_PLAN record."
         },
         {
           "portId": "predictions",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-predictions-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per arc, per target: HPOP state [6] (m, m/s, GCRF) and, with covariance, the position blocks a [6] (P0 alone) and u [3][6] (unit density per R, T, N axis), m^2."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "HPOP predictions at the plan's targets."
+          "description": "One $ERM ARC_PREDICTIONS record: HPOP's states (and P0-only and unit-noise position blocks) at the plan's targets."
         },
         {
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-covariance-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "P0 per regime (fit, test) and process noise (test)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The hpop-covariance-model; fit and test need it."
+          "description": "One $ERM MODEL record (PropagatorCovariance); fit and test need it."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-coverage-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "mode (epoch, fit, test), window [from, to) on target epochs, clipK, discretizationSeconds, gate, regimes, ageBinsDays."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Coverage settings as JSON."
+          "description": "One $ERM COVERAGE_OPTIONS record: mode, window, strata, gate, clip and discretization."
         }
       ],
       "outputPorts": [
@@ -683,45 +646,41 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-covariance-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "epoch: P0 per regime; fit: the model with process noise per regime."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The model (epoch and fit modes)."
+          "description": "One $ERM MODEL record, PropagatorCovariance (epoch and fit modes)."
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "hpop-covariance-coverage-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "test: coverage with and without process noise by regime and prediction age, with the calibration gate."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The coverage report (test mode)."
+          "description": "One $ERM PROPAGATOR_COVERAGE record (test mode)."
         }
       ],
       "maxBatch": 1,
@@ -775,23 +734,21 @@
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "common-epoch-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "targets[]: norad, epoch (ISO 8601 UTC), afterSeconds, sets (element-set epochs), origin (reference | mean | set), originSet."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Targets as JSON: per target the object, the epoch, the element sets to propagate there and the origin their differences are taken from."
+          "description": "One $ERM COMMON_EPOCH record with REQUESTS: per target the object, the epoch, the element sets to propagate there and the origin."
         }
       ],
       "outputPorts": [
@@ -799,23 +756,21 @@
           "portId": "differences",
           "acceptedTypeSets": [
             {
-              "setId": "common-epoch-differences-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per target: its epoch, the origin state (GCRF, km, km/s) and per element set its epoch, age in days and prediction minus origin in the origin's RTN axes."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The differences as JSON."
+          "description": "One $ERM COMMON_EPOCH record with RESULTS."
         }
       ],
       "maxBatch": 1,
@@ -849,23 +804,21 @@
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "map-covariance-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "requests[]: norad, set (anchor epoch), from (covariance epoch, default the set epoch), covariance (21, lower triangle, RTN, km, km/s), to (ISO 8601 UTC epochs), method (sgp4 | two-body | lambert), stm."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Requests as JSON: per request the anchor element set, the covariance and its epoch, the target epochs and the STM method."
+          "description": "One $ERM COVARIANCE_MAP record with REQUESTS: the anchor element set, the covariance and its epoch, the target epochs and the method."
         }
       ],
       "outputPorts": [
@@ -873,23 +826,21 @@
           "portId": "covariance",
           "acceptedTypeSets": [
             {
-              "setId": "covariance-map-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per request and target: the mapped covariance (21, lower triangle, RTN axes of the anchor set's SGP4 state at the target), optionally the STM (36, row-major, TEME), and for lambert the arc (revolutions, branch, v1, energies)."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The mapped covariances as JSON."
+          "description": "One $ERM COVARIANCE_MAP record with RESULTS."
         }
       ],
       "maxBatch": 1,
@@ -903,45 +854,41 @@
           "portId": "cases",
           "acceptedTypeSets": [
             {
-              "setId": "screening-cases-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "pairs[]: e1, e2 (RTN position errors, km) and c1, c2 (position covariances, lower triangle RR, TR, TT, NR, NT, NN, km^2, positive definite)."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Pairs of objects, each with its own error and covariance, as JSON."
+          "description": "One $ERM SCREENING_CASES record: pairs of objects, each with its own error and covariance."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "screening-cases-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hardBodyRadiusM, pcThreshold, necessityLevel, boundCoverage, directions, missDistancesM."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Screening settings as JSON; every field optional (the defaults of screening_evaluation)."
+          "description": "One $ERM SCREENING_SETTINGS record (the defaults of screening_evaluation)."
         }
       ],
       "outputPorts": [
@@ -949,23 +896,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "screening-cases-report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Alert rates of the probabilistic, bounded-set and possibility methods by geometry and synthetic miss, over the supplied pairs."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The screening report as JSON."
+          "description": "One $ERM SCREENING_REPORT record."
         }
       ],
       "maxBatch": 1,
@@ -979,23 +924,21 @@
           "portId": "pairs",
           "acceptedTypeSets": [
             {
-              "setId": "pair-statistics-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "pairs[]: id, predicted {position[3] m, velocity[3] m/s, covariance (lower 6 or 21, or full 9 or 36; SI), covarianceAxes RTN | UVW | INERTIAL}, truth {position, velocity, covariance?, covarianceAxes?}; axesFrom predicted | truth."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Pairs of a predicted and a truth state, each with a covariance, as JSON."
+          "description": "One $ERM PAIR_STATISTICS record with PAIRS: a predicted and a truth state, each with a covariance or ephemeris samples."
         }
       ],
       "outputPorts": [
@@ -1003,23 +946,21 @@
           "portId": "statistics",
           "acceptedTypeSets": [
             {
-              "setId": "pair-statistics-result-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per pair: errorRtn, velocityErrorRtn (predicted minus truth, RTN of the chosen state), predictedRtn and truthRtn (lower 3x3), d2Combined, d2Predicted, zCombined, zPredicted."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Pair statistics as JSON."
+          "description": "One $ERM PAIR_STATISTICS record with STATISTICS."
         }
       ],
       "maxBatch": 1,
@@ -1033,45 +974,41 @@
           "portId": "samples",
           "acceptedTypeSets": [
             {
-              "setId": "fit-calibration-samples-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "samples[]: stratum (string), object, error [3] and covariance (lower 6 or full 9), one consistent unit."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Errors with their predicted position covariances, as JSON."
+          "description": "One $ERM CALIBRATION record with SAMPLES: errors with their predicted position covariances."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "fit-calibration-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "method scalar-mle | axes-mle | coverage; coverage (default 0.95); minimumSamples; minimumObjects."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Fit options as JSON."
+          "description": "One $ERM CALIBRATION record: METHOD, COVERAGE, MINIMUM_SAMPLES, MINIMUM_OBJECTS."
         }
       ],
       "outputPorts": [
@@ -1079,23 +1016,21 @@
           "portId": "calibration",
           "acceptedTypeSets": [
             {
-              "setId": "fit-calibration-result-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per stratum: n, objects, factor (variance) or axesFactors [3], and mean d^2/3 and 95 % coverage before and after."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Calibration factors as JSON."
+          "description": "One $ERM CALIBRATION record with STRATA: the factors and d^2 statistics before and after."
         }
       ],
       "maxBatch": 1,
@@ -1109,45 +1044,41 @@
           "portId": "model",
           "acceptedTypeSets": [
             {
-              "setId": "calibrate-covariance-model-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "kind e14-factors (strata [{regime, horizonDays [lo, hi], factor | axesFactors, status}], regimes) or e14-element-set-model (regimes, ageBinsDays, strata [{regimeIndex, ageIndex, n, covariance[21] RTN km, km/s}], factors, status, minimumBinSamples); version."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The frozen model as JSON."
+          "description": "One $ERM MODEL record, form HorizonFactors or ElementSetModel (CALIBRATION_VERSION required)."
         },
         {
           "portId": "objects",
           "acceptedTypeSets": [
             {
-              "setId": "calibrate-covariance-objects-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "objects[]: id, regime | set {norad, epoch} | state {position, velocity} (inertial SI), horizonDays or ageDays, covariance and covarianceAxes (factor models), objectFactor."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The objects as JSON."
+          "description": "One $ERM CALIBRATED_COVARIANCES record with OBJECTS."
         },
         {
           "portId": "elements",
@@ -1175,23 +1106,21 @@
           "portId": "covariance",
           "acceptedTypeSets": [
             {
-              "setId": "calibrate-covariance-result-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: regime, cell, status, factor(s), covarianceRtn (21, SI) and covarianceInertial (36, SI, given a state); the calibration version."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Calibrated covariances as JSON."
+          "description": "One $ERM CALIBRATED_COVARIANCES record with RESULTS."
         }
       ],
       "maxBatch": 1,
@@ -1205,23 +1134,21 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "dcp-covariance-request-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "leadCovariance (K x K, ln density error by lead day), start (ISO UTC), segments [{from, to, lead}], ballisticCoefficient, startSample {stm[36], s[6]}?, epochs [{epoch, sensitivity[6] | stm[36] and s[6], base?}]."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The consider request as JSON."
+          "description": "One $ERM CONSIDER_COVARIANCES record: lead covariance, start, segments, ballistic coefficient and epochs."
         }
       ],
       "outputPorts": [
@@ -1229,23 +1156,21 @@
           "portId": "dcp",
           "acceptedTypeSets": [
             {
-              "setId": "dcp-covariance-result-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per epoch: sigmaEff, weights by lead, sensitivity g, covariance (36, SI), total (base + covariance) when a base is given."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The consider covariance as JSON."
+          "description": "One $ERM CONSIDER_COVARIANCES record with RESULTS."
         }
       ],
       "maxBatch": 1,
@@ -1259,23 +1184,21 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "noise-responses-request-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "start (ISO UTC), discretizationSeconds, samples [{epoch, state[6] SI, stm (row-major 36 or (6+p)^2 from start)}] at every step end of every target, targets [epoch]."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The propagation's STM samples and the targets as JSON."
+          "description": "One $ERM NOISE_RESPONSES record: start, discretization, STM samples and target epochs."
         }
       ],
       "outputPorts": [
@@ -1283,23 +1206,21 @@
           "portId": "responses",
           "acceptedTypeSets": [
             {
-              "setId": "noise-responses-result-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per target: steps, stepSeconds and u [3][36], the row-major 6x6 response to unit spectral density on R, T and N."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The unit noise responses as JSON."
+          "description": "One $ERM NOISE_RESPONSES record with RESULTS."
         }
       ],
       "maxBatch": 1,
@@ -1320,13 +1241,6 @@
                   "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
@@ -1348,13 +1262,6 @@
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "Each set's states at its epoch plus ages (analysis/epoch-state derive_omm, GCRF, UTC, km, km/s): the OCM rows of a modeled covariance. A block belongs to the set whose epoch is its first row."
@@ -1376,13 +1283,6 @@
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
@@ -1404,13 +1304,6 @@
                   "fileIdentifier": "$OCM",
                   "rootTypeName": "OCM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
@@ -1422,27 +1315,24 @@
           "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
         },
         {
-          "portId": "recipe",
+          "portId": "models",
           "acceptedTypeSets": [
             {
-              "setId": "recipe-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
-              }
+              ]
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "The models the recipe can use: $ERM MODEL records (form ElementSetModel with its realism CELLS, SOURCES and POOLED; data/e14-s3-kc.erm is E14's frozen S3-KC), size-prefixed, any number per frame. The recipe itself is node config: plugin.getConfig keys under \"attach.\" (version, source {id, kind, lineage, originator, provider, fitClass, licence {class, id}}, producer, created, latestOnly, maxOperatorRows, realism [...]), else the same keys at the root."
         }
       ],
       "outputPorts": [
@@ -1492,24 +1382,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         }
       ],
       "maxBatch": 1,
@@ -1540,29 +1427,6 @@
           "maxStreams": 4096,
           "required": true,
           "description": "The maneuvers of one source (analysis/maneuver-detection detect_maneuvers or compare_ephemerides)."
-        },
-        {
-          "portId": "recipe",
-          "acceptedTypeSets": [
-            {
-              "setId": "recipe-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The recipe of attach_covariance; only its source and producer are read.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The source's attribution. Configuration, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The recipe of attach_covariance; only its source and producer are read."
         }
       ],
       "outputPorts": [
@@ -1591,24 +1455,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         }
       ],
       "maxBatch": 1,
@@ -1663,23 +1524,21 @@
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "element-fit-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "from, to, epoch (first | last | middle | ISO), stepSeconds, fitBstar, bstar (number | apriori), weighting (uniform | rtn | covariance), sigmaRtnKm, velocity, sigmaVelocityKmS, halfLifeHours, towards, maxIterations, tolerance, initial, rejectSigma, scaleCovariance, closure, residuals, ephemerisStream, OMM metadata (originator, creationDate, classification, elementSetNo, comment, objectName, objectId); fits[] with norad and per-fit overrides."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Fit settings as JSON; without fits, every object of the ephemeris is fitted with the global settings."
+          "description": "One $ERM ELEMENT_FITS record with OPTIONS: SHARED settings for every object, FITS per object (each overrides the shared settings where it differs from them); without it, every object of the ephemeris is fitted with the defaults."
         }
       ],
       "outputPorts": [
@@ -1687,19 +1546,13 @@
           "portId": "elements",
           "acceptedTypeSets": [
             {
-              "setId": "sds-omm-aligned-stream",
+              "setId": "sds-omm",
               "allowedTypes": [
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OMM records, one per converged fit: full-precision SGP4 mean elements in TEME, B*, and the epoch Cartesian covariance in RSW axes."
@@ -1714,23 +1567,21 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "element-fit-report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per fit: states, stages, iterations, convergence and criterion, epoch, elements, residual statistics on every state of the span (3D, per-coordinate, RTN, max, N, span), the half-split closure, the weighted RMS, the condition number, and the covariance in equinoctial, classical and RSW Cartesian form."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The fit report as JSON."
+          "description": "One $ERM ELEMENT_FITS record with FITS (the fitted element sets are the companion elements port)."
         }
       ],
       "maxBatch": 1,
@@ -1784,23 +1635,21 @@
           "portId": "options",
           "acceptedTypeSets": [
             {
-              "setId": "element-residuals-options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "requests[]: norad, set (epoch, ISO 8601 UTC), windows[] {from, to, label}, stepSeconds, ephemerisStream, label; samples (per-state RTN residuals)."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The requests as JSON."
+          "description": "One $ERM ELEMENT_FITS record with RESIDUAL_REQUESTS (INCLUDE_SAMPLES for per-window samples)."
         }
       ],
       "outputPorts": [
@@ -1808,23 +1657,21 @@
           "portId": "residuals",
           "acceptedTypeSets": [
             {
-              "setId": "element-residuals-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per request and window: N, span, 3D, per-coordinate and RTN RMS, RTN means, maxima, the velocity RMS where the ephemeris has velocities, and propagation failures; optionally per-state residuals."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The residual statistics as JSON."
+          "description": "One $ERM ELEMENT_FITS record with RESIDUAL_RESULTS."
         }
       ],
       "maxBatch": 1,

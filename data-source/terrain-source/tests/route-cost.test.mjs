@@ -33,6 +33,19 @@ import { fileURLToPath } from "node:url";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
+import {
+  typedInput,
+  input,
+  typeRefOf,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
 const WASM = fs.readFileSync(fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)));
@@ -82,11 +95,13 @@ async function p50RouteMs(t, availableBytes, invokes, { available: given, path }
         payload: encodeHttpRequest({ method: "GET", path, query: "", headers: {} }),
       }
     : REQUEST;
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: WASM,
     manifest: MANIFEST,
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
@@ -94,7 +109,7 @@ async function p50RouteMs(t, availableBytes, invokes, { available: given, path }
   t.after(() => harness.destroy());
 
   // Warm: the first invoke is the one that pays for the config, by design.
-  const first = await harness.invoke({ methodId: "route", inputs: [request] });
+  const first = await invokeTyped(harness, { methodId: "route", inputs: [request] });
   assert.equal(first.statusCode, 0, `${first.errorCode}: ${first.errorMessage}`);
   assert.ok(
     first.outputs.some((o) => o.portId === "query"),
@@ -104,7 +119,7 @@ async function p50RouteMs(t, availableBytes, invokes, { available: given, path }
   const samples = [];
   for (let i = 0; i < invokes; i++) {
     const started = process.hrtime.bigint();
-    const response = await harness.invoke({ methodId: "route", inputs: [request] });
+    const response = await invokeTyped(harness, { methodId: "route", inputs: [request] });
     samples.push(Number(process.hrtime.bigint() - started) / 1e6);
     assert.equal(response.statusCode, 0);
   }
@@ -170,11 +185,13 @@ test("layer.json renders ONCE per config, so a revalidation is not a re-render",
     terrain_available: available,
     terrain_version: "1.0.0",
   };
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: WASM,
     manifest: MANIFEST,
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
@@ -187,13 +204,13 @@ test("layer.json renders ONCE per config, so a revalidation is not a re-render",
     payload: encodeHttpRequest({ method: "GET", path: "/api/v1/terrain/layer.json", query: "", headers: {} }),
   };
   const render = async () => {
-    const routed = await harness.invoke({ methodId: "route", inputs: [layerRequest] });
+    const routed = await invokeTyped(harness, { methodId: "route", inputs: [layerRequest] });
     assert.equal(routed.statusCode, 0);
     const plan = routed.outputs.find((o) => o.portId === "layer_plan");
     const started = process.hrtime.bigint();
-    const rendered = await harness.invoke({
+    const rendered = await invokeTyped(harness, {
       methodId: "layer_json",
-      inputs: [{ portId: "plan", typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: plan.payload.byteLength }, payload: plan.payload }],
+      inputs: [{ portId: "plan", typeRef: typeRefOf(plan.payload), payload: plan.payload }],
     });
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     assert.equal(rendered.statusCode, 0, `${rendered.errorCode}: ${rendered.errorMessage}`);

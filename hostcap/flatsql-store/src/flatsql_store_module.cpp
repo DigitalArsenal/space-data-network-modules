@@ -11,14 +11,15 @@
  * wrapper FlatBuffer and INGEST it (flatsql.ingest_record). Content-addressed dedup
  * is a read-only SELECT COUNT via flatsql.exec_envelope.
  *
- * PER-PROVIDER ATTRIBUTION: the OD node emits, per record, a CID-KEYED PROVENANCE
- * SIDECAR on the "provenance" input port:
- *   [u32le cid_len][cid][u32le provider_len][provider][u32le source_name_len][source_name]
- * This node maps cid -> {provider, source_name} (order-independent, no SDS parsing)
- * and writes those columns for the matching record; absent -> node CONFIG fallback.
+ * PER-PROVIDER ATTRIBUTION: per record, an IngestRequest (INGQ) on the
+ * "provenance" input port names the record by PROVENANCE.NORMALIZED_SHA256 (the
+ * lowercase hex SHA-256 of the record's size-prefixed bytes - a one-record
+ * normalized stream) and carries TAGS.PROVIDER_ID / TAGS.SOURCE_NAME. This node
+ * maps that digest -> {provider, source_name} (order-independent) and writes those
+ * columns for the matching record; absent or empty -> node CONFIG fallback.
  *
  * PULLED_AT / BATCH_ID (fire-scoped, not invocation-scoped): an OPTIONAL
- * "trigger" input frame carries the fire wall-clock time ([u64le unix_ms]) —
+ * "trigger" TimerTick (TICK) carries the fire wall-clock time (FIRED_MS) —
  * host-supplied trigger metadata (a capability read, not orchestration; the
  * store has no clock). The reactor may dispatch this node's `store()` entry
  * MULTIPLE TIMES per fire (the OD node can emit results across more than one
@@ -54,13 +55,17 @@
  *                           by sequence — zero record content awareness.
  * Retention is BEST-EFFORT: a failed prune never fails the fire's ingest.
  *
- * INPUT PORTS ($OMM/$OCM/$OBD only — NEVER $OEM):
- *   "records"    : 1..N size-prefixed SDS records (aligned-binary).
- *   "provenance" : 0..N cid-keyed provenance frames (see above).
- *   "config"     : OPTIONAL default provenance
- *                  [u32 provider][u32 source_name][u32 batch_id]([u32 retain_k]).
- *   "trigger"    : OPTIONAL [u64le unix_ms] fire timestamp.
- * OUTPUT "result": 4-byte little-endian ingested-count (aligned-binary).
+ * INPUT PORTS ($OMM/$OCM/$OBD only — NEVER $OEM), FlatBuffers only:
+ *   "omm_records" / "ocm_records" / "obd_records" : 0..N frames, each ONE
+ *                  size-prefixed record of that port's standard. Frames are taken
+ *                  in invocation arrival order across the three ports.
+ *   "provenance" : 0..N IngestRequest (INGQ), one per record (see above).
+ *   "trigger"    : OPTIONAL TimerTick (TICK); FIRED_MS is the fire timestamp.
+ * CONFIG (node config, ModuleConfig MCFG via sdm_piv::get_config()):
+ *   provider, source_name, batch_id (strings), retain_k (number; 0/absent = 4).
+ * OUTPUT "result": one IngestResult (INGR): PROVIDER_ID / SOURCE_NAME (config),
+ *   BATCH_ID (the fire's), INSERTED, RECONCILED_DUPLICATES (cid already stored),
+ *   RECONCILED_OLD_BATCHES (records tombstoned by retention).
  */
 
 #include <cstddef>
@@ -70,9 +75,12 @@
 #include <string>
 #include <vector>
 
-#include "flatbuffers/flatbuffers.h"
-#include "sds_cid.hpp"
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "IngestRequest_generated.h"
+#include "IngestResult_generated.h"
+#include "TimerTick_generated.h"
+#include "sds_cid.hpp"
 
 // The FlatSQL host trampolines (byte-movers over THIS module's memory; the engine
 // is a SEPARATE flatsqlrt runtime). Declared for the deploy node's bake+load+$PLG:
@@ -119,8 +127,11 @@ using sdn_cid::cid_v1_raw_sha256;
 void tlv_u32(std::vector<uint8_t>& t, uint32_t n) {
   t.push_back(n & 0xff); t.push_back((n >> 8) & 0xff); t.push_back((n >> 16) & 0xff); t.push_back((n >> 24) & 0xff);
 }
+// One TEXT parameter in FlatSQL's tagged encoding (sdm_piv::SqlValues: u8 tag 4, u32le length, bytes).
 void tlv_string(std::vector<uint8_t>& t, const std::string& s) {
-  t.push_back(4 /*PARAM_STRING*/); tlv_u32(t, static_cast<uint32_t>(s.size())); t.insert(t.end(), s.begin(), s.end());
+  sdm_piv::SqlValues v; v.str(s);
+  const std::string_view b = v.view();
+  t.insert(t.end(), b.begin(), b.end());
 }
 uint32_t rd_u32le(const uint8_t* p) {
   return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
@@ -132,71 +143,75 @@ uint64_t rd_u64le(const uint8_t* p) {
 }
 
 struct Route { const char* table; const char* wrapper_fid; };
-Route route_for_record(const uint8_t* rec, uint32_t len) {
-  if (len < 12) return {nullptr, nullptr};
-  if (std::memcmp(rec + 8, "$OMM", 4) == 0) return {"sds_omm", "SOMM"};
-  if (std::memcmp(rec + 8, "$OCM", 4) == 0) return {"sds_ocm", "SOCM"};
-  if (std::memcmp(rec + 8, "$OBD", 4) == 0) return {"sds_obd", "SOBD"};
+// The port names the standard; the record's own file_identifier (size-prefixed:
+// at rec+8) must agree, else the frame is skipped (as an unknown id always was).
+Route route_for_record(const char* port, const uint8_t* rec, uint32_t len) {
+  if (len < 12 || !port) return {nullptr, nullptr};
+  if (std::strcmp(port, "omm_records") == 0 && std::memcmp(rec + 8, "$OMM", 4) == 0) return {"sds_omm", "SOMM"};
+  if (std::strcmp(port, "ocm_records") == 0 && std::memcmp(rec + 8, "$OCM", 4) == 0) return {"sds_ocm", "SOCM"};
+  if (std::strcmp(port, "obd_records") == 0 && std::memcmp(rec + 8, "$OBD", 4) == 0) return {"sds_obd", "SOBD"};
   return {nullptr, nullptr};
 }
 
 struct Provenance { std::string provider, source_name, batch_id; uint32_t retain_k = 0; };
 
-// Default provenance (fallback) from the "config" port; optional trailing u32 K.
-Provenance read_config_provenance() {
-  Provenance p;
-  const int32_t ci = plugin_find_input_index("config", 0);
-  if (ci < 0) return p;
-  const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(ci));
-  if (!f || !f->payload || f->payload_length < 4) return p;
-  const uint8_t* d = f->payload;
-  uint32_t n = f->payload_length, off = 0;
-  auto take = [&](std::string& dst) {
-    if (off + 4 > n) return;
-    uint32_t l = rd_u32le(d + off); off += 4;
-    if (off + l > n) { off = n; return; }
-    dst.assign(reinterpret_cast<const char*>(d + off), l); off += l;
-  };
-  take(p.provider); take(p.source_name); take(p.batch_id);
-  if (off + 4 <= n) p.retain_k = rd_u32le(d + off);  // optional retention K
-  return p;
+// Default provenance (fallback) + retention K from the node CONFIG (ModuleConfig).
+bool read_config_provenance(Provenance& p) {
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) {
+    plugin_set_error("config-unavailable", ("plugin.getConfig failed: " + config.error_message()).c_str());
+    return false;
+  }
+  p.provider = std::string(config.string("provider"));
+  p.source_name = std::string(config.string("source_name"));
+  p.batch_id = std::string(config.string("batch_id"));
+  const double k = config.number("retain_k", 0);
+  p.retain_k = k >= 1 && k <= 4294967295.0 ? static_cast<uint32_t>(k) : 0u;
+  return true;
 }
 
-// CID-keyed provenance map from the "provenance" port frames.
+std::string sha256_hex(const uint8_t* data, size_t len) {
+  uint8_t d[32];
+  sdn_cid::sha256_raw(data, len, d);
+  static const char* kHex = "0123456789abcdef";
+  std::string s(64, '0');
+  for (int i = 0; i < 32; ++i) { s[2 * i] = kHex[d[i] >> 4]; s[2 * i + 1] = kHex[d[i] & 0xf]; }
+  return s;
+}
+
+// Record-digest-keyed provenance map from the "provenance" IngestRequest frames.
 std::map<std::string, std::pair<std::string, std::string>> read_provenance_map() {
+  namespace R = sdn::runtime;
   std::map<std::string, std::pair<std::string, std::string>> m;
   for (uint32_t ordinal = 0;; ++ordinal) {
     const int32_t idx = plugin_find_input_index("provenance", ordinal);
     if (idx < 0) break;
     const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!f || !f->payload || f->payload_length < 12) continue;
-    const uint8_t* d = f->payload;
-    uint32_t n = f->payload_length, off = 0;
-    std::string cid, provider, source;
-    auto take = [&](std::string& dst) -> bool {
-      if (off + 4 > n) return false;
-      uint32_t l = rd_u32le(d + off); off += 4;
-      if (off + l > n) return false;
-      dst.assign(reinterpret_cast<const char*>(d + off), l); off += l;
-      return true;
-    };
-    if (take(cid) && take(provider) && take(source) && !cid.empty()) {
-      m[cid] = {provider, source};
-    }
+    if (!f || !f->payload || f->payload_length == 0) continue;
+    flatbuffers::Verifier v(f->payload, f->payload_length);
+    if (!R::VerifyIngestRequestBuffer(v)) continue;
+    const R::IngestRequest* q = R::GetIngestRequest(f->payload);
+    const R::Provenance* pv = q->PROVENANCE();
+    if (!pv || !pv->NORMALIZED_SHA256() || pv->NORMALIZED_SHA256()->size() == 0) continue;
+    const auto* tags = q->TAGS();
+    m[pv->NORMALIZED_SHA256()->str()] = {tags->PROVIDER_ID() ? tags->PROVIDER_ID()->str() : std::string(),
+                                         tags->SOURCE_NAME() ? tags->SOURCE_NAME()->str() : std::string()};
   }
   return m;
 }
 
-// Optional fire timestamp (unix ms) carried by THIS invocation's "trigger" port
-// frame. Returns 0 when this particular invocation carries no trigger frame
+// Optional fire timestamp (unix ms): FIRED_MS of THIS invocation's "trigger"
+// TimerTick. Returns 0 when this particular invocation carries no trigger frame
 // (see fire-scoped batch identity below for why that is expected/handled, not
 // an error).
 uint64_t read_pulled_at_this_invocation() {
   const int32_t ti = plugin_find_input_index("trigger", 0);
   if (ti < 0) return 0;
   const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(ti));
-  if (!f || !f->payload || f->payload_length < 8) return 0;
-  return rd_u64le(f->payload);
+  if (!f || !f->payload || f->payload_length == 0) return 0;
+  flatbuffers::Verifier v(f->payload, f->payload_length);
+  if (!sdn::runtime::VerifyTimerTickBuffer(v)) return 0;
+  return sdn::runtime::GetTimerTick(f->payload)->FIRED_MS();
 }
 
 // ── Fire-scoped batch identity (fixes the SILENT-DROP bug) ────────────────────
@@ -419,43 +434,72 @@ void rowids_for_batch(const char* table, const std::string& batch_id, std::vecto
     if (!row.empty() && row[0].type == 1 && row[0].i > 0) out.push_back(static_cast<uint64_t>(row[0].i));
 }
 
-// Tombstone every record of every stale batch in `table`. Returns true if any
-// were tombstoned (best-effort; a host error just yields false).
-bool tombstone_stale(const char* table, uint32_t K) {
+// Tombstone every record of every stale batch in `table`. Returns how many the
+// host tombstoned (best-effort; a host error just yields 0).
+uint64_t tombstone_stale(const char* table, uint32_t K) {
   const std::vector<std::string> stale = stale_batch_ids(table, K);
-  if (stale.empty()) return false;
+  if (stale.empty()) return 0;
   std::vector<uint64_t> seqs;
   for (const std::string& b : stale) rowids_for_batch(table, b, seqs);
-  if (seqs.empty()) return false;
+  if (seqs.empty()) return 0;
   const std::string t(table);
   const int64_t rc = flatsql_mark_deleted_bulk(as_u32(t.data()), static_cast<uint32_t>(t.size()),
                                                as_u32(seqs.data()),
                                                static_cast<uint32_t>(seqs.size()));
-  return rc > 0;
+  return rc > 0 ? static_cast<uint64_t>(rc) : 0;
 }
 
 // Keep the latest K runs per table; physically reclaim. Best-effort: never fails
-// the fire. K==0 (config absent) disables retention.
-void run_retention(uint32_t K) {
-  if (K == 0) return;
-  bool any = false;
-  any |= tombstone_stale("sds_omm", K);
-  any |= tombstone_stale("sds_ocm", K);
-  any |= tombstone_stale("sds_obd", K);
-  if (any) flatsql_compact();  // reclaim survivors into a fresh arena
+// the fire. Returns the records tombstoned.
+uint64_t run_retention(uint32_t K) {
+  if (K == 0) return 0;
+  uint64_t tombstoned = 0;
+  tombstoned += tombstone_stale("sds_omm", K);
+  tombstoned += tombstone_stale("sds_ocm", K);
+  tombstoned += tombstone_stale("sds_obd", K);
+  if (tombstoned) flatsql_compact();  // reclaim survivors into a fresh arena
+  return tombstoned;
+}
+
+int32_t push_result(const Provenance& cfg, const std::string& batch_id, uint64_t inserted,
+                    uint64_t duplicates, uint64_t old_batches) {
+  namespace R = sdn::runtime;
+  flatbuffers::FlatBufferBuilder b(256);
+  const auto provider = b.CreateString(cfg.provider);
+  const auto source = b.CreateString(cfg.source_name);
+  const auto batch = b.CreateString(batch_id);
+  R::IngestResultBuilder r(b);
+  r.add_PROVIDER_ID(provider);
+  r.add_SOURCE_NAME(source);
+  r.add_BATCH_ID(batch);
+  r.add_INSERTED(inserted);
+  r.add_RECONCILED_DUPLICATES(duplicates);
+  r.add_RECONCILED_OLD_BATCHES(old_batches);
+  R::FinishIngestResultBuffer(b, r.Finish());
+  return plugin_push_output_ex("result", "IngestResult.fbs", R::IngestResultIdentifier(),
+                               PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "IngestResult", 0, 0,
+                               b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
 }
 
 }  // namespace
 
+// The method entry. The wasi-threads guest-link build renames it to the SDK's
+// pluginId-prefixed symbol (-DFLATSQL_STORE_ENTRY=<prefix>store).
+#ifndef FLATSQL_STORE_ENTRY
+#define FLATSQL_STORE_ENTRY store
+#endif
+
 extern "C" {
 
-int store(void) {
+int FLATSQL_STORE_ENTRY(void) {
   plugin_reset_output_state();
 
-  const Provenance cfg = read_config_provenance();
+  Provenance cfg;
+  if (!read_config_provenance(cfg)) return 1;
   const auto prov_map = read_provenance_map();
 
-  // Pass 1: collect valid records. cid_concat is retained ONLY as the
+  // Pass 1: collect valid records, in invocation arrival order across the three
+  // per-standard ports. cid_concat is retained ONLY as the
   // no-trigger-wired fallback hash input (see resolve_fire_scope) — it is no
   // longer the primary batch_id source, because it varies per INVOCATION
   // (this fire may dispatch `store` more than once; see the fire-scoped
@@ -465,13 +509,12 @@ int store(void) {
   struct Rec { const uint8_t* ptr; uint32_t len; std::string cid; Route route; };
   std::vector<Rec> recs;
   std::vector<uint8_t> cid_concat;
-  for (uint32_t ordinal = 0;; ++ordinal) {
-    const int32_t idx = plugin_find_input_index("records", ordinal);
-    if (idx < 0) break;
-    const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!f || !f->payload || f->payload_length == 0) continue;
-    const Route r = route_for_record(f->payload, f->payload_length);
-    if (r.table == nullptr) continue;  // not $OMM/$OCM/$OBD ($OEM never stored) — skip
+  const uint32_t frames = plugin_get_input_count();
+  for (uint32_t i = 0; i < frames; ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (!f || !f->port_id || !f->payload || f->payload_length == 0) continue;
+    const Route r = route_for_record(f->port_id, f->payload, f->payload_length);
+    if (r.table == nullptr) continue;  // not a records port, or id disagrees ($OEM never stored) — skip
     std::string cid = cid_v1_raw_sha256(f->payload, f->payload_length);
     cid_concat.insert(cid_concat.end(), cid.begin(), cid.end());
     recs.push_back(Rec{f->payload, f->payload_length, std::move(cid), r});
@@ -483,6 +526,7 @@ int store(void) {
   const uint64_t pulled_at = fire.pulled_at;
 
   uint32_t ingested = 0;
+  uint64_t duplicates = 0;
   for (const Rec& rec : recs) {
     const int64_t present = cid_present(rec.route.table, rec.cid);
     if (present < 0) {
@@ -490,14 +534,16 @@ int store(void) {
                        "cid dedup SELECT via flatsql.exec_envelope failed.");
       return 2;
     }
-    if (present > 0) continue;  // content-addressed dedup
+    if (present > 0) { ++duplicates; continue; }  // content-addressed dedup
 
-    // Per-record provider/source_name: cid-keyed provenance sidecar; else config.
+    // Per-record provider/source_name: the record's IngestRequest provenance; else config.
     std::string provider = cfg.provider, source_name = cfg.source_name;
-    auto it = prov_map.find(rec.cid);
-    if (it != prov_map.end()) {
-      if (!it->second.first.empty()) provider = it->second.first;
-      if (!it->second.second.empty()) source_name = it->second.second;
+    if (!prov_map.empty()) {
+      auto it = prov_map.find(sha256_hex(rec.ptr, rec.len));
+      if (it != prov_map.end()) {
+        if (!it->second.first.empty()) provider = it->second.first;
+        if (!it->second.second.empty()) source_name = it->second.second;
+      }
     }
 
     const std::vector<uint8_t> wrapper =
@@ -515,15 +561,9 @@ int store(void) {
 
   // Bound the store: keep the latest K runs per table, reclaim the rest.
   // Runs AFTER ingest so THIS fire's batch counts as the newest run. Best-effort.
-  run_retention(cfg.retain_k ? cfg.retain_k : 4u);
+  const uint64_t tombstoned = run_retention(cfg.retain_k ? cfg.retain_k : 4u);
 
-  uint8_t count_le[4];
-  count_le[0] = ingested & 0xff; count_le[1] = (ingested >> 8) & 0xff;
-  count_le[2] = (ingested >> 16) & 0xff; count_le[3] = (ingested >> 24) & 0xff;
-  const int32_t pushed = plugin_push_output_ex(
-      "result", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
-      count_le, 4);
-  return pushed < 0 ? 4 : 0;
+  return push_result(cfg, batch_id, ingested, duplicates, tombstoned) < 0 ? 4 : 0;
 }
 
 }  // extern "C"

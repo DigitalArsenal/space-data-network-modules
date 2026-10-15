@@ -21,16 +21,22 @@ source provenance, probability algorithms and units.
 | `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per excluded object |
 | Three `prepare_*_screening_index` methods | CQR index request | CQR index result |
 | `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
-| `coarse_grid` | CQR window request on a resident index, and a block of coarse steps | Sampled states and motion bounds for the GPU pair search, plus a JSON report of exclusions |
-| `search_candidates` | CQR window request on a resident index, and a block of coarse steps | Candidate pair-steps found on the CPU (the frame `refine_candidates` takes), plus a JSON report of exclusions |
-| `search_grid` | CQR window request (its controls), a coarse grid block `coarse_grid` returned, optional roles (primary, secondary, skip per object) | Candidate pair-steps in grid rows, plus a JSON report of the roles |
-| `refine_candidates` | CQR window request on a resident index, optional candidate pairs and exclusions | Chunked CQR catalog results, plus one OMM per excluded object |
+| `coarse_grid` | CQR window request on a resident index, and a `$SCR` BLOCK of coarse steps | `$SCR` GRID: sampled states and motion bounds for the GPU pair search, plus a `$SCR` SEARCH_REPORT with the exclusions |
+| `search_candidates` | CQR window request on a resident index, and a `$SCR` BLOCK of coarse steps | `$SCR` CANDIDATES found on the CPU (what `refine_candidates` takes), plus a `$SCR` SEARCH_REPORT with the exclusions |
+| `search_grid` | CQR window request (its controls), a `$SCR` GRID `coarse_grid` returned, optional `$SCR` ROLES (primary, secondary, skip per object) | `$SCR` CANDIDATES in grid rows, plus a `$SCR` SEARCH_REPORT of the roles |
+| `refine_candidates` | CQR window request on a resident index, optional `$SCR` CANDIDATES and EXCLUSIONS, optional `$ERM` uncertainty model | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
-| `possibility_of_collision` | `CPQ1` frame: two admissible sets (finite supports with possibilities, or ellipsoidal kernels) and the combined radius | `CPR1` frame: possibility and necessity of collision, miss-distance and closest-approach-time ranges |
+| `possibility_of_collision` | `$SCR` POSSIBILITY_REQUEST: two admissible sets (finite supports with possibilities, or ellipsoidal kernels) and the combined radius | `$SCR` POSSIBILITY_RESULT: possibility and necessity of collision, miss-distance and closest-approach-time ranges |
 
-Use the exact method names, port names and CQR arms in the manifest. The former
-JSON `invoke` operation envelope and Emscripten JSON exports are retired.
+Use the exact method names, port names and CQR arms in the manifest. Every port
+names one SDS type: CQR, OMM, OEM, EOP, PRW, TIM, CAT, CDM, CSM, the screening
+work products as `$SCR` (block, grid, roles, candidates, exclusions, search
+report, possibility request and result) and the empirical model as `$ERM`. The
+former JSON `invoke` operation envelope, Emscripten JSON exports and the
+module-local tagged frames (CAU1, CAB1, CAG1, CAR1, CAC1, CAX1, CPQ1, CPR1) and
+JSON reports are retired. `assess_conjunction` and `screen_catalog` no longer
+advertise a `cdm` output they never wrote: a pair's CDM is `emit_cdm`'s.
 
 OMM/TLE sources select the built-in SGP4 provider explicitly. OEM compact arrays,
 OEM explicit samples and Cartesian Chebyshev PPE use native track evaluation.
@@ -79,7 +85,9 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 - **Empirical model.** Element sets can take covariance from an empirical
   prediction-error model: `analysis/gp-error-model`, scaled and gated by its
   calibration. `scripts/uncertainty-model.mjs` writes the model as the
-  `uncertainty_model` frame (`CAU1`).
+  `uncertainty_model` record (`$ERM`, MODEL arm: regimes and age bins, and per
+  stratum the RTN covariance with its CALIBRATION and reference). An `$ERM`
+  model gp-error-model emits is passed through.
   - **Where:** `assess_conjunction`, `screen_catalog`, `screen_window`,
     `screen_segment_window` and `refine_candidates`, with a covariance
     `ALGORITHM`.
@@ -134,7 +142,7 @@ the Minkowski sum (conservative) and evaluated in the encounter plane at the
 nominal closest approach, the short-term assumptions of Foster's probability.
 Possibility and necessity are not collision probabilities, and finite
 supports screen only the encounters they sample. The request and result are
-module-local aligned frames (`CPQ1`, `CPR1`), as `coarse_grid`'s; the layout
+`$SCR` records (POSSIBILITY_REQUEST, POSSIBILITY_RESULT); the evaluation
 is in `src/cpp/src/possibility_screening.cpp`, which uses the TEAG primitives
 of `analysis/estimation/src/teag.hpp`. Authority:
 `tests/possibilityScreening.test.mjs` (definitions on a constructed support,

@@ -35,6 +35,8 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { generateSdsHeaders } from "./sds-headers.mjs";
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const cppRoot = path.join(packageRoot, "src", "cpp");
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -89,10 +91,11 @@ const SOURCES = [
   "maneuver_plugin.cpp",
   "plugin_runtime.cpp",
   "orbit_geometry.cpp",
-  // The invoke entry point last: it is the only file that reaches for the
-  // SDK-generated `space_data_module_invoke.h`, which the compiler writes
-  // beside the amalgamated source.
-  "plugin_entrypoints.cpp",
+  // The $MPL wire and the `plan` entry point last: it is the only file that
+  // reaches for the SDK-generated `space_data_module_invoke.h`, which the
+  // compiler writes beside the amalgamated source, and the only one that reads
+  // the $MPL header generated below.
+  "mpl_bridge.cpp",
 ];
 
 const LOCAL_INCLUDE = /^\s*#\s*include\s+"(?:maneuver\/)?[A-Za-z0-9_./]+\.h"\s*$/;
@@ -126,6 +129,15 @@ const parts = [
 parts.push("// ---- shared lambert-izzo/include/lambert_izzo/solver.hpp ----");
 parts.push(await fs.readFile(lambertSolverPath, "utf8"));
 parts.push(await fs.readFile(path.join(packageRoot, "../../foundation/orbits/src/state_representations.hpp"), "utf8"));
+
+// The $MPL header and the families it includes (dependency order, object API),
+// generated from the standards' schemas: see sds-headers.mjs.
+const { families, headers: sdsHeaders } = await generateSdsHeaders();
+parts.push("#include <flatbuffers/flatbuffers.h>");
+for (const family of families) {
+  parts.push(`// ---- spacedatastandards ${family}/main.fbs (flatc --gen-object-api) ----`);
+  parts.push(sdsHeaders[family]);
+}
 
 for (const header of HEADERS) {
   const file = path.join(cppRoot, "include", "maneuver", header);

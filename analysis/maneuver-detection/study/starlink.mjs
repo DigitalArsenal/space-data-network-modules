@@ -13,7 +13,7 @@
 // one revolution to the next (a rise is thrust: drag only lowers it).
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadModule, json, TYPES, iso, seconds, outputsOf, jsonOf, OEM, flatbuffers, MODULES } from './lib/host.mjs';
+import { loadModule, config, TYPES, iso, seconds, outputsOf, reportFrom, OEM, flatbuffers, MODULES } from './lib/host.mjs';
 import { detectHistories, scoreVariants, writeJson, log } from './lib/run.mjs';
 
 const [work, ...rest] = process.argv.slice(2);
@@ -64,8 +64,8 @@ for (const norad of sample) {
   }
   if (versions.length < 2) { log(`${norad}: ${versions.length} version(s)`); continue; }
   const res = await compare.invoke('compare_ephemerides', [...versions.map((v) => ({ portId: 'versions', payload: v.bytes, typeRef: TYPES.OEM })),
-    json('options', { within_version: true, unplanned_threshold_km: 0 })]);
-  const report = jsonOf(res, 'report').objects[0];
+    config({ within_version: true, unplanned_threshold_km: 0 })]);
+  const report = (await reportFrom(res)).objects[0];
   const changes = report.changes.filter((c) => c.mode === 'overlap').map((c) => ({ window: c.window, in_track_mps: c.in_track_mps, delta_sma_km: c.delta_sma_km }));
   // Within each version, its first 8 h (its own orbit determination's reach).
   const rises = [], falls = [];

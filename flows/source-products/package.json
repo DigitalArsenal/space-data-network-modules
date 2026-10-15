@@ -1,15 +1,18 @@
 {
   "name": "@digitalarsenal/sdn-flow-source-products",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../source-products.flow.json --deps ../source-products.deps.json",
-    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../node_modules/spacedatastandards.org && pwd)}\"; node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../source-products.flow.json --deps ../source-products.deps.json --out ./dist",
+    "check": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../source-products.flow.json --deps ../source-products.deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-/Users/tj/software/worktrees/spacedatastandards--sds-node-api-standards-20261013}\"; node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../source-products.flow.json --deps ../source-products.deps.json --out ./dist",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

@@ -17,8 +17,9 @@ each file's URL and the inventory lines taken.
 All are complex packing with spatial differencing (template 5.3), as GFS/GEFS publish nearly every field. Licence:
 NOAA/NCEP model output via NODD, open to the public (https://www.weather.gov/disclaimer).
 
-`jobs.json` holds the job attributes the source node emits for each product (model key and id, class, stride, bands,
-spread).
+`jobs.json` holds the job attributes the source node puts in each product's $WXF job header (HttpRequest.CONTEXT: model
+key and id, class, the records' spacing `grid_deg` = the field's spacing times `stride`, bands, spread); `stride` is also
+what generate-expected.py thins the ecCodes values by.
 
 ## expected.json — the independent reference
 

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.satnogs-source",
   "name": "SatNOGS DB RF Transmitter Source Nodes",
-  "version": "0.1.0",
-  "description": "SatNOGS DB (Libre Space Foundation) -> SDS $RFB transmitter records. Two pure flow nodes: `request` turns a cron timer tick into ONE whole-table hostcap/http-request GET of https://db.satnogs.org/api/transmitters/?format=json (bulk, never a pagination walk \u2014 the source-policy.json crawl ruling) plus the parser attribution job; `parse` joins that job with the http response, decodes ~4,994 transmitter rows and emits a size-prefixed $RFB record stream for hostcap/storage-ingest. One $RFB record carries exactly one LINK_DIRECTION, so a Transceiver/Transponder becomes an UPLINK + DOWNLINK pair sharing ID_TRANSMITTER (the SatNOGS uuid). SatNOGS publishes HERTZ; every frequency field written is MHz per the normative RFB units rule. Licence is CC-BY-SA-4.0: every record carries CITATION verbatim and the batch provenance carries license/license_url/citation so the share-alike obligation survives republication. No capabilities: this node performs no I/O \u2014 http and storage are the generic hostcap connector nodes. HTTP 304 Not Modified is accepted, never treated as a failed fetch: the parse method emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced.",
+  "version": "0.2.0",
+  "description": "SatNOGS DB (Libre Space Foundation) -> SDS $RFB transmitter records (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between modules). Two pure flow nodes: `request` turns a TimerTick into ONE whole-table HttpRequest (HREQ) GET of https://db.satnogs.org/api/transmitters/?format=json (bulk, never a pagination walk \u2014 the source-policy.json crawl ruling) whose CONTEXT is the parse job, one size-prefixed IngestRequest (INGQ) skeleton (schema, provider, source name and URL, reconcile None, archive naming), echoed by hostcap/http-request in the HttpResponse; `parse` reads that HttpResponse (HRSP), decodes ~4,994 transmitter rows and emits a size-prefixed $RFB record stream, the IngestRequest for hostcap/storage-ingest (the job completed with the batch id, licence tags and provenance) and the HttpResponse verbatim as the raw document. One $RFB record carries exactly one LINK_DIRECTION, so a Transceiver/Transponder becomes an UPLINK + DOWNLINK pair sharing ID_TRANSMITTER (the SatNOGS uuid). SatNOGS publishes HERTZ; every frequency field written is MHz per the normative RFB units rule. Licence is CC-BY-SA-4.0: every record carries CITATION verbatim and the batch's source tags carry LICENSE CC-BY-SA-4.0, LICENSE_URL, CITATION and SHARE_ALIKE true so the share-alike obligation survives republication. Node CONFIG through the builtin plugin.getConfig hostcall (SDS $PIV, one ModuleConfig FlatBuffer): satnogs_transmitters_url, satnogs_http_timeout_ms, satnogs_provider_id, satnogs_if_none_match, satnogs_if_modified_since, satnogs_record_cap. No capabilities: this node performs no I/O \u2014 http and storage are the generic hostcap connector nodes. HTTP 304 Not Modified is accepted, never treated as a failed fetch: the parse method emits a single FlowNotice (Unchanged, not-modified) on its 'unchanged' port and nothing else, so no batch is stored or announced.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,37 +15,35 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Both methods are pure single-pass transforms over one fetched JSON table: `request` formats a fetch descriptor from node CONFIG, and `parse` walks the SatNOGS transmitter rows once, emitting one or two $RFB records per row into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of a ~3.5 MB body. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Both methods are pure single-pass transforms over one fetched JSON table: `request` builds one HttpRequest from node CONFIG, and `parse` walks the SatNOGS transmitter rows once, emitting one or two $RFB records per row into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of a ~3.5 MB body. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [
     {
       "methodId": "request",
       "displayName": "SatNOGS Transmitters Fetch Request",
-      "description": "Builds the SatNOGS DB transmitters fetch request + parse job from a timer tick. ONE whole-table request per cycle with the source-policy.json identifying UA and conditional-request validators from node CONFIG. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "description": "Builds the SatNOGS transmitters fetch from a TimerTick: ONE whole-table HttpRequest per cycle with the identifying User-Agent source-policy.json mandates, conditional-request validators from node CONFIG when set, and the parse job in CONTEXT (one size-prefixed IngestRequest). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "inputPorts": [
         {
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload at all, so there is no SDS record to name."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK) from the flow's timer trigger."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick."
+          "description": "Cron timer tick (its fields are not read)."
         }
       ],
       "outputPorts": [
@@ -53,47 +51,22 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON http request for the SatNOGS transmitters table.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET the transmitters table, headers user-agent / accept (and if-none-match / if-modified-since from CONFIG), TIMEOUT_MS satnogs_http_timeout_ms; CONTEXT: the parse job, one size-prefixed IngestRequest (SCHEMA RFB.fbs, TAGS PROVIDER_ID / SOURCE_NAME satnogs-db / SOURCE_URL, RECONCILE None, ARCHIVE satnogs / transmitters.json)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
           "description": "SatNOGS transmitters fetch request."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "satnogs-ingest-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON job attribution (source satnogs-db).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) produced and consumed inside this flow; it is ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "SatNOGS parse job."
         }
       ],
       "maxBatch": 1,
@@ -102,53 +75,28 @@
     {
       "methodId": "parse",
       "displayName": "Parse SatNOGS Transmitters into $RFB",
-      "description": "Decodes the SatNOGS transmitters JSON table into a size-prefixed $RFB record stream (one record per link direction, Hz -> MHz, POLARIZATION explicitly UNKNOWN, CITATION carrying the CC-BY-SA-4.0 attribution) plus the storage.ingest_with_source meta and the raw payload for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. HTTP 304 Not Modified is accepted: the host presents the ETag / Last-Modified it recorded from the last 2xx for this URL, so an unchanged document answers 304 with no body. The method then emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced. Same contract as data-source/celestrak-parser.",
+      "description": "Reads the HttpResponse carrying the SatNOGS transmitters table and its job (CONTEXT), decodes each transmitter row into one $RFB record per link direction (Hz -> MHz, explicit UNKNOWN polarization) and emits a size-prefixed $RFB record stream, the IngestRequest for storage-ingest and the HttpResponse verbatim for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. HTTP 304 Not Modified is accepted, never treated as a failed fetch: the host presents the ETag / Last-Modified it recorded from the previous 2xx for this URL, so an unchanged table answers 304 with no body. The method then emits a single FlowNotice on its 'unchanged' port and nothing else, so no batch is stored or announced. Any other non-200 status (or a failed exchange, STATUS 0) fails closed with nothing emitted.",
       "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "satnogs-ingest-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "UTF-8 JSON fetch-job attribution.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) emitted by this module's own request node inside the same flow; ingest bookkeeping, never persisted."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Fetch-job attribution from the request node."
-        },
         {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON from hostcap/http-request.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS, HEADERS, BODY verbatim, the request's CONTEXT (the job, a size-prefixed IngestRequest), RETRIEVED_MS."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The HTTP response carrying the SatNOGS transmitters table."
+          "description": "The HTTP response carrying the SatNOGS transmitters table, its job echoed in CONTEXT."
         }
       ],
       "outputPorts": [
@@ -156,24 +104,22 @@
           "portId": "rfb_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the RFB batch, carrying licence-bearing provenance.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, licence-bearing provenance) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "description": "IngestRequest (INGQ) for hostcap/storage-ingest: SCHEMA RFB.fbs, TAGS (PROVIDER_ID, SOURCE_NAME, BATCH_ID = sha256 of the payload, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER source:satnogs, LICENSE CC-BY-SA-4.0, LICENSE_URL, CITATION, SHARE_ALIKE true), RECONCILE from the job (None), ARCHIVE from the job, PROVENANCE (status, validators, retrieval time, parser, source / normalized SHA-256, counts)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "RFB ingest meta."
+          "description": "RFB ingest request."
         },
         {
           "portId": "rfb_records",
@@ -200,41 +146,37 @@
           "portId": "raw",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-raw-payload",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The decoded source payload bytes (for raw archiving).",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/json",
-                "detail": "The verbatim SatNOGS DB transmitters table as fetched: vendor JSON from db.satnogs.org, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
-              }
+              "description": "The HttpResponse (HRSP) the batch was made from, verbatim: its BODY is the SatNOGS transmitters JSON storage-ingest archives under the request's ARCHIVE naming."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Raw fetched payload."
+          "description": "Raw fetched document (the response verbatim)."
         },
         {
           "portId": "unchanged",
           "acceptedTypeSets": [
             {
-              "setId": "satnogs-unchanged-notice-json",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched transmitters table is current; an intra-flow control frame, never persisted as a record."
-              },
-              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+              "description": "FlowNotice (FNTC): KIND Unchanged, SCHEMA RFB.fbs, PROVIDER_ID, SOURCE_NAME, REASON not-modified, ITEMS the source URL, AT_MS the host's retrieval time."
             }
           ],
           "minStreams": 0,

@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.satnogs-rf-ingest",
   "name": "SatNOGS RF Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 5,
@@ -17,31 +17,36 @@
       "nodeId": "req",
       "pluginId": "com.digitalarsenal.data-source.satnogs-source",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.satnogs-source",
       "methodId": "parse",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "ingest_rfb",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -49,8 +54,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.satnogs-source",
       "pluginId": "com.digitalarsenal.data-source.satnogs-source",
-      "version": "0.1.0",
-      "sha256": "b564c1dba1ad8fc58b4a384f4048798d14ad602128931a09cacafcc177a3ea6a",
+      "version": "0.2.0",
+      "sha256": "054bdf1f123a8264674d13e2275cdd57ab2d5f655da65f207661912139af821e",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -64,28 +69,28 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "version": "0.1.0",
-      "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "version": "0.2.0",
+      "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
       "methodSymbols": {
-        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
       }
     },
     {
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "version": "0.1.0",
-      "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "version": "0.3.0",
+      "sha256": "0aed7c1cdd06b18d6cd8b72e8de452bff1d694ecceb51996b7a1ee6e96e0bbc1",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
       "methodSymbols": {
-        "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
       }
     }
   ]

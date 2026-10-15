@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "typedHostcall.hpp"
+
 // Reference states: a precise-orbit product (SP3, read by files/orbit-products)
 // as GCRF states in UTC per catalogued object, each with the product's stated
 // accuracy as covariance, for calibrating orbit uncertainty against evidence
@@ -16,8 +18,10 @@
 //   ephemeris          $OEM, one block per satellite, Earth-fixed, positions
 //   descriptor         $NCD with the SP3 header and the file's SHA-256
 //   earth_orientation  $EOP rows bracketing the file
-//   identities         JSON: product, source, satellite id -> catalogued
-//                      object, optional statedSigmaM with statedSigmaBasis
+// Config (plugin.getConfig, one ModuleConfig read in place by
+// sdm_piv::get_config): product, source, satellites.<SP3 id>.{norad,
+// objectId, name} (each SP3 satellite id -> catalogued object over the
+// file's span), optional statedSigmaM with statedSigmaBasis.
 // Output: reference, one $OEM per identified satellite.
 //
 // Time: GPS, Galileo and QZSS time are TAI - 19 s, BeiDou TAI - 33 s,
@@ -68,13 +72,14 @@ const T* root(const plugin_input_frame_t* f, const char* ident) {
 
 std::string text(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
 
-std::string json_string(const nlohmann::json& j, const char* key) {
-  const auto it = j.find(key);
-  return it != j.end() && it->is_string() ? it->get<std::string>() : std::string();
+// Config lookups with the legacy defaults: "" for a missing string, -1 for a
+// missing number.
+std::string config_string(const sdm_piv::ConfigTable& c, std::string_view key) {
+  return c.kind(key) == sdn::runtime::configValueKind_String ? std::string(c.string(key)) : std::string();
 }
-double json_number(const nlohmann::json& j, const char* key) {
-  const auto it = j.find(key);
-  return it != j.end() && it->is_number() ? it->get<double>() : -1.0;
+double config_number(const sdm_piv::ConfigTable& c, std::string_view key) {
+  return c.kind(key, sdn::runtime::configValueKind_String) == sdn::runtime::configValueKind_Number ? c.number(key, -1.0)
+                                                                                                  : -1.0;
 }
 
 struct Instant {
@@ -232,15 +237,15 @@ extern "C" int reference_states() {
   if (!itrf_realization(coordinates))
     return fail("unsupported-frame", "SP3 coordinate system '" + coordinates + "' is not an ITRF realization.");
 
-  const plugin_input_frame_t* ids = input("identities");
-  if (!ids || !ids->payload) return fail("missing-identities", "identities JSON is required.");
-  const nlohmann::json idj = nlohmann::json::parse(ids->payload, ids->payload + ids->payload_length, nullptr, false);
-  if (idj.is_discarded() || !idj.is_object() || !idj.contains("satellites") || !idj["satellites"].is_object())
-    return fail("invalid-identities", "identities must be a JSON object with a satellites object.");
-  const std::string product = json_string(idj, "product");
-  const std::string source = json_string(idj, "source");
-  const double stated_sigma_m = json_number(idj, "statedSigmaM");
-  const std::string stated_basis = json_string(idj, "statedSigmaBasis");
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) return fail("missing-identities", "plugin.getConfig failed: " + config.error_message());
+  const sdm_piv::ConfigTable satellites = config.table("satellites");
+  if (!satellites)
+    return fail("invalid-identities", "config must hold a satellites object (SP3 satellite id -> catalogued object).");
+  const std::string product = config_string(config, "product");
+  const std::string source = config_string(config, "source");
+  const double stated_sigma_m = config_number(config, "statedSigmaM");
+  const std::string stated_basis = config_string(config, "statedSigmaBasis");
   if (stated_sigma_m > 0 && stated_basis.empty())
     return fail("invalid-identities", "statedSigmaM needs statedSigmaBasis: where the accuracy is stated.");
 
@@ -258,11 +263,11 @@ extern "C" int reference_states() {
   for (const ephemerisDataBlock* block : *oem->EPHEMERIS_DATA_BLOCK()) {
     if (!block || !block->OBJECT()) continue;
     const std::string sat = text(block->OBJECT()->OBJECT_ID());
-    const auto who = idj["satellites"].find(sat);
-    if (who == idj["satellites"].end()) continue;  // not a catalogued object over this span
-    if (!who->is_object() || json_number(*who, "norad") <= 0)
+    if (!satellites.has(sat)) continue;  // not a catalogued object over this span
+    const sdm_piv::ConfigTable who = satellites.table(sat);
+    if (!who || config_number(who, "norad") <= 0)
       return fail("invalid-identities", sat + " has no norad number.");
-    const uint32_t norad = static_cast<uint32_t>(json_number(*who, "norad"));
+    const uint32_t norad = static_cast<uint32_t>(config_number(who, "norad"));
     const auto* lines = block->EPHEMERIS_DATA_LINES();
     if (!lines)
       return fail("invalid-ephemeris", sat + ": expected per-epoch lines (the SP3 projection of read_container).");
@@ -398,8 +403,8 @@ extern "C" int reference_states() {
     }
     if (out_lines.empty()) continue;
 
-    const std::string name = json_string(*who, "name");
-    const std::string object_id = json_string(*who, "objectId");
+    const std::string name = config_string(who, "name");
+    const std::string object_id = config_string(who, "objectId");
     const auto name_offset = fbb.CreateString(name);
     const auto id_offset = fbb.CreateString(object_id);
     CATBuilder cat(fbb);
@@ -449,9 +454,17 @@ extern "C" int reference_states() {
 //              lines optional, in the block's own frame.
 //   reference  $OEM, block 0: GCRF, or EME2000 (rotated by the IAU 2006 frame
 //              bias), UTC, EPHEMERIS_DATA_LINES.
-// Output: report, JSON, one row per reference epoch inside the ephemeris span:
-// the GCRF position error (reference minus ephemeris, km) and, with
-// covariance, its Mahalanobis distance squared on the 3x3 position block.
+// Outputs:
+//   residuals  $OEM, one GCRF/UTC block: per reference epoch inside the
+//              ephemeris span, the position error (reference minus
+//              ephemeris, km) as the line's X/Y/Z and, with covariance, the
+//              ephemeris's GCRF position covariance at that epoch (km^2)
+//              as a covariance line (its Mahalanobis distance squared and
+//              sigmas follow from the two).
+//   report     $CVR: MEAN_D2_OVER_3 and COVERAGE_95 (d2 <= 7.8147, the 0.95
+//              point of chi-square with 3 degrees of freedom) over SAMPLES
+//              epochs with covariance (NaN without), TEST_WINDOW the compared
+//              span, EVIDENCE the frames, degree and compared/outside counts.
 //
 // Interpolation: the block's degree (INTERPOLATION_DEGREE, 5 when absent)
 // Lagrange interpolant through the nearest degree + 1 states, and the same
@@ -585,7 +598,10 @@ extern "C" int compare_to_reference() {
       for (int j = 0; j < 3; ++j) bias[i][j] = rbm[j][i];
   }
 
-  nlohmann::json rows = nlohmann::json::array();
+  flatbuffers::FlatBufferBuilder fbb(1 << 16);
+  std::vector<flatbuffers::Offset<ephemerisDataLine>> res_lines;
+  std::vector<flatbuffers::Offset<covarianceMatrixLine>> res_cov;
+  std::string first_epoch, last_epoch;
   size_t outside = 0, n_d2 = 0, inside95 = 0;
   double sum_d2 = 0.0;
   if (rb->EPHEMERIS_DATA_LINES()) {
@@ -606,8 +622,9 @@ extern "C" int compare_to_reference() {
       double q[3] = {l->X(), l->Y(), l->Z()}, qg[3];
       for (int i = 0; i < 3; ++i) qg[i] = bias[i][0] * q[0] + bias[i][1] * q[1] + bias[i][2] * q[2];
       const double err[3] = {qg[0] - pg.x, qg[1] - pg.y, qg[2] - pg.z};
-      nlohmann::json row = {{"epoch", iso}, {"errorKm", {err[0], err[1], err[2]}},
-                            {"errorNormKm", std::sqrt(err[0] * err[0] + err[1] * err[1] + err[2] * err[2])}};
+      res_lines.push_back(CreateephemerisDataLineDirect(fbb, iso.c_str(), err[0], err[1], err[2]));
+      if (first_epoch.empty()) first_epoch = iso;
+      last_epoch = iso;
       double c[6];
       if (with_cov && interpolate(covariance, t, n, 6, c)) {
         // P in the ephemeris frame, then M P M^T.
@@ -637,27 +654,61 @@ extern "C" int compare_to_reference() {
           double d2 = 0.0;
           for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) d2 += err[i] * inv[i][j] * err[j];
-          row["d2"] = d2;
-          row["sigmaKm"] = {std::sqrt(g[0][0]), std::sqrt(g[1][1]), std::sqrt(g[2][2])};
+          res_cov.push_back(
+              CreatecovarianceMatrixLineDirect(fbb, iso.c_str(), g[0][0], g[1][0], g[1][1], g[2][0], g[2][1], g[2][2]));
           sum_d2 += d2;
           ++n_d2;
           if (d2 <= 7.814727903251178) ++inside95;  // chi-square, 3 degrees of freedom, 0.95
         }
       }
-      rows.push_back(row);
     }
   }
-  nlohmann::json report = {{"ephemerisFrame", ef}, {"referenceFrame", rf}, {"interpolationDegree", degree},
-                           {"covariance", with_cov}, {"compared", rows.size()}, {"outsideSpan", outside},
-                           {"rows", rows}};
-  if (n_d2) {
-    report["meanD2Over3"] = sum_d2 / (3.0 * static_cast<double>(n_d2));
-    report["coverage95"] = static_cast<double>(inside95) / static_cast<double>(n_d2);
-    report["d2Count"] = n_d2;
+  const size_t compared = res_lines.size();
+  char evidence[256];
+  std::snprintf(evidence, sizeof(evidence),
+                "compare_to_reference: ephemeris %s vs reference %s; interpolation degree %zu; covariance %s; "
+                "compared %zu, outside span %zu",
+                ef.c_str(), rf.c_str(), degree, with_cov ? "yes" : "no", compared, outside);
+
+  // residuals: one GCRF/UTC $OEM block.
+  {
+    const auto frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
+                                       CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
+    const auto cov_frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
+                                           CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
+    const std::string comment = std::string("Position residuals, reference minus ephemeris, km, GCRF; covariance lines: "
+                                            "the ephemeris's GCRF position covariance, km^2. ") + evidence;
+    const auto block = CreateephemerisDataBlockDirect(
+        fbb, comment.c_str(), 0, "EARTH", frame, nullptr, res_cov.empty() ? 0 : cov_frame, timingStandard::UTC,
+        first_epoch.empty() ? nullptr : first_epoch.c_str(), nullptr, nullptr,
+        last_epoch.empty() ? nullptr : last_epoch.c_str(), nullptr, 0, 0.0, 3, nullptr, &res_lines,
+        res_cov.empty() ? nullptr : &res_cov, nullptr, 0, 399);
+    const std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block};
+    fbb.FinishSizePrefixed(CreateOEMDirect(fbb, nullptr, 3.0, nullptr, "reference-states", &blocks), "$OEM");
+    if (plugin_push_output_ex("residuals", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0,
+                              fbb.GetBufferPointer(), fbb.GetSize()) < 0)
+      return 500;
   }
-  const std::string out = report.dump();
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                            reinterpret_cast<const uint8_t*>(out.data()), static_cast<uint32_t>(out.size())) < 0)
+
+  // report: the realism summary as $CVR.
+  flatbuffers::FlatBufferBuilder cvr(1024);
+  const std::string window = first_epoch.empty() ? std::string() : first_epoch + "/" + last_epoch;
+  const auto lineage = cvr.CreateString(std::string("ephemeris ") + ef + " vs reference " + rf);
+  const auto window_offset = cvr.CreateString(window);
+  const auto evidence_offset = cvr.CreateString(evidence);
+  CVRBuilder b(cvr);
+  b.add_MEASURED_LINEAGE(lineage);
+  if (!window.empty()) b.add_TEST_WINDOW(window_offset);
+  if (n_d2) {
+    b.add_MEAN_D2_OVER_3(sum_d2 / (3.0 * static_cast<double>(n_d2)));
+    b.add_COVERAGE_95(static_cast<double>(inside95) / static_cast<double>(n_d2));
+    b.add_OBJECTS(1);
+  }
+  b.add_SAMPLES(static_cast<uint32_t>(n_d2));
+  b.add_EVIDENCE(evidence_offset);
+  cvr.FinishSizePrefixed(b.Finish(), "$CVR");
+  if (plugin_push_output_ex("report", "CVR.fbs", "$CVR", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CVR", 0, 0,
+                            cvr.GetBufferPointer(), cvr.GetSize()) < 0)
     return 500;
   return 0;
 }

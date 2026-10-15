@@ -8,6 +8,7 @@ import * as o from 'spacedatastandards.org/lib/js/OEM/main.js';
 import { OPM } from 'spacedatastandards.org/lib/js/OPM/OPM.js';
 import { NCD, NCDT, ncdContainerFormat } from 'spacedatastandards.org/lib/js/NCD/main.js';
 import { sha256, numericId } from './crosswalk.js';
+import { XMT_TYPE, matchRequest, matchView } from './xmt.js';
 const table = (s, name, fields) => Object.assign(new s[`${name}T`](), fields);
 const type = code => ({ schemaName:`${code}.fbs`, fileIdentifier:`$${code}`, rootTypeName:code });
 const encode = (s, name, value, prefix = true) => { const b = new Builder(2048); const root = value.pack(b); prefix ? b.finishSizePrefixed(root,`$${name}`) : b.finish(root,`$${name}`); return new Uint8Array(b.asUint8Array()); };
@@ -107,7 +108,7 @@ export async function runMatching({module,candidates,pairs,policy,prepare}) {
     const {bytes:unused,...description}=candidate;
     metadata.push({...description,trajectorySha256:await sha256(payload),provenance});
   }
-  const recipe={version:1,...policy,candidates:metadata,pairs},payload=new TextEncoder().encode(JSON.stringify(recipe));
-  const outputs=await invokeChecked(module,'match_catalog',[{portId:'recipe',typeRef:{wireFormat:'aligned-binary',requiredAlignment:1,byteLength:payload.length},payload},...prepared],'report');
-  return {recipe,report:JSON.parse(new TextDecoder().decode(outputs[0].payload))};
+  const recipe={version:1,...policy,candidates:metadata,pairs};
+  const outputs=await invokeChecked(module,'match_catalog',[{portId:'recipe',typeRef:XMT_TYPE,payload:matchRequest(recipe)},...prepared],'report');
+  return {recipe,report:matchView(outputs[0].payload,recipe)};
 }

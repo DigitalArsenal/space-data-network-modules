@@ -1332,7 +1332,7 @@ struct VCMT : public ::flatbuffers::NativeTable {
   VCMT &operator=(VCMT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// Vector Covariance Message
+/// DEPRECATED: use $OCM, which carries everything a VCM does. Vector Covariance Message.
 struct VCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef VCMT NativeTableType;
   typedef VCMBuilder Builder;

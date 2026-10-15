@@ -9,45 +9,16 @@
 //
 // The result is screen_catalog's result for the same request: the GPU only
 // proposes candidates, and every reported number comes from the module.
-// This file moves frames between the module and the GPU; it has no physics.
+// This file moves $SCR records between the module and the GPU; it has no physics.
 
-const tagged = (tag, byteLength) => {
-  const bytes = new Uint8Array(byteLength);
-  for (let i = 0; i < 4; i++) bytes[i] = tag.charCodeAt(i);
-  return { bytes, view: new DataView(bytes.buffer) };
-};
+import { blockFrame, candidateTriples, candidatesFrame, excludedFrame, searchReport } from './scrFrames.mjs';
 
-export function blockFrame(firstStep, stepCount) {
-  const { bytes, view } = tagged('CAB1', 12);
-  view.setUint32(4, firstStep, true);
-  view.setUint32(8, stepCount, true);
-  return bytes;
-}
+export { blockFrame, candidatesFrame, excludedFrame };
 
-export function excludedFrame(excluded) {
-  const { bytes, view } = tagged('CAX1', 8 + excluded.size * 12);
-  view.setUint32(4, excluded.size, true);
-  let at = 8;
-  for (const [index, jd] of excluded) {
-    view.setUint32(at, index, true);
-    view.setFloat64(at + 4, jd, true);
-    at += 12;
-  }
-  return bytes;
-}
-
-export function candidatesFrame(triples, from, to) {
-  const count = (to - from) / 3;
-  const { bytes, view } = tagged('CAC1', 8 + count * 12);
-  view.setUint32(4, count, true);
-  new Uint32Array(bytes.buffer, 8, count * 3).set(triples.subarray(from, to));
-  return bytes;
-}
-
-// The request carries its SDS type; the control frames their media type.
+// Every port carries one SDS type: $CQR requests and results, $SCR screening
+// work products, the $ERM uncertainty model.
 export const sds = (portId, code, payload) => ({ portId, payload,
   typeRef: { schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' } });
-export const control = (portId, mediaType, payload) => ({ portId, payload, typeRef: { wireFormat: 'flatbuffer', mediaType } });
 
 // Orders candidate triples by pair, then step, so a pair's steps stay in one
 // refine call and make whole encounters.
@@ -93,11 +64,11 @@ export async function screenAllVsAllOnGpu(o) {
     const count = lastStep === null ? 1 : Math.min(blockSteps, lastStep - first + 1);
     let t = performance.now();
     const response = await invoke(screener ? 'coarse_grid' : 'search_candidates', [...requestInput,
-      control('block', 'application/vnd.sdn.ca-grid-block', blockFrame(first, count))]);
+      sds('block', 'SCR', blockFrame(first, count))]);
     if (response.statusCode !== 0) throw new Error(`${screener ? 'coarse_grid' : 'search_candidates'}: ${response.errorCode}: ${response.errorMessage}`);
     const out = response.outputs;
     timings.gridMs += performance.now() - t;
-    const report = JSON.parse(new TextDecoder().decode(port(out, 'report')));
+    const report = searchReport(port(out, 'report'));
     lastStep = report.last_step;
     objects = report.objects;
     for (const x of report.excluded) {
@@ -110,9 +81,7 @@ export async function screenAllVsAllOnGpu(o) {
       timings.gpuMs += screened.gpuMs;
       triples = screened.triples;
     } else {
-      const frame = port(out, 'candidates');
-      const n = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(4, true);
-      triples = new Uint32Array(frame.slice(8, 8 + n * 12).buffer);
+      triples = candidateTriples(port(out, 'candidates'));
     }
     blocks.push(triples);
     candidateCount += triples.length / 3;
@@ -152,7 +121,7 @@ export async function refineCandidates(o) {
   const perRefine = o.candidatesPerRefine ?? 150000;
   const requestInput = [sds('request', 'CQR', o.request)];
   // An empirical prediction-error model goes to refinement only (where events get their probability).
-  const modelInput = o.uncertaintyModel ? [control('uncertainty_model', 'application/vnd.sdn.ca-uncertainty-model', o.uncertaintyModel)] : [];
+  const modelInput = o.uncertaintyModel ? [sds('uncertainty_model', 'ERM', o.uncertaintyModel)] : [];
   const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
   const events = [], excludedRecords = [];
   const totals = { KD_TREE_CANDIDATES: 0, TCA_REFINED: 0, CONJUNCTIONS_FOUND: 0, PROPAGATIONS: 0, FAILED_PAIRS: 0 };
@@ -172,8 +141,8 @@ export async function refineCandidates(o) {
     const [from, to] = queue.shift();
     const t = performance.now();
     const inputs = [...requestInput,
-      control('candidates', 'application/vnd.sdn.ca-candidates', candidatesFrame(sorted, from, to)),
-      control('excluded', 'application/vnd.sdn.ca-excluded', excludedBytes), ...modelInput];
+      sds('candidates', 'SCR', candidatesFrame(sorted, from, to)),
+      sds('excluded', 'SCR', excludedBytes), ...modelInput];
     let response = await invoke('refine_candidates', inputs);
     refineCalls++;
     if (response.statusCode !== 0 && response.errorCode === 'output-staging-limit') {

@@ -1,10 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.clock",
   "name": "SDN Host Clock Node",
-  "version": "0.1.0",
-  "description": "Capability node wrapping the host clock hostcall group (clock.now + clock.nowIso). Method \"now\" takes no input and emits one \"time\" frame of UTF-8 JSON bytes {\"unixMs\":N,\"iso\":\"...\"} sampled from the host clock at invoke time. PERIODIC emission is a flow TRIGGER concern (timer trigger kind), not this node: wire a timer trigger at the flow level and place this node downstream when a flow needs the sampled time as data. Host gating: the Go node (sdn-server modulert) serves clock.* as ungated built-ins; the SDK NodeHost/BrowserHost are default-deny and require the \"clock\" capability grant, so this node declares it for host-agnostic flows.",
+  "version": "0.2.0",
+  "description": "Host clock connector (typed contracts 1.0). Method \"now\" takes an optional \"trigger\" frame, a TimerTick (TICK, module-sdk runtime type; its payload is not read), samples the host clock through clock.now and clock.nowIso (SDS $PIV hostcalls: a TimeValue record and the raw RFC3339 text) and emits one \"time\" frame, a $TIM (SDS standard TIM): TIME_SYSTEM UTC with an INSTANT {UTC, EPOCH_FORMAT UNIX_SECONDS, SECONDS whole Unix seconds, SUBSECOND_NANOS the millisecond remainder, ISO8601 the host's RFC3339 reading}. No JSON. PERIODIC emission is a flow TRIGGER concern (timer trigger kind), not this node: wire a timer trigger at the flow level and place this node downstream when a flow needs the sampled time as data. Host gating: the Go node (sdn-server modulert) serves clock.* as ungated built-ins; the SDK NodeHost/BrowserHost are default-deny and require the \"clock\" capability grant, so this node declares it.",
   "pluginFamily": "infrastructure",
-  "capabilities": ["clock"],
+  "capabilities": [
+    "clock"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "host-clock",
@@ -12,14 +14,23 @@
       "direction": "input",
       "capability": "clock",
       "resource": "host://clock",
-      "description": "Host clock hostcalls (clock.now unix milliseconds, clock.nowIso RFC3339). Available on the Go server host (built-in) and SDK NodeHost/BrowserHost (capability-gated).",
+      "description": "Host clock hostcalls as SDS $PIV invocations (clock.now -> TimeValue UNIX_MS, clock.nowIso -> raw \"value\" RFC3339 text). Available on the Go server host (built-in) and SDK NodeHost/BrowserHost (capability-gated).",
       "properties": {
-        "hostOps": ["clock.now", "clock.nowIso"]
+        "hostOps": [
+          "clock.now",
+          "clock.nowIso"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "now",
@@ -29,19 +40,22 @@
           "portId": "trigger",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-clock-trigger",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Optional trigger frame; the payload is ignored. Any frame (e.g. a timer-trigger emission or an upstream completion signal) causes one clock sample."
+              "description": "Optional TimerTick (module-sdk runtime type TICK), e.g. a flow timer trigger's firing. Its fields are not read: any tick causes one clock sample, and an invoke without one samples too."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional trigger; payload ignored."
+          "description": "Optional trigger (TimerTick); payload not read."
         }
       ],
       "outputPorts": [
@@ -49,24 +63,27 @@
           "portId": "time",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-time-json",
+              "setId": "sds-tim-instant",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"unixMs\":<integer unix milliseconds from clock.now>,\"iso\":\"<RFC3339 string from clock.nowIso>\"}."
+              "description": "$TIM (SDS standard TIM): TIME_SYSTEM UTC; INSTANT {TIME_SYSTEM UTC, EPOCH_FORMAT UNIX_SECONDS, SECONDS = floor(clock.now / 1000), SUBSECOND_NANOS = (clock.now mod 1000) * 1e6, ISO8601 = clock.nowIso verbatim}. SECONDS + SUBSECOND_NANOS are clock.now's Unix milliseconds exactly."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The sampled host time as a JSON frame."
+          "description": "The sampled host time as one $TIM frame."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Samples clock.now and clock.nowIso through the sync hostcall bridge and emits both readings in one JSON frame."
+      "description": "Samples clock.now and clock.nowIso through the sync typed hostcall bridge (SDS $PIV) and emits both readings in one $TIM frame."
     }
   ],
   "buildArtifacts": [

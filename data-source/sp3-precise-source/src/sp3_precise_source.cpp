@@ -1,9 +1,14 @@
 // data-source/sp3-precise-source: precise orbit products in SP3-c and SP3-d (IGS and its analysis centres, BKG, ESA/ESOC) as SDS records.
 //
-//   read_sp3   a decompressed SP3 file -> one $OEM per satellite, and a report of what the header and the body state
+//   read_sp3   the HttpResponse (HRSP) holding a decompressed SP3 file -> one $OEM per satellite, and a FlowNotice (FNTC)
+//              report of what the header and the body state
 //
-// Pure bytes in, pure bytes out: the download (BKG and ESA serve the files gzip-compressed, which the host expands), the
-// schedule and the archive belong to the SDN host flow. Errors are flags (an invoke error code and message), never exceptions.
+// Typed contracts 1.0 (FlatBuffers only): the input is the HttpResponse hostcap/http-request answers, BODY the SP3 text
+// verbatim; the report is one FlowNotice (KIND Info: COUNT the $OEM emitted, ITEMS the header facts and per-satellite counts
+// as "name=value", a satellite's as "satellite.<id>.<name>=value"). HTTP 304 gives one FlowNotice (Unchanged) and no $OEM;
+// another status or a transport ERROR is refused. The download (BKG and ESA serve the files gzip-compressed, which the host
+// expands), the schedule and the archive belong to the SDN host flow. No hostcalls. Errors are flags (an invoke error code and
+// message), never exceptions.
 //
 // The reader is files/orbit-products/src/sp3.hpp, the one SP3 reader of this repository (it is also what that module's
 // read_container runs). What this module adds is the shape of the product:
@@ -29,7 +34,11 @@
 #include <string>
 #include <vector>
 
+#include <HttpResponse_generated.h>
+#include <FlowNotice_generated.h>
+
 using Json = nlohmann::json;
+namespace R = sdn::runtime;
 
 namespace {
 
@@ -92,10 +101,21 @@ std::unique_ptr<RFMT> frame_of(const std::string& coordinate_system, bool* earth
   return frame;
 }
 
-int push_json(const char* port, const Json& value) {
-  const std::string text = value.dump();
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(text.data()),
-                               static_cast<uint32_t>(text.size()));
+// A report item: "name=value", the value as JSON writes a number or a boolean, a string verbatim.
+std::string item(const std::string& name, const Json& value) { return name + "=" + (value.is_string() ? value.get<std::string>() : value.dump()); }
+
+int push_notice(R::flowNoticeKind kind, const char* reason, uint64_t count, std::vector<std::string> items) {
+  R::FlowNoticeT notice;
+  notice.KIND = kind;
+  notice.SCHEMA = "OEM";
+  notice.SOURCE_NAME = "sp3";
+  notice.REASON = reason;
+  notice.COUNT = count;
+  notice.ITEMS = std::move(items);
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+  return plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+                               b.GetBufferPointer(), b.GetSize());
 }
 
 std::string iso_of(double zero_unix_seconds, double offset_seconds) {
@@ -105,13 +125,25 @@ std::string iso_of(double zero_unix_seconds, double offset_seconds) {
 }  // namespace
 
 extern "C" int read_sp3(void) {
-  if (plugin_get_input_count() != 1) return fail("invalid-sp3", "Exactly one decompressed SP3 file is required.");
+  if (plugin_get_input_count() != 1) return fail("invalid-sp3", "Exactly one HttpResponse holding a decompressed SP3 file is required.");
   const auto* input = plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) {
-    return fail("invalid-sp3", "The source must be one bounded, decompressed SP3 file.");
+  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length) {
+    return fail("missing-response-frame", "The parser requires the HttpResponse frame on 'source'.");
   }
+  flatbuffers::Verifier verifier(input->payload, input->payload_length, 64, 1000000, false);
+  if (!R::VerifyHttpResponseBuffer(verifier)) return fail("invalid-response-frame", "The source frame is not an HttpResponse (HRSP).");
+  const R::HttpResponse* response = R::GetHttpResponse(input->payload);
+  if (response->ERROR() && response->ERROR()->size()) return fail("fetch-failed", "The SP3 request failed: " + response->ERROR()->str());
+  if (response->STATUS() == 304) {
+    return push_notice(R::flowNoticeKind_Unchanged, "not-modified", 1, {response->URL() ? response->URL()->str() : std::string()}) < 0 ? 1 : 0;
+  }
+  if (response->STATUS() != 200) return fail("fetch-failed", "The SP3 source returned HTTP status " + std::to_string(response->STATUS()) + ".");
+  const auto* body = response->BODY();
+  if (!body || body->size() == 0 || body->size() > kMaxBytes) return fail("invalid-sp3", "The source must be one bounded, decompressed SP3 file.");
+  const uint8_t* bytes = body->data();
+  const uint32_t length = body->size();
   sp3::File file;
-  const ephem::Status status = sp3::read(reinterpret_cast<const char*>(input->payload), input->payload_length, &file);
+  const ephem::Status status = sp3::read(reinterpret_cast<const char*>(bytes), length, &file);
   if (status != ephem::Status::Ok) return fail("invalid-sp3", std::string("The file is not a readable SP3-c or SP3-d product: ") + ephem::status_name(status) + ".");
   if (file.satellites.empty() || file.satellites.size() > kMaxSatellites) return fail("invalid-sp3", "The file names no satellite, or more than 1,024.");
   const std::string system_token = upper(file.time_system);
@@ -123,14 +155,14 @@ extern "C" int read_sp3(void) {
   agency.erase(0, agency.find_first_not_of(' '));
   agency.erase(agency.find_last_not_of(' ') + 1);
 
-  Json satellites = Json::array();
+  std::vector<std::string> satellites;
   std::vector<OEMT> products;
   size_t without_states = 0;
   for (const sp3::SatelliteBlock& sat : file.satellites) {
     const ephem::Series& series = sat.series;
     if (series.rows.empty()) {
       ++without_states;
-      satellites.push_back({{"id", sat.sat_id}, {"states", 0}});
+      satellites.push_back(item("satellite." + sat.sat_id + ".states", 0));
       continue;
     }
     double zero = 0;
@@ -174,17 +206,22 @@ extern "C" int read_sp3(void) {
       if (f.orbit_predicted) ++predicted;
       if (f.maneuver) ++maneuvers;
     }
-    satellites.push_back({{"id", sat.sat_id}, {"states", series.rows.size()}, {"blocks", runs}, {"velocity", velocity}, {"accuracyExponent", sat.accuracy_exponent}, {"clock", clock},
-                          {"predictedStates", predicted}, {"maneuverFlags", maneuvers}});
+    const std::string at = "satellite." + sat.sat_id + ".";
+    for (std::string entry : {item(at + "states", series.rows.size()), item(at + "blocks", runs), item(at + "velocity", velocity), item(at + "accuracyExponent", sat.accuracy_exponent),
+                              item(at + "clock", clock), item(at + "predictedStates", predicted), item(at + "maneuverFlags", maneuvers)}) {
+      satellites.push_back(std::move(entry));
+    }
     products.push_back(std::move(oem));
   }
   if (products.empty()) return fail("invalid-sp3", "No satellite has a position in the file.");
-  const Json report = {{"version", 1}, {"source", "sp3"}, {"fileVersion", std::string(1, file.version)}, {"positionVelocity", std::string(1, file.pos_vel_flag)}, {"agency", agency},
-                       {"coordinateSystem", file.coordinate_sys}, {"orbitType", file.orbit_type}, {"dataUsed", file.data_used}, {"timeSystem", file.time_system},
-                       {"frame", earth_fixed ? "Earth-fixed" : "inertial"}, {"gpsWeek", file.gps_week}, {"epochIntervalSeconds", file.epoch_interval},
-                       {"firstEpoch", file.satellites.front().series.epoch_zero_iso}, {"declaredEpochs", file.declared_num_epochs}, {"satellites", satellites},
-                       {"satellitesWithoutStates", without_states}, {"sha256", ephem::sha256_hex(input->payload, input->payload_length)}, {"bytes", input->payload_length}};
-  if (push_json("report", report) < 0) return 1;
+  std::vector<std::string> items = {item("fileVersion", std::string(1, file.version)), item("positionVelocity", std::string(1, file.pos_vel_flag)), item("agency", agency),
+                                    item("coordinateSystem", file.coordinate_sys), item("orbitType", file.orbit_type), item("dataUsed", file.data_used),
+                                    item("timeSystem", file.time_system), item("frame", earth_fixed ? "Earth-fixed" : "inertial"), item("gpsWeek", file.gps_week),
+                                    item("epochIntervalSeconds", file.epoch_interval), item("firstEpoch", file.satellites.front().series.epoch_zero_iso),
+                                    item("declaredEpochs", file.declared_num_epochs), item("satelliteCount", file.satellites.size()),
+                                    item("satellitesWithoutStates", without_states), item("sha256", ephem::sha256_hex(bytes, length)), item("bytes", length)};
+  items.insert(items.end(), satellites.begin(), satellites.end());
+  if (push_notice(R::flowNoticeKind_Info, "sp3", products.size(), std::move(items)) < 0) return 1;
   for (const OEMT& oem : products) {
     flatbuffers::FlatBufferBuilder fbb(4096);
     FinishOEMBuffer(fbb, CreateOEM(fbb, &oem));

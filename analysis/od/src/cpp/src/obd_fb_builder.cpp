@@ -12,6 +12,7 @@
 #include "od/obd_fb_builder.h"
 
 #include <string>
+#include <vector>
 
 // macOS <math.h> SVID matherr macros (DOMAIN/SING/OVERFLOW/…) collide with
 // generated enum identifiers; undef before the generated header. Native-build
@@ -50,6 +51,18 @@ std::vector<uint8_t> build_obd_flatbuffer(const SGP4Elements& el,
     const auto object_id = fbb.CreateString(el.object_id);
     const auto effective_from = fbb.CreateString(el.epoch_iso);
     const auto method_src = fbb.CreateString(method_source);
+    // The ephemeris provider (CONFIG dataSource) as the run's one contributing source: an ephemeris fit has no
+    // per-sensor weighting, so its WRMS is the fit's.
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<odSensorContribution>>> sensors;
+    if (!el.data_source.empty()) {
+        const auto sensor_id = fbb.CreateString(el.data_source);
+        const auto ob_types = fbb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fbb.CreateString("EPHEMERIS")});
+        odSensorContributionBuilder sc(fbb);
+        sc.add_SENSOR_ID(sensor_id);
+        sc.add_WRMS(el.rms_km);
+        sc.add_OB_TYPES(ob_types);
+        sensors = fbb.CreateVector(std::vector<flatbuffers::Offset<odSensorContribution>>{sc.Finish()});
+    }
 
     OBDBuilder b(fbb);
     b.add_SAT_NO(static_cast<uint32_t>(el.norad_cat_id));
@@ -69,10 +82,35 @@ std::vector<uint8_t> build_obd_flatbuffer(const SGP4Elements& el,
     b.add_FIRST_PASS_WRMS(el.rms_km);
     b.add_BEST_PASS_WRMS(el.rms_km);
     b.add_NUM_ITERATIONS(static_cast<uint16_t>(el.iterations < 0 ? 0 : el.iterations));
+    if (!el.data_source.empty()) b.add_SENSORS(sensors);
 
     const auto obd = b.Finish();
     FinishSizePrefixedOBDBuffer(fbb, obd);
 
+    const uint8_t* p = fbb.GetBufferPointer();
+    return std::vector<uint8_t>(p, p + fbb.GetSize());
+}
+
+std::vector<uint8_t> build_reference_obd_flatbuffer(const SGP4Elements& fitted,
+                                                    const SGP4Elements& reference,
+                                                    double fit_span_days) {
+    flatbuffers::FlatBufferBuilder fbb(512);
+    const auto object_id = fbb.CreateString(fitted.object_id);
+    const auto effective_from = fbb.CreateString(reference.epoch_iso);
+    const auto method_src = fbb.CreateString("reference");
+
+    OBDBuilder b(fbb);
+    b.add_SAT_NO(static_cast<uint32_t>(fitted.norad_cat_id));
+    b.add_ORIG_OBJECT_ID(object_id);
+    b.add_METHOD(odMethod::GENERAL_PERTURBATIONS);
+    b.add_METHOD_SOURCE(method_src);
+    b.add_INITIAL_OD(false);
+    if (!reference.epoch_iso.empty()) b.add_EFFECTIVE_FROM(effective_from);
+    if (fit_span_days > 0.0) b.add_FIT_SPAN(fit_span_days);
+    b.add_WRMS(fitted.reference_rms_km);
+    b.add_NUM_ITERATIONS(0);
+
+    FinishSizePrefixedOBDBuffer(fbb, b.Finish());
     const uint8_t* p = fbb.GetBufferPointer();
     return std::vector<uint8_t>(p, p + fbb.GetSize());
 }

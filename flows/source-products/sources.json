@@ -19,7 +19,7 @@
     "element-set": {
       "ingress": [
         "element_sets or element_sets_mpe",
-        "element_set_recipe"
+        "models"
       ],
       "products": "The newest set of each object: its epoch states and a covariance by rule (3, else 4). The history: maneuvers by the detector's two passes with SGP4 answering the propagator query port."
     },
@@ -29,7 +29,7 @@
         "ephemeris",
         "ephemeris_versions",
         "planned_maneuvers",
-        "fit_recipe"
+        "models"
       ],
       "products": "The newest fitted set and its states with a covariance by rule (1 when the operator's ephemeris carries covariance lines, else 3 or 4). Maneuvers from the history of fitted sets, and from the versions against the planned maneuvers."
     },
@@ -37,7 +37,7 @@
       "ingress": [
         "fit_omm",
         "fit",
-        "fit_recipe"
+        "models"
       ],
       "estimator": {
         "module": "analysis/estimation",
@@ -87,7 +87,6 @@
           "module": "data-source/celestrak-parser",
           "method": "parse_gp",
           "port": "omm_records",
-          "wildcard": true,
           "type": "$OMM",
           "into": [
             {
@@ -97,9 +96,7 @@
           ]
         }
       ],
-      "limits": [
-        "celestrak-parser types its record ports with a wildcard; the records on omm_records are $OMM."
-      ]
+      "limits": []
     },
     {
       "id": "space-track-gp",
@@ -130,8 +127,9 @@
         {
           "module": "data-source/retrieval",
           "method": "omm_bulk",
-          "port": "stream",
-          "type": "$OMM",
+          "port": "page",
+          "type": "$QRP",
+          "unwrap": "$OMM",
           "into": [
             {
               "trigger": "element_sets",
@@ -154,7 +152,7 @@
       ],
       "limits": [
         "spacetrack-source reads the REST API's gp and gp_history JSON, up to 256 MiB a response; its parse_satcat gives the $CAT of the SATCAT, which the $CAT integrator's identity step reads and this flow does not take.",
-        "gp-archive-records builds the $MPE the node's bulk import stores (`sdn import-gp-archive`); retrieval returns what the node's store holds: the request names the dataset, and the recipe must name the source that dataset came from.",
+        "gp-archive-records builds the $MPE the node's bulk import stores (`sdn import-gp-archive`); retrieval returns what the node's store holds: the request names the dataset, and the recipe must name the source that dataset came from. Its page is a $QRP page stream (the size-prefixed KIND Page header, then the record stream verbatim); a host drops the header and enqueues the $OMM records on element_sets.",
         "A stream whose records are separated by zero-length padding prefixes is read by epoch-state and gp-error-model but refused by detect_maneuvers; pass the stream without padding."
       ]
     },
@@ -194,7 +192,6 @@
         "method": "fit",
         "input": "starlink",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -256,7 +253,6 @@
         "method": "fit",
         "input": "iss",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -302,7 +298,6 @@
         "method": "fit",
         "input": "intelsat",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -347,7 +342,6 @@
         "method": "fit",
         "input": "glonass",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -393,7 +387,6 @@
         "method": "fit",
         "input": "cpf",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -440,7 +433,6 @@
         "method": "fit",
         "input": "cpf",
         "output": "omm",
-        "unwrap": "$FSB",
         "into": {
           "trigger": "fit_omm",
           "port": "omm"
@@ -529,6 +521,37 @@
         "AOE is the second element-set lineage (SGP4 mean elements from its own sensors). E14 measured only the Space-Track lineage, so the pooled model answers (rule 4), uncalibrated; E15 measures AOE against independent orbits.",
         "AOE rewrites an object's set every three hours and keeps the last until the next: a snapshot holds one newest set per object, and the record's ctime (CREATION_DATE) is the moment a set was available. A history across snapshots is what the maneuver detector screens.",
         "parse_aoe also gives the id crosswalk (what AOE states about each object, as candidates) for the $CAT integrator; the flow does not take it."
+      ]
+    },
+    {
+      "id": "celestrak-supgp",
+      "registry": [],
+      "kind": "element-set",
+      "originator": "CelesTrak",
+      "lineage": "celestrak-supgp",
+      "licence": {
+        "class": "cite-only",
+        "id": "celestrak"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/celestrak-supgp",
+          "method": "parse",
+          "port": "omm_records",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "CelesTrak's supplemental GP: SGP4 sets CelesTrak fits to operator ephemerides (SES, Planet, Iridium, Telesat, Kuiper, AST SpaceMobile, the China Space Station), one source name per provider (ses, planet, iridium, telesat, kuiper, ast-spacemobile, css). NON-INDEPENDENT: they are CelesTrak's fits, not this network's and not the operator's product (USER_DEFINED SDN_INDEPENDENT false, CelesTrak's RMS kept as SDN_CELESTRAK_RMS).",
+        "request turns the trigger into one HttpRequest per provider token (the job a $ICN in CONTEXT); hostcap/http-request fetches it; parse gives the $OMM records, their IngestRequest and the raw document for hostcap/storage-ingest. A token not answered 200 is a FlowNotice Missing.",
+        "E14 measured only the Space-Track lineage, so the pooled model answers (rule 4), uncalibrated."
       ]
     },
     {
@@ -725,13 +748,6 @@
     }
   ],
   "refused": [
-    {
-      "module": "data-source/celestrak-supgp",
-      "registry": [],
-      "check": "no-orbit-output",
-      "reason": "Pull-only: it parses CelesTrak's supplemental GP of SES, Planet, Iridium, Telesat, Kuiper, AST and the China Space Station inside `pull` and stores each object. No method gives the $OMM records to a flow.",
-      "task": "modules-celestrak-supgp-emit-20261011"
-    },
     {
       "module": "data-source/gps-source",
       "registry": [],

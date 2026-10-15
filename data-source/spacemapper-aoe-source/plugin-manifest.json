@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
   "name": "SpaceMapper AOE Source",
-  "version": "0.1.0",
-  "description": "Read SpaceMapper's AOE catalog records (its SGP4 two-line sets, the NORAD number it gives or aoe:<id>, the channel) into canonical SDS OMM records and an id crosswalk of candidate identity links. Retrieval and page decoding belong to the SDN host flow.",
+  "version": "0.2.0",
+  "description": "Read SpaceMapper's AOE catalog records (its SGP4 two-line sets, the NORAD number it gives or aoe:<id>, the channel) into canonical SDS $OMM records, an id crosswalk of candidate identities as $CAT records and the batch's IngestRequest (typed contracts 1.0: FlatBuffers only). Input: one HttpResponse (HRSP) whose BODY is the records the host extracted from SpaceMapper's pages, verbatim (JSON lines or one JSON array, at most 128 MiB); 304 -> one FlowNotice Unchanged; any other non-200 fails. Retrieval and page decoding belong to the SDN host flow. No hostcalls, no capabilities.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -20,27 +20,25 @@
       "displayName": "Read AOE element sets as OMM",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/json",
-                "detail": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB."
-              }
+              "description": "HttpResponse (HRSP): STATUS, URL (the source, echoed into the meta), RETRIEVED_MS, BODY the AOE records verbatim as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, at most 128 MiB. CONTEXT is not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB."
+          "description": "HttpResponse (HRSP): STATUS, URL (the source, echoed into the meta), RETRIEVED_MS, BODY the AOE records verbatim as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, at most 128 MiB. CONTEXT is not read."
         }
       ],
       "outputPorts": [
@@ -53,15 +51,16 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
         },
         {
@@ -71,44 +70,61 @@
               "setId": "crosswalk",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion."
-              }
+              "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; channel, satellite id and AOE's object type text ride on the $OMM USER_DEFINED_PARAMETERS."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion."
+          "required": false,
+          "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; channel, satellite id and AOE's object type text ride on the $OMM USER_DEFINED_PARAMETERS."
         },
         {
-          "portId": "report",
+          "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "report",
+              "setId": "meta",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation."
-              }
+              "description": "One IngestRequest (INGQ): SCHEMA OMM.fbs, TAGS SOURCE_NAME spacemapper-aoe, SOURCE_URL the response URL, BATCH_ID the SHA-256 of the body; PROVENANCE PARSER spacemapper-aoe-source, SOURCE_SHA256, NORMALIZED_COUNT (OMM records), SCHEMAS/SCHEMA_COUNTS (OMM.fbs, CAT.fbs), ATTRIBUTES the counts (records, emitted, duplicateRecordIds, rejected, rejection:<reason>, alpha5CatalogNumbers, checksumMismatches, withoutNoradNumber, objects), WARNINGS the first 20 rejected records with their reasons and the AOE ids whose sets conflict."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation."
+          "required": false,
+          "description": "One IngestRequest (INGQ): SCHEMA OMM.fbs, TAGS SOURCE_NAME spacemapper-aoe, SOURCE_URL the response URL, BATCH_ID the SHA-256 of the body; PROVENANCE PARSER spacemapper-aoe-source, SOURCE_SHA256, NORMALIZED_COUNT (OMM records), SCHEMAS/SCHEMA_COUNTS (OMM.fbs, CAT.fbs), ATTRIBUTES the counts (records, emitted, duplicateRecordIds, rejected, rejection:<reason>, alpha5CatalogNumbers, checksumMismatches, withoutNoradNumber, objects), WARNINGS the first 20 rejected records with their reasons and the AOE ids whose sets conflict."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "unchanged",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice Unchanged (REASON not-modified) when the response is a 304; nothing else is emitted then."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One FlowNotice Unchanged (REASON not-modified) when the response is a 304; nothing else is emitted then."
         }
       ],
       "maxBatch": 1,
@@ -119,7 +135,32 @@
     {
       "schemaName": "OMM.fbs",
       "fileIdentifier": "$OMM",
-      "rootTypeName": "OMM"
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
@@ -133,6 +174,6 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "One complete bounded set of provider records is read in input order into canonical records and two control frames; the host parallelizes independent snapshots and this parser creates no threads."
+    "detail": "One complete bounded set of provider records is read in input order into canonical records, candidate catalog identities and one ingest request; the host parallelizes independent snapshots and this parser creates no threads."
   }
 }

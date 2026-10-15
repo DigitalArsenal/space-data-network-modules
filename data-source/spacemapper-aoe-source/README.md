@@ -8,12 +8,15 @@ products (`flows/source-products`, catalog pipeline C2): the flow takes its `$OM
 
 The same artifact runs in the browser and WasmEdge, byte for byte. Retrieval belongs to the SDN host flow: the pages are server
 rendered with their records in the page state, which the host decodes as data (nothing from a page is executed), splits by box to
-stay under the site's 1,000-record answers, and stores. The module reads the records the host extracted: JSON lines, as the archive's
-`records.jsonl`, or one JSON array.
+stay under the site's 1,000-record answers, and stores. The module reads the records the host extracted, verbatim as the BODY of one
+`HttpResponse` (HRSP): JSON lines, as the archive's `records.jsonl`, or one JSON array.
+
+Typed contracts 1.0: every port names one FlatBuffers type; JSON is only AOE's own format inside the response body.
 
 ## Method
 
-`parse_aoe`, input `source` (up to 128 MiB), outputs `omm`, `crosswalk` and `report`.
+`parse_aoe`, input `response` (HRSP, body up to 128 MiB), outputs `omm` (`$OMM`), `crosswalk` (`$CAT`), `meta` (IngestRequest,
+INGQ) and `unchanged` (FlowNotice, FNTC). A 304 gives one FlowNotice Unchanged and nothing else; any other non-200 fails whole.
 
 - **The set.** The record's two-line set is the element set. Its fixed columns are decoded into the OMM fields SGP4 takes, without
   computing anything: eccentricity and B* are written with an implied decimal point, the epoch as a year and a day of year (the
@@ -32,12 +35,16 @@ stay under the site's 1,000-record answers, and stores. The module reads the rec
   Space-Track under the same number with the same designator.
 - **Time.** `CREATION_DATE` is the record's `ctime` (AOE's write time, hh:04 UTC every three hours) in UTC: the moment the set was
   available. A record id seen twice in one input (the listing shifts while it is paged) is dropped and counted.
-- **Crosswalk.** What AOE states about each object, from its newest set, as candidates (`status: candidate`): `native` (`aoe:<id>`),
-  the AOE catalog id, the NORAD number it gives (null when none), its satellite id, the designator, name, class and channel. Two sets
-  that state different numbers for one AOE id are listed in `conflicts`. The `$CAT` integrator binds an identity only through a link
-  tested on normalized ephemerides.
-- **Report.** Records read, emitted, dropped (by reason, first 20 examples), duplicates, Alpha-5 numbers, checksum mismatches, objects
-  with no NORAD number.
+- **Crosswalk.** What AOE states about each object, from its newest set, as candidates: one size-prefixed `$CAT` per AOE object, in
+  AOE id order, `CATALOG_URI` `urn:sdn:spacemapper-aoe` and `CATALOG_OBJECT_ID` `aoe:<id>` (AOE's own namespace), `NORAD_CAT_ID` the
+  number it gives (0 when none), `OBJECT_ID` the designator, `OBJECT_NAME`, `OBJECT_TYPE` (PAYLOAD, ROCKET BODY, DEBRIS, else
+  UNKNOWN). The channel, satellite id and AOE's class text ride on the `$OMM` `USER_DEFINED_PARAMETERS`. AOE ids whose sets state
+  different numbers are listed as `conflict aoe:<id>` warnings in the meta. The `$CAT` integrator binds an identity only through a
+  link tested on normalized ephemerides.
+- **Meta.** One IngestRequest: `SCHEMA` OMM.fbs, `TAGS` (SOURCE_NAME spacemapper-aoe, SOURCE_URL the response URL, BATCH_ID the
+  SHA-256 of the body), `PROVENANCE` with the report's counts as `ATTRIBUTES` (records, emitted, duplicateRecordIds, rejected,
+  `rejection:<reason>`, alpha5CatalogNumbers, checksumMismatches, withoutNoradNumber, objects), the first 20 dropped records and the
+  conflicts as `WARNINGS`, SCHEMAS/SCHEMA_COUNTS for OMM.fbs and CAT.fbs.
 
 A record that cannot be read is dropped and counted; an input that is not JSON lines or a JSON array of objects, or that gives
 nothing readable, is refused whole with no partial output. Errors are flags, never exceptions.
@@ -48,8 +55,9 @@ Read for this module (local run, nothing committed): the 2026-10-11 KY snapshot,
 ## Build and test
 
 ```sh
-npm ci
-npm run build          # dist/isomorphic/module.wasm and dist/guest-link (single thread, SDK 0.8.27, SDS 1.245.0)
+mkdir -p node_modules && ln -sfn <space-data-module-sdk 0.9.3> node_modules/space-data-module-sdk
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards checkout>
+npm run build          # dist/isomorphic/module.wasm and dist/guest-link (single thread, SDK 0.9.3)
 npm test               # the module through the SDK's browser harness
 npm run test:parity    # headless Chrome, native WasmEdge, Docker WasmEdge: byte-identical
 ```

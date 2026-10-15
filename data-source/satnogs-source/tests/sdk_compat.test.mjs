@@ -1,8 +1,12 @@
-// data-source/satnogs-source SDK-compat tests.
+// data-source/satnogs-source SDK-compat tests on the typed contracts (1.0).
 //
 // The two pure flow nodes run in the SDK browser harness against a fixture cut
-// from the LIVE SatNOGS DB transmitters table (see fixtures/PROVENANCE.md), and
-// their outputs are asserted against the three Themis rulings the parser has to
+// from the LIVE SatNOGS DB transmitters table (see fixtures/PROVENANCE.md):
+// TimerTick in -> HttpRequest out (the job, a size-prefixed IngestRequest, in
+// CONTEXT); HttpResponse in (the job echoed) -> IngestRequest + $RFB stream +
+// the HttpResponse verbatim, or one FlowNotice on a 304. The node config is the
+// SDS $PIV plugin.getConfig answer (one ModuleConfig on raw "config").
+// The outputs are asserted against the three Themis rulings the parser has to
 // encode:
 //
 //   1. Hz -> MHz is normative. A 136,658,500 Hz downlink MUST decode as
@@ -10,11 +14,12 @@
 //   2. One RFB record = one LINK_DIRECTION. A Transceiver/Transponder produces
 //      TWO records sharing ID_TRANSMITTER.
 //   3. Licence carriage. Every record carries the CC-BY-SA-4.0 attribution in
-//      CITATION, and the batch provenance carries license/license_url/citation.
+//      CITATION, and the batch's source tags carry LICENSE / LICENSE_URL /
+//      CITATION / SHARE_ALIKE.
 //
 // Plus the invariants that would silently corrupt the catalogue if they broke:
-// POLARIZATION is explicitly UNKNOWN (never the LHCP zero-default), JSON keys
-// are IDL-capitalized, and a non-200 fetch fails closed.
+// POLARIZATION is explicitly UNKNOWN (never the LHCP zero-default), and a
+// non-200 fetch fails closed.
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
@@ -25,6 +30,17 @@ import { fileURLToPath } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import {
+  decodeFlowNotice,
+  decodeHostCall,
+  decodeHttpRequest,
+  decodeHttpResponse,
+  decodeIngestRequest,
+  encodeHttpResponse,
+  encodeIngestRequest,
+  encodeTimerTick,
+  identifierOf,
+} from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -33,7 +49,6 @@ const STANDARDS_ROOT =
   process.env.SPACE_DATA_STANDARDS_ROOT ??
   fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const TRANSMITTERS_JSON = fs.readFileSync(
@@ -42,13 +57,31 @@ const TRANSMITTERS_JSON = fs.readFileSync(
 
 const SOURCE_URL = "https://db.satnogs.org/api/transmitters/?format=json";
 const CITATION = "SatNOGS DB, Libre Space Foundation, https://db.satnogs.org/ (CC BY-SA 4.0)";
+const RETRIEVED_MS = Date.UTC(2026, 7, 3, 12, 0, 0);
 
-const JOB = {
-  source_url: SOURCE_URL,
-  source_name: "satnogs-db",
-  archive_source: "satnogs",
-  archive_name: "transmitters.json",
+const TYPE = {
+  TICK: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" },
+  HRSP: { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" },
 };
+
+// The job as request builds it: one size-prefixed IngestRequest skeleton.
+function sizePrefixed(bytes) {
+  const out = new Uint8Array(bytes.length + 4);
+  new DataView(out.buffer).setUint32(0, bytes.length, true);
+  out.set(bytes, 4);
+  return out;
+}
+const JOB = sizePrefixed(encodeIngestRequest({
+  schema: "RFB.fbs",
+  tags: { providerId: "space-data-network-02", sourceName: "satnogs-db", sourceUrl: SOURCE_URL },
+  reconcile: "none",
+  archive: { source: "satnogs", name: "transmitters.json" },
+}));
+function readJob(context) {
+  assert.equal(new DataView(context.buffer, context.byteOffset).getUint32(0, true), context.length - 4, "CONTEXT is size-prefixed");
+  assert.equal(identifierOf(context.subarray(4)), "INGQ", "CONTEXT is one IngestRequest");
+  return decodeIngestRequest(context.slice(4));
+}
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -58,31 +91,42 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-function jsonInput(portId, value) {
-  const payload = encoder.encode(JSON.stringify(value));
-  return {
-    portId,
-    // Control frames are variable-length UTF-8 JSON. An `acceptsAnyFlatbuffer`
-    // port only matches the flatbuffer wire format (an aligned-binary accepted
-    // type would have to pin a FIXED byteLength, which a JSON frame has not),
-    // so control frames ride the opaque flatbuffer lane — exactly what the
-    // flow runtime does on an `opaque: true` edge.
-    typeRef: { wireFormat: "flatbuffer" },
-    payload,
-  };
-}
-
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-async function createHarness(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-  });
+// The SDK harness's BrowserHost answers plugin.getConfig from `config` (one ModuleConfig on raw "config", as the Go node
+// answers it). The hostcall import is wrapped only to record the module's calls.
+async function createHarness(t, config = {}) {
+  const calls = [];
+  const instantiate = WebAssembly.instantiate;
+  WebAssembly.instantiate = async (module, imports) => {
+    let memory;
+    const host = imports.space_data_module_host;
+    if (!host) return instantiate(module, imports);
+    const wrapped = { ...imports, space_data_module_host: { ...host,
+      call: (opPtr, opLen, ptr, len) => {
+        calls.push(decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice()));
+        return host.call(opPtr, opLen, ptr, len);
+      },
+    } };
+    const result = await instantiate(module, wrapped);
+    memory = (result.instance ?? result).exports.memory;
+    return result;
+  };
+  let harness;
+  try {
+    harness = await createBrowserModuleHarness({
+      wasmSource: new Uint8Array(readWasm()),
+      manifest: readManifest(),
+      surface: "direct",
+      hostOptions: { config },
+    });
+  } finally {
+    WebAssembly.instantiate = instantiate;
+  }
   t.after(() => harness.destroy());
+  harness.calls = calls;
   return harness;
 }
 
@@ -90,12 +134,6 @@ function outputsByPort(response) {
   const map = new Map();
   for (const frame of response.outputs) map.set(frame.portId, frame);
   return map;
-}
-
-function jsonFrame(map, portId) {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
 }
 
 // Splits a size-prefixed record stream into unprefixed record buffers.
@@ -118,8 +156,9 @@ function fileIdentifier(record) {
   return decoder.decode(record.subarray(4, 8));
 }
 
-function httpResponse(bodyBytes, headers = {}) {
-  return { status: 200, headers, bodyB64: Buffer.from(bodyBytes).toString("base64") };
+const tick = () => ({ portId: "tick", typeRef: TYPE.TICK, payload: encodeTimerTick({ triggerId: "timer-satnogs-rf", firedMs: RETRIEVED_MS }) });
+function responseInput({ status = 200, body = new Uint8Array(0), headers = {}, context = JOB, error = "" } = {}) {
+  return { portId: "response", typeRef: TYPE.HRSP, payload: encodeHttpResponse({ url: SOURCE_URL, status, headers, body, context, error, retrievedMs: RETRIEVED_MS }) };
 }
 
 // ---------------------------------------------------------------------------
@@ -195,24 +234,36 @@ const LINK = { UPLINK: 0, DOWNLINK: 1 };
 const POLARIZATION_UNKNOWN = 6;
 const XMT = { UNKNOWN: 0, ACTIVE: 1, INACTIVE: 2, INVALID: 3 };
 
-async function runParse(t, body, headers = {}, job = JOB) {
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [jsonInput("job", job), jsonInput("response", httpResponse(body, headers))],
-  });
-  return response;
+async function runParse(t, body, headers = {}, config = {}) {
+  const harness = await createHarness(t, config);
+  return harness.invoke({ methodId: "parse", inputs: [responseInput({ body, headers })] });
 }
 
 // ---------------------------------------------------------------------------
 
-test("satnogs-source artifact passes SDK compliance against the standards tree", async () => {
+test("satnogs-source artifact passes SDK compliance with typed ports only", async () => {
+  const manifest = readManifest();
   const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
+    manifest,
     wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
     standardsRoot: STANDARDS_ROOT,
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ids = {};
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+      const [type] = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(type.acceptsAnyFlatbuffer, undefined, port.portId);
+      assert.equal(type.wireFormat, "flatbuffer", port.portId);
+      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+    }
+  }
+  assert.deepEqual(ids, {
+    "request.tick": "TICK", "request.request": "HREQ",
+    "parse.response": "HRSP", "parse.rfb_meta": "INGQ", "parse.rfb_records": "$RFB", "parse.raw": "HRSP", "parse.unchanged": "FNTC",
+  });
 });
 
 test("satnogs-source is a pure node: canonical ABI, WASI-only imports besides the config bridge", async () => {
@@ -226,89 +277,120 @@ test("satnogs-source is a pure node: canonical ABI, WASI-only imports besides th
   ]) {
     assert.ok(inspection.exports.includes(required), `missing export ${required}`);
   }
-  const importedModuleNames = Array.from(new Set(inspection.imports.map((e) => e.module))).sort();
-  // plugin.getConfig rides the space_data_module_host bridge; nothing else.
-  for (const name of importedModuleNames) {
-    assert.ok(
-      name === "wasi_snapshot_preview1" || name === "space_data_module_host",
-      `unexpected import module ${name}`,
-    );
-  }
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((e) => e.module))).sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);
 });
 
 test("manifest declares zero host capabilities (http + storage are the hostcap connectors)", () => {
   const manifest = readManifest();
   assert.deepEqual(manifest.capabilities, []);
   assert.equal(manifest.pluginFamily, "data_source");
-  const methodIds = manifest.methods.map((m) => m.methodId);
-  assert.deepEqual(methodIds, ["request", "parse"]);
+  assert.deepEqual(manifest.methods.map((m) => m.methodId), ["request", "parse"]);
 });
 
-test("request: timer tick -> ONE bulk fetch request + attribution job", async (t) => {
+test("request: TimerTick -> ONE bulk HttpRequest with its job (an IngestRequest) in CONTEXT", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("tick", {})],
-  });
+  const response = await harness.invoke({ methodId: "request", inputs: [tick()] });
   assert.equal(response.statusCode, 0, response.errorMessage);
-  const outputs = outputsByPort(response);
-
-  const request = jsonFrame(outputs, "request");
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["request"]);
+  const request = decodeHttpRequest(response.outputs[0].payload);
   assert.equal(request.method, "GET");
   assert.equal(request.url, SOURCE_URL, "whole-table bulk URL, no pagination cursor");
   assert.ok(!/[?&](page|offset|limit)=/.test(request.url), "must not walk pages");
   // source-policy.json fetchDiscipline: identify yourself, never anonymously.
   assert.match(request.headers["user-agent"], /^SDN-CatalogEnrichmentBot\/0\.1 \(\+https:\/\//);
   assert.match(request.headers["user-agent"], /contact /);
-  assert.equal(typeof request.timeoutMs, "number");
-
-  const job = jsonFrame(outputs, "job");
-  assert.equal(job.source_name, "satnogs-db");
-  assert.equal(job.source_url, SOURCE_URL);
-  assert.equal(job.archive_source, "satnogs");
-  assert.equal(job.archive_name, "transmitters.json");
-  assert.ok(job.provider_id.length > 0);
+  assert.equal(request.headers.accept, "application/json");
+  assert.equal(request.headers["if-none-match"], undefined, "no validators unless CONFIG sets them");
+  assert.equal(request.timeoutMs, 120000);
+  assert.deepEqual(readJob(request.context), decodeIngestRequest(JOB.slice(4)));
+  assert.deepEqual(harness.calls.map((c) => c.op), ["plugin.getConfig"]);
 });
 
-test("parse: RFB stream + ingest meta carry full attribution and the CC-BY-SA licence", async (t) => {
+test("request: node CONFIG (ModuleConfig) sets the URL, timeout, provider and validators", async (t) => {
+  const url = "https://db.satnogs.org/api/transmitters/?format=json&satellite__norad_cat_id=25544";
+  const harness = await createHarness(t, {
+    satnogs_transmitters_url: url, satnogs_http_timeout_ms: 30000, satnogs_provider_id: "node-x",
+    satnogs_if_none_match: 'W/"abc"', satnogs_if_modified_since: "Sun, 03 Aug 2026 00:00:00 GMT",
+  });
+  const response = await harness.invoke({ methodId: "request", inputs: [tick()] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const request = decodeHttpRequest(response.outputs[0].payload);
+  assert.equal(request.url, url);
+  assert.equal(request.timeoutMs, 30000);
+  assert.equal(request.headers["if-none-match"], 'W/"abc"');
+  assert.equal(request.headers["if-modified-since"], "Sun, 03 Aug 2026 00:00:00 GMT");
+  const job = readJob(request.context);
+  assert.equal(job.tags.providerId, "node-x");
+  assert.equal(job.tags.sourceUrl, url);
+});
+
+test("parse: RFB stream + IngestRequest carry full attribution and the CC-BY-SA licence", async (t) => {
   const response = await runParse(t, TRANSMITTERS_JSON, {
     "last-modified": "Sun, 03 Aug 2026 00:00:00 GMT",
+    etag: 'W/"t1"',
+    "content-type": "application/json",
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   const outputs = outputsByPort(response);
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["rfb_meta", "rfb_records", "raw"]);
 
-  const meta = jsonFrame(outputs, "rfb_meta");
+  const meta = decodeIngestRequest(outputs.get("rfb_meta").payload);
   assert.equal(meta.schema, "RFB.fbs");
-  assert.equal(meta.source_name, "satnogs-db");
-  assert.equal(meta.source_url, SOURCE_URL);
-  assert.equal(meta.batch_id, sha256Hex(TRANSMITTERS_JSON));
-  assert.equal(meta.content_key_id, "public");
-  assert.equal(meta.source_peer, "source:satnogs");
+  // Themis ruling 3: the share-alike obligation is machine-readable per batch.
+  assert.deepEqual(meta.tags, {
+    providerId: "space-data-network-02", sourceName: "satnogs-db", batchId: sha256Hex(TRANSMITTERS_JSON), sourceUrl: SOURCE_URL,
+    contentKeyId: "public", sourcePeer: "source:satnogs", license: "CC-BY-SA-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/", citation: CITATION, shareAlike: true,
+  });
   assert.equal(meta.reconcile, "none");
   assert.deepEqual(meta.archive, { source: "satnogs", name: "transmitters.json" });
 
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.source_sha256, sha256Hex(TRANSMITTERS_JSON));
-  assert.equal(provenance.parser_version, "satnogs-rfb-wasm/v1");
-  // Themis ruling 3: the share-alike obligation is machine-readable per batch.
-  assert.equal(provenance.license, "CC-BY-SA-4.0");
-  assert.equal(provenance.license_url, "https://creativecommons.org/licenses/by-sa/4.0/");
-  assert.equal(provenance.citation, CITATION);
-  assert.equal(provenance.share_alike, true);
-  // The Hz/MHz conversion is declared, not implied.
-  assert.deepEqual(provenance.units, { frequency: "MHz", baud: "baud" });
-  assert.deepEqual(provenance.source_units, { frequency: "Hz" });
-
   const records = splitStream(outputs.get("rfb_records").payload);
-  assert.equal(records.length, provenance.normalized_count);
-  assert.equal(provenance.schema_counts["RFB.fbs"], records.length);
-  assert.equal(provenance.downlink_records + provenance.uplink_records, records.length);
+  const p = meta.provenance;
+  assert.equal(p.sourceUrl, SOURCE_URL);
+  assert.equal(p.httpStatus, 200);
+  assert.equal(p.etag, 'W/"t1"');
+  assert.equal(p.lastModified, "Sun, 03 Aug 2026 00:00:00 GMT");
+  assert.equal(p.contentType, "application/json");
+  assert.equal(p.retrievedMs, RETRIEVED_MS, "no Date header: the host's receive time");
+  assert.equal(p.parser, "satnogs-source");
+  assert.equal(p.parserVersion, "satnogs-rfb-wasm/v1");
+  assert.equal(p.sourceSha256, sha256Hex(TRANSMITTERS_JSON));
+  // the normalized hash: sha256 over (schema \0 record \0) per record, the runner's writeNormalizedHashRecord
+  const h = createHash("sha256");
+  for (const r of records) h.update("RFB.fbs").update(Buffer.from([0])).update(r).update(Buffer.from([0]));
+  assert.equal(p.normalizedSha256, h.digest("hex"));
+  assert.equal(p.normalizedCount, records.length);
+  assert.deepEqual(p.schemaCounts, { "RFB.fbs": records.length });
+  assert.deepEqual(p.warnings, []);
+  assert.equal(p.fromCache, false);
   for (const record of records) {
     assert.equal(fileIdentifier(record), "$RFB", "record carries the $RFB file identifier");
   }
+  // the downlink + uplink split the legacy provenance counted, re-derived from the records
+  const rows = JSON.parse(TRANSMITTERS_JSON.toString("utf8"));
+  assert.equal(records.length, rows.filter((r) => r.downlink_low).length + rows.filter((r) => r.uplink_low).length);
 
-  // raw payload is the fetched bytes verbatim.
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(TRANSMITTERS_JSON));
+  // raw: the HttpResponse verbatim (its BODY the fetched bytes).
+  const raw = decodeHttpResponse(outputs.get("raw").payload);
+  assert.deepEqual(Buffer.from(raw.body), Buffer.from(TRANSMITTERS_JSON));
+  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(responseInput({ body: TRANSMITTERS_JSON, headers: {
+    "last-modified": "Sun, 03 Aug 2026 00:00:00 GMT", etag: 'W/"t1"', "content-type": "application/json" } }).payload));
+});
+
+test("parse: the publisher's Date header is the retrieval time when present", async (t) => {
+  const response = await runParse(t, TRANSMITTERS_JSON, { date: "Mon, 04 Aug 2026 06:30:00 GMT" });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const meta = decodeIngestRequest(outputsByPort(response).get("rfb_meta").payload);
+  assert.equal(meta.provenance.retrievedMs, Date.UTC(2026, 7, 4, 6, 30, 0));
+});
+
+test("parse: satnogs_record_cap (a ModuleConfig Number) caps the emitted records", async (t) => {
+  const response = await runParse(t, TRANSMITTERS_JSON, {}, { satnogs_record_cap: 3 });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const outputs = outputsByPort(response);
+  assert.equal(splitStream(outputs.get("rfb_records").payload).length, 3);
+  assert.equal(decodeIngestRequest(outputs.get("rfb_meta").payload).provenance.normalizedCount, 3);
 });
 
 test("parse: Hz -> MHz is applied to EVERY frequency field (Themis ruling 1)", async (t) => {
@@ -449,14 +531,24 @@ test("parse: an uplink with no uplink_mode leaves MODE absent rather than copyin
 
 test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [
-      jsonInput("job", JOB),
-      jsonInput("response", { status: 503, headers: {}, bodyB64: "" }),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse", inputs: [responseInput({ status: 503 })] });
   assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "fetch-failed");
+  assert.equal(response.outputs.length, 0);
+});
+
+test("parse: a failed exchange (STATUS 0 with ERROR) fails closed, naming the error", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({ methodId: "parse", inputs: [responseInput({ status: 0, error: "timeout" })] });
+  assert.equal(response.errorCode, "fetch-failed");
+  assert.match(response.errorMessage, /HTTP status 0 \(timeout\)/);
+  assert.equal(response.outputs.length, 0);
+});
+
+test("parse: a response without its job in CONTEXT is refused", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({ methodId: "parse", inputs: [responseInput({ body: TRANSMITTERS_JSON, context: new Uint8Array(0) })] });
+  assert.equal(response.errorCode, "missing-job");
   assert.equal(response.outputs.length, 0);
 });
 
@@ -464,30 +556,16 @@ test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
 // recorded from the last 2xx for this URL (sdn-server
 // internal/modulert/caps/http_validators.go) and the origin confirmed the
 // document is current. No batch exists, so no record port may fire — only the
-// single "unchanged" notice, and the invocation SUCCEEDS. Same contract as
-// data-source/celestrak-parser.
-test("parse answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
-  const job = { ...JOB, dataset_id: "satnogs-transmitters" };
+// single "unchanged" FlowNotice, and the invocation SUCCEEDS.
+test("parse answers HTTP 304 with one Unchanged FlowNotice and zero record frames", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", { status: 304, headers: { Etag: 'W/"x"' }, bodyB64: "" }),
-    ],
-  });
+  const response = await harness.invoke({ methodId: "parse", inputs: [responseInput({ status: 304, headers: { etag: 'W/"x"' } })] });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1, "exactly one frame");
-  const outputs = outputsByPort(response);
-  for (const port of ["rfb_meta", "rfb_records", "raw"]) {
-    assert.equal(outputs.has(port), false, `${port} must stay silent`);
-  }
-  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
-    status: 304,
-    unchanged: true,
-    source_name: job.source_name,
-    source_url: job.source_url,
-    dataset_id: job.dataset_id,
+  assert.equal(response.outputs[0].portId, "unchanged");
+  assert.deepEqual(decodeFlowNotice(response.outputs[0].payload), {
+    kind: "unchanged", schema: "RFB.fbs", providerId: "space-data-network-02", sourceName: "satnogs-db", batchId: "",
+    count: 0, reason: "not-modified", items: [SOURCE_URL], atMs: RETRIEVED_MS,
   });
 });
 

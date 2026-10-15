@@ -1,9 +1,9 @@
 {
   "pluginId": "com.digitalarsenal.flows.weathernext-cyclones-ingest",
   "name": "Global Ensemble Forecast Cyclone Track Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast: a module cron TIMER tick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the hostcap/http-request GET for the track CSV plus its parse job; hostcap/http-request fetches it; weathernext-parser:parse_cyclone_tracks groups the rows by (storm, member) into size-prefixed $TCT records with exact unit conversions and points in valid-time order (batch = sha256 of the CSV), emitting the ingest meta with archive naming and the raw CSV; hostcap/storage-ingest persists the batch and archives the payload through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast (typed contracts 1.0): the host cron TimerTick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the track CSV HttpRequest GET carrying its parse job in CONTEXT as a size-prefixed $TCT header record (model, ensemble size, wind averaging period, origin, dataset, source URL, licence); hostcap/http-request fetches it and echoes the CONTEXT; weathernext-parser:parse_cyclone_tracks emits one $TCT per (storm, member), the batch's IngestRequest (batch = sha256 of the CSV bytes, ARCHIVE weathernext / cyclone-tracks.csv) and the HttpResponse itself on raw; hostcap/storage-ingest persists the batch (IngestRequest on meta, the stream on tct_records, the HttpResponse on raw, whose BODY it archives) through the policy-mediated storage.ingest_with_source hostcall. IngestResults and Skipped FlowNotices land on the egress sink. After each store, weathernext-source:publish_request joins the IngestResult with the IngestRequest and (only when node CONFIG carries weathernext_publish_url, and not for a REFUSED batch) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its HttpResponse also lands on egress. Every edge carries one concrete FlatBuffer type; no JSON frames between nodes.",
   "capabilities": [
     "http",
     "secrets:gcp-weathernext",
@@ -12,23 +12,23 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.weathernext-source",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     }
   ],
   "externalInterfaces": [
@@ -38,7 +38,7 @@
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
         "hostOps": [
           "http.request"
@@ -51,7 +51,7 @@
       "direction": "bidirectional",
       "capability": "storage_ingest",
       "resource": "sdn://storage/ingest",
-      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
       "properties": {
         "hostOps": [
           "storage.ingest_with_source"
@@ -69,24 +69,22 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK); its payload is not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick."
+          "description": "Cron timer tick. Single-stream: a surplus is refused as batched-input-frames."
         }
       ],
       "outputPorts": [
@@ -94,19 +92,22 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-result-json",
+              "setId": "sdn-runtime-ingest-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Ingest result summary."
+          "description": "EXACTLY ONE IngestResult per invocation."
         }
       ],
       "maxBatch": 1,
@@ -209,26 +210,22 @@
       "toNodeId": "http",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -239,11 +236,22 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -254,11 +262,22 @@
       "toNodeId": "ingest_tct",
       "toPortId": "meta",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -267,7 +286,7 @@
       "fromNodeId": "parse",
       "fromPortId": "tct_records",
       "toNodeId": "ingest_tct",
-      "toPortId": "records",
+      "toPortId": "tct_records",
       "contract": {
         "canonicalType": {
           "schemaName": "TCT.fbs",
@@ -295,11 +314,22 @@
       "toNodeId": "ingest_tct",
       "toPortId": "raw",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -310,11 +340,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -325,11 +366,22 @@
       "toNodeId": "publish_tct",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -340,11 +392,22 @@
       "toNodeId": "publish_tct",
       "toPortId": "meta",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -355,11 +418,22 @@
       "toNodeId": "publish_http_tct",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -370,11 +444,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -385,11 +470,22 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     }

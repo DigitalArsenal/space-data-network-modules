@@ -1,8 +1,9 @@
 #ifndef MANEUVER_PLUGIN_RUNTIME_H
 #define MANEUVER_PLUGIN_RUNTIME_H
 
+#include "json_lite.h"
+
 #include <string>
-#include <string_view>
 
 namespace maneuver {
 
@@ -13,7 +14,13 @@ struct PluginInvokeResult {
     std::string error_message;
 };
 
-PluginInvokeResult invoke_json_request(std::string_view request_json);
+/// Run one named operation on an already-built parameter tree. `json` is the
+/// operation's internal answer document (SI units), read back by mpl_bridge.
+PluginInvokeResult invoke_operation(const std::string& operation,
+                                    const json_lite::Value& params);
+
+/// The module version, equal to plugin-manifest.json's `version`.
+const char* module_version();
 
 }  // namespace maneuver
 

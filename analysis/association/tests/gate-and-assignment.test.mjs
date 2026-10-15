@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { associate, block, celestial, diagonal, earthOrientation, eopRow, options, predictions, rdo, solveAssignment, OEM } from './lib.mjs';
+import { ASG, assignedOf, associate, block, celestial, diagonal, earthOrientation, eopRow, predictions, problemFrame, rdo, solveAssignment, OEM } from './lib.mjs';
 
 const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
 import { denseProblem, hungarianOptimum, sparseOptimum, sparseProblem } from './assignment-problems.mjs';
@@ -21,11 +21,12 @@ test('chi-square gates match the NIST critical values for 1 to 6 degrees of free
   for (const [k, p] of nist.probabilities.entries()) {
     const { report } = await associate([
       predictions([block({ norad: 1, objectId: 'A', states: still(7000), covariances: covs(diagonal(1e-8)) })]),
-      range('o', 7000), options({ gate_probability: p, light_time: false }),
-    ]);
+      range('o', 7000),
+    ], { gate_probability: p, light_time: false });
     for (let dof = 1; dof <= 6; dof++) {
       const expected = nist.criticalValues[dof][k];
-      assert.ok(Math.abs(report.gate_thresholds[dof] - expected) <= 5e-4, `P=${p}, dof ${dof}: ${report.gate_thresholds[dof]} vs NIST ${expected}`);
+      const gate = report.GATE_THRESHOLDS.find((g) => g.DEGREES_OF_FREEDOM === dof).THRESHOLD;
+      assert.ok(Math.abs(gate - expected) <= 5e-4, `P=${p}, dof ${dof}: ${gate} vs NIST ${expected}`);
     }
   }
 });
@@ -37,15 +38,15 @@ test('seeded assignment problems of the OR-Library sizes solve to the optimum an
     const cost = denseProblem(n, seed);
     const optimal = hungarianOptimum(cost);
     const solution = await solveAssignment({ cost });
-    assert.equal(solution.total_cost, optimal, name);
-    assert.equal(new Set(solution.assignment).size, n, `${name}: a permutation`);
-    assert.equal(solution.assignment.reduce((s, j, i) => s + cost[i][j], 0), optimal, `${name}: the assignment costs what it reports`);
+    assert.equal(solution.TOTAL_COST, optimal, name);
+    assert.equal(new Set(solution.ASSIGNMENT).size, n, `${name}: a permutation`);
+    assert.equal(solution.ASSIGNMENT.reduce((s, j, i) => s + cost[i][j], 0), optimal, `${name}: the assignment costs what it reports`);
   }
   const problem = sparseProblem(800, 800);
   const solution = await solveAssignment(problem);
-  assert.equal(solution.total_cost, sparseOptimum(problem));
+  assert.equal(solution.TOTAL_COST, sparseOptimum(problem));
   const permitted = new Map(problem.entries.map(([i, j, c]) => [`${i},${j}`, c]));
-  assert.ok(solution.assignment.every((j, i) => permitted.has(`${i},${j}`)), 'only permitted pairs');
+  assert.ok(solution.ASSIGNMENT.every((j, i) => permitted.has(`${i},${j}`)), 'only permitted pairs');
 });
 
 test('global assignment beats nearest neighbour, and ambiguity and posterior follow the likelihoods', async () => {
@@ -73,17 +74,17 @@ test('global assignment beats nearest neighbour, and ambiguity and posterior fol
       block({ norad: 101, objectId: 'A', states: still(7000), covariances: covs(diagonal(1e-8)) }),
       block({ norad: 102, objectId: 'B', states: bStates, covariances: covs(radialTight), covFrame: rsw }),
     ]),
-    range('o1', 7000.0014, T0), range('o2', 6999.9995, T0), options({ light_time: false }),
-  ]);
+    range('o1', 7000.0014, T0), range('o2', 6999.9995, T0),
+  ], { light_time: false });
   const S = 1e-6 + 1e-8;
-  const [o1, o2] = report.observations;
-  const d2 = (o, key) => o.candidates.find((c) => c.object.key === key).d2;
+  const [o1, o2] = report.OBSERVATIONS;
+  const d2 = (o, key) => o.CANDIDATES.find((c) => c.OBJECT.KEY === key).D2;
   const close = (a, b, what) => assert.ok(Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b)), `${what}: ${a} vs ${b}`);
   close(d2(o1, 'A'), 1.4e-3 ** 2 / S, 'o1-A');
   close(d2(o1, 'B'), 1.6e-3 ** 2 / S, 'o1-B');
   close(d2(o2, 'A'), 0.5e-3 ** 2 / S, 'o2-A');
   close(d2(o2, 'B'), 3.5e-3 ** 2 / S, 'o2-B');
-  const gate = report.gate_thresholds['1'];
+  const gate = report.GATE_THRESHOLDS.find((g) => g.DEGREES_OF_FREEDOM === 1).THRESHOLD;
   const costs = { o1: { A: d2(o1, 'A'), B: d2(o1, 'B') }, o2: { A: d2(o2, 'A'), B: d2(o2, 'B') } };
   let best = null;
   for (const a1 of ['A', 'B', null]) for (const a2 of ['A', 'B', null]) {
@@ -92,14 +93,14 @@ test('global assignment beats nearest neighbour, and ambiguity and posterior fol
     const total = c('o1', a1) + c('o2', a2);
     if (!best || total < best.total) best = { total, a1, a2 };
   }
-  assert.deepEqual([o1.object?.key, o2.object?.key], [best.a1, best.a2]);
+  assert.deepEqual([assignedOf(o1)?.OBJECT.KEY, assignedOf(o2)?.OBJECT.KEY], [best.a1, best.a2]);
   assert.deepEqual([best.a1, best.a2], ['B', 'A']);
-  assert.equal(o1.ambiguous, true, 'o1 lost its nearest object to the global assignment');
-  assert.equal(o1.assignment_conflict, true);
-  assert.equal(o2.ambiguous, false, "o2's second object is outside the gate");
+  assert.equal(o1.AMBIGUOUS, true, 'o1 lost its nearest object to the global assignment');
+  assert.equal(o1.ASSIGNMENT_CONFLICT, true);
+  assert.equal(o2.AMBIGUOUS, false, "o2's second object is outside the gate");
   // Equal S: posterior = exp(-d2/2) normalised over the in-gate objects.
   const pB = Math.exp(-costs.o1.B / 2) / (Math.exp(-costs.o1.A / 2) + Math.exp(-costs.o1.B / 2));
-  close(o1.posterior, pB, 'o1 posterior');
+  close(assignedOf(o1).POSTERIOR, pB, 'o1 posterior');
   const out = Object.fromEntries(records.associated.map(({ record }) => [record.ID, record]));
   assert.equal(out.o1.SAT_NO, 102);
   assert.equal(out.o1.ON_ORBIT, 'B');
@@ -108,7 +109,7 @@ test('global assignment beats nearest neighbour, and ambiguity and posterior fol
   assert.equal(records.ucts.length, 0);
   // The statistics on the records (SDS 1.241.0) are the report's.
   close(out.o1.CORR_MAHALANOBIS_SQ, costs.o1.B, 'o1 CORR_MAHALANOBIS_SQ');
-  close(out.o1.CORR_P_VALUE, o1.p_value, 'o1 CORR_P_VALUE');
+  close(out.o1.CORR_P_VALUE, assignedOf(o1).P_VALUE, 'o1 CORR_P_VALUE');
   close(out.o1.CORR_QUALITY, pB, 'o1 CORR_QUALITY');
   assert.deepEqual([out.o1.CORR_DOF, out.o1.CORR_GATE, out.o1.CORR_AMBIGUOUS], [1, gate, true]);
   close(out.o2.CORR_MAHALANOBIS_SQ, costs.o2.A, 'o2 CORR_MAHALANOBIS_SQ');
@@ -127,13 +128,13 @@ test('a radar DOPPLER of carrier DOPPLER_FREQUENCY is the two-way range rate -c 
   const prediction = predictions([block({ norad: 7, objectId: 'GEO', states: geo, covariances: covs(diagonal(1, 1e-6)) })]);
   const eop = earthOrientation([eopRow({ date: '2026-08-02', mjd: 61254, xArcsec: 0.2, yArcsec: 0.3, dut1: 0.05 })]);
   const base = { OB_TIME: T, ID_SENSOR: 'radar', SEN_REFERENCE_FRAME: 'ITRF', SENX: 6378.137, SENY: 0, SENZ: 0 };
-  const { report, error } = await associate([prediction, eop, options({ light_time: false }),
+  const { report, error } = await associate([prediction, eop,
     rdo({ ...base, ID: 'rate', RANGE_RATE: rate, RANGE_RATE_UNC: sigma }),
-    rdo({ ...base, ID: 'doppler', DOPPLER: -2 * f * rate / C, DOPPLER_UNC: 2 * f * sigma / C, DOPPLER_FREQUENCY: f })]);
+    rdo({ ...base, ID: 'doppler', DOPPLER: -2 * f * rate / C, DOPPLER_UNC: 2 * f * sigma / C, DOPPLER_FREQUENCY: f })], { light_time: false });
   assert.equal(error, undefined, error);
-  const [byRate, byDoppler] = ['rate', 'doppler'].map((id) => report.observations.find((o) => o.id === id));
-  const d2 = (o) => o.candidates[0].d2;
-  assert.equal(byDoppler.source.range_rate_km_s, 'DOPPLER');
+  const [byRate, byDoppler] = ['rate', 'doppler'].map((id) => report.OBSERVATIONS.find((o) => o.ID === id));
+  const d2 = (o) => o.CANDIDATES[0].D2;
+  assert.equal(byDoppler.MEASUREMENTS.find((m) => m.KIND === ASG.asgMeasurementKind.RangeRate).SOURCE_FIELD, 'DOPPLER');
   assert.ok(d2(byRate) > 0, `d2 ${d2(byRate)}`);
   assert.ok(Math.abs(d2(byDoppler) - d2(byRate)) <= 1e-9 * d2(byRate), `${d2(byDoppler)} vs ${d2(byRate)}`);
   const refused = await associate([prediction, eop, rdo({ ...base, ID: 'bare', DOPPLER: 1, DOPPLER_UNC: 1 })]);
@@ -159,7 +160,7 @@ test('an Earth-fixed sensor is rotated to GCRF as in Vallado\'s IAU-2006/2000 wo
     earthOrientation([eopRow({ date: '2004-04-06', mjd: 53101, xArcsec: -0.140682, yArcsec: 0.333309, dut1: -0.4399619, lod: 0.0015563, dXArcsec: -0.000205, dYArcsec: -0.000136 })]),
   ]);
   assert.equal(error, undefined, error);
-  const s = report.observations[0].sensor_gcrf_km;
+  const s = report.OBSERVATIONS[0].SENSOR_POSITION_GCRF_KM;
   const expected = [5102.508958, 6123.011401, 6378.136928];
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(s[k] - expected[k]) <= 2e-5, `component ${k}: ${s[k]} vs ${expected[k]}`);
 });
@@ -189,14 +190,14 @@ test('the report gives an Earth-fixed sensor\'s GCRF velocity, the rate of its G
     earthOrientation([eopRow({ date: '2004-04-06', mjd: 53101, xArcsec: -0.140682, yArcsec: 0.333309, dut1: -0.4399619, lod: 0.0015563, dXArcsec: -0.000205, dYArcsec: -0.000136 })]),
   ]);
   assert.equal(error, undefined, error);
-  const at = (i) => report.observations.find((o) => o.id === `v${i}`);
-  const v = at(1).sensor_velocity_gcrf_km_s;
-  const difference = [0, 1, 2].map((k) => (at(2).sensor_gcrf_km[k] - at(0).sensor_gcrf_km[k]) / 2);
+  const at = (i) => report.OBSERVATIONS.find((o) => o.ID === `v${i}`);
+  const v = at(1).SENSOR_VELOCITY_GCRF_KM_S;
+  const difference = [0, 1, 2].map((k) => (at(2).SENSOR_POSITION_GCRF_KM[k] - at(0).SENSOR_POSITION_GCRF_KM[k]) / 2);
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(v[k] - difference[k]) <= 3e-8, `component ${k}: ${v[k]} vs ${difference[k]} km/s`);
   const speed = Math.hypot(...v);
   const closed = 7.292115146706979e-5 * (1 - 0.0015563 / 86400) * Math.hypot(sensor[0], sensor[1]);
   assert.ok(Math.abs(speed - closed) <= 1e-5 * closed, `|v| ${speed} vs ${closed} km/s`);
-  const r = at(1).sensor_gcrf_km;
+  const r = at(1).SENSOR_POSITION_GCRF_KM;
   assert.ok(Math.abs(v[0] * r[0] + v[1] * r[1] + v[2] * r[2]) <= 1e-5 * speed * Math.hypot(...r), 'v is orthogonal to r');
 });
 
@@ -207,5 +208,39 @@ test('an inertial sensor reports no GCRF velocity', async () => {
     rdo({ ID: 'space', OB_TIME: '2004-04-06T07:51:28.386009Z', ID_SENSOR: 'space', SEN_REFERENCE_FRAME: 'GCRF', SENX: 7000, SENY: 0, SENZ: 0, RANGE: 35000, RANGE_UNC: 1 }),
   ]);
   assert.equal(error, undefined, error);
-  assert.equal(report.observations[0].sensor_velocity_gcrf_km_s, null);
+  assert.deepEqual(report.OBSERVATIONS[0].SENSOR_VELOCITY_GCRF_KM_S, [], 'no velocity');
+});
+
+test('the $ASG problem forms: a gated dense problem, a sparse one with repeats, a maximization, and refusals', async () => {
+  // Rows 0 and 1, columns 0..2; null forbidden. Row 0 pays 1.5 to stay unassigned, row 1 pays 5.
+  // Enumeration: r0 -> c0 (1) + r1 -> c1 (2) = 3 beats r0 unassigned (1.5) + r1 -> c0 (2) = 3.5 and r0 -> c2 (3) + r1 -> c0 (2) = 5.
+  const gated = await solveAssignment({ cost: [[1, null, 3], [2, 2, null]], unassigned_cost: [1.5, 5] });
+  assert.deepEqual([gated.ASSIGNMENT, gated.TOTAL_COST, gated.ASSIGNED, gated.ROWS, gated.COLUMNS], [[0, 1], 3, 2, 2, 3]);
+  const leave = await solveAssignment({ cost: [[4, 9], [9, 9]], unassigned_cost: 0.5 });
+  assert.deepEqual([leave.ASSIGNMENT, leave.TOTAL_COST, leave.ASSIGNED], [[-1, -1], 1, 0]);
+  // A repeated sparse pair keeps its lowest cost.
+  const sparse = await solveAssignment({ rows: 2, columns: 2, entries: [[0, 0, 5], [0, 0, 1], [1, 1, 2], [0, 1, 0.5], [1, 0, 0.5]] });
+  assert.deepEqual([sparse.ASSIGNMENT, sparse.TOTAL_COST], [[1, 0], 1]);
+  // Maximize: the largest total, reported in the problem's own sign.
+  const max = await solveAssignment({ cost: [[4, 1, 3], [2, 0, 5]], objective: 'Maximize' });
+  assert.deepEqual([max.ASSIGNMENT, max.TOTAL_COST], [[0, 2], 9]);
+  assert.match((await solveAssignment({ cost: [[1, 2], [3, 4], [5, 6]] })).error, /more rows than columns/);
+  assert.match((await solveAssignment({ cost: [[null, null], [1, 2]] })).error, /no feasible solution/);
+  assert.match((await solveAssignment({ cost: [[1, 2]], unassigned_cost: [1, 2] })).error, /UNASSIGNED_COST/);
+});
+
+test('options come from the node config; a bad value is refused with its key', async () => {
+  const inputs = [predictions([block({ norad: 1, objectId: 'A', states: still(7000), covariances: covs(diagonal(1e-8)) })]), range('o', 7000)];
+  const { report } = await associate(inputs, { scan: 'observation', max_candidates: 2, geometry: false, light_time: false, min_posterior: 0.5, clutter_density: 0.25 });
+  const o = report.OPTIONS;
+  assert.deepEqual([o.SCAN, o.MAX_CANDIDATES, o.GEOMETRY, o.LIGHT_TIME, o.MIN_POSTERIOR, o.CLUTTER_DENSITY, o.GATE_PROBABILITY],
+    [ASG.asgScanGrouping.Observation, 2, false, false, 0.5, 0.25, 0.9973]);
+  assert.deepEqual(report.OBSERVATIONS[0].CANDIDATES[0].POSITION_GCRF_KM, [], 'geometry off');
+  const defaults = (await associate(inputs)).report.OPTIONS;
+  assert.deepEqual([defaults.SCAN, defaults.MAX_CANDIDATES, defaults.GEOMETRY, defaults.LIGHT_TIME], [ASG.asgScanGrouping.SensorTime, 5, true, true]);
+  assert.match((await associate(inputs, { gate_probability: 1.5 })).error, /gate_probability/);
+  assert.match((await associate(inputs, { scan: 'sideways' })).error, /scan/);
+  assert.match((await associate(inputs, { max_candidates: 2.5 })).error, /max_candidates/);
+  assert.match((await associate(inputs, { light_time: 'yes' })).error, /light_time/);
+  assert.equal((await associate(inputs, { other_module_key: 1 })).error, undefined, 'keys of other modules are not refused');
 });

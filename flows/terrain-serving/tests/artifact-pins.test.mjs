@@ -106,10 +106,12 @@ test("every linked node module is the build this checkout holds", () => {
 });
 
 test("the flow declares the capability set it is approved for, and no more", () => {
-  // storage_query and nothing else: the serving lane reads the store and never
-  // writes it, and a capability that appears here has to be approved on the
-  // host by hash before the flow will start.
-  assert.deepEqual(artifact.capabilities, ["storage_query"]);
+  // storage_query, and clock: the serving lane reads the store and never writes it, and a capability that appears
+  // here has to be approved on the host by hash before the flow will start. `clock` arrived with typed contracts 1.0:
+  // hostcap/flatsql-query 0.3.0 declares it for the whole module (its sandbox_query method resolves TIME_PROFILE
+  // epoch 0 through clock.now), and a linked flow inherits its parts' capabilities - this flow's `query` node never
+  // calls it. Approving the flow now means approving clock as well.
+  assert.deepEqual(artifact.capabilities, ["clock", "storage_query"]);
   assert.equal(artifact.threadModel, "single-thread");
 });
 

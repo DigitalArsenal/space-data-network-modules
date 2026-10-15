@@ -1,3 +1,10 @@
+import * as flatbuffers from "flatbuffers";
+import { FIL } from "spacedatastandards.org/lib/js/FIL/FIL.js";
+import { filEntryKind } from "spacedatastandards.org/lib/js/FIL/filEntryKind.js";
+import { KMF } from "spacedatastandards.org/lib/js/KMF/KMF.js";
+import { keyMaterialAlgorithm } from "spacedatastandards.org/lib/js/KMF/keyMaterialAlgorithm.js";
+import { keyMaterialEncoding } from "spacedatastandards.org/lib/js/KMF/keyMaterialEncoding.js";
+import { keyMaterialRole } from "spacedatastandards.org/lib/js/KMF/keyMaterialRole.js";
 import {
   createBrowserWasiShim,
 } from "space-data-module-sdk/host/wasi-shim";
@@ -35,6 +42,53 @@ const textDecoder = new TextDecoder();
 const DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const NODE_SCHEME = "node";
+
+// The module's port types (plugin-manifest.json, typed contracts 1.0).
+const typeRef = (code) => ({ schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: "flatbuffer" });
+export const PORT_TYPES = Object.freeze({ LGR: typeRef("LGR"), KMF: typeRef("KMF"), FIL: typeRef("FIL") });
+
+/** The recipient's private key as the recipient_key frame: a $KMF, ROLE DecryptKey, KEY_BYTES the raw key. */
+export function encodeRecipientKey(privateKey) {
+  const builder = new flatbuffers.Builder(privateKey.length + 64);
+  const keyBytes = KMF.createKeyBytesVector(builder, privateKey);
+  KMF.startKMF(builder);
+  KMF.addRole(builder, keyMaterialRole.DecryptKey);
+  KMF.addAlgorithm(builder, keyMaterialAlgorithm.Opaque);
+  KMF.addEncoding(builder, keyMaterialEncoding.RawBytes);
+  KMF.addKeyBytes(builder, keyBytes);
+  KMF.finishKMFBuffer(builder, KMF.endKMF(builder));
+  return builder.asUint8Array();
+}
+
+/** Bytes as a $FIL (KIND File, SIZE, CONTENT): the protected_content frame. */
+export function encodeFileContent(content) {
+  const builder = new flatbuffers.Builder(content.length + 64);
+  const contentOffset = FIL.createContentVector(builder, content);
+  FIL.startFIL(builder);
+  FIL.addKind(builder, filEntryKind.File);
+  FIL.addSize(builder, BigInt(content.length));
+  FIL.addContent(builder, contentOffset);
+  FIL.finishFILBuffer(builder, FIL.endFIL(builder));
+  return builder.asUint8Array();
+}
+
+/** The CONTENT of a $FIL frame (the plaintext port). */
+export function decodeFileContent(bytes) {
+  const bb = new flatbuffers.ByteBuffer(bytes);
+  if (!FIL.bufferHasIdentifier(bb)) throw new Error("client-decrypt answered a frame that is not a $FIL.");
+  return FIL.getRootAsFIL(bb).contentArray() ?? new Uint8Array();
+}
+
+/** The decrypt_artifact input frames for a grant, the recipient key and (optionally) the encrypted bundle. */
+export function decryptArtifactInputs({ grantResponseBytes, privateKey, encryptedBundle }) {
+  return [
+    { portId: "grant_response", typeRef: PORT_TYPES.LGR, payload: grantResponseBytes },
+    { portId: "recipient_key", typeRef: PORT_TYPES.KMF, payload: encodeRecipientKey(privateKey) },
+    ...(encryptedBundle && encryptedBundle.length > 0
+      ? [{ portId: "protected_content", typeRef: PORT_TYPES.FIL, payload: encodeFileContent(encryptedBundle) }]
+      : []),
+  ];
+}
 
 function nodeSpecifier(name) {
   return `${NODE_SCHEME}:${name}`;
@@ -215,9 +269,9 @@ function normalizeDecryptPayload(firstArg, secondArg) {
     return {
       payload:
         toUint8Array(
-          firstArg.payload ?? firstArg.grantResponse ?? firstArg.envelope ?? firstArg.bytes,
+          firstArg.payload ?? firstArg.grantResponseBytes ?? firstArg.grantResponse ?? firstArg.envelope ?? firstArg.bytes,
         ) ?? new Uint8Array(),
-      privateKey: toUint8Array(firstArg.privateKey) ?? new Uint8Array(),
+      privateKey: toUint8Array(firstArg.privateKey ?? secondArg) ?? new Uint8Array(),
       encryptedBundle:
         toUint8Array(
           firstArg.encryptedBundle ??
@@ -262,16 +316,13 @@ export async function createClientDecrypt(options = {}) {
 
       const result = invokeDirect(runtime.instance, {
         methodId: "decrypt_artifact",
-        inputs: [
-          { payload },
-          { payload: privateKey },
-          ...(encryptedBundle.length > 0 ? [{ payload: encryptedBundle }] : []),
-        ],
+        inputs: decryptArtifactInputs({ grantResponseBytes: payload, privateKey, encryptedBundle }),
       });
       if (result.statusCode !== 0 || result.errorMessage) {
         throw new Error(result.errorMessage || "client-decrypt failed");
       }
-      return result.outputs?.[0]?.payload ?? new Uint8Array();
+      const plaintext = result.outputs?.find((frame) => frame.portId === "plaintext");
+      return plaintext ? decodeFileContent(plaintext.payload) : new Uint8Array();
     },
     async destroy() {
       runtime.wasi.flushOutput();
@@ -283,6 +334,8 @@ export async function createClientDecrypt(options = {}) {
 
 const packageApi = Object.assign(createClientDecrypt, {
   createClientDecrypt,
+  decryptArtifactInputs,
+  decodeFileContent,
   getIsomorphicWasmPath,
   isomorphicWasmPath,
 });

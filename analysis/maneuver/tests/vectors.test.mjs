@@ -21,8 +21,8 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
+import { invokeOperation, probeOperation } from "./mpl_client.mjs";
 import {
   BANDS,
   INVARIANTS,
@@ -49,25 +49,7 @@ const decoder = new TextDecoder();
  * two are the whole distinction the tier-D screening rows exist to draw.
  */
 async function probe(harness, request) {
-  try {
-    const response = await harness.invoke({
-      methodId: "invoke",
-      inputs: [{ portId: "request", payload: encoder.encode(JSON.stringify(request)) }],
-    });
-    const frame = response.outputs?.find((entry) => entry.portId === "response");
-    let body = null;
-    let bodyError = null;
-    if (frame) {
-      try {
-        body = JSON.parse(decoder.decode(frame.payload));
-      } catch (error) {
-        bodyError = String(error);
-      }
-    }
-    return { trapped: false, statusCode: response.statusCode, errorCode: response.errorCode, body, bodyError };
-  } catch (error) {
-    return { trapped: true, error: String(error) };
-  }
+  return probeOperation(harness, request);
 }
 
 /**
@@ -480,26 +462,14 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
           prograde: true,
           nRevs: 0,
         };
-        const raw = await harness.invoke({
-          methodId: "invoke",
-          inputs: [
-            {
-              portId: "request",
-              payload: Buffer.from(
-                JSON.stringify({ operation: "solveLambert", params }),
-                "utf8",
-              ),
-            },
-          ],
-        });
+        const raw = await probeOperation(harness, { operation: "solveLambert", params });
         if (raw.statusCode !== 0) {
           // A structured refusal. Under 0.1.0 this would have been a TRAP that
           // killed the harness for every remaining case in the grid.
           refused += 1;
           continue;
         }
-        const frame = raw.outputs.find((entry) => entry.portId === "response");
-        const response = JSON.parse(new TextDecoder().decode(frame.payload));
+        const response = raw.body;
         assert.equal(
           response.converged,
           true,

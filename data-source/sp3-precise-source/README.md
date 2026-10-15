@@ -12,8 +12,10 @@ IGS data centres or ESA's Navigation Support Office, the gunzip the data centres
 
 ## Method
 
-`read_sp3`, input `source` (one decompressed file, up to 128 MiB), outputs `oem` (one frame per satellite with a position, up to 1,024)
-and `report`.
+`read_sp3` (typed contracts 1.0, FlatBuffers only): input `source`, the `HttpResponse` (HRSP) hostcap/http-request answers with BODY
+one decompressed file (up to 128 MiB); outputs `oem` (one `$OEM` frame per satellite with a position, up to 1,024) and `report`, one
+`FlowNotice` (FNTC, KIND Info) whose ITEMS are the header facts and per-satellite counts as `name=value`. A 304 gives one `FlowNotice`
+(Unchanged) and no `$OEM`; another status or a transport error is refused.
 
 The reader is `files/orbit-products/src/sp3.hpp`, the one SP3 reader of this repository (it is also what that module's
 `read_container` runs, against the IGS specification and Orekit's parser); `data-source/glonass-source` keeps its own, for IAC's files,

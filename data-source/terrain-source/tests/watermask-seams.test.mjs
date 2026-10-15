@@ -42,21 +42,31 @@ import { fileURLToPath } from "node:url";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { buildGeoTiff, buildWaterTiff, decodeDtt, rawBodyFrameBytes, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  buildWaterTiff,
+  decodeDtt,
+  rawBodyFrameBytes,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
 const WASM = fs.readFileSync(fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)));
 const encoder = new TextEncoder();
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 const PROVENANCE = {
   datasetId: "cop-dem-glo-30",
@@ -102,10 +112,10 @@ const Y0 = Math.ceil((45 + 90) / SPAN);
 async function encodeBlock(t, tiles, { gridSize = 65 } = {}) {
   const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
   t.after(() => harness.destroy());
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         level: LEVEL,
         gridSize,
@@ -121,7 +131,7 @@ async function encodeBlock(t, tiles, { gridSize = 65 } = {}) {
   const records = splitStream(response.outputs.find((o) => o.portId === "records").payload);
   return {
     tiles: records.map((r) => decodeDtt(r)),
-    report: JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload)),
+    report: decodeTileReport(response.outputs.find((o) => o.portId === "report").payload),
   };
 }
 
@@ -428,7 +438,7 @@ test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithst
   t.after(() => harness.destroy());
   const address = { x: X0 + 5, y: Y0 + 5 };
   const inputs = (skipOceanTiles) => [
-    jsonFrame("plan", {
+    typedFrame("plan", {
       tilesetId: "spaceaware-terrain",
       level: LEVEL,
       gridSize: 65,
@@ -441,7 +451,7 @@ test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithst
     frame("water", rawBodyFrameBytes(seaWater)),
   ];
 
-  const kept = await harness.invoke({ methodId: "tile", inputs: inputs(false) });
+  const kept = await invokeTyped(harness, { methodId: "tile", inputs: inputs(false) });
   assert.equal(kept.statusCode, 0, `${kept.errorCode}: ${kept.errorMessage}`);
   const keptRecords = splitStream(kept.outputs.find((o) => o.portId === "records").payload);
   assert.equal(keptRecords.length, 1, "without the flag the record is produced as asked");
@@ -451,9 +461,9 @@ test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithst
   assert.equal(dtt.maxHeightM, 0);
   assert.equal(dtt.dataCoverageFraction, 1, "…and it was FULLY covered by real measurements");
 
-  const skipped = await harness.invoke({ methodId: "tile", inputs: inputs(true) });
+  const skipped = await invokeTyped(harness, { methodId: "tile", inputs: inputs(true) });
   assert.equal(skipped.statusCode, 0, `${skipped.errorCode}: ${skipped.errorMessage}`);
-  const report = JSON.parse(new TextDecoder().decode(skipped.outputs.find((o) => o.portId === "report").payload));
+  const report = decodeTileReport(skipped.outputs.find((o) => o.portId === "report").payload);
   assert.equal(report.tilesEmitted, 0, "nothing stored");
   assert.equal(report.tilesSkippedOcean, 1, "…and it is COUNTED as skipped, not silently dropped");
 });
@@ -497,7 +507,7 @@ test("an all-water tile whose CORNER is lifted by a coast OUTSIDE it is still oc
   });
 
   const inputs = (dem, skipOceanTiles) => [
-    jsonFrame("plan", {
+    typedFrame("plan", {
       tilesetId: "spaceaware-terrain",
       level: LEVEL,
       gridSize: 65,
@@ -512,11 +522,11 @@ test("an all-water tile whose CORNER is lifted by a coast OUTSIDE it is still oc
   const run = async (dem, skipOceanTiles) => {
     const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
     t.after(() => harness.destroy());
-    const response = await harness.invoke({ methodId: "tile", inputs: inputs(dem, skipOceanTiles) });
+    const response = await invokeTyped(harness, { methodId: "tile", inputs: inputs(dem, skipOceanTiles) });
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
     return {
       records: splitStream(response.outputs.find((o) => o.portId === "records").payload),
-      report: JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload)),
+      report: decodeTileReport(response.outputs.find((o) => o.portId === "report").payload),
     };
   };
 
@@ -590,10 +600,10 @@ test("A POST NO GRANULE COVERS IS OCEAN, per post — never land because a NEIGH
   const insideY = Math.floor((45.4 + 90) / SPAN);
   const insideX = Math.floor((10.4 + 180) / SPAN);
 
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         level: LEVEL,
         gridSize: 65,
@@ -628,7 +638,7 @@ test("A POST NO GRANULE COVERS IS OCEAN, per post — never land because a NEIGH
 
   // The two counts are reported separately: an ocean inference and a genuine
   // gap in the mask lane are different facts and a run must not hide either.
-  const report = JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload));
+  const report = decodeTileReport(response.outputs.find((o) => o.portId === "report").payload);
   assert.ok(report.maskFromAbsenceSamples > 0, "the ocean inference is counted");
   assert.equal(report.maskUnclassifiedSamples, 0, "no post has elevation but no classification");
 });
@@ -641,10 +651,10 @@ test("an all-ocean cell still emits a records frame, so the walk cannot stall", 
   const seaGeo = { originLon: 10, originLat: 46, scaleLon: 1 / 600, scaleLat: 1 / 600, width: 600, height: 600 };
   const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
   t.after(() => harness.destroy());
-  const response = await harness.invoke({
+  const response = await invokeTyped(harness, {
     methodId: "tile",
     inputs: [
-      jsonFrame("plan", {
+      typedFrame("plan", {
         tilesetId: "spaceaware-terrain",
         level: LEVEL,
         gridSize: 65,

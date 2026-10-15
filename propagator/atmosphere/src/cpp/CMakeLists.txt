@@ -42,7 +42,6 @@ add_library(
     atmosphere STATIC
     src/us76.cpp
     src/nrlmsise00.cpp
-    src/plugin_runtime.cpp
     src/space_weather.cpp
     src/winds.cpp
     "${NRLMSISE00_DIR}/nrlmsise-00.c"
@@ -95,7 +94,7 @@ if(EMSCRIPTEN)
         atmosphere_wasm PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='AtmosphereModule' \

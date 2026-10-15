@@ -15,6 +15,12 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  decodeHttpRequest,
+  decodeIngestRequest,
+  encodeHttpResponse,
+  encodeTimerTick,
+} from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -29,7 +35,6 @@ const LIVE_BUCKET_LIST =
   "https://storage.googleapis.com/storage/v1/b/statistics-mlab-oti/o" +
   "?prefix=v0/asn/14593/&maxResults=50";
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const TIMEOUT_MS = 60000;
 
@@ -66,13 +71,20 @@ async function liveFetch(t, url) {
   }
 }
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
+// The typed harness: the SDK harness's BrowserHost answers the module's plugin.getConfig ($PIV) from `config` (one
+// ModuleConfig on raw "config"), as the Go node answers it.
+async function typedHarness(t, config) {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH))),
+    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
+    surface: "direct",
+    hostOptions: { config },
+  });
+  t.after(() => harness.destroy());
+  return harness;
 }
+
+const TYPE = (schemaName, fileIdentifier, rootTypeName) => ({ schemaName, fileIdentifier, rootTypeName, wireFormat: "flatbuffer" });
 
 function splitStream(payload) {
   const records = [];
@@ -145,31 +157,23 @@ test("LIVE: the compiled guest turns the real bytes into $CNP records", async (t
   const rows = JSON.parse(body.toString("utf8"));
   const dates = [...new Set(rows.map((r) => r.date))];
 
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-    // 0 = every published day, so the count is checkable against the source.
-    hostcallDispatch: (operation) =>
-      operation === "plugin.getConfig" ? { mlab_max_days: 0, mlab_record_cap: 5000 } : null,
+  // 0 = every published day, so the count is checkable against the source.
+  const harness = await typedHarness(t, { mlab_max_days: 0, mlab_record_cap: 5000 });
+  // the module's own request (its job in CONTEXT), answered with the live bytes
+  const planned = await harness.invoke({
+    methodId: "request",
+    inputs: [{ portId: "tick", typeRef: TYPE("TimerTick.fbs", "TICK", "TimerTick"), payload: encodeTimerTick({ triggerId: "live" }) }],
   });
-  t.after(() => harness.destroy());
-
+  assert.equal(planned.statusCode, 0, planned.errorMessage);
+  const request = decodeHttpRequest(planned.outputs[0].payload);
+  assert.equal(request.url, LIVE_URL);
   const invoked = await harness.invoke({
     methodId: "parse",
-    inputs: [
-      jsonInput("job", {
-        source_url: LIVE_URL,
-        source_name: "mlab-ndt-statistics",
-        archive_source: "mlab",
-        archive_name: "histogram_daily_stats.json",
-      }),
-      jsonInput("response", {
-        status: 200,
-        headers: { "content-type": "application/json" },
-        bodyB64: body.toString("base64"),
-      }),
-    ],
+    inputs: [{
+      portId: "response",
+      typeRef: TYPE("HttpResponse.fbs", "HRSP", "HttpResponse"),
+      payload: encodeHttpResponse({ url: LIVE_URL, status: 200, headers: { "content-type": "application/json" }, body, context: request.context, retrievedMs: Date.now() }),
+    }],
   });
   assert.equal(invoked.statusCode, 0, invoked.errorMessage);
   const outputs = new Map(invoked.outputs.map((f) => [f.portId, f]));
@@ -178,13 +182,11 @@ test("LIVE: the compiled guest turns the real bytes into $CNP records", async (t
   for (const record of records) {
     assert.equal(decoder.decode(record.subarray(4, 8)), "$CNP");
   }
-  const meta = JSON.parse(decoder.decode(outputs.get("cnp_meta").payload));
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.normalized_count, records.length);
-  assert.equal(provenance.bucket_rows, rows.length);
-  assert.equal(provenance.license, "CC0-1.0");
+  const meta = decodeIngestRequest(outputs.get("cnp_meta").payload);
+  assert.equal(meta.provenance.normalizedCount, records.length);
+  assert.equal(meta.tags.license, "CC0-1.0");
   console.log(
     `LIVE M-Lab -> $CNP: ${records.length} records from ${rows.length} rows, ` +
-      `batch ${meta.batch_id.slice(0, 12)}…`,
+      `batch ${meta.tags.batchId.slice(0, 12)}…`,
   );
 });

@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.peers-discovery",
   "name": "SDN Peers Discovery Flow",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "HTTP network-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (peers_list | peer_get | not_found), hostcap/p2p-discovery peers issues the policy-mediated p2p.peers_snapshot hostcall (the host's peerstore/DHT/registry view + stored $EPM profiles; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape peers splices stored $EPM frames verbatim / synthesizes minimal unsigned EPMs / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "description": "Gateway peers flow (mount GET /api/v1/peers[/{peerId}]): foundation/http-route discover decides the request as an $APR (peers_list / peer_get + peerId); hostcap/p2p-discovery peers_snapshot reads the host's peerstore through the policy-mediated p2p.peers_snapshot hostcall (typed $PIV, capability p2p_read) and answers an $NST (identity fields decoded from each peer's stored $EPM) beside the $APR (STATUS 404 peer-unknown, 502 host-failed); foundation/http-respond respond renders the $HTR: the $NST verbatim as FlatBuffers by default, JSON on request. foundation/discovery-shape is retired: the typed $NST is the shaped answer. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",
@@ -16,13 +16,6 @@
       "nodeId": "disc",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "methodId": "peers_snapshot",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_peers",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -43,35 +36,17 @@
   ],
   "edges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-disc-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "disc",
-      "toPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "disc-decision",
-      "fromNodeId": "disc",
-      "fromPortId": "decision",
-      "toNodeId": "shape",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "disc-snapshot",
+      "edgeId": "disc-decision-respond-decision",
       "fromNodeId": "disc",
-      "fromPortId": "snapshot",
-      "toNodeId": "shape",
-      "toPortId": "snapshot",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "shape-decision",
-      "fromNodeId": "shape",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
@@ -79,34 +54,16 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-body",
-      "fromNodeId": "shape",
-      "fromPortId": "body",
+      "edgeId": "disc-peers-respond-peers",
+      "fromNodeId": "disc",
+      "fromPortId": "peers",
       "toNodeId": "respond",
-      "toPortId": "epm_body",
+      "toPortId": "peers",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-opaque-body",
-      "fromNodeId": "shape",
-      "fromPortId": "opaque_body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "shape-etag",
-      "fromNodeId": "shape",
-      "fromPortId": "etag",
-      "toNodeId": "respond",
-      "toPortId": "etag",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
@@ -135,7 +92,6 @@
   "requiredPlugins": [
     "com.digitalarsenal.foundation.http-route",
     "com.digitalarsenal.hostcap.p2p-discovery",
-    "com.digitalarsenal.foundation.discovery-shape",
     "com.digitalarsenal.foundation.http-respond"
   ],
   "api": {
@@ -148,7 +104,7 @@
         "method": "GET",
         "operationId": "listPeers",
         "summary": "Known peers with EPM profiles and published standards",
-        "description": "The host's network view \u2014 connected peers, peerstore/DHT entries, registry profiles, and PNM publishers \u2014 as one record per peer. Default encoding: aligned size-prefixed $EPM frames (stored profiles verbatim and signature-verifiable; peers without a stored profile get a synthesized minimal unsigned EPM whose DN is the peer id and whose MULTIFORMAT_ADDRESS carries /p2p/<peerId>). format=json: bare array of {peer_id, self, connected, agent_version, addrs, standards, epm|null} \u2014 standards are derived from stored signed PNMs per publishing peer; epm renders the EPM schema fields with SCHEMA-EXACT names {DN, LEGAL_NAME, ALTERNATE_NAMES, MULTIFORMAT_ADDRESS, ENTITY_TYPE} plus the synthesized lowercase signed (hard rule json-schema-capitalization-rule: SDS-record properties keep the IDL capitalization; API-synthesized fields stay lowercase snake_case).",
+        "description": "The peers this node knows (SDS Node Status Record): per peer its identity fields from the stored $EPM (DN, ORGANIZATION, keys), addresses, agent version, online state and whether it is this node; /{peerId} narrows to one peer. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists. Conditional GET: the record's ETAG (a content tag, stable across calls while the content is unchanged) rides the etag header; If-None-Match equal to it answers 304.",
         "anonymous": true,
         "params": [
           {
@@ -168,33 +124,81 @@
         ],
         "responses": {
           "200": {
-            "description": "Peer record stream. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag.",
-            "recordStream": true,
+            "description": "One $NST. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists.",
             "content": {
-              "application/vnd.sdn.flatbuffers.stream": {
-                "sds": {
-                  "schemaName": "EPM.fbs",
-                  "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM"
-                },
-                "description": "Aligned size-prefixed $EPM FlatBuffer frames, one per known peer."
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$NST (SDS NST.fbs): The peers this node knows (SDS Node Status Record): per peer its identity fields from the stored $EPM (DN, ORGANIZATION, keys), addresses, agent version, online state and whether it is this node; /{peerId} narrows to one peer."
+                }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
-                },
-                "description": "Bare top-level JSON array of peer records (format=json)."
+                  "type": "object",
+                  "description": "The $NST as JSON (IDL field names)."
+                }
               }
             }
           },
           "304": {
-            "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated."
+            "description": "Not modified: If-None-Match equals the record's ETAG."
           },
           "404": {
-            "description": "No route matched under the mount."
+            "description": "No route, or (/{peerId}) a peer unknown to this node (peer-unknown).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The p2p hostcall failed (host-failed).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -203,7 +207,7 @@
         "method": "GET",
         "operationId": "getPeer",
         "summary": "One peer's EPM profile and published standards",
-        "description": "The same record shape as the peers list, narrowed to one libp2p peer id. Unknown peers answer 404.",
+        "description": "The peers this node knows (SDS Node Status Record): per peer its identity fields from the stored $EPM (DN, ORGANIZATION, keys), addresses, agent version, online state and whether it is this node; /{peerId} narrows to one peer. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists. Conditional GET: the record's ETAG (a content tag, stable across calls while the content is unchanged) rides the etag header; If-None-Match equal to it answers 304.",
         "anonymous": true,
         "params": [
           {
@@ -213,7 +217,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "libp2p peer ID of the provider node (e.g. 16Uiu2HAm\u2026)."
+            "description": "libp2p peer ID of the provider node (e.g. 16Uiu2HAm…)."
           },
           {
             "name": "format",
@@ -232,33 +236,81 @@
         ],
         "responses": {
           "200": {
-            "description": "Single-peer record stream (one $EPM frame / one-element bare array); X-SDN-Record-Count and ETag headers on both encodings.",
-            "recordStream": true,
+            "description": "One $NST. Representation: FlatBuffers by default (?format=flatbuffer or Accept: application/x-flatbuffers); ?format=json or Accept: application/json renders the same record as JSON with the standard's IDL field names (enums by name, byte vectors hex) - rendered by foundation/http-respond, the only place JSON exists.",
             "content": {
-              "application/vnd.sdn.flatbuffers.stream": {
-                "sds": {
-                  "schemaName": "EPM.fbs",
-                  "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM"
-                },
-                "description": "One aligned size-prefixed $EPM FlatBuffer frame."
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$NST (SDS NST.fbs): The peers this node knows (SDS Node Status Record): per peer its identity fields from the stored $EPM (DN, ORGANIZATION, keys), addresses, agent version, online state and whether it is this node; /{peerId} narrows to one peer."
+                }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
-                },
-                "description": "One-element bare JSON array (format=json)."
+                  "type": "object",
+                  "description": "The $NST as JSON (IDL field names)."
+                }
               }
             }
           },
           "304": {
-            "description": "Not modified (If-None-Match matched the stream ETag)."
+            "description": "Not modified: If-None-Match equals the record's ETAG."
           },
           "404": {
-            "description": "Peer unknown to this node."
+            "description": "No route, or (/{peerId}) a peer unknown to this node (peer-unknown).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The p2p hostcall failed (host-failed).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }

@@ -1,7 +1,8 @@
 // route(): the epoch record and the discovery document, the 503 without an
 // epoch, the 304, the 404s and the 405 — against the compiled isomorphic
 // artifact in the SDK's browser harness, config handed over the
-// plugin.getConfig hostcall exactly as the Go host answers it.
+// plugin.getConfig SDS $PIV hostcall as the Go node answers it: one
+// ModuleConfig (MCFG) on raw "config", nulls left out.
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -11,6 +12,7 @@ import { fileURLToPath } from "node:url";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
+import { encodeModuleConfig } from "space-data-module-sdk/runtime-contracts";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -26,6 +28,7 @@ const RECORD = {
   FILES: [
     { NAME: "building.fgb", CATEGORY: "building", KIND: "polygon", MEDIA_TYPE: "application/x-flatgeobuf", BYTES: 797351152, SHA256: "a".repeat(64), FEATURE_COUNT: 2763936, LAYER: "multipolygons", WHERE: "building IS NOT NULL AND building <> 'no'" },
     { NAME: "road-lines.fgb", CATEGORY: "road", KIND: "line", MEDIA_TYPE: "application/x-flatgeobuf", BYTES: 281731032, SHA256: "b".repeat(64), FEATURE_COUNT: 1189806, LAYER: "lines", WHERE: "highway IS NOT NULL" },
+    { NAME: "ocean.fgb", CATEGORY: "water", KIND: "polygon", MEDIA_TYPE: "application/x-flatgeobuf", BYTES: 12345, SHA256: "c".repeat(64), FEATURE_COUNT: 0, LAYER: "ocean", WHERE: null },
   ],
   DATASET_EPOCH: "2026-09-02T20:20:51Z",
   PROVENANCE: {
@@ -40,6 +43,11 @@ const RECORD = {
   },
 };
 const CID = "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
+/** The config as the node holds it: nulls are left out of a ModuleConfig (Go node runtimecfg.Encode). */
+const withoutNulls = (v) =>
+  Array.isArray(v) ? v.map(withoutNulls)
+    : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null).map(([k, x]) => [k, withoutNulls(x)]))
+      : v;
 const CONFIG = { osm_epoch_cid: CID, osm_epoch_record: RECORD, osm_attribution: "© OpenStreetMap contributors" };
 
 async function invoke(t, inputs, config) {
@@ -47,10 +55,7 @@ async function invoke(t, inputs, config) {
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
-      if (operation === "plugin.getConfig") return config;
-      throw new Error(`unexpected hostcall operation: ${operation}`);
-    },
+    hostOptions: { config: withoutNulls(config) },
   });
   t.after(() => harness.destroy());
   return harness.invoke({ methodId: "route", inputs });
@@ -90,6 +95,9 @@ test("tileset.json renders the builder's record with the pinned CID, a relative 
   assert.equal(record.EPOCH_BASE_PATH, `/ipfs/${CID}/`);
   assert.deepEqual(record.FILES, RECORD.FILES, "FILES verbatim");
   assert.deepEqual(record.PROVENANCE, RECORD.PROVENANCE, "PROVENANCE verbatim");
+  // Byte-identical to what the JSON-config build served: the builder's key order, its nulls kept.
+  const { FORMAT, TILESET_ID, REGION, CRS, PAYLOAD, FILES, DATASET_EPOCH, PROVENANCE } = RECORD;
+  assert.equal(r.body, JSON.stringify({ FORMAT, TILESET_ID, REGION, CRS, PAYLOAD: { ...PAYLOAD, CID }, EPOCH_BASE_PATH: `/ipfs/${CID}/`, FILES, DATASET_EPOCH, PROVENANCE }));
   assert.equal(record.DATASET_EPOCH, RECORD.DATASET_EPOCH);
 
   // Conditional: the same ETag answers 304 with no body; another one answers 200.
@@ -119,10 +127,9 @@ test("without a pinned epoch the record route answers 503 naming the missing key
 test("the discovery document names the epoch, and the config can arrive on a frame", async (t) => {
   const configFrame = {
     portId: "config",
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: 0 },
-    payload: new TextEncoder().encode(JSON.stringify({ ...CONFIG, osm_mount_path: "/osm", osm_gateway_path: "/gw" })),
+    typeRef: { schemaName: "ModuleConfig.fbs", fileIdentifier: "MCFG", rootTypeName: "ModuleConfig", wireFormat: "flatbuffer" },
+    payload: encodeModuleConfig(withoutNulls({ ...CONFIG, osm_mount_path: "/osm", osm_gateway_path: "/gw" })),
   };
-  configFrame.typeRef.byteLength = configFrame.payload.byteLength;
   const r = response(await invoke(t, [requestFrame("/osm/catalogue.json"), configFrame], {}));
   assert.equal(r.status, 200);
   assert.deepEqual(JSON.parse(r.body), {
@@ -132,6 +139,16 @@ test("the discovery document names the epoch, and the config can arrive on a fra
   assert.equal(r.headers.etag, multihashEtag(r.body));
   const record = response(await invoke(t, [requestFrame("/osm/tileset.json"), configFrame], {}));
   assert.equal(JSON.parse(record.body).EPOCH_BASE_PATH, `/gw/${CID}/`);
+  const junk = await invoke(t, [requestFrame("/osm/tileset.json"), { ...configFrame, payload: new TextEncoder().encode("{\"osm_mount_path\":\"/osm\"}") }], {});
+  assert.equal(junk.errorCode, "invalid-config-frame");
+});
+
+test("an OCEAN table renders as an object in the builder's key order, and keys the builder does not write follow sorted", async (t) => {
+  const ocean = { SOURCE_URL: "https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip", SHA256: "d".repeat(64), FILES_DATED: "2026-08-30", LICENSE: "ODbL-1.0" };
+  const record = { ...RECORD, PROVENANCE: { ...RECORD.PROVENANCE, OCEAN: ocean, ZETA: [1.5, 2], ALPHA: ["x", "y"] } };
+  const r = response(await invoke(t, [requestFrame("/api/v1/osm/tileset.json")], { ...CONFIG, osm_epoch_record: record }));
+  assert.equal(r.status, 200);
+  assert.ok(r.body.includes(`"OCEAN":${JSON.stringify(ocean)},"ALPHA":["x","y"],"ZETA":[1.5,2]}`), r.body);
 });
 
 test("outside the mount and unknown routes are no-store 404s; non-GET is 405", async (t) => {

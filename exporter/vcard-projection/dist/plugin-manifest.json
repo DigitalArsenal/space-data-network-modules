@@ -1,0 +1,189 @@
+{
+  "pluginId": "com.digitalarsenal.exporter.vcard-projection",
+  "name": "vCard Projection",
+  "version": "0.2.0",
+  "description": "Pure WASM vCard 3.0 projection of $EPM (§21 literal-key), typed contracts 1.0: card_full (full contact card + verification chain + photo) and card_compact (QR-density card: sign/encrypt/epmsig only) emit one $VCF whose CARD is the vCard text verbatim; card_parse reads a $VCF's CARD and emits one $EPM carrying the recovered fields. Every frame is a size-prefixed SDS FlatBuffer. No capabilities: this module performs no I/O, no signing, no key derivation.",
+  "pluginFamily": "exporter",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "abiVersion": 1,
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "vCard 3.0 text projection of $EPM to $VCF and back — stateless record transform, no host calls, no threading"
+  },
+  "buildArtifacts": [
+    {
+      "artifactId": "vcard-projection-wasm",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "card_full",
+      "displayName": "Full vCard",
+      "inputPorts": [
+        {
+          "portId": "epm",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EPM FlatBuffer record (the node's signed identity record)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $EPM record to project."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF: FORM FULL, CARD = the UTF-8 vCard 3.0 text verbatim (CRLF, 75-octet folding), MEDIA_TYPE text/vcard, CONFORMANCE {VERSION 3.0, LINE_ENDING CRLF, FOLD_OCTET_WIDTH 75, BYTE_LENGTH}.",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The projected card as one $VCF record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "card_compact",
+      "displayName": "Compact QR vCard",
+      "inputPorts": [
+        {
+          "portId": "epm",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EPM FlatBuffer record."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $EPM record to project."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF: FORM COMPACT, CARD = the UTF-8 vCard 3.0 text verbatim (CRLF, 75-octet folding), MEDIA_TYPE text/vcard, CONFORMANCE {VERSION 3.0, LINE_ENDING CRLF, FOLD_OCTET_WIDTH 75, BYTE_LENGTH, BYTE_BUDGET 1200, WITHIN_BYTE_BUDGET}.",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The projected card as one $VCF record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "card_parse",
+      "displayName": "Parse vCard to EPM fields",
+      "inputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcf-card",
+              "description": "Size-prefixed $VCF; its CARD (vCard 3.0 text) is parsed.",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCF.fbs",
+                  "fileIdentifier": "$VCF",
+                  "rootTypeName": "VCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $VCF card to parse back into EPM fields."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "epm_fields",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-record",
+              "description": "Size-prefixed $EPM carrying only the recovered fields: DN (FN), LEGAL_NAME (ORG), JOB_TITLE (TITLE), EMAIL (contact EMAIL), TELEPHONE (TEL), FAMILY_NAME / GIVEN_NAME (N), and KEYS {PUBLIC_KEY = lower-case hex of the sign / encrypt alias's b64url local part, KEY_TYPE Signing / Encryption}. Unsigned: SIGNATURE is not recovered.",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The recovered EPM fields as one $EPM record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

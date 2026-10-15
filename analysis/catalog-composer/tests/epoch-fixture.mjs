@@ -5,14 +5,15 @@ import { OPM } from 'spacedatastandards.org/lib/js/OPM/OPM.js';
 import { createHash } from 'node:crypto';
 import { NCD } from 'spacedatastandards.org/lib/js/NCD/NCD.js';
 import { ncdContainerFormat } from 'spacedatastandards.org/lib/js/NCD/ncdContainerFormat.js';
-const TYPE={schemaName:'NCD.fbs',fileIdentifier:'$NCD',rootTypeName:'NCD',wireFormat:'aligned-binary',requiredAlignment:8};
+import { epochPolicy, recipeFrame } from './xmt-recipes.mjs';
+const TYPE={schemaName:'NCD.fbs',fileIdentifier:'$NCD',rootTypeName:'NCD',wireFormat:'flatbuffer'};
 function container(text,{format,filename}) {
  const bytes=Buffer.from(text),b=new Builder(1024),kind=b.createString(format),name=b.createString(filename),sha=b.createString(createHash('sha256').update(bytes).digest('hex'));
  NCD.startNCD(b);NCD.addFormat(b,ncdContainerFormat.PROVIDER_DEFINED);NCD.addProviderDefinedFormatName(b,kind);NCD.addInternalFileName(b,name);NCD.addSourceSha256(b,sha);NCD.addSourceByteLength(b,BigInt(bytes.length));NCD.finishSizePrefixedNCDBuffer(b,NCD.endNCD(b));return new Uint8Array(Buffer.concat([b.asUint8Array(),bytes]));
 }
 export const start='2026-09-21T00:00:00Z';
 export const truth=[42000,1000,-500,0,.01,.001];
-export const policy={version:1,propagatorId:'test-affine',propagatorArtifactSha256:'a'.repeat(64),forceModel:{centralBody:false},frameTransformationRef:'test-J2000-identity',holdoutStride:4,positionToleranceKm:.0001,positionPerturbationKm:.01,velocityPerturbationKmS:.00001,positionWeightKm:.00001,positionRegularizationKm:1000,velocityRegularizationKmS:1};
+export const policy={propagatorId:'test-affine',propagatorArtifactSha256:'a'.repeat(64),forceModel:{centralBody:false},frameTransformationRef:'test-J2000-identity',holdoutStride:4,positionToleranceKm:.0001,positionPerturbationKm:.01,velocityPerturbationKmS:.00001,positionWeightKm:.00001,positionRegularizationKm:1000,velocityRegularizationKmS:1};
 export function opm(state,{epoch=start,object='vimpel:10201',frame='J2000'}={}) {
  const b=new Builder(512);const strings=['2.0','','test',object,'','EARTH',frame,'UTC',epoch].map(s=>b.createString(s));
  b.startObject(28);strings.forEach((s,i)=>b.addFieldOffset(i,s,0));state.forEach((v,i)=>b.addFieldFloat64(i+9,v,0));b.finishSizePrefixed(b.endObject(),'$OPM');return b.asUint8Array();
@@ -30,6 +31,6 @@ export function reference({heldoutError=0,filename='010201_20260921_000000',stat
 }
 const scientific=(portId,code,payload)=>({portId,typeRef:{schemaName:code+'.fbs',fileIdentifier:'$'+code,rootTypeName:code},payload});
 export function request(methodId,state,arcs,ref=reference(),recipe=policy) {
- const payload=new TextEncoder().encode(JSON.stringify(recipe));return {methodId,inputs:[{portId:'recipe',typeRef:{wireFormat:'aligned-binary',requiredAlignment:1,byteLength:payload.length},payload},scientific('seed','OPM',opm(state)),{portId:'reference',typeRef:{...TYPE,byteLength:ref.length},payload:ref},...arcs.map(x=>scientific('ephemerides','OEM',x))]};
+ return {methodId,inputs:[recipeFrame(epochPolicy(recipe)),scientific('seed','OPM',opm(state)),{portId:'reference',typeRef:TYPE,payload:ref},...arcs.map(x=>scientific('ephemerides','OEM',x))]};
 }
 export function perturbed(state){return [state,...state.map((_,j)=>state.map((x,k)=>x+(k===j?(j<3?policy.positionPerturbationKm:policy.velocityPerturbationKmS):0)))].map(s=>oemStates(affine(s)));}

@@ -1,27 +1,28 @@
 {
   "pluginId": "com.digitalarsenal.flows.node-activity",
   "name": "SDN Node Activity Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "M2 node-activity flow (mount GET /api/v1/node/activity): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_node_activity classifies it (GET/HEAD -> route=activity, limit=<the ?limit query param clamped in-wasm to [1, 256], default 50>; anything else -> route=error status=405 — PATH is not inspected, the mount carries exactly one resource), hostcap/node-activity activity forwards {\"limit\":N} (the decision's clamped limit, defensively re-clamped to [1, 256] with the same default of 50) to the policy-mediated READ-ONLY node_activity_read.activity hostcall (capability node_activity_read; the host's capPrefixFromName has no mapping for it, so the capability name itself is the op prefix) and emits the raw hostcall result OBJECT verbatim on \"body\" (a live activity-log snapshot — recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit — NOT an SDS record collection, so the bare-array json convention used by the other gateway flows does not apply), and foundation/http-respond assembles the final $HTR envelope (200/405/503) delivered to the host-model egress sink. JSON-ONLY for v1: there is no SDS schema for node activity events (checked spacedatastandards.org/schema — no matching record type), so a flatbuffer presentation is blocked on a future SDS schema addition rather than a hand-written table (generated-types-only rule; fb blocked-on-schema). No ETag/conditional-GET: the activity log changes on every call, so a conditional-GET contract would be pointless. Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs — METHOD/PATH/QUERY/HEADERS/BODY/REMOTE) carries no caller-trust field a flow can read, so the route is declared anonymous:false (operator-gated at the host's auth wall, mirroring flows/node-status's precedent) until the envelope carries trust information a shape node could read to serve a reduced anonymous subset.",
+  "description": "M2 node-activity flow (mount GET /api/v1/node/activity): foundation/http-route route_node_activity decides the $HTQ request as an $APR (GET/HEAD -> route activity + the limit clamped [1,256], default 50; anything else STATUS 405); hostcap/node-activity reads the log through the READ-ONLY node_activity_read.activity hostcall (typed $PIV, capability node_activity_read) and answers an $NEV beside the $APR (or STATUS 503); foundation/http-respond respond renders the $HTR: the $NEV verbatim as FlatBuffers by default, JSON on request. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
+    "clock",
     "node_activity_read"
   ],
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.7.0",
-      "maxVersion": "0.7.0"
+      "minVersion": "0.8.0",
+      "maxVersion": "0.8.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.node-activity",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.2.1",
-      "maxVersion": "0.2.1"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     }
   ],
   "externalInterfaces": [
@@ -31,10 +32,24 @@
       "direction": "bidirectional",
       "capability": "node_activity_read",
       "resource": "sdn://node/activity",
-      "description": "Policy-mediated read-only host node-activity snapshot (recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit).",
+      "description": "Policy-mediated read-only host node-activity log as SDS $PIV hostcalls (node_activity_read.activity -> list events, newest first, bounded by LIMIT); node.peerId (ungated) names the node.",
       "properties": {
         "hostOps": [
-          "node_activity_read.activity"
+          "node_activity_read.activity",
+          "node.peerId"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now (SDS $PIV, TimeValue) stamps NEV.GENERATED_AT_MS.",
+      "properties": {
+        "hostOps": [
+          "clock.now"
         ]
       }
     }
@@ -49,15 +64,16 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request",
+              "setId": "sdn-http-request-envelope",
               "allowedTypes": [
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $HTQ HttpRequest envelope."
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
             }
           ],
           "minStreams": 1,
@@ -76,7 +92,8 @@
                 {
                   "schemaName": "HttpResponseAbi.fbs",
                   "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
@@ -85,7 +102,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
+          "description": "Exactly one $HTR per HTTP exchange."
         }
       ],
       "maxBatch": 1,
@@ -96,12 +113,158 @@
     {
       "schemaName": "HttpRequestAbi.fbs",
       "fileIdentifier": "$HTQ",
-      "rootTypeName": "HttpRequest"
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
     },
     {
       "schemaName": "HttpResponseAbi.fbs",
       "fileIdentifier": "$HTR",
-      "rootTypeName": "HttpResponse"
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NHS.fbs",
+      "fileIdentifier": "$NHS",
+      "rootTypeName": "NHS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NEV.fbs",
+      "fileIdentifier": "$NEV",
+      "rootTypeName": "NEV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CSM.fbs",
+      "fileIdentifier": "$CSM",
+      "rootTypeName": "CSM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     }
   ],
   "runtimeTargets": [
@@ -156,52 +319,85 @@
   ],
   "flowEdges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-activity-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "activity",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "activity-decision",
+      "edgeId": "activity-decision-respond-decision",
       "fromNodeId": "activity",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "activity-body",
+      "edgeId": "activity-activity-respond-activity",
       "fromNodeId": "activity",
-      "fromPortId": "body",
+      "fromPortId": "activity",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "activity",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "NEV.fbs",
+          "fileIdentifier": "$NEV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "NEV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",

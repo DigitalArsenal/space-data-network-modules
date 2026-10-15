@@ -1,201 +1,139 @@
 /*
- * Flow-level tests for the compiled node-status flow (M1 node-status flow) —
- * BRIDGE mode. The SAME artifact a daemon mounts at GET /api/v1/node/status
- * is instantiated in the JS flow runtime host (browser parity): a $HTQ
- * HttpRequest enters the route_node_status node, the route -> node-status
- * status -> http-respond chain runs linked-direct inside the artifact's
- * linear memory, and the ONLY host crossing is the declared
- * node_status_read.status hostcall — stubbed here with the Go-host response
- * dialect (same wire envelope shape flows/public-query/tests/flow.test.mjs
- * uses).
+ * Flow-level tests for the compiled node-status flow (typed contracts 1.0). The SAME artifact a daemon mounts at
+ * GET /api/v1/node/status is instantiated in the JS flow runtime host: a $HTQ enters route_node_status, the $APR
+ * decision and the $NHS answer travel route -> node-status -> http-respond linked-direct inside the artifact, and the
+ * only host crossings are the node's typed $PIV hostcalls (node_status_read.status, node.peerId, clock.now), answered
+ * here on the wire the way a typed host answers them.
  */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 import { decodeHttpResponse, encodeHttpRequest } from "space-data-module-sdk/http";
+import { decodeHostCall, encodeHostCallResult } from "space-data-module-sdk/runtime-contracts";
 
-const STATUS_WASM = new URL("../dist/status/runtime.wasm", import.meta.url);
+const FLOW_WASM = new URL("../dist/status/runtime.wasm", import.meta.url);
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-// ---------------------------------------------------------------------------
-// Hostcall wire helpers (Go-host dialect: [u32le metaLen][meta JSON][u32le
-// segCount]([u32le segLen][bytes])* — node_status_read carries NO binary
-// segments, so segCount is always 0 here).
-// ---------------------------------------------------------------------------
-
-function encodeHostcallEnvelope(meta) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4;
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  view.setUint32(0, metaBytes.length, true);
-  envelope.set(metaBytes, 4);
-  view.setUint32(4 + metaBytes.length, 0, true);
-  return envelope;
+async function loadStandard(code) {
+  const esbuild = await import(pathToFileURL(path.join(STANDARDS_ROOT, "node_modules", "esbuild", "lib", "main.js")).href);
+  const flatbuffersEntry = fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"));
+  const out = await esbuild.build({ entryPoints: [path.join(STANDARDS_ROOT, "lib", "ts", code, "main.ts")], bundle: true, format: "esm", write: false, platform: "neutral", alias: { flatbuffers: flatbuffersEntry }, logLevel: "silent" });
+  return import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
 }
+const flatbuffers = await import(pathToFileURL(fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"))).href);
+const { NHS, nhsServiceState } = await loadStandard("NHS");
+const { APR } = await loadStandard("APR");
 
-function decodeHostcallEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  return { meta };
-}
-
-const STATUS_RESULT = {
-  uptime_seconds: 98765,
-  started_at: "2026-07-01T00:00:00Z",
-  store: { total_bytes: 104857600, total_records: 4213, storage_path: "/var/lib/sdn/store" },
-  disk: { capacity_bytes: 500000000000, free_bytes: 250000000000, available_bytes: 240000000000 },
-  service: { state: "running", mode: "daemon", autostart_known: false },
-  bandwidth: {
-    total_in_bytes: 1024,
-    total_out_bytes: 2048,
-    rate_in_bps: 12.5,
-    rate_out_bps: 25.0,
-    history: [],
-  },
+const NOW_MS = 1791900000123n;
+const REPORT = {
+  UPTIME_S: 98765n, STARTED_MS: 1791801235000n, STORE_TOTAL_BYTES: 104857600n, STORE_TOTAL_RECORDS: 4213n, STORAGE_PATH: "/var/lib/sdn/store",
+  HAS_DISK: true, DISK_CAPACITY_BYTES: 500000000000n, DISK_FREE_BYTES: 250000000000n, DISK_AVAILABLE_BYTES: 240000000000n,
+  SERVICE_STATE: "running", SERVICE_MODE: "daemon", HAS_BANDWIDTH: true, TOTAL_IN_BYTES: 1024n, TOTAL_OUT_BYTES: 2048n, RATE_IN_BPS: 12.5, RATE_OUT_BPS: 25,
 };
+const HISTORY = [{ TS_MS: 1791899990000n, TOTAL_IN_BYTES: 1000n, TOTAL_OUT_BYTES: 2000n, RATE_IN_BPS: 10, RATE_OUT_BPS: 20 }];
 
-// ---------------------------------------------------------------------------
-// Hostcall stub.
-// ---------------------------------------------------------------------------
-
-function createStatusStub({ result, fail } = {}) {
+// A typed host on the wire: each $PIV call is decoded and answered with a $PIV response.
+function typedHost({ fail } = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-
+  const answer = (call) => {
+    if (call.op === "node_status_read.status") {
+      if (fail) throw Object.assign(new Error(fail), { code: "failed" });
+      return { result: REPORT, lists: { bandwidth_history: HISTORY } };
+    }
+    if (call.op === "node.peerId") return { raw: { value: "16Uiu2HAmSelfNode" } };
+    if (call.op === "clock.now") return { result: { UNIX_MS: NOW_MS } };
+    throw Object.assign(new Error(`unexpected op ${call.op}`), { code: "unsupported" });
+  };
   const imports = {
     space_data_module_host: {
-      call(opPtr, opLen, payloadPtr, payloadLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta: requestPayload } = decodeHostcallEnvelope(payload);
-        calls.push({ operation, payload: requestPayload });
-
-        if (operation === "node_status_read.status") {
-          if (fail) {
-            response = encodeHostcallEnvelope({ ok: false, error: { message: fail } });
-            return 1;
-          }
-          response = encodeHostcallEnvelope({ ok: true, result });
-          return 0;
-        }
-        response = encodeHostcallEnvelope({ ok: false, error: { message: `unexpected op ${operation}` } });
-        return 1;
+      call(opPtr, opLen, ptr, len) {
+        const call = decodeHostCall(new Uint8Array(memoryRef.memory.buffer).slice(ptr, ptr + len));
+        calls.push(call);
+        let out;
+        try { out = { ok: true, op: call.op, ...answer(call) }; } catch (error) { out = { ok: false, error: { code: error.code, message: error.message } }; }
+        response = encodeHostCallResult(out);
+        return 0;
       },
-      response_len() {
-        return response.length;
-      },
-      read_response(dstPtr, dstLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const length = Math.min(dstLen, response.length);
-        heap.set(response.subarray(0, length), dstPtr);
-        return length;
+      response_len: () => response.length,
+      read_response(dst, len) {
+        const n = Math.min(len, response.length);
+        new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, n), dst);
+        return n;
       },
     },
   };
   return { calls, imports, memoryRef };
 }
 
-async function pumpRequest(stub, request) {
-  const host = await createFlowRuntimeHost({
-    wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(STATUS_WASM))),
-    extraImports: stub.imports,
-    // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
-    // when the caller states it. Without this the artifact's declared
-    // runtimeTargets are never checked here at all.
-    runtimeTarget: "wasmedge",
-  });
-  stub.memoryRef.memory = host.memory;
-
+async function serve(host, request) {
+  const runtime = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(FLOW_WASM))), extraImports: host.imports, runtimeTarget: "wasmedge" });
+  host.memoryRef.memory = runtime.memory;
   const responses = [];
-  host.enqueueTriggerFrame(0, {
-    portId: "request",
-    bytes: encodeHttpRequest(request),
-  });
-  await host.drain(
-    {
-      "sdn.flow.egress:emit": ({ frames }) => {
-        for (const frame of frames) {
-          responses.push(decodeHttpResponse(frame.bytes));
-        }
-        return { statusCode: 0 };
-      },
-    },
-    { maxIterations: 100 },
-  );
-  assert.equal(responses.length, 1, "expected exactly one $HTR frame");
-  return responses[0];
+  runtime.enqueueTriggerFrame(0, { portId: "request", bytes: encodeHttpRequest(request) });
+  await runtime.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) responses.push(decodeHttpResponse(f.bytes)); return { statusCode: 0 }; } }, { maxIterations: 100 });
+  assert.equal(responses.length, 1, "exactly one $HTR");
+  const [http] = responses;
+  http.header = (name) => http.headers.find((h) => h.name === name)?.value;
+  http.json = () => JSON.parse(new TextDecoder().decode(http.body));
+  return http;
 }
 
-function header(http, name) {
-  for (const entry of http.headers ?? []) {
-    if (entry.name === name) return entry.value;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Tests.
-// ---------------------------------------------------------------------------
-
-test("node status: GET returns 200 with the hostcall result object verbatim as a bare JSON object", async () => {
-  const stub = createStatusStub({ result: STATUS_RESULT });
-  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/node/status", query: "" });
+test("GET answers the node's $NHS verbatim as FlatBuffers", async () => {
+  const host = typedHost();
+  const http = await serve(host, { method: "GET", path: "/api/v1/node/status" });
   assert.equal(http.status, 200);
-  assert.equal(header(http, "content-type"), "application/json");
-  assert.deepEqual(JSON.parse(decoder.decode(http.body)), STATUS_RESULT);
-  // Object-shaped body: the bare-array record-count header must not appear.
-  assert.equal(header(http, "x-sdn-record-count"), undefined);
-
-  assert.equal(stub.calls.length, 1);
-  assert.equal(stub.calls[0].operation, "node_status_read.status");
-  assert.deepEqual(stub.calls[0].payload, {}, "the hostcall input carries no fields");
+  assert.equal(http.header("content-type"), "application/x-flatbuffers");
+  assert.equal(http.header("x-sdn-file-identifier"), "$NHS");
+  const bb = new flatbuffers.ByteBuffer(http.body);
+  assert.ok(NHS.bufferHasIdentifier(bb));
+  const nhs = NHS.getRootAsNHS(bb).unpack();
+  assert.equal(nhs.NODE_ID, "16Uiu2HAmSelfNode");
+  assert.equal(BigInt(nhs.GENERATED_AT_MS), NOW_MS);
+  assert.equal(nhs.SERVICE_STATE, nhsServiceState.Running);
+  assert.deepEqual([BigInt(nhs.UPTIME_S), BigInt(nhs.STARTED_AT_MS), nhs.STORAGE_PATH, BigInt(nhs.DISK_FREE_BYTES), nhs.HAS_NETWORK, nhs.RATE_OUT_BPS], [98765n, 1791801235000n, "/var/lib/sdn/store", 250000000000n, true, 25]);
+  assert.equal(nhs.THROUGHPUT_HISTORY.length, 1);
+  assert.deepEqual(host.calls.map((c) => c.op).sort(), ["clock.now", "node.peerId", "node_status_read.status"]);
 });
 
-test("node status: HEAD is routed like GET (route=status)", async () => {
-  const stub = createStatusStub({ result: STATUS_RESULT });
-  const http = await pumpRequest(stub, { method: "HEAD", path: "/api/v1/node/status", query: "" });
-  assert.equal(http.status, 200);
-  assert.equal(stub.calls.length, 1);
+test("?format=json (or Accept: application/json) renders the same $NHS with its IDL field names", async () => {
+  const http = await serve(typedHost(), { method: "GET", path: "/api/v1/node/status", query: "format=json" });
+  assert.equal(http.header("content-type"), "application/json");
+  const body = http.json();
+  assert.deepEqual([body.NODE_ID, body.SERVICE_STATE, body.UPTIME_S, body.STORE_TOTAL_RECORDS, body.HAS_DISK, body.RATE_IN_BPS], ["16Uiu2HAmSelfNode", "Running", 98765, 4213, true, 12.5]);
+  assert.deepEqual(body.THROUGHPUT_HISTORY, [{ TIME_MS: 1791899990000, TOTAL_IN_BYTES: 1000, TOTAL_OUT_BYTES: 2000, RATE_IN_BPS: 10, RATE_OUT_BPS: 20 }]);
+  const byAccept = await serve(typedHost(), { method: "HEAD", path: "/api/v1/node/status", headers: { Accept: "application/json" } });
+  assert.deepEqual([byAccept.status, byAccept.header("content-type")], [200, "application/json"]);
 });
 
-test("node status: non-GET/HEAD methods answer 405 without reaching the host", async () => {
-  const stub = createStatusStub({ result: STATUS_RESULT });
-  const http = await pumpRequest(stub, { method: "POST", path: "/api/v1/node/status", query: "" });
+test("a non-GET method answers 405 without reaching the host", async () => {
+  const host = typedHost();
+  const http = await serve(host, { method: "POST", path: "/api/v1/node/status", query: "format=json" });
   assert.equal(http.status, 405);
-  assert.equal(header(http, "content-type"), "application/json");
-  const body = JSON.parse(decoder.decode(http.body));
-  assert.match(body.error, /POST/);
-  assert.equal(stub.calls.length, 0, "non-GET/HEAD must never reach the host");
+  assert.deepEqual(http.json(), { error: "no POST route for node status (GET only)", code: "method-not-allowed" });
+  assert.equal(host.calls.length, 0);
+  const fb = await serve(typedHost(), { method: "DELETE", path: "/api/v1/node/status" });
+  assert.equal(fb.status, 405);
+  assert.equal(APR.getRootAsAPR(new flatbuffers.ByteBuffer(fb.body)).ERROR_CODE(), "method-not-allowed", "the refusal record itself, as FlatBuffers");
 });
 
-test("node status: a node_status_read.status hostcall failure answers an honest 503", async () => {
-  const stub = createStatusStub({ fail: "node status snapshot unavailable" });
-  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/node/status", query: "" });
+test("a node_status_read failure answers an honest 503", async () => {
+  const http = await serve(typedHost({ fail: "node status snapshot unavailable" }), { method: "GET", path: "/api/v1/node/status", query: "format=json" });
   assert.equal(http.status, 503);
-  assert.equal(header(http, "content-type"), "application/json");
-  const body = JSON.parse(decoder.decode(http.body));
-  assert.match(body.error, /unavailable/);
+  assert.equal(http.json().code, "status-unavailable");
+  assert.match(http.json().error, /unavailable/);
 });
 
-test("node status bundle carries the api block for the OpenAPI generator", () => {
-  const flow = JSON.parse(
-    fs.readFileSync(fileURLToPath(new URL("../dist/status/flow.json", import.meta.url)), "utf8"),
-  );
+test("the bundle carries the api block for the OpenAPI generator", () => {
+  const flow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/status/flow.json", import.meta.url)), "utf8"));
   assert.equal(flow.api.basePath, "/api/v1/node/status");
-  assert.deepEqual(
-    flow.api.routes.map((route) => [route.method, route.path, route.anonymous]),
-    [["GET", "", false]],
-  );
-  assert.ok(flow.api.routes[0].responses["405"], "non-GET rejection documented");
-  assert.ok(flow.api.routes[0].responses["503"], "hostcall-unavailable rejection documented");
+  assert.deepEqual(flow.api.routes.map((r) => [r.method, r.path, r.anonymous]), [["GET", "", false]]);
+  assert.deepEqual(Object.keys(flow.api.routes[0].responses["200"].content).sort(), ["application/json", "application/x-flatbuffers"]);
+  assert.ok(flow.api.routes[0].responses["405"] && flow.api.routes[0].responses["503"]);
 });

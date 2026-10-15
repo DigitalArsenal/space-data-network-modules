@@ -5,7 +5,11 @@
  * Three methods:
  *   card_full   — full contact card + verification chain + photo
  *   card_compact — QR-density card (sign/encrypt/epmsig only, ≤1200 bytes)
- *   card_parse   — vCard text → EPM fields JSON
+ *   card_parse   — $VCF card → $EPM carrying the recovered fields
+
+ * Typed contracts 1.0: $EPM in, $VCF out (CARD = the vCard text verbatim) for the
+ * projections; $VCF in, $EPM out for the parse. Every frame is a size-prefixed SDS
+ * FlatBuffer; no JSON or loose text travels between modules.
  *
  * No capabilities: no I/O, no signing, no key derivation, no network.
  * §21 (owner ruling 2026-08-19): sign/encrypt aliases carry b64url(literal
@@ -25,7 +29,7 @@
 #include <sstream>
 
 #include "space_data_module_invoke.h"
-// EPM generated headers are inlined by build.mjs and joined before this source.
+// The EPM and VCF generated headers are inlined by build.mjs ahead of this source.
 
 namespace {
 
@@ -366,7 +370,43 @@ std::string projectCompactCard(const EPM* epm) {
 
 // ── vCard → EPM fields (card_parse) ───────────────────────────────────────
 
-std::string parseVCardToFields(const uint8_t* data, size_t len) {
+// The fields card_parse recovers (the same set the JSON form carried).
+struct ParsedFields {
+    std::string dn, legal_name, job_title, email, telephone, family_name, given_name;
+    std::string signing_public_key, encryption_public_key;  // hex of the alias's b64url local part
+};
+
+// raw (unpadded) base64url → lower-case hex; "" when the text is not base64url.
+std::string b64urlToHex(const std::string& in) {
+    auto val = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '-') return 62;
+        if (c == '_') return 63;
+        return -1;
+    };
+    if (in.empty() || in.size() % 4 == 1) return "";
+    std::vector<uint8_t> bytes;
+    uint32_t acc = 0;
+    int bits = 0;
+    for (char c : in) {
+        const int v = val(c);
+        if (v < 0) return "";
+        acc = (acc << 6) | static_cast<uint32_t>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
+        }
+    }
+    static const char hex[] = "0123456789abcdef";
+    std::string out;
+    for (uint8_t b : bytes) { out += hex[b >> 4]; out += hex[b & 15]; }
+    return out;
+}
+
+ParsedFields parseVCardToFields(const uint8_t* data, size_t len) {
     // Simple vCard line parser — unfold continuation lines, split properties.
     std::string text(data, data + len);
     // Unfold: join "\r\n " or "\n " continuation lines
@@ -384,14 +424,10 @@ std::string parseVCardToFields(const uint8_t* data, size_t len) {
         }
     }
 
-    // Parse into JSON — the recovered EPM fields
-    std::string json = "{";
-    bool first = true;
-    auto addField = [&](const std::string& key, const std::string& value) {
-        if (value.empty()) return;
-        if (!first) json += ",";
-        first = false;
-        json += "\"" + key + "\":\"" + value + "\"";
+    // The first non-empty value of each field wins, as the JSON form's first key did.
+    ParsedFields f;
+    auto set = [](std::string& field, const std::string& value) {
+        if (!value.empty() && field.empty()) field = value;
     };
 
     std::istringstream iss(unfolded);
@@ -404,40 +440,81 @@ std::string parseVCardToFields(const uint8_t* data, size_t len) {
         const std::string name = line.substr(0, colon);
         const std::string value = line.substr(colon + 1);
 
-        if (name == "FN") addField("dn", value);
-        else if (name == "ORG") addField("legal_name", value);
-        else if (name == "TITLE") addField("job_title", value);
+        if (name == "FN") set(f.dn, value);
+        else if (name == "ORG") set(f.legal_name, value);
+        else if (name == "TITLE") set(f.job_title, value);
         else if (name == "EMAIL" && name.find("type=") == std::string::npos) {
             // Contact email (not an alias) — simple heuristic: aliases have type= sign/encrypt/etc.
             if (value.find("@") != std::string::npos &&
                 value.find(".spacedatanetwork.org") == std::string::npos) {
-                addField("email", value);
+                set(f.email, value);
             }
         }
-        else if (name == "TEL") addField("telephone", value);
+        else if (name == "TEL") set(f.telephone, value);
         // N: family;given;additional;prefix;suffix
         else if (name == "N") {
             const size_t sc1 = value.find(';');
             const size_t sc2 = value.find(';', sc1 + 1);
-            const size_t sc3 = value.find(';', sc2 + 1);
-            const size_t sc4 = value.find(';', sc3 + 1);
-            if (sc1 != std::string::npos) addField("family_name", value.substr(0, sc1));
-            if (sc2 != std::string::npos) addField("given_name", value.substr(sc1 + 1, sc2 - sc1 - 1));
+            if (sc1 != std::string::npos) set(f.family_name, value.substr(0, sc1));
+            if (sc2 != std::string::npos) set(f.given_name, value.substr(sc1 + 1, sc2 - sc1 - 1));
         }
-        // Alias emails → recovered keys
+        // Alias emails → recovered literal public keys (b64url local part → hex, the EPM PUBLIC_KEY form)
         else if (name.find("type=sign") != std::string::npos) {
-            // b64url local part → would need b64url decode → hex to recover public_key
-            // For now, record the alias value
             const size_t at = value.find('@');
-            if (at != std::string::npos) addField("signing_public_key", value.substr(0, at));
+            if (at != std::string::npos) set(f.signing_public_key, b64urlToHex(value.substr(0, at)));
         }
         else if (name.find("type=encrypt") != std::string::npos) {
             const size_t at = value.find('@');
-            if (at != std::string::npos) addField("encryption_public_key", value.substr(0, at));
+            if (at != std::string::npos) set(f.encryption_public_key, b64urlToHex(value.substr(0, at)));
         }
     }
-    json += "}";
-    return json;
+    return f;
+}
+
+// The recovered fields as one size-prefixed $EPM (absent fields stay absent).
+void buildParsedEPM(const ParsedFields& f, ::flatbuffers::FlatBufferBuilder& b) {
+    auto str = [&](const std::string& v) { return v.empty() ? ::flatbuffers::Offset<::flatbuffers::String>() : b.CreateString(v); };
+    std::vector<::flatbuffers::Offset<CryptoKey>> keys;
+    if (!f.signing_public_key.empty())
+        keys.push_back(CreateCryptoKey(b, str(f.signing_public_key), 0, 0, 0, 0, 0, KeyType_Signing));
+    if (!f.encryption_public_key.empty())
+        keys.push_back(CreateCryptoKey(b, str(f.encryption_public_key), 0, 0, 0, 0, 0, KeyType_Encryption));
+    const auto keysVec = keys.empty() ? ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CryptoKey>>>() : b.CreateVector(keys);
+    const auto dn = str(f.dn), legal = str(f.legal_name), family = str(f.family_name), given = str(f.given_name),
+               job = str(f.job_title), email = str(f.email), tel = str(f.telephone);
+    EPMBuilder e(b);
+    if (!dn.IsNull()) e.add_DN(dn);
+    if (!legal.IsNull()) e.add_LEGAL_NAME(legal);
+    if (!family.IsNull()) e.add_FAMILY_NAME(family);
+    if (!given.IsNull()) e.add_GIVEN_NAME(given);
+    if (!job.IsNull()) e.add_JOB_TITLE(job);
+    if (!email.IsNull()) e.add_EMAIL(email);
+    if (!tel.IsNull()) e.add_TELEPHONE(tel);
+    if (!keysVec.IsNull()) e.add_KEYS(keysVec);
+    FinishSizePrefixedEPMBuffer(b, e.Finish());
+}
+
+// The projected card text as one size-prefixed $VCF: CARD verbatim, the form, and the
+// conformance facts this emitter fixes (vCard 3.0, CRLF, 75-octet folding).
+void buildCardVCF(const std::string& card, vcfCardForm form, ::flatbuffers::FlatBufferBuilder& b) {
+    const bool compact = form == vcfCardForm_COMPACT;
+    const auto conformance = CreateVCFConformanceDirect(
+        b, "3.0", nullptr, vcfLineEnding_CRLF, static_cast<uint32_t>(kFoldLimit),
+        static_cast<uint32_t>(card.size()), 0, compact ? static_cast<uint32_t>(kQrMaxBytes) : 0,
+        compact && card.size() <= kQrMaxBytes);
+    const auto cardText = b.CreateString(card);
+    const auto mediaType = b.CreateString("text/vcard");
+    VCFBuilder v(b);
+    v.add_FORM(form);
+    v.add_CARD(cardText);
+    v.add_MEDIA_TYPE(mediaType);
+    v.add_CONFORMANCE(conformance);
+    FinishSizePrefixedVCFBuffer(b, v.Finish());
+}
+
+int pushTyped(const char* port, const char* schema, const char* fid, const char* root, const ::flatbuffers::FlatBufferBuilder& b) {
+    return plugin_push_output_ex(port, schema, fid, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
+                                 b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
 }
 
 // ── input frame helper ──────────────────────────────────────────────────────
@@ -448,6 +525,8 @@ const EPM* readEPMFromInput(const char* portId) {
     const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
     if (!frame || frame->payload_length == 0 || !frame->payload) return nullptr;
     // Size-prefixed EPM: the frame payload includes the 4-byte size prefix
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifySizePrefixedEPMBuffer(verifier)) return nullptr;
     return GetSizePrefixedEPM(frame->payload);
 }
 
@@ -464,10 +543,12 @@ int card_full(void) {
         return 400;
     }
     const std::string vcard = projectFullCard(epm);
-    plugin_push_output_ex("vcard", nullptr, nullptr,
-                           PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                           reinterpret_cast<const uint8_t*>(vcard.data()),
-                           static_cast<uint32_t>(vcard.size()));
+    ::flatbuffers::FlatBufferBuilder b(vcard.size() + 256);
+    buildCardVCF(vcard, vcfCardForm_FULL, b);
+    if (pushTyped("vcard", "VCF.fbs", VCFIdentifier(), "VCF", b) < 0) {
+        plugin_set_error("output-failed", "card_full could not emit its $VCF frame.");
+        return 500;
+    }
     return 0;
 }
 
@@ -483,30 +564,44 @@ int card_compact(void) {
                          "compact card exceeds the 1200-byte QR budget");
         return 422;
     }
-    plugin_push_output_ex("vcard", nullptr, nullptr,
-                           PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                           reinterpret_cast<const uint8_t*>(vcard.data()),
-                           static_cast<uint32_t>(vcard.size()));
+    ::flatbuffers::FlatBufferBuilder b(vcard.size() + 256);
+    buildCardVCF(vcard, vcfCardForm_COMPACT, b);
+    if (pushTyped("vcard", "VCF.fbs", VCFIdentifier(), "VCF", b) < 0) {
+        plugin_set_error("output-failed", "card_compact could not emit its $VCF frame.");
+        return 500;
+    }
     return 0;
 }
 
 int card_parse(void) {
     const int32_t idx = plugin_find_input_index("vcard", 0);
     if (idx < 0) {
-        plugin_set_error("missing-vcard-frame", "card_parse requires the vCard text frame.");
+        plugin_set_error("missing-vcard-frame", "card_parse requires the $VCF card frame.");
         return 400;
     }
     const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
     if (!frame || frame->payload_length == 0 || !frame->payload) {
-        plugin_set_error("empty-vcard", "card_parse received an empty vCard.");
+        plugin_set_error("empty-vcard", "card_parse received an empty $VCF frame.");
         return 400;
     }
-    const std::string json = parseVCardToFields(
-        static_cast<const uint8_t*>(frame->payload), frame->payload_length);
-    plugin_push_output_ex("epm_fields", nullptr, nullptr,
-                           PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                           reinterpret_cast<const uint8_t*>(json.data()),
-                           static_cast<uint32_t>(json.size()));
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifySizePrefixedVCFBuffer(verifier)) {
+        plugin_set_error("invalid-vcf", "card_parse requires one size-prefixed $VCF record.");
+        return 400;
+    }
+    const VCF* card = GetSizePrefixedVCF(frame->payload);
+    const auto* text = card->CARD();
+    if (!text || text->size() == 0) {
+        plugin_set_error("empty-vcard", "card_parse received a $VCF with an empty CARD.");
+        return 400;
+    }
+    const ParsedFields fields = parseVCardToFields(reinterpret_cast<const uint8_t*>(text->data()), text->size());
+    ::flatbuffers::FlatBufferBuilder b(512);
+    buildParsedEPM(fields, b);
+    if (pushTyped("epm_fields", "EPM.fbs", EPMIdentifier(), "EPM", b) < 0) {
+        plugin_set_error("output-failed", "card_parse could not emit its $EPM frame.");
+        return 500;
+    }
     return 0;
 }
 

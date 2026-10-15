@@ -1,26 +1,42 @@
 /*
- * Flow-level tests for the compiled weathernext-ingest flows — BRIDGE mode.
+ * Flow-level tests for the compiled weathernext-ingest flows — BRIDGE mode, typed contracts 1.0.
  * The SAME artifacts the Go host serves from cron timers are instantiated in
- * the JS flow runtime host (WasmEdge leg): a timer tick enters the request-
+ * the JS flow runtime host (WasmEdge leg): a TimerTick enters the request-
  * builder node, the whole plan -> fetch -> parse -> ingest chain runs
- * linked-direct inside the artifact's linear memory, and the ONLY host
- * crossings are the declared hostcalls: plugin.getConfig (node config),
- * http.request (fetch) and storage.ingest_with_source (guarded persistence).
- * secrets.get is never expected here (auth mode none); a call to it fails
- * the stub loudly.
+ * linked-direct inside the artifact's linear memory (HttpRequest / HttpResponse
+ * frames with the parse job in CONTEXT, IngestRequest + record stream into
+ * storage-ingest), and the ONLY host crossings are the declared hostcalls, each
+ * an SDS $PIV invocation: plugin.getConfig (one ModuleConfig on raw "config"), http.request
+ * (fetch) and storage.ingest_with_source (guarded persistence). secrets.get is
+ * never expected here (auth mode none); a call to it fails the stub loudly.
  */
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import {
+  decodeFlowNotice,
+  decodeHostCall,
+  decodeHttpResponse,
+  decodeIngestResult,
+  encodeHostCallResult, encodeModuleConfig,
+  encodeTimerTick,
+  identifierOf,
+} from "space-data-module-sdk/runtime-contracts";
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const STANDARDS_ROOT =
+  process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const WXF_LIB = pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/WXF/main.js"));
+const flatbuffers = createRequire(WXF_LIB)("flatbuffers");
+const wxfLib = await import(WXF_LIB.href);
 
 const CLOUDS_WASM = new URL("../dist/clouds/runtime.wasm", import.meta.url);
 const CYCLONES_WASM = new URL("../dist/cyclones/runtime.wasm", import.meta.url);
@@ -60,116 +76,61 @@ function sha256Hex(parts) {
   return hash.digest("hex");
 }
 
-function encodeHostcallEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4 + segments.reduce((sum, segment) => sum + 4 + segment.length, 0);
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  envelope.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    envelope.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return envelope;
-}
+const headerBlock = (headers = {}) => Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join("\r\n");
+const headersOf = (block) => Object.fromEntries((block ? decoder.decode(block) : "").split(/\r?\n/).filter(Boolean).map((line) => {
+  const at = line.indexOf(":");
+  return [line.slice(0, at).trim().toLowerCase(), line.slice(at + 1).trim()];
+}));
 
-function decodeHostcallEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
-  const metaLen = view.getUint32(offset, true);
-  offset += 4;
-  const meta = JSON.parse(decoder.decode(bytes.subarray(offset, offset + metaLen)));
-  offset += metaLen;
-  const segmentCount = view.getUint32(offset, true);
-  offset += 4;
-  const segments = [];
-  for (let i = 0; i < segmentCount; i++) {
-    const segmentLen = view.getUint32(offset, true);
-    offset += 4;
-    segments.push(Uint8Array.from(bytes.subarray(offset, offset + segmentLen)));
-    offset += segmentLen;
-  }
-  return { meta, segments };
-}
-
-// Hostcall stub speaking the Go-host dialect: config inside {ok, result},
-// http bodies back as base64 strings with body_encoding, ingest answers as
-// {"ok":true,"result":{...}}. secrets.get is NOT answered: auth mode none
-// must never reach it.
+// Hostcall stub speaking the Go host's typed dialect: each call an SDS $PIV request, each answer a $PIV response.
+// secrets.get is NOT answered: auth mode none must never reach it.
 function createIngestHostStub({ fetches, config = {} }) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-
+  const answer = (call) => {
+    if (call.op === "plugin.getConfig") return encodeHostCallResult({ ok: true, op: call.op, raw: { config: encodeModuleConfig(config) } });
+    if (call.op === "http.request") {
+      const url = decoder.decode(call.raw.url);
+      const spec = fetches[url];
+      return encodeHostCallResult({ ok: true, op: call.op, result: { STATUS: spec ? spec.status ?? 200 : 404, RETRIEVED_MS: BigInt(Date.UTC(2026, 8, 3, 12, 0, 1)) },
+        raw: { url, headers: headerBlock(spec?.headers), body: spec ? new Uint8Array(Buffer.from(spec.body)) : new Uint8Array(0) } });
+    }
+    if (call.op === "storage.ingest_with_source") {
+      const records = Buffer.from(call.raw.records);
+      let count = 0;
+      for (let off = 0; off < records.length;) { off += 4 + records.readUInt32LE(off); count++; }
+      return encodeHostCallResult({ ok: true, op: call.op, result: { SCHEMA: call.params.SCHEMA, BATCH_ID: call.params.BATCH_ID, INSERTED: BigInt(count),
+        ARCHIVED: call.raw.archive ? `/raw/${call.params.ARCHIVE_SOURCE}/${call.params.ARCHIVE_NAME}` : "" } });
+    }
+    return encodeHostCallResult({ ok: false, error: { code: "unsupported", message: `unexpected op ${call.op}` } });
+  };
   const imports = {
     space_data_module_host: {
       call(opPtr, opLen, payloadPtr, payloadLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta, segments } = decodeHostcallEnvelope(payload);
-        calls.push({ operation, meta, segments });
-
-        if (operation === "plugin.getConfig") {
-          response = encodeHostcallEnvelope({ ok: true, result: config });
-          return 0;
-        }
-        if (operation === "http.request") {
-          const fetchSpec = fetches[meta.url];
-          if (!fetchSpec) {
-            response = encodeHostcallEnvelope({
-              ok: true,
-              result: { status: 404, headers: {}, body: "", body_encoding: "base64" },
-            });
-            return 0;
-          }
-          response = encodeHostcallEnvelope({
-            ok: true,
-            result: {
-              status: fetchSpec.status ?? 200,
-              headers: fetchSpec.headers ?? {},
-              body: Buffer.from(fetchSpec.body).toString("base64"),
-              body_encoding: "base64",
-            },
-          });
-          return 0;
-        }
-        if (operation === "storage.ingest_with_source") {
-          const recordsRef = meta.records?.$bin ?? 0;
-          const records = Buffer.from(segments[recordsRef]);
-          let count = 0;
-          for (let off = 0; off < records.length; ) {
-            const len = records.readUInt32LE(off);
-            off += 4 + len;
-            count++;
-          }
-          response = encodeHostcallEnvelope({
-            ok: true,
-            result: { schema: meta.schema, inserted: count, batch_id: meta.batch_id },
-          });
-          return 0;
-        }
-        response = encodeHostcallEnvelope({ ok: false, message: `unexpected op ${operation}` });
-        return 1;
+        const call = decodeHostCall(new Uint8Array(memoryRef.memory.buffer, payloadPtr, payloadLen).slice());
+        calls.push(call);
+        response = answer(call);
+        return 0;
       },
-      response_len() {
-        return response.length;
-      },
+      response_len() { return response.length; },
       read_response(dstPtr, dstLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
         const length = Math.min(dstLen, response.length);
-        heap.set(response.subarray(0, length), dstPtr);
+        new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, length), dstPtr);
         return length;
       },
     },
   };
   return { calls, imports, memoryRef };
+}
+
+// Egress frames are FlatBuffers: IngestResult, FlowNotice, HttpResponse (the publication's answer).
+function decodeEgress(bytes) {
+  const id = identifierOf(bytes);
+  if (id === "INGR") return { type: "INGR", ...decodeIngestResult(bytes) };
+  if (id === "FNTC") return { type: "FNTC", ...decodeFlowNotice(bytes) };
+  if (id === "HRSP") return { type: "HRSP", ...decodeHttpResponse(bytes) };
+  throw new Error(`egress frame of unexpected type ${id}`);
 }
 
 async function runFlowOnce(wasmURL, stub) {
@@ -183,31 +144,46 @@ async function runFlowOnce(wasmURL, stub) {
   stub.memoryRef.memory = host.memory;
 
   const results = [];
-  host.enqueueTriggerFrame(0, {
-    portId: "tick",
-    bytes: encoder.encode(JSON.stringify({ firedAt: "2026-09-03T12:00:00Z" })),
-  });
+  host.enqueueTriggerFrame(0, { portId: "tick", bytes: encodeTimerTick({ triggerId: "timer", firedMs: Date.UTC(2026, 8, 3, 12) }) });
   await host.drain({
     "sdn.flow.egress:emit": ({ frames }) => {
-      for (const frame of frames) results.push(JSON.parse(decoder.decode(frame.bytes)));
+      for (const frame of frames) results.push(decodeEgress(Uint8Array.from(frame.bytes)));
       return { statusCode: 0 };
     },
   });
   return results;
 }
 
-const opCalls = (stub, operation) => stub.calls.filter((call) => call.operation === operation);
+const opCalls = (stub, op) => stub.calls.filter((call) => call.op === op);
 const ingestCalls = (stub) => opCalls(stub, "storage.ingest_with_source");
 const httpCalls = (stub) => opCalls(stub, "http.request");
 const secretsCalls = (stub) => opCalls(stub, "secrets.get");
+const urlOf = (call) => decoder.decode(call.raw.url);
 
 function publishBodies(stub) {
-  return httpCalls(stub)
-    .filter((call) => call.meta.url === PUBLISH_URL)
-    .map((call) => {
-      const bodyRef = call.meta.body?.$bin ?? 0;
-      return JSON.parse(Buffer.from(call.segments[bodyRef]).toString("utf8"));
-    });
+  return httpCalls(stub).filter((call) => urlOf(call) === PUBLISH_URL).map((call) => {
+    assert.equal(call.params.METHOD, "POST");
+    assert.deepEqual(headersOf(call.raw.headers), { "content-type": "application/octet-stream" });
+    // the BODY is the stored batch's IngestResult (INGR)
+    const bytes = Uint8Array.from(call.raw.body);
+    assert.equal(identifierOf(bytes), "INGR");
+    const { schema, providerId, sourceName, batchId, inserted, refused } = decodeIngestResult(bytes);
+    assert.equal(refused, "");
+    assert.ok(inserted > 0, "the publication carries the stored count");
+    return { schema, providerId, sourceName, batchId };
+  });
+}
+
+function splitRecords(bytes, identifier) {
+  const records = Buffer.from(bytes);
+  const out = [];
+  for (let off = 0; off < records.length;) {
+    const len = records.readUInt32LE(off);
+    assert.equal(records.subarray(off + 8, off + 12).toString("latin1"), identifier);
+    out.push(Uint8Array.from(records.subarray(off + 4, off + 4 + len)));
+    off += 4 + len;
+  }
+  return out;
 }
 
 const PUBLISH_FETCH = {
@@ -221,43 +197,62 @@ test("clouds: timer tick -> plan -> 3 chunk fetches -> parse -> ONE attributed $
 
   const fetches = httpCalls(stub);
   assert.deepEqual(
-    fetches.map((call) => call.meta.url),
+    fetches.map(urlOf),
     Object.keys(CHUNK_FETCHES),
     "one GET per array, in plan order",
   );
   for (const call of fetches) {
-    assert.equal(call.meta.method, "GET");
-    assert.equal(call.meta.headers?.authorization, undefined, "auth none: no bearer header");
+    assert.equal(call.params.METHOD, "GET");
+    assert.equal(call.params.TIMEOUT_MS, 90000);
+    assert.equal(call.raw.headers, undefined, "auth none: no header block, no bearer");
   }
   assert.equal(secretsCalls(stub).length, 0, "auth none never reads the credential lane");
 
   const ingests = ingestCalls(stub);
   assert.equal(ingests.length, 1, "one ingest for the whole chunk batch");
   const ingest = ingests[0];
-  assert.equal(ingest.meta.schema, "WXF.fbs");
-  assert.equal(ingest.meta.provider_id, "weathernext");
-  assert.equal(ingest.meta.source_name, "weathernext3-clouds-0p1deg");
-  assert.equal(ingest.meta.batch_id, sha256Hex(CHUNK_BODIES), "batch = sha256 of the chunk bodies in port order");
-  assert.equal(ingest.meta.reconcile, "duplicates");
-  assert.equal(ingest.meta.license, "CC-BY-4.0", "init 2026-09-02T00Z + 6 h is more than an hour old");
-  assert.equal(ingest.meta.archive, undefined, "field lane archives nothing");
-  assert.ok(ingest.meta.source_url.startsWith(`${BASE_URL}/${STORE_PATH}/`));
-  assert.equal(ingest.segments.length, 1, "records segment only");
-  const records = Buffer.from(ingest.segments[0]);
-  let count = 0;
-  for (let off = 0; off < records.length; ) {
-    const len = records.readUInt32LE(off);
-    assert.equal(records.subarray(off + 8, off + 12).toString("latin1"), "$WXF");
-    off += 4 + len;
-    count++;
-  }
-  assert.equal(count, 3, "three $WXF tiles");
-  const provenance = JSON.parse(Buffer.from(ingest.meta.provenance.json, "base64").toString("utf8"));
-  assert.deepEqual(provenance.schema_counts, { "WXF.fbs": 3 });
+  assert.equal(ingest.params.SCHEMA, "WXF.fbs");
+  assert.equal(ingest.params.PROVIDER_ID, "weathernext");
+  assert.equal(ingest.params.SOURCE_NAME, "weathernext3-clouds-0p1deg");
+  assert.equal(ingest.params.BATCH_ID, sha256Hex(CHUNK_BODIES), "batch = sha256 of the chunk bodies in fetch order");
+  assert.equal(ingest.params.RECONCILE, 0, "reconcile Duplicates");
+  assert.equal(ingest.params.LICENSE, "CC-BY-4.0", "init 2026-09-02T00Z + 6 h is more than an hour old");
+  assert.equal(ingest.params.ARCHIVE_NAME ?? "", "", "field lane archives nothing");
+  assert.ok(ingest.params.SOURCE_URL.startsWith(`${BASE_URL}/${STORE_PATH}/`));
+  assert.deepEqual(Object.keys(ingest.raw), ["records"], "records only");
+  assert.equal(splitRecords(ingest.raw.records, "$WXF").length, 3, "three $WXF tiles");
+  assert.equal(ingest.lists.provenance.length, 1);
+  assert.equal(Number(ingest.lists.provenance[0].NORMALIZED_COUNT), 3);
+  assert.equal(ingest.lists.provenance[0].PARSER_VERSION, "weathernext-zarr-wasm/v1");
 
   assert.equal(results.length, 1, "one ingest result reached the egress sink");
+  assert.equal(results[0].type, "INGR");
   assert.equal(results[0].inserted, 3);
   assert.equal(results[0].schema, "WXF.fbs");
+});
+
+test("clouds: the tile geometry the source computes reaches the records exactly as expected.json holds it", async () => {
+  const edge = fs.readFileSync(new URL("wn3-0p1deg-clouds/low_cloud_cover.c.0.0.6.28.7.bin", FIXTURES));
+  const fetches = {
+    [`${BASE_URL}/${STORE_PATH}/low_cloud_cover/c/0/0/6/14/7`]: CHUNK_FETCHES[`${BASE_URL}/${STORE_PATH}/low_cloud_cover/c/0/0/6/14/7`],
+    [`${BASE_URL}/${STORE_PATH}/low_cloud_cover/c/0/0/6/28/7`]: { body: edge },
+  };
+  const stub = createIngestHostStub({ config: { ...LIVE_CONFIG, weathernext_arrays: "low_cloud_cover", weathernext_chunks: "14,7;28,7" }, fetches });
+  await runFlowOnce(CLOUDS_WASM, stub);
+  const [ingest] = ingestCalls(stub);
+  const records = splitRecords(ingest.raw.records, "$WXF").map((r) => wxfLib.WXF.getRootAsWXF(new flatbuffers.ByteBuffer(r)).unpack());
+  for (const [record, name] of [[records[0], "low_cloud_cover.c.0.0.6.14.7.bin"], [records[1], "low_cloud_cover.c.0.0.6.28.7.bin"]]) {
+    const chunk = EXPECTED_CLOUDS.chunks[name];
+    assert.equal(record.FIELD_ID, EXPECTED_CLOUDS.field_ids.low_cloud_cover);
+    assert.deepEqual([record.GRID.NLAT, record.GRID.NLON, record.GRID.LAT0, record.GRID.LON0, record.GRID.DLAT, record.GRID.DLON, record.GRID.PERIODIC_LON],
+      [chunk.NLAT, chunk.NLON, chunk.LAT0, chunk.LON0, chunk.DLAT, chunk.DLON, chunk.PERIODIC_LON], name);
+    assert.deepEqual([record.TILE_INDEX, record.TILE_COUNT, record.MISSING_COUNT, record.VALUES.length], [chunk.TILE_INDEX, chunk.TILE_COUNT, chunk.MISSING_COUNT, chunk.cell_count], name);
+    assert.equal(record.VALUE_MIN, Math.fround(chunk.VALUE_MIN));
+    assert.equal(record.VALUE_MAX, Math.fround(chunk.VALUE_MAX));
+    for (const spot of chunk.spots) assert.equal(record.VALUES[spot.i * chunk.NLON + spot.j], Math.fround(spot.value), `${name} spot (${spot.i}, ${spot.j})`);
+    assert.equal(Number(record.VALID_TIME_MS), EXPECTED_CLOUDS.job.valid_time_ms);
+    assert.equal(Number(record.RETRIEVED_AT), Date.UTC(2026, 8, 3, 12, 0, 1), "no Date header: the host's RETRIEVED_MS");
+  }
 });
 
 test("clouds: NO publish POST is made without weathernext_publish_url", async () => {
@@ -283,7 +278,7 @@ test("clouds: the stored batch triggers its dataset publication when configured"
     batchId: sha256Hex(CHUNK_BODIES),
   });
   assert.equal(results.length, 2, "ingest result + publication response reach egress");
-  assert.equal(results.filter((entry) => entry.status === 202).length, 1);
+  assert.equal(results.filter((entry) => entry.type === "HRSP" && entry.status === 202).length, 1);
 });
 
 test("clouds: live access OFF fetches nothing, stores nothing, reads no secret", async () => {
@@ -292,7 +287,7 @@ test("clouds: live access OFF fetches nothing, stores nothing, reads no secret",
   assert.equal(httpCalls(stub).length, 0, "zero http.request hostcalls");
   assert.equal(ingestCalls(stub).length, 0, "zero ingest hostcalls");
   assert.equal(secretsCalls(stub).length, 0);
-  assert.deepEqual(results, [{ skipped: "live-access-disabled" }], "the skip reaches the egress sink");
+  assert.deepEqual(results.map((r) => [r.type, r.kind, r.reason]), [["FNTC", "skipped", "live-access-disabled"]], "the skip reaches the egress sink");
 });
 
 test("clouds: the default config (no switch at all) is OFF", async () => {
@@ -300,7 +295,7 @@ test("clouds: the default config (no switch at all) is OFF", async () => {
   const results = await runFlowOnce(CLOUDS_WASM, stub);
   assert.equal(httpCalls(stub).length, 0);
   assert.equal(ingestCalls(stub).length, 0);
-  assert.deepEqual(results, [{ skipped: "live-access-disabled" }]);
+  assert.deepEqual(results.map((r) => [r.type, r.kind, r.reason]), [["FNTC", "skipped", "live-access-disabled"]]);
 });
 
 test("cyclones: timer tick -> fetch -> parse -> ONE attributed $TCT ingest of 6 tracks with the raw CSV archived", async () => {
@@ -312,37 +307,29 @@ test("cyclones: timer tick -> fetch -> parse -> ONE attributed $TCT ingest of 6 
 
   const fetches = httpCalls(stub);
   assert.equal(fetches.length, 1);
-  assert.equal(fetches[0].meta.url, CYCLONE_URL);
-  assert.equal(fetches[0].meta.headers?.authorization, undefined);
+  assert.equal(urlOf(fetches[0]), CYCLONE_URL);
+  assert.equal(fetches[0].raw.headers, undefined);
   assert.equal(secretsCalls(stub).length, 0);
 
   const ingests = ingestCalls(stub);
   assert.equal(ingests.length, 1);
   const ingest = ingests[0];
-  assert.equal(ingest.meta.schema, "TCT.fbs");
-  assert.equal(ingest.meta.source_name, "weathernext3-cyclone-tracks");
-  assert.equal(ingest.meta.source_url, CYCLONE_URL);
-  assert.equal(ingest.meta.batch_id, EXPECTED_CYCLONES.csv_sha256);
-  // The ingest node references the archived payload segment positionally
-  // inside the archive object ({"$bin":1}); source and name are the parser's.
-  assert.equal(ingest.meta.archive.source, EXPECTED_CYCLONES.archive.source);
-  assert.equal(ingest.meta.archive.name, EXPECTED_CYCLONES.archive.name);
-  assert.deepEqual(ingest.meta.archive.raw, { $bin: 1 });
-  assert.equal(ingest.meta.license, "CC-BY-4.0");
-  assert.equal(ingest.segments.length, 2, "records + archive raw segments");
-  assert.deepEqual(Buffer.from(ingest.segments[1]), Buffer.from(CSV_BYTES), "raw archive bytes");
-  const records = Buffer.from(ingest.segments[0]);
-  let count = 0;
-  for (let off = 0; off < records.length; ) {
-    const len = records.readUInt32LE(off);
-    assert.equal(records.subarray(off + 8, off + 12).toString("latin1"), "$TCT");
-    off += 4 + len;
-    count++;
-  }
-  assert.equal(count, EXPECTED_CYCLONES.record_count, "six (storm, member) tracks");
+  assert.equal(ingest.params.SCHEMA, "TCT.fbs");
+  assert.equal(ingest.params.SOURCE_NAME, "weathernext3-cyclone-tracks");
+  assert.equal(ingest.params.SOURCE_URL, CYCLONE_URL);
+  assert.equal(ingest.params.BATCH_ID, EXPECTED_CYCLONES.csv_sha256);
+  assert.equal(ingest.params.ARCHIVE_SOURCE, EXPECTED_CYCLONES.archive.source);
+  assert.equal(ingest.params.ARCHIVE_NAME, EXPECTED_CYCLONES.archive.name);
+  assert.equal(ingest.params.LICENSE, "CC-BY-4.0");
+  assert.deepEqual(Object.keys(ingest.raw).sort(), ["archive", "records"], "records + archive raw frames");
+  assert.deepEqual(Buffer.from(ingest.raw.archive), Buffer.from(CSV_BYTES), "the archived document is the CSV, byte-equal");
+  assert.equal(ingest.lists.provenance[0].CONTENT_TYPE, "text/csv");
+  assert.equal(splitRecords(ingest.raw.records, "$TCT").length, EXPECTED_CYCLONES.record_count, "six (storm, member) tracks");
 
   assert.equal(results.length, 1);
+  assert.equal(results[0].type, "INGR");
   assert.equal(results[0].inserted, EXPECTED_CYCLONES.record_count);
+  assert.equal(results[0].archived, `/raw/weathernext/cyclone-tracks.csv`);
   assert.deepEqual(publishBodies(stub), [], "no publish URL, no publication");
 });
 
@@ -351,13 +338,13 @@ test("cyclones: live access OFF and a missing URL each skip without fetching", a
   const offResults = await runFlowOnce(CYCLONES_WASM, off);
   assert.equal(httpCalls(off).length, 0);
   assert.equal(ingestCalls(off).length, 0);
-  assert.deepEqual(offResults, [{ skipped: "live-access-disabled" }]);
+  assert.deepEqual(offResults.map((r) => [r.type, r.kind, r.reason]), [["FNTC", "skipped", "live-access-disabled"]]);
 
   const noUrl = createIngestHostStub({ config: { ...LIVE_CONFIG, weathernext_cyclone_url: "" }, fetches: {} });
   const noUrlResults = await runFlowOnce(CYCLONES_WASM, noUrl);
   assert.equal(httpCalls(noUrl).length, 0);
   assert.equal(ingestCalls(noUrl).length, 0);
-  assert.deepEqual(noUrlResults, [{ skipped: "cyclone-url-missing" }]);
+  assert.deepEqual(noUrlResults.map((r) => [r.type, r.kind, r.reason]), [["FNTC", "skipped", "cyclone-url-missing"]]);
 });
 
 test("cyclones: the stored batch publishes when configured", async () => {

@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { readDtt, splitStream } from "../dtt-reader.mjs";
+import { configFrame, granuleFrame, planInputs, storeAnswer, typedInput } from "../../../data-source/terrain-source/typed-frames.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
@@ -409,27 +410,9 @@ const PLAN = {
   rowOriginNorth: false,
 };
 
-// hostcap/http-request responseWire "raw-body-v1": "$HRB", little-endian
-// status, body verbatim — an 8-byte header, no length (the frame carries it).
-const rawBodyFrame = (portId, body) => {
-  const bytes = Buffer.alloc(8 + body.length);
-  bytes.write("$HRB", 0, "latin1");
-  bytes.writeUInt32LE(200, 4);
-  Buffer.from(body).copy(bytes, 8);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.length },
-    payload: new Uint8Array(bytes),
-  };
-};
-const jsonFrame = (portId, value) => {
-  const bytes = encoder.encode(JSON.stringify(value));
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
+// Typed contracts 1.0: a granule is the HttpResponse hostcap/http-request answers (BODY verbatim), and the plan is
+// the $DTT header stream (+ ModuleConfig options) - built with the lane's own typed-frames module.
+const rawBodyFrame = (portId, body) => granuleFrame(portId, body, 200);
 
 // Cut a small block of real tiles, then lay the run out on disk exactly as the
 // builder does, so ipfs-publish.mjs runs against it unchanged.
@@ -438,8 +421,8 @@ async function buildFixture() {
     wasmSource: fs.readFileSync(path.join(SOURCE, "dist", "isomorphic", "module.wasm")),
     manifest: JSON.parse(fs.readFileSync(path.join(SOURCE, "plugin-manifest.json"), "utf8")),
     surface: "direct",
+    // `tile` makes no hostcall at all.
     hostcallDispatch: (operation) => {
-      if (operation === "plugin.getConfig") return {};
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
@@ -450,7 +433,7 @@ async function buildFixture() {
   for (let x = 535; x <= 536; x += 1) for (let y = 383; y <= 384; y += 1) tiles.push({ level: 9, x, y });
   const response = await harness.invoke({
     methodId: "tile",
-    inputs: [jsonFrame("plan", { ...PLAN, tiles }), rawBodyFrame("dem", dem), rawBodyFrame("water", wbm)],
+    inputs: [...planInputs({ ...PLAN, tiles }), rawBodyFrame("dem", dem), rawBodyFrame("water", wbm)],
   });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const stream = Buffer.from(response.outputs.find((o) => o.portId === "records").payload);
@@ -541,16 +524,18 @@ const ipfsDir = path.join(fixture.outDir, "ipfs");
 const layerJson = JSON.parse(fs.readFileSync(path.join(ipfsDir, "layer.json"), "utf8"));
 
 async function synthesizeFromShippingMount(config, address) {
+  // The shipping mount's config travels on the module's "config" port (a ModuleConfig, the same entries plugin.getConfig
+  // answers), so the harness needs no host bridge.
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(path.join(SOURCE, "dist", "isomorphic", "module.wasm")),
     manifest: JSON.parse(fs.readFileSync(path.join(SOURCE, "plugin-manifest.json"), "utf8")),
     surface: "direct",
     hostcallDispatch: (operation) => {
-      if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   try {
+    const mountConfig = configFrame(config);
     const route = await harness.invoke({
       methodId: "route",
       inputs: [{
@@ -561,21 +546,15 @@ async function synthesizeFromShippingMount(config, address) {
           path: `/api/v1/terrain/${address}.terrain`,
           headers: { "accept-encoding": "identity" },
         }),
-      }],
+      }, mountConfig],
     });
     assert.equal(route.statusCode, 0, `${route.errorCode}: ${route.errorMessage}`);
     const context = route.outputs.find((output) => output.portId === "context");
     assert.ok(context, `route did not produce context for ${address}`);
+    // The store's answer to a miss: one empty $FSB chunk and a COMPLETE $FSO status.
     const response = await harness.invoke({
       methodId: "respond",
-      inputs: [
-        {
-          portId: "stream",
-          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: 4 },
-          payload: new Uint8Array(4),
-        },
-        { portId: "context", typeRef: context.typeRef, payload: context.payload },
-      ],
+      inputs: [...storeAnswer(new Uint8Array(4)), typedInput("context", context.payload), mountConfig],
     });
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
     const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
@@ -873,11 +852,15 @@ test("bounded publisher inflate refuses a gzip bomb", async () => {
 });
 
 // This host's WASM/SDK initialization OOMs before publisher code at
-// 32/48/64/96 MiB; 128 MiB is the lowest measured isolated V8 heap that
-// starts and completes.
-test("publisher materialization completes in its lowest measured isolated 128 MiB V8 heap", async () => {
+// 32/48/64/96 MiB. 128 MiB was the lowest measured isolated V8 heap that
+// started and completed until typed contracts 1.0 (2026-10-13): the publisher
+// now drives the typed module (ModuleConfig config frame, $FSB/$FSO store
+// answer, $HTQ forwarding) and re-measured 144 MiB OOM, 160 MiB completes.
+// SDK 0.9.2 (one ModuleConfig on raw "config", the availability index a NumberList) did not move it: re-measured
+// 2026-10-14, 3 runs each, 64-144 MiB OOM, 160 MiB completes - the config frame is not what sets this floor.
+test("publisher materialization completes in its lowest measured isolated 160 MiB V8 heap", async () => {
   const outDir = copyFixtureOutput();
-  const result = await runPublisher(outDir, ["--no-add"], { nodeArgs: ["--max-old-space-size=128"] });
+  const result = await runPublisher(outDir, ["--no-add"], { nodeArgs: ["--max-old-space-size=160"] });
   assert.equal(result.code, 0, result.stderr);
 });
 

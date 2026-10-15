@@ -4,8 +4,9 @@ SDK module for launch-window collision screening
 (`screen_launch_window`, `$CQR LAUNCH_REQUEST` → `$CQR LAUNCH_RESULT`, SDS
 1.227.0). It evaluates every liftoff time on a grid across the window, for
 every launched segment against every orbiting object. It returns the
-prohibited liftoff spans and the worst approach of each run. A JSON `report`
-repeats the closures as ISO 8601 intervals for `LDM.LCOLA_WINDOW_CLOSURES`.
+prohibited liftoff spans and the worst approach of each run. A FlowNotice (FNTC)
+`report` repeats the closures as ISO 8601 intervals (ITEMS) for
+`LDM.LCOLA_WINDOW_CLOSURES`, with COUNT the violating approaches.
 Background and requirements:
 [docs/studies/launch-notifications-and-cola.md](../../docs/studies/launch-notifications-and-cola.md).
 

@@ -1,10 +1,17 @@
 /**
  * SDN Client Decrypt Module (C++ / Crypto++)
  *
- * Decrypts either the legacy JSON envelope format or the canonical SDS `$LGR`
- * module-delivery grant format. For `$LGR` inputs the module fetches the
- * encrypted bundle over IPFS through the sync space_data_module_host bridge when the host has
- * not already supplied the encrypted bundle bytes.
+ * Decrypts a protected module artifact from the canonical SDS `$LGR`
+ * module-delivery grant (typed contracts 1.0: every port one SDS FlatBuffer
+ * type, every hostcall an SDS $PIV invocation through sdm_piv; no JSON).
+ *
+ *   decrypt_artifact: grant_response $LGR + recipient_key $KMF
+ *                     + protected_content $FIL -> plaintext $FIL
+ *
+ * The SDK's generated invoke glue (staged by build.mjs) checks every frame
+ * against plugin-manifest.json. The module makes no hostcall: fetching the
+ * protected bundle (ipfs) is the host's, which hands it in on
+ * protected_content (ipfs is not a capability of the browser target).
  */
 
 #include <stdint.h>
@@ -26,9 +33,12 @@
 
 #include <flatbuffers/flatbuffers.h>
 #include "ENC_generated.h"
+#include "FIL_generated.h"
 #include "LGR_generated.h"
-#include "PIV_generated.h"
 #include "REC_generated.h"
+
+#include "plugin_manifest_bytes.h"
+#include "space_data_module_invoke.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -50,33 +60,11 @@ static const uint16_t KMF_KEY_BYTES_FIELD_ID = 4;
 static const uint8_t REC_TRAILER_MAGIC[4] = {'$', 'R', 'E', 'C'};
 static const size_t REC_TRAILER_FOOTER_BYTES = 8;
 
-#if defined(SDN_WASI_PLUGIN)
-#include "../../../common/sdm_hostcall_wire.hpp"
-#endif
-
 struct DecryptResult {
     bool ok = false;
     std::vector<uint8_t> plaintext;
     std::string error;
 };
-
-#if defined(SDN_WASI_PLUGIN)
-static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_t>& out_bytes) {
-    std::string meta = "{\"cid\":\"";
-    meta.append(cid, cid_len);
-    meta += "\"}";
-
-    sdm_hostcall::Response response;
-    if (!sdm_hostcall::call("ipfs.cat", meta, {}, &response)) {
-        return false;
-    }
-    return sdm_hostcall::get_result_bytes(response, &out_bytes);
-}
-#else
-static bool fetch_ipfs_bytes(const char*, size_t, std::vector<uint8_t>&) {
-    return false;
-}
-#endif
 
 // compute_shared_secret dispatches the unified-ECIES ECDH on
 // ENC.KEY_EXCHANGE (docs/UNIFIED_ECIES.md): X25519 raw shared secret, or
@@ -565,19 +553,11 @@ static DecryptResult decrypt_lgr_grant(
         return result;
     }
 
-    std::vector<uint8_t> encrypted_bundle;
-    if (encrypted_bundle_bytes != nullptr && encrypted_bundle_len > 0) {
-        encrypted_bundle.assign(
-            encrypted_bundle_bytes,
-            encrypted_bundle_bytes + encrypted_bundle_len
-        );
-    } else {
-        const auto* cid = descriptor->WASM_CID();
-        if (!fetch_ipfs_bytes(cid->c_str(), cid->size(), encrypted_bundle)) {
-            result.error = "IPFS fetch failed";
-            return result;
-        }
+    if (encrypted_bundle_bytes == nullptr || encrypted_bundle_len == 0) {
+        result.error = "the protected bundle is required";
+        return result;
     }
+    std::vector<uint8_t> encrypted_bundle(encrypted_bundle_bytes, encrypted_bundle_bytes + encrypted_bundle_len);
     if (encrypted_bundle.size() <= GCM_IV_BYTES + GCM_TAG_BYTES) {
         result.error = "encrypted bundle is too small";
         return result;
@@ -652,257 +632,103 @@ static DecryptResult decrypt_lgr_grant(
     return result;
 }
 
-static std::vector<uint8_t> finish_piv_response(
-    flatbuffers::FlatBufferBuilder& fbb,
-    flatbuffers::Offset<PIVResponse> response
-) {
-    const auto root = CreatePIV(fbb, 0, response);
-    FinishPIVBuffer(fbb, root);
-    return std::vector<uint8_t>(
-        fbb.GetBufferPointer(),
-        fbb.GetBufferPointer() + fbb.GetSize()
-    );
+static void secure_zero(void* ptr, size_t len) {
+    volatile uint8_t* p = static_cast<volatile uint8_t*>(ptr);
+    for (size_t i = 0; i < len; ++i) p[i] = 0;
 }
 
-static std::vector<uint8_t> build_error_response(
-    const char* code,
-    const char* msg,
-    int32_t status_code,
-    uint64_t trace_id = 0
-) {
-    flatbuffers::FlatBufferBuilder fbb(256);
-    const auto code_off = fbb.CreateString(code ? code : "invoke-error");
-    const auto msg_off = fbb.CreateString(msg ? msg : "client-decrypt failed");
-    const auto response = CreatePIVResponse(
-        fbb,
-        status_code,
-        status_code == 404 ? pivStatus::NOT_FOUND : pivStatus::FAILED,
-        false,
-        0,
-        0,
-        0,
-        code_off,
-        msg_off,
-        trace_id
-    );
-    return finish_piv_response(fbb, response);
+static int fail(const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return 1;
 }
 
-static std::vector<uint8_t> build_bytes_response(
-    const uint8_t* data,
-    size_t len,
-    uint64_t trace_id = 0
-) {
-    flatbuffers::FlatBufferBuilder fbb(len + 512);
-    fbb.ForceVectorAlignment(len, sizeof(uint8_t), 8);
-    const auto arena_vec = fbb.CreateVector(data, len);
-    const auto frame = CreateTABDirect(
-        fbb,
-        0,
-        static_cast<uint32_t>(len),
-        8,
-        payloadWireFormat::FLATBUFFER,
-        0,
-        bufferMutability::IMMUTABLE,
-        bufferOwnership::HOST_OWNED,
-        0,
-        "result"
-    );
-    const auto frames = fbb.CreateVector(&frame, 1);
-    const auto response = CreatePIVResponse(
-        fbb,
-        0,
-        pivStatus::OK,
-        false,
-        0,
-        frames,
-        arena_vec,
-        0,
-        0,
-        trace_id
-    );
-    return finish_piv_response(fbb, response);
+// The one frame on `port_id`, or nullptr.
+static const plugin_input_frame_t* input_frame(const char* port_id) {
+    const int32_t index = plugin_find_input_index(port_id, 0);
+    if (index < 0) return nullptr;
+    const auto* frame = plugin_get_input_frame(static_cast<uint32_t>(index));
+    return frame && frame->payload && frame->payload_length > 0 ? frame : nullptr;
 }
 
-static bool resolve_piv_frame_payload(
-    const TAB* frame,
-    const flatbuffers::Vector<uint8_t>* arena,
-    const uint8_t** payload,
-    size_t* payload_len
-) {
-    if (!frame || !payload || !payload_len) {
-        return false;
-    }
-    const size_t offset = static_cast<size_t>(frame->OFFSET());
-    const size_t size = static_cast<size_t>(frame->SIZE());
-    const size_t arena_size = arena ? static_cast<size_t>(arena->size()) : 0;
-    if (size > 0 && !arena) {
-        return false;
-    }
-    if (offset > arena_size || size > arena_size - offset) {
-        return false;
-    }
-    *payload = size > 0 ? arena->data() + offset : nullptr;
-    *payload_len = size;
-    return true;
+// A $FIL carrying `content` verbatim (KIND File, SIZE, CONTENT), as licensing/core answers plaintext.
+static std::vector<uint8_t> build_fil(const std::vector<uint8_t>& content) {
+    flatbuffers::FlatBufferBuilder builder(content.size() + 128);
+    const auto content_offset = builder.CreateVector(content);
+    FILBuilder fil(builder);
+    fil.add_KIND(filEntryKind::File);
+    fil.add_SIZE(static_cast<uint64_t>(content.size()));
+    fil.add_CONTENT(content_offset);
+    FinishFILBuffer(builder, fil.Finish());
+    return {builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize()};
 }
 
-static std::vector<uint8_t> handle_decrypt_artifact(const PIVRequest* req) {
-    const auto* frames = req->INPUTS();
-    const auto* arena = req->PAYLOAD_ARENA();
-    const uint64_t trace_id = req ? req->TRACE_ID() : 0;
-    if (!frames || frames->size() < 2 || frames->size() > 3) {
-        return build_error_response(
-            "invalid-input",
-            "decrypt_artifact requires 2 or 3 input frames",
-            400,
-            trace_id
-        );
-    }
-
-    const auto* payload_frame = frames->Get(0);
-    const auto* key_frame = frames->Get(1);
-    const auto* encrypted_bundle_frame = frames->size() > 2 ? frames->Get(2) : nullptr;
-    const uint8_t* payload = nullptr;
-    size_t payload_len = 0;
-    const uint8_t* private_key = nullptr;
-    size_t private_key_len = 0;
-    const uint8_t* encrypted_bundle = nullptr;
-    size_t encrypted_bundle_len = 0;
-    if (!resolve_piv_frame_payload(payload_frame, arena, &payload, &payload_len) ||
-        !resolve_piv_frame_payload(key_frame, arena, &private_key, &private_key_len) ||
-        (encrypted_bundle_frame &&
-            !resolve_piv_frame_payload(
-                encrypted_bundle_frame,
-                arena,
-                &encrypted_bundle,
-                &encrypted_bundle_len
-            ))) {
-        return build_error_response(
-            "invalid-input",
-            "input frame exceeds payload arena",
-            400,
-            trace_id
-        );
-    }
-
-    DecryptResult decrypted;
-    if (payload_len >= 8 && LGRBufferHasIdentifier(payload)) {
-        decrypted = decrypt_lgr_grant(
-            payload,
-            payload_len,
-            encrypted_bundle,
-            encrypted_bundle_len,
-            private_key,
-            private_key_len
-        );
-    } else {
-        // v1: the legacy JSON double-GCM envelope is gone; the SDS $LGR grant
-        // is the only supported artifact envelope.
-        decrypted.ok = false;
-        decrypted.error = "unsupported envelope: expected an SDS $LGR grant";
-    }
-
-    if (!decrypted.ok) {
-        return build_error_response(
-            "decrypt-failed",
-            decrypted.error.c_str(),
-            1,
-            trace_id
-        );
-    }
-    return build_bytes_response(
-        decrypted.plaintext.data(),
-        decrypted.plaintext.size(),
-        trace_id
-    );
-}
+extern "C" void __wasm_call_ctors(void);
 
 extern "C" {
 
 __attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) {
-    return static_cast<uint8_t*>(malloc(size));
+void _initialize(void) {
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        __wasm_call_ctors();
+    }
 }
 
 __attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t) {
-    free(ptr);
+const uint8_t* plugin_get_manifest_flatbuffer(void) {
+    return client_decrypt_plugin_manifest_bytes;
 }
 
 __attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    if (!req_ptr || req_len == 0 || !out_len_ptr) {
-        std::vector<uint8_t> response = build_error_response(
-            "invalid-request",
-            "Invoke request bytes are empty.",
-            400
-        );
-        if (out_len_ptr) {
-            *out_len_ptr = static_cast<uint32_t>(response.size());
-        }
-        uint8_t* response_ptr = static_cast<uint8_t*>(malloc(response.size()));
-        if (!response_ptr) {
-            if (out_len_ptr) {
-                *out_len_ptr = 0;
-            }
-            return nullptr;
-        }
-        memcpy(response_ptr, response.data(), response.size());
-        return response_ptr;
+uint32_t plugin_get_manifest_flatbuffer_size(void) {
+    return client_decrypt_plugin_manifest_bytes_len;
+}
+
+// grant_response $LGR + recipient_key $KMF + protected_content $FIL -> plaintext $FIL.
+int decrypt_artifact(void) {
+    plugin_reset_output_state();
+    const auto* grant_frame = input_frame("grant_response");
+    const auto* key_frame = input_frame("recipient_key");
+    if (!grant_frame) return fail("missing-input", "Input port \"grant_response\" is required.");
+    if (!key_frame) return fail("missing-input", "Input port \"recipient_key\" is required.");
+
+    flatbuffers::Verifier key_verifier(key_frame->payload, key_frame->payload_length);
+    if (!VerifyKMFBuffer(key_verifier)) {
+        return fail("invalid-recipient-key-input", "Input port \"recipient_key\" must carry a $KMF decrypt key.");
+    }
+    const KMF* key = GetKMF(key_frame->payload);
+    if (!key || !key->KEY_BYTES() || key->ROLE() != keyMaterialRole::DecryptKey) {
+        return fail("invalid-recipient-key-input",
+                    "Input port \"recipient_key\" must carry a $KMF with ROLE DecryptKey and KEY_BYTES.");
     }
 
-    std::vector<uint8_t> response;
-    if (req_len < 8 || !PIVBufferHasIdentifier(req_ptr)) {
-        response = build_error_response(
-            "invalid-request",
-            "Invoke request must be an SDS PIV envelope.",
-            400
-        );
-    } else {
-        flatbuffers::Verifier verifier(req_ptr, req_len);
-        if (!VerifyPIVBuffer(verifier)) {
-            response = build_error_response(
-                "invalid-request",
-                "SDS PIV invoke envelope verification failed.",
-                400
-            );
-        } else {
-            const PIV* envelope = GetPIV(req_ptr);
-            const PIVRequest* req = envelope ? envelope->REQUEST() : nullptr;
-            const uint64_t trace_id = req ? req->TRACE_ID() : 0;
-            if (!req) {
-                response = build_error_response(
-                    "invalid-request",
-                    "SDS PIV invoke envelope does not contain a request.",
-                    400,
-                    trace_id
-                );
-            } else {
-                const char* method = req->METHOD_ID() ? req->METHOD_ID()->c_str() : "";
-                if (strcmp(method, "decrypt_artifact") == 0) {
-                    response = handle_decrypt_artifact(req);
-                } else {
-                    response = build_error_response(
-                        "unknown-method",
-                        "unknown method",
-                        404,
-                        trace_id
-                    );
-                }
-            }
-        }
+    const auto* content_frame = input_frame("protected_content");
+    if (!content_frame) return fail("missing-input", "Input port \"protected_content\" is required.");
+    flatbuffers::Verifier content_verifier(content_frame->payload, content_frame->payload_length);
+    const FIL* content = VerifyFILBuffer(content_verifier) ? GetFIL(content_frame->payload) : nullptr;
+    if (!content || !content->CONTENT() || content->CONTENT()->size() == 0) {
+        return fail("invalid-protected-content-input", "Input port \"protected_content\" must carry a $FIL with CONTENT.");
     }
+    const uint8_t* bundle = content->CONTENT()->data();
+    const size_t bundle_len = content->CONTENT()->size();
 
-    const uint32_t response_len = static_cast<uint32_t>(response.size());
-    uint8_t* response_ptr = static_cast<uint8_t*>(malloc(response_len));
-    if (!response_ptr) {
-        *out_len_ptr = 0;
-        return nullptr;
+    DecryptResult decrypted = decrypt_lgr_grant(
+        grant_frame->payload,
+        grant_frame->payload_length,
+        bundle,
+        bundle_len,
+        key->KEY_BYTES()->data(),
+        key->KEY_BYTES()->size());
+    if (!decrypted.ok) return fail("decrypt-failed", decrypted.error);
+
+    const std::vector<uint8_t> file = build_fil(decrypted.plaintext);
+    secure_zero(decrypted.plaintext.data(), decrypted.plaintext.size());
+    if (plugin_push_output_ex("plaintext", "FIL.fbs", FILIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FIL",
+                              0, 0, file.data(), static_cast<uint32_t>(file.size())) < 0) {
+        return fail("emit-failed", "The plaintext frame was refused.");
     }
-    memcpy(response_ptr, response.data(), response_len);
-    *out_len_ptr = response_len;
-    return response_ptr;
+    return 0;
 }
 
 }  // extern "C"

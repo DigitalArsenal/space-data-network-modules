@@ -30,7 +30,9 @@ const sourceCode = [
 ].join('\n\n');
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-const result = await compileModuleFromSource({ manifest, standardsRoot, sourceCode, language: 'c++', outputPath, threadModel: 'wasi-sequential' });
+const result = await compileModuleFromSource({ manifest, standardsRoot, sourceCode, language: 'c++', outputPath, threadModel: 'wasi-sequential',
+  // plugin.getConfig through the sync space_data_module_host bridge (typedHostcall.hpp, sdm_piv).
+  allowUndefinedImports: true });
 try {
   if (!result.report?.ok) throw new Error(`Compiled artifact failed SDK validation:\n${JSON.stringify(result.report?.issues ?? [], null, 2)}`);
   await fs.copyFile(manifestPath, path.join(distRoot, 'plugin-manifest.json'));

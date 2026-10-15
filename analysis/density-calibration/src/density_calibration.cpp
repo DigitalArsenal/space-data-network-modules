@@ -6,6 +6,16 @@
 // global corrections to Jacchia's temperatures from calibration-satellite
 // drag every few hours.
 //
+// Typed contracts 1.0: every method takes one SDS $DCL (Density Calibration)
+// record on "request" and answers with one $DCL on its output port. The
+// request names the model in ATMOSPHERE ($ATM: JB08, or NRLMSIS00E), carries
+// the JB2008 drivers as $PRW PRWJB2008IndicesTable rows (JB2008_DRIVERS) or the
+// NRLMSISE-00 daily space weather as $SPW rows (SPACE_WEATHER), the correction
+// (CORRECTION), the settings (SETTINGS), and the points (POINTS), element-set
+// histories ($OMM, OBJECTS) or states ($OEM ephemeris block, STATES) of the
+// method. Times are Unix milliseconds (UTC) on the wire and UTC MJD inside:
+// mjd = (ms + 40587 * 86400000) / 86400000, one rounding. No JSON anywhere.
+//
 // The density is propagator/hpop's JB2008 (lib/jb2008.h, Orekit 13.1's port,
 // itself a port of Space Environment Technologies' Fortran), driven as hpop
 // drives it: SOLFSMY values at 12 UT of each DATE interpolated linearly at
@@ -28,22 +38,23 @@
 // with UT1 = UTC and no polar motion. Its direction is within 0.01 deg of
 // DE440's, i.e. 2.4 s of local solar time.
 //
-// NRLMSISE-00 (0.4.0): `evaluate` (points form) and `drag_work` also take
-// atmosphere "NRLMSISE00" with nrlmsise00 {rows} (PRW SPW rows as JSON: DATE,
-// F107_OBS, F107_OBS_CENTER81, AP_AVG), the real model through the public-domain
-// Brodowski C port in third_party/nrlmsise00 (gtd7d: total mass density with
-// anomalous oxygen), driven as propagator/hpop drives it (src/cpp/src/
-// prw_execution.cpp SpaceWeatherTable): at a UTC instant on day d, F10.7 is the
-// observed flux of day d-1, F10.7a the 81-day centred mean of day d, Ap the daily
-// Ap of day d (all switches 1: the daily-Ap form), local solar time = UT +
-// longitude/15, the WGS84 geodetic point. No correction field applies to it.
+// NRLMSISE-00: `evaluate` and `drag_work` also take ATMOSPHERE NRLMSIS00E with
+// SPACE_WEATHER ($SPW rows: DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), the real
+// model through the public-domain Brodowski C port in third_party/nrlmsise00
+// (gtd7d: total mass density with anomalous oxygen), driven as propagator/hpop
+// drives it (src/cpp/src/prw_execution.cpp SpaceWeatherTable): at a UTC instant on
+// day d, F10.7 is the observed flux of day d-1, F10.7a the 81-day centred mean of
+// day d, Ap the daily Ap of day d (all switches 1: the daily-Ap form), local solar
+// time = UT + longitude/15, the WGS84 geodetic point. No correction applies to it.
 //
-// Methods (JSON in, JSON out):
-//   evaluate   density, its log-derivative in dT, dT and local solar time at
-//              each point.
-//   calibrate  per time bin, the coefficients minimising the weighted sum of
-//              squared log-density residuals plus a Gaussian prior on each
-//              coefficient (Gauss-Newton, robust editing).
+// Methods ($DCL in, $DCL out):
+//   evaluate         density, its log-derivative in dT, dT and local solar time at each point.
+//   calibrate        per time bin, the coefficients minimising the weighted sum of squared
+//                    log-density residuals plus a Gaussian prior on each coefficient.
+//   decay            the drag decay of element-set histories (the forward model).
+//   calibrate_decay  node correction and ballistic coefficients from orbital decay.
+//   energy           the Jacobi integral of the geopotential of states, and its gradient.
+//   drag_work        drag power and work along states.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -54,33 +65,70 @@
 #include <string>
 #include <vector>
 
+#include "DCL_generated.h"  // spacedatastandards.org lib/cpp/DCL/main_generated.h and the headers it includes, inlined by build.mjs
+
 namespace {
 
-using json = nlohmann::json;
+namespace fb = ::flatbuffers;
 using astro::jb2008::Inputs;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg = kPi / 180.0;
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 int fail(const char* code, const std::string& message) {
   plugin_set_error(code, message.c_str());
   return 1;
 }
-const plugin_input_frame_t* input(const char* port) {
-  const int32_t index = plugin_find_input_index(port, 0);
-  return index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
+// The one $DCL request of a method; nullptr (and the reason) when it is absent or not a $DCL.
+const DCL* dcl_request(std::string& error) {
+  const plugin_input_frame_t* frame = nullptr;
+  const uint32_t count = plugin_get_input_count();
+  for (uint32_t i = 0; i < count; ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (!f || !f->port_id || std::strcmp(f->port_id, "request") != 0) continue;
+    if (frame) { error = "a method takes one $DCL frame on \"request\"; the surplus frames are refused."; return nullptr; }
+    frame = f;
+  }
+  if (!frame || !frame->payload) { error = "request must be a $DCL (Density Calibration) record."; return nullptr; }
+  fb::Verifier verifier(frame->payload, frame->payload_length);
+  if (!VerifyDCLBuffer(verifier)) { error = "request must be a $DCL (Density Calibration) record."; return nullptr; }
+  return GetDCL(frame->payload);
 }
-json json_input(const char* port) {
-  const plugin_input_frame_t* f = input(port);
-  if (!f || !f->payload) return json(json::value_t::discarded);
-  return json::parse(f->payload, f->payload + f->payload_length, nullptr, false);
-}
-int emit(const char* port, const json& j) {
-  const std::string text = j.dump();
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0
+int emit(const char* port, fb::FlatBufferBuilder& b, fb::Offset<DCL> root) {
+  FinishDCLBuffer(b, root);
+  return plugin_push_output_ex(port, "DCL.fbs", DCLIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "DCL", 0, 0, b.GetBufferPointer(),
+                               static_cast<uint32_t>(b.GetSize())) < 0
              ? 1
              : 0;
 }
+// Unix milliseconds (UTC) <-> UTC MJD. The MJD is the exact quotient rounded once.
+double mjd_of_ms(int64_t ms) { return (double(ms) + 3506716800000.0) / 86400000.0; }
+int64_t ms_of_mjd(double mjd) { return std::isfinite(mjd) ? int64_t(std::llround((mjd - 40587.0) * 86400000.0)) : 0; }
+// An ISO 8601 UTC instant (YYYY-MM-DD[THH:MM:SS[.f]][Z]) as UTC MJD: the day's MJD plus (h 3600 + m 60 + s) / 86400.
+bool mjd_of_iso(const fb::String* text, double& mjd) {
+  if (!text) return false;
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0;
+  char sec[40] = {0};
+  const int n = std::sscanf(text->c_str(), "%d-%d-%d%*[T ]%d:%d:%39[0-9.]", &y, &mo, &d, &h, &mi, sec);
+  if (n != 3 && n != 6) return false;
+  double jd0 = 0, mjd0 = 0;
+  if (eraCal2jd(y, mo, d, &jd0, &mjd0) != 0) return false;
+  if (n == 3) { mjd = mjd0; return true; }
+  char* end = nullptr;
+  const double s = std::strtod(sec, &end);
+  if (end == sec || h < 0 || h > 23 || mi < 0 || mi > 59 || !(s >= 0 && s < 61)) return false;
+  mjd = mjd0 + (h * 3600.0 + mi * 60.0 + s) / 86400.0;
+  return true;
+}
+template <typename T>
+size_t size_of(const fb::Vector<T>* v) { return v ? v->size() : 0; }
+fb::Offset<fb::Vector<double>> doubles(fb::FlatBufferBuilder& b, const std::vector<double>& v) { return b.CreateVector(v); }
+fb::Offset<fb::Vector<int64_t>> times(fb::FlatBufferBuilder& b, const std::vector<double>& mjd) {
+  std::vector<int64_t> ms(mjd.size());
+  for (size_t i = 0; i < mjd.size(); ++i) ms[i] = ms_of_mjd(mjd[i]);
+  return b.CreateVector(ms);
+}
+fb::Offset<fb::Vector<uint32_t>> indices(fb::FlatBufferBuilder& b, const std::vector<uint32_t>& v) { return b.CreateVector(v); }
 bool finite(double x) { return std::isfinite(x); }
 bool positive(double x) { return std::isfinite(x) && x > 0; }
 
@@ -92,26 +140,26 @@ class Jb2008Table {
   std::vector<Day> days;
   std::vector<double> dtc;
   long firstMjd = 0;
-  std::string add(const json& rows) {
-    if (!rows.is_array() || rows.empty()) return "jb2008.rows must be a non-empty array.";
-    for (const json& row : rows) {
+  std::string add(const PRWJB2008IndicesTable* table) {
+    const auto* rows = table ? table->ROWS() : nullptr;
+    if (!rows || rows->size() == 0) return "JB2008_DRIVERS (the jb2008 driver rows) must hold at least one row.";
+    for (const PRWJB2008Indices* row : *rows) {
       int y = 0, m = 0, d = 0;
       double jd0 = 0, mjd = 0;
-      const std::string date = row.value("DATE", std::string());
+      const std::string date = row->DATE() ? row->DATE()->str() : std::string();
       if (std::sscanf(date.c_str(), "%d-%d-%d", &y, &m, &d) != 3 || eraCal2jd(y, m, d, &jd0, &mjd) != 0)
         return "JB2008 DATE must be an ISO 8601 calendar date.";
       if (days.empty()) firstMjd = long(mjd);
       else if (long(mjd) != firstMjd + long(days.size())) return "JB2008 rows must be consecutive days.";
-      const auto num = [&](const char* k) { return row.contains(k) && row[k].is_number() ? row[k].get<double>() : -1.0; };
-      const Day v{num("F10"), num("F10_CENTRED_81"), num("S10"), num("S10_CENTRED_81"),
-                  num("M10"), num("M10_CENTRED_81"), num("Y10"), num("Y10_CENTRED_81")};
+      const Day v{row->F10(), row->F10_CENTRED_81(), row->S10(), row->S10_CENTRED_81(),
+                  row->M10(), row->M10_CENTRED_81(), row->Y10(), row->Y10_CENTRED_81()};
       for (const double x : {v.f10, v.f10B, v.s10, v.s10B, v.m10, v.m10B, v.y10, v.y10B})
         if (!positive(x)) return "JB2008 solar indices must be positive and finite (" + date + ").";
-      if (!row.contains("DTC_HOURLY_K") || !row["DTC_HOURLY_K"].is_array() || row["DTC_HOURLY_K"].size() != 24)
-        return "JB2008 DTC_HOURLY_K needs 24 hourly values (" + date + ").";
-      for (const json& x : row["DTC_HOURLY_K"]) {
-        if (!x.is_number() || !finite(x.get<double>())) return "JB2008 DTC values must be finite.";
-        dtc.push_back(x.get<double>());
+      const auto* hourly = row->DTC_HOURLY_K();
+      if (!hourly || hourly->size() != 24) return "JB2008 DTC_HOURLY_K needs 24 hourly values (" + date + ").";
+      for (const double x : *hourly) {
+        if (!finite(x)) return "JB2008 DTC values must be finite.";
+        dtc.push_back(x);
       }
       days.push_back(v);
     }
@@ -138,27 +186,26 @@ class Jb2008Table {
   }
 };
 
-// ── NRLMSISE-00 drivers, read as propagator/hpop's SpaceWeatherTable reads PRW SPW rows ──
+// ── NRLMSISE-00 drivers, read as propagator/hpop's SpaceWeatherTable reads $SPW rows ──
 class Nrlmsise00Table {
  public:
   struct Day { double f107Obs, f107ObsCentred81, apDaily; };
   std::map<long, Day> days;  // by MJD (UTC)
-  std::string add(const json& rows) {
-    if (!rows.is_array() || rows.empty()) return "nrlmsise00.rows must be a non-empty array.";
+  std::string add(const fb::Vector<fb::Offset<SPW>>* rows) {
+    if (!rows || rows->size() == 0) return "SPACE_WEATHER (the nrlmsise00 driver rows) must hold at least one $SPW row.";
     long previous = 0;
     bool first = true;
-    for (const json& row : rows) {
+    for (const SPW* row : *rows) {
       int y = 0, m = 0, d = 0;
       double jd0 = 0, mjd = 0;
-      const std::string date = row.value("DATE", std::string());
+      const std::string date = row->DATE() ? row->DATE()->str() : std::string();
       if (std::sscanf(date.c_str(), "%d-%d-%d", &y, &m, &d) != 3 || eraCal2jd(y, m, d, &jd0, &mjd) != 0)
         return "NRLMSISE-00 DATE must be an ISO 8601 calendar date.";
       const long day = long(mjd);
       if (!first && day <= previous) return "NRLMSISE-00 rows must have strictly increasing DATE.";
       first = false;
       previous = day;
-      const auto num = [&](const char* k) { return row.contains(k) && row[k].is_number() ? row[k].get<double>() : -1.0; };
-      const Day v{num("F107_OBS"), num("F107_OBS_CENTER81"), num("AP_AVG")};
+      const Day v{double(row->F107_OBS()), double(row->F107_OBS_CENTER81()), double(row->AP_AVG())};
       if (!positive(v.f107Obs) || !positive(v.f107ObsCentred81) || !finite(v.apDaily) || v.apDaily < 0)
         return "NRLMSISE-00 F10.7 must be positive and Ap nonnegative (" + date + ").";
       days[day] = v;
@@ -176,6 +223,18 @@ class Nrlmsise00Table {
     return true;
   }
 };
+
+// The model of a request: JB2008 (ATMOSPHERE absent or JB08) or NRLMSISE-00 (NRLMSIS00E); "" or the reason.
+std::string atmosphere_of(const DCL* request, bool& msis) {
+  msis = false;
+  const ATM* atm = request->ATMOSPHERE();
+  if (!atm || atm->MODEL() == AtmosphericModelFamily_JB08) return "";
+  if (atm->MODEL() == AtmosphericModelFamily_NRLMSIS00E) { msis = true; return ""; }
+  return "ATMOSPHERE (the atmosphere model) must be JB08 or NRLMSIS00E.";
+}
+fb::Offset<ATM> atmosphere_record(fb::FlatBufferBuilder& b, bool msis) {
+  return CreateATM(b, msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JB08, msis ? 2000 : 2008);
+}
 
 // The mass density (kg/m^3) of NRLMSISE-00 at a geodetic point and a UTC MJD, with the inputs of Nrlmsise00Table::at and
 // hpop's switches (0 for the output units, 1 for every variation: the daily-Ap form).
@@ -291,62 +350,54 @@ double rho_at(const Point& p, double dT) {
 }
 double hour_angle(const Point& p) { return std::remainder(p.lon - p.sunLon, 2 * kPi); }
 
-// Points from {points: {mjd, latDeg, lonDeg, altKm}} with the drivers from
-// {jb2008: {rows}}, or from {raw: [{mjd, sunRaRad, sunDecRad, lonRad, latRad,
-// altKm, inputs: [F10, F10B, S10, S10B, M10, M10B, Y10, Y10B, DSTDTC]}]}
-// (the arguments of Space Environment Technologies' JB2008 subroutine).
-std::string load_points(const json& request, std::vector<Point>& points) {
-  if (request.contains("raw")) {
-    const json& raw = request["raw"];
-    if (!raw.is_array()) return "raw must be an array.";
-    for (const json& r : raw) {
+// Points from POINTS {TIME_MS, LATITUDE_DEG, LONGITUDE_DEG, ALTITUDE_KM} with
+// the drivers of the request's model (JB2008_DRIVERS, or SPACE_WEATHER for
+// NRLMSIS00E), or, when POINTS carries MODEL_DRIVERS, the arguments of Space
+// Environment Technologies' JB2008 subroutine at each point: the time, the
+// Sun's right ascension and declination, the point's longitude and latitude
+// (deg, taken as given), its altitude and nine driver values [F10, F10B, S10,
+// S10B, M10, M10B, Y10, Y10B, DSTDTC].
+std::string load_points(const DCL* request, std::vector<Point>& points) {
+  const dclPoints* pts = request->POINTS();
+  if (!pts) return "POINTS {TIME_MS, LATITUDE_DEG, LONGITUDE_DEG, ALTITUDE_KM} is required.";
+  const size_t n = size_of(pts->TIME_MS());
+  if (size_of(pts->LATITUDE_DEG()) != n || size_of(pts->LONGITUDE_DEG()) != n || size_of(pts->ALTITUDE_KM()) != n)
+    return "POINTS LATITUDE_DEG, LONGITUDE_DEG and ALTITUDE_KM must have one value per point (TIME_MS).";
+  if (size_of(pts->MODEL_DRIVERS()) != 0) {
+    if (size_of(pts->MODEL_DRIVERS()) != 9 * n || size_of(pts->SUN_RIGHT_ASCENSION_DEG()) != n || size_of(pts->SUN_DECLINATION_DEG()) != n)
+      return "POINTS MODEL_DRIVERS need nine values per point and SUN_RIGHT_ASCENSION_DEG and SUN_DECLINATION_DEG one.";
+    const auto* v = pts->MODEL_DRIVERS();
+    for (size_t i = 0; i < n; ++i) {
       Point p;
-      const json& v = r.value("inputs", json::array());
-      if (!v.is_array() || v.size() != 9) return "raw inputs need nine values.";
-      p.mjd = r.value("mjd", 0.0);
-      p.sunLon = r.value("sunRaRad", 0.0);
-      p.sunLat = r.value("sunDecRad", 0.0);
-      p.lon = r.value("lonRad", 0.0);
-      p.lat = r.value("latRad", 0.0);
-      p.altM = r.value("altKm", 0.0) * 1000.0;
-      p.in = Inputs{v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]};
+      p.mjd = mjd_of_ms(pts->TIME_MS()->Get(i));
+      p.sunLon = pts->SUN_RIGHT_ASCENSION_DEG()->Get(i) * kDeg;
+      p.sunLat = pts->SUN_DECLINATION_DEG()->Get(i) * kDeg;
+      p.lon = pts->LONGITUDE_DEG()->Get(i) * kDeg;
+      p.lat = pts->LATITUDE_DEG()->Get(i) * kDeg;
+      p.altM = pts->ALTITUDE_KM()->Get(i) * 1000.0;
+      const size_t k = 9 * i;
+      p.in = Inputs{v->Get(k), v->Get(k + 1), v->Get(k + 2), v->Get(k + 3), v->Get(k + 4), v->Get(k + 5), v->Get(k + 6), v->Get(k + 7), v->Get(k + 8)};
       p.ok = true;
       points.push_back(p);
     }
     return "";
   }
-  const std::string atmosphere = request.value("atmosphere", std::string("JB2008"));
-  if (atmosphere != "JB2008" && atmosphere != "NRLMSISE00") return "atmosphere must be JB2008 or NRLMSISE00.";
-  const bool msis = atmosphere == "NRLMSISE00";
-  if (!request.contains("points") || !request["points"].is_object()) return "points {mjd, latDeg, lonDeg, altKm} is required.";
-  const json& pts = request["points"];
-  for (const char* k : {"mjd", "latDeg", "lonDeg", "altKm"})
-    if (!pts.contains(k) || !pts[k].is_array()) return std::string("points.") + k + " must be an array.";
-  const size_t n = pts["mjd"].size();
-  for (const char* k : {"latDeg", "lonDeg", "altKm"})
-    if (pts[k].size() != n) return std::string("points.") + k + " must have one value per point.";
+  bool msis = false;
+  std::string e = atmosphere_of(request, msis);
+  if (!e.empty()) return e;
   Jb2008Table table;
   Nrlmsise00Table msisTable;
-  std::string e;
-  if (msis) {
-    if (!request.contains("nrlmsise00") || !request["nrlmsise00"].is_object()) return "nrlmsise00 {rows} is required.";
-    e = msisTable.add(request["nrlmsise00"].value("rows", json::array()));
-  } else {
-    if (!request.contains("jb2008") || !request["jb2008"].is_object()) return "jb2008 {rows} is required.";
-    e = table.add(request["jb2008"].value("rows", json::array()));
-  }
+  e = msis ? msisTable.add(request->SPACE_WEATHER()) : table.add(request->JB2008_DRIVERS());
   if (!e.empty()) return e;
   SunEarthFixed sun;
   points.resize(n);
-  const json &mj = pts["mjd"], &la = pts["latDeg"], &lo = pts["lonDeg"], &al = pts["altKm"];
   for (size_t i = 0; i < n; ++i) {
     Point& p = points[i];
-    if (!mj[i].is_number() || !la[i].is_number() || !lo[i].is_number() || !al[i].is_number()) continue;
-    p.mjd = mj[i];
-    p.lat = la[i].get<double>() * kDeg;
+    p.mjd = mjd_of_ms(pts->TIME_MS()->Get(i));
+    p.lat = pts->LATITUDE_DEG()->Get(i) * kDeg;
     // JB2008 expects longitudes in [-pi, pi], as hpop's geodetic conversion gives them.
-    p.lon = std::remainder(lo[i].get<double>() * kDeg, 2 * kPi);
-    p.altM = al[i].get<double>() * 1000.0;
+    p.lon = std::remainder(pts->LONGITUDE_DEG()->Get(i) * kDeg, 2 * kPi);
+    p.altM = pts->ALTITUDE_KM()->Get(i) * 1000.0;
     if (msis) {
       // NRLMSISE-00 is defined to 1000 km; a point outside, or on a day the rows do not cover, is refused and never guessed.
       if (!finite(p.mjd) || !finite(p.lat) || !finite(p.lon) || !(p.altM >= 90e3 && p.altM <= 1000e3)) continue;
@@ -363,33 +414,28 @@ std::string load_points(const json& request, std::vector<Point>& points) {
   return "";
 }
 
-// A correction in time nodes {nodesMjd, altitudeKm, values}: dT(t, h) =
-// sum_j sum_a values[j][a] phi_j(t) w_a(h), phi_j the linear interpolant in
-// time between nodes (the first and last values held outside them) and w_a
-// the linear interpolant in altitude between altitudeKm nodes, extrapolated
-// linearly up to 100 km beyond the outer nodes and held beyond that; an empty
-// altitudeKm is one global value per node. calibrate_decay estimates it.
+// A correction in time nodes (FORM Nodes: NODE_TIMES_MS, NODE_ALTITUDES_KM,
+// NODE_VALUES_K): dT(t, h) = sum_j sum_a values[j][a] phi_j(t) w_a(h), phi_j
+// the linear interpolant in time between nodes (the first and last values
+// held outside them) and w_a the linear interpolant in altitude between the
+// altitude nodes, extrapolated linearly up to 100 km beyond the outer nodes
+// and held beyond that; no altitude nodes is one global value per node.
+// calibrate_decay estimates it.
 struct NodeCorrection {
   std::vector<double> t, alt, v;  // node MJDs, altitude nodes (km), values node-major [j * P + a]
   int P() const { return alt.empty() ? 1 : int(alt.size()); }
   int M() const { return int(t.size()); }
-  std::string load(const json& j) {
+  std::string load(const dclCorrection* c) {
     t.clear(); alt.clear(); v.clear();
-    const json& nodes = j.value("nodesMjd", json::array());
-    const json& altitudes = j.value("altitudeKm", json::array());
-    const json& values = j.value("values", json::array());
-    if (!nodes.is_array() || nodes.empty()) return "correction.nodesMjd must be a non-empty array.";
-    for (const json& x : nodes) { if (!x.is_number()) return "correction.nodesMjd must be numbers."; t.push_back(x.get<double>()); }
-    for (size_t i = 1; i < t.size(); ++i) if (!(t[i] > t[i - 1])) return "correction.nodesMjd must increase.";
-    if (!altitudes.is_array()) return "correction.altitudeKm must be an array.";
-    for (const json& x : altitudes) { if (!x.is_number()) return "correction.altitudeKm must be numbers."; alt.push_back(x.get<double>()); }
-    if (alt.size() == 1) return "correction.altitudeKm needs none (global) or at least two altitudes.";
-    for (size_t i = 1; i < alt.size(); ++i) if (!(alt[i] > alt[i - 1])) return "correction.altitudeKm must increase.";
-    if (!values.is_array() || values.size() != t.size()) return "correction.values needs one entry per node.";
-    for (const json& row : values) {
-      if (!row.is_array() || int(row.size()) != P()) return "each correction.values entry needs one value per altitude node (one when global).";
-      for (const json& x : row) { if (!x.is_number() || !finite(x.get<double>())) return "correction values must be finite numbers."; v.push_back(x.get<double>()); }
-    }
+    if (size_of(c->NODE_TIMES_MS()) == 0) return "CORRECTION NODE_TIMES_MS must hold at least one node.";
+    for (const int64_t ms : *c->NODE_TIMES_MS()) t.push_back(mjd_of_ms(ms));
+    for (size_t i = 1; i < t.size(); ++i) if (!(t[i] > t[i - 1])) return "CORRECTION NODE_TIMES_MS must increase.";
+    if (c->NODE_ALTITUDES_KM()) for (const double x : *c->NODE_ALTITUDES_KM()) alt.push_back(x);
+    if (alt.size() == 1) return "CORRECTION NODE_ALTITUDES_KM needs none (global) or at least two altitudes.";
+    for (size_t i = 1; i < alt.size(); ++i) if (!(alt[i] > alt[i - 1])) return "CORRECTION NODE_ALTITUDES_KM must increase.";
+    if (size_of(c->NODE_VALUES_K()) != t.size() * size_t(P()))
+      return "CORRECTION NODE_VALUES_K needs one value per time node and altitude node (one per time node when global).";
+    for (const double x : *c->NODE_VALUES_K()) { if (!finite(x)) return "CORRECTION values must be finite numbers."; v.push_back(x); }
     return "";
   }
   void timeWeight(double mjd, int& j0, double& w) const {
@@ -421,35 +467,52 @@ struct NodeCorrection {
     }
     return dT;
   }
+  fb::Offset<dclCorrection> record(fb::FlatBufferBuilder& b, const std::vector<double>* sigmas) const {
+    const auto tt = times(b, t);
+    const auto aa = doubles(b, alt), vv = doubles(b, v);
+    const auto ss = sigmas ? doubles(b, *sigmas) : fb::Offset<fb::Vector<double>>();
+    dclCorrectionBuilder c(b);
+    c.add_FORM(dclCorrectionForm_Nodes);
+    c.add_NODE_TIMES_MS(tt);
+    c.add_NODE_ALTITUDES_KM(aa);
+    c.add_NODE_VALUES_K(vv);
+    if (sigmas) c.add_NODE_SIGMAS_K(ss);
+    return c.Finish();
+  }
 };
 
-// A correction: either time nodes (above, with nodesMjd) or spherical-
-// harmonic segments {degree, segments: [{fromMjd, toMjd, coefficients}]}, the
-// segment holding the instant (from <= t < to) applying and none meaning dT = 0.
+// A correction: FORM None (dT = 0), Nodes (above), or Harmonic: DEGREE and
+// SEGMENTS [{FROM_MS, TO_MS, COEFFICIENTS_K}], the segment holding the instant
+// (from <= t < to) applying, none meaning dT = 0. A segment with no
+// coefficients (a bin calibrate could not fit) applies nowhere.
 struct Correction {
   int degree = 0;
-  bool nodal = false;
+  bool nodal = false, present = false;
   NodeCorrection nodes;
   struct Segment { double from, to; std::vector<double> c; };
   std::vector<Segment> segments;
-  std::string load(const json& j) {
-    if (j.contains("nodesMjd")) {
+  std::string load(const dclCorrection* j) {
+    if (!j || j->FORM() == dclCorrectionForm_None) return "";
+    present = true;
+    if (j->FORM() == dclCorrectionForm_Nodes) {
       nodal = true;
       return nodes.load(j);
     }
-    degree = j.value("degree", 0);
-    if (degree < 0 || degree > 8) return "correction.degree must be 0-8.";
-    for (const json& s : j.value("segments", json::array())) {
-      Segment g{s.value("fromMjd", 0.0), s.value("toMjd", 0.0), {}};
-      const json& c = s.value("coefficients", json::array());
-      if (!c.is_array() || int(c.size()) != basis_size(degree)) return "each correction segment needs (degree+1)^2 coefficients.";
-      for (const json& x : c) g.c.push_back(x.is_number() ? x.get<double>() : std::numeric_limits<double>::quiet_NaN());
-      if (!(g.to > g.from)) return "correction segments need toMjd > fromMjd.";
-      segments.push_back(g);
-    }
+    if (j->FORM() != dclCorrectionForm_Harmonic) return "CORRECTION FORM must be None, Harmonic or Nodes.";
+    degree = j->DEGREE();
+    if (degree < 0 || degree > 8) return "CORRECTION DEGREE must be 0-8.";
+    if (j->SEGMENTS())
+      for (const dclHarmonicSegment* s : *j->SEGMENTS()) {
+        Segment g{mjd_of_ms(s->FROM_MS()), mjd_of_ms(s->TO_MS()), {}};
+        if (!(g.to > g.from)) return "CORRECTION segments need TO_MS > FROM_MS.";
+        if (size_of(s->COEFFICIENTS_K()) == 0) continue;
+        if (int(s->COEFFICIENTS_K()->size()) != basis_size(degree)) return "each CORRECTION segment needs (DEGREE+1)^2 coefficients.";
+        for (const double x : *s->COEFFICIENTS_K()) g.c.push_back(x);
+        segments.push_back(g);
+      }
     std::sort(segments.begin(), segments.end(), [](const Segment& a, const Segment& b) { return a.from < b.from; });
     for (size_t i = 1; i < segments.size(); ++i)
-      if (segments[i].from < segments[i - 1].to) return "correction segments must not overlap.";
+      if (segments[i].from < segments[i - 1].to) return "CORRECTION segments must not overlap.";
     return "";
   }
   double at(const Point& p) const {
@@ -463,6 +526,26 @@ struct Correction {
     double dT = 0;
     for (int k = 0; k < basis_size(degree); ++k) dT += it->c[k] * y[k];
     return dT;
+  }
+  // The correction as applied, for the answer; a null offset when there is none.
+  fb::Offset<dclCorrection> record(fb::FlatBufferBuilder& b) const {
+    if (!present) return 0;
+    if (nodal) return nodes.record(b, nullptr);
+    std::vector<fb::Offset<dclHarmonicSegment>> segs;
+    for (const Segment& s : segments) {
+      const auto c = doubles(b, s.c);
+      dclHarmonicSegmentBuilder g(b);
+      g.add_FROM_MS(ms_of_mjd(s.from));
+      g.add_TO_MS(ms_of_mjd(s.to));
+      g.add_COEFFICIENTS_K(c);
+      segs.push_back(g.Finish());
+    }
+    const auto sv = b.CreateVector(segs);
+    dclCorrectionBuilder c(b);
+    c.add_FORM(dclCorrectionForm_Harmonic);
+    c.add_DEGREE(uint8_t(degree));
+    c.add_SEGMENTS(sv);
+    return c.Finish();
   }
 };
 
@@ -529,15 +612,15 @@ struct ElementSet {
   double mjd = 0, aKm = 0, ecc = 0, perigeeKm = 0, bstar = 0;
   elsetrec rec{};
 };
-std::string load_set(const json& s, ElementSet& out) {
-  const auto num = [&](const char* k, double& x) {
-    if (!s.contains(k) || !s[k].is_number()) return false;
-    x = s[k].get<double>();
+std::string load_set(const OMM* s, ElementSet& out) {
+  const auto num = [&](double value, double& x) {
+    x = value;
     return finite(x);
   };
   double n = 0, e = 0, inc = 0, raan = 0, argp = 0, ma = 0;
-  if (!num("mjd", out.mjd) || !num("MEAN_MOTION", n) || !num("ECCENTRICITY", e) || !num("INCLINATION", inc) || !num("RA_OF_ASC_NODE", raan) ||
-      !num("ARG_OF_PERICENTER", argp) || !num("MEAN_ANOMALY", ma) || !num("BSTAR", out.bstar))
+  if (!mjd_of_iso(s->EPOCH(), out.mjd) || !finite(out.mjd) || !num(s->MEAN_MOTION(), n) || !num(s->ECCENTRICITY(), e) ||
+      !num(s->INCLINATION(), inc) || !num(s->RA_OF_ASC_NODE(), raan) || !num(s->ARG_OF_PERICENTER(), argp) || !num(s->MEAN_ANOMALY(), ma) ||
+      !num(s->BSTAR(), out.bstar))
     return "fields";
   if (!(n > 0) || !(e >= 0 && e < 1)) return "mean-motion-or-eccentricity";
   std::memset(&out.rec, 0, sizeof(out.rec));
@@ -640,8 +723,12 @@ struct Segment {
   std::vector<double> G;
   bool ok = false;
 };
+// The trajectory points of decay's samples, column-major (SAMPLE_* of dclObject).
+struct Samples {
+  std::vector<double> mjd, teme, lat, lon, alt, rho, q;
+};
 bool integrate(ElementSet& set, Segment& sg, double stepS, const Jb2008Table& table, const SunTable& sun, const NodeCorrection& corr,
-               bool gradient, json* samples) {
+               bool gradient, Samples* samples) {
   const double span = (sg.to - sg.from) * 86400.0;
   const int n = std::max(1, int(std::ceil(span / stepS - 1e-9)));
   const double h = span / n;
@@ -681,9 +768,15 @@ bool integrate(ElementSet& set, Segment& sg, double stepS, const Jb2008Table& ta
         sg.G[size_t(j - sg.j0) * P + a] -= c * q * rho * g * wgt[m];
       }
     }
-    if (samples)
-      samples->push_back({{"mjd", mjd}, {"temeKm", {rv[0], rv[1], rv[2]}}, {"temeKmS", {rv[3], rv[4], rv[5]}}, {"latDeg", p.lat / kDeg},
-                          {"lonDeg", p.lon / kDeg}, {"altKm", p.altM / 1000.0}, {"rho", rho}, {"qM2S", q}});
+    if (samples) {
+      samples->mjd.push_back(mjd);
+      samples->teme.insert(samples->teme.end(), rv, rv + 6);
+      samples->lat.push_back(p.lat / kDeg);
+      samples->lon.push_back(p.lon / kDeg);
+      samples->alt.push_back(p.altM / 1000.0);
+      samples->rho.push_back(rho);
+      samples->q.push_back(q);
+    }
   }
   sg.ok = true;
   return true;
@@ -692,6 +785,7 @@ bool integrate(ElementSet& set, Segment& sg, double stepS, const Jb2008Table& ta
 // An object: its element sets in epoch order, split into chains where two
 // sets are more than maxGapDays apart (each chain has its own offset a0), and
 // the segments joining consecutive sets of a chain.
+struct Refusal { uint32_t index; std::string reason; };
 struct Object {
   std::string id;
   std::vector<ElementSet> sets;
@@ -699,23 +793,22 @@ struct Object {
   std::vector<std::vector<Segment>> segments;
   std::vector<double> a0;  // per chain, km
   double lnB = 0, lnBPrior = 0, lnBSigma = 0, sigmaM = 0;
-  json refused = json::array();
+  std::vector<Refusal> refused;
   std::vector<double> residualM;  // per set (NaN when not in a chain)
   std::vector<char> use;          // per set
 };
-std::string load_object(const json& o, double fromMjd, double toMjd, double maxGapDays, Object& out) {
-  out.id = o.contains("id") ? (o["id"].is_string() ? o["id"].get<std::string>() : o["id"].dump()) : std::string();
-  const json& sets = o.value("sets", json::array());
-  if (!sets.is_array()) return "objects[].sets must be an array.";
+std::string load_object(const dclObject* o, double fromMjd, double toMjd, double maxGapDays, Object& out) {
+  out.id = o->ID() ? o->ID()->str() : std::string();
   std::vector<ElementSet> all;
-  for (size_t k = 0; k < sets.size(); ++k) {
+  const size_t count = size_of(o->ELEMENT_SETS());
+  for (size_t k = 0; k < count; ++k) {
     ElementSet s;
-    const std::string e = load_set(sets[k], s);
+    const std::string e = load_set(o->ELEMENT_SETS()->Get(uint32_t(k)), s);
     if (e == "fields")
-      return "each element set needs mjd (UTC), MEAN_MOTION (rev/day), ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, "
+      return "each element set needs EPOCH (ISO 8601 UTC), MEAN_MOTION (rev/day), ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, "
              "MEAN_ANOMALY (deg) and BSTAR (1/earth radii).";
     if (!e.empty()) {
-      out.refused.push_back({{"index", k}, {"reason", e}});
+      out.refused.push_back({uint32_t(k), e});
       continue;
     }
     if (s.mjd < fromMjd || s.mjd > toMjd) continue;
@@ -740,12 +833,16 @@ std::string load_object(const json& o, double fromMjd, double toMjd, double maxG
   out.a0.assign(out.chains.size(), 0.0);
   out.residualM.assign(out.sets.size(), std::numeric_limits<double>::quiet_NaN());
   out.use.assign(out.sets.size(), 1);
-  if (o.contains("lnBPrior") && o["lnBPrior"].is_object()) {
-    out.lnBPrior = o["lnBPrior"].value("mean", 0.0);
-    out.lnBSigma = o["lnBPrior"].value("sigma", 0.0);
-    if (!finite(out.lnBPrior) || !(out.lnBSigma >= 0)) return "objects[].lnBPrior needs a finite mean and a sigma >= 0.";
-  }
+  // A prior on ln B: sigma 0 = none.
+  out.lnBPrior = o->LN_B_PRIOR_MEAN();
+  out.lnBSigma = o->LN_B_PRIOR_SIGMA();
+  if (!finite(out.lnBPrior) || !(out.lnBSigma >= 0)) return "OBJECTS LN_B_PRIOR needs a finite mean and a sigma >= 0.";
   return "";
+}
+fb::Offset<fb::Vector<fb::Offset<dclRefusal>>> refusals(fb::FlatBufferBuilder& b, const std::vector<Refusal>& r) {
+  std::vector<fb::Offset<dclRefusal>> out;
+  for (const Refusal& x : r) out.push_back(CreatedclRefusalDirect(b, x.index, x.reason.c_str()));
+  return b.CreateVector(out);
 }
 // Integrates every segment of an object; false if any fails.
 bool integrate_object(Object& ob, double stepS, const Jb2008Table& table, const SunTable& sun, const NodeCorrection& corr, bool gradient) {
@@ -788,35 +885,57 @@ void robust_sigma(Object& ob, double floorM, double edit) {
       ob.use[s] = finite(ob.residualM[s]) && std::abs(ob.residualM[s] - centre) <= edit * ob.sigmaM ? 1 : 0;
 }
 
+// The settings of a request (an empty table when it has none).
+const dclSettings* settings_of(const DCL* request) {
+  static fb::FlatBufferBuilder empty = [] {
+    fb::FlatBufferBuilder b(64);
+    b.Finish(dclSettingsBuilder(b).Finish());
+    return b;
+  }();
+  return request->SETTINGS() ? request->SETTINGS() : fb::GetRoot<dclSettings>(empty.GetBufferPointer());
+}
+// The input points' own columns, copied into the answer.
+struct PointColumns {
+  fb::Offset<fb::Vector<int64_t>> time;
+  fb::Offset<fb::Vector<double>> lat, lon, alt;
+};
+PointColumns copy_columns(fb::FlatBufferBuilder& b, const dclPoints* pts) {
+  const auto d = [&](const fb::Vector<double>* v) { return v ? b.CreateVector(v->data(), v->size()) : b.CreateVector(std::vector<double>()); };
+  return {b.CreateVector(pts->TIME_MS()->data(), pts->TIME_MS()->size()), d(pts->LATITUDE_DEG()), d(pts->LONGITUDE_DEG()), d(pts->ALTITUDE_KM())};
+}
+
 }  // namespace
 
-// evaluate: {points|raw, jb2008, correction?, derivative?} ->
-// {density [kg/m^3], deltaT [K], dLnRhoDT [1/K] (with derivative), lstHours,
-// sunLonDeg and sunLatDeg (with diagnostics; the Sun's Earth-fixed direction), refused}
+// evaluate: POINTS (with the drivers of ATMOSPHERE, or MODEL_DRIVERS), CORRECTION?, SETTINGS WANT_DERIVATIVE and
+// WANT_SUN_DIAGNOSTICS -> POINTS DENSITY_KG_M3 (NaN = refused), DELTA_T_K, LOCAL_SOLAR_TIME_H, DLN_DENSITY_DT_PER_K
+// (with WANT_DERIVATIVE), SUN_LONGITUDE_DEG and SUN_LATITUDE_DEG (with WANT_SUN_DIAGNOSTICS; the Sun's Earth-fixed
+// direction), REFUSED.
 extern "C" int evaluate() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
   std::vector<Point> points;
-  std::string e = load_points(request, points);
+  e = load_points(request, points);
   if (!e.empty()) return fail("invalid-request", e);
   Correction correction;
-  if (request.contains("correction")) {
-    e = correction.load(request["correction"]);
-    if (!e.empty()) return fail("invalid-correction", e);
-  }
-  const bool derivative = request.value("derivative", false), diagnostics = request.value("diagnostics", false);
-  const bool msisModel = request.value("atmosphere", std::string("JB2008")) == "NRLMSISE00";
-  if (msisModel && (request.contains("correction") || derivative || diagnostics))
-    return fail("invalid-request", "atmosphere NRLMSISE00 has no temperature correction, derivative or Sun diagnostics.");
-  json density = json::array(), deltaT = json::array(), dlog = json::array(), lst = json::array(), refused = json::array();
-  json sunLon = json::array(), sunLat = json::array();
-  for (size_t i = 0; i < points.size(); ++i) {
+  e = correction.load(request->CORRECTION());
+  if (!e.empty()) return fail("invalid-correction", e);
+  const dclSettings* settings = settings_of(request);
+  const bool derivative = settings->WANT_DERIVATIVE(), diagnostics = settings->WANT_SUN_DIAGNOSTICS();
+  bool msisModel = false;
+  if (size_of(request->POINTS()->MODEL_DRIVERS()) == 0) atmosphere_of(request, msisModel);
+  if (msisModel && (correction.present || derivative || diagnostics))
+    return fail("invalid-request", "ATMOSPHERE NRLMSIS00E (NRLMSISE00) has no temperature correction, derivative or Sun diagnostics.");
+  const size_t n = points.size();
+  std::vector<double> density, deltaT, dlog, lst, sunLon, sunLat;
+  std::vector<uint32_t> refused;
+  for (size_t i = 0; i < n; ++i) {
     const Point& p = points[i];
     if (!p.ok) {
-      refused.push_back(i);
-      density.push_back(nullptr); deltaT.push_back(nullptr); lst.push_back(nullptr);
-      if (derivative) dlog.push_back(nullptr);
-      if (diagnostics) { sunLon.push_back(nullptr); sunLat.push_back(nullptr); }
+      refused.push_back(uint32_t(i));
+      density.push_back(kNaN); deltaT.push_back(kNaN); lst.push_back(kNaN);
+      if (derivative) dlog.push_back(kNaN);
+      if (diagnostics) { sunLon.push_back(kNaN); sunLat.push_back(kNaN); }
       continue;
     }
     if (p.msis) {
@@ -834,49 +953,80 @@ extern "C" int evaluate() {
     if (derivative) dlog.push_back((std::log(rho_at(p, dT + 1.0)) - std::log(rho_at(p, dT - 1.0))) / 2.0);
     if (diagnostics) { sunLon.push_back(p.sunLon / kDeg); sunLat.push_back(p.sunLat / kDeg); }
   }
-  json out = {{"kind", msisModel ? "nrlmsise00-densities" : "jb2008-densities"}, {"version", 1}, {"density", density}, {"deltaT", deltaT}, {"lstHours", lst}, {"refused", refused}};
-  if (derivative) out["dLnRhoDT"] = dlog;
-  if (diagnostics) { out["sunLonDeg"] = sunLon; out["sunLatDeg"] = sunLat; }
-  return emit("result", out);
+  fb::FlatBufferBuilder b(1024 + n * 80);
+  const PointColumns cols = copy_columns(b, request->POINTS());
+  const auto vDensity = doubles(b, density), vDeltaT = doubles(b, deltaT), vLst = doubles(b, lst);
+  const auto vRefused = indices(b, refused);
+  const fb::Offset<fb::Vector<double>> vDlog = derivative ? doubles(b, dlog) : fb::Offset<fb::Vector<double>>();
+  const fb::Offset<fb::Vector<double>> vSunLon = diagnostics ? doubles(b, sunLon) : fb::Offset<fb::Vector<double>>();
+  const fb::Offset<fb::Vector<double>> vSunLat = diagnostics ? doubles(b, sunLat) : fb::Offset<fb::Vector<double>>();
+  dclPointsBuilder pb(b);
+  pb.add_TIME_MS(cols.time);
+  pb.add_LATITUDE_DEG(cols.lat);
+  pb.add_LONGITUDE_DEG(cols.lon);
+  pb.add_ALTITUDE_KM(cols.alt);
+  pb.add_DENSITY_KG_M3(vDensity);
+  pb.add_DELTA_T_K(vDeltaT);
+  pb.add_LOCAL_SOLAR_TIME_H(vLst);
+  if (derivative) pb.add_DLN_DENSITY_DT_PER_K(vDlog);
+  if (diagnostics) { pb.add_SUN_LONGITUDE_DEG(vSunLon); pb.add_SUN_LATITUDE_DEG(vSunLat); }
+  pb.add_REFUSED(vRefused);
+  const auto pointsOut = pb.Finish();
+  const auto atm = atmosphere_record(b, msisModel);
+  const auto corr = correction.record(b);
+  dclSettingsBuilder sb(b);
+  sb.add_WANT_DERIVATIVE(derivative);
+  sb.add_WANT_SUN_DIAGNOSTICS(diagnostics);
+  const auto set = sb.Finish();
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_DensityEvaluation);
+  d.add_ATMOSPHERE(atm);
+  d.add_SETTINGS(set);
+  if (correction.present) d.add_CORRECTION(corr);
+  d.add_STATUS(dclStatus_Solved);
+  d.add_POINTS(pointsOut);
+  return emit("result", b, d.Finish());
 }
 
-// calibrate: {points + rho (+ weight) | raw + rho, jb2008, degree, binHours,
-// fromMjd, toMjd, logSigma, priorSigmaK [per degree], minPoints, iterations,
-// editSigma} -> {bins: [{fromMjd, toMjd, n, used, coefficients, sigmas,
-// prefitRms, postfitRms, iterations, converged}]}
+// calibrate: POINTS with OBSERVED_DENSITY_KG_M3 (and WEIGHT), the JB2008 drivers (or MODEL_DRIVERS), SETTINGS FROM_MS,
+// TO_MS, DEGREE, BIN_S, LOG_DENSITY_SIGMA, PRIOR_SIGMA_K [per degree], MIN_POINTS, MAX_ITERATIONS, EDIT_SIGMA (< 0: no
+// editing) -> CORRECTION Harmonic: per bin a segment with COEFFICIENTS_K, SIGMAS_K and its FIT (OBSERVATIONS, USED,
+// PARAMETERS, PREFIT_RMS, POSTFIT_RMS, ITERATIONS, CONVERGED); a bin with too few points has no coefficients.
 extern "C" int calibrate() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
-  if (request.value("atmosphere", std::string("JB2008")) != "JB2008") return fail("invalid-request", "calibrate fits the JB2008 temperature correction only.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
+  const dclPoints* pts = request->POINTS();
+  bool msisModel = false;
+  e = atmosphere_of(request, msisModel);
+  if (!e.empty() || msisModel)
+    return fail("invalid-request", "calibrate fits the JB2008 temperature correction only.");
   std::vector<Point> points;
-  std::string e = load_points(request, points);
+  e = load_points(request, points);
   if (!e.empty()) return fail("invalid-request", e);
-  const json rhoJson = request.contains("raw") ? json(nullptr) : request["points"].value("rho", json::array());
+  const auto* observed = pts->OBSERVED_DENSITY_KG_M3();
+  if (size_of(observed) != points.size()) return fail("invalid-request", "POINTS OBSERVED_DENSITY_KG_M3 must have one value per point.");
   std::vector<double> rho(points.size(), 0.0), weight(points.size(), 1.0);
-  if (request.contains("raw")) {
-    for (size_t i = 0; i < points.size(); ++i) rho[i] = request["raw"][i].value("rho", 0.0);
-  } else {
-    if (!rhoJson.is_array() || rhoJson.size() != points.size()) return fail("invalid-request", "points.rho must have one value per point.");
-    for (size_t i = 0; i < points.size(); ++i) rho[i] = rhoJson[i].is_number() ? rhoJson[i].get<double>() : 0.0;
-    const json w = request["points"].value("weight", json::array());
-    if (w.is_array() && w.size() == points.size())
-      for (size_t i = 0; i < points.size(); ++i) weight[i] = w[i].is_number() ? w[i].get<double>() : 0.0;
-  }
-  const int degree = request.value("degree", 0);
-  if (degree < 0 || degree > 8) return fail("invalid-request", "degree must be 0-8.");
+  for (size_t i = 0; i < points.size(); ++i) rho[i] = observed->Get(uint32_t(i));
+  if (size_of(pts->WEIGHT()) == points.size())
+    for (size_t i = 0; i < points.size(); ++i) weight[i] = pts->WEIGHT()->Get(uint32_t(i));
+  const dclSettings* settings = settings_of(request);
+  const int degree = settings->DEGREE();
+  if (degree < 0 || degree > 8) return fail("invalid-request", "SETTINGS DEGREE must be 0-8.");
   const int K = basis_size(degree);
-  const double binDays = request.value("binHours", 3.0) / 24.0;
-  const double from = request.value("fromMjd", 0.0), to = request.value("toMjd", 0.0);
-  if (!(binDays > 0) || !(to > from)) return fail("invalid-request", "binHours > 0 and toMjd > fromMjd are required.");
-  const double logSigma = request.value("logSigma", 0.1);
+  const double binHours = settings->BIN_S() != 0 ? settings->BIN_S() / 3600.0 : 3.0;
+  const double binDays = binHours / 24.0;
+  const double from = mjd_of_ms(settings->FROM_MS()), to = mjd_of_ms(settings->TO_MS());
+  if (!(binDays > 0) || !(to > from)) return fail("invalid-request", "SETTINGS BIN_S > 0 and TO_MS > FROM_MS are required.");
+  const double logSigma = settings->LOG_DENSITY_SIGMA() != 0 ? settings->LOG_DENSITY_SIGMA() : 0.1;
   std::vector<double> priorSigma(degree + 1, 100.0);
-  if (request.contains("priorSigmaK")) {
-    const json& ps = request["priorSigmaK"];
-    if (!ps.is_array() || int(ps.size()) != degree + 1) return fail("invalid-request", "priorSigmaK needs one value per degree.");
-    for (int l = 0; l <= degree; ++l) priorSigma[l] = ps[l];
+  if (size_of(settings->PRIOR_SIGMA_K()) != 0) {
+    if (int(settings->PRIOR_SIGMA_K()->size()) != degree + 1) return fail("invalid-request", "SETTINGS PRIOR_SIGMA_K needs one value per degree.");
+    for (int l = 0; l <= degree; ++l) priorSigma[l] = settings->PRIOR_SIGMA_K()->Get(uint32_t(l));
   }
-  const int minPoints = request.value("minPoints", 30), maxIterations = request.value("iterations", 10);
-  const double editSigma = request.value("editSigma", 4.0);
+  const int minPoints = settings->MIN_POINTS() != 0 ? int(settings->MIN_POINTS()) : 30;
+  const int maxIterations = settings->MAX_ITERATIONS() != 0 ? int(settings->MAX_ITERATIONS()) : 10;
+  const double editSigma = settings->EDIT_SIGMA() != 0 ? settings->EDIT_SIGMA() : 4.0;
   std::vector<double> priorDiag(K);
   for (int l = 0, k = 0; l <= degree; ++l)
     for (int c = 0; c < 2 * l + 1; ++c, ++k) priorDiag[k] = 1.0 / (priorSigma[l] * priorSigma[l]);
@@ -885,17 +1035,25 @@ extern "C" int calibrate() {
   std::vector<std::vector<size_t>> members(nBins);
   for (size_t i = 0; i < points.size(); ++i) {
     if (!points[i].ok || !positive(rho[i]) || !(weight[i] > 0)) continue;
-    const long b = long(std::floor((points[i].mjd - from) / binDays));
-    if (b >= 0 && b < nBins) members[b].push_back(i);
+    const long bin = long(std::floor((points[i].mjd - from) / binDays));
+    if (bin >= 0 && bin < nBins) members[bin].push_back(i);
   }
-  json bins = json::array();
+  fb::FlatBufferBuilder b(4096);
+  std::vector<fb::Offset<dclHarmonicSegment>> bins;
   std::vector<double> y(K);
-  for (long b = 0; b < nBins; ++b) {
-    const std::vector<size_t>& idx = members[b];
-    json bin = {{"fromMjd", from + b * binDays}, {"toMjd", from + (b + 1) * binDays}, {"n", idx.size()}};
+  for (long bin = 0; bin < nBins; ++bin) {
+    const std::vector<size_t>& idx = members[bin];
+    const int64_t fromMs = ms_of_mjd(from + bin * binDays), toMs = ms_of_mjd(from + (bin + 1) * binDays);
     if (long(idx.size()) < minPoints) {
-      bin["coefficients"] = nullptr;
-      bins.push_back(bin);
+      dclFitStatisticsBuilder fs(b);
+      fs.add_OBSERVATIONS(uint32_t(idx.size()));
+      fs.add_PARAMETERS(uint32_t(K));
+      const auto fit = fs.Finish();
+      dclHarmonicSegmentBuilder g(b);
+      g.add_FROM_MS(fromMs);
+      g.add_TO_MS(toMs);
+      g.add_FIT(fit);
+      bins.push_back(g.Finish());
       continue;
     }
     std::vector<double> c(K, 0.0), r(idx.size()), g(idx.size());
@@ -959,27 +1117,57 @@ extern "C" int calibrate() {
     }
     long used = 0;
     for (char u : use) used += u;
-    json sigmas = json::array();
-    for (int a = 0; a < K; ++a) sigmas.push_back(inverse.empty() ? json(nullptr) : json(std::sqrt(inverse[a * K + a])));
-    bin["used"] = used;
-    bin["coefficients"] = c;
-    bin["sigmas"] = sigmas;
-    bin["prefitRms"] = prefit;
-    bin["postfitRms"] = rms();
-    bin["iterations"] = iterations;
-    bin["converged"] = converged;
-    bins.push_back(bin);
+    std::vector<double> sigmas;
+    if (!inverse.empty())
+      for (int a = 0; a < K; ++a) sigmas.push_back(std::sqrt(inverse[a * K + a]));
+    const double postfit = rms();
+    const auto vc = doubles(b, c), vs = doubles(b, sigmas);
+    dclFitStatisticsBuilder fs(b);
+    fs.add_ITERATIONS(uint32_t(iterations));
+    fs.add_CONVERGED(converged);
+    fs.add_OBSERVATIONS(uint32_t(idx.size()));
+    fs.add_USED(uint32_t(used));
+    fs.add_PARAMETERS(uint32_t(K));
+    fs.add_PREFIT_RMS(prefit);
+    fs.add_POSTFIT_RMS(postfit);
+    const auto fit = fs.Finish();
+    dclHarmonicSegmentBuilder sg(b);
+    sg.add_FROM_MS(fromMs);
+    sg.add_TO_MS(toMs);
+    sg.add_COEFFICIENTS_K(vc);
+    sg.add_SIGMAS_K(vs);
+    sg.add_FIT(fit);
+    bins.push_back(sg.Finish());
   }
-  return emit("calibration", {{"kind", "jb2008-dt-calibration"}, {"version", 1}, {"degree", degree}, {"binHours", binDays * 24.0},
-                              {"logSigma", logSigma}, {"priorSigmaK", priorSigma}, {"bins", bins}});
+  const auto segs = b.CreateVector(bins);
+  dclCorrectionBuilder cb(b);
+  cb.add_FORM(dclCorrectionForm_Harmonic);
+  cb.add_DEGREE(uint8_t(degree));
+  cb.add_SEGMENTS(segs);
+  const auto corr = cb.Finish();
+  const auto prior = doubles(b, priorSigma);
+  dclSettingsBuilder sb(b);
+  sb.add_FROM_MS(settings->FROM_MS());
+  sb.add_TO_MS(settings->TO_MS());
+  sb.add_DEGREE(uint8_t(degree));
+  sb.add_BIN_S(binHours * 3600.0);
+  sb.add_LOG_DENSITY_SIGMA(logSigma);
+  sb.add_PRIOR_SIGMA_K(prior);
+  sb.add_MIN_POINTS(uint32_t(minPoints));
+  sb.add_MAX_ITERATIONS(uint32_t(maxIterations));
+  sb.add_EDIT_SIGMA(editSigma);
+  const auto set = sb.Finish();
+  const auto atm = atmosphere_record(b, false);
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_DensityCalibration);
+  d.add_ATMOSPHERE(atm);
+  d.add_SETTINGS(set);
+  d.add_CORRECTION(corr);
+  d.add_STATUS(dclStatus_Solved);
+  return emit("calibration", b, d.Finish());
 }
 
 namespace {
-// The drivers of a decay request; empty string or the reason.
-std::string load_drivers(const json& request, Jb2008Table& table) {
-  if (!request.contains("jb2008") || !request["jb2008"].is_object()) return "jb2008 {rows} is required.";
-  return table.add(request["jb2008"].value("rows", json::array()));
-}
 // The UTC span of every set (and, for decay, its one-set span) for the Sun table.
 void set_span(const std::vector<Object>& objects, double extraDays, double& lo, double& hi) {
   lo = std::numeric_limits<double>::infinity();
@@ -987,42 +1175,57 @@ void set_span(const std::vector<Object>& objects, double extraDays, double& lo, 
   for (const Object& ob : objects)
     for (const ElementSet& s : ob.sets) { lo = std::min(lo, s.mjd); hi = std::max(hi, s.mjd + extraDays); }
 }
+// The per-set columns of an object (time, mean semi-major axis, perigee height, eccentricity).
+struct SetColumns {
+  fb::Offset<fb::Vector<int64_t>> time;
+  fb::Offset<fb::Vector<double>> a, perigee, ecc;
+};
+SetColumns set_columns(fb::FlatBufferBuilder& b, const Object& ob) {
+  std::vector<double> t, a, p, e;
+  for (const ElementSet& s : ob.sets) { t.push_back(s.mjd); a.push_back(s.aKm); p.push_back(s.perigeeKm); e.push_back(s.ecc); }
+  return {times(b, t), doubles(b, a), doubles(b, p), doubles(b, e)};
+}
 }  // namespace
 
-// decay: the forward model. {jb2008, objects: [{id, sets, B? (m^2/kg, default
-// 1), spanDays? (one set: integrate it alone over this span)}], correction?
-// (time nodes), stepSeconds?, maxGapDays?, samples?} -> per object the sets'
-// mean semi-major axes, the drag change over each segment (B * D) and its
-// cumulative sum at each set, the mean geodetic altitude, and with samples
-// every trajectory point (TEME state, geodetic point, density, q).
+// decay: the forward model. JB2008_DRIVERS, OBJECTS [{ID, ELEMENT_SETS ($OMM), BALLISTIC_COEFFICIENT_M2_KG (0 = 1),
+// SPAN_S (one set: integrate it alone over this span)}], CORRECTION? (Nodes), SETTINGS STEP_S, MAX_GAP_S, WANT_SAMPLES ->
+// per object the sets' mean semi-major axes, the drag change over each segment (B * D) and its cumulative sum at each
+// set, the mean geodetic altitude, and with WANT_SAMPLES every trajectory point (TEME state, geodetic point, density, q).
 extern "C" int decay() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
   Jb2008Table table;
-  std::string e = load_drivers(request, table);
+  e = table.add(request->JB2008_DRIVERS());
   if (!e.empty()) return fail("invalid-request", e);
   NodeCorrection corr;
-  if (request.contains("correction")) {
-    e = corr.load(request["correction"]);
+  const dclCorrection* given = request->CORRECTION();
+  const bool corrected = given && given->FORM() != dclCorrectionForm_None;
+  if (corrected) {
+    if (given->FORM() != dclCorrectionForm_Nodes) return fail("invalid-correction", "decay takes a correction in time nodes (FORM Nodes).");
+    e = corr.load(given);
     if (!e.empty()) return fail("invalid-correction", e);
   } else {
     corr.t = {0.0};
     corr.v = {0.0};
   }
-  const double stepS = request.value("stepSeconds", 60.0), maxGap = request.value("maxGapDays", 3.0);
-  if (!(stepS >= 1 && stepS <= 600)) return fail("invalid-request", "stepSeconds must be 1-600.");
-  const bool wantSamples = request.value("samples", false);
-  const json& list = request.value("objects", json::array());
-  if (!list.is_array() || list.empty()) return fail("invalid-request", "objects must be a non-empty array.");
-  std::vector<Object> objects(list.size());
-  std::vector<double> span(list.size(), 0.0), B(list.size(), 1.0);
+  const dclSettings* settings = settings_of(request);
+  const double stepS = settings->STEP_S() != 0 ? settings->STEP_S() : 60.0;
+  const double maxGap = settings->MAX_GAP_S() != 0 ? settings->MAX_GAP_S() / 86400.0 : 3.0;
+  if (!(stepS >= 1 && stepS <= 600)) return fail("invalid-request", "SETTINGS STEP_S must be 1-600.");
+  const bool wantSamples = settings->WANT_SAMPLES();
+  const auto* list = request->OBJECTS();
+  if (size_of(list) == 0) return fail("invalid-request", "OBJECTS must hold at least one object.");
+  std::vector<Object> objects(list->size());
+  std::vector<double> span(list->size(), 0.0), B(list->size(), 1.0);
   double extra = 0;
-  for (size_t i = 0; i < list.size(); ++i) {
-    e = load_object(list[i], -1e9, 1e9, maxGap, objects[i]);
+  for (size_t i = 0; i < list->size(); ++i) {
+    const dclObject* o = list->Get(uint32_t(i));
+    e = load_object(o, -1e9, 1e9, maxGap, objects[i]);
     if (!e.empty()) return fail("invalid-request", e);
-    span[i] = list[i].value("spanDays", 0.0);
-    B[i] = list[i].value("B", 1.0);
-    if (!(span[i] >= 0 && span[i] <= 30) || !positive(B[i])) return fail("invalid-request", "spanDays must be 0-30 and B positive.");
+    span[i] = o->SPAN_S() / 86400.0;
+    B[i] = o->BALLISTIC_COEFFICIENT_M2_KG() != 0 ? o->BALLISTIC_COEFFICIENT_M2_KG() : 1.0;
+    if (!(span[i] >= 0 && span[i] <= 30) || !positive(B[i])) return fail("invalid-request", "SPAN_S must be 0-30 days and B positive.");
     if (objects[i].sets.size() == 1 && span[i] > 0) {
       Segment sg;
       sg.set = 0;
@@ -1036,10 +1239,12 @@ extern "C" int decay() {
   set_span(objects, extra, lo, hi);
   SunTable sun;
   sun.build(lo - 0.1, hi + 0.1);
-  json out = json::array();
+  fb::FlatBufferBuilder b(4096);
+  std::vector<fb::Offset<dclObject>> out;
   for (size_t i = 0; i < objects.size(); ++i) {
     Object& ob = objects[i];
-    json samples = json::array(), segs = json::array(), sets = json::array();
+    Samples samples;
+    std::vector<double> segFrom, segTo, segDecay, segAlt;
     std::vector<double> cumulative(ob.sets.size(), std::numeric_limits<double>::quiet_NaN());
     bool ok = true;
     for (size_t c = 0; c < ob.chains.size() && ok; ++c) {
@@ -1050,18 +1255,72 @@ extern "C" int decay() {
         if (!integrate(ob.sets[sg.set], sg, stepS, table, sun, corr, false, wantSamples ? &samples : nullptr)) { ok = false; break; }
         cum += B[i] * sg.D;
         if (k + 1 < ob.chains[c].size()) cumulative[ob.chains[c][k + 1]] = cum;
-        segs.push_back({{"fromMjd", sg.from}, {"toMjd", sg.to}, {"decayM", B[i] * sg.D}, {"meanAltitudeKm", sg.altSum / std::max(1.0, sg.altCount)}});
+        segFrom.push_back(sg.from);
+        segTo.push_back(sg.to);
+        segDecay.push_back(B[i] * sg.D);
+        segAlt.push_back(sg.altSum / std::max(1.0, sg.altCount));
       }
     }
-    for (size_t k = 0; k < ob.sets.size(); ++k)
-      sets.push_back({{"mjd", ob.sets[k].mjd}, {"aKm", ob.sets[k].aKm}, {"perigeeKm", ob.sets[k].perigeeKm}, {"eccentricity", ob.sets[k].ecc},
-                      {"cumulativeDecayM", std::isfinite(cumulative[k]) ? json(cumulative[k]) : json(nullptr)}});
-    json o = {{"id", ob.id}, {"ok", ok}, {"B", B[i]}, {"sets", sets}, {"segments", segs}, {"refused", ob.refused},
-              {"meanAltitudeKm", ok ? json(mean_altitude(ob)) : json(nullptr)}};
-    if (wantSamples) o["samples"] = samples;
-    out.push_back(o);
+    const auto id = b.CreateString(ob.id);
+    const auto refused = refusals(b, ob.refused);
+    const SetColumns sc = set_columns(b, ob);
+    const auto vCum = doubles(b, cumulative);
+    const auto vSegFrom = times(b, segFrom), vSegTo = times(b, segTo);
+    const auto vSegDecay = doubles(b, segDecay), vSegAlt = doubles(b, segAlt);
+    fb::Offset<fb::Vector<int64_t>> sTime;
+    fb::Offset<fb::Vector<double>> sTeme, sLat, sLon, sAlt, sRho, sQ;
+    if (wantSamples) {
+      sTime = times(b, samples.mjd);
+      sTeme = doubles(b, samples.teme);
+      sLat = doubles(b, samples.lat);
+      sLon = doubles(b, samples.lon);
+      sAlt = doubles(b, samples.alt);
+      sRho = doubles(b, samples.rho);
+      sQ = doubles(b, samples.q);
+    }
+    dclObjectBuilder o(b);
+    o.add_ID(id);
+    o.add_BALLISTIC_COEFFICIENT_M2_KG(B[i]);
+    o.add_SPAN_S(list->Get(uint32_t(i))->SPAN_S());
+    o.add_OK(ok);
+    o.add_REFUSED(refused);
+    o.add_SET_TIME_MS(sc.time);
+    o.add_SET_MEAN_SEMI_MAJOR_AXIS_KM(sc.a);
+    o.add_SET_PERIGEE_HEIGHT_KM(sc.perigee);
+    o.add_SET_ECCENTRICITY(sc.ecc);
+    o.add_SET_CUMULATIVE_DECAY_M(vCum);
+    o.add_SEGMENT_FROM_MS(vSegFrom);
+    o.add_SEGMENT_TO_MS(vSegTo);
+    o.add_SEGMENT_DECAY_M(vSegDecay);
+    o.add_SEGMENT_MEAN_ALTITUDE_KM(vSegAlt);
+    o.add_MEAN_ALTITUDE_KM(ok ? mean_altitude(ob) : kNaN);
+    if (wantSamples) {
+      o.add_SAMPLE_TIME_MS(sTime);
+      o.add_SAMPLE_TEME_STATE(sTeme);
+      o.add_SAMPLE_LATITUDE_DEG(sLat);
+      o.add_SAMPLE_LONGITUDE_DEG(sLon);
+      o.add_SAMPLE_ALTITUDE_KM(sAlt);
+      o.add_SAMPLE_DENSITY_KG_M3(sRho);
+      o.add_SAMPLE_DECAY_FACTOR_M2_S(sQ);
+    }
+    out.push_back(o.Finish());
   }
-  return emit("result", {{"kind", "jb2008-orbit-decay"}, {"version", 1}, {"objects", out}});
+  const auto objs = b.CreateVector(out);
+  const auto corrOut = corrected ? corr.record(b, nullptr) : fb::Offset<dclCorrection>();
+  dclSettingsBuilder sb(b);
+  sb.add_STEP_S(stepS);
+  sb.add_MAX_GAP_S(maxGap * 86400.0);
+  sb.add_WANT_SAMPLES(wantSamples);
+  const auto set = sb.Finish();
+  const auto atm = atmosphere_record(b, false);
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_OrbitalDecay);
+  d.add_ATMOSPHERE(atm);
+  d.add_SETTINGS(set);
+  if (corrected) d.add_CORRECTION(corrOut);
+  d.add_STATUS(dclStatus_Solved);
+  d.add_OBJECTS(objs);
+  return emit("result", b, d.Finish());
 }
 
 // calibrate_decay: the temperature correction (time nodes, optionally linear
@@ -1071,53 +1330,62 @@ extern "C" int decay() {
 // weighted by each object's robust residual scale, with a random-walk prior
 // on the correction, a prior on its mean level, an optional prior tying
 // altitude nodes, and each object's prior on ln B (anchors: known area to
-// mass). {jb2008, objects: [{id, sets, lnBPrior? {mean, sigma}}], nodes:
-// {fromMjd, toMjd, stepHours, altitudeKm?}, priors: {randomWalkKPerSqrtDay,
-// meanLevelK, altitudeDifferenceK?}, stepSeconds?, maxGapDays?, sigmaFloorM?,
-// editSigma?, iterations?, minSets?, residuals?}
+// mass). JB2008_DRIVERS, OBJECTS [{ID, ELEMENT_SETS, LN_B_PRIOR_MEAN/SIGMA}],
+// SETTINGS FROM_MS, TO_MS, NODE_STEP_S (0 = 6 h), NODE_ALTITUDES_KM,
+// RANDOM_WALK_K_PER_SQRT_DAY, MEAN_LEVEL_K, ALTITUDE_DIFFERENCE_K, STEP_S,
+// MAX_GAP_S, RESIDUAL_FLOOR_M, EDIT_SIGMA (< 0: no editing), MAX_ITERATIONS,
+// REWEIGHT_ITERATIONS, TOLERANCE_K/LN_B/OFFSET_M, MIN_SETS, WANT_RESIDUALS.
 extern "C" int calibrate_decay() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
   Jb2008Table table;
-  std::string e = load_drivers(request, table);
+  e = table.add(request->JB2008_DRIVERS());
   if (!e.empty()) return fail("invalid-request", e);
-  const json& nodes = request.value("nodes", json::object());
-  const double from = nodes.value("fromMjd", 0.0), to = nodes.value("toMjd", 0.0), stepH = nodes.value("stepHours", 6.0);
-  if (!(to > from) || !(stepH > 0)) return fail("invalid-request", "nodes {fromMjd, toMjd > fromMjd, stepHours > 0} is required.");
+  const dclSettings* settings = settings_of(request);
+  const double from = mjd_of_ms(settings->FROM_MS()), to = mjd_of_ms(settings->TO_MS());
+  const double stepH = settings->NODE_STEP_S() != 0 ? settings->NODE_STEP_S() / 3600.0 : 6.0;
+  if (!(to > from) || !(stepH > 0)) return fail("invalid-request", "SETTINGS FROM_MS, TO_MS > FROM_MS and NODE_STEP_S > 0 are required.");
   NodeCorrection corr;
   const int M = int(std::ceil((to - from) / (stepH / 24.0) - 1e-9)) + 1;
   if (M > 4000) return fail("invalid-request", "too many correction nodes.");
   for (int j = 0; j < M; ++j) corr.t.push_back(from + j * stepH / 24.0);
-  for (const json& a : nodes.value("altitudeKm", json::array())) corr.alt.push_back(a.is_number() ? a.get<double>() : -1.0);
-  if (corr.alt.size() == 1) return fail("invalid-request", "nodes.altitudeKm needs none (global) or at least two altitudes.");
+  if (settings->NODE_ALTITUDES_KM()) for (const double a : *settings->NODE_ALTITUDES_KM()) corr.alt.push_back(a);
+  if (corr.alt.size() == 1) return fail("invalid-request", "SETTINGS NODE_ALTITUDES_KM needs none (global) or at least two altitudes.");
   for (size_t a = 1; a < corr.alt.size(); ++a)
-    if (!(corr.alt[a] > corr.alt[a - 1])) return fail("invalid-request", "nodes.altitudeKm must increase.");
+    if (!(corr.alt[a] > corr.alt[a - 1])) return fail("invalid-request", "SETTINGS NODE_ALTITUDES_KM must increase.");
   const int P = corr.P(), nTheta = M * P;
   corr.v.assign(size_t(nTheta), 0.0);
-  const json& priors = request.value("priors", json::object());
-  const double rw = priors.value("randomWalkKPerSqrtDay", 30.0), meanK = priors.value("meanLevelK", 150.0), diffK = priors.value("altitudeDifferenceK", 100.0);
-  if (!positive(rw) || !positive(meanK) || !positive(diffK)) return fail("invalid-request", "priors must be positive.");
-  const double stepS = request.value("stepSeconds", 60.0), maxGap = request.value("maxGapDays", 3.0), floorM = request.value("sigmaFloorM", 1.0);
-  const double edit = request.value("editSigma", 4.0);
+  const double rw = settings->RANDOM_WALK_K_PER_SQRT_DAY() != 0 ? settings->RANDOM_WALK_K_PER_SQRT_DAY() : 30.0;
+  const double meanK = settings->MEAN_LEVEL_K() != 0 ? settings->MEAN_LEVEL_K() : 150.0;
+  const double diffK = settings->ALTITUDE_DIFFERENCE_K() != 0 ? settings->ALTITUDE_DIFFERENCE_K() : 100.0;
+  if (!positive(rw) || !positive(meanK) || !positive(diffK)) return fail("invalid-request", "SETTINGS priors must be positive.");
+  const double stepS = settings->STEP_S() != 0 ? settings->STEP_S() : 60.0;
+  const double maxGap = settings->MAX_GAP_S() != 0 ? settings->MAX_GAP_S() / 86400.0 : 3.0;
+  const double floorM = settings->RESIDUAL_FLOOR_M() != 0 ? settings->RESIDUAL_FLOOR_M() : 1.0;
+  const double edit = settings->EDIT_SIGMA() != 0 ? settings->EDIT_SIGMA() : 4.0;
   // Residual scales and edits are re-estimated in the first reweight
   // iterations and then held, so that Gauss-Newton converges on a fixed problem.
-  const int reweight = request.value("reweightIterations", 4);
-  const int maxIt = request.value("iterations", 10), minSets = request.value("minSets", 5);
-  const json& tol = request.value("tolerance", json::object());
-  const double tolK = tol.value("K", 0.5), tolLnB = tol.value("lnB", 1e-3), tolA0 = tol.value("a0M", 0.1);
-  if (!positive(tolK) || !positive(tolLnB) || !positive(tolA0)) return fail("invalid-request", "tolerance {K, lnB, a0M} must be positive.");
-  json history = json::array();
-  const bool wantResiduals = request.value("residuals", false);
-  if (!(stepS >= 1 && stepS <= 600) || !positive(floorM)) return fail("invalid-request", "stepSeconds must be 1-600 and sigmaFloorM positive.");
+  const int reweight = settings->REWEIGHT_ITERATIONS() != 0 ? int(settings->REWEIGHT_ITERATIONS()) : 4;
+  const int maxIt = settings->MAX_ITERATIONS() != 0 ? int(settings->MAX_ITERATIONS()) : 10;
+  const int minSets = settings->MIN_SETS() != 0 ? int(settings->MIN_SETS()) : 5;
+  const double tolK = settings->TOLERANCE_K() != 0 ? settings->TOLERANCE_K() : 0.5;
+  const double tolLnB = settings->TOLERANCE_LN_B() != 0 ? settings->TOLERANCE_LN_B() : 1e-3;
+  const double tolA0 = settings->TOLERANCE_OFFSET_M() != 0 ? settings->TOLERANCE_OFFSET_M() : 0.1;
+  if (!positive(tolK) || !positive(tolLnB) || !positive(tolA0)) return fail("invalid-request", "SETTINGS TOLERANCE_K, TOLERANCE_LN_B and TOLERANCE_OFFSET_M must be positive.");
+  struct Step { int iteration; double chi2; long observations; double big, bigB, bigA; };
+  std::vector<Step> history;
+  const bool wantResiduals = settings->WANT_RESIDUALS();
+  if (!(stepS >= 1 && stepS <= 600) || !positive(floorM)) return fail("invalid-request", "SETTINGS STEP_S must be 1-600 and RESIDUAL_FLOOR_M positive.");
 
   // Objects: sets inside the node span, chains of at least two sets.
-  const json& list = request.value("objects", json::array());
-  if (!list.is_array()) return fail("invalid-request", "objects must be an array.");
+  const auto* list = request->OBJECTS();
   std::vector<Object> objects;
-  json skipped = json::array();
-  for (const json& o : list) {
+  struct Skipped { std::string id, reason; long sets; bool counted; std::vector<Refusal> refused; };
+  std::vector<Skipped> skipped;
+  for (size_t li = 0; li < size_of(list); ++li) {
     Object ob;
-    e = load_object(o, from, to, maxGap, ob);
+    e = load_object(list->Get(uint32_t(li)), from, to, maxGap, ob);
     if (!e.empty()) return fail("invalid-request", e);
     std::vector<std::vector<int>> chains;
     std::vector<std::vector<Segment>> segments;
@@ -1135,7 +1403,7 @@ extern "C" int calibrate_decay() {
     ob.segments = segments;
     ob.a0.assign(chains.size(), 0.0);
     if (int(used) < minSets) {
-      skipped.push_back({{"id", ob.id}, {"reason", "fewer than minSets sets in chains"}, {"sets", used}});
+      skipped.push_back({ob.id, "fewer than MIN_SETS sets in chains", long(used), true, ob.refused});
       continue;
     }
     if (!(ob.lnBSigma > 0)) ob.lnBSigma = 0;
@@ -1153,7 +1421,7 @@ extern "C" int calibrate_decay() {
   std::vector<Object> kept;
   for (Object& ob : objects) {
     if (!integrate_object(ob, stepS, table, sun, corr, false)) {
-      skipped.push_back({{"id", ob.id}, {"reason", "trajectory outside the drivers, below 90 km or refused by SGP4"}});
+      skipped.push_back({ob.id, "trajectory outside the drivers, below 90 km or refused by SGP4", 0, false, ob.refused});
       continue;
     }
     double sxx = 0, sxy = 0;
@@ -1328,7 +1596,7 @@ extern "C" int calibrate_decay() {
         bigA = std::max(bigA, std::abs(rhs[chainBase[i] + c]));
       }
     }
-    history.push_back({{"iteration", iterations + 1}, {"chiSquare", chi2}, {"observations", observations}, {"maxStepK", big}, {"maxStepLnB", bigB}, {"maxStepA0M", bigA}});
+    history.push_back({iterations + 1, chi2, observations, big, bigB, bigA});
     if (iterations + 1 >= reweight && big < tolK && bigB < tolLnB && bigA < tolA0) { converged = true; ++iterations; break; }
   }
   // The solution: residuals and the formal covariance there, under the scales
@@ -1341,19 +1609,13 @@ extern "C" int calibrate_decay() {
   std::vector<double> scratch(rhs);
   const bool haveCov = cholesky_solve(NM, scratch, n, &cov);
 
-  json values = json::array(), sigmas = json::array();
-  for (int j = 0; j < M; ++j) {
-    json v = json::array(), s = json::array();
-    for (int a = 0; a < P; ++a) {
-      v.push_back(corr.v[j * P + a]);
-      s.push_back(haveCov ? json(std::sqrt(cov[size_t(j * P + a) * n + (j * P + a)])) : json(nullptr));
-    }
-    values.push_back(v);
-    sigmas.push_back(s);
-  }
+  std::vector<double> sigmas;
+  if (haveCov)
+    for (int k = 0; k < nTheta; ++k) sigmas.push_back(std::sqrt(cov[size_t(k) * n + k]));
+  fb::FlatBufferBuilder b(1 << 16);
   // Identifiability: the mean level of each altitude node and its formal
   // sigma; the correlation of the overall mean level with the mean ln B.
-  json level = json::array();
+  std::vector<fb::Offset<dclLevel>> level;
   double varT = 0, varB = 0, covTB = 0;
   for (int a = 0; a < P; ++a) {
     double m = 0, var = 0;
@@ -1361,7 +1623,7 @@ extern "C" int calibrate_decay() {
     if (haveCov)
       for (int j = 0; j < M; ++j)
         for (int k = 0; k < M; ++k) var += cov[size_t(j * P + a) * n + (k * P + a)] / (double(M) * M);
-    level.push_back({{"altitudeKm", P == 1 ? json(nullptr) : json(corr.alt[a])}, {"meanK", m}, {"sigmaK", haveCov ? json(std::sqrt(var)) : json(nullptr)}});
+    level.push_back(CreatedclLevel(b, P == 1 ? kNaN : corr.alt[a], m, haveCov ? std::sqrt(var) : kNaN));
   }
   // The mean ln B is weighted by each object's precision (1 / its ln B
   // variance), so that an object whose B the data cannot resolve does not
@@ -1378,7 +1640,7 @@ extern "C" int calibrate_decay() {
     for (int u = 0; u < nTheta; ++u)
       for (int i = 0; i < N; ++i) covTB += cov[size_t(u) * n + (nTheta + i)] * wB[i] / double(nTheta);
   }
-  json objs = json::array();
+  std::vector<fb::Offset<dclObject>> objs;
   for (int i = 0; i < N; ++i) {
     Object& ob = objects[i];
     double s = 0, cnt = 0, obsDecay = 0, modelDecay = 0;
@@ -1388,32 +1650,115 @@ extern "C" int calibrate_decay() {
       for (const Segment& sg : ob.segments[c]) modelDecay += std::exp(ob.lnB) * sg.D;
       inChains += long(ob.chains[c].size());
     }
-    for (size_t k = 0; k < ob.sets.size(); ++k)
+    std::vector<uint8_t> setUsed(ob.sets.size(), 0);
+    for (size_t k = 0; k < ob.sets.size(); ++k) {
       if (std::isfinite(ob.residualM[k]) && ob.use[k]) { s += ob.residualM[k] * ob.residualM[k]; ++cnt; ++used; }
-    json o = {{"id", ob.id}, {"sets", inChains}, {"used", used}, {"chains", ob.chains.size()}, {"lnB", ob.lnB},
-              {"lnBSigma", haveCov ? json(std::sqrt(cov[size_t(nTheta + i) * n + (nTheta + i)])) : json(nullptr)}, {"B", std::exp(ob.lnB)},
-              {"lnBPrior", {{"mean", ob.lnBPrior}, {"sigma", ob.lnBSigma}}}, {"sigmaM", ob.sigmaM}, {"rmsM", cnt > 0 ? std::sqrt(s / cnt) : 0.0},
-              {"prefitRmsM", prefit[i]}, {"meanAltitudeKm", mean_altitude(ob)}, {"perigeeKm", ob.sets.front().perigeeKm},
-              {"firstMjd", ob.sets[ob.chains.front().front()].mjd}, {"lastMjd", ob.sets[ob.chains.back().back()].mjd},
-              {"observedDecayM", obsDecay}, {"modelDecayM", modelDecay}, {"refused", ob.refused}};
-    if (wantResiduals) {
-      json res = json::array();
-      for (size_t k = 0; k < ob.sets.size(); ++k)
-        if (std::isfinite(ob.residualM[k])) res.push_back({{"mjd", ob.sets[k].mjd}, {"residualM", ob.residualM[k]}, {"used", ob.use[k] != 0}});
-      o["residuals"] = res;
+      setUsed[k] = std::isfinite(ob.residualM[k]) && ob.use[k] != 0;
     }
-    objs.push_back(o);
+    const auto id = b.CreateString(ob.id);
+    const auto refused = refusals(b, ob.refused);
+    const SetColumns sc = set_columns(b, ob);
+    fb::Offset<fb::Vector<double>> vRes;
+    fb::Offset<fb::Vector<uint8_t>> vUsed;
+    if (wantResiduals) {
+      vRes = doubles(b, ob.residualM);
+      vUsed = b.CreateVector(setUsed);
+    }
+    dclFitStatisticsBuilder fs(b);
+    fs.add_OBSERVATIONS(uint32_t(inChains));
+    fs.add_USED(uint32_t(used));
+    fs.add_PREFIT_RMS(prefit[i]);
+    fs.add_POSTFIT_RMS(cnt > 0 ? std::sqrt(s / cnt) : 0.0);
+    const auto fit = fs.Finish();
+    dclObjectBuilder o(b);
+    o.add_ID(id);
+    o.add_BALLISTIC_COEFFICIENT_M2_KG(std::exp(ob.lnB));
+    o.add_LN_B_PRIOR_MEAN(ob.lnBPrior);
+    o.add_LN_B_PRIOR_SIGMA(ob.lnBSigma);
+    o.add_OK(true);
+    o.add_REFUSED(refused);
+    o.add_SET_TIME_MS(sc.time);
+    o.add_SET_MEAN_SEMI_MAJOR_AXIS_KM(sc.a);
+    o.add_SET_PERIGEE_HEIGHT_KM(sc.perigee);
+    o.add_SET_ECCENTRICITY(sc.ecc);
+    if (wantResiduals) {
+      o.add_SET_RESIDUAL_M(vRes);
+      o.add_SET_USED(vUsed);
+    }
+    o.add_MEAN_ALTITUDE_KM(mean_altitude(ob));
+    o.add_LN_B(ob.lnB);
+    o.add_LN_B_SIGMA(haveCov ? std::sqrt(cov[size_t(nTheta + i) * n + (nTheta + i)]) : kNaN);
+    o.add_RESIDUAL_SCALE_M(ob.sigmaM);
+    o.add_CHAINS(uint32_t(ob.chains.size()));
+    o.add_SETS_IN_CHAINS(uint32_t(inChains));
+    o.add_FIRST_MS(ms_of_mjd(ob.sets[ob.chains.front().front()].mjd));
+    o.add_LAST_MS(ms_of_mjd(ob.sets[ob.chains.back().back()].mjd));
+    o.add_OBSERVED_DECAY_M(obsDecay);
+    o.add_MODEL_DECAY_M(modelDecay);
+    o.add_FIT(fit);
+    objs.push_back(o.Finish());
   }
-  json fit = {{"iterations", iterations}, {"converged", converged}, {"observations", observations}, {"parameters", n}, {"objects", N},
-              {"chiSquare", chi2}, {"level", level}, {"history", history},
-              {"tolerance", {{"K", tolK}, {"lnB", tolLnB}, {"a0M", tolA0}}},
-              {"levelLnBCorrelation", haveCov && varT > 0 && varB > 0 ? json(covTB / std::sqrt(varT * varB)) : json(nullptr)},
-              {"meanLevelSigmaK", haveCov ? json(std::sqrt(varT)) : json(nullptr)}};
-  json correction = {{"nodesMjd", corr.t}, {"altitudeKm", corr.alt}, {"values", values}, {"sigmas", sigmas}};
-  return emit("calibration", {{"kind", "jb2008-decay-calibration"}, {"version", 1}, {"correction", correction}, {"objects", objs},
-                              {"skipped", skipped}, {"fit", fit},
-                              {"settings", {{"stepSeconds", stepS}, {"maxGapDays", maxGap}, {"sigmaFloorM", floorM}, {"editSigma", edit}, {"reweightIterations", reweight},
-                                            {"priors", {{"randomWalkKPerSqrtDay", rw}, {"meanLevelK", meanK}, {"altitudeDifferenceK", diffK}}}}}});
+  for (const Skipped& k : skipped) {
+    const auto id = b.CreateString(k.id);
+    const auto reason = b.CreateString(k.reason);
+    const auto refused = refusals(b, k.refused);
+    dclObjectBuilder o(b);
+    o.add_ID(id);
+    o.add_OK(k.counted);
+    o.add_SKIPPED_REASON(reason);
+    o.add_REFUSED(refused);
+    if (k.counted) o.add_SETS_IN_CHAINS(uint32_t(k.sets));
+    objs.push_back(o.Finish());
+  }
+  std::vector<fb::Offset<dclIteration>> hist;
+  for (const Step& h : history) hist.push_back(CreatedclIteration(b, uint32_t(h.iteration), h.chi2, uint32_t(h.observations), h.big, h.bigB, h.bigA));
+  const auto vObjs = b.CreateVector(objs);
+  const auto vLevel = b.CreateVector(level);
+  const auto vHist = b.CreateVector(hist);
+  const auto corrOut = corr.record(b, haveCov ? &sigmas : nullptr);
+  dclFitStatisticsBuilder fs(b);
+  fs.add_ITERATIONS(uint32_t(iterations));
+  fs.add_CONVERGED(converged);
+  fs.add_OBSERVATIONS(uint32_t(observations));
+  fs.add_USED(uint32_t(observations));
+  fs.add_PARAMETERS(uint32_t(n));
+  fs.add_CHI_SQUARE(chi2);
+  const auto fit = fs.Finish();
+  const auto alts = doubles(b, corr.alt);
+  dclSettingsBuilder sb(b);
+  sb.add_FROM_MS(settings->FROM_MS());
+  sb.add_TO_MS(settings->TO_MS());
+  sb.add_MAX_ITERATIONS(uint32_t(maxIt));
+  sb.add_EDIT_SIGMA(edit);
+  sb.add_NODE_STEP_S(stepH * 3600.0);
+  sb.add_NODE_ALTITUDES_KM(alts);
+  sb.add_RANDOM_WALK_K_PER_SQRT_DAY(rw);
+  sb.add_MEAN_LEVEL_K(meanK);
+  sb.add_ALTITUDE_DIFFERENCE_K(diffK);
+  sb.add_STEP_S(stepS);
+  sb.add_MAX_GAP_S(maxGap * 86400.0);
+  sb.add_RESIDUAL_FLOOR_M(floorM);
+  sb.add_REWEIGHT_ITERATIONS(uint32_t(reweight));
+  sb.add_TOLERANCE_K(tolK);
+  sb.add_TOLERANCE_LN_B(tolLnB);
+  sb.add_TOLERANCE_OFFSET_M(tolA0);
+  sb.add_MIN_SETS(uint32_t(minSets));
+  sb.add_WANT_RESIDUALS(wantResiduals);
+  const auto set = sb.Finish();
+  const auto atm = atmosphere_record(b, false);
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_DecayCalibration);
+  d.add_ATMOSPHERE(atm);
+  d.add_SETTINGS(set);
+  d.add_CORRECTION(corrOut);
+  d.add_STATUS(converged ? dclStatus_Solved : dclStatus_NotConverged);
+  d.add_OBJECTS(vObjs);
+  d.add_FIT(fit);
+  d.add_LEVELS(vLevel);
+  d.add_HISTORY(vHist);
+  d.add_LEVEL_LN_B_CORRELATION(haveCov && varT > 0 && varB > 0 ? covTB / std::sqrt(varT * varB) : kNaN);
+  d.add_MEAN_LEVEL_SIGMA_K(haveCov ? std::sqrt(varT) : kNaN);
+  return emit("calibration", b, d.Finish());
 }
 
 // ── Orbital energy and drag work ─────────────────────────────────────────────
@@ -1522,26 +1867,48 @@ class EarthOrientation {
 struct OrbitalState {
   double mjd = 0, r[3] = {}, v[3] = {}, dut1 = 0, xp = 0, yp = 0;
 };
-std::string load_states(const json& request, std::vector<OrbitalState>& out) {
-  if (!request.contains("states") || !request["states"].is_array() || request["states"].empty()) return "states must be a non-empty array of {mjd, r, v}.";
-  for (const json& s : request["states"]) {
-    OrbitalState o;
-    if (!s.is_object() || !s.contains("mjd") || !s["mjd"].is_number() || !s.contains("r") || !s["r"].is_array() || s["r"].size() != 3 ||
-        !s.contains("v") || !s["v"].is_array() || s["v"].size() != 3)
-      return "each state needs mjd (UTC), r [3] and v [3] (GCRF, m and m/s).";
-    o.mjd = s["mjd"].get<double>();
-    for (int k = 0; k < 3; ++k) {
-      if (!s["r"][k].is_number() || !s["v"][k].is_number()) return "state components must be numbers.";
-      o.r[k] = s["r"][k].get<double>();
-      o.v[k] = s["v"][k].get<double>();
+// The states of STATES: its $OEM ephemeris block (GCRF, km and km/s), either EPHEMERIS_DATA_LINES (each with its EPOCH)
+// or the compact EPHEMERIS_DATA (STATE_VECTOR_SIZE values per state at START_TIME + i STEP_SIZE), with DUT1_S,
+// POLAR_MOTION_X_ARCSEC and POLAR_MOTION_Y_ARCSEC parallel to them (empty = 0).
+std::string load_states(const DCL* request, std::vector<OrbitalState>& out) {
+  const dclStates* states = request->STATES();
+  const ephemerisDataBlock* block = states ? states->EPHEMERIS() : nullptr;
+  const char* missing = "STATES needs an EPHEMERIS block with at least one state (GCRF, km and km/s).";
+  if (!block) return missing;
+  if (size_of(block->EPHEMERIS_DATA_LINES()) != 0) {
+    for (const ephemerisDataLine* line : *block->EPHEMERIS_DATA_LINES()) {
+      OrbitalState o;
+      if (!mjd_of_iso(line->EPOCH(), o.mjd)) return "each ephemeris line needs an EPOCH (ISO 8601 UTC).";
+      const double r[3] = {line->X(), line->Y(), line->Z()}, v[3] = {line->X_DOT(), line->Y_DOT(), line->Z_DOT()};
+      for (int k = 0; k < 3; ++k) { o.r[k] = r[k] * 1000.0; o.v[k] = v[k] * 1000.0; }
+      out.push_back(o);
     }
-    o.dut1 = s.value("dut1", 0.0);
-    o.xp = s.value("xp", 0.0);
-    o.yp = s.value("yp", 0.0);
-    out.push_back(o);
+  } else if (size_of(block->EPHEMERIS_DATA()) != 0) {
+    const int stride = block->STATE_VECTOR_SIZE();
+    const auto* data = block->EPHEMERIS_DATA();
+    double start = 0;
+    if ((stride != 6 && stride != 9) || data->size() % stride != 0) return "EPHEMERIS_DATA needs STATE_VECTOR_SIZE (6 or 9) values per state.";
+    if (!mjd_of_iso(block->START_TIME(), start)) return "a compact ephemeris needs START_TIME (ISO 8601 UTC).";
+    for (size_t i = 0; i < data->size() / stride; ++i) {
+      OrbitalState o;
+      o.mjd = start + double(i) * block->STEP_SIZE() / 86400.0;
+      for (int k = 0; k < 3; ++k) { o.r[k] = data->Get(uint32_t(i * stride + k)) * 1000.0; o.v[k] = data->Get(uint32_t(i * stride + 3 + k)) * 1000.0; }
+      out.push_back(o);
+    }
   }
-  return "";
+  if (out.empty()) return missing;
+  const auto column = [&](const fb::Vector<double>* v, double OrbitalState::*member, const char* name) -> std::string {
+    if (size_of(v) == 0) return "";
+    if (v->size() != out.size()) return std::string("STATES ") + name + " must have one value per state (or none).";
+    for (size_t i = 0; i < out.size(); ++i) out[i].*member = v->Get(uint32_t(i));
+    return "";
+  };
+  std::string e = column(states->DUT1_S(), &OrbitalState::dut1, "DUT1_S");
+  if (e.empty()) e = column(states->POLAR_MOTION_X_ARCSEC(), &OrbitalState::xp, "POLAR_MOTION_X_ARCSEC");
+  if (e.empty()) e = column(states->POLAR_MOTION_Y_ARCSEC(), &OrbitalState::yp, "POLAR_MOTION_Y_ARCSEC");
+  return e;
 }
+
 void cross(const double a[3], const double b[3], double c[3]) {
   c[0] = a[1] * b[2] - a[2] * b[1];
   c[1] = a[2] * b[0] - a[0] * b[2];
@@ -1570,31 +1937,37 @@ Frame frame_of(EarthOrientation& eo, const OrbitalState& s, double omegaEarth) {
 
 }  // namespace
 
-// energy: {states: [{mjd (UTC), r [m], v [m/s] (GCRF), dut1?, xp?, yp?}], degree? (2-70, 36), order? (= degree), gm? (3.986004418e14),
-// omega? (7.292115e-5 rad/s), gradient?} -> {energy [J/kg], kinetic, potential, rotation, relativeSpeed [m/s],
-// geodetic {latDeg, lonDeg, altKm}, gradient [[dC/dr (3), dC/dv (3)]] (with gradient), refused [indices]}
+// energy: STATES (EPHEMERIS, DUT1_S?, POLAR_MOTION_*?), GRAVITY_DEGREE (2-70; 0 = 36), GRAVITY_ORDER (0 = the degree),
+// GM_M3_S2 (0 = 3.986004418e14), EARTH_ROTATION_RAD_S (0 = 7.292115e-5), SETTINGS WANT_GRADIENT -> STATES ENERGY_J_KG,
+// KINETIC_J_KG, POTENTIAL_J_KG, ROTATIONAL_J_KG, RELATIVE_SPEED_M_S, LATITUDE_DEG, LONGITUDE_DEG, ALTITUDE_KM,
+// ENERGY_GRADIENT [dC/dr (3), dC/dv (3)] per state (with WANT_GRADIENT), REFUSED (NaN in every column of a refused state).
 extern "C" int energy() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
   std::vector<OrbitalState> states;
-  const std::string e = load_states(request, states);
+  e = load_states(request, states);
   if (!e.empty()) return fail("invalid-request", e);
-  const int degree = request.value("degree", 36);
-  const int order = request.value("order", degree);
-  if (degree < 2 || degree > kMaxGeopotentialDegree || order < 0 || order > degree) return fail("invalid-request", "degree must be 2-70 and order 0-degree.");
-  const double gm = request.value("gm", kMu), omegaEarth = request.value("omega", kOmegaEarth);
-  if (!positive(gm) || !positive(omegaEarth)) return fail("invalid-request", "gm and omega must be positive.");
-  const bool wantGradient = request.value("gradient", false);
+  const int degree = request->GRAVITY_DEGREE() != 0 ? int(request->GRAVITY_DEGREE()) : 36;
+  const int order = request->GRAVITY_ORDER() != 0 ? int(request->GRAVITY_ORDER()) : degree;
+  if (degree < 2 || degree > kMaxGeopotentialDegree || order < 0 || order > degree)
+    return fail("invalid-request", "GRAVITY_DEGREE (the field degree) must be 2-70 and GRAVITY_ORDER 0-degree.");
+  if (request->GRAVITY_FIELD() && request->GRAVITY_FIELD()->size() != 0 && request->GRAVITY_FIELD()->str() != "EGM2008")
+    return fail("invalid-request", "GRAVITY_FIELD must be EGM2008 (or empty).");
+  const double gm = request->GM_M3_S2() != 0 ? request->GM_M3_S2() : kMu;
+  const double omegaEarth = request->EARTH_ROTATION_RAD_S() != 0 ? request->EARTH_ROTATION_RAD_S() : kOmegaEarth;
+  if (!positive(gm) || !positive(omegaEarth)) return fail("invalid-request", "GM_M3_S2 and EARTH_ROTATION_RAD_S must be positive.");
+  const bool wantGradient = settings_of(request)->WANT_GRADIENT();
   EarthOrientation eo;
-  json energyJ = json::array(), kinetic = json::array(), potential = json::array(), rotation = json::array(), speed = json::array();
-  json lat = json::array(), lon = json::array(), alt = json::array(), gradient = json::array(), refused = json::array();
+  std::vector<double> energyJ, kinetic, potential, rotation, speed, lat, lon, alt, gradient;
+  std::vector<uint32_t> refused;
   for (size_t i = 0; i < states.size(); ++i) {
     const OrbitalState& s = states[i];
     const Frame f = frame_of(eo, s, omegaEarth);
     if (!f.ok) {
-      refused.push_back(i);
-      for (json* a : {&energyJ, &kinetic, &potential, &rotation, &speed, &lat, &lon, &alt}) a->push_back(nullptr);
-      if (wantGradient) gradient.push_back(nullptr);
+      refused.push_back(uint32_t(i));
+      for (std::vector<double>* a : {&energyJ, &kinetic, &potential, &rotation, &speed, &lat, &lon, &alt}) a->push_back(kNaN);
+      if (wantGradient) gradient.insert(gradient.end(), 6, kNaN);
       continue;
     }
     const double U = geopotential(f.xe, degree, order, gm);
@@ -1624,50 +1997,79 @@ extern "C" int energy() {
       double gradU[3], wv[3];
       for (int j = 0; j < 3; ++j) gradU[j] = f.rc2t[0][j] * g[0] + f.rc2t[1][j] * g[1] + f.rc2t[2][j] * g[2];  // R^T g
       cross(f.omega, s.v, wv);
-      gradient.push_back({gradU[0] + wv[0], gradU[1] + wv[1], gradU[2] + wv[2], f.vr[0], f.vr[1], f.vr[2]});
+      const double row[6] = {gradU[0] + wv[0], gradU[1] + wv[1], gradU[2] + wv[2], f.vr[0], f.vr[1], f.vr[2]};
+      gradient.insert(gradient.end(), row, row + 6);
     }
   }
-  json out = {{"kind", "orbital-energy"}, {"version", 1}, {"energy", energyJ}, {"kinetic", kinetic}, {"potential", potential}, {"rotation", rotation},
-              {"relativeSpeed", speed}, {"geodetic", {{"latDeg", lat}, {"lonDeg", lon}, {"altKm", alt}}}, {"refused", refused},
-              {"settings", {{"degree", degree}, {"order", order}, {"gm", gm}, {"omega", omegaEarth}, {"field", "EGM2008"}}}};
-  if (wantGradient) out["gradient"] = gradient;
-  return emit("result", out);
+  fb::FlatBufferBuilder b(1024 + states.size() * 120);
+  const auto vE = doubles(b, energyJ), vK = doubles(b, kinetic), vU = doubles(b, potential), vR = doubles(b, rotation);
+  const auto vS = doubles(b, speed), vLat = doubles(b, lat), vLon = doubles(b, lon), vAlt = doubles(b, alt);
+  const auto vRef = indices(b, refused);
+  const fb::Offset<fb::Vector<double>> vG = wantGradient ? doubles(b, gradient) : fb::Offset<fb::Vector<double>>();
+  dclStatesBuilder sb(b);
+  sb.add_ENERGY_J_KG(vE);
+  sb.add_KINETIC_J_KG(vK);
+  sb.add_POTENTIAL_J_KG(vU);
+  sb.add_ROTATIONAL_J_KG(vR);
+  if (wantGradient) sb.add_ENERGY_GRADIENT(vG);
+  sb.add_RELATIVE_SPEED_M_S(vS);
+  sb.add_LATITUDE_DEG(vLat);
+  sb.add_LONGITUDE_DEG(vLon);
+  sb.add_ALTITUDE_KM(vAlt);
+  sb.add_REFUSED(vRef);
+  const auto statesOut = sb.Finish();
+  dclSettingsBuilder st(b);
+  st.add_WANT_GRADIENT(wantGradient);
+  const auto set = st.Finish();
+  const auto field = b.CreateString("EGM2008");
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_OrbitalEnergy);
+  d.add_GRAVITY_FIELD(field);
+  d.add_GRAVITY_DEGREE(uint16_t(degree));
+  d.add_GRAVITY_ORDER(uint16_t(order));
+  d.add_GM_M3_S2(gm);
+  d.add_EARTH_ROTATION_RAD_S(omegaEarth);
+  d.add_SETTINGS(set);
+  d.add_STATUS(dclStatus_Solved);
+  d.add_STATES(statesOut);
+  return emit("result", b, d.Finish());
 }
 
-// drag_work: {states, jb2008: {rows} | atmosphere: "NRLMSISE00" with nrlmsise00: {rows}, correction? (JB2008 only), B? (Cd*A/m, 1)} -> {density, relativeSpeed, power [W/kg] (= -B rho |v_r|^3 / 2),
-// work [J/kg] between consecutive states (trapezoid), cumulativeWork, refused}
+// drag_work: STATES, the drivers of ATMOSPHERE (JB2008_DRIVERS, or SPACE_WEATHER for NRLMSIS00E), CORRECTION? (JB2008
+// only), BALLISTIC_COEFFICIENT_M2_KG (Cd*A/m; 0 = 1), EARTH_ROTATION_RAD_S -> STATES DENSITY_KG_M3, RELATIVE_SPEED_M_S,
+// DRAG_POWER_W_KG (= -B rho |v_r|^3 / 2), DRAG_WORK_J_KG between consecutive states (trapezoid), CUMULATIVE_DRAG_WORK_J_KG,
+// REFUSED.
 extern "C" int drag_work() {
-  const json request = json_input("request");
-  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::string e;
+  const DCL* request = dcl_request(e);
+  if (!request) return fail("invalid-request", e);
   std::vector<OrbitalState> states;
-  std::string e = load_states(request, states);
+  e = load_states(request, states);
   if (!e.empty()) return fail("invalid-request", e);
-  const std::string atmosphere = request.value("atmosphere", std::string("JB2008"));
-  if (atmosphere != "JB2008" && atmosphere != "NRLMSISE00") return fail("invalid-request", "atmosphere must be JB2008 or NRLMSISE00.");
-  const bool msis = atmosphere == "NRLMSISE00";
+  bool msis = false;
+  e = atmosphere_of(request, msis);
+  if (!e.empty()) return fail("invalid-request", e);
   Jb2008Table table;
   Nrlmsise00Table msisTable;
+  const bool corrected = request->CORRECTION() && request->CORRECTION()->FORM() != dclCorrectionForm_None;
   if (msis) {
-    if (request.contains("correction")) return fail("invalid-correction", "atmosphere NRLMSISE00 has no temperature correction.");
-    if (!request.contains("nrlmsise00") || !request["nrlmsise00"].is_object()) return fail("invalid-request", "nrlmsise00 {rows} is required.");
-    e = msisTable.add(request["nrlmsise00"].value("rows", json::array()));
+    if (corrected) return fail("invalid-correction", "ATMOSPHERE NRLMSIS00E has no temperature correction.");
+    e = msisTable.add(request->SPACE_WEATHER());
   } else {
-    if (!request.contains("jb2008") || !request["jb2008"].is_object()) return fail("invalid-request", "jb2008 {rows} is required.");
-    e = table.add(request["jb2008"].value("rows", json::array()));
+    e = table.add(request->JB2008_DRIVERS());
   }
   if (!e.empty()) return fail("invalid-request", e);
   Correction correction;
-  if (request.contains("correction")) {
-    e = correction.load(request["correction"]);
-    if (!e.empty()) return fail("invalid-correction", e);
-  }
-  const double B = request.value("B", 1.0), omegaEarth = request.value("omega", kOmegaEarth);
-  if (!std::isfinite(B) || !positive(omegaEarth)) return fail("invalid-request", "B and omega must be finite and positive.");
+  e = correction.load(request->CORRECTION());
+  if (!e.empty()) return fail("invalid-correction", e);
+  const double B = request->BALLISTIC_COEFFICIENT_M2_KG() != 0 ? request->BALLISTIC_COEFFICIENT_M2_KG() : 1.0;
+  const double omegaEarth = request->EARTH_ROTATION_RAD_S() != 0 ? request->EARTH_ROTATION_RAD_S() : kOmegaEarth;
+  if (!std::isfinite(B) || !positive(omegaEarth)) return fail("invalid-request", "BALLISTIC_COEFFICIENT_M2_KG and EARTH_ROTATION_RAD_S must be finite and positive.");
   EarthOrientation eo;
   SunEarthFixed sun;
   const size_t n = states.size();
   std::vector<double> rho(n, std::numeric_limits<double>::quiet_NaN()), speed(rho), power(rho);
-  json refused = json::array();
+  std::vector<uint32_t> refused;
   for (size_t i = 0; i < n; ++i) {
     const OrbitalState& s = states[i];
     const Frame f = frame_of(eo, s, omegaEarth);
@@ -1686,26 +2088,42 @@ extern "C" int drag_work() {
         p.ok = true;
       }
     }
-    if (!p.ok) { refused.push_back(i); continue; }
+    if (!p.ok) { refused.push_back(uint32_t(i)); continue; }
     speed[i] = std::sqrt(dot(f.vr, f.vr));
     rho[i] = msis ? msis_density(p.mjd, p.lat, p.lon, p.altM, p.f107, p.f107a, p.ap) : rho_at(p, correction.at(p));
     power[i] = -0.5 * B * rho[i] * speed[i] * speed[i] * speed[i];
   }
-  json work = json::array(), cumulative = json::array(), densityJ = json::array(), speedJ = json::array(), powerJ = json::array();
+  std::vector<double> work, cumulative;
   double total = 0.0;
   cumulative.push_back(0.0);
-  for (size_t i = 0; i < n; ++i) {
-    densityJ.push_back(std::isfinite(rho[i]) ? json(rho[i]) : json(nullptr));
-    speedJ.push_back(std::isfinite(speed[i]) ? json(speed[i]) : json(nullptr));
-    powerJ.push_back(std::isfinite(power[i]) ? json(power[i]) : json(nullptr));
-    if (i + 1 < n) {
-      const double dt = (states[i + 1].mjd - states[i].mjd) * 86400.0;
-      const bool both = std::isfinite(power[i]) && std::isfinite(power[i + 1]);
-      work.push_back(both ? json(0.5 * (power[i] + power[i + 1]) * dt) : json(nullptr));
-      if (both) total += 0.5 * (power[i] + power[i + 1]) * dt;
-      cumulative.push_back(total);
-    }
+  for (size_t i = 0; i + 1 < n; ++i) {
+    const double dt = (states[i + 1].mjd - states[i].mjd) * 86400.0;
+    const bool both = std::isfinite(power[i]) && std::isfinite(power[i + 1]);
+    work.push_back(both ? 0.5 * (power[i] + power[i + 1]) * dt : kNaN);
+    if (both) total += 0.5 * (power[i] + power[i + 1]) * dt;
+    cumulative.push_back(total);
   }
-  return emit("result", {{"kind", "drag-work"}, {"version", 1}, {"density", densityJ}, {"relativeSpeed", speedJ}, {"power", powerJ}, {"work", work},
-                         {"cumulativeWork", cumulative}, {"refused", refused}, {"settings", {{"B", B}, {"omega", omegaEarth}, {"atmosphere", atmosphere}}}});
+  fb::FlatBufferBuilder b(1024 + n * 64);
+  const auto vRho = doubles(b, rho), vSpeed = doubles(b, speed), vPower = doubles(b, power), vWork = doubles(b, work);
+  const auto vCum = doubles(b, cumulative);
+  const auto vRef = indices(b, refused);
+  dclStatesBuilder sb(b);
+  sb.add_RELATIVE_SPEED_M_S(vSpeed);
+  sb.add_DENSITY_KG_M3(vRho);
+  sb.add_DRAG_POWER_W_KG(vPower);
+  sb.add_DRAG_WORK_J_KG(vWork);
+  sb.add_CUMULATIVE_DRAG_WORK_J_KG(vCum);
+  sb.add_REFUSED(vRef);
+  const auto statesOut = sb.Finish();
+  const auto atm = atmosphere_record(b, msis);
+  const auto corr = correction.record(b);
+  DCLBuilder d(b);
+  d.add_PRODUCT(dclProduct_DragWork);
+  d.add_ATMOSPHERE(atm);
+  d.add_EARTH_ROTATION_RAD_S(omegaEarth);
+  d.add_BALLISTIC_COEFFICIENT_M2_KG(B);
+  if (correction.present) d.add_CORRECTION(corr);
+  d.add_STATUS(dclStatus_Solved);
+  d.add_STATES(statesOut);
+  return emit("result", b, d.Finish());
 }

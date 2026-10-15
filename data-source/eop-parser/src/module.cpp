@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <cstdlib>
 namespace {
-using eop_wire::Json;
 constexpr double AS2R = 4.848136811095359935899141e-6;
 constexpr size_t MAX_BYTES = 16 * 1024 * 1024;
 std::string trim(const std::string& s) {
@@ -110,33 +109,6 @@ int c04(const std::string& l, Row& r, bool legacy) {
   }
   return 1;
 }
-bool decode64(const std::string& s, std::string& out) {
-  static const std::string chars =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  if (s.size() % 4 || s.size() > 4 * ((MAX_BYTES + 2) / 3)) return false;
-  for (size_t i = 0; i < s.size(); i += 4) {
-    uint32_t n = 0;
-    int pad = 0;
-    for (int j = 0; j < 4; ++j) {
-      char c = s[i + j];
-      if (c == '=') {
-        if (j < 2 || i + 4 != s.size()) return false;
-        ++pad;
-        n <<= 6;
-      } else {
-        auto v = chars.find(c);
-        if (v == std::string::npos || pad) return false;
-        n = (n << 6) | v;
-      }
-    }
-    if (pad > 2 || (pad == 2 && (n & 0xffff)) || (pad == 1 && (n & 0xff)))
-      return false;
-    out.push_back(n >> 16);
-    if (pad < 2) out.push_back(n >> 8);
-    if (pad < 1) out.push_back(n);
-  }
-  return out.size() <= MAX_BYTES;
-}
 void append(const Row& r, int source, const std::string& cid,
             const std::string& epoch, std::vector<uint8_t>& stream) {
   flatbuffers::FlatBufferBuilder b(512);
@@ -151,12 +123,12 @@ void append(const Row& r, int source, const std::string& cid,
   row.add_MJD(r.mjd);
   row.add_DATA_SET_CID(cs);
   if (!epoch.empty()) row.add_DATA_SET_EPOCH(es);
-  row.add_SERIES(source == 0   ? eopSeries::FINALS2000A
-                 : source == 1 ? eopSeries::IERS_C04_20
-                               : eopSeries::OTHER);
+  row.add_SERIES(source == 0   ? eopSeries_FINALS2000A
+                 : source == 1 ? eopSeries_IERS_C04_20
+                               : eopSeries_OTHER);
   // The actual C04 file header says IAU 2000, as does finals2000A's readme.
-  row.add_IAU_CONVENTION(iauPrecessionNutationModel::IAU_2000A);
-  row.add_DATA_TYPE(r.predicted ? DataType::PREDICTED : DataType::OBSERVED);
+  row.add_IAU_CONVENTION(iauPrecessionNutationModel_IAU_2000A);
+  row.add_DATA_TYPE(r.predicted ? DataType_PREDICTED : DataType_OBSERVED);
   double x = r.v[0] * AS2R, y = r.v[1] * AS2R;
   row.add_X_POLE_WANDER_RADIANS_HP(x);
   row.add_X_POLE_WANDER_RADIANS(x);
@@ -197,42 +169,73 @@ void append(const Row& r, int source, const std::string& cid,
   stream.insert(stream.end(), b.GetBufferPointer(),
                 b.GetBufferPointer() + b.GetSize());
 }
+// RFC 3339 (whole seconds, UTC) of Unix milliseconds - the issue epoch a $FIL's MODIFIED_AT_MS names.
+std::string rfc3339(int64_t ms) {
+  int64_t s = ms >= 0 ? ms / 1000 : (ms - 999) / 1000, z = (s >= 0 ? s : s - 86399) / 86400;
+  const int64_t sod = s - z * 86400;
+  z += 719468;
+  const int64_t era = (z >= 0 ? z : z - 146096) / 146097, doe = z - era * 146097,
+                yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365, doy = doe - (365 * yoe + yoe / 4 - yoe / 100),
+                mp = (5 * doy + 2) / 153, d = doy - (153 * mp + 2) / 5 + 1, m = mp < 10 ? mp + 3 : mp - 9,
+                y = yoe + era * 400 + (m <= 2);
+  char out[32];
+  std::snprintf(out, sizeof(out), "%04lld-%02lld-%02lldT%02lld:%02lld:%02lldZ", (long long)y, (long long)m, (long long)d,
+                (long long)(sod / 3600), (long long)(sod / 60 % 60), (long long)(sod % 60));
+  return out;
+}
 int parse(int source) {
   using namespace eop_wire;
   plugin_reset_output_state();
   if (!unique_inputs())
     return error("Duplicate input frames are not supported.");
-  auto job = json(frame("job"));
-  if (!job.is_object()) return error("job must be a JSON object.");
-  for (auto key : {"data_set_epoch", "source_url", "format", "series_name"})
-    if (job.contains(key) && !job[key].is_string())
-      return error("Job metadata must be strings.");
-  if (job.contains("format") && job["format"] != sources[source].format)
-    return error("Job format does not match parser method.");
   auto raw = frame("body"), response = frame("response");
   if (bool(raw) == bool(response))
     return error("Supply exactly one body or HTTP response.");
-  std::string body;
+  const auto& src = sources[source];
+  std::string body, source_url = src.url, epoch;
+  int32_t http_status = 0;
   if (raw) {
-    if (raw->payload_length > MAX_BYTES) return error("Source exceeds 16 MiB.");
-    body.assign(reinterpret_cast<const char*>(raw->payload),
-                raw->payload_length);
+    flatbuffers::Verifier v(raw->payload ? raw->payload : reinterpret_cast<const uint8_t*>(""), raw->payload_length);
+    if (!raw->payload || !VerifyFILBuffer(v)) return error("body must be one $FIL.");
+    const FIL* file = GetFIL(raw->payload);
+    const auto* content = file->CONTENT();
+    if (content && content->size() > MAX_BYTES) return error("Source exceeds 16 MiB.");
+    if (content) body.assign(reinterpret_cast<const char*>(content->data()), content->size());
+    if (file->MODIFIED_AT_MS() > 0) epoch = rfc3339(file->MODIFIED_AT_MS());
   } else {
-    auto http = json(response);
-    if (!http.is_object() || !http.contains("status") ||
-        !http["status"].is_number_integer())
-      return error("Invalid HTTP response.");
-    if (http["status"] == 304)
-      return push("unchanged", {{"status", 304},
-                                {"unchanged", true},
-                                {"series_name", sources[source].name}}) < 0
+    flatbuffers::Verifier v(response->payload ? response->payload : reinterpret_cast<const uint8_t*>(""), response->payload_length);
+    if (!response->payload || !R::VerifyHttpResponseBuffer(v)) return error("Invalid HTTP response.");
+    const R::HttpResponse& http = *R::GetHttpResponse(response->payload);
+    // The job (optional, as before): a size-prefixed $ICN in CONTEXT, whose DATASET_ID must be this method's format.
+    if (const auto* ctx = http.CONTEXT(); ctx && ctx->size()) {
+      flatbuffers::Verifier cv(ctx->data(), ctx->size());
+      if (!VerifySizePrefixedICNBuffer(cv)) return error("Job metadata must be a size-prefixed $ICN.");
+      const ICN* job = GetSizePrefixedICN(ctx->data());
+      if (job->DATASET_ID() && job->DATASET_ID()->str() != src.format)
+        return error("Job format does not match parser method.");
+      if (job->ENDPOINT_URL() && job->ENDPOINT_URL()->size()) source_url = job->ENDPOINT_URL()->str();
+    }
+    http_status = http.STATUS();
+    if (http_status == 304) {
+      flatbuffers::FlatBufferBuilder b(256);
+      const std::vector<std::string> items{source_url};
+      R::FlowNoticeT n;
+      n.KIND = R::flowNoticeKind_Unchanged;
+      n.SCHEMA = "EOP.fbs";
+      n.SOURCE_NAME = src.name;
+      n.REASON = "not-modified";
+      n.COUNT = 1;
+      n.ITEMS = items;
+      R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &n));
+      return push_flatbuffer("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice",
+                             b.GetBufferPointer(), b.GetSize()) < 0
                  ? 5
                  : 0;
-    if (http["status"] != 200 || !http.contains("bodyB64") ||
-        !http["bodyB64"].is_string())
-      return error("HTTP 200 and bodyB64 required.");
-    if (!decode64(http["bodyB64"].get<std::string>(), body))
-      return error("Invalid base64 response body.");
+    }
+    if (http_status != 200 || !http.BODY() || http.BODY()->size() == 0)
+      return error("HTTP 200 and a body required.");
+    if (http.BODY()->size() > MAX_BYTES) return error("Source exceeds 16 MiB.");
+    body.assign(reinterpret_cast<const char*>(http.BODY()->data()), http.BODY()->size());
   }
   const auto hash = ephem::sha256_hex(
       reinterpret_cast<const uint8_t*>(body.data()), body.size());
@@ -289,23 +292,37 @@ int parse(int source) {
   }
   if (rows.empty()) return error("No EOP rows found.");
   std::vector<uint8_t> stream;
-  for (const auto& row : rows)
-    append(row, source, cid, job.value("data_set_epoch", std::string()),
-           stream);
-  if (plugin_push_output_ex("records", "EOP.fbs", "$EOP",
-                            PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "EOP", 0, 0,
-                            stream.data(), stream.size()) < 0)
+  for (const auto& row : rows) append(row, source, cid, epoch, stream);
+  if (push_flatbuffer("records", "EOP.fbs", "$EOP", "EOP", stream.data(), stream.size()) < 0)
     return 5;
-  return push("meta",
-              {{"schema", "EOP.fbs"},
-               {"source_url",
-                job.value("source_url", std::string(sources[source].url))},
-               {"series_name", sources[source].name},
-               {"format", sources[source].format},
-               {"sha256", hash},
-               {"data_set_cid", cid},
-               {"record_count", rows.size()},
-               {"empty_future_rows", skipped}}) < 0
+  // The batch's IngestRequest: what the JSON meta said, typed. data_set_cid rides on every row.
+  std::vector<std::string> warnings;
+  if (skipped > 0) warnings.push_back(std::to_string(skipped) + " empty future rows skipped");
+  const std::vector<std::string> schemas{"EOP.fbs"};
+  const std::vector<uint64_t> counts{rows.size()};
+  const std::string parser = "eop-parser";
+  R::IngestRequestT meta;
+  meta.SCHEMA = "EOP.fbs";
+  meta.TAGS = std::make_unique<R::SourceTagsT>();
+  meta.TAGS->SOURCE_NAME = src.name;
+  meta.TAGS->SOURCE_URL = source_url;
+  meta.TAGS->BATCH_ID = hash;
+  meta.RECONCILE = R::reconcileMode_Duplicates;
+  meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  auto& p = *meta.PROVENANCE;
+  p.SOURCE_URL = source_url;
+  p.HTTP_STATUS = http_status;
+  p.PARSER = parser;
+  p.PARSER_VERSION = src.format;
+  p.SOURCE_SHA256 = hash;
+  p.NORMALIZED_COUNT = rows.size();
+  p.SCHEMAS = schemas;
+  p.SCHEMA_COUNTS = counts;
+  p.WARNINGS = warnings;
+  flatbuffers::FlatBufferBuilder mb(1024);
+  R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+  return push_flatbuffer("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest",
+                         mb.GetBufferPointer(), mb.GetSize()) < 0
              ? 5
              : 0;
 }

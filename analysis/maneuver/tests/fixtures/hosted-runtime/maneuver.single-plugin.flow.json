@@ -6,7 +6,7 @@
     {
       "nodeId": "maneuver",
       "pluginId": "maneuver-planner",
-      "methodId": "invoke",
+      "methodId": "plan",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
     }
@@ -29,5 +29,5 @@
     }
   ],
   "requiredPlugins": ["maneuver-planner"],
-  "description": "Minimal hosted-runtime example invoking the maneuver plugin through the canonical command bridge."
+  "description": "Minimal hosted-runtime example invoking the maneuver plugin with one $MPL maneuver-plan request."
 }

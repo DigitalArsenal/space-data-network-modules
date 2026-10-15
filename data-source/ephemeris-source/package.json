@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-ephemeris-source",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -12,7 +12,11 @@
   },
   "devDependencies": {
     "esbuild": "0.25.12",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.215.0"
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "1.249.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

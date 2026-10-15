@@ -1,17 +1,14 @@
 {
   "name": "space-data-network-module-celestrak-supgp",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "main": "index.js",
   "exports": {
-    ".": "./index.js",
     "./dist/*": "./dist/*"
   },
   "files": [
     "dist/",
-    "src/",
-    "index.js",
-    "manifest.js"
+    "plugin-manifest.json"
   ],
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
@@ -19,6 +16,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "^1.249.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

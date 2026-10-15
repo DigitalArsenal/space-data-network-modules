@@ -26,7 +26,11 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 const sdsHeaders = [
   '#include "flatbuffers/flatbuffers.h"\nnamespace {',
   ...SCHEMA_FAMILIES.map((family) =>
-    headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "").replaceAll('#include "flatbuffers/flatbuffers.h"\n', ""),
+    headers[family]
+      .replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "")
+      .replaceAll('#include "flatbuffers/flatbuffers.h"\n', "")
+      // The SDK compiler's FlatBuffers runtime is the one linked; the generator's version pin does not apply.
+      .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?"Non-compatible flatbuffers version included"\);\n/, ""),
   ),
   "}  // namespace",
 ];
@@ -55,16 +59,7 @@ const implementationSource = await fs.readFile(
   "utf8",
 );
 
-// nlohmann::json without exceptions for the options and request frames (the same header analysis/maneuver-detection
-// and analysis/gp-error-model compile).
-const jsonHeader = await fs.readFile(
-  path.join(packageRoot, "..", "..", "propagator", "sgp4", "src", "cpp", "include", "nlohmann", "json.hpp"),
-  "utf8",
-);
-
 const sourceCode = [
-  "#define JSON_NOEXCEPTION 1",
-  jsonHeader,
   ...sdsHeaders,
   erfa.source,
   bodyModels,
@@ -88,8 +83,11 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // Pure closed-form evaluation: nothing spawned, nothing shared.
+  // Pure closed-form evaluation: nothing spawned, nothing shared. One synchronous hostcall, plugin.getConfig
+  // (typedHostcall.hpp, SDS $PIV), for the ages.
   threadModel: "single-thread",
+  // Imports the sync space_data_module_host hostcall bridge for plugin.getConfig; resolved at instantiation.
+  allowUndefinedImports: true,
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

@@ -15,6 +15,8 @@ import { Buffer } from "node:buffer";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+import { granuleFrame, planInputs, decodeTileReport } from "./helpers.mjs";
+
 const [, , granuleDir, outPath] = process.argv;
 assert.ok(granuleDir && outPath, "usage: produce-real-dtt.mjs <granuleDir> <out.bin>");
 
@@ -24,22 +26,9 @@ const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function frame(portId, payload) {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-}
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
-const responseFrame = (portId, body, extra = {}) =>
-  jsonFrame(portId, {
-    status: 200,
-    headers: {},
-    bodyB64: Buffer.from(body).toString("base64"),
-    ...extra,
-  });
+// Typed contracts 1.0: the plan is the $DTT header stream (+ ModuleConfig options), each granule an HttpResponse.
+const planFrames = (plan) => planInputs(plan);
+const responseFrame = (portId, body) => granuleFrame(portId, body, 200);
 
 const now = new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
 const provFor = (name) => ({
@@ -91,7 +80,7 @@ for (const t of TILES) {
     childAvailability: 0,
     provenance: provFor(t.dems[0][1]),
   };
-  const inputs = [jsonFrame("plan", plan), ...t.dems.map(([d]) => responseFrame("dem", d))];
+  const inputs = [...planFrames(plan), ...t.dems.map(([d]) => responseFrame("dem", d))];
   const response = await harness.invoke({ methodId: "tile", inputs });
   assert.equal(
     response.statusCode,
@@ -101,7 +90,7 @@ for (const t of TILES) {
   const outs = new Map(response.outputs.map((o) => [o.portId, o.payload]));
   const records = outs.get("records");
   assert.ok(records && records.byteLength > 8, "records stream present");
-  const report = JSON.parse(decoder.decode(outs.get("report")));
+  const { notice, ...report } = decodeTileReport(outs.get("report"));
   console.log(`z${t.level}/${t.x}/${t.y}:`, JSON.stringify(report));
   streams.push(Buffer.from(records));
   produced.push({ level: t.level, x: t.x, y: t.y, bytes: records.byteLength, report });

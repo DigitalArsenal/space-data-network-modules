@@ -1,28 +1,20 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
-import { createRequire } from 'node:module';
-import { pathToFileURL,fileURLToPath } from 'node:url';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
-import { config,receipt,response,http,input } from './fixture.mjs';
+import { decodeFlowNotice, decodeHttpRequest, decodeIngestRequest } from 'space-data-module-sdk/runtime-contracts';
+import { CORE, forecast, harness, httpResponse, nodeConfig, producerPeerId, readWxf, response, retrievedMs, standardsRoot, tick, writeWxf, wxf } from './fixture.mjs';
 
-const root=process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
-const require=createRequire(path.join(root,'package.json'));
-const {ByteBuffer}=require('flatbuffers');
-const {WXF,wxfTimeBasis,wxfLicenseClass,wxfMemberKind,wxfTemporalKind}=await import(pathToFileURL(path.join(root,'lib/js/WXF/main.js')));
-const wasmPath=fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url));
-const manifest=JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json',import.meta.url)));
-const wasm=fs.readFileSync(wasmPath);
-const jsonOutput=(result,port)=>JSON.parse(Buffer.from(result.outputs.find(f=>f.portId===port).payload).toString());
-async function harness(t) { const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'}); t.after(()=>h.destroy()); return h; }
-async function plan(h,value=config) {
-  return h.invoke({methodId:'plan_forecast',inputs:[input('config',value)]});
+const manifest=JSON.parse(fs.readFileSync(CORE.manifest,'utf8'));
+const core=(t,config=nodeConfig())=>harness(t,{...CORE,config});
+const plan=(h)=>h.invoke({methodId:'plan_forecast',inputs:[tick()]});
+function planned(result) {
+  assert.equal(result.statusCode,0,result.errorMessage);
+  assert.deepEqual(result.outputs.map(f=>[f.portId,f.typeRef?.fileIdentifier]),[['request','HREQ']]);
+  return decodeHttpRequest(result.outputs[0].payload);
 }
-async function parse(h,job,body=response(),receiptValue=receipt,status=200,extra=[]) {
-  return h.invoke({methodId:'parse_forecast',inputs:[input('job',job),input('response',http(body,status)),input('receipt',receiptValue),...extra]});
-}
+const parse=(h,context,...args)=>h.invoke({methodId:'parse_forecast',inputs:[httpResponse(context,...args)]});
 function records(result) {
   const bytes=result.outputs.find(f=>f.portId==='records').payload, rows=[];
   for(let offset=0;offset<bytes.length;) {
@@ -30,28 +22,47 @@ function records(result) {
     assert.ok(size>=12 && offset+size<=bytes.length);
     const frame=bytes.slice(offset,offset+size);
     assert.equal(Buffer.from(frame.slice(8,12)).toString(),'$WXF');
-    rows.push(WXF.getSizePrefixedRootAsWXF(new ByteBuffer(frame)).unpack()); offset+=size;
+    rows.push(readWxf(frame)); offset+=size;
   }
   return rows;
 }
-test('the actual artifact satisfies the SDK contract',async()=> {
-  const report=await validateArtifactWithStandards({wasmPath,manifest,standardsRoot:root});
+
+test('the actual artifact satisfies the SDK contract with typed ports only',async()=> {
+  const report=await validateArtifactWithStandards({wasmPath:CORE.wasm,manifest,standardsRoot});
   assert.equal(report.ok,true,JSON.stringify(report.issues));
+  const ids=manifest.methods.map(m=>[m.methodId,[...m.inputPorts,...m.outputPorts].map(p=>{
+    assert.equal(p.acceptedTypeSets.length,1,p.portId); assert.equal(p.acceptedTypeSets[0].allowedTypes.length,1,p.portId);
+    const [type]=p.acceptedTypeSets[0].allowedTypes; assert.equal(type.acceptsAnyFlatbuffer,undefined); assert.equal(type.wireFormat,'flatbuffer');
+    return `${p.portId}:${type.fileIdentifier}`;
+  })]);
+  assert.deepEqual(ids,[['plan_forecast',['tick:TICK','request:HREQ']],['parse_forecast',['response:HRSP','records:$WXF','meta:INGQ','report:FNTC']]]);
 });
-test('requests explicit units and UTC without credentials in attribution',async t=> {
-  const h=await harness(t), result=await plan(h);
-  assert.equal(result.statusCode,0,result.errorMessage);
-  const request=jsonOutput(result,'request'),job=jsonOutput(result,'job'),url=new URL(request.url);
+
+test('plans one GET with explicit units and UTC; the plan rides CONTEXT as a $WXF header; no credentials in it',async t=> {
+  const h=await core(t), request=planned(await plan(h)), url=new URL(request.url);
+  assert.deepEqual(h.stub.wire.map(c=>c.op),['plugin.getConfig']);
+  assert.equal(request.method,'GET'); assert.equal(request.timeoutMs,20000); assert.equal(request.maxBytes,4*1024*1024);
   assert.equal(url.hostname,'api.open-meteo.com');
   assert.equal(url.searchParams.get('timeformat'),'unixtime'); assert.equal(url.searchParams.get('timezone'),'GMT');
   assert.equal(url.searchParams.get('wind_speed_unit'),'ms'); assert.equal(url.searchParams.get('temperature_unit'),'celsius');
-  assert.equal(job.source_url,request.url); assert.equal(request.responseWire,'raw-body-v1');
-  const paid=await plan(h,{...config,access:'customer'});
-  assert.equal(new URL(jsonOutput(paid,'request').url).hostname,'customer-api.open-meteo.com');
-  assert.ok(!JSON.stringify([jsonOutput(paid,'request'),jsonOutput(paid,'job')]).includes('apikey'));
+  assert.equal(url.searchParams.get('hourly'),forecast.variables.join(','));
+  const job=readWxf(request.context);
+  assert.equal(job.SOURCE_URL,request.url); assert.equal(job.FIELD_ID,'forecast/52.52,13.41'); assert.equal(job.DATASET_ID,'forecast/52.52,13.41');
+  assert.equal(job.GRID.LAT0,52.52); assert.equal(job.GRID.LON0,13.41); assert.equal(job.GRID.NLAT,1);
+  assert.equal(job.PRODUCER_PEER_ID,producerPeerId);
+  assert.equal(job.TIME_BASIS,wxf.wxfTimeBasis.ValidTimeOnly); assert.equal(job.LICENSE_CLASS,wxf.wxfLicenseClass.OpenAttribution); assert.equal(job.VALUES.length,0);
+  h.stub.config=nodeConfig({open_meteo_forecast:{...forecast,access:'customer'}});
+  const paid=planned(await plan(h));
+  assert.equal(new URL(paid.url).hostname,'customer-api.open-meteo.com');
+  assert.ok(!JSON.stringify(paid.headers).includes('apikey') && !paid.url.includes('apikey') && !Buffer.from(paid.context).includes('apikey'));
+  h.stub.config=nodeConfig({open_meteo_forecast:{latitude:1,longitude:2,access:'noncommercial'}});
+  const defaults=new URL(planned(await plan(h)).url);
+  assert.equal(defaults.searchParams.get('hourly'),'temperature_2m,relative_humidity_2m,cloud_cover,wind_speed_10m,pressure_msl,precipitation');
+  assert.equal(defaults.searchParams.get('forecast_days'),'3');
 });
-test('normalizes the documented weather units, UTC epochs, licence and missing values',async t=> {
-  const h=await harness(t), job=jsonOutput(await plan(h),'job'),result=await parse(h,job);
+
+test('normalizes the documented weather units, UTC epochs, licence and missing values; IngestRequest + FlowNotice report',async t=> {
+  const h=await core(t), request=planned(await plan(h)), result=await parse(h,request.context);
   assert.equal(result.statusCode,0,result.errorMessage);
   const rows=records(result); assert.equal(rows.length,192);
   // SI conversions are exact definitions; 5e-5 accommodates float32 storage
@@ -60,42 +71,62 @@ test('normalizes the documented weather units, UTC epochs, licence and missing v
   for(const [variable,[value,units]] of Object.entries(expected)) {
     const record=rows.find(r=>r.VARIABLE_NAME===variable);
     assert.ok(Math.abs(record.VALUES[0]-value)<5e-5,variable); assert.equal(record.UNITS,units);
-    assert.equal(record.TIME_BASIS,wxfTimeBasis.ValidTimeOnly); assert.equal(record.INIT_TIME_MS,0n);
-    assert.equal(record.MEMBER_KIND,wxfMemberKind.Unspecified); assert.equal(record.LEAD_HOURS,0);
-    assert.equal(record.VALID_TIME_MS,1656633600000n); assert.equal(record.RETRIEVED_AT,BigInt(receipt.retrieved_at_ms));
-    assert.equal(record.LICENSE_CLASS,wxfLicenseClass.OpenAttribution); assert.equal(record.PRODUCER_PEER_ID,receipt.producer_peer_id);
-    assert.equal(record.SOURCE_URL,job.source_url); assert.match(record.CITATION,/Open-Meteo/);
+    assert.equal(record.TIME_BASIS,wxf.wxfTimeBasis.ValidTimeOnly); assert.equal(record.INIT_TIME_MS,0n);
+    assert.equal(record.MEMBER_KIND,wxf.wxfMemberKind.Unspecified); assert.equal(record.LEAD_HOURS,0);
+    assert.equal(record.VALID_TIME_MS,1656633600000n); assert.equal(record.RETRIEVED_AT,BigInt(retrievedMs));
+    assert.equal(record.LICENSE_CLASS,wxf.wxfLicenseClass.OpenAttribution); assert.equal(record.PRODUCER_PEER_ID,producerPeerId);
+    assert.equal(record.SOURCE_URL,request.url); assert.match(record.CITATION,/Open-Meteo/);
     assert.equal(record.GRID.NLAT,1); assert.equal(record.GRID.NLON,1); assert.equal(record.GRID.LON0,13.419);
   }
   const missing=rows.find(r=>r.VARIABLE_NAME==='temperature_2m' && r.VALID_TIME_MS===1656640800000n);
   assert.ok(Number.isNaN(missing.VALUES[0])); assert.ok(Number.isNaN(missing.VALUE_MIN)); assert.equal(missing.MISSING_COUNT,1);
-  const rain=rows.find(r=>r.VARIABLE_NAME==='precipitation'); assert.equal(rain.TEMPORAL_KIND,wxfTemporalKind.Accumulated); assert.equal(rain.ACCUMULATION_HOURS,1);
-  assert.deepEqual(jsonOutput(result,'report'),{records:192,missing:1,retrieved_at_ms:receipt.retrieved_at_ms});
-  assert.equal(jsonOutput(result,'meta').reconcile,'current');
+  const rain=rows.find(r=>r.VARIABLE_NAME==='precipitation'); assert.equal(rain.TEMPORAL_KIND,wxf.wxfTemporalKind.Accumulated); assert.equal(rain.ACCUMULATION_HOURS,1);
+  const batch=crypto.createHash('sha256').update(JSON.stringify(response())).digest('hex');
+  const meta=decodeIngestRequest(result.outputs.find(f=>f.portId==='meta').payload);
+  assert.deepEqual(meta,{schema:'WXF.fbs',reconcile:'current',archive:null,provenance:null,tags:{providerId:'open-meteo',sourceName:'forecast/52.52,13.41',batchId:batch,sourceUrl:request.url,
+    contentKeyId:'',sourcePeer:producerPeerId,license:'CC-BY-4.0',licenseUrl:'https://creativecommons.org/licenses/by/4.0/',citation:'Weather data by Open-Meteo (https://open-meteo.com/), CC BY 4.0; units converted to SDS WXF units.',shareAlike:false}});
+  const report=result.outputs.filter(f=>f.portId==='report').map(f=>decodeFlowNotice(f.payload));
+  assert.deepEqual(report.map(n=>[n.kind,n.count,n.atMs,n.sourceName,n.batchId]),[['info',192,retrievedMs,'forecast/52.52,13.41',batch],['missing',1,retrievedMs,'forecast/52.52,13.41',batch]]);
 });
+
 test('rejects invalid configuration and recovers on the same instance',async t=> {
-  const h=await harness(t);
-  for(const value of [null,{}, {...config,access:''},{...config,latitude:91},{...config,longitude:'13'},
-    {...config,forecast_days:1.5},{...config,forecast_days:100000000000},
-    {...config,variables:['temperature_2m','temperature_2m']},{...config,variables:['invented']},{...config,variables:[3]}]) {
-    const result=await plan(h,value);assert.notEqual(result.statusCode,0);assert.equal(result.outputs.length,0);
+  const h=await core(t);
+  for(const value of [null,{}, {...forecast,access:''},{...forecast,latitude:91},{...forecast,longitude:'13'},
+    {...forecast,forecast_days:1.5},{...forecast,forecast_days:100000000000},
+    {...forecast,variables:['temperature_2m','temperature_2m']},{...forecast,variables:['invented']},{...forecast,variables:[3]}]) {
+    h.stub.config=value===null?null:nodeConfig({open_meteo_forecast:value});
+    const result=await plan(h);assert.notEqual(result.statusCode,0,JSON.stringify(value));assert.equal(result.outputs.length,0);
   }
+  h.stub.config=nodeConfig();
   assert.equal((await plan(h)).statusCode,0);
 });
+
 test('rejects partial or wrong-unit responses atomically and preserves legitimate zero values',async t=> {
-  const h=await harness(t),job=jsonOutput(await plan(h),'job');
+  const h=await core(t), {context}=planned(await plan(h));
   const bad=[body=>body.hourly.time.pop(),body=>body.hourly.precipitation.pop(),body=>body.hourly.time[1]++,
     body=>body.hourly_units.temperature_2m='°F',body=>body.utc_offset_seconds=3600,
     body=>body.hourly.cloud_cover[23]=101,body=>body.hourly.temperature_2m[23]='missing',
     body=>delete body.hourly_units,body=>delete body.latitude];
-  for(const mutate of bad) { const body=response();mutate(body);const result=await parse(h,job,body);assert.notEqual(result.statusCode,0);assert.equal(result.outputs.length,0); }
-  for(const status of [429,500,503]) assert.notEqual((await parse(h,job,response(),receipt,status)).statusCode,0);
-  assert.notEqual((await parse(h,job,'{broken')).statusCode,0);
-  assert.notEqual((await parse(h,job,response(),{...receipt,retrieved_at_ms:0})).statusCode,0);
-  assert.notEqual((await parse(h,job,response(),{...receipt,retrieved_at_ms:receipt.retrieved_at_ms+86400000})).statusCode,0);
-  assert.notEqual((await parse(h,{...job,source_url:'https://other.example/'})).statusCode,0);
-  assert.notEqual((await parse(h,job,response(),receipt,200,[input('job',job)])).statusCode,0);
-  const body=response();body.hourly.precipitation[0]=0;const result=await parse(h,job,body);
+  for(const mutate of bad) { const body=response();mutate(body);const result=await parse(h,context,body);assert.notEqual(result.statusCode,0);assert.equal(result.outputs.length,0); }
+  for(const status of [304,429,500,503]) assert.notEqual((await parse(h,context,response(),status)).statusCode,0);
+  assert.notEqual((await parse(h,context,'{broken')).statusCode,0);
+  assert.notEqual((await parse(h,context,response(),200,0)).statusCode,0);
+  assert.notEqual((await parse(h,context,response(),200,retrievedMs+86400000)).statusCode,0);
+  // a plan that is not the canonical plan of its own URL, or no plan at all
+  const other=readWxf(context); other.SOURCE_URL='https://other.example/';
+  assert.notEqual((await parse(h,writeWxf(other))).statusCode,0);
+  const moved=readWxf(context); moved.FIELD_ID='forecast/0,0';
+  assert.notEqual((await parse(h,writeWxf(moved))).statusCode,0);
+  assert.notEqual((await parse(h,new Uint8Array(0))).statusCode,0);
+  // exactly one response per invocation
+  const two=await h.invoke({methodId:'parse_forecast',inputs:[httpResponse(context),httpResponse(context)]});
+  assert.notEqual(two.statusCode,0); assert.equal(two.outputs.length,0);
+  // the producer peer id rides the plan (stamped from node config): none, no records
+  const anonymous=readWxf(context); anonymous.PRODUCER_PEER_ID=null;
+  assert.notEqual((await parse(h,writeWxf(anonymous))).statusCode,0);
+  const wire=h.stub.wire.length; await parse(h,context);
+  assert.equal(h.stub.wire.length,wire,'parse_forecast makes no host call');
+  const body=response();body.hourly.precipitation[0]=0;const result=await parse(h,context,body);
   assert.equal(result.statusCode,0,result.errorMessage);const row=records(result).find(r=>r.VARIABLE_NAME==='precipitation');
   assert.equal(row.VALUES[0],0);assert.equal(row.MISSING_COUNT,0);
 });

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.network.cloudflare-registrar",
   "name": "Cloudflare peer routing",
-  "version": "0.1.0",
-  "description": "Plan explicit peer-ID DNS inclusion and exclusion while preserving unmanaged records. Execution and origin verification are host responsibilities.",
+  "version": "0.2.0",
+  "description": "Plan explicit peer-ID DNS inclusion and exclusion while preserving unmanaged records (typed contracts 1.0: FlatBuffers only). plan reads the complete Cloudflare DNS listing (HttpResponse pages), the known peers ($NST) and the node's publication verifications ($PNV), with operator choices from node config (plugin.getConfig: cloudflare_zone_id, cloudflare_zone_name, cloudflare_api_base, request_timeout_ms, peers [{peer_id, included, origin_ipv4, origin_verified, public_artifacts_only}], managed_records [{label, record_id}]), and emits the Cloudflare API calls as HttpRequests (CONTEXT one $APR naming peer and action) plus one FlowNotice per peer. It never holds credentials or executes them; the credentialed host applies and re-reads.",
   "pluginFamily": "infrastructure",
   "externalInterfaces": [],
   "capabilities": [],
@@ -18,52 +18,114 @@
     {
       "methodId": "plan",
       "displayName": "Plan peer routes",
+      "description": "DNS listing pages + $NST + $PNV + config -> POST/PUT/DELETE dns_records HttpRequests and per-peer FlowNotices. Snapshot time is the latest page RETRIEVED_MS. A peer is verified when a $PNV entry it published has SIGNATURE_VERIFIED with KEY_SOURCE IdentityRecord, PeerIdentifier or OperatorTrust, received within 900 s. Undeclared $NST peers are excluded; only explicit exclusion deletes an owned route.",
       "inputPorts": [
         {
-          "portId": "snapshot",
+          "portId": "dns_records",
           "acceptedTypeSets": [
             {
-              "setId": "snapshot-v1",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Authenticated operator configuration and a complete, fresh verified discovery/origin and DNS snapshot. Routing control metadata, never persisted as an SDS observation."
-              }
+              "description": "HttpResponse (HRSP) from hostcap/http-request for GET <api>/zones/<zone>/dns_records: STATUS 200, BODY Cloudflare's JSON listing (success, result, result_info page/total_pages/total_count), RETRIEVED_MS the snapshot time."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Every page of the zone's DNS listing (pages 1..total_pages exactly once)."
+        },
+        {
+          "portId": "peers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-nst",
+              "allowedTypes": [
+                {
+                  "schemaName": "NST.fbs",
+                  "fileIdentifier": "$NST",
+                  "rootTypeName": "NST",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$NST: the peers the node knows (hostcap/p2p-discovery peers_snapshot)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Authenticated operator configuration and a complete, fresh verified discovery/origin and DNS snapshot."
+          "description": "Discovered peers; discovery alone creates no route."
+        },
+        {
+          "portId": "verifications",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$PNV: the node's verdicts on received publication notices."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Peer identity verification and its time."
         }
       ],
       "outputPorts": [
         {
-          "portId": "plan",
+          "portId": "requests",
           "acceptedTypeSets": [
             {
-              "setId": "plan-v1",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Deterministic DNS actions and per-peer status; applied is always false until the host verifies execution. Routing control metadata, never persisted as an SDS observation."
-              }
+              "description": "HttpRequest (HREQ): POST <api>/zones/<zone>/dns_records, PUT or DELETE .../dns_records/<id>; BODY (POST/PUT) the Cloudflare JSON record {type A, name, content, proxied true, ttl 1, comment sdn-peer:<label>}; no authorization header (the credentialed host adds it); CONTEXT one size-prefixed $APR (METHOD, PATH, ROUTE cloudflare-dns-record, PARAMETERS peerId/label/hostname/recordId)."
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Deterministic DNS actions and per-peer status; applied is always false until the host verifies execution."
+          "minStreams": 0,
+          "maxStreams": 5000,
+          "required": false,
+          "description": "Planned Cloudflare API calls; not applied."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC) per peer: PROVIDER_ID cloudflare, SOURCE_NAME hostname, BATCH_ID peer id, REASON included/excluded/blocked/conflict/pending-inclusion/pending-exclusion, KIND Unchanged (included) / Info (pending-*) / Skipped (the rest), COUNT 1 when included, ITEMS the message and \"cache-purge-required\", AT_MS the snapshot time."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 5000,
+          "required": false,
+          "description": "Per-peer status."
         }
       ],
       "maxBatch": 1,
@@ -72,6 +134,32 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Bounded deterministic DNS comparison and identity encoding; no workers or network access inside this planning method."
-  }
+    "detail": "Bounded deterministic DNS comparison and identity encoding; one plugin.getConfig hostcall, no workers or network access inside this planning method."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "cloudflare-registrar-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
 }

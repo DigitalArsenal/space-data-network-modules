@@ -51,6 +51,7 @@ struct NSTNodeT : public ::flatbuffers::NativeTable {
   std::string EPM_CID{};
   std::string STORAGE_DAEMON_VERSION{};
   std::string ONION_ADDRESS{};
+  std::vector<std::string> STANDARDS{};
 };
 
 /// Node Status Record (NST)
@@ -96,7 +97,8 @@ struct NSTNode FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ENCRYPTION_PUBLIC_KEY = 52,
     VT_EPM_CID = 54,
     VT_STORAGE_DAEMON_VERSION = 56,
-    VT_ONION_ADDRESS = 58
+    VT_ONION_ADDRESS = 58,
+    VT_STANDARDS = 60
   };
   /// Peer identifier (multihash, base58).
   const ::flatbuffers::String *PEER_ID() const {
@@ -205,6 +207,10 @@ struct NSTNode FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *ONION_ADDRESS() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ONION_ADDRESS);
   }
+  /// Standards the peer publishes or serves, as their codes, e.g. "OMM".
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *STANDARDS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_STANDARDS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -258,6 +264,9 @@ struct NSTNode FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(STORAGE_DAEMON_VERSION()) &&
            VerifyOffset(verifier, VT_ONION_ADDRESS) &&
            verifier.VerifyString(ONION_ADDRESS()) &&
+           VerifyOffset(verifier, VT_STANDARDS) &&
+           verifier.VerifyVector(STANDARDS()) &&
+           verifier.VerifyVectorOfStrings(STANDARDS()) &&
            verifier.EndTable();
   }
   NSTNodeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -353,6 +362,9 @@ struct NSTNodeBuilder {
   void add_ONION_ADDRESS(::flatbuffers::Offset<::flatbuffers::String> ONION_ADDRESS) {
     fbb_.AddOffset(NSTNode::VT_ONION_ADDRESS, ONION_ADDRESS);
   }
+  void add_STANDARDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> STANDARDS) {
+    fbb_.AddOffset(NSTNode::VT_STANDARDS, STANDARDS);
+  }
   explicit NSTNodeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -393,10 +405,12 @@ inline ::flatbuffers::Offset<NSTNode> CreateNSTNode(
     ::flatbuffers::Offset<::flatbuffers::String> ENCRYPTION_PUBLIC_KEY = 0,
     ::flatbuffers::Offset<::flatbuffers::String> EPM_CID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> STORAGE_DAEMON_VERSION = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> ONION_ADDRESS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> ONION_ADDRESS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> STANDARDS = 0) {
   NSTNodeBuilder builder_(_fbb);
   builder_.add_UPTIME_S(UPTIME_S);
   builder_.add_LAST_SEEN(LAST_SEEN);
+  builder_.add_STANDARDS(STANDARDS);
   builder_.add_ONION_ADDRESS(ONION_ADDRESS);
   builder_.add_STORAGE_DAEMON_VERSION(STORAGE_DAEMON_VERSION);
   builder_.add_EPM_CID(EPM_CID);
@@ -460,7 +474,8 @@ inline ::flatbuffers::Offset<NSTNode> CreateNSTNodeDirect(
     const char *ENCRYPTION_PUBLIC_KEY = nullptr,
     const char *EPM_CID = nullptr,
     const char *STORAGE_DAEMON_VERSION = nullptr,
-    const char *ONION_ADDRESS = nullptr) {
+    const char *ONION_ADDRESS = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *STANDARDS = nullptr) {
   auto PEER_ID__ = PEER_ID ? _fbb.CreateString(PEER_ID) : 0;
   auto DN__ = DN ? _fbb.CreateString(DN) : 0;
   auto ORGANIZATION__ = ORGANIZATION ? _fbb.CreateString(ORGANIZATION) : 0;
@@ -481,6 +496,7 @@ inline ::flatbuffers::Offset<NSTNode> CreateNSTNodeDirect(
   auto EPM_CID__ = EPM_CID ? _fbb.CreateString(EPM_CID) : 0;
   auto STORAGE_DAEMON_VERSION__ = STORAGE_DAEMON_VERSION ? _fbb.CreateString(STORAGE_DAEMON_VERSION) : 0;
   auto ONION_ADDRESS__ = ONION_ADDRESS ? _fbb.CreateString(ONION_ADDRESS) : 0;
+  auto STANDARDS__ = STANDARDS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*STANDARDS) : 0;
   return CreateNSTNode(
       _fbb,
       PEER_ID__,
@@ -510,7 +526,8 @@ inline ::flatbuffers::Offset<NSTNode> CreateNSTNodeDirect(
       ENCRYPTION_PUBLIC_KEY__,
       EPM_CID__,
       STORAGE_DAEMON_VERSION__,
-      ONION_ADDRESS__);
+      ONION_ADDRESS__,
+      STANDARDS__);
 }
 
 ::flatbuffers::Offset<NSTNode> CreateNSTNode(::flatbuffers::FlatBufferBuilder &_fbb, const NSTNodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -520,6 +537,7 @@ struct NSTT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<NSTNodeT>> NODES{};
   int64_t GENERATED_AT = 0;
   std::string SOURCE_PEER_ID{};
+  std::string ETAG{};
   NSTT() = default;
   NSTT(const NSTT &o);
   NSTT(NSTT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -534,7 +552,8 @@ struct NST FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NODES = 4,
     VT_GENERATED_AT = 6,
-    VT_SOURCE_PEER_ID = 8
+    VT_SOURCE_PEER_ID = 8,
+    VT_ETAG = 10
   };
   const ::flatbuffers::Vector<::flatbuffers::Offset<NSTNode>> *NODES() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<NSTNode>> *>(VT_NODES);
@@ -547,6 +566,10 @@ struct NST FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *SOURCE_PEER_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_PEER_ID);
   }
+  /// Entity tag of this set, for conditional requests.
+  const ::flatbuffers::String *ETAG() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ETAG);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -556,6 +579,8 @@ struct NST FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<int64_t>(verifier, VT_GENERATED_AT, 8) &&
            VerifyOffset(verifier, VT_SOURCE_PEER_ID) &&
            verifier.VerifyString(SOURCE_PEER_ID()) &&
+           VerifyOffset(verifier, VT_ETAG) &&
+           verifier.VerifyString(ETAG()) &&
            verifier.EndTable();
   }
   NSTT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -576,6 +601,9 @@ struct NSTBuilder {
   void add_SOURCE_PEER_ID(::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID) {
     fbb_.AddOffset(NST::VT_SOURCE_PEER_ID, SOURCE_PEER_ID);
   }
+  void add_ETAG(::flatbuffers::Offset<::flatbuffers::String> ETAG) {
+    fbb_.AddOffset(NST::VT_ETAG, ETAG);
+  }
   explicit NSTBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -591,9 +619,11 @@ inline ::flatbuffers::Offset<NST> CreateNST(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<NSTNode>>> NODES = 0,
     int64_t GENERATED_AT = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ETAG = 0) {
   NSTBuilder builder_(_fbb);
   builder_.add_GENERATED_AT(GENERATED_AT);
+  builder_.add_ETAG(ETAG);
   builder_.add_SOURCE_PEER_ID(SOURCE_PEER_ID);
   builder_.add_NODES(NODES);
   return builder_.Finish();
@@ -608,14 +638,17 @@ inline ::flatbuffers::Offset<NST> CreateNSTDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const std::vector<::flatbuffers::Offset<NSTNode>> *NODES = nullptr,
     int64_t GENERATED_AT = 0,
-    const char *SOURCE_PEER_ID = nullptr) {
+    const char *SOURCE_PEER_ID = nullptr,
+    const char *ETAG = nullptr) {
   auto NODES__ = NODES ? _fbb.CreateVector<::flatbuffers::Offset<NSTNode>>(*NODES) : 0;
   auto SOURCE_PEER_ID__ = SOURCE_PEER_ID ? _fbb.CreateString(SOURCE_PEER_ID) : 0;
+  auto ETAG__ = ETAG ? _fbb.CreateString(ETAG) : 0;
   return CreateNST(
       _fbb,
       NODES__,
       GENERATED_AT,
-      SOURCE_PEER_ID__);
+      SOURCE_PEER_ID__,
+      ETAG__);
 }
 
 ::flatbuffers::Offset<NST> CreateNST(::flatbuffers::FlatBufferBuilder &_fbb, const NSTT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -657,6 +690,7 @@ inline void NSTNode::UnPackTo(NSTNodeT *_o, const ::flatbuffers::resolver_functi
   { auto _e = EPM_CID(); if (_e) _o->EPM_CID = _e->str(); }
   { auto _e = STORAGE_DAEMON_VERSION(); if (_e) _o->STORAGE_DAEMON_VERSION = _e->str(); }
   { auto _e = ONION_ADDRESS(); if (_e) _o->ONION_ADDRESS = _e->str(); }
+  { auto _e = STANDARDS(); if (_e) { _o->STANDARDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->STANDARDS[_i] = _e->Get(_i)->str(); } } else { _o->STANDARDS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<NSTNode> CreateNSTNode(::flatbuffers::FlatBufferBuilder &_fbb, const NSTNodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -695,6 +729,7 @@ inline ::flatbuffers::Offset<NSTNode> NSTNode::Pack(::flatbuffers::FlatBufferBui
   auto _EPM_CID = _o->EPM_CID.empty() ? 0 : _fbb.CreateString(_o->EPM_CID);
   auto _STORAGE_DAEMON_VERSION = _o->STORAGE_DAEMON_VERSION.empty() ? 0 : _fbb.CreateString(_o->STORAGE_DAEMON_VERSION);
   auto _ONION_ADDRESS = _o->ONION_ADDRESS.empty() ? 0 : _fbb.CreateString(_o->ONION_ADDRESS);
+  auto _STANDARDS = _o->STANDARDS.size() ? _fbb.CreateVectorOfStrings(_o->STANDARDS) : 0;
   return CreateNSTNode(
       _fbb,
       _PEER_ID,
@@ -724,12 +759,14 @@ inline ::flatbuffers::Offset<NSTNode> NSTNode::Pack(::flatbuffers::FlatBufferBui
       _ENCRYPTION_PUBLIC_KEY,
       _EPM_CID,
       _STORAGE_DAEMON_VERSION,
-      _ONION_ADDRESS);
+      _ONION_ADDRESS,
+      _STANDARDS);
 }
 
 inline NSTT::NSTT(const NSTT &o)
       : GENERATED_AT(o.GENERATED_AT),
-        SOURCE_PEER_ID(o.SOURCE_PEER_ID) {
+        SOURCE_PEER_ID(o.SOURCE_PEER_ID),
+        ETAG(o.ETAG) {
   NODES.reserve(o.NODES.size());
   for (const auto &NODES_ : o.NODES) { NODES.emplace_back((NODES_) ? new NSTNodeT(*NODES_) : nullptr); }
 }
@@ -738,6 +775,7 @@ inline NSTT &NSTT::operator=(NSTT o) FLATBUFFERS_NOEXCEPT {
   std::swap(NODES, o.NODES);
   std::swap(GENERATED_AT, o.GENERATED_AT);
   std::swap(SOURCE_PEER_ID, o.SOURCE_PEER_ID);
+  std::swap(ETAG, o.ETAG);
   return *this;
 }
 
@@ -753,6 +791,7 @@ inline void NST::UnPackTo(NSTT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = NODES(); if (_e) { _o->NODES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->NODES[_i]) { _e->Get(_i)->UnPackTo(_o->NODES[_i].get(), _resolver); } else { _o->NODES[_i] = std::unique_ptr<NSTNodeT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->NODES.resize(0); } }
   { auto _e = GENERATED_AT(); _o->GENERATED_AT = _e; }
   { auto _e = SOURCE_PEER_ID(); if (_e) _o->SOURCE_PEER_ID = _e->str(); }
+  { auto _e = ETAG(); if (_e) _o->ETAG = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<NST> CreateNST(::flatbuffers::FlatBufferBuilder &_fbb, const NSTT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -766,11 +805,13 @@ inline ::flatbuffers::Offset<NST> NST::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _NODES = _o->NODES.size() ? _fbb.CreateVector<::flatbuffers::Offset<NSTNode>> (_o->NODES.size(), [](size_t i, _VectorArgs *__va) { return CreateNSTNode(*__va->__fbb, __va->__o->NODES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _GENERATED_AT = _o->GENERATED_AT;
   auto _SOURCE_PEER_ID = _o->SOURCE_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->SOURCE_PEER_ID);
+  auto _ETAG = _o->ETAG.empty() ? 0 : _fbb.CreateString(_o->ETAG);
   return CreateNST(
       _fbb,
       _NODES,
       _GENERATED_AT,
-      _SOURCE_PEER_ID);
+      _SOURCE_PEER_ID,
+      _ETAG);
 }
 
 inline const NST *GetNST(const void *buf) {

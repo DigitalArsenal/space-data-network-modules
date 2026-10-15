@@ -82,19 +82,81 @@ const plugin_input_frame_t* input(const char* port) {
   const int32_t index = plugin_find_input_index(port, 0);
   return index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
 }
-nlohmann::json json_input(const char* port) {
-  const plugin_input_frame_t* f = input(port);
-  if (!f || !f->payload) return nlohmann::json(nlohmann::json::value_t::discarded);
-  return nlohmann::json::parse(f->payload, f->payload + f->payload_length, nullptr, false);
+// A size-prefixed or plain root, verified.
+template <typename T>
+const T* root(const plugin_input_frame_t* f, const char* ident) {
+  if (!f || !f->payload || f->payload_length < 8) return nullptr;
+  const uint8_t* p = f->payload;
+  const size_t n = f->payload_length;
+  flatbuffers::Verifier::Options options;
+  options.max_tables = 100000000;
+  options.max_depth = 128;
+  if (flatbuffers::BufferHasIdentifier(p, ident, true)) {
+    flatbuffers::Verifier v(p, n, options);
+    return v.VerifySizePrefixedBuffer<T>(ident) ? flatbuffers::GetSizePrefixedRoot<T>(p) : nullptr;
+  }
+  flatbuffers::Verifier v(p, n, options);
+  return flatbuffers::BufferHasIdentifier(p, ident, false) && v.VerifyBuffer<T>(ident) ? flatbuffers::GetRoot<T>(p) : nullptr;
 }
-int emit_text(const char* port, const std::string& text) {
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0
-             ? 1
+std::string text(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+int emit_lfv(const char* port, flatbuffers::FlatBufferBuilder& fbb, flatbuffers::Offset<LFV> root) {
+  fbb.Finish(root, "$LFV");
+  return plugin_push_output_ex(port, "LFV.fbs", "$LFV", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "LFV", 0, 0,
+                               fbb.GetBufferPointer(), static_cast<uint32_t>(fbb.GetSize())) < 0
+             ? fail("output-failed", std::string("could not push ") + port)
              : 0;
 }
-int emit(const char* port, const nlohmann::json& j) { return emit_text(port, j.dump()); }
-nlohmann::json number(double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); }
+// Non-finite values are "not computable": NaN on the wire.
+double finite_or_nan(double x) { return std::isfinite(x) ? x : std::numeric_limits<double>::quiet_NaN(); }
+
+// ── epochs: ISO 8601 UTC with nanosecond digits; a unix-seconds double of this era round-trips exactly ──
+int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
+  y -= m <= 2;
+  const int64_t era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + static_cast<int64_t>(doe) - 719468;
+}
+void civil_from_days(int64_t z, int64_t* y, unsigned* m, unsigned* d) {
+  z += 719468;
+  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+  const unsigned doe = static_cast<unsigned>(z - era * 146097);
+  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const unsigned mp = (5 * doy + 2) / 153;
+  *d = doy - (153 * mp + 2) / 5 + 1;
+  *m = mp < 10 ? mp + 3 : mp - 9;
+  *y = static_cast<int64_t>(yoe) + era * 400 + (*m <= 2);
+}
+// unix seconds from "YYYY-MM-DDTHH:MM:SS[.f...][Z]"; NaN when it does not parse.
+double parse_epoch(const flatbuffers::String* s) {
+  if (!s) return kNaN;
+  const std::string t = s->str();
+  int y, mo, d, h, mi;
+  int used = 0;
+  if (std::sscanf(t.c_str(), "%d-%d-%dT%d:%d:%n", &y, &mo, &d, &h, &mi, &used) != 5 || used == 0) return kNaN;
+  char* end = nullptr;
+  const double sec = std::strtod(t.c_str() + used, &end);
+  if (end == t.c_str() + used || (*end && !(end[0] == 'Z' && !end[1]))) return kNaN;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 || !(sec >= 0 && sec < 61)) return kNaN;
+  const double base = static_cast<double>(days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60);
+  return base + sec;
+}
+std::string format_epoch(double t) {
+  int64_t whole = static_cast<int64_t>(std::floor(t));
+  char frac[32];
+  std::snprintf(frac, sizeof frac, "%.9f", t - static_cast<double>(whole));
+  if (frac[0] == '1') ++whole, std::snprintf(frac, sizeof frac, "%.9f", 0.0);
+  const int64_t days = (whole >= 0 ? whole : whole - 86399) / 86400, rest = whole - days * 86400;
+  int64_t y;
+  unsigned m, d;
+  civil_from_days(days, &y, &m, &d);
+  char buf[64];
+  std::snprintf(buf, sizeof buf, "%04lld-%02u-%02uT%02lld:%02lld:%02lld%sZ", static_cast<long long>(y), m, d,
+                static_cast<long long>(rest / 3600), static_cast<long long>(rest / 60 % 60), static_cast<long long>(rest % 60), frac + 1);
+  return buf;
+}
 
 // ── statistics ──
 double median(std::vector<double> v) {
@@ -190,96 +252,96 @@ struct History {
   std::vector<Set> sets;
   std::vector<Window> windows;
 };
-const char* kSetFields[] = {"t", "n", "e", "i", "raan", "argp", "ma", "bstar"};
+// Histories arrive as $LFV rows: SOURCE_ID the history's id, TARGET (empty =
+// the id), ROLE (Unlabelled reads as real, the old default), GENERATOR,
+// CLASS_LABEL, and ELEMENT_SETS, the $OMM element sets (EPOCH, MEAN_MOTION,
+// ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY,
+// BSTAR). Daily ephemeris windows (hpop view) arrive as one $OEM: a block per
+// window, OBJECT.OBJECT_ID the history's id, START_TIME the window start, the
+// lines up to USEABLE_STOP_TIME the samples (GCRF km, km/s), and a line at
+// STOP_TIME after USEABLE_STOP_TIME the state at the next window's start.
+const char* role_name(lfvRole r) { return r == lfvRole::Decoy ? "decoy" : "real"; }
+lfvRole role_of(const std::string& r) { return r == "decoy" ? lfvRole::Decoy : r == "real" ? lfvRole::Real : lfvRole::Unlabelled; }
 
-bool read_histories(const nlohmann::json& j, std::vector<History>* out, std::string* error) {
-  if (!j.is_object() || !j.contains("objects") || !j["objects"].is_array()) {
-    *error = "expected {objects: [...]}";
+bool read_histories(const LFV* lfv, const OEM* oem, std::vector<History>* out, std::string* error) {
+  if (!lfv || !lfv->ROWS()) {
+    *error = "expected an $LFV with ROWS";
     return false;
   }
-  for (const auto& o : j["objects"]) {
+  std::unordered_map<std::string, size_t> where;
+  for (const LFVRow* o : *lfv->ROWS()) {
     History h;
-    h.id = o.value("id", std::string());
-    h.target = o.value("target", h.id);
-    h.role = o.value("role", std::string("real"));
-    h.generator = o.value("generator", std::string());
-    h.cls = o.value("cls", std::string());
+    h.id = text(o->SOURCE_ID());
+    h.target = text(o->TARGET());
+    if (h.target.empty()) h.target = h.id;
+    h.role = role_name(o->ROLE());
+    h.generator = text(o->GENERATOR());
+    h.cls = text(o->CLASS_LABEL());
     if (h.id.empty()) {
-      *error = "every object needs an id";
+      *error = "every row needs a SOURCE_ID";
       return false;
     }
-    if (o.contains("t")) {
-      const size_t n = o["t"].size();
-      for (const char* f : kSetFields)
-        if (!o.contains(f) || !o[f].is_array() || o[f].size() != n) {
-          *error = h.id + ": element arrays must all have the length of t";
-          return false;
-        }
-      for (size_t k = 0; k < n; ++k) {
-        double v[8];
-        for (int f = 0; f < 8; ++f) v[f] = o[kSetFields[f]][k].is_number() ? o[kSetFields[f]][k].get<double>() : kNaN;
+    if (o->ELEMENT_SETS()) {
+      for (const OMM* m : *o->ELEMENT_SETS()) {
+        const double v[8] = {parse_epoch(m->EPOCH()), m->MEAN_MOTION(), m->ECCENTRICITY(), m->INCLINATION(),
+                             m->RA_OF_ASC_NODE(), m->ARG_OF_PERICENTER(), m->MEAN_ANOMALY(), m->BSTAR()};
         Set s{v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]};
         if (std::all_of(v, v + 8, [](double x) { return std::isfinite(x); }) && s.n > 0) h.sets.push_back(s);
       }
       std::sort(h.sets.begin(), h.sets.end(), [](const Set& a, const Set& b) { return a.t < b.t; });
     }
-    if (o.contains("windows")) {
-      for (const auto& w : o["windows"]) {
-        Window win;
-        win.t = w.value("t", kNaN);
-        auto state = [](const nlohmann::json& a, std::array<double, 7>* s) {
-          if (!a.is_array() || a.size() != 7) return false;
-          for (int k = 0; k < 7; ++k) (*s)[k] = a[k].is_number() ? a[k].get<double>() * (k ? 1e-3 : 1.0) : kNaN;
-          return std::all_of(s->begin(), s->end(), [](double x) { return std::isfinite(x); });
-        };
-        for (const auto& s : w.value("samples", nlohmann::json::array())) {
-          std::array<double, 7> st{};
-          if (state(s, &st)) win.samples.push_back(st);
-        }
-        if (w.contains("end")) win.has_end = state(w["end"], &win.end);
-        if (std::isfinite(win.t) && !win.samples.empty()) h.windows.push_back(win);
-      }
-      std::sort(h.windows.begin(), h.windows.end(), [](const Window& a, const Window& b) { return a.t < b.t; });
-    }
+    where.emplace(h.id, out->size());
     out->push_back(std::move(h));
+  }
+  if (oem && oem->EPHEMERIS_DATA_BLOCK()) {
+    std::vector<bool> touched(out->size(), false);
+    for (const ephemerisDataBlock* b : *oem->EPHEMERIS_DATA_BLOCK()) {
+      const auto it = b && b->OBJECT() ? where.find(text(b->OBJECT()->OBJECT_ID())) : where.end();
+      if (it == where.end()) continue;
+      Window win;
+      win.t = parse_epoch(b->START_TIME());
+      const double usable_stop = b->USEABLE_STOP_TIME() ? parse_epoch(b->USEABLE_STOP_TIME()) : INFINITY;
+      if (b->EPHEMERIS_DATA_LINES())
+        for (const ephemerisDataLine* l : *b->EPHEMERIS_DATA_LINES()) {
+          std::array<double, 7> st{parse_epoch(l->EPOCH()), l->X(), l->Y(), l->Z(), l->X_DOT(), l->Y_DOT(), l->Z_DOT()};
+          const bool ok = std::all_of(st.begin(), st.end(), [](double x) { return std::isfinite(x); });
+          if (std::isfinite(st[0]) && st[0] > usable_stop) win.has_end = ok, win.end = st;
+          else if (ok) win.samples.push_back(st);
+        }
+      if (std::isfinite(win.t) && !win.samples.empty()) (*out)[it->second].windows.push_back(win), touched[it->second] = true;
+    }
+    for (size_t k = 0; k < out->size(); ++k)
+      if (touched[k])
+        std::sort((*out)[k].windows.begin(), (*out)[k].windows.end(), [](const Window& a, const Window& b) { return a.t < b.t; });
   }
   return true;
 }
 
-void append_number(std::string* s, double x) {
-  char buf[32];
-  std::snprintf(buf, sizeof buf, "%.16g", x);
-  s->append(buf);
-}
-void append_quoted(std::string* s, const std::string& text) { s->append(nlohmann::json(text).dump()); }
-std::string write_histories(const std::vector<History>& list) {
-  std::string s = "{\"objects\":[";
-  for (size_t k = 0; k < list.size(); ++k) {
-    const History& h = list[k];
-    if (k) s += ',';
-    s += "{\"id\":";
-    append_quoted(&s, h.id);
-    s += ",\"target\":";
-    append_quoted(&s, h.target);
-    s += ",\"role\":";
-    append_quoted(&s, h.role);
-    s += ",\"generator\":";
-    append_quoted(&s, h.generator);
-    for (int f = 0; f < 8; ++f) {
-      s += ",\"";
-      s += kSetFields[f];
-      s += "\":[";
-      for (size_t j = 0; j < h.sets.size(); ++j) {
-        if (j) s += ',';
-        const Set& e = h.sets[j];
-        const double v[] = {e.t, e.n, e.e, e.i, e.raan, e.argp, e.ma, e.bstar};
-        append_number(&s, v[f]);
-      }
-      s += ']';
+// Histories as $LFV rows with their element sets as $OMM.
+flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<LFVRow>>> write_histories(flatbuffers::FlatBufferBuilder& fbb,
+                                                                                       const std::vector<History>& list) {
+  std::vector<flatbuffers::Offset<LFVRow>> rows;
+  rows.reserve(list.size());
+  for (const History& h : list) {
+    std::vector<flatbuffers::Offset<OMM>> sets;
+    sets.reserve(h.sets.size());
+    for (const Set& e : h.sets) {
+      const auto epoch = fbb.CreateString(format_epoch(e.t));
+      OMMBuilder m(fbb);
+      m.add_EPOCH(epoch);
+      m.add_MEAN_MOTION(e.n);
+      m.add_ECCENTRICITY(e.e);
+      m.add_INCLINATION(e.i);
+      m.add_RA_OF_ASC_NODE(e.raan);
+      m.add_ARG_OF_PERICENTER(e.argp);
+      m.add_MEAN_ANOMALY(e.ma);
+      m.add_BSTAR(e.bstar);
+      sets.push_back(m.Finish());
     }
-    s += '}';
+    rows.push_back(CreateLFVRowDirect(fbb, h.id.c_str(), h.target.c_str(), role_of(h.role), h.generator.c_str(),
+                                      h.cls.empty() ? nullptr : h.cls.c_str(), nullptr, kNaN, &sets));
   }
-  return s + "]}";
+  return fbb.CreateVector(rows);
 }
 
 // ── SGP4 (WGS-72, opsmode i, the propagator/sgp4 sources) ──
@@ -1066,7 +1128,12 @@ double cp_upper(int k, int n, double alpha) {
 // eps >= ln(P_p(S) / P_q(S)) for every set S; S = {score > tau} (or its
 // complement, decoy side) chosen on one half of the targets, bounded at 95 %
 // one-sided each on the other half.
-nlohmann::json epsilon_bound(const std::vector<double>& s, const std::vector<int>& y, const std::vector<int>& half) {
+struct Epsilon {
+  bool ok = false, above = true;
+  double lower = 0, tau = 0;
+  int kr = 0, nr = 0, kd = 0, nd = 0;
+};
+Epsilon epsilon_bound(const std::vector<double>& s, const std::vector<int>& y, const std::vector<int>& half) {
   struct Best {
     double tau = kNaN, value = -INFINITY;
     bool above = true;
@@ -1096,17 +1163,18 @@ nlohmann::json epsilon_bound(const std::vector<double>& s, const std::vector<int
       const double v = above ? std::log(pr / pd) : std::log(pd / pr);
       if (v > best.value) best = {tau, v, above};
     }
-  nlohmann::json out;
+  Epsilon out;
   if (!std::isfinite(best.tau)) return out;
   int kr, nr, kd, nd;
   counts(1, best.tau, best.above, &kr, &nr, &kd, &nd);
   if (!nr || !nd) return out;
   const double lower = best.above ? std::log(cp_lower(kr, nr, 0.05) / cp_upper(kd, nd, 0.05))
                                   : std::log(cp_lower(kd, nd, 0.05) / cp_upper(kr, nr, 0.05));
-  out["epsilonLowerBound95"] = std::max(0.0, lower);
-  out["threshold"] = best.tau;
-  out["side"] = best.above ? "real above" : "decoy below";
-  out["heldOut"] = {{"real", {{"in", kr}, {"n", nr}}}, {"decoy", {{"in", kd}, {"n", nd}}}};
+  out.ok = true;
+  out.lower = std::max(0.0, lower);
+  out.tau = best.tau;
+  out.above = best.above;
+  out.kr = kr, out.nr = nr, out.kd = kd, out.nd = nd;
   return out;
 }
 
@@ -1114,26 +1182,32 @@ nlohmann::json epsilon_bound(const std::vector<double>& s, const std::vector<int
 
 // ─────────────────────────────── methods ───────────────────────────────
 
+// Settings: node config (plugin.getConfig), one table per method: decoys,
+// features and distinguish, with the keys the JSON options had.
+
 extern "C" int decoys() {
-  const nlohmann::json options = json_input("options");
-  const nlohmann::json population = json_input("population");
-  if (!options.is_object() || !population.is_object()) return fail("invalid-input", "population and options must be JSON objects");
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) return fail("config-unavailable", "plugin.getConfig failed: " + std::string(config.error_message()));
+  const LFV* population = root<LFV>(input("population"), "$LFV");
+  if (!population) return fail("invalid-input", "population must be an $LFV");
+  const sdm_piv::ConfigTable options = config.table("decoys");
   GeneratorOptions o;
-  o.kind = options.value("generator", std::string());
+  o.kind = std::string(options.string("generator"));
   if (o.kind != "independent" && o.kind != "rotated" && o.kind != "resampled" && o.kind != "chained" && o.kind != "aligned" &&
       o.kind != "fleet")
     return fail("invalid-options", "generator must be independent, rotated, resampled, chained, aligned or fleet");
-  if (!options.contains("window") || options["window"].size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
-  o.w0 = options["window"][0].get<double>(), o.w1 = options["window"][1].get<double>();
-  o.per_target = options.value("perTarget", 1);
-  o.donors = options.value("donors", std::string("population"));
-  o.neighbours = options.value("neighbours", 50);
-  o.seed = options.value("seed", static_cast<uint64_t>(1));
+  const sdm_piv::Span<double> window = options.numbers("window");
+  if (window.size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
+  o.w0 = window[0], o.w1 = window[1];
+  o.per_target = static_cast<int>(options.number("perTarget", 1));
+  o.donors = std::string(options.string("donors", "population"));
+  o.neighbours = static_cast<int>(options.number("neighbours", 50));
+  o.seed = static_cast<uint64_t>(options.number("seed", 1));
   if (!(o.w1 > o.w0) || o.per_target < 1 || (o.donors != "population" && o.donors != "regime"))
     return fail("invalid-options", "window must be increasing, perTarget >= 1, donors population or regime");
   std::vector<History> reals;
   std::string error;
-  if (!read_histories(population, &reals, &error)) return fail("invalid-population", error);
+  if (!read_histories(population, nullptr, &reals, &error)) return fail("invalid-population", error);
   const int days = static_cast<int>(std::ceil((o.w1 - o.w0) / kDay));
 
   // Donors, the drag common mode and the catalog-neighbour offsets.
@@ -1161,8 +1235,8 @@ extern "C" int decoys() {
   }
 
   std::vector<std::string> targets;
-  if (options.contains("targets"))
-    for (const auto& t : options["targets"]) targets.push_back(t.get<std::string>());
+  if (options.has("targets"))
+    for (std::string_view t : options.strings("targets")) targets.push_back(std::string(t));
   else
     for (const Donor* d : pool) targets.push_back(d->id);
   std::unordered_map<std::string, size_t> where;
@@ -1205,34 +1279,40 @@ extern "C" int decoys() {
       out.push_back(std::move(h));
     }
   }
-  std::string text = write_histories(out);
-  text.pop_back();   // close the object after the report fields
-  nlohmann::json report = {{"generator", o.kind}, {"donors", o.donors}, {"population", pool.size()},
-                           {"targets", targets.size()}, {"decoys", out.size()}, {"refused", refused},
-                           {"neighbourOffsets", offsets.size()}};
-  nlohmann::json bands = nlohmann::json::array();
-  for (size_t b = 0; b < cm.profile.size(); ++b)
-    if (!cm.profile[b].empty())
-      bands.push_back({{"altitudeKm", {CommonMode::kLowestKm + b * CommonMode::kBandKm, CommonMode::kLowestKm + (b + 1) * CommonMode::kBandKm}},
-                       {"objects", cm.objects[b]}, {"relativeDecay", cm.profile[b]}});
-  report["dragCommonMode"] = bands;
-  text += ",\"report\":" + report.dump() + "}";
-  return emit_text("decoys", text);
+  // The decoys as $LFV rows; SOURCE_COUNT the targets asked, REFERENCE_COUNT
+  // the population with 6 element sets in the window (the donors), and
+  // SKIPPED_COUNT the decoys refused for fewer than 6 sets.
+  flatbuffers::FlatBufferBuilder fbb(1 << 16);
+  const auto rows = write_histories(fbb, out);
+  LFVBuilder b(fbb);
+  b.add_WINDOW_START_MS(static_cast<int64_t>(std::llround(o.w0 * 1000.0)));
+  b.add_WINDOW_END_MS(static_cast<int64_t>(std::llround(o.w1 * 1000.0)));
+  b.add_MIN_POINTS(6);
+  b.add_ROWS(rows);
+  b.add_SOURCE_COUNT(static_cast<uint32_t>(targets.size()));
+  b.add_REFERENCE_COUNT(static_cast<uint32_t>(pool.size()));
+  b.add_SKIPPED_COUNT(static_cast<uint32_t>(refused));
+  return emit_lfv("decoys", fbb, b.Finish());
 }
 
 extern "C" int features() {
-  const nlohmann::json options = json_input("options");
-  const nlohmann::json histories = json_input("histories");
-  if (!options.is_object() || !histories.is_object()) return fail("invalid-input", "histories and options must be JSON objects");
-  const std::string view = options.value("view", std::string());
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) return fail("config-unavailable", "plugin.getConfig failed: " + std::string(config.error_message()));
+  const LFV* histories = root<LFV>(input("histories"), "$LFV");
+  const plugin_input_frame_t* eph = input("ephemerides");
+  const OEM* oem = eph && eph->payload ? root<OEM>(eph, "$OEM") : nullptr;
+  if (!histories || (eph && eph->payload && !oem)) return fail("invalid-input", "histories must be an $LFV and ephemerides an $OEM");
+  const sdm_piv::ConfigTable options = config.table("features");
+  const std::string view = std::string(options.string("view"));
   if (view != "gp" && view != "hpop") return fail("invalid-options", "view must be gp or hpop");
-  if (!options.contains("window") || options["window"].size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
-  const double w0 = options["window"][0].get<double>(), w1 = options["window"][1].get<double>();
+  const sdm_piv::Span<double> window = options.numbers("window");
+  if (window.size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
+  const double w0 = window[0], w1 = window[1];
   const int days = static_cast<int>(std::ceil((w1 - w0) / kDay));
-  const size_t min_points = options.value("minPoints", view == "gp" ? 6 : 8);
+  const size_t min_points = static_cast<size_t>(options.number("minPoints", view == "gp" ? 6 : 8));
   std::vector<History> list;
   std::string error;
-  if (!read_histories(histories, &list, &error)) return fail("invalid-histories", error);
+  if (!read_histories(histories, oem, &list, &error)) return fail("invalid-histories", error);
 
   std::vector<Track> tracks(list.size());
   std::vector<std::vector<elsetrec>> recs(list.size());
@@ -1272,7 +1352,8 @@ extern "C" int features() {
   names.push_back("sequenceMatch");
   names.push_back("catalogDistance");
 
-  nlohmann::json rows = nlohmann::json::array();
+  flatbuffers::FlatBufferBuilder fbb(1 << 16);
+  std::vector<flatbuffers::Offset<LFVRow>> rows;
   int skipped = 0;
   for (size_t k = 0; k < list.size(); ++k) {
     const Track& tr = tracks[k];
@@ -1304,13 +1385,17 @@ extern "C" int features() {
     x.push_back(drag ? correlation(differences(sigs[k].a), *drag, 8) : kNaN);
     x.push_back(catalog.sequence_match(sigs[k], seqs[k], list[k].target));
     x.push_back(catalog.nearest(sigs[k], list[k].target));
-    nlohmann::json xs = nlohmann::json::array();
-    for (double v : x) xs.push_back(number(v));
-    rows.push_back({{"id", list[k].id}, {"target", list[k].target}, {"role", list[k].role},
-                    {"generator", list[k].generator}, {"cls", list[k].cls}, {"x", xs}});
+    for (double& v : x) v = finite_or_nan(v);
+    const History& h = list[k];
+    rows.push_back(CreateLFVRowDirect(fbb, h.id.c_str(), h.target.c_str(), role_of(h.role), h.generator.empty() ? nullptr : h.generator.c_str(),
+                                      h.cls.empty() ? nullptr : h.cls.c_str(), &x));
   }
-  return emit("features", {{"view", view}, {"names", names}, {"rows", rows},
-                           {"counts", {{"histories", list.size()}, {"catalog", catalog.sigs.size()}, {"tooFewPoints", skipped}}}});
+  std::vector<flatbuffers::Offset<flatbuffers::String>> name_offsets;
+  for (const std::string& n : names) name_offsets.push_back(fbb.CreateString(n));
+  const auto lfv = CreateLFVDirect(fbb, view.c_str(), &name_offsets, nullptr, static_cast<int64_t>(std::llround(w0 * 1000.0)),
+                                   static_cast<int64_t>(std::llround(w1 * 1000.0)), static_cast<uint32_t>(min_points), &rows,
+                                   static_cast<uint32_t>(list.size()), static_cast<uint32_t>(catalog.sigs.size()), static_cast<uint32_t>(skipped));
+  return emit_lfv("features", fbb, lfv);
 }
 
 // P(the real candidate is picked first of n) when a decoy scores below it with
@@ -1321,52 +1406,59 @@ double p_first(double a, double t, int n) {
 }
 
 extern "C" int distinguish() {
-  const nlohmann::json options = json_input("options");
-  const nlohmann::json input_rows = json_input("features");
-  if (!input_rows.is_object() || !input_rows.contains("rows") || !input_rows.contains("names"))
-    return fail("invalid-features", "features must be {names, rows: [{target, role, x}]}");
-  const nlohmann::json opt = options.is_object() ? options : nlohmann::json::object();
-  const int folds = opt.value("folds", 5);
+  const sdm_piv::Config config = sdm_piv::get_config();
+  if (!config.ok()) return fail("config-unavailable", "plugin.getConfig failed: " + std::string(config.error_message()));
+  const LFV* input_rows = root<LFV>(input("features"), "$LFV");
+  if (!input_rows || !input_rows->ROWS() || !input_rows->FEATURE_NAMES())
+    return fail("invalid-features", "features must be an $LFV with FEATURE_NAMES and ROWS (TARGET, ROLE, VALUES)");
+  const sdm_piv::ConfigTable opt = config.table("distinguish");
+  const int folds = static_cast<int>(opt.number("folds", 5));
   Booster proto;
-  proto.depth = opt.value("depth", 3), proto.rounds = opt.value("rounds", 200);
-  proto.rate = opt.value("learningRate", 0.1), proto.lambda = opt.value("lambda", 1.0);
-  proto.min_hessian = opt.value("minChildHessian", 1.0);
-  const int nbins = std::clamp(opt.value("bins", 32), 2, 250);
-  const uint64_t seed = opt.value("seed", static_cast<uint64_t>(1));
+  proto.depth = static_cast<int>(opt.number("depth", 3)), proto.rounds = static_cast<int>(opt.number("rounds", 200));
+  proto.rate = opt.number("learningRate", 0.1), proto.lambda = opt.number("lambda", 1.0);
+  proto.min_hessian = opt.number("minChildHessian", 1.0);
+  const int nbins = std::clamp(static_cast<int>(opt.number("bins", 32)), 2, 250);
+  const uint64_t seed = static_cast<uint64_t>(opt.number("seed", 1));
   std::vector<int> ranks = {2, 10, 100, 1000, 10000};
-  if (opt.contains("ranks")) ranks = opt["ranks"].get<std::vector<int>>();
+  if (opt.has("ranks")) {
+    ranks.clear();
+    for (double n : opt.numbers("ranks")) ranks.push_back(static_cast<int>(n));
+  }
 
-  const std::vector<std::string> all_names = input_rows["names"].get<std::vector<std::string>>();
+  std::vector<std::string> all_names;
+  for (const flatbuffers::String* n : *input_rows->FEATURE_NAMES()) all_names.push_back(text(n));
   std::vector<std::string> exclude;
-  if (opt.contains("exclude")) exclude = opt["exclude"].get<std::vector<std::string>>();
+  for (std::string_view e : opt.strings("exclude")) exclude.push_back(std::string(e));
   std::vector<size_t> keep;
   std::vector<std::string> names;
   for (size_t f = 0; f < all_names.size(); ++f)
     if (std::find(exclude.begin(), exclude.end(), all_names[f]) == exclude.end()) keep.push_back(f), names.push_back(all_names[f]);
   std::vector<std::vector<double>> x;
   std::vector<int> y, fold, half;
-  std::vector<std::string> cls;
-  for (const auto& r : input_rows["rows"]) {
-    if (r["x"].size() != all_names.size()) return fail("invalid-features", "every row needs one value per name");
+  std::vector<std::string> cls, target;
+  for (const LFVRow* r : *input_rows->ROWS()) {
+    const auto* values = r->VALUES();
+    if ((values ? values->size() : 0) != all_names.size()) return fail("invalid-features", "every row needs one value per name");
     std::vector<double> v;
-    for (size_t f : keep) v.push_back(r["x"][f].is_number() ? r["x"][f].get<double>() : kNaN);
-    const uint64_t g = mix(hash_text(r.value("target", std::string())) ^ seed);
-    x.push_back(v), y.push_back(r.value("role", std::string()) == "real");
+    for (size_t f : keep) v.push_back(values->Get(static_cast<flatbuffers::uoffset_t>(f)));
+    std::string t = text(r->TARGET());
+    if (t.empty()) t = text(r->SOURCE_ID());
+    const uint64_t g = mix(hash_text(t) ^ seed);
+    x.push_back(v), y.push_back(r->ROLE() == lfvRole::Real);
     fold.push_back(static_cast<int>(g % folds)), half.push_back(static_cast<int>((g >> 32) % 2));
-    cls.push_back(r.value("cls", std::string()));
+    cls.push_back(text(r->CLASS_LABEL()));
+    target.push_back(std::move(t));
   }
   int nr = 0;
   for (int v : y) nr += v;
   const int nd = static_cast<int>(y.size()) - nr;
   if (nr < 20 || nd < 20) return fail("too-few-rows", "need at least 20 real and 20 decoy rows");
-  std::vector<std::string> target;
-  for (const auto& r : input_rows["rows"]) target.push_back(r.value("target", std::string()));
   std::map<std::string, std::vector<size_t>> groups;
   for (size_t r = 0; r < x.size(); ++r) groups[target[r]].push_back(r);
   // Relative: each feature minus its median over the target's own candidates,
   // so the classifier compares a set's members with each other (an adversary
   // facing copies of one orbit).
-  const bool relative = opt.value("relative", false);
+  const bool relative = opt.boolean("relative", false);
   if (relative)
     for (const auto& [t, rows] : groups)
       for (size_t f = 0; f < names.size(); ++f) {
@@ -1403,37 +1495,46 @@ extern "C" int distinguish() {
     }
     return p / reals.size();
   };
-  nlohmann::json first = nlohmann::json::array();
+  flatbuffers::FlatBufferBuilder fbb(1 << 14);
+  using RankOffsets = std::vector<flatbuffers::Offset<LFVRankProbability>>;
+  auto rank = [&](int n, double p, double ideal) {
+    return CreateLFVRankProbability(fbb, static_cast<uint32_t>(n), p, p > 0 ? 1.0 / p : kNaN, ideal);
+  };
+  RankOffsets first;
   for (int n : ranks) {
     const double p = top(sr, n);
-    first.push_back({{"n", n}, {"pRealFirst", p}, {"nEffective", number(p > 0 ? 1.0 / p : kNaN)}, {"ideal", 1.0 / n}});
+    first.push_back(rank(n, p, 1.0 / n));
   }
-  nlohmann::json by_class = nlohmann::json::object();
+  std::vector<flatbuffers::Offset<LFVClassResult>> by_class;
   std::map<std::string, std::vector<double>> class_scores;
   for (size_t r = 0; r < x.size(); ++r)
     if (y[r] && !cls[r].empty()) class_scores[cls[r]].push_back(score[r]);
   for (const auto& [c, s] : class_scores) {
-    nlohmann::json rows = nlohmann::json::array();
+    RankOffsets rows;
     for (int n : ranks) {
       const double p = top(s, n);
-      rows.push_back({{"n", n}, {"pRealFirst", p}, {"nEffective", number(p > 0 ? 1.0 / p : kNaN)}});
+      rows.push_back(rank(n, p, kNaN));
     }
-    by_class[c] = {{"real", s.size()}, {"auc", auc(s, sd)}, {"first", rows}};
+    by_class.push_back(CreateLFVClassResultDirect(fbb, c.c_str(), static_cast<uint32_t>(s.size()), auc(s, sd), &rows));
   }
   // Which features separate on their own, and which the trees used.
   double total = 0;
   for (double g : gain) total += g;
-  nlohmann::json per = nlohmann::json::array();
+  struct Separation {   // by value: equal gain shares keep the order the JSON build gave them
+    std::string name;
+    double auc, separation, gain_share;
+  };
+  std::vector<Separation> per;
   for (size_t f = 0; f < names.size(); ++f) {
     std::vector<double> a, b;
     for (size_t r = 0; r < x.size(); ++r) (y[r] ? a : b).push_back(x[r][f]);
     const double u = auc(a, b);
-    per.push_back({{"name", names[f]}, {"aloneAuc", number(u)}, {"separation", number(std::isfinite(u) ? std::max(u, 1 - u) : kNaN)},
-                   {"gainShare", total > 0 ? gain[f] / total : 0.0}});
+    per.push_back({names[f], finite_or_nan(u), std::isfinite(u) ? std::max(u, 1 - u) : kNaN, total > 0 ? gain[f] / total : 0.0});
   }
-  std::sort(per.begin(), per.end(), [](const nlohmann::json& p, const nlohmann::json& q) {
-    return p["gainShare"].get<double>() > q["gainShare"].get<double>();
-  });
+  std::sort(per.begin(), per.end(), [](const Separation& p, const Separation& q) { return p.gain_share > q.gain_share; });
+  std::vector<flatbuffers::Offset<LFVFeatureSeparation>> separation;
+  for (const Separation& p : per)
+    separation.push_back(CreateLFVFeatureSeparationDirect(fbb, p.name.c_str(), p.auc, p.separation, p.gain_share));
   int correct = 0;
   for (size_t r = 0; r < x.size(); ++r) correct += (score[r] > 0) == (y[r] == 1);
   double bal_r = 0, bal_d = 0;
@@ -1443,7 +1544,7 @@ extern "C" int distinguish() {
   // exchangeable), P(first of N) from those ranks, and, for N beyond the set,
   // from each score standardized by its own set's decoys (median, robust
   // scale) against all sets' standardized decoys pooled.
-  nlohmann::json within;
+  flatbuffers::Offset<LFVWithinGroup> within = 0;
   size_t fewest = SIZE_MAX;
   for (const auto& [t, rows] : groups) {
     size_t d = 0;
@@ -1476,7 +1577,7 @@ extern "C" int distinguish() {
       reals.push_back({below / ds.size(), ties / ds.size(), z(real)});
     }
     std::sort(pooled.begin(), pooled.end());
-    std::vector<int> histogram(10, 0);
+    std::vector<uint32_t> histogram(10, 0);
     std::vector<double> ranks_u;
     for (const auto& r : reals) {
       const double u = r[0] + 0.5 * r[1];
@@ -1487,7 +1588,7 @@ extern "C" int distinguish() {
     double ks = 0;
     for (size_t k = 0; k < ranks_u.size(); ++k)
       ks = std::max({ks, std::fabs((k + 1.0) / ranks_u.size() - ranks_u[k]), std::fabs(static_cast<double>(k) / ranks_u.size() - ranks_u[k])});
-    nlohmann::json empirical = nlohmann::json::array(), standardized = nlohmann::json::array();
+    RankOffsets empirical, standardized;
     for (int n : ranks) {
       double pe = 0, ps = 0;
       for (const auto& r : reals) {
@@ -1497,21 +1598,31 @@ extern "C" int distinguish() {
         ps += p_first(below / pooled.size(), ties / pooled.size(), n);
       }
       pe /= reals.size(), ps /= reals.size();
-      if (static_cast<size_t>(n) <= fewest + 1)
-        empirical.push_back({{"n", n}, {"pRealFirst", pe}, {"nEffective", number(pe > 0 ? 1.0 / pe : kNaN)}, {"ideal", 1.0 / n}});
-      standardized.push_back({{"n", n}, {"pRealFirst", ps}, {"nEffective", number(ps > 0 ? 1.0 / ps : kNaN)}, {"ideal", 1.0 / n}});
+      if (static_cast<size_t>(n) <= fewest + 1) empirical.push_back(rank(n, pe, 1.0 / n));
+      standardized.push_back(rank(n, ps, 1.0 / n));
     }
-    within = {{"targets", reals.size()}, {"fewestDecoys", fewest}, {"pooledDecoys", pooled.size()},
-              {"rankHistogram", histogram}, {"rankKs", ks}, {"first", empirical}, {"firstStandardized", standardized}};
+    within = CreateLFVWithinGroupDirect(fbb, static_cast<uint32_t>(reals.size()), static_cast<uint32_t>(fewest),
+                                        static_cast<uint32_t>(pooled.size()), &histogram, ks, &empirical, &standardized);
   }
-  return emit("report", {{"rows", {{"real", nr}, {"decoy", nd}}}, {"excluded", exclude}, {"relative", relative}, {"withinTarget", within},
-                         {"classifier", {{"kind", "gradient-boosted trees, logistic loss"}, {"depth", proto.depth},
-                                         {"rounds", proto.rounds}, {"learningRate", proto.rate}, {"bins", nbins},
-                                         {"folds", folds}, {"split", "by target"}}},
-                         {"auc", auc(sr, sd)},
-                         {"balancedAccuracy", 0.5 * (bal_r / nr + bal_d / nd)},
-                         {"epsilon", epsilon_bound(score, y, half)},
-                         {"first", first},
-                         {"byClass", by_class},
-                         {"features", per}});
+  // The held-out threshold test: the region chosen on one half of the targets,
+  // counted and bounded (95 % one-sided Clopper-Pearson) on the other.
+  std::vector<flatbuffers::Offset<LFVThresholdTest>> thresholds;
+  const Epsilon eps = epsilon_bound(score, y, half);
+  if (eps.ok)
+    thresholds.push_back(CreateLFVThresholdTest(fbb, eps.tau, eps.above ? lfvRegionSide::Above : lfvRegionSide::AtOrBelow,
+                                                eps.above ? lfvRole::Real : lfvRole::Decoy, static_cast<uint32_t>(eps.kr),
+                                                static_cast<uint32_t>(eps.nr), static_cast<uint32_t>(eps.kd),
+                                                static_cast<uint32_t>(eps.nd), eps.lower, 0.95));
+  std::vector<flatbuffers::Offset<flatbuffers::String>> excluded, all;
+  for (const std::string& e : exclude) excluded.push_back(fbb.CreateString(e));
+  for (const std::string& n : all_names) all.push_back(fbb.CreateString(n));
+  const auto classifier = CreateLFVClassifierDirect(fbb, "gradient-boosted trees, logistic loss", static_cast<uint32_t>(proto.depth),
+                                                    static_cast<uint32_t>(proto.rounds), proto.rate, proto.lambda, proto.min_hessian,
+                                                    static_cast<uint32_t>(nbins), static_cast<uint32_t>(folds), "by target", seed);
+  const auto report = CreateLFVTestReportDirect(fbb, "cross-validated classifier", nullptr, kNaN, kNaN, static_cast<uint32_t>(nr),
+                                                static_cast<uint32_t>(nd), &excluded, relative, classifier, auc(sr, sd),
+                                                0.5 * (bal_r / nr + bal_d / nd), &thresholds, &first, &by_class, &separation, within);
+  const std::string view = text(input_rows->VIEW());
+  return emit_lfv("report", fbb, CreateLFVDirect(fbb, view.empty() ? nullptr : view.c_str(), &all, nullptr, 0, 0, 0, nullptr,
+                                                 0, 0, 0, 0, report));
 }

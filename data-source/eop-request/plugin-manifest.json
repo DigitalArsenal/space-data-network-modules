@@ -1,259 +1,185 @@
 {
-  "pluginId": "com.digitalarsenal.data-source.eop-request",
-  "name": "eop-request",
-  "version": "0.1.0",
-  "description": "Pure C++ Earth orientation request builder for three switchable sources.",
-  "pluginFamily": "data_source",
-  "capabilities": [],
-  "invokeSurfaces": [
-    "direct",
-    "command"
-  ],
-  "runtimeTargets": [
-    "browser",
-    "wasmedge"
-  ],
-  "methods": [
+ "pluginId": "com.digitalarsenal.data-source.eop-request",
+ "name": "eop-request",
+ "version": "0.2.0",
+ "description": "Pure C++ Earth orientation request builder for three switchable sources (typed contracts 1.0: FlatBuffers only, no JSON and no base64). Each method turns ONE TimerTick (TICK) into ONE HttpRequest (HREQ) for hostcap/http-request: GET the method's file, TIMEOUT_MS 90000, MAX_BYTES 16777216 (the host errors past it, never truncates), CONTEXT the parser job as one size-prefixed SDS $ICN record (CONNECTOR_ID and DATASET_ID the format finals2000a / c04 / paris, SOURCE_NAME the series name, ENDPOINT_URL the file, KIND HttpsPull, TARGET_SCHEMA EOP.fbs, EMITS_SCHEMAS [EOP]) that the connector echoes in the HttpResponse for eop-parser. A second tick in one invocation is refused. No config, no hostcalls, no capabilities.",
+ "pluginFamily": "data_source",
+ "capabilities": [],
+ "invokeSurfaces": [
+  "direct",
+  "command"
+ ],
+ "runtimeTargets": [
+  "browser",
+  "wasmedge"
+ ],
+ "methods": [
+  {
+   "methodId": "finals2000a",
+   "displayName": "finals2000a",
+   "inputPorts": [
     {
-      "methodId": "finals2000a",
-      "displayName": "finals2000a",
-      "inputPorts": [
+     "portId": "tick",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-timer-tick",
+       "allowedTypes": [
         {
-          "portId": "tick",
-          "acceptedTypeSets": [
-            {
-              "setId": "tick-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Timer tick, content ignored.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Timer tick, content ignored."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Timer tick, content ignored."
+         "schemaName": "TimerTick.fbs",
+         "fileIdentifier": "TICK",
+         "rootTypeName": "TimerTick",
+         "wireFormat": "flatbuffer"
         }
-      ],
-      "outputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "request-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request GET control JSON.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request GET control JSON."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "hostcap/http-request GET control JSON."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution and fixed-column format name.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution and fixed-column format name."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Source attribution and fixed-column format name."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Request finals2000a EOP data; networking and storage are host concerns."
-    },
-    {
-      "methodId": "c04",
-      "displayName": "c04",
-      "inputPorts": [
-        {
-          "portId": "tick",
-          "acceptedTypeSets": [
-            {
-              "setId": "tick-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Timer tick, content ignored.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Timer tick, content ignored."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Timer tick, content ignored."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "request-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request GET control JSON.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request GET control JSON."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "hostcap/http-request GET control JSON."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution and fixed-column format name.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution and fixed-column format name."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Source attribution and fixed-column format name."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Request c04 EOP data; networking and storage are host concerns."
-    },
-    {
-      "methodId": "paris",
-      "displayName": "paris",
-      "inputPorts": [
-        {
-          "portId": "tick",
-          "acceptedTypeSets": [
-            {
-              "setId": "tick-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Timer tick, content ignored.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Timer tick, content ignored."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Timer tick, content ignored."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "request-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "hostcap/http-request GET control JSON.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request GET control JSON."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "hostcap/http-request GET control JSON."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-frames",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Source attribution and fixed-column format name.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source attribution and fixed-column format name."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Source attribution and fixed-column format name."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Request paris EOP data; networking and storage are host concerns."
+       ],
+       "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
     }
-  ],
-  "externalInterfaces": []
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-request",
+       "allowedTypes": [
+        {
+         "schemaName": "HttpRequest.fbs",
+         "fileIdentifier": "HREQ",
+         "rootTypeName": "HttpRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://datacenter.iers.org/data/9/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://datacenter.iers.org/data/9/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "TimerTick -> the finals2000a HttpRequest carrying its $ICN job in CONTEXT; networking and storage are host concerns."
+  },
+  {
+   "methodId": "c04",
+   "displayName": "c04",
+   "inputPorts": [
+    {
+     "portId": "tick",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-timer-tick",
+       "allowedTypes": [
+        {
+         "schemaName": "TimerTick.fbs",
+         "fileIdentifier": "TICK",
+         "rootTypeName": "TimerTick",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-request",
+       "allowedTypes": [
+        {
+         "schemaName": "HttpRequest.fbs",
+         "fileIdentifier": "HREQ",
+         "rootTypeName": "HttpRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID c04)."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID c04)."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "TimerTick -> the c04 HttpRequest carrying its $ICN job in CONTEXT; networking and storage are host concerns."
+  },
+  {
+   "methodId": "paris",
+   "displayName": "paris",
+   "inputPorts": [
+    {
+     "portId": "tick",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-timer-tick",
+       "allowedTypes": [
+        {
+         "schemaName": "TimerTick.fbs",
+         "fileIdentifier": "TICK",
+         "rootTypeName": "TimerTick",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "TimerTick (module-sdk runtime type TICK) from the flow timer; its fields are not read."
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "request",
+     "acceptedTypeSets": [
+      {
+       "setId": "sdn-runtime-http-request",
+       "allowedTypes": [
+        {
+         "schemaName": "HttpRequest.fbs",
+         "fileIdentifier": "HREQ",
+         "rootTypeName": "HttpRequest",
+         "wireFormat": "flatbuffer"
+        }
+       ],
+       "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://hpiers.obspm.fr/iers/eop/eopc04/eopc04_IAU2000.62-now, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID paris)."
+      }
+     ],
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://hpiers.obspm.fr/iers/eop/eopc04/eopc04_IAU2000.62-now, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID paris)."
+    }
+   ],
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "description": "TimerTick -> the paris HttpRequest carrying its $ICN job in CONTEXT; networking and storage are host concerns."
+  }
+ ],
+ "externalInterfaces": [],
+ "schemasUsed": [
+  {
+   "schemaName": "ICN.fbs",
+   "fileIdentifier": "$ICN",
+   "rootTypeName": "ICN"
+  }
+ ]
 }

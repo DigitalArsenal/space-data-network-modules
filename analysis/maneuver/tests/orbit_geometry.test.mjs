@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
+import { invokeOperation, probeOperation } from "./mpl_client.mjs";
 
 const wasm = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const circle = {
@@ -28,7 +28,7 @@ for (const [runtime, surface] of [["browser", "command"], ["browser", "direct"],
     const harness = await createStandaloneHarnessOrSkip(runtime, wasm, t, {surface, enableThreads: true});
     if (!harness) return;
     t.after(() => harness.destroy());
-    const invoke = (operation, params) => invokeJsonRequest(harness, {operation, params});
+    const invoke = (operation, params) => invokeOperation(harness, {operation, params});
 
     // Orekit KeplerianOrbitTest.testJacobianReferenceEllipse, also consumed by
     // foundation/orbits. 10 micrometres / 10 nanometres/s allow the published
@@ -98,10 +98,9 @@ for (const [runtime, surface] of [["browser", "command"], ["browser", "direct"],
       {...circle, state: frameState},
       {state: {position: [0,0,0], velocity: [0,0,0]}},
     ]) {
-      const response = await harness.invoke({methodId: "invoke", inputs: [{portId: "request",
-        payload: new TextEncoder().encode(JSON.stringify({operation: "evaluateOrbitGeometry", params}))}]});
+      const response = await probeOperation(harness, {operation: "evaluateOrbitGeometry", params});
       assert.notEqual(response.statusCode, 0);
-      const body = JSON.parse(new TextDecoder().decode(response.outputs[0].payload));
+      const body = response.body;
       assert.match(body.error, /orbit|Orbit|deltaVFrame|exactly one|never both/);
       assert.deepEqual(await invoke("evaluateOrbitGeometry", circle), before);
     }

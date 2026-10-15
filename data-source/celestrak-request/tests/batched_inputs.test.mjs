@@ -22,23 +22,20 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { encodeIngestRequest, encodeIngestResult, encodeTimerTick } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
-const encoder = new TextEncoder();
-
-// Any-flatbuffer wildcard ports accept opaque aligned bytes. The SDK invoke
-// codec requires BOTH requiredAlignment and byteLength on an aligned typeRef —
-// omitting them throws before the wasm is entered.
-function bytesInput(portId, text) {
-  const payload = encoder.encode(text);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
-  };
+// Every port names one runtime type; each frame is a real one of that type.
+const FRAMES = {
+  tick: () => ({ typeRef: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" }, payload: encodeTimerTick({}) }),
+  result: () => ({ typeRef: { schemaName: "IngestResult.fbs", fileIdentifier: "INGR", rootTypeName: "IngestResult", wireFormat: "flatbuffer" }, payload: encodeIngestResult({ schema: "OMM.fbs" }) }),
+  meta: () => ({ typeRef: { schemaName: "IngestRequest.fbs", fileIdentifier: "INGQ", rootTypeName: "IngestRequest", wireFormat: "flatbuffer" }, payload: encodeIngestRequest({ schema: "OMM.fbs", tags: {} }) }),
+};
+function bytesInput(portId) {
+  return { portId, ...FRAMES[portId]() };
 }
 
 async function invoke(t, methodId, inputs) {
@@ -63,9 +60,9 @@ const CASES = [
 
 for (const [methodId, port, others] of CASES) {
   test(`${methodId} refuses two frames on the single-stream "${port}" port`, async (t) => {
-    const inputs = others.map((other, i) => bytesInput(other, `{"n":${i}}`));
-    inputs.push(bytesInput(port, '{"which":"first"}'));
-    inputs.push(bytesInput(port, '{"which":"second"}'));
+    const inputs = others.map((other, i) => bytesInput(other));
+    inputs.push(bytesInput(port));
+    inputs.push(bytesInput(port));
 
     const response = await invoke(t, methodId, inputs);
     assert.notEqual(response.statusCode, 0, "a batched invocation must not report success");
@@ -87,8 +84,8 @@ for (const [methodId, port, others] of CASES) {
     // asserts only that the refusal did NOT fire — the method may still fail
     // for its own reasons (unparseable payload, absent host stub), which is a
     // different error code and not this invariant's business.
-    const inputs = others.map((other, i) => bytesInput(other, `{"n":${i}}`));
-    inputs.push(bytesInput(port, "{}"));
+    const inputs = others.map((other, i) => bytesInput(other));
+    inputs.push(bytesInput(port));
     const response = await invoke(t, methodId, inputs);
     assert.notEqual(response.errorCode, "batched-input-frames");
   });

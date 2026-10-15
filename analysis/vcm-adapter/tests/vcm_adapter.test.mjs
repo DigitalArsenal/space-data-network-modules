@@ -17,15 +17,60 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
+import { decodeFlowNotice } from 'space-data-module-sdk/runtime-contracts';
 import * as flatbuffers from 'flatbuffers';
 import * as sdsOcm from 'spacedatastandards.org/lib/js/OCM/main.js';
-import { decodePrw, sds } from '../../../propagator/hpop/tests/lib/prwCodec.mjs';
+import * as sds from 'spacedatastandards.org/lib/js/PRW/main.js';
 
 const here = (p) => new URL(p, import.meta.url);
 const SAMPLE = fs.readFileSync(here('fixtures/sample-vcm.txt'));
-const load = async (dir) => createBrowserModuleHarness({ wasmSource: fs.readFileSync(here(`${dir}/dist/isomorphic/module.wasm`)), manifest: JSON.parse(fs.readFileSync(here(`${dir}/plugin-manifest.json`), 'utf8')), surface: 'direct' });
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)) });
+// Typed contracts 1.0: the VCM text is a $FIL (CONTENT), the read options / ocm header / write options are node config
+// (plugin.getConfig answered by the SDK host from hostOptions.config: tables "read", "header", "write"), and read's
+// report is a FlowNotice whose ITEMS are "key=value" lines.
+const load = async (dir, config = {}) => createBrowserModuleHarness({ wasmSource: fs.readFileSync(here(`${dir}/dist/isomorphic/module.wasm`)), manifest: JSON.parse(fs.readFileSync(here(`${dir}/plugin-manifest.json`), 'utf8')), surface: 'direct', hostOptions: { config } });
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL('../node_modules/spacedatastandards.org/', import.meta.url));
+// $FIL from the standard's own TypeScript bindings (lib/ts/FIL), bundled with the standards repo's esbuild.
+const { FIL } = await (async () => {
+  const esbuild = createRequire(path.join(STANDARDS_ROOT, 'package.json'))('esbuild');
+  const built = await esbuild.build({ stdin: { contents: 'export * from "./lib/ts/FIL/main.ts";', resolveDir: STANDARDS_ROOT, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', write: false });
+  return import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+})();
+const FIL_REF = { schemaName: 'FIL.fbs', fileIdentifier: '$FIL', rootTypeName: 'FIL', wireFormat: 'flatbuffer' };
+const filOf = (text) => {
+  const b = new flatbuffers.Builder(1024);
+  const content = FIL.createContentVector(b, new Uint8Array(text));
+  FIL.startFIL(b); FIL.addContent(b, content); FIL.finishFILBuffer(b, FIL.endFIL(b));
+  return b.asUint8Array();
+};
+const message = (text) => ({ portId: 'message', typeRef: FIL_REF, payload: filOf(text) });
+const textOf = (bytes) => { const f = FIL.getRootAsFIL(new flatbuffers.ByteBuffer(new Uint8Array(bytes))); assert.equal(f.MEDIA_TYPE(), 'text/plain'); return Buffer.from(f.contentArray()).toString(); };
+// The FlowNotice report back as the object the items describe: numbers and number lists parsed, parameterSigma and note
+// lines collected, integrator.* nested.
+const LIST_TEXT = new Set(['dynamicParameters']);
+const reportOf = (bytes) => {
+  const n = decodeFlowNotice(bytes);
+  assert.equal(n.kind, 'info'); assert.equal(n.schema, 'OCM.fbs');
+  const r = { parameterSigmas: [], notes: [], integrator: {} };
+  for (const item of n.items) {
+    const at = item.indexOf('='), key = item.slice(0, at), v = item.slice(at + 1);
+    const value = v === 'true' ? true : v === 'false' ? false : LIST_TEXT.has(key) ? v.split(' ').filter(Boolean)
+      : v !== '' && v.split(' ').every((x) => x !== '' && !Number.isNaN(Number(x))) ? (v.includes(' ') || /Km$|KmS$|Arcsec$|equinoctial$/.test(key) ? v.split(' ').map(Number) : Number(v)) : v;
+    if (key === 'parameterSigma') { const [name, unit, val, sigma] = v.split(' '); r.parameterSigmas.push({ name, unit, value: Number(val), sigma: Number(sigma) }); }
+    else if (key === 'note') r.notes.push(v);
+    else if (key.startsWith('integrator.')) r.integrator[key.slice(11)] = value;
+    else r[key] = value;
+  }
+  if (r.cartesianCovarianceKm === '') r.cartesianCovarianceKm = null;
+  return r;
+};
+const decodePrw = (bytes) => sds.PRW.getSizePrefixedRootAsPRW(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack();
+// One invocation of the adapter with its node config.
+const call = async (config, methodId, inputs) => { const h = await load('..', config); try { return await h.invoke({ methodId, inputs }); } finally { h.destroy(); } };
+const readWith = async (h, text) => h.invoke({ methodId: 'read', inputs: [message(text)] });
 const PRW = { schemaName: 'PRW.fbs', fileIdentifier: '$PRW', rootTypeName: 'PRW', wireFormat: 'flatbuffer' };
 const OCM_REF = { schemaName: 'OCM.fbs', fileIdentifier: '$OCM', rootTypeName: 'OCM', wireFormat: 'flatbuffer' };
 const EOP_REF = { schemaName: 'EOP.fbs', fileIdentifier: '$EOP', rootTypeName: 'EOP', wireFormat: 'flatbuffer' };
@@ -57,8 +102,7 @@ const lowerTriangle = (text) => {
 };
 
 test('read: the transformed covariance reproduces the VCM\'s own sigmas', async (t) => {
-  const h = await load('..'); t.after(() => h.destroy());
-  const report = (options) => h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', options)] }).then((r) => JSON.parse(Buffer.from(out(ok(r), 'report')).toString()));
+  const report = async (options) => { const h = await load('..', { read: options }); try { return reportOf(out(ok(await readWith(h, SAMPLE)), 'report')); } finally { h.destroy(); } };
   const r = await report({});
   assert.equal(r.meanMotionUnit, 'fraction');
   t.diagnostic(`stated ${r.statedUvwSigmasKm.slice(0, 3).map((x) => (x * 1000).toFixed(1))} m, recomputed ${r.recomputedUvwSigmasKm.slice(0, 3).map((x) => (x * 1000).toFixed(2))} m`);
@@ -99,14 +143,13 @@ test('read: the transformed covariance reproduces the VCM\'s own sigmas', async 
 // below 1 must match unscaled; and some message must rule out rad/ks, the
 // unit the survey's sample alone cannot tell from dn/n.
 test('read: private SP messages (VCM_PRIVATE_DIR)', { skip: !process.env.VCM_PRIVATE_DIR && 'VCM_PRIVATE_DIR not set' }, async (t) => {
-  const h = await load('..'); t.after(() => h.destroy());
   const dir = process.env.VCM_PRIVATE_DIR;
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.vcm'));
   assert.ok(files.length > 0, 'no .vcm files');
   let radKsExcluded = false;
   for (const f of files) {
     const text = fs.readFileSync(`${dir}/${f}`);
-    const read = (options) => h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: text }, json('options', options)] }).then((r) => JSON.parse(Buffer.from(out(ok(r), 'report')).toString()));
+    const read = async (options) => { const h = await load('..', { read: options }); try { return reportOf(out(ok(await readWith(h, text)), 'report')); } finally { h.destroy(); } };
     const r = await read({ ephemerisSource: 'Analytical' });
     const dev = r.statedUvwSigmasKm.slice(0, 3).map((s, i) => r.recomputedUvwSigmasKm[i] / s - 1);
     t.diagnostic(`${f}: deviations ${dev.map((d) => (d * 100).toFixed(2)).join('/')} %, scale ${r.covarianceScale.toFixed(3)}, ${r.parameterSigmas.map((p) => `${p.name} ${(100 * p.sigma / p.value).toFixed(1)} %`).join(', ')}`);
@@ -114,7 +157,7 @@ test('read: private SP messages (VCM_PRIVATE_DIR)', { skip: !process.env.VCM_PRI
     if (r.weightedRms < 1) assert.equal(r.covarianceScale, 1);
     const ks = await read({ ephemerisSource: 'Analytical', meanMotionUnit: 'rad/ks' });
     if (Math.abs(ks.recomputedUvwSigmasKm[0] / ks.statedUvwSigmasKm[0] - 1) > 0.1) radKsExcluded = true;
-    await assertReproduced(t, h, text, f, { ephemerisSource: 'Analytical' });   // VCM -> OCM -> VCM text
+    await assertReproduced(t, text, f, { ephemerisSource: 'Analytical' });   // VCM -> OCM -> VCM text
   }
   assert.ok(radKsExcluded, 'no message rules out rad/ks');
 });
@@ -122,18 +165,21 @@ test('read: private SP messages (VCM_PRIVATE_DIR)', { skip: !process.env.VCM_PRI
 // The $OCM read wrote, decoded with the released SDS bindings.
 const decodeOcm = (bytes) => sdsOcm.OCM.getSizePrefixedRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack();
 // A VCM through read and write: the text written from the $OCM and the $EOP records read wrote.
-async function throughOcm(vcm, text, options = {}) {
-  const read = ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: text }, json('options', options)] }));
-  const written = ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'ocm', typeRef: OCM_REF, payload: out(read, 'ocm') }, { portId: 'eop', typeRef: EOP_REF, payload: out(read, 'eop') }] }));
-  return { read, report: JSON.parse(Buffer.from(out(read, 'report')).toString()), ocm: decodeOcm(out(read, 'ocm')), text: Buffer.from(out(written, 'message')).toString() };
+async function throughOcm(text, options = {}) {
+  const vcm = await load('..', { read: options });
+  try {
+    const read = ok(await readWith(vcm, text));
+    const written = ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'ocm', typeRef: OCM_REF, payload: out(read, 'ocm') }, { portId: 'eop', typeRef: EOP_REF, payload: out(read, 'eop') }] }));
+    return { read, report: reportOf(out(read, 'report')), ocm: decodeOcm(out(read, 'ocm')), text: textOf(out(written, 'message')) };
+  } finally { vcm.destroy(); }
 }
 const messageLines = (text) => text.split('\n').map((l) => l.replace(/^<>\s?/, '').replace(/\s+/g, ' ').trim());
 const lineOf = (text, label) => messageLines(text).find((l) => l.startsWith(label));
 const sigmasOf = (text) => ['VECTOR U,V,W SIGMAS (KM):', 'VECTOR UD,VD,WD SIGMAS (KM/S):'].flatMap((label) => lineOf(text, label).slice(label.length).trim().split(' ').map(Number));
 // VCM -> OCM -> VCM text for one message: the printed sigmas within 1 %, the covariance to 2e-5 of its sigmas, and
 // every line that states a model, a parameter, an Earth orientation value or an integrator setting as it was.
-async function assertReproduced(t, vcm, text, name, options) {
-  const { text: again } = await throughOcm(vcm, text, options);
+async function assertReproduced(t, text, name, options) {
+  const { text: again } = await throughOcm(text, options);
   const was = sigmasOf(text.toString()), is = sigmasOf(again);
   // Within 1 % of what the message printed, plus the half unit of the fourth decimal the new text prints them to.
   for (let i = 0; i < 6; ++i) assert.ok(Math.abs(is[i] - was[i]) <= 0.01 * was[i] + 0.5e-4 + 1e-12, `${name}: sigma ${i} ${is[i]} against ${was[i]}`);
@@ -152,8 +198,7 @@ async function assertReproduced(t, vcm, text, name, options) {
 }
 
 test('read -> write: the sample VCM comes back from its OCM with its sigmas and covariance', async (t) => {
-  const h = await load('..'); t.after(() => h.destroy());
-  await assertReproduced(t, h, SAMPLE, 'sample', {});
+  await assertReproduced(t, SAMPLE, 'sample', {});
 });
 
 // The shapes the sample does not have, built on the sample's covariance: a covariance reaching B, BDOT, AGOM and T
@@ -193,7 +238,7 @@ function variantOf({ pos, vel, rms, size, thrust = 0, agom = 0, bdot = 0, srp = 
   return Buffer.from(`${lines.filter((l) => l !== '').join('\n')}\n${rows.join('\n')}\n`);
 }
 test('read -> write: shapes the sample does not have, from 7x7 to 10x10, retrograde, geostationary, eccentric, unscaled', async (t) => {
-  const h = await load('..'); t.after(() => h.destroy());
+  const h = await load('..', { read: {} }); t.after(() => h.destroy());
   const shapes = {
     'size 10 with thrust and radiation pressure': { pos: [369.89521989, 5103.23778139, 4467.41312115], vel: [-6.491206849227, -2.407500055425, 3.279477293781], rms: 1.15, size: 10, thrust: 3.1e-9, agom: 0.0211, bdot: 2.4e-10, srp: true },
     'geostationary': { pos: [42164.0, 112.5, 83.25], vel: [-0.0083, 3.0746, 0.0537], rms: 1.09, size: 8, bdot: 1e-12 },
@@ -201,17 +246,15 @@ test('read -> write: shapes the sample does not have, from 7x7 to 10x10, retrogr
     'eccentric, weighted RMS below 1': { pos: [7000.0, 0.0, 0.0], vel: [0.0, 9.0, 3.07], rms: 0.86, size: 7 },
   };
   for (const [name, shape] of Object.entries(shapes)) {
-    const first = await h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: variantOf(shape) }, json('options', {})] });
-    const r = JSON.parse(Buffer.from(out(ok(first), 'report')).toString());
+    const r = reportOf(out(ok(await readWith(h, variantOf(shape))), 'report'));
     assert.equal(r.covarianceSize, shape.size, name);
     const text = variantOf({ ...shape, sigmas: r.recomputedUvwSigmasKm.map((x) => Number(x.toFixed(4))) });
-    await assertReproduced(t, h, text, name, {});
+    await assertReproduced(t, text, name, {});
   }
 });
 
 test('read: the $OCM carries the state, the covariance with its parameter row, the force model and the settings', async (t) => {
-  const h = await load('..'); t.after(() => h.destroy());
-  const { ocm, report } = await throughOcm(h, SAMPLE, {});
+  const { ocm, report } = await throughOcm(SAMPLE, {});
   assert.equal(ocm.HEADER.ORIGINATOR, 'FAKE_CENTER');
   assert.equal(ocm.METADATA.OBJECT_DESIGNATOR, '00000');
   assert.equal(ocm.METADATA.INTERNATIONAL_DESIGNATOR, '0000-000A');
@@ -257,11 +300,11 @@ test('read: the $OCM carries the state, the covariance with its parameter row, t
 });
 
 test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
-  const vcm = await load('..'), hpop = await load('../../../propagator/hpop');
-  t.after(() => { vcm.destroy(); hpop.destroy(); });
+  const hpop = await load('../../../propagator/hpop');
+  t.after(() => hpop.destroy());
   const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
-  const read = ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', options)] }));
-  const report = JSON.parse(Buffer.from(out(read, 'report')).toString());
+  const read = ok(await call({ read: options }, 'read', [message(SAMPLE)]));
+  const report = reportOf(out(read, 'report'));
   const request = decodePrw(out(read, 'request')).EXECUTION_REQUEST;
   assert.equal(request.INITIAL.COORDINATE_SYSTEM.AXIS_TYPE, sds.rfmAxisType.MEAN_EQUATOR_EQUINOX_J2000);
   assert.equal(request.FORCES.GRAVITY_CHOICE, sds.prwGravitySelection.EGM96);
@@ -278,17 +321,17 @@ test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
     ballisticCoefficient: report.ballisticCoefficientM2Kg, f10: report.f10, averageF10: report.averageF10, averageAp: report.averageAp,
     taiMinusUtcS: report.taiMinusUtcS, ut1MinusUtcS: report.ut1MinusUtcS, weightedRms: 1,
   };
-  const toOcm = async (extra) => out(ok(await vcm.invoke({ methodId: 'ocm', inputs: [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }, json('header', { ...header, ...extra })] })), 'ocm');
+  const toOcm = async (extra) => out(ok(await call({ header: { ...header, ...extra } }, 'ocm', [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }])), 'ocm');
   const ocm = await toOcm({});
   const record = decodeOcm(ocm);
   assert.equal(record.COV_SIZE, 7);
   assert.deepEqual(record.COV_PARAMETERS, ['DRAG_AREA_OVER_MASS']);
   assert.equal(record.TRAJ_REF_FRAME.NAME, 'EME2000');
   assert.equal(record.METADATA.OBJECT_NAME, 'ROUND TRIP');
-  const writeText = async (bytes) => Buffer.from(out(ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'ocm', typeRef: OCM_REF, payload: bytes }, { portId: 'eop', typeRef: EOP_REF, payload: out(read, 'eop') }] })), 'message')).toString();
+  const writeText = async (bytes) => textOf(out(ok(await call({}, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: bytes }, { portId: 'eop', typeRef: EOP_REF, payload: out(read, 'eop') }])), 'message'));
   const text = await writeText(ocm);
   t.diagnostic(text.split('\n').slice(0, 8).join('\n'));
-  const back = JSON.parse(Buffer.from(out(ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: Buffer.from(text) }, json('options', { ...options, scaleCovarianceByWeightedRms: false })] })), 'report')).toString());
+  const back = reportOf(out(ok(await call({ read: { ...options, scaleCovarianceByWeightedRms: false } }, 'read', [message(Buffer.from(text))])), 'report'));
   const position = [final.STATE.STATE.POSITION.X, final.STATE.STATE.POSITION.Y, final.STATE.STATE.POSITION.Z].map((x) => x / 1000);
   for (let i = 0; i < 3; ++i) assert.ok(Math.abs(back.j2kPositionKm[i] - position[i]) < 1e-8, 'position');
   const P = [...final.COVARIANCE.VALUES], m = 7;
@@ -305,7 +348,7 @@ test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
   // result; a default read restores the result's covariance.
   const scaled = await writeText(await toOcm({ weightedRms: report.weightedRms }));
   assert.match(scaled, /WTD RMS:\s+0\.11498E\+01/);
-  const again = JSON.parse(Buffer.from(out(ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: Buffer.from(scaled) }, json('options', options)] })), 'report')).toString());
+  const again = reportOf(out(ok(await call({ read: options }, 'read', [message(Buffer.from(scaled))])), 'report'));
   let worstScaled = 0;
   for (let i = 0; i < m; ++i) for (let j = 0; j < m; ++j) {
     const si = i < 6 ? 1e3 : 1, sj = j < 6 ? 1e3 : 1;
@@ -320,12 +363,11 @@ test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
 //     chooses. Read as printed, the sample's B sigma is 5.1 times B; read as
 //     a fraction of B, 4.3 %. Fractional rows go back out as fractions.
 test('parameterRows: B row as printed or as a fraction of B', async (t) => {
-  const vcm = await load('..'), hpop = await load('../../../propagator/hpop');
-  t.after(() => { vcm.destroy(); hpop.destroy(); });
+  const hpop = await load('../../../propagator/hpop');
+  t.after(() => hpop.destroy());
   const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
-  const read = async (rows) => ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', { ...options, parameterRows: rows })] }));
-  const reportOf = (r) => JSON.parse(Buffer.from(out(r, 'report')).toString());
-  const absolute = reportOf(await read('absolute')), fractional = reportOf(await read('fractional'));
+  const read = async (rows) => ok(await call({ read: { ...options, parameterRows: rows } }, 'read', [message(SAMPLE)]));
+  const absolute = reportOf(out(await read('absolute'), 'report')), fractional = reportOf(out(await read('fractional'), 'report'));
   const printed = Math.sqrt(0.13665e-2) * 0.11498e1, b = 0.826455e-2;
   assert.equal(absolute.parameterRows, 'absolute');
   assert.equal(fractional.parameterRows, 'fractional');
@@ -341,12 +383,41 @@ test('parameterRows: B row as printed or as a fraction of B', async (t) => {
   const r = await read('fractional');
   const run = ok(await hpop.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(r, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(r, 'earth_orientation') }] }));
   const header = { geopotential: fractional.geopotential, zonals: fractional.zonals, tesserals: fractional.tesserals, drag: fractional.drag, ballisticCoefficient: b, weightedRms: 1, parameterRows: 'fractional' };
-  const ocm = out(ok(await vcm.invoke({ methodId: 'ocm', inputs: [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }, json('header', header)] })), 'ocm');
-  const text = Buffer.from(out(ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'ocm', typeRef: OCM_REF, payload: ocm }] })), 'message')).toString();
+  const ocm = out(ok(await call({ header }, 'ocm', [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }])), 'ocm');
+  const text = textOf(out(ok(await call({}, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: ocm }])), 'message'));
   const { n, p } = lowerTriangle(text);
   assert.equal(n, 7);
   // B is a constant of the motion: its variance is unchanged by propagation.
   assert.ok(Math.abs(p[6 * 7 + 6] - printed ** 2) < 1e-4 * printed ** 2, `${p[6 * 7 + 6]} vs ${printed ** 2}`);
-  const bad = await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', { parameterRows: 'percent' })] });
+  const bad = await call({ read: { parameterRows: 'percent' } }, 'read', [message(SAMPLE)]);
   assert.notEqual(bad.statusCode, 0);
+});
+
+// Typed contracts 1.0: one concrete FlatBuffer type on every port, and the artifact passes SDK compliance.
+test('every port names one FlatBuffer type; SDK compliance', async () => {
+  const { validateArtifactWithStandards } = await import('space-data-module-sdk/compliance');
+  const manifest = JSON.parse(fs.readFileSync(here('../plugin-manifest.json'), 'utf8'));
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(here('../dist/isomorphic/module.wasm')), standardsRoot: STANDARDS_ROOT });
+  assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ids = {};
+  for (const method of manifest.methods) for (const port of [...method.inputPorts, ...method.outputPorts]) {
+    assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+    const [type, ...rest] = port.acceptedTypeSets[0].allowedTypes;
+    assert.equal(rest.length, 0, port.portId);
+    assert.equal(type.acceptsAnyFlatbuffer, undefined, port.portId);
+    assert.equal(type.wireFormat, 'flatbuffer', port.portId);
+    ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+  }
+  assert.deepEqual(ids, {
+    'read.message': '$FIL', 'read.request': '$PRW', 'read.earth_orientation': '$PRW', 'read.eop': '$EOP', 'read.ocm': '$OCM', 'read.report': 'FNTC',
+    'ocm.result': '$PRW', 'ocm.ocm': '$OCM', 'write.ocm': '$OCM', 'write.eop': '$EOP', 'write.message': '$FIL',
+  });
+});
+
+test('config: unknown keys and non-scalar values are refused; a refused message', async () => {
+  for (const config of [{ read: { nope: 1 } }, { read: { arcSeconds: [1, 2] } }]) {
+    const r = await call(config, 'read', [message(SAMPLE)]);
+    assert.equal(r.errorCode, 'invalid-options', JSON.stringify(config));
+  }
+  assert.notEqual((await call({}, 'read', [message(Buffer.from('<> NOT A MESSAGE\n'))])).statusCode, 0);
 });

@@ -26,24 +26,20 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
-import { createRequire } from "node:module";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const sdkTestingEntry = fileURLToPath(
-  new URL(import.meta.resolve("space-data-module-sdk/testing")),
-);
-const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
-const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = sdkRequire("flatbuffers");
-const { HttpRequest } = sdkRequire(
-  path.join(sdkRoot, "src/generated/http/sdn/http/http-request.js"),
-);
-
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+import {
+  byPort,
+  decodeIrm,
+  drainParse,
+  harnessFor,
+  joinStream,
+  packIrm,
+  reportsOf,
+  responseFor,
+  routeFor,
+  sds,
+  skippedOf,
+} from "./helpers.mjs";
 
 const BULK_GZ = fs.readFileSync(
   fileURLToPath(new URL("./fixtures/opencellid-bulk.slice.csv.gz", import.meta.url)),
@@ -67,106 +63,36 @@ const BULK_GZ = fs.readFileSync(
 const BULK_SITES = 6;
 const BULK_ROWS = 15;
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
-}
-
-function htqRequest(body) {
-  const b = new flatbuffers.Builder(1024);
-  const methodOff = b.createString("POST");
-  const pathOff = b.createString("/api/v1/cellular/aggregate");
-  const queryOff = b.createString("");
-  const bodyOff = HttpRequest.createBodyVector(b, encoder.encode(JSON.stringify(body)));
-  HttpRequest.startHttpRequest(b);
-  HttpRequest.addMethod(b, methodOff);
-  HttpRequest.addPath(b, pathOff);
-  HttpRequest.addQuery(b, queryOff);
-  HttpRequest.addBody(b, bodyOff);
-  HttpRequest.finishHttpRequestBuffer(b, HttpRequest.endHttpRequest(b));
-  return { portId: "request", typeRef: { wireFormat: "flatbuffer" }, payload: b.asUint8Array() };
-}
-
-async function harnessFor(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-const byPort = (response) => {
-  const map = new Map();
-  for (const frame of response.outputs) map.set(frame.portId, frame);
-  return map;
-};
-const framesFor = (response, portId) => response.outputs.filter((f) => f.portId === portId);
-const jsonFrame = (map, portId) => {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
-};
-
 async function routeBulk(harness, requestBody = {}) {
-  const routedRaw = await harness.invoke({
-    methodId: "route",
-    inputs: [
-      htqRequest({
-        PROVIDERS: ["opencellid-bulk"],
-        METHOD: "SINGLE_SOURCE",
-        LIMIT: 2000,
-        FULL_POPULATION: true,
-        CREDENTIAL_MEDIATOR: true,
-        ...requestBody,
-      }),
-    ],
+  // A run with NO fetchable provider short-circuits: it answers on `decision`
+  // and emits no HttpRequest. Either way the contract carries the skip ledger.
+  return routeFor(harness, {
+    PROVIDERS: ["opencellid-bulk"],
+    METHOD: "SINGLE_SOURCE",
+    LIMIT: 2000,
+    FULL_POPULATION: true,
+    CREDENTIAL_MEDIATOR: true,
+    ...requestBody,
   });
-  // A run with NO fetchable provider short-circuits: it emits `reply` and no
-  // `job`, because starting a pipeline that cannot complete is worse than
-  // answering. Both frames carry `skipped`, which is what these tests read.
-  const routed = byPort(routedRaw);
-  const carrier = routed.has("job") ? "job" : "reply";
-  return {
-    job: jsonFrame(routed, carrier),
-    shortCircuited: carrier === "reply",
-    descriptors: framesFor(routedRaw, "requests").map((f) =>
-      JSON.parse(decoder.decode(f.payload)),
-    ),
-  };
 }
 
-/** Feed one chunk of the gzip through parse and return {reports, job}. */
-async function parseChunk(harness, job, chunk) {
-  let parsed = byPort(
-    await harness.invoke({
-      methodId: "parse",
-      inputs: [
-        jsonInput("job", job),
-        jsonInput("responses", {
-          status: 200,
-          headers: {},
-          bodyB64: Buffer.from(chunk).toString("base64"),
-        }),
-      ],
-    }),
-  );
-  for (let tick = 0; tick < 8 && !parsed.get("reports"); tick += 1) {
-    parsed = byPort(await harness.invoke({ methodId: "parse", inputs: [] }));
-  }
-  return { reports: jsonFrame(parsed, "reports"), job: jsonFrame(parsed, "job") };
+/**
+ * Feed one chunk of the gzip through parse as the HttpResponse to `descriptor`,
+ * with `context` (default: the request's own CONTEXT) echoed. Returns the
+ * reports and the resume mark parse wrote.
+ */
+async function parseChunk(harness, descriptor, chunk, context) {
+  const parsed = await drainParse(harness, [responseFor(descriptor, { status: 206, body: chunk, context })]);
+  const resume = parsed.get("resume");
+  return { reports: reportsOf(parsed.get("reports").payload), resume: resume ? decodeIrm(resume.payload) : undefined, resumeBytes: resume?.payload };
 }
 
 // ── 1. the collapse ────────────────────────────────────────────────────────
 
 test("the bulk gzip decodes to SITES, not cells", async (t) => {
   const harness = await harnessFor(t);
-  const { job } = await routeBulk(harness);
-  const { reports } = await parseChunk(harness, job, BULK_GZ);
+  const { descriptors } = await routeBulk(harness);
+  const { reports } = await parseChunk(harness, descriptors[0], BULK_GZ);
 
   assert.equal(
     reports.length,
@@ -204,8 +130,8 @@ test("a collapsed site SUMS its cells' samples and takes the WIDEST range", asyn
   // total, because the mast really was observed that many times, and `range` is
   // the union of the sectors' footprints, never the narrowest.
   const harness = await harnessFor(t);
-  const { job } = await routeBulk(harness);
-  const { reports } = await parseChunk(harness, job, BULK_GZ);
+  const { descriptors } = await routeBulk(harness);
+  const { reports } = await parseChunk(harness, descriptors[0], BULK_GZ);
 
   const paris = reports.find((r) => Math.round(r.latitude * 1000) === 48857);
   assert.ok(paris, "the Paris site is missing");
@@ -226,63 +152,75 @@ test("a collapsed site SUMS its cells' samples and takes the WIDEST range", asyn
 test("a chunked download resumes across the byte seam with identical results", async (t) => {
   // THE POINT OF THE WHOLE MECHANISM. A raw deflate stream cannot be restarted
   // at an arbitrary offset — there is no sync point and back-references reach
-  // 32 KiB behind — so the decoder state has to cross the seam in the job. If
-  // it does not, this test does not throw an inflate error: it returns fewer
-  // sites, or a site built from half a CSV row.
+  // 32 KiB behind — so the decoder state has to cross the seam in the $IRM
+  // resume mark. If it does not, this test does not throw an inflate error: it
+  // returns fewer sites, or a site built from half a CSV row.
   const harness = await harnessFor(t);
+  const I = sds.IRM;
 
   const split = 200; // mid-deflate-stream, deliberately not a block boundary
   assert.ok(split < BULK_GZ.length, "the fixture is too small to split");
 
-  const first = await routeBulk(harness);
-  const chunk1 = await parseChunk(harness, first.job, BULK_GZ.subarray(0, split));
+  const { descriptors } = await routeBulk(harness);
+  const chunk1 = await parseChunk(harness, descriptors[0], BULK_GZ.subarray(0, split));
 
-  const mark = chunk1.job.bulk_resume_next;
+  const mark = chunk1.resume;
   assert.ok(mark, "parse emitted no resume mark for an unfinished bulk download");
-  assert.equal(mark.complete, false, "an unfinished download reported itself complete");
-  assert.equal(mark.header_done, true, "the gzip header was not consumed");
-  assert.ok(mark.decoder && mark.decoder.length > 0, "the resume mark carries no decoder state");
-  assert.equal(mark.next_byte, split, "the resume mark did not advance to the seam");
+  assert.equal(mark.STATE, I.irmJobState.IN_PROGRESS, "an unfinished download reported itself complete");
+  assert.equal(Number(mark.NEXT_OFFSET), split, "the resume mark did not advance to the seam");
+  assert.equal(mark.PROVIDER_ID, "opencellid-bulk");
+  const dc = mark.DECODE_CONTEXT;
+  assert.ok(dc.DECODER_STATE.length > 0, "the resume mark carries no decoder state");
+  assert.equal(Number(dc.DECODER_STATE_BYTE_LENGTH), dc.DECODER_STATE.length);
+  assert.equal(dc.DECODER_STATE_FORMAT, "cell-tower-source/tinfl-v1");
+  assert.equal(dc.DECODER_STATE_VERSION, "1");
+  assert.equal(dc.WINDOW.length, 32768, "the 32 KiB dictionary did not cross the seam");
+  assert.equal(Number(dc.WINDOW_BYTE_LENGTH), 32768);
+  assert.ok(Number(dc.WINDOW_POSITION) < 32768);
+  assert.equal(dc.COMPRESSION, "gzip");
+  assert.equal(dc.FORMAT, "text/csv");
 
-  // The second range is requested from exactly where the first stopped.
-  const second = await routeBulk(harness, { BULK_RESUME: mark });
-  assert.equal(second.descriptors.length, 1, "the resumed run emitted no descriptor");
-  assert.equal(
-    second.descriptors[0].headers.range,
-    `bytes=${split}-${split + 32 * 1024 * 1024 - 1}`,
-    "the resumed descriptor did not ask for the next window",
-  );
-
-  const chunk2 = await parseChunk(harness, second.job, BULK_GZ.subarray(split));
-  assert.equal(chunk2.job.bulk_resume_next.complete, true, "the second chunk did not finish");
+  // The next chunk continues THAT mark: its CONTEXT carries the run contract and
+  // the $IRM, exactly as cell-tower-ingest's ingest_plan writes it.
+  const context = joinStream([descriptors[0].ctx.aprBytes, chunk1.resumeBytes]);
+  const chunk2 = await parseChunk(harness, descriptors[0], BULK_GZ.subarray(split), context);
+  assert.equal(chunk2.resume.STATE, I.irmJobState.COMPLETE, "the second chunk did not finish");
+  assert.equal(chunk2.resume.DECODE_CONTEXT.DECODER_STATE.length, 0, "a finished stream still carries a decoder");
+  assert.equal(Number(chunk2.resume.LAST_CHUNK.RANGE_FIRST_BYTE), split, "the chunk was not recorded from the seam");
 
   // The two chunks together see every row and every site the whole file has.
   const total = chunk1.reports.length + chunk2.reports.length;
+  assert.equal(total, BULK_SITES, `chunked decode found ${total} sites, whole-file decode finds ${BULK_SITES}`);
   assert.equal(
-    total,
-    BULK_SITES,
-    `chunked decode found ${total} sites, whole-file decode finds ${BULK_SITES}`,
-  );
-  assert.equal(
-    chunk2.job.bulk_resume_next.rows_seen,
+    chunk1.resume.LAST_CHUNK.RECORDS_DECODED + chunk2.resume.LAST_CHUNK.RECORDS_DECODED,
     BULK_ROWS,
     "the chunked run did not see every data row",
   );
-  assert.equal(chunk2.job.bulk_resume_next.sites_emitted, BULK_SITES);
 });
 
-test("a finished bulk download is not fetched again", async (t) => {
-  // Without this the chunk sequence never terminates: a range past the end of
-  // the file is answered 416 with no body, i.e. a provider that fetches forever
-  // and contributes nothing.
+test("a mark whose decoder stamps disagree RESTARTS rather than resuming into nonsense", async (t) => {
+  // DECODER_STATE is an opaque memory image of ONE decoder build. A mark from a
+  // different build — a different format token, version or byte length — is
+  // refused before it is loaded: this chunk decodes nothing and writes no mark,
+  // because inflating mid-symbol from a foreign struct would not fail loudly,
+  // it would decode to plausible garbage that stores cleanly.
   const harness = await harnessFor(t);
-  const { job, descriptors } = await routeBulk(harness, {
-    BULK_RESUME: { next_byte: BULK_GZ.length, complete: true },
-  });
-  assert.equal(descriptors.length, 0, "a completed bulk download was requested again");
-  const mine = (job.skipped ?? []).find((s) => s.provider_id === "opencellid-bulk");
-  assert.ok(mine, "the completed provider is not named in the skip list");
-  assert.equal(mine.bulkComplete, true);
+  const split = 200;
+  const { descriptors } = await routeBulk(harness);
+  const chunk1 = await parseChunk(harness, descriptors[0], BULK_GZ.subarray(0, split));
+  for (const tamper of [
+    (m) => { m.DECODE_CONTEXT.DECODER_STATE_FORMAT = "some-other-producer/v9"; },
+    (m) => { m.DECODE_CONTEXT.DECODER_STATE_VERSION = "2"; },
+    (m) => { m.DECODE_CONTEXT.DECODER_STATE_BYTE_LENGTH = 7n; },
+    (m) => { m.DECODE_CONTEXT.WINDOW = m.DECODE_CONTEXT.WINDOW.slice(1); },
+  ]) {
+    const mark = decodeIrm(chunk1.resumeBytes);
+    tamper(mark);
+    const context = joinStream([descriptors[0].ctx.aprBytes, packIrm(mark)]);
+    const chunk2 = await parseChunk(harness, descriptors[0], BULK_GZ.subarray(split), context);
+    assert.deepEqual(chunk2.reports, [], "a foreign decoder image was resumed");
+    assert.equal(chunk2.resume, undefined, "a refused mark still advanced");
+  }
 });
 
 // ── 3. the fail-closed wiring ──────────────────────────────────────────────
@@ -292,19 +230,12 @@ test("a credentialed provider is skipped unless the mediator is declared", async
   // `{{credential}}` would spend the owner's daily quota on a request that
   // cannot succeed.
   const harness = await harnessFor(t);
-  const { job, descriptors } = await routeBulk(harness, { CREDENTIAL_MEDIATOR: false });
+  const { contract, descriptors } = await routeBulk(harness, { CREDENTIAL_MEDIATOR: false });
   assert.equal(descriptors.length, 0, "an unfillable credentialed descriptor was emitted");
-  const mine = (job.skipped ?? []).find((s) => s.provider_id === "opencellid-bulk");
+  const mine = skippedOf(contract).find((s) => s.provider_id === "opencellid-bulk");
   assert.ok(mine, "the credentialed provider is not named in the skip list");
-  assert.equal(mine.needsMediator, true);
-  assert.equal(mine.credentialLane, "cell_opencellid-bulk");
-  // The stale reason this task was filed against must be gone: the endpoint IS
-  // verified and a credential IS stored; what is missing is the wiring.
-  assert.equal(
-    /not verified against a live account/.test(mine.reason),
-    false,
-    "route still claims the endpoint is unverified",
-  );
+  // What is missing is the WIRING (the mediator), not a verified endpoint.
+  assert.equal(mine.code, "needs-mediator");
 });
 
 test("a declared mediator gets a descriptor marked with the lane that fills it", async (t) => {
@@ -312,7 +243,9 @@ test("a declared mediator gets a descriptor marked with the lane that fills it",
   const { descriptors } = await routeBulk(harness);
   assert.equal(descriptors.length, 1);
   const d = descriptors[0];
-  assert.equal(d.credentialLane, "cell_opencellid-bulk");
+  assert.equal(d.ctx.apr.params.credentialLane, "cell_opencellid-bulk");
+  // The request-scoped lane reads the export's first 32 MiB window.
+  assert.equal(d.headers.range, `bytes=0-${32 * 1024 * 1024 - 1}`);
   assert.ok(
     d.url.includes("{{credential}}"),
     "route substituted a credential it does not hold",
@@ -329,10 +262,10 @@ test("a 200 that is really a token error decodes to nothing, not to an empty reg
   // signal, so if the body reached the gzip decoder an expired credential would
   // be indistinguishable from a register with nothing in it.
   const harness = await harnessFor(t);
-  const { job } = await routeBulk(harness);
+  const { descriptors } = await routeBulk(harness);
   const { reports } = await parseChunk(
     harness,
-    job,
+    descriptors[0],
     Buffer.from('{"status":"error","message":"INVALID_TOKEN"}'),
   );
   assert.deepEqual(reports, [], "a provider error envelope was decoded as register data");
@@ -345,19 +278,11 @@ test("the anonymous 1000-row clamp is untouched by the bulk lane", async (t) => 
   // ANONYMOUS caller to make the node fetch and merge without bound — the cap
   // this file has carried since the Houston-box defect.
   const harness = await harnessFor(t);
-  const routedRaw = await harness.invoke({
-    methodId: "route",
-    inputs: [
-      htqRequest({
-        PROVIDERS: ["openstreetmap-overpass"],
-        BBOX: { south: 52.45, west: 13.3, north: 52.55, east: 13.45 },
-        LIMIT: 999999,
-      }),
-    ],
+  const { descriptors } = await routeFor(harness, {
+    PROVIDERS: ["openstreetmap-overpass"],
+    BBOX: { south: 52.45, west: 13.3, north: 52.55, east: 13.45 },
+    LIMIT: 999999,
   });
-  const descriptors = framesFor(routedRaw, "requests").map((f) =>
-    JSON.parse(decoder.decode(f.payload)),
-  );
   assert.equal(descriptors.length > 0, true, "the bounded provider emitted no descriptor");
   for (const d of descriptors) {
     assert.ok(

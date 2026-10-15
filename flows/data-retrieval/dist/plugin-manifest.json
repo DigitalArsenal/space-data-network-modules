@@ -1,37 +1,28 @@
 {
   "pluginId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "pluginFamily": "flow",
-  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: bridge — the retrieval node reaches the store over the storage.flatsql_* hostcall bridge (capability storage_query). The former \"flatsql\" linkage, which linked the live store engine into this artifact's own linear memory, is RETIRED: FlatSQL is an independently signed and instantiated isomorphic WASM node, never a library baked into every flow that reads. Flatbuffer-branch bodies cross the bridge as SDNE body-ref tokens when the host honours \"deliver\":\"ref\" and as segment bytes otherwise; the json branch copies bytes engine->flow in-wasm.",
+  "description": "HTTP data-retrieval flow (mount /api/v1/data): foundation/http-route route decides the $HTQ request as a $QRP - \"/<code>/bulk\" -> \"bulk\" (any SDS standard: SCHEMA_NAME, SOURCE_NAME, TIME_PROFILE, PROFILE_EPOCH_MS, LIMIT, representation, If-None-Match), \"/query\" -> \"query\" (SQL + typed PARAMETERS), anything else -> \"refusal\" (a $QRP Error straight to the responder); data-source/retrieval omm_bulk resolves the epoch profile (request > config > defaults) and reads storage.flatsql_epoch_stream, data_query runs storage.flatsql_query_stream (typed $PIV hostcalls, capability storage_query; ?profile=all reads every record of the lane through storage.flatsql_query_stream; records are delivered out of band by host body reference - QRP BODY_REF_TOKEN -> $HTR BODY_REF - unless JSON is asked for, then inline), each answering the $QRP request beside a $QRP page (the page header with RECORD_COUNT and the FNV-1a entity tag, then the records verbatim); foundation/http-respond respond_query renders the $HTR (200 / 304 / refusal status): the page stream verbatim as FlatBuffers by default, the records as JSON on request ($OMM). engineLinkage bridge: the retrieval node reaches the store over the storage hostcall bridge; FlatSQL is an independently signed node, never linked into this artifact. foundation/decision-gate and foundation/omm-json are retired: the router's typed ports dispatch and the responder renders the client JSON itself. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
+    "clock",
     "storage_query"
   ],
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.7.0",
-      "maxVersion": "0.7.0"
-    },
-    {
-      "pluginId": "com.digitalarsenal.foundation.decision-gate",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.8.0",
+      "maxVersion": "0.8.0"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.retrieval",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
-    },
-    {
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "minVersion": "0.1.1",
-      "maxVersion": "0.1.1"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.2.1",
-      "maxVersion": "0.2.1"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     }
   ],
   "externalInterfaces": [
@@ -41,12 +32,25 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine-native retrieval ops (storage.flatsql_epoch_stream, storage.flatsql_query_stream, storage.flatsql_cache_key).",
+      "description": "Host FlatSQL engine-native retrieval ops as SDS $PIV hostcalls: storage.flatsql_epoch_stream (EpochStreamParams -> StreamResult + raw stream) and storage.flatsql_query_stream (SqlStreamParams + raw sql + list sql_params -> StreamResult + raw stream).",
       "properties": {
         "hostOps": [
           "storage.flatsql_epoch_stream",
-          "storage.flatsql_query_stream",
-          "storage.flatsql_cache_key"
+          "storage.flatsql_query_stream"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults omm_bulk's epoch when neither the request nor the config states one; plugin.getConfig (ungated) supplies the per-standard profile defaults.",
+      "properties": {
+        "hostOps": [
+          "clock.now",
+          "plugin.getConfig"
         ]
       }
     }
@@ -66,7 +70,8 @@
                 {
                   "schemaName": "HttpRequestAbi.fbs",
                   "fileIdentifier": "$HTQ",
-                  "rootTypeName": "HttpRequest"
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
@@ -75,7 +80,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+          "description": "One $HTQ HttpRequest envelope as delivered verbatim by the host pipe."
         }
       ],
       "outputPorts": [
@@ -88,7 +93,8 @@
                 {
                   "schemaName": "HttpResponseAbi.fbs",
                   "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
@@ -97,7 +103,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
+          "description": "Exactly one $HTR per HTTP exchange."
         }
       ],
       "maxBatch": 1,
@@ -108,22 +114,158 @@
     {
       "schemaName": "HttpRequestAbi.fbs",
       "fileIdentifier": "$HTQ",
-      "rootTypeName": "HttpRequest"
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
     },
     {
-      "schemaName": "CAQ.fbs",
-      "fileIdentifier": "$CAQ",
-      "rootTypeName": "CAQ"
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR",
+      "wireFormat": "flatbuffer"
     },
     {
-      "schemaName": "OMM.fbs",
-      "fileIdentifier": "$OMM",
-      "rootTypeName": "OMM"
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
     },
     {
       "schemaName": "HttpResponseAbi.fbs",
       "fileIdentifier": "$HTR",
-      "rootTypeName": "HttpResponse"
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NHS.fbs",
+      "fileIdentifier": "$NHS",
+      "rootTypeName": "NHS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NEV.fbs",
+      "fileIdentifier": "$NEV",
+      "rootTypeName": "NEV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CSM.fbs",
+      "fileIdentifier": "$CSM",
+      "rootTypeName": "CSM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     }
   ],
   "runtimeTargets": [
@@ -149,15 +291,6 @@
       "uiY": 0
     },
     {
-      "nodeId": "gate",
-      "pluginId": "com.digitalarsenal.foundation.decision-gate",
-      "methodId": "dispatch",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
       "nodeId": "omm",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "methodId": "omm_bulk",
@@ -176,27 +309,9 @@
       "uiY": 0
     },
     {
-      "nodeId": "branch",
-      "pluginId": "com.digitalarsenal.foundation.decision-gate",
-      "methodId": "branch",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
-      "nodeId": "tojson",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "methodId": "encode",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "methodId": "respond",
+      "methodId": "respond_query",
       "kind": "responder",
       "dispatchModel": null,
       "uiX": 0,
@@ -214,35 +329,20 @@
   ],
   "flowEdges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-bulk-omm-request",
       "fromNodeId": "route",
-      "fromPortId": "decision",
-      "toNodeId": "gate",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "gate-omm-bulk",
-      "fromNodeId": "gate",
-      "fromPortId": "omm_bulk",
+      "fromPortId": "bulk",
       "toNodeId": "omm",
       "toPortId": "request",
       "contract": {
         "canonicalType": {
-          "schemaName": "CAQ.fbs",
-          "fileIdentifier": "$CAQ",
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
           "schemaVersion": null,
           "schemaHash": [],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
-          "rootTypeName": "CAQ",
+          "rootTypeName": "QRP",
           "fixedStringLength": 0,
           "byteLength": 0,
           "requiredAlignment": 0
@@ -255,20 +355,20 @@
       }
     },
     {
-      "edgeId": "gate-data-query",
-      "fromNodeId": "gate",
-      "fromPortId": "data_query",
+      "edgeId": "route-query-query-query",
+      "fromNodeId": "route",
+      "fromPortId": "query",
       "toNodeId": "query",
       "toPortId": "query",
       "contract": {
         "canonicalType": {
-          "schemaName": "CAQ.fbs",
-          "fileIdentifier": "$CAQ",
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
           "schemaVersion": null,
           "schemaHash": [],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
-          "rootTypeName": "CAQ",
+          "rootTypeName": "QRP",
           "fixedStringLength": 0,
           "byteLength": 0,
           "requiredAlignment": 0
@@ -281,219 +381,137 @@
       }
     },
     {
-      "edgeId": "gate-routed-decision",
-      "fromNodeId": "gate",
-      "fromPortId": "routed",
-      "toNodeId": "branch",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "gate-not-found",
-      "fromNodeId": "gate",
-      "fromPortId": "not_found",
+      "edgeId": "route-refusal-respond-decision",
+      "fromNodeId": "route",
+      "fromPortId": "refusal",
       "toNodeId": "respond",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "omm-stream",
+      "edgeId": "omm-decision-respond-decision",
       "fromNodeId": "omm",
-      "fromPortId": "stream",
-      "toNodeId": "branch",
-      "toPortId": "stream",
-      "contract": {
-        "canonicalType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "flatbuffer",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 0
-        },
-        "alignedType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 8
-        },
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
-        "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
-      }
-    },
-    {
-      "edgeId": "query-rows",
-      "fromNodeId": "query",
-      "fromPortId": "rows",
-      "toNodeId": "branch",
-      "toPortId": "stream",
-      "contract": {
-        "canonicalType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "flatbuffer",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 0
-        },
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": false,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "branch-flatbuffer-body",
-      "fromNodeId": "branch",
-      "fromPortId": "flatbuffer",
-      "toNodeId": "respond",
-      "toPortId": "omm_body",
-      "contract": {
-        "canonicalType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "flatbuffer",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 0
-        },
-        "alignedType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 8
-        },
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
-        "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
-      }
-    },
-    {
-      "edgeId": "branch-json-stream",
-      "fromNodeId": "branch",
-      "fromPortId": "json",
-      "toNodeId": "tojson",
-      "toPortId": "stream",
-      "contract": {
-        "canonicalType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "flatbuffer",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 0
-        },
-        "alignedType": {
-          "schemaName": "OMM.fbs",
-          "fileIdentifier": "$OMM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "OMM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 8
-        },
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
-        "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
-      }
-    },
-    {
-      "edgeId": "branch-decision",
-      "fromNodeId": "branch",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "branch-etag",
-      "fromNodeId": "branch",
-      "fromPortId": "etag",
+      "edgeId": "omm-page-respond-page",
+      "fromNodeId": "omm",
+      "fromPortId": "page",
       "toNodeId": "respond",
-      "toPortId": "etag",
+      "toPortId": "page",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "tojson-body",
-      "fromNodeId": "tojson",
-      "fromPortId": "json",
+      "edgeId": "query-decision-respond-decision",
+      "fromNodeId": "query",
+      "fromPortId": "decision",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "query-page-respond-page",
+      "fromNodeId": "query",
+      "fromPortId": "page",
+      "toNodeId": "respond",
+      "toPortId": "page",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",

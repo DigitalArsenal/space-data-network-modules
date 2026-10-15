@@ -9,9 +9,21 @@ deprecated: the `$OCM` carries everything a VCM does.
 
 | Method | In | Out |
 | --- | --- | --- |
-| `read` | `message`: one VCM as text; `options` (JSON, optional) | `request`: `$PRW` EXECUTION_REQUEST; `earth_orientation`: `$PRW` EARTH_ORIENTATION; `eop`: `$EOP` records; `ocm`: `$OCM`; `report`: JSON |
-| `ocm` | `result`: `$PRW` EXECUTION_RESULT (EME2000); `header` (JSON, optional) | `ocm`: `$OCM` |
-| `write` | `ocm`: `$OCM`; `eop`: `$EOP` records (optional); `options` (JSON, optional) | `message`: VCM text |
+| `read` | `message`: `$FIL` whose CONTENT is one VCM as text | `request`: `$PRW` EXECUTION_REQUEST; `earth_orientation`: `$PRW` EARTH_ORIENTATION; `eop`: `$EOP` records; `ocm`: `$OCM`; `report`: FlowNotice Info |
+| `ocm` | `result`: `$PRW` EXECUTION_RESULT (EME2000) | `ocm`: `$OCM` |
+| `write` | `ocm`: `$OCM`; `eop`: `$EOP` records (optional) | `message`: `$FIL` (NAME `<satellite>.vcm`, MEDIA_TYPE `text/plain`, CONTENT the VCM text) |
+
+Typed contracts 1.0: every port is one FlatBuffer type. The settings are node
+config (`plugin.getConfig`, one ModuleConfig): table `read` (the read options
+below), table `header` (the `ocm` header: identity, model lines, parameter
+values, space weather, integrator lines, `weightedRms`, `covarianceScale`,
+`meanMotionUnit`, `parameterRows`) and table `write` (`meanMotionUnit`,
+`parameterRows`, `covarianceScale`). Values are strings, numbers or booleans;
+unknown read/write keys are refused. `read`'s report is a FlowNotice Info:
+SCHEMA `OCM.fbs`, SOURCE_NAME the satellite number, COUNT the covariance
+size, REASON the notes, ITEMS `key=value` lines (numbers `%.17g`, lists
+space-separated, one `parameterSigma=<name> <unit> <value> <sigma>` per
+parameter row, one `note=` per note).
 
 ## What `read` builds
 
@@ -41,7 +53,7 @@ deprecated: the `$OCM` carries everything a VCM does.
   `$EOP` record per day, for `write` and for any reader of `$EOP`.
 - **`$OCM`.** The message as the one record the stack publishes: see below.
 
-Options: `meanMotionUnit` (`fraction`, default: the covariance's n row as
+Read options (config table `read`): `meanMotionUnit` (`fraction`, default: the covariance's n row as
 dn/n; or `rad/ks`, `rad/s`, `rad/min`, `rev/day`), `scaleCovarianceByWeightedRms`
 (default true: times max(1, WTD RMS)^2), `arcSeconds` (default 86400),
 `ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel on HPOP's kernel

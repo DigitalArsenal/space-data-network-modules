@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/testing';
+import {loadModule} from 'space-data-module-sdk/host/isomorphic';
 import {encodePluginInvokeRequest,decodePluginInvokeResponse} from 'space-data-module-sdk/invoke';
-import {extractPublicationRecordCollection} from 'space-data-module-sdk/transport';
 import {assertSequentialArtifact} from 'space-data-module-sdk/compiler';
+import {filFrame} from './fit_harness.mjs';
 const artifact=process.env.OD_ARTIFACT??fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url));
 async function createOemInput(wireFormat = "flatbuffer") {
   const {Builder} = await import("flatbuffers");
@@ -37,31 +36,41 @@ async function createOemInput(wireFormat = "flatbuffer") {
 // Public NASA ISS OEM, EME2000 / UTC / km and km/s. Existing reference tests
 // validate orbital values; this gate requires zero-tolerance payload identity
 // across runtimes for the same WASM and request (including covariance absence).
-test('canonical OD artifact has identical PIV outputs on three runtimes',async()=>{
+// The artifact imports the typed hostcall bridge (space_data_module_host), which
+// the plain WasmEdge CLI (and a Docker image of it) cannot instantiate ("unknown
+// import"). Both WasmEdge legs are therefore the SDK loader's, as in
+// tests/sdk_compat.test.mjs: loadModule runs the artifact on the SDK WasmEdge
+// runner, which serves the bridge (plugin.getConfig answers the config, every
+// other operation a typed "unsupported"). SDM_WASMEDGE_RUNNER_BINARY names a
+// prebuilt runner. The command leg replays the loader's own launch plan so that
+// a failing request still yields its response frame on stdout (exit status 1),
+// which the loader's invoke() reports only as the exit.
+test('canonical OD artifact has identical PIV outputs on three runtimes',async t=>{
  const wasm=fs.readFileSync(artifact);assertSequentialArtifact(wasm);
- const h=await createBrowserModuleHarness({wasmSource:wasm,surface:'direct'});
- const temp=fs.mkdtempSync(path.join(os.tmpdir(),'od-parity-'));
- fs.writeFileSync(path.join(temp,'module.wasm'),extractPublicationRecordCollection(wasm)?.payloadBytes??wasm);
- const dockerImage=process.env.OD_PARITY_DOCKER_IMAGE??'space-data-module-sdk/parity-wasmedge:0.16.4';
+ const js=await createBrowserModuleHarness({wasmSource:wasm,surface:'direct'});
+ const direct=await loadModule({wasmSource:artifact,runtimeKind:'wasmedge',enableThreads:true,surface:'direct'});
+ const command=await loadModule({wasmSource:artifact,runtimeKind:'wasmedge',enableThreads:true});
+ t.after(()=>Promise.all([js,direct,command].map(h=>h.destroy())));
+ assert.equal(direct.runtime.surface,'direct');
+ assert.equal(command.runtime.surface,'command');
  const normalize=r=>({status:r.statusCode,error:r.errorCode??'',outputs:r.outputs.map(o=>({port:o.portId,bytes:Buffer.from(o.payload).toString('hex')}))});
- try {
-  const requests=[
-   {methodId:'fit',inputs:[{portId:'meme',payload:fs.readFileSync(new URL('./fixtures/request.fit.meme',import.meta.url))}]},
-   {methodId:'fit',inputs:[await createOemInput()]},
-   {methodId:'fit',inputs:[]},
-   {methodId:'fit',inputs:[{portId:'meme',payload:new TextEncoder().encode('invalid ephemeris')}]}
-  ];
-  for(const request of requests){
-   const expected=normalize(await h.invoke(request)),input=encodePluginInvokeRequest(request);
-   for(const [command,args] of [
-    [process.env.WASMEDGE_BINARY??'wasmedge',['--enable-threads',path.join(temp,'module.wasm')]],
-    ['docker',['run','--rm','-i','--network=none','-v',temp+':/input:ro',dockerImage,'--enable-threads','/input/module.wasm']]
-   ]){
-    const r=spawnSync(command,args,{input,timeout:60000,maxBuffer:4*1024*1024});
-    assert.equal(r.error,undefined,r.error?.message);
-    assert.ok(r.status===0 || (r.status===1 && expected.status!==0),command+': '+r.stderr?.toString());
-    assert.deepEqual(normalize(decodePluginInvokeResponse(r.stdout)),expected,command+' output differs');
-   }
-  }
- } finally {await h.destroy();fs.rmSync(temp,{recursive:true,force:true});}
+ const runCommand=request=>{
+  const {command:binary,args,env,cwd}=command.launchPlan;
+  const r=spawnSync(binary,args,{input:encodePluginInvokeRequest(request),env,cwd,timeout:60000,maxBuffer:4*1024*1024});
+  assert.equal(r.error,undefined,r.error?.message);
+  return r;
+ };
+ const requests=[
+  {methodId:'fit',inputs:[filFrame(fs.readFileSync(new URL('./fixtures/request.fit.meme',import.meta.url)))]},
+  {methodId:'fit',inputs:[await createOemInput()]},
+  {methodId:'fit',inputs:[]},
+  {methodId:'fit',inputs:[filFrame(new TextEncoder().encode('invalid ephemeris'))]}
+ ];
+ for(const request of requests){
+  const expected=normalize(await js.invoke(request));
+  assert.deepEqual(normalize(await direct.invoke(request)),expected,'wasmedge direct output differs');
+  const r=runCommand(request);
+  assert.ok(r.status===0 || (r.status===1 && expected.status!==0),'wasmedge command: '+r.stderr?.toString());
+  assert.deepEqual(normalize(decodePluginInvokeResponse(r.stdout)),expected,'wasmedge command output differs');
+ }
 });

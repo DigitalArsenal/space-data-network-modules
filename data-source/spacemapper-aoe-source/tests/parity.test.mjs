@@ -4,11 +4,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { synthetic } from '../../spacetrack-source/tests/fixtures/spacetrack-format.mjs';
 import { aoeRecord } from './fixtures/aoe-format.mjs';
 
-const request = (text) => ({ methodId: 'parse_aoe', inputs: [{ portId: 'source', payloadUtf8: text, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: new TextEncoder().encode(text).length } }] });
+// The records as the BODY of one HttpResponse (HRSP), as the host flow hands them over.
+const request = (text) => ({ methodId: 'parse_aoe', inputs: [{ portId: 'response', payload: encodeHttpResponse({ status: 200, body: new TextEncoder().encode(text) }),
+  typeRef: { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' } }] });
 const base = (over = {}) => synthetic({ epoch: '2026-10-10T10:00:00.000000', recordId: 5001, ...over });
 
 test('the same parser artifact agrees in Chromium, native WasmEdge and Docker WasmEdge', { skip: process.env.SDN_RUN_AOE_PARITY !== '1' }, async () => {
@@ -26,6 +29,7 @@ test('the same parser artifact agrees in Chromium, native WasmEdge and Docker Wa
       { id: 'jsonl', request: request(records.map((r) => JSON.stringify(r)).join('\n')), expect: 'ok' },
       { id: 'array', request: request(JSON.stringify(records.slice(0, 3))), expect: 'ok' },
       { id: 'damaged', request: request(JSON.stringify(records).slice(0, -3)), expect: 'ok' },
+      { id: 'not-modified', request: { methodId: 'parse_aoe', inputs: [{ ...request('').inputs[0], payload: encodeHttpResponse({ status: 304 }) }] }, expect: 'ok' },
     ],
   });
   const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, autoBuildDockerImage: false, timeoutMs: 60000, log: (message) => console.log(message) });

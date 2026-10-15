@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.open-meteo-host",
   "name": "Open-Meteo scheduled source adapter",
-  "version": "0.1.0",
-  "description": "Generic host configuration and retrieval receipt for the Open-Meteo flow. Requires an SDK host supplying plugin.getConfig; weather normalization remains in the portable core. SDN auto-publishes configured source lanes after successful ingestion.",
+  "version": "0.2.0",
+  "description": "Scheduling gate for the Open-Meteo flow (typed contracts 1.0). prepare_scheduled: a TimerTick in; node CONFIG (plugin.getConfig) open_meteo_enabled must be true (else a FlowNotice Skipped 'disabled'), open_meteo_producer_peer_id set and open_meteo_forecast.access noncommercial (scheduled customer access needs a credential adapter and is refused); the tick is then forwarded to open-meteo plan_forecast. receipt_scheduled: the HttpResponse in; a 304 becomes a FlowNotice Unchanged (the current batch is kept, nothing republished), anything else is forwarded verbatim to open-meteo parse_forecast. The only host call is the builtin plugin.getConfig (SDS $PIV). No JSON.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Bounded point forecast processing. Scheduled methods read generic host configuration and the clock; HTTP, signing, IPFS and persistence remain in existing host capability nodes. No threads."
+    "detail": "Scheduling gates over node configuration; one builtin plugin.getConfig hostcall per invocation. HTTP, signing, IPFS and persistence remain in existing host capability nodes. No threads."
   },
   "methods": [
     {
@@ -27,215 +27,145 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "tick-v1",
+              "setId": "sdn-TimerTick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
-              }
+              "description": "TimerTick (TICK) from the flow's timer trigger."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+          "description": "The timer tick."
         }
       ],
       "outputPorts": [
         {
-          "portId": "config",
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "config-v1",
+              "setId": "sdn-TimerTick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "One location, selected hourly variables, forecast days and explicit API access tier."
-              }
+              "description": "The same TimerTick, forwarded verbatim."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One location, selected hourly variables, forecast days and explicit API access tier."
+          "description": "The tick for open-meteo plan_forecast, only when scheduled fetching is enabled and allowed."
         },
         {
           "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "status-v1",
+              "setId": "sdn-FlowNotice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-              }
+              "description": "FlowNotice (FNTC) kind Skipped, REASON 'disabled'."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+          "description": "Why the cycle fetched nothing."
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Gates one timer tick on node CONFIG and forwards it to plan_forecast, or reports the skipped cycle."
     },
     {
       "methodId": "receipt_scheduled",
       "displayName": "Attach retrieval receipt",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Unmodified forecast plan."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Unmodified forecast plan."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "sdn-HttpResponse",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-              }
+              "description": "HttpResponse (HRSP) of the forecast GET."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
+          "description": "The forecast response."
         }
       ],
       "outputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Unmodified forecast plan."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Unmodified forecast plan."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "sdn-HttpResponse",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-              }
+              "description": "The same HttpResponse, forwarded verbatim."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-        },
-        {
-          "portId": "receipt",
-          "acceptedTypeSets": [
-            {
-              "setId": "receipt-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+          "description": "The response for open-meteo parse_forecast (not a 304)."
         },
         {
           "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "status-v1",
+              "setId": "sdn-FlowNotice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
-              }
+              "description": "FlowNotice (FNTC) kind Unchanged for a 304 (SCHEMA WXF.fbs, PROVIDER_ID open-meteo, SOURCE_NAME the plan's source)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Skipped timer cycle or unchanged response; flow bookkeeping, never a data record."
+          "description": "The unchanged notice: the publisher had nothing new."
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Turns a 304 into an Unchanged notice; forwards every other response to parse_forecast."
     }
   ],
   "schemasUsed": []

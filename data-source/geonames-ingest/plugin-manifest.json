@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
   "name": "Gazetteer Named Place Ingest Nodes",
-  "version": "0.1.0",
-  "description": "The ORCHESTRATION half of the GeoNames gazetteer lane. geonames-source is the request-scoped decoder - dump in, $GNP stream out, capabilities [], nothing persisted - which is the right shape for a browser and the wrong shape for a scheduled ingest, and the two cannot be one plugin. The ingest-only decisions live here, mirroring the cell-tower-source / cell-tower-ingest split exactly: four pure nodes read a durable resume mark, decide seed vs daily delta vs ledgered no-op, author the storage attribution, and advance the mark only from a verified store. The mark DOUBLES AS THE SAME-DATA LEDGER: the upstream ETag and Last-Modified ride on it, and a tick whose HEAD/GET matches the mark is a no-op that costs one conditional request. NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes, so this plugin performs no I/O and needs no new host connector.",
+  "version": "0.2.0",
+  "description": "The ORCHESTRATION half of the GeoNames gazetteer lane (typed contracts 1.0: FlatBuffers only between modules, no JSON and no base64): the schedule, the same-data ledger, the storage attribution and the resume mark, mirroring the cell-tower-source / cell-tower-ingest split. A daily TimerTick (TICK) enters mark_query, which emits the $FSO reading the newest $IRM resume marks through hostcap/flatsql-query (SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ? over the code-named view; the JSON lane's geonames_ingest_mark table exists on no node); ingest_plan reads the $FSB result, picks this dataset's mark by JOB_ID (geonames-ingest/<dataset id>) and plans the tick: the SEED (no mark: the ranged cities15000.zip plus admin1CodesASCII.txt, admin2Codes.txt and countryInfo.txt), the DELTA (seeded: modifications-<day>.txt with the mark's ETag as if-none-match, and deletes-<day>.txt) or NOTHING (the day is already on the mark). Each fetch is an HttpRequest (HREQ) whose CONTEXT carries the job, one size-prefixed $GNP header record (the dataset contract every record is published under), echoed by hostcap/http-request and read by geonames-source. ingest_meta authors the hostcap/storage-ingest IngestRequest (INGQ: SCHEMA GNP.fbs, PROVIDER_ID / SOURCE_NAME / BATCH_ID <dataset>@<day> / SOURCE_URL, RECONCILE None, PROVENANCE with the response's status, ETag, Last-Modified, RETRIEVED_MS and the record count) and forwards the $GNP stream untouched, refusing a seed whose Content-Range total exceeds the host's 4 MiB body cap; publish_request advances the mark FROM THE STORAGE RESULT (an $IRM: STATE COMPLETE, SOURCE = the edition with its ETag / Last-Modified, SOURCE_VERSION = the DATASET_EPOCH), never on a refused or stored-nothing batch, and - only when geonames_publish_url is set - POSTs the dataset-publication request whose body is the IngestResult naming the batch. Node CONFIG through plugin.getConfig (SDS $PIV ConfigEntry list): geonames_base_url, geonames_dataset_id, geonames_dataset_name, geonames_seed_dataset, geonames_seed_max_bytes (clamped to 4 MiB), geonames_http_timeout_ms, geonames_license, geonames_license_url, geonames_attribution, geonames_share_alike, geonames_non_commercial_only, geonames_id_prefix, geonames_provider_id, geonames_source_name, geonames_publish_url, geonames_mark_sql, geonames_mark_scan_rows. No credentials: capabilities none.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,36 +15,34 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "All four methods are single-pass transforms over the frames the flow hands them: they format a query, a set of fetch descriptors, an attribution frame or a mark. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Each method turns its typed frames into typed frames in one pass: one $FSO per tick, at most four requests per tick, one IngestRequest per batch, one mark (and at most one POST) per stored batch. No state is kept between invocations (the loop's state is the durable $IRM mark), no worker pool and no thread."
   },
   "externalInterfaces": [],
   "methods": [
     {
       "methodId": "mark_query",
-      "displayName": "Read the gazetteer resume mark",
+      "displayName": "Resume mark query",
       "inputPorts": [
         {
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Cron timer tick (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK) from the flow's daily timer trigger."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick (content ignored)."
+          "description": "Cron timer tick (content not read)."
         }
       ],
       "outputPorts": [
@@ -52,79 +50,73 @@
           "portId": "query",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-mark-query-json",
+              "setId": "sds-fso",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON for hostcap/flatsql-query reading this dataset's resume mark row.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "$FSO (SDS FSO) for hostcap/flatsql-query query: OPERATION QUERY_RECORDS, QUERY = geonames_mark_sql (default SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?), PARAMETERS = one FlatSQL tagged int64 (tag 2) = geonames_mark_scan_rows (default 32), PARAMETER_COUNT 1."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "UTF-8 JSON for hostcap/flatsql-query reading this dataset's resume mark row."
+          "description": "The FlatSQL read of the newest $IRM resume marks; ingest_plan picks this dataset's by JOB_ID."
         }
       ],
-      "description": "Turns the daily timer tick into the flatsql-query that reads this dataset's resume mark back. It is a SEPARATE node from ingest_plan on purpose: the plan takes the mark as an INPUT, and a node that emitted its own input would be a cycle in the flow graph. It emits {\"sql\",\"params\"} and not {\"table\",\"where\"}, because hostcap/flatsql-query's query reads sql and returns 400 missing-sql for anything else. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Builds the FlatSQL query that reads the resume marks back. A SEPARATE node from ingest_plan on purpose: the plan takes the mark as an INPUT, and a node that emitted its own input would be a cycle in the flow graph. The newest few $IRM records are read so one shared relation can hold every lane's marks. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE (except a flatsql-query result, whose $FSB chunks are all read). maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "ingest_plan",
-      "displayName": "Decide seed, delta or ledgered no-op",
+      "displayName": "Ingest plan",
       "inputPorts": [
         {
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Cron timer tick; its firedAt selects the delta date when the mark does not carry one.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "TimerTick (TICK): FIRED_MS (or, when 0, SCHEDULED_MS) dates the edition - the tick's UTC day."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick; its firedAt selects the delta date when the mark does not carry one."
+          "description": "Cron timer tick; its fired time selects the edition's day."
         },
         {
           "portId": "mark",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-mark-json",
+              "setId": "sds-fsb",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The resume mark row read back by flatsql-query, carrying the last stored epoch and the upstream ETag. Absent on the first run.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "$FSB (SDS FSB) chunks from hostcap/flatsql-query query records: KIND QUERY_RESULT, DATA = the aligned size-prefixed result stream (reassembled by CHUNK_SEQUENCE from 0); the $IRM records in it whose JOB_ID is geonames-ingest/<dataset id> are this lane's marks, the highest SEQUENCE winning."
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 64,
           "required": false,
-          "description": "The resume mark row read back by flatsql-query, carrying the last stored epoch and the upstream ETag. Absent on the first run."
+          "description": "The resume marks read back by flatsql-query, carrying the last stored edition and the upstream ETag. Absent (or no record of this dataset) on the first run."
         }
       ],
       "outputPorts": [
@@ -132,41 +124,37 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The main fetch for THIS tick: the seed archive (ranged, under the host's body cap) or the day's modifications file.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET, TIMEOUT_MS geonames_http_timeout_ms; CONTEXT: the job, ONE size-prefixed $GNP header record - ID = the id prefix (geonames_id_prefix), NAME = the text the job decodes (the seed archive's member, else the file itself), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL = the base URL, DATASET_EPOCH = the tick's UTC date at 00:00:00.000Z, SOURCE_URL, SOURCE_QUERY = the file, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "required": true,
-          "description": "The main fetch for THIS tick: the seed archive (ranged, under the host's body cap) or the day's modifications file."
+          "required": false,
+          "description": "The main fetch for THIS tick: the seed archive (range bytes=0-<geonames_seed_max_bytes - 1>, under the host's 4 MiB body cap) or the day's modifications file; if-none-match = the mark's ETag when it has one."
         },
         {
           "portId": "request_deletes",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The day's deletes fetch. Delta lane only - a seed edition has nothing to tombstone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET, TIMEOUT_MS geonames_http_timeout_ms; CONTEXT: the job, ONE size-prefixed $GNP header record - ID = the id prefix (geonames_id_prefix), NAME = the text the job decodes (the seed archive's member, else the file itself), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL = the base URL, DATASET_EPOCH = the tick's UTC date at 00:00:00.000Z, SOURCE_URL, SOURCE_QUERY = the file, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
             }
           ],
           "minStreams": 1,
@@ -178,18 +166,16 @@
           "portId": "request_admin1",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The first-order administrative division file. Seed lane only.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET, TIMEOUT_MS geonames_http_timeout_ms; CONTEXT: the job, ONE size-prefixed $GNP header record - ID = the id prefix (geonames_id_prefix), NAME = the text the job decodes (the seed archive's member, else the file itself), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL = the base URL, DATASET_EPOCH = the tick's UTC date at 00:00:00.000Z, SOURCE_URL, SOURCE_QUERY = the file, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
             }
           ],
           "minStreams": 1,
@@ -201,18 +187,16 @@
           "portId": "request_admin2",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The second-order administrative division file. Seed lane only.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET, TIMEOUT_MS geonames_http_timeout_ms; CONTEXT: the job, ONE size-prefixed $GNP header record - ID = the id prefix (geonames_id_prefix), NAME = the text the job decodes (the seed archive's member, else the file itself), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL = the base URL, DATASET_EPOCH = the tick's UTC date at 00:00:00.000Z, SOURCE_URL, SOURCE_QUERY = the file, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
             }
           ],
           "minStreams": 1,
@@ -224,85 +208,37 @@
           "portId": "request_country",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The country information file. Seed lane only.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET, TIMEOUT_MS geonames_http_timeout_ms; CONTEXT: the job, ONE size-prefixed $GNP header record - ID = the id prefix (geonames_id_prefix), NAME = the text the job decodes (the seed archive's member, else the file itself), SOURCE = the dataset contract (DATASET_ID, DATASET_NAME, DATASET_URL = the base URL, DATASET_EPOCH = the tick's UTC date at 00:00:00.000Z, SOURCE_URL, SOURCE_QUERY = the file, LICENSE, LICENSE_URL, ATTRIBUTION, SHARE_ALIKE, NON_COMMERCIAL_ONLY)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
           "description": "The country information file. Seed lane only."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The geonames-source run contract for this tick: lane, container, dataset identity, epoch and licence.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The geonames-source run contract for this tick: lane, container, dataset identity, epoch and licence."
         }
       ],
-      "description": "ONE TICK IS ONE BOUNDED UNIT OF WORK. The first tick fetches the SEED archive plus the three lookup files; every later tick fetches that day's modifications and deletes, which are full geoname rows and so upsert through the same decoder. A tick whose upstream ETag matches the one on the mark emits NOTHING and the run ends without a fetch - the same-data ledger is the mark itself, not a second store. The seed fetch carries a Range header bounded by the Go host's 4 MiB response-body cap (hostcap/http-request manifest): a larger body is TRUNCATED by the host and inflates to a plausible short gazetteer with no error anywhere, so the plan asks for exactly what it can receive and ingest_meta refuses the run if Content-Range proves the object is larger. Fails closed with no configured base URL rather than inventing one. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Decides between three outcomes and only three. FIRST TICK (no mark of this dataset, or one that never completed) = the SEED: one ranged fetch of the seed archive plus three for the division and country files, because $GNP carries a RESOLVED admin and country NAME beside every code. EVERY LATER TICK = the DELTA for the tick's own UTC day: modifications-YYYY-MM-DD.txt (full 19-column geoname rows, verified live 2026-08-15) and deletes-YYYY-MM-DD.txt. A TICK FOR A DAY ALREADY ON THE MARK emits nothing at all - the cheapest possible no-op. The date comes from the TICK, never a guest clock, and a tick that cannot be dated is refused (missing-tick-date): $GNP.SOURCE.DATASET_EPOCH is required on every record. A mark of another dataset is another JOB_ID and is never resumed from. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE (except a flatsql-query result, whose $FSB chunks are all read). maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "ingest_meta",
-      "displayName": "Author the storage attribution",
+      "displayName": "Ingest meta",
       "inputPorts": [
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-job-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The run contract from ingest_plan.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The run contract from ingest_plan."
-        },
         {
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-gnp-records",
+              "setId": "sds-gnp",
               "allowedTypes": [
                 {
                   "schemaName": "GNP.fbs",
@@ -311,59 +247,34 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $GNP FlatBuffer record stream."
+              "description": "Size-prefixed $GNP FlatBuffer record stream from geonames-source parse_places."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Size-prefixed $GNP FlatBuffer record stream."
-        },
-        {
-          "portId": "decision",
-          "acceptedTypeSets": [
-            {
-              "setId": "geonames-decision-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "parse_places' run summary; supplies this tick's record count.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": false,
-          "description": "parse_places' run summary; supplies this tick's record count."
+          "description": "The decoded $GNP record stream; its frame count is the edition's record count."
         },
         {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The raw http response, read for Content-Range's total and the ETag/Last-Modified the ledger turns on.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpResponse (HRSP) of the main fetch from hostcap/http-request: STATUS, HEADERS (content-range, etag, last-modified, content-type), RETRIEVED_MS, CONTEXT = the job ($GNP header)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "required": false,
-          "description": "The raw http response, read for Content-Range's total and the ETag/Last-Modified the ledger turns on."
+          "required": true,
+          "description": "The main fetch's response: the job, Content-Range's total and the ETag/Last-Modified the ledger turns on."
         }
       ],
       "outputPorts": [
@@ -371,30 +282,28 @@
           "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-storage-ingest-meta-json",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "hostcap/storage-ingest meta: schema, attribution, dataset provenance and the epoch state.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA GNP.fbs; TAGS PROVIDER_ID geonames_provider_id, SOURCE_NAME geonames_source_name, BATCH_ID <dataset id>@<YYYY-MM-DD>, SOURCE_URL; RECONCILE None (stored as given: a daily upsert must never retire the rest of the gazetteer); PROVENANCE SOURCE_URL, HTTP_STATUS, ETAG, LAST_MODIFIED, CONTENT_TYPE, RETRIEVED_MS, PARSER geonames-ingest-wasm v1, NORMALIZED_COUNT = records, SCHEMAS [GNP.fbs] / SCHEMA_COUNTS."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "hostcap/storage-ingest meta: schema, attribution, dataset provenance and the epoch state."
+          "description": "The storage attribution for this edition."
         },
         {
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-gnp-records",
+              "setId": "sds-gnp",
               "allowedTypes": [
                 {
                   "schemaName": "GNP.fbs",
@@ -403,7 +312,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The record stream, forwarded untouched."
+              "description": "Size-prefixed $GNP FlatBuffer record stream, forwarded byte-for-byte (for storage-ingest gnp_records)."
             }
           ],
           "minStreams": 1,
@@ -412,59 +321,55 @@
           "description": "The record stream, forwarded untouched."
         }
       ],
-      "description": "Authors the attribution the storage lane cannot invent - dataset, source, batch and the $GNP.SOURCE dataset provenance - and forwards the records untouched. It takes the http response because the ETag, Last-Modified and Content-Range TOTAL are only knowable here: the guest that dispatched the fetch never sees the reply, and Content-Length on a 206 describes the CHUNK, so reading it as the total would end a seed after one chunk with every later byte silently unfetched. The seed uses reconcile=append and the delta uses it too, because a daily modifications file is an UPSERT of a few thousand rows and not the gazetteer's complete set - reconciling on it would delete the entire rest of the world. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Authors the attribution the storage lane cannot invent - dataset, source, ONE batch per edition (<dataset id>@<day>, so re-running a day is idempotent and two days never collide) - from the job the main fetch's response carries, and reads the three facts only the RESPONSE carries. A job without DATASET_ID, SOURCE_URL and DATASET_EPOCH is refused (incomplete-job-attribution). THE SEED MUST NOT BE SILENTLY TRUNCATED: when Content-Range's denominator proves the archive is larger than the range asked for (geonames_seed_max_bytes, clamped to the host's 4 MiB), the run is refused (seed-exceeds-host-body-cap) rather than inflating a prefix into a plausible short gazetteer. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE (except a flatsql-query result, whose $FSB chunks are all read). maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
       "methodId": "publish_request",
-      "displayName": "Advance the mark, announce the epoch",
+      "displayName": "Publish request",
       "inputPorts": [
         {
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-storage-ingest-result-json",
+              "setId": "sdn-runtime-ingest-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "hostcap/storage-ingest result summary.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "IngestResult (module-sdk runtime type INGR) from hostcap/storage-ingest."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "hostcap/storage-ingest result summary."
+          "description": "The storage result for the batch."
         },
         {
           "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-storage-ingest-meta-json",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The meta that produced that result.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "IngestRequest (INGQ) from ingest_meta: the batch's attribution, PROVENANCE ETAG / LAST_MODIFIED / NORMALIZED_COUNT."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The meta that produced that result."
+          "description": "The IngestRequest that produced that result."
         }
       ],
       "outputPorts": [
@@ -472,41 +377,37 @@
           "portId": "mark",
           "acceptedTypeSets": [
             {
-              "setId": "geonames-mark-json",
+              "setId": "sds-irm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The advanced resume mark, carrying the stored epoch and the upstream ETag that makes the next tick a ledgered no-op.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "$IRM (SDS IRM, Ingest Resume Mark): JOB_ID geonames-ingest/<dataset id>, SEQUENCE = the edition's day number since 1970-01-01, PROVIDER_ID, INGESTOR_ID com.digitalarsenal.data-source.geonames-ingest, SOURCE (SOURCE_URL, ENTITY_TAG = the ETag, LAST_MODIFIED, SOURCE_VERSION = the DATASET_EPOCH), STATE COMPLETE, LAST_CHUNK (BATCH_ID, RECORDS_DECODED, RECORDS_STORED, COMMITTED_AT), CHUNKS_COMMITTED 1, RECORDS_COMMITTED, TARGET_STANDARD $GNP, RECONCILE_MODE none, UPDATED_AT / COMPLETED_AT, TAGS date:<YYYY-MM-DD> and lane:<seed|delta>. A record for hostcap/storage-write write_record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The advanced resume mark, carrying the stored epoch and the upstream ETag that makes the next tick a ledgered no-op."
+          "description": "The advanced resume mark, carrying the stored edition and the upstream ETag that makes the next tick a ledgered no-op."
         },
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Dataset-publication POST announcing this epoch; emitted ONLY when a publish URL is configured.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "HttpRequest (HREQ) for hostcap/http-request: POST geonames_publish_url, content-type application/octet-stream, BODY = an IngestResult (INGR) FlatBuffer naming the batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, ...)."
             }
           ],
           "minStreams": 1,
@@ -515,7 +416,7 @@
           "description": "Dataset-publication POST announcing this epoch; emitted ONLY when a publish URL is configured."
         }
       ],
-      "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch: a mark advanced when an edition is requested turns a crash between fetch and store into a permanently skipped day, invisibly. It catches the silent nop that survives hostcap/storage-ingest's own ok:false check - ok:true with inserted=0 for a tick that carried records, byte-identical to a day on which the gazetteer changed nothing - and refuses to advance the mark or the ledgered ETag over rows that were never stored. The epoch announce is the node's normal publication path (DATASET_EPOCH and DATASET_CID already ride in $GNP.SOURCE, so no new record type is minted); the mark is NOT gated on the publish URL, because a node that stores without publishing must still make progress, and publication itself is fail-closed. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Advances the resume mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one day instead of skipping it invisibly. A REFUSED batch (ingest-refused) and THE SILENT NOP - inserted=0 for an edition that carried records (ingest-stored-nothing) - advance nothing and ledger no ETag; a genuinely empty edition (no records in) still advances. The mark is NOT gated on publication; the epoch announce is fail-closed without geonames_publish_url and mints no new record type: DATASET_EPOCH already rides in $GNP.SOURCE on every stored record. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE (except a flatsql-query result, whose $FSB chunks are all read). maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
@@ -528,5 +429,27 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "schemasUsed": [
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP"
+    },
+    {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM"
+    },
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "rootTypeName": "FSB"
+    }
+  ]
 }

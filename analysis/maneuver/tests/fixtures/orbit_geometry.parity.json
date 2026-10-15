@@ -1,32 +1,104 @@
 {
   "name": "maneuver-native-orbit-geometry",
-  "threadCounts": [1],
+  "threadCounts": [
+    1
+  ],
   "cases": [
     {
       "id": "circle-quarter-period",
       "expect": "ok",
-      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"evaluateOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"elapsedSeconds\":1.5707963267948966}}"}]}
+      "request": {
+        "methodId": "plan",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadBase64": "OAAAACRNUEwAAAAAAAAqABgAAAAAAAAAFwAAAAAAAAAAABAAAAAAAAAADAAIAAAAAAAAAAAABAAqAAAAFAAAABQAAAAUAAAAKAAAAAAAAA4AAAAAAAAAAAAAAAAAABIAFAAIAAAAAAAAAAAAAAAEABIAAAAcAAAAldYm6AsuET4AAAAADAAgABwAEAAIAAcADAAAAAAAAAEYLURU+yH5PwAAAAAAAPh/AAAAAAwAAAAIAAgAAAAEAAgAAAAoAAAAJAA0ACwAAAAAAAAAAAAkABwAFAAAAAAAAAAAAAAAAAAMAAQAJAAAAAAAAAAAAPh/AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAAAAD8qfHSTWJQPw==",
+            "typeRef": {
+              "schemaName": "MPL.fbs",
+              "fileIdentifier": "$MPL",
+              "rootTypeName": "MPL",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     },
     {
       "id": "escape-refusal",
       "expect": "ok",
       "description": "The command exits successfully with a PIV nonzero status and structured error output. orbit_geometry.test.mjs checks that PIV status; this fixture compares its exact output bytes across runtimes.",
-      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"evaluateOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"deltaV\":[0,2,0],\"deltaVFrame\":\"ECI\"}}"}]}
+      "request": {
+        "methodId": "plan",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadBase64": "OAAAACRNUEwAAAAAAAAqABgAAAAAAAAAFwAAAAAAAAAAABAAAAAAAAAADAAIAAAAAAAAAAAABAAqAAAAFAAAABQAAAAUAAAAKAAAAAAAAA4AAAAAAAAAAAAAAAAAABIAFAAIAAAAAAAAAAAAAAAEABIAAAAcAAAAldYm6AsuET4AAAAADAAaABQACAAAAAQADAAAACgAAAAAAAAAAAD4fwAAAABUAAAAAAASABgAAAAAAAAAAAAMAAsABAASAAAAFAAAAAAAAAEAAAAAAAD4fwAAAAADAAAAAAAAAAAAAAD8qfHSTWJgPwAAAAAAAAAACAAIAAAABAAIAAAAKAAAACQANAAsAAAAAAAAAAAAJAAcABQAAAAAAAAAAAAAAAAADAAEACQAAAAAAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8AAAAAAAD4fwAAAAAAAAAA/Knx0k1iUD8=",
+            "typeRef": {
+              "schemaName": "MPL.fbs",
+              "fileIdentifier": "$MPL",
+              "rootTypeName": "MPL",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     },
     {
       "id": "high-eccentricity-anomaly",
       "expect": "ok",
-      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"convertOrbitAnomaly\",\"params\":{\"eccentricity\":0.999999,\"anomaly\":0.001,\"from\":\"mean\"}}"}]}
+      "request": {
+        "methodId": "plan",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadBase64": "NAAAACRNUEwAACoAGAAAAAAAAAAXAAAAAAAAAAAAEAAAAAAAAAAMAAgAAAAAAAAAAAAEACoAAAAUAAAAFAAAABQAAAAoAAAAAAAADwAAAAAAAAAAAAAAAAAAEgAIAAAAAAAAAAAAAAAAAAQAEgAAABgAAAAUACAAAAAYAAAAAAAAABAACAAHABQAAAAAAAACdT9qVt9VrT/pCyHn/f/vPwAAAAAAAPh/",
+            "typeRef": {
+              "schemaName": "MPL.fbs",
+              "fileIdentifier": "$MPL",
+              "rootTypeName": "MPL",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     },
     {
       "id": "same-point-time-of-flight",
       "expect": "ok",
-      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"orbitTimeOfFlight\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"fromTrueAnomaly\":0,\"toTrueAnomaly\":-1e-12}}"}]}
+      "request": {
+        "methodId": "plan",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadBase64": "OAAAACRNUEwAAAAAAAAqABgAAAAAAAAAFwAAAAAAAAAAABAAAAAAAAAADAAIAAAAAAAAAAAABAAqAAAAFAAAABQAAAAUAAAAKAAAAAAAABAAAAAAAAAAAAAAAAAAABIAFAAIAAAAAAAAAAAAAAAEABIAAAAoAAAAldYm6AsuET4AAAAAGAAcABgADAAAAAAAAAAAAAAAAAAAAAQAGAAAABA8lwKqf8+9AAAAAAAA+H8AAAAADAAAAAgACAAAAAQACAAAACgAAAAkADQALAAAAAAAAAAAACQAHAAUAAAAAAAAAAAAAAAAAAwABAAkAAAAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8AAAAAAAAAAPyp8dJNYlA/",
+            "typeRef": {
+              "schemaName": "MPL.fbs",
+              "fileIdentifier": "$MPL",
+              "rootTypeName": "MPL",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     },
     {
       "id": "native-257-point-ring",
       "expect": "ok",
-      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"sampleOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"count\":257}}"}]}
+      "request": {
+        "methodId": "plan",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadBase64": "OAAAACRNUEwAAAAAAAAqABgAAAAAAAAAFwAAAAAAAAAAABAAAAAAAAAADAAIAAAAAAAAAAAABAAqAAAAFAAAABQAAAAUAAAAKAAAAAAAABEAAAAAAAAAAAAAAAAAABIAEAAIAAAAAAAAAAAAAAAEABIAAAAsAAAAldYm6AsuET4gACAAHAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAHACAAAAAAAAABAQEAAAAAAAAAAAAAAAD4fwAAAAAMAAAACAAIAAAABAAIAAAAKAAAACQANAAsAAAAAAAAAAAAJAAcABQAAAAAAAAAAAAAAAAADAAEACQAAAAAAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8AAAAAAAD4fwAAAAAAAAAA/Knx0k1iUD8=",
+            "typeRef": {
+              "schemaName": "MPL.fbs",
+              "fileIdentifier": "$MPL",
+              "rootTypeName": "MPL",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     }
   ]
 }

@@ -1,7 +1,9 @@
 {
   "name": "vcard-projection-parity",
   "threadEnvVar": "SDM_PARITY_THREADS",
-  "threadCounts": [1],
+  "threadCounts": [
+    1
+  ],
   "cases": [
     {
       "id": "card_full",
@@ -14,7 +16,9 @@
             "payloadFile": "../fixtures/epm-literal-key.bin",
             "typeRef": {
               "schemaName": "EPM.fbs",
-              "fileIdentifier": "$EPM"
+              "fileIdentifier": "$EPM",
+              "rootTypeName": "EPM",
+              "wireFormat": "flatbuffer"
             }
           }
         ]
@@ -31,7 +35,9 @@
             "payloadFile": "../fixtures/epm-literal-key.bin",
             "typeRef": {
               "schemaName": "EPM.fbs",
-              "fileIdentifier": "$EPM"
+              "fileIdentifier": "$EPM",
+              "rootTypeName": "EPM",
+              "wireFormat": "flatbuffer"
             }
           }
         ]

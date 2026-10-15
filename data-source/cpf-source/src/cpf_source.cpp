@@ -2,7 +2,7 @@
  * CPF (ILRS Consolidated Prediction Format) data-source module
  * (A2.2c-2, Tier-1 adapter).
  *
- * On a TIMERS-driven `pull` this:
+ * For each run this:
  *   1. GETs an ILRS CPF v2 prediction directory listing from an UNAUTHENTICATED
  *      archive (EDC / DGFI-TUM — the archive verified to allow anonymous access;
  *      CDDIS requires an Earthdata login and is NOT used — see README),
@@ -11,8 +11,7 @@
  *   4. parses the header (H1/H2/H5) + the type-10 position records,
  *   5. re-emits a schema-exact SDS OEM record with the CPF frame PRESERVED AS
  *      DECLARED (frame code 0 = geocentric Earth-fixed = ITRF/ECEF — the OD side
- *      owns the ITRF->TEME transform per A2.2a), stores it, signs its content id,
- *      and publishes a schema-exact PNM pointer.
+ *      owns the ITRF->TEME transform per A2.2a).
  *
  * ─── HONEST FORMAT NOTES ────────────────────────────────────────────────────
  * CPF type-10 records carry POSITION ONLY (X,Y,Z in metres, geocentric). There
@@ -29,11 +28,16 @@
  * Satellite ID (field 1, COSPAR-derived) reformatted to the international
  * designator (OBJECT_ID). Nothing is hardcoded per target.
  *
- * The fetch/hash/store/sign/publish skeleton lives in the shared
- * common/provider_source.hpp; only the CPF discovery + parse + OEM mapping
- * stay here.
- *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * TYPED CONTRACTS 1.0 (FlatBuffers only, no JSON, no base64): the module makes no
+ * fetch and no store itself. `request` turns the flow's TimerTick (TICK) into a GET
+ * HttpRequest (HREQ) for hostcap/http-request; `select_file` turns the listing's HttpResponse
+ * into the GET of the file; `emit` turns the
+ * HttpResponse (HRSP) into $OEM FlatBuffers on "oem", consumed in memory by
+ * analysis/od.fit. Nothing is stored, signed or published (the former `pull`
+ * path declared a $PNM it never produced and is gone). Node config (listingUrl, target) is
+ * plugin.getConfig through sdm_piv (one ModuleConfig, read in place), the only
+ * hostcall. A transport error, another status than 200, an empty body or a
+ * file with nothing fittable fails closed (fetch-failed / fetch-empty).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -41,32 +45,16 @@
 #include <string>
 #include <vector>
 
-#include "provider_source.hpp"
+#include <string_view>
+
+#include <HttpRequest_generated.h>
+#include <HttpResponse_generated.h>
+#include <typedHostcall.hpp>
 
 // SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
 #include <cmath>
-#ifdef SING
-#undef SING
-#endif
-#ifdef DOMAIN
-#undef DOMAIN
-#endif
-#ifdef OVERFLOW
-#undef OVERFLOW
-#endif
-#ifdef UNDERFLOW
-#undef UNDERFLOW
-#endif
-#ifdef TLOSS
-#undef TLOSS
-#endif
-#ifdef PLOSS
-#undef PLOSS
-#endif
-#include "OEM_generated.h"
-#include "oem_fb_builder.hpp"
 
-namespace ps = provider_source;
+namespace R = sdn::runtime;
 
 // ── Provider constants ──────────────────────────────────────────────────────
 
@@ -79,20 +67,10 @@ static const char* kDefaultListingURL =
 // Default target basename; the filename marker is "<target>_cpf_".
 static const char* kDefaultTarget = "lageos1";
 
-static const char* kSigningKeySlot = "node-signing";
-static const char* kPublishTopic = "sdn/data-source/cpf";
 
 // MJD of the Unix epoch (1970-01-01T00:00:00Z). CPF epochs are (MJD, sec-of-day)
 // in UTC; unix = (MJD - 40587)*86400 + sec.
 static const long kMjdUnixEpochDays = 40587;
-
-extern "C" {
-// Guest allocator used by the host to pass request/response buffers.
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
 
 namespace {
 
@@ -122,9 +100,9 @@ void pad2(std::string* s, long v) {
 std::string mjd_sod_to_iso(long mjd, double sec_of_day) {
     long whole = static_cast<long>(sec_of_day);
     double frac = sec_of_day - static_cast<double>(whole);
-    long unix = (mjd - kMjdUnixEpochDays) * 86400 + whole;
-    long days = unix / 86400;
-    long sod = unix - days * 86400;
+    long unix_seconds = (mjd - kMjdUnixEpochDays) * 86400 + whole;
+    long days = unix_seconds / 86400;
+    long sod = unix_seconds - days * 86400;
     if (sod < 0) { sod += 86400; days -= 1; }
     long y; unsigned mo, da;
     civil_from_days(days, &y, &mo, &da);
@@ -339,41 +317,6 @@ std::vector<uint8_t> build_oem_fb(const CpfHeader& h, const std::vector<CpfPos>&
     return {};  // unsupported CPF frame (e.g. TOD) -> skip
 }
 
-std::string build_oem_record(const CpfHeader& h, const std::vector<CpfPos>& pos,
-                             const std::string& object_id, const std::string& frame) {
-    std::string s;
-    s.reserve(pos.size() * 100 + 640);
-    s += "{";
-    s += "\"CCSDS_OEM_VERS\":2.0,";
-    s += "\"CREATION_DATE\":\"" + ps::json_escape(h.start_time) + "\",";
-    s += "\"ORIGINATOR\":\"" + ps::json_escape(h.source_agency.empty() ? std::string("ILRS") : h.source_agency) + "\",";
-    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
-    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
-    s += "\"COMMENT\":\"ILRS CPF v2 prediction (position-only); frame preserved AS DECLARED "
-         "(CPF frame code " + std::to_string(h.frame_code) + "). Positions metres->km; NO velocity "
-         "(CPF carries none; none fabricated). OD owns the frame transform.\",";
-    s += "\"OBJECT_NAME\":\"" + ps::json_escape(h.target_name) + "\",";
-    s += "\"OBJECT_ID\":\"" + ps::json_escape(object_id) + "\",";
-    s += "\"NORAD_CAT_ID\":" + std::to_string(h.norad) + ",";
-    s += "\"CENTER_NAME\":\"EARTH\",";
-    s += "\"REFERENCE_FRAME\":\"" + ps::json_escape(frame) + "\",";  // declared (ITRF for code 0)
-    s += "\"TIME_SYSTEM\":\"UTC\",";
-    s += "\"START_TIME\":\"" + ps::json_escape(h.start_time) + "\",";
-    s += "\"STOP_TIME\":\"" + ps::json_escape(h.stop_time) + "\",";
-    s += "\"STEP_SIZE\":" + std::to_string(h.interval) + ",";  // declared CPF interval (sec)
-    s += "\"STATE_VECTOR_SIZE\":3,";  // position-only (honest; no velocity in CPF)
-    s += "\"EPHEMERIS_DATA_LINES\":[";
-    for (size_t i = 0; i < pos.size(); ++i) {
-        const CpfPos& c = pos[i];
-        if (i) s += ",";
-        s += "{\"EPOCH\":\"" + ps::json_escape(mjd_sod_to_iso(c.mjd, c.sec_of_day)) + "\",";
-        s += "\"X\":" + ps::double_to_json(c.x_m / 1000.0) + ",";
-        s += "\"Y\":" + ps::double_to_json(c.y_m / 1000.0) + ",";
-        s += "\"Z\":" + ps::double_to_json(c.z_m / 1000.0) + "}";
-    }
-    s += "]}]}";
-    return s;
-}
 
 // ── CPF directory-listing discovery ─────────────────────────────────────────
 // Extract CPF filenames (containing the marker "<target>_cpf_") from an Apache
@@ -408,24 +351,66 @@ std::string select_newest_cpf(const std::vector<uint8_t>& listing, const std::st
     return newest;
 }
 
-// ── Config (optional, from the invoke request payload) ───────────────────────
 
-struct PullConfig {
-    std::string listing_url = kDefaultListingURL;
-    std::string target = kDefaultTarget;
-};
+// ── Typed contracts 1.0: node config, HttpRequest out, HttpResponse in, $OEM out ─────────────────
+// Config is plugin.getConfig through sdm_piv (one ModuleConfig, read in place); the fetch is the flow's
+// hostcap/http-request (an HttpRequest out, its HttpResponse back in); every frame is a FlatBuffer.
 
-PullConfig parse_config(const uint8_t* req, uint32_t len) {
-    PullConfig c;
-    if (req == nullptr || len == 0) return c;
-    size_t i = 0;
-    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-    if (i >= len || req[i] != '{') return c;  // binary PIV request leaves defaults intact
-    std::string json(reinterpret_cast<const char*>(req), len);
-    std::string v;
-    if (ps::json_string_field(json, "listingUrl", &v) && !v.empty()) c.listing_url = v;
-    if (ps::json_string_field(json, "target", &v) && !v.empty()) c.target = v;
-    return c;
+int fail(const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return 1;
+}
+
+// A config string, or `fallback` when the key is absent or empty.
+std::string config_text(const sdm_piv::Config& config, const char* key, const char* fallback) {
+    const std::string_view v = config.string(key);
+    return v.empty() ? std::string(fallback) : std::string(v);
+}
+
+// One GET HttpRequest (HREQ) on `port`, as the legacy ps::http_get asked for it (method and URL only).
+int push_get(const char* port, const std::string& url) {
+    flatbuffers::FlatBufferBuilder b(256 + url.size());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str()));
+    return plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, b.GetBufferPointer(), b.GetSize());
+}
+
+// The HttpResponse (HRSP) on `port`: STATUS 200 with a body, or nullptr with the error set (a transport ERROR, another
+// status or an empty body fails closed, as the legacy fetch did).
+const R::HttpResponse* response_on(const char* port, const char* what) {
+    const int32_t index = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* f = index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
+    if (!f || !f->payload || !f->payload_length) {
+        fail("missing-response-frame", std::string("an HttpResponse frame is required on '") + port + "'");
+        return nullptr;
+    }
+    flatbuffers::Verifier verifier(f->payload, f->payload_length, 64, 1000000, false);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        fail("invalid-response-frame", std::string("the '") + port + "' frame is not an HttpResponse (HRSP)");
+        return nullptr;
+    }
+    const R::HttpResponse* r = R::GetHttpResponse(f->payload);
+    const std::string url = r->URL() ? r->URL()->str() : std::string();
+    if (r->ERROR() && r->ERROR()->size()) {
+        fail("fetch-failed", std::string(what) + " " + url + ": " + r->ERROR()->str());
+        return nullptr;
+    }
+    if (r->STATUS() != 200 || !r->BODY() || r->BODY()->size() == 0) {
+        fail("fetch-empty", std::string(what) + " " + url + " returned HTTP status " + std::to_string(r->STATUS()) +
+                                (r->BODY() && r->BODY()->size() ? "" : " with no body"));
+        return nullptr;
+    }
+    return r;
+}
+
+std::string body_of(const R::HttpResponse& r) {
+    return std::string(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size());
+}
+
+// One $OEM FlatBuffer (not size-prefixed) on "oem".
+int push_oem(const std::vector<uint8_t>& oem) {
+    return plugin_push_output_ex("oem", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
+                                 static_cast<uint32_t>(oem.size()));
 }
 
 // Join a directory URL (with or without trailing '/') and a filename.
@@ -434,70 +419,39 @@ std::string join_url(const std::string& dir, const std::string& file) {
     return dir + "/" + file;
 }
 
-// ── The pull method ──────────────────────────────────────────────────────────
-
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
-    std::string marker = cfg.target + "_cpf_";
-
-    // $OEM STREAM (in-memory, never stored): [u32le count] then
-    // count x ( [u32le len][non-size-prefixed $OEM] ). One CPF target per pull.
-    std::string stream(4, '\0');
-    uint32_t count = 0;
-    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
-        s[at + 0] = static_cast<char>(v & 0xFF);
-        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
-    };
-
-    ps::HttpResult listing = ps::http_get(cfg.listing_url);
-    std::string filename;
-    if (listing.status == 200 && !listing.body.empty())
-        filename = select_newest_cpf(listing.body, marker);
-
-    if (!filename.empty()) {
-        std::string file_url = join_url(cfg.listing_url, filename);
-        ps::HttpResult cpf = ps::http_get(file_url);
-        if (cpf.status == 200 && !cpf.body.empty()) {
-            CpfHeader h;
-            std::vector<CpfPos> pos;
-            std::string content(cpf.body.begin(), cpf.body.end());
-            parse_cpf(content, &h, &pos);
-            if (h.valid && !pos.empty()) {
-                std::string object_id = ilrs_to_intl_designator(h.ilrs_id);
-                std::vector<uint8_t> oem = build_oem_fb(h, pos, object_id);
-                if (!oem.empty()) {
-                    const size_t hdr = stream.size();
-                    stream.append(4, '\0');
-                    put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-                    stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-                    count++;
-                }
-            }
-        }
-    }
-
-    put_u32le(stream, 0, count);
-    return stream;
-}
-
 }  // namespace
 
 extern "C" {
 
-// Canonical streaming invoke entrypoint. The TIMERS `pull` entry (and any manual
-// invoke) triggers a discover+fetch+parse+store+sign+publish cycle for the
-// newest CPF prediction of the configured target.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pull(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
-    }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+// request: a TimerTick (its fields are not read) -> the GET of the target's EDC directory listing (config listingUrl).
+int request(void) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    return push_get("request", config_text(config, "listingUrl", kDefaultListingURL)) < 0 ? 1 : 0;
+}
+
+// select_file: the listing's HttpResponse -> the GET of the newest "<target>_cpf_" file in it (config target).
+int select_file(void) {
+    const R::HttpResponse* listing = response_on("listing", "the CPF listing");
+    if (!listing) return 1;
+    const sdm_piv::Config config = sdm_piv::get_config();
+    const std::string target = config_text(config, "target", kDefaultTarget);
+    const std::vector<uint8_t> body(listing->BODY()->begin(), listing->BODY()->end());
+    const std::string filename = select_newest_cpf(body, target + "_cpf_");
+    if (filename.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider: the listing names no " + target + "_cpf_ file");
+    return push_get("request", join_url(config_text(config, "listingUrl", kDefaultListingURL), filename)) < 0 ? 1 : 0;
+}
+
+// emit: the CPF file's HttpResponse -> one position-only $OEM in the CPF's declared frame. Nothing is stored.
+int emit(void) {
+    const R::HttpResponse* response = response_on("response", "the CPF file");
+    if (!response) return 1;
+    CpfHeader h;
+    std::vector<CpfPos> pos;
+    parse_cpf(body_of(*response), &h, &pos);
+    if (!h.valid || pos.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider: the CPF has no valid header or position records");
+    const std::vector<uint8_t> oem = build_oem_fb(h, pos, ilrs_to_intl_designator(h.ilrs_id));
+    if (oem.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider");
+    return push_oem(oem) < 0 ? 1 : 0;
 }
 
 }  // extern "C"

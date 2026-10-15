@@ -1,38 +1,37 @@
 // Drives the REAL wasm module against the REAL provider services, performing the
 // host's http connector step here so the fetch is genuine rather than fixtured.
 // Not a unit test: this is the "verify the endpoint against the live service
-// before compiling it in" step the endpoints task demands.
+// before compiling it in" step the endpoints task demands. Run by hand:
+//   SPACE_DATA_STANDARDS_ROOT=... node tests/live-probe.mjs
+//
+// Every frame is the typed one the flow carries: the module's HttpRequests are
+// fetched as they stand (method, url, headers, raw body), and each answer goes
+// back to parse as the HttpResponse hostcap/http-request would emit — its
+// CONTEXT echoed, the body verbatim — never with a field the connector does not
+// write (synthesising one is how a green harness once certified a dead pipeline).
+import { Buffer } from "node:buffer";
+
 import fs from "node:fs";
-import path from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const sdkTesting = fileURLToPath(new URL(import.meta.resolve("space-data-module-sdk/testing")));
-const sdkRoot = path.resolve(path.dirname(sdkTesting), "..", "..");
-const req = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = req("flatbuffers");
-const { HttpRequest } = req(path.join(sdkRoot, "src/generated/http/sdn/http/http-request.js"));
-const enc = new TextEncoder(), dec = new TextDecoder();
-
-function htq({ method = "POST", path: p = "/api/v1/cellular/aggregate", body = "" }) {
-  const b = new flatbuffers.Builder(1024);
-  const m = b.createString(method), pa = b.createString(p), q = b.createString("");
-  const bo = HttpRequest.createBodyVector(b, enc.encode(body));
-  HttpRequest.startHttpRequest(b);
-  HttpRequest.addMethod(b, m); HttpRequest.addPath(b, pa);
-  HttpRequest.addQuery(b, q); HttpRequest.addBody(b, bo);
-  HttpRequest.finishHttpRequestBuffer(b, HttpRequest.endHttpRequest(b));
-  return { portId: "request", typeRef: { wireFormat: "flatbuffer" }, payload: b.asUint8Array() };
-}
-const json = (portId, v) => ({ portId, typeRef: { wireFormat: "flatbuffer" }, payload: enc.encode(JSON.stringify(v)) });
-const byPort = (r) => { const m = new Map(); for (const f of r.outputs) m.set(f.portId, f); return m; };
-const framesFor = (r, id) => r.outputs.filter((f) => f.portId === id);
+import {
+  MANIFEST_PATH,
+  TYPE,
+  WASM_PATH,
+  buildApr,
+  decodeApr,
+  deconflict,
+  drainParse,
+  failedFetch,
+  reportsOf,
+  responseFor,
+  routeFor,
+} from "./helpers.mjs";
 
 const harness = await createBrowserModuleHarness({
-  wasmSource: fs.readFileSync(`${ROOT}/dist/isomorphic/module.wasm`),
-  manifest: JSON.parse(fs.readFileSync(`${ROOT}/plugin-manifest.json`, "utf8")),
+  wasmSource: fs.readFileSync(WASM_PATH),
+  manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
   surface: "direct",
 });
 
@@ -40,51 +39,33 @@ const PROVIDERS = process.env.E2E_PROVIDERS
   ? process.env.E2E_PROVIDERS.split(",")
   : ["openstreetmap-overpass", "fcc-uls-3650"];
 
-// Fetch ONCE, then replay the same responses through every merge method. If each
-// method refetched, a difference between methods could be a difference in what
-// the providers happened to serve that second rather than a difference in
-// deconfliction — which is the only thing this is trying to show.
-const routed = await harness.invoke({
-  methodId: "route",
-  inputs: [htq({ body: JSON.stringify({ PROVIDERS, METHOD: "CENTROID", LIMIT: 400 }) })],
-});
-const job = JSON.parse(dec.decode(byPort(routed).get("job").payload));
-const descriptors = framesFor(routed, "requests").map((f) => JSON.parse(dec.decode(f.payload)));
-console.log("descriptors:", descriptors.length, "| consulted:", job.providers_consulted);
+// Fetch ONCE, then replay the same reports through every merge method, so a
+// difference between methods is a difference in deconfliction and not in what
+// the providers happened to serve that second.
+const { descriptors, contract } = await routeFor(harness, { PROVIDERS, METHOD: "CENTROID", LIMIT: 400 });
+console.log("requests:", descriptors.length, "| consulted:", contract?.headers["x-sdn-providers-consulted"]);
 
-// The response frames handed to parse must be EXACTLY what
-// hostcap/http-request emits on its "response" port —
-// {"status","headers","bodyB64"} and nothing else
-// (hostcap/http-request/src/http_request_module.cpp:399).
-//
-// This loop used to add `provider_id: d.provider_id`, a field no host has ever
-// produced. parse read that field to pick the decoder, so the probe was feeding
-// in the very answer it was supposed to be testing for. Live on host-01 the
-// field was absent on every frame, parse skipped all of them, and the node
-// fetched all four URLs for real and answered 200 with zero records and no
-// error line — while this probe reported 1451 reports. Synthesising a field the
-// host does not send is how a green harness certifies a dead pipeline.
 const responses = [];
 for (const d of descriptors) {
   try {
-    const res = await fetch(d.url, { headers: d.headers, signal: AbortSignal.timeout(45000) });
-    const text = await res.text();
-    console.log(`  fetch ${d.provider_id} @ ${new URL(d.url).host} -> ${res.status} ${text.length}B`);
-    responses.push({ status: res.status, headers: {}, bodyB64: Buffer.from(text).toString("base64") });
+    const res = await fetch(d.url, {
+      method: d.method,
+      headers: d.headers,
+      body: d.body.length ? Buffer.from(d.body) : undefined,
+      signal: AbortSignal.timeout(45000),
+    });
+    const body = new Uint8Array(await res.arrayBuffer());
+    console.log(`  fetch ${d.provider_id} @ ${new URL(d.url).host} -> ${res.status} ${body.length}B`);
+    responses.push(responseFor(d, { status: res.status, body, retrievedMs: Date.now() }));
   } catch (e) {
     console.log(`  fetch ${d.provider_id} @ ${new URL(d.url).host} -> FAILED ${String(e.message).slice(0, 60)}`);
-    // A failed fetch still occupies its descriptor's slot: parse correlates by
-    // position, so dropping the frame silently would shift every provider after
-    // it onto the wrong body. The host emits a frame per request either way.
-    responses.push({ status: 0, headers: {}, bodyB64: "" });
+    // A failed fetch still answers, STATUS 0 with its CONTEXT echoed.
+    responses.push(failedFetch(d));
   }
 }
 
-const parsed = await harness.invoke({
-  methodId: "parse",
-  inputs: [json("job", job), ...responses.map((r) => json("responses", r))],
-});
-const reports = JSON.parse(dec.decode(byPort(parsed).get("reports").payload));
+const parsed = await drainParse(harness, responses);
+const reports = reportsOf(parsed.get("reports").payload);
 const perProvider = {};
 for (const r of reports) perProvider[r.provider_id] = (perProvider[r.provider_id] || 0) + 1;
 console.log("REPORTS decoded:", reports.length, JSON.stringify(perProvider));
@@ -93,22 +74,18 @@ for (const id of PROVIDERS) {
   if (s) console.log(`  sample ${id}:`, JSON.stringify(s).slice(0, 170));
 }
 
-// The job carries `method` as the tbsMergeMethod ORDINAL, not its name. Passing
-// the name here made atof() read 0 and every method silently ran as
-// SINGLE_SOURCE — five identical rows that looked like "deconfliction does
-// nothing" when the defect was entirely in this harness.
-const METHODS = { SINGLE_SOURCE: 0, HIGHEST_SAMPLE_COUNT: 1, MOST_RECENT: 2, AUTHORITY_PRECEDENCE: 3, CENTROID: 4 };
-for (const [METHOD, ordinal] of Object.entries(METHODS)) {
-  const merged = await harness.invoke({
-    methodId: "deconflict",
-    inputs: [json("job", { ...job, method: ordinal }), json("reports", reports)],
+// The merge method is the contract's METHOD parameter, by name.
+const job = parsed.get("job").payload;
+for (const METHOD of ["SINGLE_SOURCE", "HIGHEST_SAMPLE_COUNT", "MOST_RECENT", "AUTHORITY_PRECEDENCE", "CENTROID"]) {
+  const a = decodeApr(job);
+  const rebuilt = buildApr({
+    ROUTE: a.ROUTE,
+    SCHEMA_NAME: "TBS.fbs",
+    params: { ...a.params, METHOD },
+    headers: a.headers,
   });
-  const mp = byPort(merged);
-  const stream = mp.get("records").payload;
-  let off = 0, n = 0, ident = "";
-  const view = new DataView(stream.buffer, stream.byteOffset, stream.byteLength);
-  while (off < stream.byteLength) { const len = view.getUint32(off, true); off += 4; if (!n) ident = dec.decode(stream.subarray(off + 4, off + 8)); off += len; n++; }
-  const d = JSON.parse(dec.decode(mp.get("decision").payload));
-  console.log(`${METHOD.padEnd(22)} -> sites=${String(n).padEnd(4)} collapsed=${String(d.collapsed).padEnd(4)} multiProvider=${String(d.multiProviderSites).padEnd(4)} ident=${ident} bytes=${stream.byteLength}`);
+  const merged = await deconflict(harness, new Map([["job", { payload: rebuilt, typeRef: TYPE.APR }], ["reports", parsed.get("reports")]]));
+  const s = merged.summary;
+  console.log(`${METHOD.padEnd(22)} -> sites=${String(merged.records.length).padEnd(4)} collapsed=${String(s.collapsed).padEnd(4)} multiProvider=${String(s.multiProviderSites).padEnd(4)} truncated=${s.truncated}`);
 }
 await harness.destroy();

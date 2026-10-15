@@ -1,4 +1,25 @@
+// flows/supplemental-omm OD node (typed contracts 1.0: FlatBuffers only, no JSON, no FSB/FSO transport).
+//
+//   fit             in   starlink | glonass | intelsat | cpf | iss   SDS $OEM, one object per frame, from the flow's
+//                                                                    source modules (data-source/*-source emit)
+//                   out  omm_meta + omm   IngestRequest (INGQ) + the object's size-prefixed $OMM record stream
+//                        ocm_meta + ocm   INGQ + size-prefixed $OCM stream (the OD core's state and covariance)
+//                        obd_meta + obd   INGQ + size-prefixed $OBD stream (the fit diagnostics)
+//                        status           FlowNotice (FNTC): Info "fitted", Skipped "unfittable" / "fit-failed"
+//   publish_request in   result (IngestResult, INGR, from hostcap/storage-ingest) + meta (the INGQ it stored)
+//                   out  request (HttpRequest, HREQ): the dataset-publication POST, its BODY the IngestResult; nothing
+//                        when omm_publish_url is unset or the batch was refused
+//
+// Each $OEM is read into the object's states in the source's own axes and time scale and handed to the frozen
+// complete-arc OD core exactly as before: velocity-bearing sources (Starlink MEME, ISS OEM; EME2000) as the verbose
+// $OEM with an epoch per state, position-only sources (GLONASS SP3, Intelsat ECF, CPF; Earth-fixed or EME2000) as the
+// compact position-only $OEM (STATE_VECTOR_SIZE 3) the fitter seeds its velocities from, refused here when the fitter
+// could not fit the arc. Every ephemeris is also fitted with SGP4-XP (propagator/sgp4-xp, joined by build.mjs). One
+// object is fitted per invocation; the rest wait as backlog. Its records go out as one record stream per standard,
+// each with the IngestRequest that files it (hostcap/storage-ingest stores it).
+
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,8 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
-#include <iterator>
-#include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,13 +38,21 @@
 
 #include <flatbuffers/flatbuffers.h>
 
-#include "FSB/main_generated.h"
+// The frozen fit core (vendor/od-fit-core.o, wasi-sdk 22, libc++ 18, ABI v2) hands its results back in std::vector and
+// std::string. libc++ 20 onwards lays std::vector out by size under ABI v2 (_LIBCPP_ABI_VECTOR_LAYOUT_SIZE_BASED), and
+// a node compiled so frees the core's vectors as garbage. Build with a libc++ that keeps the pointer layout (wasi-sdk
+// 30, libc++ 21: WASI_SDK_PATH, see build.mjs).
+#if defined(_LIBCPP_ABI_VECTOR_LAYOUT_SIZE_BASED)
+#error "this libc++ lays std::vector out by size; the frozen OD fit core passes vectors in the pointer layout"
+#endif
+
+#include "FlowNotice_generated.h"
+#include "HttpRequest_generated.h"
+#include "IngestRequest_generated.h"
+#include "IngestResult_generated.h"
 #include "OEM_generated.h"
-#include "FSB/main_aligned.h"
-#include "FSO/main_FSO.h"
 #include "od_batch_fit.hpp"
 #include "oem_fb_builder.hpp"
-#include "result_schema_idl.h"
 #include "sds_cid.hpp"
 
 // SGP4-XP element sets of every ephemeris, beside the SGP4 sets of the OD core: the fit engine of
@@ -37,8 +65,8 @@
 namespace od {
 
 // ABI-matching declaration for the frozen fit-core entry point. Keeping this
-// declaration in the signed node lets the node pass deterministic fitter
-// policy without changing or rebuilding the independently pinned core object.
+// declaration in the node lets the node pass deterministic fitter policy without
+// changing or rebuilding the independently pinned core object.
 struct PluginFitFBResult {
   bool ok = false;
   std::vector<uint8_t> omm;
@@ -60,136 +88,53 @@ std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
 
 namespace {
 
-constexpr const char* kFsbSchemaName = "FSB.fbs";
-constexpr const char* kFsbFileIdentifier = "$FSB";
-constexpr const char* kFsbRootType = "FSB";
-constexpr uint32_t kFsbAlignedSize = 1'048'744;
-constexpr uint16_t kFsbAlignment = 8;
-constexpr size_t kFsbSchemaNameCapacity = 64;
-constexpr size_t kFsbFileIdentifierCapacity = 4;
-constexpr size_t kFsbDataCapacity = 1'048'576;
-constexpr size_t kFsbSha256Capacity = 32;
+namespace R = sdn::runtime;
+
 constexpr size_t kMaxOutputStreamBytes = 128u * 1024u * 1024u;
-constexpr const char* kFsoSchemaName = "FSO.fbs";
-constexpr const char* kFsoFileIdentifier = "$FSO";
-constexpr const char* kFsoRootType = "FSO";
-constexpr uint32_t kFsoAlignedSize = 361'648;
-constexpr uint16_t kFsoAlignment = 8;
-constexpr uint32_t kAlignedFsoDatabaseOffset = 16;
-constexpr uint32_t kAlignedFsoSchemaOffset = 148;
-constexpr uint32_t kAlignedFsoBindingsOffset = 262'296;
-constexpr uint32_t kAlignedFsoBindingStride = 135;
-constexpr uint32_t kAlignedFsoStatusOffset = 357'392;
-constexpr uint32_t kAlignedFsoAffectedRecordsOffset = 357'400;
-constexpr uint32_t kAlignedFsoResultBytesOffset = 357'408;
-constexpr uint32_t kAlignedFsoErrorCodeOffset = 357'416;
-constexpr uint32_t kAlignedFsoMessageOffset = 357'548;
-constexpr size_t kFsoErrorCodeCapacity = 128;
-constexpr size_t kFsoMessageCapacity = 4'096;
-constexpr size_t kMaxNativeResponseBytes = 64u * 1024u * 1024u;
-constexpr int kMaxFitIterations = 40;
-constexpr std::string_view kFitOptions =
-    R"json({"maxIterations":40})json";
-constexpr std::string_view kFlatSqlTransactionIdDomain =
-    "sdn:supplemental-omm:od:flatsql-transaction:v1";
-constexpr std::string_view kFlatSqlRecordStreamIdDomain =
-    "sdn:supplemental-omm:od:flatsql-record-stream:v1";
-constexpr const char* kRecordPortOrder[] = {"omm", "ocm", "obd"};
+// The frozen core's options parameter (its own ABI, unchanged): the deterministic optimizer bound.
+constexpr std::string_view kFitOptions = R"json({"maxIterations":40})json";
+constexpr const char* kProviderId = "supplemental-omm";
+constexpr const char* kParser = "org.sdn.flows.supplemental-omm.od";
+constexpr const char* kParserVersion = "2.0.0";
 
-enum class Provider : uint8_t {
-  Starlink,
-  Glonass,
-  Intelsat,
-  Cpf,
-  Iss,
-};
+enum class Provider : uint8_t { Starlink, Glonass, Intelsat, Cpf, Iss };
 
-struct ProviderPort {
+struct ProviderInfo {
   const char* port_id;
   Provider provider;
+  const char* source_name;   // the stored SOURCE_NAME of the fits (analysis/catalog-synthesis reads it)
+  const char* originator;    // the XP $OMM's ORIGINATOR: who produced the ephemeris
+  const char* source_plugin; // the module that read it (the XP $OMM COMMENT, the $OBD sensor)
+  bool position_only;        // the source gives positions only
 };
 
-constexpr ProviderPort kProviderPorts[] = {
-    {"starlink", Provider::Starlink},
-    {"glonass", Provider::Glonass},
-    {"intelsat", Provider::Intelsat},
-    {"cpf", Provider::Cpf},
-    {"iss", Provider::Iss},
+constexpr ProviderInfo kProviders[] = {
+    {"starlink", Provider::Starlink, "spacex-starlink", "SpaceX", "com.orbpro.spacex-starlink-source", false},
+    {"glonass", Provider::Glonass, "glonass", "CODE (Astronomical Institute, University of Bern)", "com.orbpro.glonass-source", true},
+    {"intelsat", Provider::Intelsat, "intelsat", "Intelsat", "com.orbpro.intelsat-source", true},
+    {"cpf", Provider::Cpf, "cpf", "ILRS (EDC, DGFI-TUM)", "com.orbpro.cpf-source", true},
+    {"iss", Provider::Iss, "iss", "NASA/JSC/FOD/TOPO", "com.orbpro.iss-source", false},
 };
 
-struct Chunk {
-  uint64_t request_id = 0;
-  uint32_t sequence = 0;
-  bool final = false;
-  uint64_t total_bytes = 0;
-  uint64_t record_count = 0;
-  std::string schema_name;
-  std::string file_identifier;
-  std::vector<uint8_t> data;
-  std::vector<uint8_t> sha256;
-  uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-};
-
-struct AssemblyKey {
-  Provider provider;
-  uint64_t request_id;
-
-  bool operator<(const AssemblyKey& other) const {
-    if (provider != other.provider) {
-      return static_cast<uint8_t>(provider) <
-             static_cast<uint8_t>(other.provider);
-    }
-    return request_id < other.request_id;
+const ProviderInfo* provider_for_port(const char* port_id) {
+  if (!port_id) return nullptr;
+  for (const ProviderInfo& p : kProviders) {
+    if (std::strcmp(port_id, p.port_id) == 0) return &p;
   }
-};
-
-struct Assembly {
-  uint32_t next_sequence = 0;
-  uint64_t total_bytes = 0;
-  uint64_t record_count = 0;
-  uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-  std::string schema_name;
-  std::string file_identifier;
-  std::vector<uint8_t> sha256;
-  std::vector<uint8_t> bytes;
-};
-
-struct RecordStreamAccumulator {
-  const char* port_id = nullptr;
-  const char* schema_name = nullptr;
-  const char* file_identifier = nullptr;
-  uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-  uint64_t record_count = 0;
-  std::vector<uint8_t> data;
-};
-
-struct OutputStreamRequestIdentity {
-  const RecordStreamAccumulator* stream = nullptr;
-  std::array<uint8_t, 32> digest{};
-  uint64_t request_id = 0;
-};
-
-struct OutputRequestIdentity {
-  std::array<uint8_t, 32> transaction_digest{};
-  uint64_t configuration_request_id = 0;
-  std::vector<OutputStreamRequestIdentity> streams;
-};
+  return nullptr;
+}
 
 struct NativeState {
   std::string epoch;
-  // Position-only providers: the epoch in seconds on the provider's own time
-  // scale, used to group evenly spaced states into compact $OEM blocks.
+  // The epoch in seconds on the source's own time scale, used to group evenly
+  // spaced position-only states into compact $OEM blocks.
   double seconds = 0.0;
-  double x = 0.0;
-  double y = 0.0;
-  double z = 0.0;
-  double vx = 0.0;
-  double vy = 0.0;
-  double vz = 0.0;
+  double x = 0.0, y = 0.0, z = 0.0;
+  double vx = 0.0, vy = 0.0, vz = 0.0;
 };
 
-// The states of one logical object as its provider gave them, for the SGP4-XP fit: the same NativeStates the $OEM
-// handed to the OD core was built from, in the provider's own axes and time scale, converted to UTC here.
+// The states of one object for the SGP4-XP fit: the same states the core's $OEM was built from, in the source's own
+// axes, their instants in UTC.
 struct XpInput {
   std::vector<sgp4xp::Observed> states;
   sgp4xp::Frame frame = sgp4xp::Frame::Teme;
@@ -198,188 +143,18 @@ struct XpInput {
   uint32_t norad = 0;
 };
 
-// One parsed logical object: the $OEM for the OD core and the states for the SGP4-XP fit.
-struct ParsedObject {
-  od::BatchObject object;
-  XpInput xp;
-};
-
 struct PendingFitObject {
   od::BatchObject object;
   XpInput xp;
-  Provider provider = Provider::Starlink;
-  uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-  uint64_t request_id = 0;
+  const ProviderInfo* provider = nullptr;
   std::string identity;
 };
 
-std::map<AssemblyKey, Assembly> g_assemblies;
-std::deque<PendingFitObject> g_pending_fit_objects;
-alignas(8) Aligned::FSB g_aligned_output{};
-alignas(8) uint8_t g_aligned_control[kFsoAlignedSize]{};
+std::deque<PendingFitObject> g_pending;
 
-void append_u32_be(std::vector<uint8_t>* output, uint32_t value) {
-  output->push_back(static_cast<uint8_t>((value >> 24) & 0xff));
-  output->push_back(static_cast<uint8_t>((value >> 16) & 0xff));
-  output->push_back(static_cast<uint8_t>((value >> 8) & 0xff));
-  output->push_back(static_cast<uint8_t>(value & 0xff));
-}
+// --- epochs ---------------------------------------------------------------------------------------------------------
 
-void append_u64_be(std::vector<uint8_t>* output, uint64_t value) {
-  for (int shift = 56; shift >= 0; shift -= 8) {
-    output->push_back(static_cast<uint8_t>((value >> shift) & 0xff));
-  }
-}
-
-void append_text(std::vector<uint8_t>* output, std::string_view value) {
-  append_u32_be(output, static_cast<uint32_t>(value.size()));
-  output->insert(output->end(), value.begin(), value.end());
-}
-
-void append_domain(std::vector<uint8_t>* output, std::string_view domain) {
-  output->insert(output->end(), domain.begin(), domain.end());
-  output->push_back(0);
-}
-
-uint64_t project_nonzero_request_id(const uint8_t digest[32]) {
-  uint64_t request_id = 0;
-  for (size_t index = 0; index < sizeof(uint64_t); ++index) {
-    request_id = (request_id << 8) | digest[index];
-  }
-  return request_id == 0 ? 1 : request_id;
-}
-
-bool request_id_is_used(const OutputRequestIdentity& identity,
-                        uint64_t request_id,
-                        const OutputStreamRequestIdentity* excluded) {
-  if (identity.configuration_request_id == request_id) return true;
-  return std::any_of(
-      identity.streams.begin(), identity.streams.end(),
-      [request_id, excluded](const OutputStreamRequestIdentity& stream) {
-        return &stream != excluded && stream.request_id == request_id;
-      });
-}
-
-bool derive_output_request_identity(
-    const std::vector<RecordStreamAccumulator>& streams,
-    OutputRequestIdentity* identity) {
-  if (!identity || streams.size() != std::size(kRecordPortOrder)) return false;
-  identity->streams.clear();
-  identity->streams.reserve(std::size(kRecordPortOrder));
-
-  std::vector<uint8_t> transaction_preimage;
-  append_domain(&transaction_preimage, kFlatSqlTransactionIdDomain);
-  append_u32_be(&transaction_preimage,
-                static_cast<uint32_t>(std::size(kRecordPortOrder)));
-  for (const char* port_id : kRecordPortOrder) {
-    auto found = std::find_if(
-        streams.begin(), streams.end(),
-        [port_id](const RecordStreamAccumulator& stream) {
-          return std::strcmp(stream.port_id, port_id) == 0;
-        });
-    if (found == streams.end() || found->data.empty() ||
-        found->record_count == 0 ||
-        std::find_if(std::next(found), streams.end(),
-                     [port_id](const RecordStreamAccumulator& stream) {
-                       return std::strcmp(stream.port_id, port_id) == 0;
-                     }) != streams.end()) {
-      return false;
-    }
-    OutputStreamRequestIdentity stream_identity;
-    stream_identity.stream = &*found;
-    sdn_cid::sha256_raw(found->data.data(), found->data.size(),
-                        stream_identity.digest.data());
-    append_text(&transaction_preimage, found->port_id);
-    append_text(&transaction_preimage, found->schema_name);
-    append_text(&transaction_preimage, found->file_identifier);
-    append_u64_be(&transaction_preimage, found->record_count);
-    append_u64_be(&transaction_preimage,
-                  static_cast<uint64_t>(found->data.size()));
-    transaction_preimage.insert(transaction_preimage.end(),
-                                stream_identity.digest.begin(),
-                                stream_identity.digest.end());
-    identity->streams.push_back(stream_identity);
-  }
-
-  sdn_cid::sha256_raw(transaction_preimage.data(),
-                      transaction_preimage.size(),
-                      identity->transaction_digest.data());
-  identity->configuration_request_id =
-      project_nonzero_request_id(identity->transaction_digest.data());
-
-  for (OutputStreamRequestIdentity& stream_identity : identity->streams) {
-    const RecordStreamAccumulator& stream = *stream_identity.stream;
-    std::vector<uint8_t> base_preimage;
-    append_domain(&base_preimage, kFlatSqlRecordStreamIdDomain);
-    base_preimage.insert(base_preimage.end(),
-                         identity->transaction_digest.begin(),
-                         identity->transaction_digest.end());
-    append_text(&base_preimage, stream.port_id);
-    append_text(&base_preimage, stream.schema_name);
-    append_text(&base_preimage, stream.file_identifier);
-    append_u64_be(&base_preimage, stream.record_count);
-    append_u64_be(&base_preimage,
-                  static_cast<uint64_t>(stream.data.size()));
-    base_preimage.insert(base_preimage.end(), stream_identity.digest.begin(),
-                         stream_identity.digest.end());
-    uint32_t collision_salt = 0;
-    do {
-      std::vector<uint8_t> preimage = base_preimage;
-      if (collision_salt != 0) append_u32_be(&preimage, collision_salt);
-      std::array<uint8_t, 32> digest{};
-      sdn_cid::sha256_raw(preimage.data(), preimage.size(), digest.data());
-      stream_identity.request_id = project_nonzero_request_id(digest.data());
-      ++collision_salt;
-    } while (request_id_is_used(*identity, stream_identity.request_id,
-                                &stream_identity));
-  }
-  return true;
-}
-
-std::string trim(const std::string& input) {
-  const size_t start = input.find_first_not_of(" \t\r\n");
-  if (start == std::string::npos) return {};
-  const size_t end = input.find_last_not_of(" \t\r\n");
-  return input.substr(start, end - start + 1);
-}
-
-std::vector<std::string> split_ws(const std::string& line) {
-  std::vector<std::string> tokens;
-  size_t cursor = 0;
-  while (cursor < line.size()) {
-    while (cursor < line.size() &&
-           std::isspace(static_cast<unsigned char>(line[cursor]))) {
-      ++cursor;
-    }
-    const size_t start = cursor;
-    while (cursor < line.size() &&
-           !std::isspace(static_cast<unsigned char>(line[cursor]))) {
-      ++cursor;
-    }
-    if (cursor > start) tokens.push_back(line.substr(start, cursor - start));
-  }
-  return tokens;
-}
-
-template <typename Callback>
-void for_each_line(const std::string& content, Callback callback) {
-  size_t cursor = 0;
-  while (cursor <= content.size()) {
-    const size_t newline = content.find('\n', cursor);
-    const size_t end = newline == std::string::npos ? content.size() : newline;
-    callback(content.substr(cursor, end - cursor));
-    if (newline == std::string::npos) break;
-    cursor = newline + 1;
-  }
-}
-
-void append_two_digits(std::string* output, int value) {
-  output->push_back(static_cast<char>('0' + ((value / 10) % 10)));
-  output->push_back(static_cast<char>('0' + (value % 10)));
-}
-
-std::string calendar_iso(int year, int month, int day, int hour, int minute,
-                         double seconds) {
+std::string calendar_iso(int year, int month, int day, int hour, int minute, double seconds) {
   int whole_seconds = static_cast<int>(seconds);
   int millis = static_cast<int>((seconds - whole_seconds) * 1000.0 + 0.5);
   if (millis >= 1000) {
@@ -387,104 +162,74 @@ std::string calendar_iso(int year, int month, int day, int hour, int minute,
     millis -= 1000;
   }
   char buffer[48];
-  std::snprintf(buffer, sizeof(buffer),
-                "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", year, month, day,
-                hour, minute, whole_seconds, millis);
+  std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", year, month, day, hour, minute,
+                whole_seconds, millis);
   return buffer;
 }
 
-std::string day_of_year_iso(int year, int day_of_year, int hour, int minute,
-                            double seconds) {
-  const bool leap =
-      (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-  const int month_days[] = {31, leap ? 29 : 28, 31, 30, 31, 30,
-                            31, 31, 30, 31, 30, 31};
-  int month = 1;
-  int day = day_of_year;
-  while (month <= 12 && day > month_days[month - 1]) {
-    day -= month_days[month - 1];
-    ++month;
+// Days from 1970-01-01 of a proleptic Gregorian date, and back (H. Hinnant).
+int64_t days_from_civil(int64_t y, int m, int d) {
+  y -= m <= 2;
+  const int64_t era = (y >= 0 ? y : y - 399) / 400;
+  const int64_t yoe = y - era * 400;
+  const int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+
+void civil_from_days(int64_t z, int* y, int* m, int* d) {
+  z += 719468;
+  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+  const int64_t doe = z - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153;
+  *d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+  *m = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+  *y = static_cast<int>(yoe + era * 400 + (*m <= 2));
+}
+
+// An ISO 8601 calendar stamp "YYYY-MM-DDThh:mm:ss[.fff...][Z]" as whole days from 1970 and seconds of its day, on the
+// time scale the $OEM's TIME_SYSTEM names.
+bool parse_calendar(std::string_view text, int64_t* day, double* second_of_day) {
+  if (text.size() < 19 || text[4] != '-' || text[7] != '-' || (text[10] != 'T' && text[10] != ' ') || text[13] != ':' ||
+      text[16] != ':') {
+    return false;
   }
-  if (month > 12 || day <= 0) return {};
-  return calendar_iso(year, month, day, hour, minute, seconds);
-}
-
-std::string meme_epoch_iso(const std::string& token) {
-  if (token.size() < 13) return {};
-  for (size_t index = 0; index < 13; ++index) {
-    if (!std::isdigit(static_cast<unsigned char>(token[index]))) return {};
+  for (size_t i : {0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18}) {
+    if (!std::isdigit(static_cast<unsigned char>(text[i]))) return false;
   }
-  const int year = std::strtol(token.substr(0, 4).c_str(), nullptr, 10);
-  const int day = std::strtol(token.substr(4, 3).c_str(), nullptr, 10);
-  const int hour = std::strtol(token.substr(7, 2).c_str(), nullptr, 10);
-  const int minute = std::strtol(token.substr(9, 2).c_str(), nullptr, 10);
-  const double seconds = std::strtod(token.substr(11).c_str(), nullptr);
-  return day_of_year_iso(year, day, hour, minute, seconds);
+  const auto num = [&](size_t at, size_t n) { return std::atoi(std::string(text.substr(at, n)).c_str()); };
+  const int year = num(0, 4), month = num(5, 2), dom = num(8, 2), hour = num(11, 2), minute = num(14, 2);
+  std::string sec(text.substr(17));
+  if (!sec.empty() && sec.back() == 'Z') sec.pop_back();
+  char* end = nullptr;
+  const double seconds = std::strtod(sec.c_str(), &end);
+  if (end == sec.c_str() || *end != '\0' || month < 1 || month > 12 || dom < 1 || dom > 31) return false;
+  *day = days_from_civil(year, month, dom);
+  *second_of_day = hour * 3600.0 + minute * 60.0 + seconds;
+  return true;
 }
 
-std::string julian_iso(double julian_date) {
-  const double shifted = julian_date + 0.5;
-  const int z = static_cast<int>(shifted);
-  const double fraction = shifted - static_cast<double>(z);
-  int a = z;
-  if (z >= 2299161) {
-    const int alpha = static_cast<int>((z - 1867216.25) / 36524.25);
-    a = z + 1 + alpha - alpha / 4;
-  }
-  const int b = a + 1524;
-  const int c = static_cast<int>((b - 122.1) / 365.25);
-  const int d = static_cast<int>(365.25 * c);
-  const int e = static_cast<int>((b - d) / 30.6001);
-  const int day = b - d - static_cast<int>(30.6001 * e);
-  const int month = e < 14 ? e - 1 : e - 13;
-  const int year = month > 2 ? c - 4716 : c - 4715;
-  const double hours_value = fraction * 24.0;
-  const int hour = static_cast<int>(hours_value);
-  const double minutes_value = (hours_value - hour) * 60.0;
-  const int minute = static_cast<int>(minutes_value);
-  const double seconds = (minutes_value - minute) * 60.0;
-  return calendar_iso(year, month, day, hour, minute, seconds);
+// The stamp `seconds_after` seconds after (day, second_of_day), as the node writes epochs: milliseconds and "Z" (the
+// time scale stays the $OEM's TIME_SYSTEM).
+std::string stamp_after(int64_t day, double second_of_day, double seconds_after, double* unix_seconds) {
+  double s = second_of_day + seconds_after;
+  const double whole_days = std::floor(s / 86400.0);
+  day += static_cast<int64_t>(whole_days);
+  s -= whole_days * 86400.0;
+  int y, m, d;
+  civil_from_days(day, &y, &m, &d);
+  const int hour = static_cast<int>(s / 3600.0);
+  const int minute = static_cast<int>((s - hour * 3600.0) / 60.0);
+  const double second = s - hour * 3600.0 - minute * 60.0;
+  *unix_seconds = static_cast<double>(day) * 86400.0 + s;
+  return calendar_iso(y, m, d, hour, minute, second);
 }
 
-std::string normalize_iss_epoch(std::string value) {
-  value = trim(value);
-  if (!value.empty() && value.back() != 'Z') value.push_back('Z');
-  return value;
-}
+// --- the core's $OEM ------------------------------------------------------------------------------------------------
 
-bool parse_starlink_identity(const std::string& schema_name,
-                             uint32_t* norad,
-                             std::string* object_name) {
-  constexpr const char* prefix = "MEME:";
-  if (schema_name.compare(0, std::strlen(prefix), prefix) != 0) return false;
-  const size_t id_start = std::strlen(prefix);
-  const size_t separator = schema_name.find(':', id_start);
-  if (separator == std::string::npos) return false;
-  *norad = static_cast<uint32_t>(
-      std::strtoul(schema_name.substr(id_start, separator - id_start).c_str(),
-                   nullptr, 10));
-  *object_name = schema_name.substr(separator + 1);
-  return *norad != 0 && !object_name->empty();
-}
-
-// Seconds from 1970-01-01T00:00:00 to a proleptic Gregorian calendar instant on
-// the caller's time scale (days_from_civil, H. Hinnant).
-double civil_seconds(int year, int month, int day, int hour, int minute,
-                     double seconds) {
-  const int shifted_year = year - (month <= 2 ? 1 : 0);
-  const int era = (shifted_year >= 0 ? shifted_year : shifted_year - 399) / 400;
-  const int year_of_era = shifted_year - era * 400;
-  const int day_of_year =
-      (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
-  const int day_of_era = year_of_era * 365 + year_of_era / 4 -
-                         year_of_era / 100 + day_of_year;
-  const double days = static_cast<double>(era) * 146097.0 +
-                      static_cast<double>(day_of_era) - 719468.0;
-  return days * 86400.0 + hour * 3600.0 + minute * 60.0 + seconds;
-}
-
-flatbuffers::Offset<RFM> build_reference_frame(
-    flatbuffers::FlatBufferBuilder* builder, CustomFrame frame) {
+flatbuffers::Offset<RFM> build_reference_frame(flatbuffers::FlatBufferBuilder* builder, CustomFrame frame) {
   auto wrapper = CreateCustomFrameWrapper(*builder, frame);
   RFMBuilder rfm(*builder);
   rfm.add_REFERENCE_FRAME_type(RFMUnionTraits<CustomFrameWrapper>::enum_value);
@@ -492,61 +237,48 @@ flatbuffers::Offset<RFM> build_reference_frame(
   return rfm.Finish();
 }
 
-flatbuffers::Offset<RFM> build_reference_frame(
-    flatbuffers::FlatBufferBuilder* builder, CelestialFrame frame) {
+flatbuffers::Offset<RFM> build_reference_frame(flatbuffers::FlatBufferBuilder* builder, CelestialFrame frame) {
   auto wrapper = CreateCelestialFrameWrapper(*builder, frame);
   RFMBuilder rfm(*builder);
-  rfm.add_REFERENCE_FRAME_type(
-      RFMUnionTraits<CelestialFrameWrapper>::enum_value);
+  rfm.add_REFERENCE_FRAME_type(RFMUnionTraits<CelestialFrameWrapper>::enum_value);
   rfm.add_REFERENCE_FRAME(wrapper.Union());
   return rfm.Finish();
 }
 
-// Position-only providers (CPF, SP3, ECF) carry no velocity. The fit core's
-// reader takes every EPHEMERIS_DATA_LINES row as a full state, so a row with
-// zero velocity is a body at rest in its source frame: Earth-fixed, it rotates
-// to omega x r in TEME and the fit starts from a near-radial orbit (the
-// LAGEOS-1 CPF arc fitted to e 0.966, n 16.79 rev/day, B* at its bound,
-// instead of e 0.0045, n 6.387). The reader's position-only shape is the
-// compact form with STATE_VECTOR_SIZE 3: it marks the series position-only and
-// the fitter seeds the initial velocity from the positions. Compact epochs are
-// START_TIME + i * STEP_SIZE, so each run of evenly spaced states is one block;
-// a gap or a cadence change starts the next.
+// Position-only sources (CPF, SP3, ECF) carry no velocity. The fit core's reader takes every EPHEMERIS_DATA_LINES row
+// as a full state, so a row with zero velocity is a body at rest in its source frame: Earth-fixed, it rotates to
+// omega x r in TEME and the fit starts from a near-radial orbit (the LAGEOS-1 CPF arc fitted to e 0.966, n 16.79
+// rev/day, B* at its bound, instead of e 0.0045, n 6.387). The reader's position-only shape is the compact form with
+// STATE_VECTOR_SIZE 3: it marks the series position-only and the fitter seeds the initial velocity from the positions.
+// Compact epochs are START_TIME + i * STEP_SIZE, so each run of evenly spaced states is one block; a gap or a cadence
+// change starts the next.
 //
-// The fitter seeds each local fit from the quadratic derivative of the three
-// positions around its epoch. An arc it cannot fit is refused here instead:
-// epochs must strictly increase (a repeated epoch divides by zero in that
-// derivative), and every such seed must be a bound Earth orbit. An unbound
-// seed has no mean motion; the core's deep-space propagator then loops without
-// end on the NaN elements (a GEO-radius circle traced at the inertial rate in
+// The fitter seeds each local fit from the quadratic derivative of the three positions around its epoch. An arc it
+// cannot fit is refused here instead: epochs must strictly increase (a repeated epoch divides by zero in that
+// derivative), and every such seed must be a bound Earth orbit. An unbound seed has no mean motion; the core's
+// deep-space propagator then loops without end on the NaN elements (a GEO-radius circle traced at the inertial rate in
 // the Earth-fixed frame is one: 6.1 km/s against a 4.3 km/s escape speed).
 bool earth_fixed(CustomFrame frame) { return frame == CustomFrame::ECEF; }
 bool earth_fixed(CelestialFrame) { return false; }
 
-bool position_only_arc_is_fittable(const std::vector<NativeState>& states,
-                                   bool earth_fixed_frame) {
+bool position_only_arc_is_fittable(const std::vector<NativeState>& states, bool earth_fixed_frame) {
   constexpr double kCadenceToleranceSeconds = 1e-3;
-  // The fit core's WGS-72 constants (sgp4_fitter.cpp MU_EARTH and
-  // frame_transform.cpp kOmegaEarth).
+  // The fit core's WGS-72 constants (sgp4_fitter.cpp MU_EARTH and frame_transform.cpp kOmegaEarth).
   constexpr double kMuEarth = 398600.8;
   constexpr double kOmegaEarth = 7.29211514668855e-5;
   const size_t count = states.size();
   if (count < 3) return false;
   for (size_t index = 0; index < count; ++index) {
     const NativeState& state = states[index];
-    if (!std::isfinite(state.seconds) || !std::isfinite(state.x) ||
-        !std::isfinite(state.y) || !std::isfinite(state.z)) {
+    if (!std::isfinite(state.seconds) || !std::isfinite(state.x) || !std::isfinite(state.y) ||
+        !std::isfinite(state.z)) {
       return false;
     }
-    if (index > 0 && !(state.seconds - states[index - 1].seconds >
-                       kCadenceToleranceSeconds)) {
-      return false;
-    }
+    if (index > 0 && !(state.seconds - states[index - 1].seconds > kCadenceToleranceSeconds)) return false;
   }
   for (size_t index = 0; index < count; ++index) {
     // The fitter's window: the first three, the last three, else centred.
-    const size_t first =
-        index == 0 ? 0 : (index >= count - 1 ? count - 3 : index - 1);
+    const size_t first = index == 0 ? 0 : (index >= count - 1 ? count - 3 : index - 1);
     const NativeState& p0 = states[first];
     const NativeState& p1 = states[first + 1];
     const NativeState& p2 = states[first + 2];
@@ -566,18 +298,16 @@ bool position_only_arc_is_fittable(const std::vector<NativeState>& states,
       vy += kOmegaEarth * at.x;
     }
     const double radius = std::sqrt(at.x * at.x + at.y * at.y + at.z * at.z);
-    const double energy =
-        0.5 * (vx * vx + vy * vy + vz * vz) - kMuEarth / radius;
+    const double energy = 0.5 * (vx * vx + vy * vy + vz * vz) - kMuEarth / radius;
     if (!(radius > 0.0) || !(energy < 0.0)) return false;
   }
   return true;
 }
 
 template <typename Frame>
-std::vector<uint8_t> build_position_only_oem(
-    const std::string& object_name, const std::string& object_id,
-    uint32_t norad, Frame frame, timingStandard time_system,
-    const std::vector<NativeState>& states) {
+std::vector<uint8_t> build_position_only_oem(const std::string& object_name, const std::string& object_id,
+                                             uint32_t norad, Frame frame, timingStandard time_system,
+                                             const std::vector<NativeState>& states) {
   constexpr double kCadenceToleranceSeconds = 1e-3;
   if (!position_only_arc_is_fittable(states, earth_fixed(frame))) return {};
   flatbuffers::FlatBufferBuilder builder(1 << 16);
@@ -590,8 +320,7 @@ std::vector<uint8_t> build_position_only_oem(
       step = states[end].seconds - states[start].seconds;
       ++end;
       while (end < states.size() &&
-             std::fabs(states[end].seconds - states[end - 1].seconds - step) <=
-                 kCadenceToleranceSeconds) {
+             std::fabs(states[end].seconds - states[end - 1].seconds - step) <= kCadenceToleranceSeconds) {
         ++end;
       }
     }
@@ -635,23 +364,17 @@ std::vector<uint8_t> build_position_only_oem(
   return std::vector<uint8_t>(bytes, bytes + builder.GetSize());
 }
 
-std::vector<uint8_t> build_celestial_oem(
-    const std::string& object_name, const std::string& object_id,
-    uint32_t norad, CelestialFrame frame, timingStandard time_system,
-    const std::vector<NativeState>& states) {
+std::vector<uint8_t> build_celestial_oem(const std::string& object_name, const std::string& object_id, uint32_t norad,
+                                         CelestialFrame frame, timingStandard time_system,
+                                         const std::vector<NativeState>& states) {
   if (states.size() < 3) return {};
   const oem_fb::Identity identity{object_name.c_str(), object_id.c_str(), norad};
-  return oem_fb::build_oem_flatbuffer(
-      identity, frame, "EARTH", time_system, states.data(),
-      static_cast<int>(states.size()));
+  return oem_fb::build_oem_flatbuffer(identity, frame, "EARTH", time_system, states.data(),
+                                      static_cast<int>(states.size()));
 }
 
-// The NativeStates of one object as SGP4-XP fit input. `velocities` is true for the providers that give them (MEME,
-// OEM); the others are positions only. An epoch that does not read as a time leaves the object without XP input.
-XpInput make_xp_input(const std::vector<NativeState>& states, sgp4xp::Frame frame,
-                      sgp4xp::TimeScale scale, bool velocities,
-                      const std::string& name, const std::string& object_id,
-                      uint32_t norad) {
+XpInput make_xp_input(const std::vector<NativeState>& states, sgp4xp::Frame frame, sgp4xp::TimeScale scale,
+                      bool velocities, const std::string& name, const std::string& object_id, uint32_t norad) {
   XpInput input;
   input.frame = frame;
   input.name = name;
@@ -678,758 +401,146 @@ XpInput make_xp_input(const std::vector<NativeState>& states, sgp4xp::Frame fram
   return input;
 }
 
-std::vector<ParsedObject> parse_starlink_meme(
-    const std::string& content, const std::string& schema_name) {
-  uint32_t norad = 0;
-  std::string object_name = "STARLINK";
-  parse_starlink_identity(schema_name, &norad, &object_name);
-  std::vector<NativeState> states;
-  for_each_line(content, [&](const std::string& line) {
-    const std::vector<std::string> tokens = split_ws(line);
-    if (tokens.size() < 7) return;
-    const std::string epoch = meme_epoch_iso(tokens[0]);
-    if (epoch.empty()) return;
-    NativeState state;
-    state.epoch = epoch;
-    state.x = std::strtod(tokens[1].c_str(), nullptr);
-    state.y = std::strtod(tokens[2].c_str(), nullptr);
-    state.z = std::strtod(tokens[3].c_str(), nullptr);
-    state.vx = std::strtod(tokens[4].c_str(), nullptr);
-    state.vy = std::strtod(tokens[5].c_str(), nullptr);
-    state.vz = std::strtod(tokens[6].c_str(), nullptr);
-    states.push_back(std::move(state));
-  });
-  // MEME state vectors are EME2000 (the UVW header line names only the
-  // covariance frame). Label them honestly so the fit core rotates them to
-  // TEME; read as TEME they put every Starlink fit ~30-40 km off.
-  std::vector<uint8_t> oem = build_celestial_oem(
-      object_name, "", norad, CelestialFrame::EME2000, timingStandard::UTC,
-      states);
-  if (oem.empty()) return {};
-  XpInput xp = make_xp_input(states, sgp4xp::Frame::Eme2000, sgp4xp::TimeScale::Utc,
-                             true, object_name, "", norad);
-  return {{{std::move(oem)}, std::move(xp)}};
-}
+std::string text_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
 
-std::vector<ParsedObject> parse_glonass_sp3(const std::string& content) {
-  struct Satellite {
-    std::string id;
-    std::vector<NativeState> states;
-  };
-  std::vector<Satellite> satellites;
-  std::string epoch;
-  double epoch_seconds = 0.0;
-  for_each_line(content, [&](const std::string& line) {
-    const std::vector<std::string> tokens = split_ws(line);
-    if (tokens.empty()) return;
-    if (tokens[0] == "*" && tokens.size() >= 7) {
-      const int year = std::strtol(tokens[1].c_str(), nullptr, 10);
-      const int month = std::strtol(tokens[2].c_str(), nullptr, 10);
-      const int day = std::strtol(tokens[3].c_str(), nullptr, 10);
-      const int hour = std::strtol(tokens[4].c_str(), nullptr, 10);
-      const int minute = std::strtol(tokens[5].c_str(), nullptr, 10);
-      const double second = std::strtod(tokens[6].c_str(), nullptr);
-      epoch = calendar_iso(year, month, day, hour, minute, second);
-      epoch_seconds = civil_seconds(year, month, day, hour, minute, second);
-      return;
-    }
-    if (tokens[0].size() < 3 || tokens[0][0] != 'P' ||
-        tokens[0][1] != 'R' || tokens.size() < 4 || epoch.empty()) {
-      return;
-    }
-    const std::string id = tokens[0].substr(1);
-    Satellite* satellite = nullptr;
-    for (Satellite& candidate : satellites) {
-      if (candidate.id == id) {
-        satellite = &candidate;
-        break;
-      }
-    }
-    if (!satellite) {
-      satellites.push_back({id, {}});
-      satellite = &satellites.back();
-    }
-    NativeState state;
-    state.epoch = epoch;
-    state.seconds = epoch_seconds;
-    state.x = std::strtod(tokens[1].c_str(), nullptr);
-    state.y = std::strtod(tokens[2].c_str(), nullptr);
-    state.z = std::strtod(tokens[3].c_str(), nullptr);
-    if (state.x != 0.0 || state.y != 0.0 || state.z != 0.0) {
-      satellite->states.push_back(std::move(state));
-    }
-  });
-  std::vector<ParsedObject> objects;
-  for (const Satellite& satellite : satellites) {
-    std::vector<uint8_t> oem = build_position_only_oem(
-        "GLONASS " + satellite.id, "", 0, CustomFrame::ECEF,
-        timingStandard::GPS, satellite.states);
-    if (oem.empty()) continue;
-    XpInput xp = make_xp_input(satellite.states, sgp4xp::Frame::Itrf,
-                               sgp4xp::TimeScale::Gps, false,
-                               "GLONASS " + satellite.id, "", 0);
-    objects.push_back({{std::move(oem)}, std::move(xp)});
-  }
-  return objects;
-}
-
-std::vector<ParsedObject> parse_intelsat_ecf(const std::string& content) {
-  std::string object_name = "INTELSAT";
-  std::vector<NativeState> states;
-  bool first_line = true;
-  for_each_line(content, [&](const std::string& line) {
-    if (first_line) {
-      first_line = false;
-      const std::string marker = "Intelsat ";
-      const size_t start = line.find(marker);
-      if (start != std::string::npos) {
-        const size_t name_start = start + marker.size();
-        const size_t name_end = line.find_first_of(" \t/", name_start);
-        object_name = line.substr(name_start, name_end - name_start);
-      }
-      return;
-    }
-    const std::vector<std::string> tokens = split_ws(line);
-    if (tokens.size() < 5 || tokens[0].size() < 10 || tokens[0][4] != '/' ||
-        tokens[0][7] != '/') {
-      return;
-    }
-    NativeState state;
-    state.epoch = tokens[0];
-    std::replace(state.epoch.begin(), state.epoch.end(), '/', '-');
-    state.epoch += "T" + tokens[1] + "Z";
-    char* cursor = nullptr;
-    const long hour = std::strtol(tokens[1].c_str(), &cursor, 10);
-    if (*cursor != ':') return;
-    const long minute = std::strtol(cursor + 1, &cursor, 10);
-    if (*cursor != ':') return;
-    state.seconds = civil_seconds(
-        std::strtol(tokens[0].substr(0, 4).c_str(), nullptr, 10),
-        std::strtol(tokens[0].substr(5, 2).c_str(), nullptr, 10),
-        std::strtol(tokens[0].substr(8, 2).c_str(), nullptr, 10),
-        static_cast<int>(hour), static_cast<int>(minute),
-        std::strtod(cursor + 1, nullptr));
-    state.x = std::strtod(tokens[2].c_str(), nullptr) / 1000.0;
-    state.y = std::strtod(tokens[3].c_str(), nullptr) / 1000.0;
-    state.z = std::strtod(tokens[4].c_str(), nullptr) / 1000.0;
-    states.push_back(std::move(state));
-  });
-  std::vector<uint8_t> oem = build_position_only_oem(
-      object_name, "", 0, CustomFrame::ECEF, timingStandard::UTC, states);
-  if (oem.empty()) return {};
-  XpInput xp = make_xp_input(states, sgp4xp::Frame::Itrf, sgp4xp::TimeScale::Utc,
-                             false, object_name, "", 0);
-  return {{{std::move(oem)}, std::move(xp)}};
-}
-
-std::vector<ParsedObject> parse_cpf(const std::string& content) {
-  std::string object_name = "CPF OBJECT";
-  std::string object_id;
-  uint32_t norad = 0;
-  long frame_code = 0;
-  std::vector<NativeState> states;
-  for_each_line(content, [&](const std::string& line) {
-    const std::vector<std::string> tokens = split_ws(line);
-    if (tokens.empty()) return;
-    if (tokens[0] == "H1" && tokens.size() >= 11) {
-      object_name = tokens[10];
-      return;
-    }
-    if (tokens[0] == "H2") {
-      if (tokens.size() >= 4) {
-        object_id = tokens[1];
-        norad = static_cast<uint32_t>(
-            std::strtoul(tokens[3].c_str(), nullptr, 10));
-      }
-      if (tokens.size() >= 20) {
-        frame_code = std::strtol(tokens[19].c_str(), nullptr, 10);
-      }
-      return;
-    }
-    if (tokens[0] != "10" || tokens.size() < 8) return;
-    const long mjd = std::strtol(tokens[2].c_str(), nullptr, 10);
-    const double seconds = std::strtod(tokens[3].c_str(), nullptr);
-    NativeState state;
-    state.epoch = julian_iso(static_cast<double>(mjd) + 2'400'000.5 +
-                             seconds / 86'400.0);
-    state.seconds = static_cast<double>(mjd) * 86'400.0 + seconds;
-    state.x = std::strtod(tokens[5].c_str(), nullptr) / 1000.0;
-    state.y = std::strtod(tokens[6].c_str(), nullptr) / 1000.0;
-    state.z = std::strtod(tokens[7].c_str(), nullptr) / 1000.0;
-    states.push_back(std::move(state));
-  });
-  std::vector<uint8_t> oem;
-  sgp4xp::Frame xp_frame = sgp4xp::Frame::Itrf;
-  if (frame_code == 2) {
-    oem = build_position_only_oem(object_name, object_id, norad,
-                                  CelestialFrame::EME2000,
-                                  timingStandard::UTC, states);
-    xp_frame = sgp4xp::Frame::Eme2000;
-  } else if (frame_code == 0) {
-    oem = build_position_only_oem(object_name, object_id, norad,
-                                  CustomFrame::ECEF, timingStandard::UTC,
-                                  states);
-  }
-  if (oem.empty()) return {};
-  XpInput xp = make_xp_input(states, xp_frame, sgp4xp::TimeScale::Utc, false,
-                             object_name, object_id, norad);
-  return {{{std::move(oem)}, std::move(xp)}};
-}
-
-bool kvn_value(const std::string& line, const char* key, std::string* value) {
-  const std::string normalized = trim(line);
-  const size_t key_length = std::strlen(key);
-  if (normalized.compare(0, key_length, key) != 0) return false;
-  size_t cursor = key_length;
-  while (cursor < normalized.size() &&
-         std::isspace(static_cast<unsigned char>(normalized[cursor]))) {
-    ++cursor;
-  }
-  if (cursor >= normalized.size() || normalized[cursor] != '=') return false;
-  *value = trim(normalized.substr(cursor + 1));
-  return true;
-}
-
-std::vector<ParsedObject> parse_iss_oem(const std::string& content) {
-  std::string object_name = "ISS";
-  std::string object_id = "1998-067A";
-  std::vector<NativeState> states;
-  for_each_line(content, [&](const std::string& line) {
-    std::string value;
-    if (kvn_value(line, "OBJECT_NAME", &value)) {
-      object_name = value;
-      return;
-    }
-    if (kvn_value(line, "OBJECT_ID", &value)) {
-      object_id = value;
-      return;
-    }
-    const std::vector<std::string> tokens = split_ws(line);
-    if (tokens.size() < 7 || tokens[0].size() < 11 ||
-        tokens[0].find('T') == std::string::npos ||
-        tokens[0].find('=') != std::string::npos) {
-      return;
-    }
-    NativeState state;
-    state.epoch = normalize_iss_epoch(tokens[0]);
-    state.x = std::strtod(tokens[1].c_str(), nullptr);
-    state.y = std::strtod(tokens[2].c_str(), nullptr);
-    state.z = std::strtod(tokens[3].c_str(), nullptr);
-    state.vx = std::strtod(tokens[4].c_str(), nullptr);
-    state.vy = std::strtod(tokens[5].c_str(), nullptr);
-    state.vz = std::strtod(tokens[6].c_str(), nullptr);
-    states.push_back(std::move(state));
-  });
-  std::vector<uint8_t> oem = build_celestial_oem(
-      object_name, object_id, 25544, CelestialFrame::EME2000,
-      timingStandard::UTC, states);
-  if (oem.empty()) return {};
-  XpInput xp = make_xp_input(states, sgp4xp::Frame::Eme2000, sgp4xp::TimeScale::Utc,
-                             true, object_name, object_id, 25544);
-  return {{{std::move(oem)}, std::move(xp)}};
-}
-
-std::vector<ParsedObject> parse_native_response(
-    Provider provider, const Assembly& assembly) {
-  const std::string content(assembly.bytes.begin(), assembly.bytes.end());
-  switch (provider) {
-    case Provider::Starlink:
-      return parse_starlink_meme(content, assembly.schema_name);
-    case Provider::Glonass:
-      return parse_glonass_sp3(content);
-    case Provider::Intelsat:
-      return parse_intelsat_ecf(content);
-    case Provider::Cpf:
-      return parse_cpf(content);
-    case Provider::Iss:
-      return parse_iss_oem(content);
-  }
+std::string describe(const std::string& name, const std::string& object_id, uint32_t norad) {
+  const std::string label = !name.empty() ? name : object_id;
+  if (!label.empty() && norad > 0) return label + " (NORAD " + std::to_string(norad) + ")";
+  if (!label.empty()) return label;
+  if (norad > 0) return "NORAD " + std::to_string(norad);
   return {};
 }
 
-std::string describe_batch_object(const od::BatchObject& object) {
-  if (object.oem.size() < 8 || !OEMBufferHasIdentifier(object.oem.data())) {
-    return {};
-  }
-  flatbuffers::Verifier verifier(object.oem.data(), object.oem.size());
-  if (!VerifyOEMBuffer(verifier)) return {};
-  const OEM* oem = GetOEM(object.oem.data());
-  const auto* blocks = oem ? oem->EPHEMERIS_DATA_BLOCK() : nullptr;
-  if (!blocks) return {};
-  for (flatbuffers::uoffset_t index = 0; index < blocks->size(); ++index) {
-    const ephemerisDataBlock* block = blocks->Get(index);
-    const CAT* identity = block ? block->OBJECT() : nullptr;
-    if (!identity) continue;
-    const std::string name = identity->OBJECT_NAME()
-                                 ? identity->OBJECT_NAME()->str()
-                                 : std::string{};
-    const std::string object_id = identity->OBJECT_ID()
-                                      ? identity->OBJECT_ID()->str()
-                                      : std::string{};
-    const uint32_t norad = identity->NORAD_CAT_ID();
-    const std::string label = !name.empty() ? name : object_id;
-    if (!label.empty() && norad > 0) {
-      return label + " (NORAD " + std::to_string(norad) + ")";
-    }
-    if (!label.empty()) return label;
-    if (norad > 0) return "NORAD " + std::to_string(norad);
-  }
-  return {};
-}
-
-bool decode_chunk(const plugin_input_frame_t* frame, Chunk* chunk,
-                  std::string* error) {
-  if (!frame || !chunk || !frame->payload || frame->payload_length == 0 ||
-      !frame->file_identifier ||
-      std::strcmp(frame->file_identifier, kFsbFileIdentifier) != 0) {
-    *error = "OD requires a typed $FSB input frame";
+// One $OEM from a source as the core's input and the XP input. Every block's states, in order, are the object's (the
+// sources give one block). The axes and time scale are the $OEM's own: EME2000, or Earth-fixed (CustomFrame ECEF); UTC
+// or GPS. `why` says what makes an $OEM unusable; an arc the core cannot fit leaves `pending->object.oem` empty.
+bool read_source_oem(const ProviderInfo& provider, const uint8_t* bytes, uint32_t length, PendingFitObject* pending,
+                     std::string* why) {
+  flatbuffers::Verifier verifier(bytes, length);
+  if (!OEMBufferHasIdentifier(bytes) || !VerifyOEMBuffer(verifier)) {
+    *why = "not an SDS $OEM FlatBuffer";
     return false;
   }
-  chunk->wire_format = frame->wire_format;
-  if (frame->wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER) {
-    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!VerifyFSBBuffer(verifier)) {
-      *error = "invalid canonical FSB chunk";
-      return false;
-    }
-    const FSB* stream = GetFSB(frame->payload);
-    chunk->request_id = stream->REQUEST_ID();
-    chunk->sequence = stream->CHUNK_SEQUENCE();
-    chunk->final = stream->FINAL();
-    chunk->total_bytes = stream->TOTAL_BYTES();
-    chunk->record_count = stream->RECORD_COUNT();
-    if (stream->SCHEMA_NAME()) chunk->schema_name = stream->SCHEMA_NAME()->str();
-    if (stream->FILE_IDENTIFIER()) {
-      chunk->file_identifier = stream->FILE_IDENTIFIER()->str();
-    }
-    if (stream->DATA()) {
-      chunk->data.assign(stream->DATA()->begin(), stream->DATA()->end());
-    }
-    if (stream->SHA256()) {
-      chunk->sha256.assign(stream->SHA256()->begin(), stream->SHA256()->end());
-    }
-    return true;
-  }
-  if (frame->wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
-    if (frame->payload_length != kFsbAlignedSize ||
-        reinterpret_cast<uintptr_t>(frame->payload) % kFsbAlignment != 0) {
-      *error = "invalid aligned FSB bounds or alignment";
-      return false;
-    }
-    const auto* stream = reinterpret_cast<const Aligned::FSB*>(frame->payload);
-    if ((stream->has_SCHEMA_NAME() &&
-         stream->SCHEMA_NAME.length > kFsbSchemaNameCapacity) ||
-        (stream->has_FILE_IDENTIFIER() &&
-         stream->FILE_IDENTIFIER.length > kFsbFileIdentifierCapacity) ||
-        (stream->has_DATA() && stream->DATA.length > kFsbDataCapacity) ||
-        (stream->has_SHA256() &&
-         stream->SHA256.length > kFsbSha256Capacity)) {
-      *error = "aligned FSB field length exceeds fixed capacity";
-      return false;
-    }
-    chunk->request_id = stream->REQUEST_ID;
-    chunk->sequence = stream->CHUNK_SEQUENCE;
-    chunk->final = stream->FINAL;
-    chunk->total_bytes = stream->TOTAL_BYTES;
-    chunk->record_count = stream->RECORD_COUNT;
-    if (stream->has_SCHEMA_NAME()) chunk->schema_name = stream->SCHEMA_NAME.str();
-    if (stream->has_FILE_IDENTIFIER()) {
-      chunk->file_identifier = stream->FILE_IDENTIFIER.str();
-    }
-    if (stream->has_DATA()) {
-      chunk->data.assign(stream->DATA.values,
-                         stream->DATA.values + stream->DATA.size());
-    }
-    if (stream->has_SHA256()) {
-      chunk->sha256.assign(stream->SHA256.values,
-                           stream->SHA256.values + stream->SHA256.size());
-    }
-    return true;
-  }
-  *error = "unsupported FSB wire format";
-  return false;
-}
-
-bool verify_checksum(const Assembly& assembly) {
-  if (assembly.sha256.empty()) return true;
-  if (assembly.sha256.size() != 32) return false;
-  uint8_t digest[32];
-  sdn_cid::sha256_raw(assembly.bytes.data(), assembly.bytes.size(), digest);
-  return std::memcmp(digest, assembly.sha256.data(), sizeof(digest)) == 0;
-}
-
-bool append_chunk(Provider provider, const Chunk& chunk, Assembly* completed,
-                  std::string* error) {
-  if (chunk.total_bytes == 0 || chunk.total_bytes > kMaxNativeResponseBytes) {
-    *error = "native response TOTAL_BYTES is outside the OD bound";
+  const OEM* oem = GetOEM(bytes);
+  const auto* blocks = oem->EPHEMERIS_DATA_BLOCK();
+  if (!blocks || blocks->size() == 0) {
+    *why = "the $OEM has no ephemeris data block";
     return false;
   }
-  const AssemblyKey key{provider, chunk.request_id};
-  auto found = g_assemblies.find(key);
-  if (chunk.sequence == 0) {
-    if (found != g_assemblies.end()) g_assemblies.erase(found);
-    Assembly fresh;
-    fresh.total_bytes = chunk.total_bytes;
-    fresh.record_count = chunk.record_count;
-    fresh.wire_format = chunk.wire_format;
-    fresh.schema_name = chunk.schema_name;
-    fresh.file_identifier = chunk.file_identifier;
-    fresh.sha256 = chunk.sha256;
-    fresh.bytes.reserve(static_cast<size_t>(chunk.total_bytes));
-    found = g_assemblies.emplace(key, std::move(fresh)).first;
+  std::string name, object_id;
+  uint32_t norad = 0;
+  bool celestial = false;
+  CelestialFrame celestial_frame = CelestialFrame::EME2000;
+  bool fixed = false;
+  timingStandard time_system = timingStandard::UTC;
+  std::vector<NativeState> states;
+  for (flatbuffers::uoffset_t b = 0; b < blocks->size(); ++b) {
+    const ephemerisDataBlock* block = blocks->Get(b);
+    if (!block) continue;
+    if (b == 0) {
+      if (const CAT* cat = block->OBJECT()) {
+        name = text_of(cat->OBJECT_NAME());
+        object_id = text_of(cat->OBJECT_ID());
+        norad = cat->NORAD_CAT_ID();
+      }
+      const RFM* rfm = block->REFERENCE_FRAME();
+      if (const auto* c = rfm ? rfm->REFERENCE_FRAME_as_CelestialFrameWrapper() : nullptr) {
+        celestial = true;
+        celestial_frame = c->frame();
+      } else if (const auto* f = rfm ? rfm->REFERENCE_FRAME_as_CustomFrameWrapper() : nullptr) {
+        fixed = f->frame() == CustomFrame::ECEF;
+      }
+      time_system = block->TIME_SYSTEM();
+    }
+    if (const auto* lines = block->EPHEMERIS_DATA_LINES(); lines && lines->size() > 0) {
+      for (const ephemerisDataLine* line : *lines) {
+        int64_t day = 0;
+        double sod = 0.0;
+        NativeState state;
+        if (!line || !line->EPOCH() || !parse_calendar(line->EPOCH()->string_view(), &day, &sod)) {
+          *why = "an ephemeris line's EPOCH is not an ISO 8601 calendar time";
+          return false;
+        }
+        state.epoch = stamp_after(day, sod, 0.0, &state.seconds);
+        state.x = line->X();
+        state.y = line->Y();
+        state.z = line->Z();
+        state.vx = line->X_DOT();
+        state.vy = line->Y_DOT();
+        state.vz = line->Z_DOT();
+        states.push_back(std::move(state));
+      }
+    } else if (const auto* data = block->EPHEMERIS_DATA(); data && data->size() > 0) {
+      const uint32_t stride = block->STATE_VECTOR_SIZE() == 3 ? 3 : 6;
+      int64_t day = 0;
+      double sod = 0.0;
+      if (!block->START_TIME() || !parse_calendar(block->START_TIME()->string_view(), &day, &sod)) {
+        *why = "a compact block's START_TIME is not an ISO 8601 calendar time";
+        return false;
+      }
+      for (uint32_t i = 0; i + stride <= data->size(); i += stride) {
+        NativeState state;
+        state.epoch = stamp_after(day, sod, (i / stride) * block->STEP_SIZE(), &state.seconds);
+        state.x = data->Get(i);
+        state.y = data->Get(i + 1);
+        state.z = data->Get(i + 2);
+        if (stride == 6) {
+          state.vx = data->Get(i + 3);
+          state.vy = data->Get(i + 4);
+          state.vz = data->Get(i + 5);
+        }
+        states.push_back(std::move(state));
+      }
+    }
   }
-  if (found == g_assemblies.end()) {
-    *error = "native response chunk arrived without sequence zero";
+  if (!celestial && !fixed) {
+    *why = "the $OEM's REFERENCE_FRAME is neither a celestial frame nor Earth-fixed (CustomFrame ECEF)";
     return false;
   }
-  Assembly& assembly = found->second;
-  if (chunk.sequence != assembly.next_sequence ||
-      chunk.total_bytes != assembly.total_bytes ||
-      chunk.wire_format != assembly.wire_format ||
-      chunk.schema_name != assembly.schema_name ||
-      chunk.file_identifier != assembly.file_identifier ||
-      (!assembly.sha256.empty() && chunk.sha256 != assembly.sha256)) {
-    g_assemblies.erase(found);
-    *error = "native response chunk metadata or ordering mismatch";
+  if (celestial && celestial_frame != CelestialFrame::EME2000) {
+    *why = "the $OEM's celestial REFERENCE_FRAME is not EME2000";
     return false;
   }
-  if (assembly.bytes.size() + chunk.data.size() > assembly.total_bytes) {
-    g_assemblies.erase(found);
-    *error = "native response chunks exceed TOTAL_BYTES";
+  if (time_system != timingStandard::UTC && time_system != timingStandard::GPS) {
+    *why = "the $OEM's TIME_SYSTEM is neither UTC nor GPS";
     return false;
   }
-  assembly.bytes.insert(assembly.bytes.end(), chunk.data.begin(), chunk.data.end());
-  ++assembly.next_sequence;
-  if (!chunk.final) return true;
-  if (assembly.bytes.size() != assembly.total_bytes || !verify_checksum(assembly)) {
-    g_assemblies.erase(found);
-    *error = "final native response length or SHA256 mismatch";
+  const sgp4xp::TimeScale scale = time_system == timingStandard::GPS ? sgp4xp::TimeScale::Gps : sgp4xp::TimeScale::Utc;
+  const sgp4xp::Frame xp_frame = fixed ? sgp4xp::Frame::Itrf : sgp4xp::Frame::Eme2000;
+  pending->provider = &provider;
+  pending->identity = describe(name, object_id, norad);
+  if (provider.position_only) {
+    pending->object.oem = fixed ? build_position_only_oem(name, object_id, norad, CustomFrame::ECEF, time_system, states)
+                                : build_position_only_oem(name, object_id, norad, celestial_frame, time_system, states);
+  } else if (celestial) {
+    pending->object.oem = build_celestial_oem(name, object_id, norad, celestial_frame, time_system, states);
+  } else {
+    *why = "an Earth-fixed $OEM from a source that gives velocities";
     return false;
   }
-  *completed = std::move(assembly);
-  g_assemblies.erase(found);
+  if (!pending->object.oem.empty()) {
+    pending->xp = make_xp_input(states, xp_frame, scale, !provider.position_only, name, object_id, norad);
+  }
   return true;
 }
 
-int32_t push_canonical_stream_chunk(
-    const RecordStreamAccumulator& records, uint64_t request_id,
-    uint32_t sequence, bool final, const uint8_t digest[32],
-    const uint8_t* chunk_data, size_t chunk_size) {
-  flatbuffers::FlatBufferBuilder builder(chunk_size + 256);
-  const auto schema = builder.CreateString(records.schema_name);
-  const auto identifier = builder.CreateString(records.file_identifier);
-  const auto data = builder.CreateVector(chunk_data, chunk_size);
-  const auto checksum = builder.CreateVector(digest, 32);
-  FSBBuilder stream_builder(builder);
-  stream_builder.add_REQUEST_ID(request_id);
-  stream_builder.add_KIND(flatSqlByteStreamKind_RECORD_STREAM);
-  stream_builder.add_CHUNK_SEQUENCE(sequence);
-  stream_builder.add_FINAL(final);
-  stream_builder.add_TOTAL_BYTES(records.data.size());
-  stream_builder.add_RECORD_COUNT(records.record_count);
-  stream_builder.add_SCHEMA_NAME(schema);
-  stream_builder.add_FILE_IDENTIFIER(identifier);
-  stream_builder.add_DATA(data);
-  stream_builder.add_SHA256(checksum);
-  const auto root = stream_builder.Finish();
-  FinishFSBBuffer(builder, root);
-  return plugin_push_output_typed(
-      records.port_id, kFsbSchemaName, kFsbFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, kFsbRootType, 0, 0, 0,
-      builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize()));
-}
+// --- the fit --------------------------------------------------------------------------------------------------------
 
-int32_t push_aligned_stream_chunk(
-    const RecordStreamAccumulator& stream, uint64_t request_id,
-    uint32_t sequence, bool final, const uint8_t digest[32],
-    const uint8_t* chunk_data, size_t chunk_size) {
-  if (chunk_size > kFsbDataCapacity) return -1;
-  std::memset(&g_aligned_output, 0, sizeof(g_aligned_output));
-  g_aligned_output.REQUEST_ID = request_id;
-  g_aligned_output.KIND = flatSqlByteStreamKind_RECORD_STREAM;
-  g_aligned_output.CHUNK_SEQUENCE = sequence;
-  g_aligned_output.FINAL = final;
-  g_aligned_output.TOTAL_BYTES = stream.data.size();
-  g_aligned_output.RECORD_COUNT = stream.record_count;
-  g_aligned_output.SCHEMA_NAME.set(stream.schema_name);
-  g_aligned_output.set_has_SCHEMA_NAME(true);
-  g_aligned_output.FILE_IDENTIFIER.set(stream.file_identifier);
-  g_aligned_output.set_has_FILE_IDENTIFIER(true);
-  g_aligned_output.DATA.set_length(static_cast<uint32_t>(chunk_size));
-  std::memcpy(g_aligned_output.DATA.values, chunk_data, chunk_size);
-  g_aligned_output.set_has_DATA(true);
-  g_aligned_output.SHA256.set_length(32);
-  std::memcpy(g_aligned_output.SHA256.values, digest, 32);
-  g_aligned_output.set_has_SHA256(true);
-  return plugin_push_output_typed(
-      stream.port_id, kFsbSchemaName, kFsbFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, kFsbRootType, 0,
-      kFsbAlignedSize, kFsbAlignment,
-      reinterpret_cast<const uint8_t*>(&g_aligned_output), kFsbAlignedSize);
-}
-
-int32_t push_record_stream(const RecordStreamAccumulator& stream,
-                           uint64_t request_id,
-                           const std::array<uint8_t, 32>& digest) {
-  if (stream.data.empty() || stream.record_count == 0) return 0;
-  size_t offset = 0;
-  uint32_t sequence = 0;
-  while (offset < stream.data.size()) {
-    const size_t chunk_size =
-        std::min(kFsbDataCapacity, stream.data.size() - offset);
-    const bool final = offset + chunk_size == stream.data.size();
-    const int32_t status =
-        stream.wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY
-            ? push_aligned_stream_chunk(stream, request_id, sequence, final,
-                                        digest.data(),
-                                        stream.data.data() + offset,
-                                        chunk_size)
-            : push_canonical_stream_chunk(stream, request_id, sequence, final,
-                                          digest.data(),
-                                          stream.data.data() + offset,
-                                          chunk_size);
-    if (status < 0) return status;
-    offset += chunk_size;
-    ++sequence;
-  }
-  return 0;
-}
-
-bool append_record(std::vector<RecordStreamAccumulator>* streams,
-                   const char* port_id, const char* schema_name,
-                   const char* file_identifier,
-                   const std::vector<uint8_t>& record,
-                   uint32_t wire_format) {
-  if (!streams) return false;
-  if (record.empty()) return true;
-  auto found = std::find_if(
-      streams->begin(), streams->end(),
-      [port_id, wire_format](const RecordStreamAccumulator& stream) {
-        return stream.wire_format == wire_format &&
-               std::strcmp(stream.port_id, port_id) == 0;
-      });
-  if (found == streams->end()) {
-    streams->push_back({port_id, schema_name, file_identifier, wire_format});
-    found = std::prev(streams->end());
-  }
-  if (record.size() > kMaxOutputStreamBytes - found->data.size()) return false;
-  found->data.insert(found->data.end(), record.begin(), record.end());
-  ++found->record_count;
-  return true;
-}
-
-int32_t push_canonical_configuration(uint64_t request_id) {
-  flatbuffers::FlatBufferBuilder builder(std::strlen(kResultSchemaIdl) + 1024);
-  const auto database_name = builder.CreateString("supplemental-omm");
-  const auto schema_idl = builder.CreateVector(
-      reinterpret_cast<const uint8_t*>(kResultSchemaIdl),
-      std::strlen(kResultSchemaIdl));
-  std::vector<flatbuffers::Offset<FSOTableBinding>> bindings;
-  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OMM", "OMM"));
-  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OCM", "OCM"));
-  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OBD", "OBD"));
-  const auto table_bindings = builder.CreateVector(bindings);
-  FSOBuilder control(builder);
-  control.add_OPERATION(flatSqlNodeOperation_CONFIGURE_INDEX);
-  control.add_REQUEST_ID(request_id);
-  control.add_DATABASE_NAME(database_name);
-  control.add_SCHEMA_IDL(schema_idl);
-  control.add_TABLE_BINDINGS(table_bindings);
-  const auto root = control.Finish();
-  FinishFSOBuffer(builder, root);
-  return plugin_push_output_typed(
-      "control", kFsoSchemaName, kFsoFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, kFsoRootType, 0, 0, 0,
-      builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize()));
-}
-
-void write_aligned_u32(uint32_t offset, uint32_t value) {
-  std::memcpy(g_aligned_control + offset, &value, sizeof(value));
-}
-
-void write_aligned_u64(uint32_t offset, uint64_t value) {
-  std::memcpy(g_aligned_control + offset, &value, sizeof(value));
-}
-
-bool write_aligned_string(uint32_t offset, size_t capacity,
-                          const char* value) {
-  const size_t length = std::strlen(value);
-  if (length > capacity || length > 255) return false;
-  g_aligned_control[offset] = static_cast<uint8_t>(length);
-  std::memcpy(g_aligned_control + offset + 1, value, length);
-  return true;
-}
-
-bool write_aligned_binding(uint32_t index, const char* file_identifier,
-                           const char* table_name) {
-  const uint32_t base = kAlignedFsoBindingsOffset + 4 +
-                        index * kAlignedFsoBindingStride;
-  g_aligned_control[base] = 3;
-  return write_aligned_string(base + 1, 4, file_identifier) &&
-         write_aligned_string(base + 6, 128, table_name);
-}
-
-int32_t push_canonical_status(uint64_t request_id,
-                              flatSqlNodeStatus status,
-                              uint64_t affected_records,
-                              uint64_t result_bytes,
-                              const std::string& error_code,
-                              const std::string& message) {
-  flatbuffers::FlatBufferBuilder builder(message.size() + 512);
-  const auto encoded_error = error_code.empty()
-                                 ? flatbuffers::Offset<flatbuffers::String>{}
-                                 : builder.CreateString(error_code);
-  const auto encoded_message = message.empty()
-                                   ? flatbuffers::Offset<
-                                         flatbuffers::Vector<uint8_t>>{}
-                                   : builder.CreateVector(
-                                         reinterpret_cast<const uint8_t*>(
-                                             message.data()),
-                                         message.size());
-  FSOBuilder status_builder(builder);
-  status_builder.add_REQUEST_ID(request_id);
-  status_builder.add_STATUS(status);
-  status_builder.add_AFFECTED_RECORDS(affected_records);
-  status_builder.add_RESULT_BYTES(result_bytes);
-  if (!error_code.empty()) status_builder.add_ERROR_CODE(encoded_error);
-  if (!message.empty()) status_builder.add_MESSAGE(encoded_message);
-  const auto root = status_builder.Finish();
-  FinishFSOBuffer(builder, root);
-  return plugin_push_output_typed(
-      "status", kFsoSchemaName, kFsoFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, kFsoRootType, 0, 0, 0,
-      builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize()));
-}
-
-int32_t push_aligned_status(uint64_t request_id, flatSqlNodeStatus status,
-                            uint64_t affected_records, uint64_t result_bytes,
-                            const std::string& error_code,
-                            const std::string& message) {
-  std::memset(g_aligned_control, 0, sizeof(g_aligned_control));
-  write_aligned_u64(8, request_id);
-  g_aligned_control[kAlignedFsoStatusOffset] =
-      static_cast<uint8_t>(status);
-  write_aligned_u64(kAlignedFsoAffectedRecordsOffset, affected_records);
-  write_aligned_u64(kAlignedFsoResultBytesOffset, result_bytes);
-  if (!error_code.empty()) {
-    g_aligned_control[1] |= 4;
-    if (!write_aligned_string(kAlignedFsoErrorCodeOffset,
-                              kFsoErrorCodeCapacity,
-                              error_code.c_str())) {
-      return -1;
-    }
-  }
-  if (!message.empty()) {
-    g_aligned_control[1] |= 8;
-    write_aligned_u32(kAlignedFsoMessageOffset,
-                      static_cast<uint32_t>(message.size()));
-    std::memcpy(g_aligned_control + kAlignedFsoMessageOffset + 4,
-                message.data(), message.size());
-  }
-  return plugin_push_output_typed(
-      "status", kFsoSchemaName, kFsoFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, kFsoRootType, 0,
-      kFsoAlignedSize, kFsoAlignment, g_aligned_control, kFsoAlignedSize);
-}
-
-int32_t push_status(uint32_t wire_format, uint64_t request_id,
-                    flatSqlNodeStatus status, uint64_t affected_records,
-                    uint64_t result_bytes, std::string error_code,
-                    std::string message) {
-  if (error_code.size() > kFsoErrorCodeCapacity) {
-    error_code.resize(kFsoErrorCodeCapacity);
-  }
-  if (message.size() > kFsoMessageCapacity) {
-    message.resize(kFsoMessageCapacity);
-  }
-  if (wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
-    return push_aligned_status(request_id, status, affected_records,
-                               result_bytes, error_code, message);
-  }
-  return push_canonical_status(request_id, status, affected_records,
-                               result_bytes, error_code, message);
-}
-
-int32_t push_aligned_configuration(uint64_t request_id) {
-  const size_t schema_length = std::strlen(kResultSchemaIdl);
-  if (schema_length > 262'144) return -1;
-  std::memset(g_aligned_control, 0, sizeof(g_aligned_control));
-  g_aligned_control[0] = 7;  // DATABASE_NAME, SCHEMA_IDL, TABLE_BINDINGS.
-  g_aligned_control[2] =
-      static_cast<uint8_t>(flatSqlNodeOperation_CONFIGURE_INDEX);
-  write_aligned_u64(8, request_id);
-  if (!write_aligned_string(kAlignedFsoDatabaseOffset, 128,
-                            "supplemental-omm")) {
-    return -1;
-  }
-  write_aligned_u32(kAlignedFsoSchemaOffset,
-                    static_cast<uint32_t>(schema_length));
-  std::memcpy(g_aligned_control + kAlignedFsoSchemaOffset + 4,
-              kResultSchemaIdl, schema_length);
-  write_aligned_u32(kAlignedFsoBindingsOffset, 3);
-  if (!write_aligned_binding(0, "$OMM", "OMM") ||
-      !write_aligned_binding(1, "$OCM", "OCM") ||
-      !write_aligned_binding(2, "$OBD", "OBD")) {
-    return -1;
-  }
-  return plugin_push_output_typed(
-      "control", kFsoSchemaName, kFsoFileIdentifier,
-      PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, kFsoRootType, 0,
-      kFsoAlignedSize, kFsoAlignment, g_aligned_control, kFsoAlignedSize);
-}
-
-int32_t push_configuration(uint32_t wire_format, uint64_t request_id) {
-  if (wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
-    return push_aligned_configuration(request_id);
-  }
-  return push_canonical_configuration(request_id);
-}
-
-bool append_result(std::vector<RecordStreamAccumulator>* streams,
-                   const od::BatchResult& result, uint32_t wire_format) {
-  bool accepted =
-      append_record(streams, "omm", "OMM", "$OMM", result.omm,
-                    wire_format) &&
-      append_record(streams, "ocm", "OCM", "$OCM", result.ocm,
-                    wire_format) &&
-      append_record(streams, "obd", "OBD", "$OBD", result.obd,
-                    wire_format);
-  for (const od::BatchEpochResult& additional : result.additional_epochs) {
-    accepted =
-        accepted &&
-        append_record(streams, "omm", "OMM", "$OMM", additional.omm,
-                      wire_format) &&
-        append_record(streams, "ocm", "OCM", "$OCM", additional.ocm,
-                      wire_format) &&
-        append_record(streams, "obd", "OBD", "$OBD", additional.obd,
-                      wire_format);
-  }
-  return accepted;
-}
-
-bool preflight_fit_epochs(
-    const std::vector<od::PluginFitFBResult>& epochs,
-    std::string* error_code,
-    std::string* error_message) {
+bool preflight_fit_epochs(const std::vector<od::PluginFitFBResult>& epochs, std::string* error_code,
+                          std::string* error_message) {
   if (epochs.empty()) {
     *error_code = "fit-empty";
     *error_message = "complete-arc fitter produced no epoch records";
     return false;
   }
   for (const od::PluginFitFBResult& epoch : epochs) {
-    if (!epoch.ok || epoch.omm.empty() || epoch.ocm.empty() ||
-        epoch.obd.empty()) {
+    if (!epoch.ok || epoch.omm.empty() || epoch.ocm.empty() || epoch.obd.empty()) {
       if (!epoch.ok) {
-        *error_code = epoch.error_code.empty()
-                          ? "fit-epoch-failed"
-                          : epoch.error_code;
-        *error_message = epoch.error_message.empty()
-                             ? "complete-arc fitter returned a failed epoch"
-                             : epoch.error_message;
+        *error_code = epoch.error_code.empty() ? "fit-epoch-failed" : epoch.error_code;
+        *error_message = epoch.error_message.empty() ? "complete-arc fitter returned a failed epoch" : epoch.error_message;
       } else {
         *error_code = "fit-incomplete-epoch";
-        *error_message =
-            "complete-arc fitter returned an incomplete epoch record set";
+        *error_message = "complete-arc fitter returned an incomplete epoch record set";
       }
       return false;
     }
@@ -1437,335 +548,295 @@ bool preflight_fit_epochs(
   return true;
 }
 
-od::BatchResult fit_one_bounded(const od::BatchObject& object) {
-  od::BatchResult result;
-  std::vector<od::PluginFitFBResult> epochs =
-      od::fit_ephemeris_epochs_fb(
-          object.oem.empty() ? nullptr : object.oem.data(),
-          object.oem.size(), kFitOptions);
-  if (!preflight_fit_epochs(epochs, &result.error_code,
-                            &result.error_message)) {
-    return result;
+// One record stream: size-prefixed records back to back.
+struct RecordStream {
+  std::vector<uint8_t> bytes;
+  uint64_t count = 0;
+  bool add(const std::vector<uint8_t>& record) {
+    if (record.empty()) return true;
+    if (record.size() > kMaxOutputStreamBytes - bytes.size()) return false;
+    bytes.insert(bytes.end(), record.begin(), record.end());
+    ++count;
+    return true;
   }
-  od::PluginFitFBResult& first = epochs.front();
-  result.ok = true;
-  result.omm = std::move(first.omm);
-  result.obd = std::move(first.obd);
-  result.ocm = std::move(first.ocm);
-  result.rms_km = first.rms_km;
-  result.converged = first.converged;
-  result.additional_epochs.reserve(epochs.size() - 1);
-  for (size_t index = 1; index < epochs.size(); ++index) {
-    od::PluginFitFBResult& epoch = epochs[index];
-    od::BatchEpochResult additional;
-    additional.omm = std::move(epoch.omm);
-    additional.obd = std::move(epoch.obd);
-    additional.ocm = std::move(epoch.ocm);
-    additional.rms_km = epoch.rms_km;
-    additional.converged = epoch.converged;
-    result.additional_epochs.push_back(std::move(additional));
-  }
-  return result;
-}
-
-bool provider_for_port(const char* port_id, Provider* provider) {
-  if (!port_id || !provider) return false;
-  for (const ProviderPort& candidate : kProviderPorts) {
-    if (std::strcmp(port_id, candidate.port_id) == 0) {
-      *provider = candidate.provider;
-      return true;
-    }
-  }
-  return false;
-}
-
-void publish_pending_fit_state() {
-  const uint32_t backlog =
-      static_cast<uint32_t>(g_pending_fit_objects.size());
-  plugin_set_backlog_remaining(backlog);
-  plugin_set_yielded(backlog > 0 ? 1 : 0);
-}
+};
 
 // ---------------------------------------------------------------------------
 // SGP4-XP element sets beside the SGP4 sets of the OD core.
 //
-// Every ephemeris is also fitted with SGP4-XP, the US Space Force's perturbation
-// model with a fitted ballistic term (BTERM) and solar-radiation term (AGOM):
-// a day to fit (two thirds of an ephemeris shorter than a day and a half) and
-// up to a day to score it, window after window while the ephemeris lasts, at
-// most 16 (propagator/sgp4-xp, engine.hpp). Each fitted window is one $OMM
-// (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) and one
-// $OBD in the same record streams as the OD core's records, and names its
-// source: the OMM's ORIGINATOR is the organisation that produced the ephemeris
-// and the OBD's sensor is the provider node's plugin ID. An ephemeris too short
-// to hold a fit and three hours to score it gets no XP set; the OD core's sets
-// are unaffected either way.
+// Every ephemeris is also fitted with SGP4-XP, the US Space Force's perturbation model with a fitted ballistic term
+// (BTERM) and solar-radiation term (AGOM): a day to fit (two thirds of an ephemeris shorter than a day and a half) and
+// up to a day to score it, window after window while the ephemeris lasts, at most 16 (propagator/sgp4-xp,
+// engine.hpp). Each fitted window is one $OMM (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT)
+// and one $OBD in the same record streams as the OD core's records, and names its source: the OMM's ORIGINATOR is the
+// organisation that produced the ephemeris and the OBD's sensor is the source module's plugin ID. An ephemeris too
+// short to hold a fit and three hours to score it gets no XP set; the OD core's sets are unaffected either way.
 // ---------------------------------------------------------------------------
-constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16,
-                                               0};
+constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16, 0};
 constexpr const char* kXpProduct =
-    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.1.0 and the US "
-    "Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.1.0 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 constexpr uint32_t kUnknownNorad = 99999;  // the OD core's placeholder
 
-const char* provider_originator(Provider provider) {
-  switch (provider) {
-    case Provider::Starlink:
-      return "SpaceX";
-    case Provider::Glonass:
-      return "CODE (Astronomical Institute, University of Bern)";
-    case Provider::Intelsat:
-      return "Intelsat";
-    case Provider::Cpf:
-      return "ILRS (EDC, DGFI-TUM)";
-    case Provider::Iss:
-      return "NASA/JSC/FOD/TOPO";
-  }
-  return "UNKNOWN";
-}
-
-const char* provider_source(Provider provider) {
-  switch (provider) {
-    case Provider::Starlink:
-      return "org.sdn.flows.supplemental-omm.provider-starlink";
-    case Provider::Glonass:
-      return "org.sdn.flows.supplemental-omm.provider-glonass";
-    case Provider::Intelsat:
-      return "org.sdn.flows.supplemental-omm.provider-intelsat";
-    case Provider::Cpf:
-      return "org.sdn.flows.supplemental-omm.provider-cpf";
-    case Provider::Iss:
-      return "org.sdn.flows.supplemental-omm.provider-iss";
-  }
-  return "";
-}
-
-std::vector<uint8_t> size_prefixed_omm(const OMMT& omm) {
+template <typename T>
+std::vector<uint8_t> size_prefixed(const T& native, const char* identifier) {
   flatbuffers::FlatBufferBuilder builder(4096);
-  builder.FinishSizePrefixed(CreateOMM(builder, &omm), OMMIdentifier());
-  return std::vector<uint8_t>(builder.GetBufferPointer(),
-                              builder.GetBufferPointer() + builder.GetSize());
+  builder.FinishSizePrefixed(T::TableType::Pack(builder, &native), identifier);
+  return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
-std::vector<uint8_t> size_prefixed_obd(const OBDT& obd) {
-  flatbuffers::FlatBufferBuilder builder(4096);
-  builder.FinishSizePrefixed(CreateOBD(builder, &obd), OBDIdentifier());
-  return std::vector<uint8_t>(builder.GetBufferPointer(),
-                              builder.GetBufferPointer() + builder.GetSize());
-}
-
-// Appends an $OMM and an $OBD for each fitted window to the record streams.
-// Returns the account that follows the object's completion message: empty when
-// the ephemeris is too short to hold a fit and its scoring (most short provider
-// responses), else the number of sets and of windows refused. `ok` is false only
-// when a stream would pass its size bound.
-std::string append_xp_records(std::vector<RecordStreamAccumulator>* streams,
-                              const PendingFitObject& pending, bool* ok) {
+// Appends an $OMM and an $OBD for each fitted window. Returns the account that follows the object's completion
+// message: empty when the ephemeris is too short to hold a fit and its scoring, else the number of sets and of windows
+// refused. `ok` is false only when a stream would pass its size bound.
+std::string append_xp_records(RecordStream* omm, RecordStream* obd, const PendingFitObject& pending, bool* ok) {
   *ok = true;
   if (pending.xp.states.empty()) return {};
-  const uint32_t norad =
-      pending.xp.norad != 0 ? pending.xp.norad : kUnknownNorad;
+  const uint32_t norad = pending.xp.norad != 0 ? pending.xp.norad : kUnknownNorad;
   sgp4xp::SourceFit fitted;
   std::string code;
   std::string why;
-  if (!sgp4xp::fitSource(pending.xp.states, pending.xp.frame, norad,
-                         kXpWindowPolicy, &fitted, &code, &why)) {
+  if (!sgp4xp::fitSource(pending.xp.states, pending.xp.frame, norad, kXpWindowPolicy, &fitted, &code, &why)) {
     if (code == "arc-too-short" || code == "too-few-states") return {};
     return "; SGP4-XP refused: " + code + ": " + why;
   }
   sgp4xp::Provenance who;
-  who.originator = provider_originator(pending.provider);
-  who.source = provider_source(pending.provider);
+  who.originator = pending.provider->originator;
+  who.source = pending.provider->source_plugin;
   who.name = pending.xp.name;
   who.id = pending.xp.object_id;
   who.norad = norad;
   size_t appended = 0;
   for (const sgp4xp::IntervalFit& window : fitted.windows) {
-    const std::unique_ptr<OMMT> omm = sgp4xp::ommOf(window, who, kXpProduct);
-    const std::unique_ptr<OBDT> obd = sgp4xp::obdOf(window, who, kXpProduct);
-    if (!append_record(streams, "omm", "OMM", "$OMM", size_prefixed_omm(*omm),
-                       pending.wire_format) ||
-        !append_record(streams, "obd", "OBD", "$OBD", size_prefixed_obd(*obd),
-                       pending.wire_format)) {
+    const std::unique_ptr<OMMT> o = sgp4xp::ommOf(window, who, kXpProduct);
+    const std::unique_ptr<OBDT> d = sgp4xp::obdOf(window, who, kXpProduct);
+    if (!omm->add(size_prefixed(*o, OMMIdentifier())) || !obd->add(size_prefixed(*d, OBDIdentifier()))) {
       *ok = false;
       return {};
     }
     ++appended;
   }
-  std::string account = "; SGP4-XP: " + std::to_string(appended) +
-                        (appended == 1 ? " set" : " sets");
+  std::string account = "; SGP4-XP: " + std::to_string(appended) + (appended == 1 ? " set" : " sets");
   if (!fitted.refusals.empty()) {
-    account += ", " + std::to_string(fitted.refusals.size()) +
-               " refused (" + fitted.refusals.front() + ")";
+    account += ", " + std::to_string(fitted.refusals.size()) + " refused (" + fitted.refusals.front() + ")";
   }
   return account;
+}
+
+// --- outputs --------------------------------------------------------------------------------------------------------
+
+std::string hex(const uint8_t* bytes, size_t n) {
+  static const char* digits = "0123456789abcdef";
+  std::string out(n * 2, '0');
+  for (size_t i = 0; i < n; ++i) {
+    out[2 * i] = digits[bytes[i] >> 4];
+    out[2 * i + 1] = digits[bytes[i] & 15];
+  }
+  return out;
+}
+
+int32_t push(const char* port, const char* schema, const char* identifier, const char* root,
+             const uint8_t* bytes, size_t size) {
+  return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, bytes,
+                               static_cast<uint32_t>(size));
+}
+
+// The batch of one standard: its IngestRequest on "<code>_meta", then its record stream on "<code>". BATCH_ID is the
+// SHA-256 of the stream.
+bool push_batch(const char* code, const char* schema, const char* identifier, const char* root,
+                const RecordStream& stream, const ProviderInfo& provider, std::string* batch_id) {
+  uint8_t digest[32];
+  sdn_cid::sha256_raw(stream.bytes.data(), stream.bytes.size(), digest);
+  *batch_id = hex(digest, sizeof digest);
+  R::IngestRequestT request;
+  request.SCHEMA = schema;
+  request.TAGS = std::make_unique<R::SourceTagsT>();
+  request.TAGS->PROVIDER_ID = kProviderId;
+  request.TAGS->SOURCE_NAME = provider.source_name;
+  request.TAGS->BATCH_ID = *batch_id;
+  request.TAGS->CONTENT_KEY_ID = "public";
+  request.RECONCILE = R::reconcileMode_Duplicates;
+  request.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  request.PROVENANCE->PARSER = kParser;
+  request.PROVENANCE->PARSER_VERSION = kParserVersion;
+  request.PROVENANCE->NORMALIZED_SHA256 = *batch_id;
+  request.PROVENANCE->NORMALIZED_COUNT = stream.count;
+  flatbuffers::FlatBufferBuilder b(512);
+  R::FinishIngestRequestBuffer(b, R::IngestRequest::Pack(b, &request));
+  const std::string meta_port = std::string(code) + "_meta";
+  return push(meta_port.c_str(), "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest",
+              b.GetBufferPointer(), b.GetSize()) >= 0 &&
+         push(code, schema, identifier, root, stream.bytes.data(), stream.bytes.size()) >= 0;
+}
+
+bool push_notice(R::flowNoticeKind kind, const char* reason, const ProviderInfo* provider, uint64_t count,
+                 const std::string& item, const std::string& batch_id = {}) {
+  R::FlowNoticeT notice;
+  notice.KIND = kind;
+  notice.SCHEMA = "OMM.fbs";
+  notice.PROVIDER_ID = kProviderId;
+  if (provider) notice.SOURCE_NAME = provider->source_name;
+  notice.BATCH_ID = batch_id;
+  notice.COUNT = count;
+  notice.REASON = reason;
+  if (!item.empty()) notice.ITEMS.push_back(item);
+  flatbuffers::FlatBufferBuilder b(256 + item.size());
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+  return push("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b.GetBufferPointer(),
+              b.GetSize()) >= 0;
+}
+
+int finish(int code) {
+  const uint32_t backlog = static_cast<uint32_t>(g_pending.size());
+  plugin_set_backlog_remaining(backlog);
+  plugin_set_yielded(backlog > 0 ? 1 : 0);
+  return code;
+}
+
+int fail(const char* code, const std::string& message, int status) {
+  plugin_set_error(code, message.c_str());
+  return finish(status);
 }
 
 }  // namespace
 
 extern "C" int fit(void) {
   plugin_reset_output_state();
-  std::string error;
 
   for (uint32_t index = 0; index < plugin_get_input_count(); ++index) {
     const plugin_input_frame_t* frame = plugin_get_input_frame(index);
-    Provider provider;
-    if (!frame || !provider_for_port(frame->port_id, &provider)) continue;
-    Chunk chunk;
-    if (!decode_chunk(frame, &chunk, &error)) {
-      plugin_set_error("od-chunk-invalid", error.c_str());
-      publish_pending_fit_state();
-      return 400;
+    const ProviderInfo* provider = frame ? provider_for_port(frame->port_id) : nullptr;
+    if (!provider) continue;
+    if (!frame->payload || frame->payload_length == 0) {
+      return fail("od-input-invalid", std::string("an empty frame on \"") + provider->port_id + "\"", 400);
     }
-    Assembly completed;
-    if (!append_chunk(provider, chunk, &completed, &error)) {
-      plugin_set_error("od-chunk-invalid", error.c_str());
-      publish_pending_fit_state();
-      return 400;
+    PendingFitObject pending;
+    std::string why;
+    if (!read_source_oem(*provider, frame->payload, frame->payload_length, &pending, &why)) {
+      return fail("od-input-invalid", std::string("\"") + provider->port_id + "\": " + why, 400);
     }
-    if (!chunk.final) continue;
-    std::vector<ParsedObject> parsed =
-        parse_native_response(provider, completed);
-    if (parsed.empty()) {
-      const std::string parse_error =
-          "complete provider response had fewer than three usable states";
-      plugin_set_error("od-native-parse", parse_error.c_str());
-      std::string message = parse_error;
-      if (!completed.schema_name.empty()) {
-        message += ": " + completed.schema_name;
-      }
-      if (push_status(completed.wire_format, chunk.request_id,
-                      flatSqlNodeStatus_INVALID_ARGUMENT, 0, 0,
-                      "od-native-parse", message) < 0) {
-        plugin_set_error("od-output", "unable to emit OD parse status");
-        publish_pending_fit_state();
-        return 500;
+    if (pending.object.oem.empty()) {
+      std::string message = "the ephemeris has fewer than three usable states or an arc the fit core cannot fit";
+      if (!pending.identity.empty()) message += ": " + pending.identity;
+      if (!push_notice(R::flowNoticeKind_Skipped, "unfittable", provider, 1, message)) {
+        return fail("od-output", "unable to emit a FlowNotice", 500);
       }
       continue;
     }
-    for (ParsedObject& parsed_object : parsed) {
-      std::string identity = describe_batch_object(parsed_object.object);
-      g_pending_fit_objects.push_back({std::move(parsed_object.object),
-                                       std::move(parsed_object.xp),
-                                       provider,
-                                       completed.wire_format,
-                                       chunk.request_id,
-                                       std::move(identity)});
-    }
+    g_pending.push_back(std::move(pending));
   }
 
-  if (g_pending_fit_objects.empty()) {
-    publish_pending_fit_state();
-    return 0;
-  }
+  if (g_pending.empty()) return finish(0);
 
-  PendingFitObject pending = std::move(g_pending_fit_objects.front());
-  g_pending_fit_objects.pop_front();
-  // Keep the frozen pthread batch entry linked into the exact isomorphic child
-  // profile. The empty call performs no fit; one admitted object is fitted
-  // below through the same core's options-aware complete-arc entry point.
+  PendingFitObject pending = std::move(g_pending.front());
+  g_pending.pop_front();
+  // Keep the frozen pthread batch entry linked into the isomorphic node. The empty call performs no fit; the object is
+  // fitted below through the same core's options-aware complete-arc entry point.
   od::BatchRunStats stats{};
   const std::vector<od::BatchObject> no_objects;
   (void)od::run_batch_fit(no_objects, 0, &stats);
-  std::vector<od::BatchResult> results;
-  results.reserve(1);
-  results.push_back(fit_one_bounded(pending.object));
-  size_t emitted = 0;
-  uint32_t configuration_wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-  std::vector<RecordStreamAccumulator> streams;
-  std::string first_fit_error_code;
-  std::string first_fit_error;
-  for (size_t index = 0; index < results.size(); ++index) {
-    const od::BatchResult& result = results[index];
-    if (!result.ok || result.omm.empty()) {
-      if (first_fit_error_code.empty()) {
-        first_fit_error_code = result.error_code;
-      }
-      if (first_fit_error.empty()) {
-        first_fit_error = result.error_message.empty()
-                              ? "OD fit produced no complete record set"
-                              : result.error_message;
-      }
-      continue;
-    }
-    const uint32_t output_wire_format = pending.wire_format;
-    if (emitted == 0) configuration_wire_format = output_wire_format;
-    if (!append_result(&streams, result, output_wire_format)) {
-      plugin_set_error("od-output-too-large",
-                       "one fitted schema stream exceeds 128 MiB");
-      publish_pending_fit_state();
-      return 413;
-    }
-    ++emitted;
-  }
-  if (emitted == 0) {
-    const std::string fit_error =
-        first_fit_error.empty() ? "OD produced no complete record set"
-                                : first_fit_error;
-    plugin_set_error("od-fit", fit_error.c_str());
+
+  std::vector<od::PluginFitFBResult> epochs =
+      od::fit_ephemeris_epochs_fb(pending.object.oem.data(), pending.object.oem.size(), kFitOptions);
+  std::string error_code, error_message;
+  if (!preflight_fit_epochs(epochs, &error_code, &error_message)) {
     std::string message = "OD fit failed";
     if (!pending.identity.empty()) message += ": " + pending.identity;
-    message += ": " + fit_error;
-    if (push_status(
-            pending.wire_format, pending.request_id,
-            flatSqlNodeStatus_INTERNAL_ERROR, 0, 0,
-            first_fit_error_code.empty() ? "od-fit" : first_fit_error_code,
-            message) < 0) {
-      plugin_set_error("od-output", "unable to emit OD fit failure status");
-      publish_pending_fit_state();
-      return 500;
+    message += ": " + error_code + ": " + error_message;
+    if (!push_notice(R::flowNoticeKind_Skipped, "fit-failed", pending.provider, 1, message)) {
+      return fail("od-output", "unable to emit a FlowNotice", 500);
     }
-    publish_pending_fit_state();
-    return 0;
+    return finish(0);
+  }
+
+  RecordStream omm, ocm, obd;
+  for (const od::PluginFitFBResult& epoch : epochs) {
+    if (!omm.add(epoch.omm) || !ocm.add(epoch.ocm) || !obd.add(epoch.obd)) {
+      return fail("od-output-too-large", "one fitted record stream exceeds 128 MiB", 413);
+    }
   }
   bool xp_ok = true;
-  const std::string xp_account = append_xp_records(&streams, pending, &xp_ok);
-  if (!xp_ok) {
-    plugin_set_error("od-output-too-large",
-                     "one fitted schema stream exceeds 128 MiB");
-    publish_pending_fit_state();
-    return 413;
-  }
-  OutputRequestIdentity output_identity;
-  if (!derive_output_request_identity(streams, &output_identity)) {
-    plugin_set_error("od-output-identity",
-                     "unable to derive complete fitted output identity");
-    publish_pending_fit_state();
-    return 500;
-  }
-  if (push_configuration(configuration_wire_format,
-                         output_identity.configuration_request_id) < 0) {
-    plugin_set_error("od-output", "unable to emit FlatSQL CONFIGURE_INDEX control");
-    publish_pending_fit_state();
-    return 500;
-  }
-  for (const OutputStreamRequestIdentity& stream_identity :
-       output_identity.streams) {
-    if (push_record_stream(*stream_identity.stream, stream_identity.request_id,
-                           stream_identity.digest) < 0) {
-      plugin_set_error("od-output", "unable to emit fitted FSB record stream");
-      publish_pending_fit_state();
-      return 500;
-    }
-  }
-  uint64_t affected_records = 0;
-  uint64_t result_bytes = 0;
-  for (const RecordStreamAccumulator& stream : streams) {
-    result_bytes += static_cast<uint64_t>(stream.data.size());
-    if (std::strcmp(stream.port_id, "omm") == 0) {
-      affected_records = stream.record_count;
-    }
+  const std::string xp_account = append_xp_records(&omm, &obd, pending, &xp_ok);
+  if (!xp_ok) return fail("od-output-too-large", "one fitted record stream exceeds 128 MiB", 413);
+
+  std::string omm_batch, ocm_batch, obd_batch;
+  if (!push_batch("omm", "OMM.fbs", "$OMM", "OMM", omm, *pending.provider, &omm_batch) ||
+      !push_batch("ocm", "OCM.fbs", "$OCM", "OCM", ocm, *pending.provider, &ocm_batch) ||
+      !push_batch("obd", "OBD.fbs", "$OBD", "OBD", obd, *pending.provider, &obd_batch)) {
+    return fail("od-output", "unable to emit a fitted batch", 500);
   }
   std::string message = "OD fit complete";
   if (!pending.identity.empty()) message += ": " + pending.identity;
   message += xp_account;
-  if (push_status(pending.wire_format, pending.request_id,
-                  flatSqlNodeStatus_COMPLETE, affected_records,
-                  result_bytes, "", message) < 0) {
-    plugin_set_error("od-output", "unable to emit OD completion status");
-    publish_pending_fit_state();
+  if (!push_notice(R::flowNoticeKind_Info, "fitted", pending.provider, omm.count, message, omm_batch)) {
+    return fail("od-output", "unable to emit a FlowNotice", 500);
+  }
+  return finish(0);
+}
+
+// publish_request: hostcap/storage-ingest's IngestResult + the IngestRequest it stored -> the dataset-publication POST
+// (omm_publish_url), its BODY the IngestResult naming the stored batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID);
+// nothing when omm_publish_url is unset, or when the batch was refused (nothing was stored).
+extern "C" int publish_request(void) {
+  plugin_reset_output_state();
+  const auto frame_for = [](const char* port) -> const plugin_input_frame_t* {
+    const int32_t at = plugin_find_input_index(port, 0);
+    return at < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(at));
+  };
+  const plugin_input_frame_t* result_frame = frame_for("result");
+  const plugin_input_frame_t* meta_frame = frame_for("meta");
+  if (plugin_find_input_index("result", 1) >= 0 || plugin_find_input_index("meta", 1) >= 0) {
+    plugin_set_error("batched-input-frames", "publish_request pairs ONE IngestResult with ONE IngestRequest per invocation.");
     return 500;
   }
-  publish_pending_fit_state();
+  if (!result_frame || !result_frame->payload || result_frame->payload_length == 0) {
+    plugin_set_error("missing-result-frame", "publish_request requires the storage-ingest result frame.");
+    return 400;
+  }
+  if (!meta_frame || !meta_frame->payload || meta_frame->payload_length == 0) {
+    plugin_set_error("missing-meta-frame", "publish_request requires the IngestRequest frame.");
+    return 400;
+  }
+  flatbuffers::Verifier result_verifier(result_frame->payload, result_frame->payload_length);
+  if (!R::VerifyIngestResultBuffer(result_verifier)) {
+    plugin_set_error("invalid-result-frame", "the result frame is not an IngestResult (INGR).");
+    return 400;
+  }
+  flatbuffers::Verifier meta_verifier(meta_frame->payload, meta_frame->payload_length);
+  if (!R::VerifyIngestRequestBuffer(meta_verifier)) {
+    plugin_set_error("invalid-meta-frame", "the meta frame is not an IngestRequest (INGQ).");
+    return 400;
+  }
+  const sdm_piv::Config config = sdm_piv::get_config();
+  const std::string url(config.string("omm_publish_url", ""));
+  if (url.empty()) return 0;
+  const R::IngestResult& result = *R::GetIngestResult(result_frame->payload);
+  const R::IngestRequest& meta = *R::GetIngestRequest(meta_frame->payload);
+  if (result.REFUSED() && result.REFUSED()->size()) return 0;  // nothing stored, nothing to publish
+  std::string schema = text_of(result.SCHEMA()), batch_id = text_of(result.BATCH_ID());
+  if (schema.empty()) schema = text_of(meta.SCHEMA());
+  if (batch_id.empty()) batch_id = text_of(meta.TAGS()->BATCH_ID());
+  const std::string provider = text_of(meta.TAGS()->PROVIDER_ID()), source = text_of(meta.TAGS()->SOURCE_NAME());
+  if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
+    plugin_set_error("incomplete-publication-identity", "publish_request needs schema, batchId, providerId and sourceName.");
+    return 400;
+  }
+  flatbuffers::FlatBufferBuilder body_builder(512);
+  R::FinishIngestResultBuffer(
+      body_builder,
+      R::CreateIngestResultDirect(body_builder, schema.c_str(), provider.c_str(), source.c_str(), batch_id.c_str(),
+                                  result.INSERTED(), result.RECONCILED_DUPLICATES(), result.RECONCILED_OLD_BATCHES(),
+                                  result.ARCHIVED() && result.ARCHIVED()->size() ? result.ARCHIVED()->c_str() : nullptr,
+                                  nullptr));
+  const std::vector<uint8_t> body(body_builder.GetBufferPointer(),
+                                  body_builder.GetBufferPointer() + body_builder.GetSize());
+  flatbuffers::FlatBufferBuilder b(512 + body.size());
+  std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "content-type", "application/octet-stream")};
+  R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "POST", url.c_str(), &headers, &body,
+                                                           static_cast<uint32_t>(config.number("omm_publish_timeout_ms", 30000)),
+                                                           0, nullptr));
+  if (push("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", b.GetBufferPointer(),
+           b.GetSize()) < 0) {
+    plugin_set_error("emit-failed", "unable to emit the publication HttpRequest.");
+    return 500;
+  }
   return 0;
 }

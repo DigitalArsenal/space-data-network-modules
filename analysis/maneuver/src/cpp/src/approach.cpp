@@ -539,7 +539,13 @@ PhasingFromStateResult computePhasingFromTargetState(
 
     result.coplanarTolerance = options.coplanarTolerance;
     result.eccentricityTolerance = options.eccentricityTolerance;
-    result.coOrbitalToleranceMetres = options.coOrbitalTolerance * radius;
+    if (std::isfinite(options.coOrbitalToleranceMetres)) {
+        result.coOrbitalToleranceMetres = options.coOrbitalToleranceMetres;
+        result.coOrbitalToleranceFraction = options.coOrbitalToleranceMetres / radius;
+    } else {
+        result.coOrbitalToleranceMetres = options.coOrbitalTolerance * radius;
+        result.coOrbitalToleranceFraction = options.coOrbitalTolerance;
+    }
     result.coplanar = result.geometry.planeAngle <= options.coplanarTolerance;
     result.nearCircular =
         result.geometry.chaserEccentricity <= options.eccentricityTolerance &&

@@ -1,89 +1,44 @@
 /*
- * data-source/cell-tower-ingest (graph task `mod-cell-tower-ingest-flow`).
+ * data-source/cell-tower-ingest (graph task `mod-cell-tower-ingest-flow`) — typed contracts 1.0: FlatBuffers only,
+ * no JSON and no base64 between modules.
  *
- * The INGEST half of the cellular program. `cell-tower-source` is the
- * REQUEST-scoped browser aggregate: one $HTQ in, one deconflicted $TBS stream
- * straight back to the caller, `capabilities: []`, nothing persisted. That is
- * the right shape for the demo and the wrong shape for ingest, and the two
- * cannot be one flow — so the ingest-only decisions live here, in a separate
- * plugin, exactly as the credential lane was split into `cell-tower-credentials`
- * for the same reason.
+ * The INGEST half of the cellular program. `cell-tower-source` is the REQUEST-scoped aggregate: one $HTQ in, one
+ * deconflicted $TBS stream straight back to the caller, `capabilities: []`, nothing persisted. That is the right shape
+ * for the demo and the wrong shape for ingest, so the ingest-only decisions live here, in a separate plugin, exactly
+ * as the credential lane was split into `cell-tower-credentials`. This plugin REUSES `cell-tower-source`'s `parse` and
+ * `deconflict` unchanged: decoding a provider body and merging sites are the same operations whether the answer is
+ * served or stored, and forking them would fork the deconfliction rules.
  *
- * This plugin REUSES `cell-tower-source`'s `parse` and `deconflict` unchanged:
- * decoding a provider body and merging sites across providers are the same
- * operations whether the answer is served or stored, and forking them would
- * fork the deconfliction rules.
+ * Methods (every frame a FlatBuffer):
+ *   mark_query      TimerTick                              -> $FSO   (read the newest $IRM resume marks)
+ *   ingest_plan     TimerTick + $FSB (marks)               -> HttpRequest: ONE ranged chunk; CONTEXT = a size-prefixed
+ *                                                             stream [$APR run contract, $IRM job]
+ *   ingest_meta     $TBS + HttpResponse + $IRM resume?     -> IngestRequest + $TBS (forwarded) + candidate $IRM
+ *                                                          -> FlowNotice Unchanged ONLY on HTTP 304
+ *   publish_request IngestResult + IngestRequest + $IRM    -> durable $IRM (storage-write) + publication POST
+ *   cache_plan      $HTQ                                   -> $HTQ forwarded (passthrough / tile) or $FSO x2 + $APR
+ *   cache_freshness $APR + $FSB (rows) + $FSB (marks)      -> $APR decision + $DAV + $TBS records
+ *   tile_plan       $HTQ                                   -> $FSO queries + $APR jobs, or an $APR refusal
+ *   tile_meta/tile  $APR + $FSB                            -> $QRP decision + $QRP projection page
  *
- * Methods:
- *   mark_query      tick                     -> query           (read the resume mark)
- *   ingest_plan     tick + mark?             -> request, job    (ONE ranged chunk)
- *   ingest_meta     job + records            -> meta, records   (storage-ingest input)
- *                                            -> unchanged       (ONLY on HTTP 304)
- *   publish_request result + meta            -> request?, mark  (publish + advance)
+ * WHY THE FETCH IS CHUNKED. The Go server host caps an http response body at 4 MiB (hostcap/http-request), so a bulk
+ * export is read by HTTP Range strictly under that ceiling, one chunk per tick; the loop's state lives in the durable
+ * $IRM mark, never in a guest instance a restart erases.
  *
- * WHY THE FETCH IS CHUNKED, AND WHY THE CHUNK SIZE IS NOT A FREE PARAMETER.
+ * WHY THE MARK ADVANCES WHERE IT DOES. `publish_request` writes the mark from the STORAGE RESULT — never at dispatch:
+ * a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows.
  *
- * `hostcap/http-request`'s own manifest records that the Go server host
- * (sdn-server modulert/caps/http.go) CAPS THE RESPONSE BODY AT 4 MiB. A bulk
- * cellular export is measured in gigabytes, so a whole-file GET does not merely
- * strain memory — it is truncated by the host before the guest ever sees it, and
- * a truncated CSV parses to a plausible-looking short row set with no error
- * anywhere. Independently, `cellular-worldwide-ingest-exceeds-host01` measured a
- * 4.75 MB CSV already forcing 8192 linear-memory pages.
+ * NEXT_OFFSET IS A RECORD BOUNDARY. A ranged read ends mid-row; `ingest_meta` corrects backwards to the byte after the
+ * last newline in the chunk (a compressed lane takes the decoder's own resume point instead, from parse's `resume`).
  *
- * So the bulk lanes fetch by HTTP Range, strictly under that ceiling, and ingest
- * per chunk. The default is 3 MiB, leaving headroom under the 4 MiB cap.
+ * HTTP 304 NOT MODIFIED IS A SUCCESSFUL RUN WITH NOTHING NEW: one FlowNotice on `unchanged` and nothing on
+ * meta/records, so hostcap/storage-ingest never fires, no batch is stored and the mark does not move.
  *
- * WHY THE RESUME MARK ADVANCES WHERE IT DOES.
- *
- * The mark is written by `publish_request`, from the STORAGE RESULT — never by
- * `ingest_plan` when it dispatches a chunk. A mark advanced at dispatch time
- * turns a crash between fetch and store into permanently skipped rows, and the
- * gap is invisible: the next run resumes past data that was never persisted.
- * Advancing only on a verified store makes a restart re-fetch at most one chunk,
- * which is idempotent because the storage lane reconciles by source batch.
- *
- * THE MARK'S WRITE LANE IS A MEASURED GAP, NOT AN OVERSIGHT. `hostcap/flatsql-
- * store` cannot carry it: it is the OD flow's fitted-results terminal, built
- * wasi-threads (so it cannot link into a single-thread flow at all — the flow
- * compiler refuses with `mixed-guest-thread-models`) and its `records` port
- * admits only $OMM/$OCM/$OBD. `hostcap/file` is single-thread and would fit, but
- * the Go server host has NO filesystem capability handler, so it fails closed on
- * the very box this flow targets. `storage.write` is schema-typed and would
- * require inventing an SDS record for a bookkeeping row, which is Themis's call
- * and not this flow's to make.
- *
- * HTTP 304 NOT MODIFIED IS A SUCCESSFUL RUN WITH NOTHING NEW, NOT A FAILED
- * FETCH. The host presents the ETag / Last-Modified it recorded from the last
- * 2xx for a URL (sdn-server internal/modulert/caps/http_validators.go), so an
- * unchanged bulk export answers 304 with no body at all. `cell-tower-source`'s
- * `parse` skips a non-2xx response, `deconflict` then emits an EMPTY record
- * stream, and `ingest_meta` refused that with `missing-records-frame` status
- * 400 — which failed `com.digitalarsenal.flows.cellular-network-ingest` every
- * day on host-02 while archive.org was perfectly healthy.
- *
- * The contract is `data-source/celestrak-parser`'s, mirrored exactly: one
- * notice on the `unchanged` port and NOTHING on meta/records, so
- * hostcap/storage-ingest never becomes ready, no batch is stored or announced,
- * and the resume mark does not move — nothing new was read, so there is
- * nothing to resume past, and the next tick re-asks for the same chunk.
- *
- * So `publish_request` EMITS the advanced mark on its own port — correct, tested
- * and ready — and the flow currently lands it on egress rather than in a store.
- * The read side is real: `mark_query` builds the flatsql-query that reads the
- * mark back, and `ingest_plan` consumes it. Closing the loop needs one durable
- * row lane; see the task note.
- *
- * FAIL LOUDLY ON THE SILENT NOP. `storage.ingest_with_source` refuses the whole
- * batch below a 5 GiB free-disk floor, and the refusal is an errCapJSON RETURN
- * VALUE, not a host event (`sdn-host02-flow-ingest-silent-nop`). hostcap/storage-
- * ingest already turns `ok:false` into a node error. The residue this module must
- * catch is the other half: `ok:true` with `inserted: 0` for a chunk that carried
- * records. That is byte-identical to a healthy empty tail, so it is checked
- * against the record count the job carries rather than guessed at, and it stops
- * the run instead of advancing the mark over data that was never stored.
+ * FAIL LOUDLY ON THE SILENT NOP: INSERTED 0 for a chunk that carried records is byte-identical to a healthy empty
+ * tail, so it is checked against the chunk's own record count and stops the run instead of advancing the mark.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -91,277 +46,199 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <string_view>
 #include <sys/time.h>
+#include <utility>
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "IngestResult_generated.h"
+#include "FlowNotice_generated.h"
 
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace {
 
-// The Go host caps an http response body at 4 MiB (hostcap/http-request
-// manifest). 3 MiB leaves headroom for the response envelope and keeps a chunk
-// comfortably inside a guest heap that 4.75 MB was already straining.
+namespace R = sdn::runtime;
+namespace A = sdn::runtime::Aligned;
+namespace H = sdn::http;
+
+using Bytes = std::vector<uint8_t>;
+
+// The Go host caps an http response body at 4 MiB; 3 MiB leaves headroom.
 constexpr long kDefaultChunkBytes = 3L * 1024L * 1024L;
 constexpr long kMaxChunkBytes = 4L * 1024L * 1024L;
 constexpr long kDefaultTimeoutMs = 90000;
-constexpr const char* kSchema = "TBS";
+constexpr const char* kSchemaName = "TBS.fbs";
+constexpr const char* kTargetStandard = "$TBS";
+constexpr const char* kIngestorId = "cell-tower-ingest-wasm/v1";
+constexpr const char* kParser = "cell-tower-ingest-wasm-v1";
+constexpr const char* kParserVersion = "0.2.0";
+// The shared decode-context literals (cell-tower-source parse is the authority on the decoder they describe).
+constexpr const char* kDecodeFormat = "text/csv";
+constexpr const char* kDecoderStateFormat = "cell-tower-source/tinfl-v1";
 
-bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+// THE ENGINE-ROUTED READ FORMS: every embedded standard is served through a generated FlatSQL unified view named by
+// its SDS CODE over `_data`/`_rowid` (owner law 2026-08-25).
+constexpr const char* kDefaultMarkSql = "SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?";
+constexpr long kDefaultMarkScanRows = 32;
+constexpr const char* kDefaultCacheSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
+constexpr long kDefaultCacheMaxRows = 5000;
 
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            value.push_back(json[i + 1]);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
+// ── the density-tile contract (graph tasks sdn-cellular-density-tiles / upstream-modules-2) ─────────────────────────
+constexpr const char* kTileScheme = "xyz";
+constexpr long kTileMinZoom = 0;
+constexpr long kTileMaxZoom = 18;
+constexpr long kTileThreshold = 2048;  // count <= threshold -> every point
+constexpr long kTileBudget = 4096;     // count <= budget -> a deterministic sample; above -> a density grid
+constexpr long kTileDensityN = 16;
+constexpr double kTileLatClamp = 85.05112878;
+constexpr double kTileIndexEpsilon = 1e-9;  // the client's TILE_INDEX_EPSILON verbatim
+constexpr const char* kDefaultTileRelation = "TBS";
+// THE ROW BUDGET IS THE GUEST'S MEMORY BUDGET: 100,000 whole $TBS rows exceeded a 2048-page mount on the first tile
+// request (host-01, 2026-08-27); 25,000 fits.
+constexpr long kDefaultTileMaxRows = 25000;
+constexpr const char* kTileDataset = "cellular-base-stations";
+constexpr const char* kTileNoEpoch = "1970-01-01T00:00:00Z";
+constexpr const char* kTileUrlTemplate = "/api/v1/cellular/tiles/{z}/{x}/{y}";
+constexpr const char* kTileDeconfliction =
+    "Tiles are pre-deconflicted on the node: sites are merged across provider registries before storage, so a tile "
+    "never carries the same site twice.";
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Time.
+// ---------------------------------------------------------------------------------------------------------------------
+
+int64_t now_unix_ms() {
+    struct timeval tv;
+    if (gettimeofday(&tv, nullptr) != 0) return 0;
+    return static_cast<int64_t>(tv.tv_sec) * 1000 + static_cast<int64_t>(tv.tv_usec / 1000);
+}
+
+// RFC 3339 UTC fixed-millisecond, as $IRM asks for its timestamps.
+std::string iso_ms(int64_t ms) {
+    const time_t seconds = static_cast<time_t>(ms / 1000);
+    struct tm g;
+    gmtime_r(&seconds, &g);
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", g.tm_year + 1900, g.tm_mon + 1, g.tm_mday,
+                  g.tm_hour, g.tm_min, g.tm_sec, static_cast<int>(ms % 1000));
+    return buf;
+}
+
+int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
+    y -= m <= 2;
+    const int64_t era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(y - era * 400);
+    const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<int64_t>(doe) - 719468;
+}
+
+// "YYYY-MM-DDTHH:MM:SS[.fff][Z|+HH:MM]" -> Unix ms; false when it is not one.
+bool parse_rfc3339_ms(const std::string& s, int64_t* out) {
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, se = 0;
+    if (s.size() < 19 || std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &se) != 6) return false;
+    size_t at = 19;
+    int64_t frac = 0;
+    if (at < s.size() && s[at] == '.') {
+        int digits = 0;
+        for (at++; at < s.size() && s[at] >= '0' && s[at] <= '9'; at++) {
+            if (digits < 3) { frac = frac * 10 + (s[at] - '0'); digits++; }
         }
+        while (digits < 3) { frac *= 10; digits++; }
     }
-    *out = value;
+    int64_t offset_min = 0;
+    if (at < s.size() && (s[at] == '+' || s[at] == '-')) {
+        int oh = 0, om = 0;
+        if (std::sscanf(s.c_str() + at + 1, "%2d:%2d", &oh, &om) == 2) offset_min = (oh * 60 + om) * (s[at] == '-' ? -1 : 1);
+    }
+    const int64_t days = days_from_civil(y, static_cast<unsigned>(mo), static_cast<unsigned>(d));
+    *out = ((days * 86400 + h * 3600 + mi * 60 + se) - offset_min * 60) * 1000 + frac;
     return true;
 }
 
-// Slice a nested JSON object out verbatim, brace-matched and string-aware, so
-// a value containing braces (a URL template, an escaped quote) cannot end the
-// slice early. Used to forward a producer's own frame without re-serialising it.
-std::string json_object_slice_local(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '{') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') depth++;
-        else if (c == '}') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
+// ---------------------------------------------------------------------------------------------------------------------
+// Node config: plugin.getConfig as an SDS $PIV hostcall - one ModuleConfig FlatBuffer on raw "config", read in place
+// (sdm_piv::Config). No config reads as the defaults.
+// ---------------------------------------------------------------------------------------------------------------------
+
+std::string format_number(double v) {
+    char buf[40];
+    if (v == std::floor(v) && std::fabs(v) < 1e15) std::snprintf(buf, sizeof(buf), "%.0f", v);
+    else std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
 }
 
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    // A QUOTED NUMBER IS STILL A NUMBER.
-    //
-    // Node CONFIG arrives as JSON built from the operator's YAML, and an
-    // operator writing `cell_ingest_http_timeout_ms: "1800000"` — which is
-    // ordinary YAML practice and exactly what host-02 had — produced a JSON
-    // STRING. This function required a digit or a minus sign, returned false,
-    // and every caller quietly fell back to its compiled-in default: the
-    // 30-minute timeout was really 90 seconds and a configured chunk size was
-    // not the chunk size used. Nothing said so (graph:
-    // sdn-cellular-ingest-lands-no-batch). Refusing the quoted form would be
-    // the other defensible answer, but it is not the one that can be taken
-    // safely against configs that are already deployed and already quoted.
-    size_t j = i;
-    bool quoted = false;
-    if (json[j] == '"') { quoted = true; j++; }
-    if (j >= json.size()) return false;
-    const char c = json[j];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + j, &end);
-    if (end == json.c_str() + j) return false;
-    // A quoted value must be ENTIRELY numeric: "1800000" is a number written as
-    // a string, "1800000ms" is a unit the caller did not ask for and must not
-    // silently become 1800000.
-    if (quoted) {
-        const size_t consumed = static_cast<size_t>(end - json.c_str());
-        if (consumed >= json.size() || json[consumed] != '"') return false;
-    }
-    *out = value;
-    return true;
-}
+struct Config {
+    sdm_piv::Config mcfg;
 
-double json_number_or(const std::string& json, const char* key, double fallback) {
-    double v = 0;
-    return json_number_field(json, key, &v) ? v : fallback;
-}
-
-// CONTROL CHARACTERS ARE ESCAPED, not passed through.
-//
-// This used to handle only `"`, `\` and newline, and every other byte went out
-// verbatim — which is fine right up until a field carries something that is not
-// text. It did: `ingest_meta` sliced a "CSV header" out of a still-GZIPPED
-// response body, so the meta JSON handed to storage.ingest_with_source began
-// `"csv_header":"\x1f\x8b\x08..."`. The host's envelope decoder refused the
-// whole hostcall with `invalid character '\x1f' in string literal`, the ingest
-// node answered 502, and the run stored nothing (graph:
-// sdn-cellular-ingest-lands-no-batch). The header slice is fixed at its source
-// below, but a serializer that can emit invalid JSON at all is the deeper
-// fault: ONE unescaped byte anywhere destroys the entire message.
-std::string json_escape(const std::string& s) {
-    static const char kHex[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        const unsigned char u = static_cast<unsigned char>(c);
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (u < 0x20 || u == 0x7f) {
-            out += "\\u00";
-            out.push_back(kHex[(u >> 4) & 0xF]);
-            out.push_back(kHex[u & 0xF]);
-        }
-        else out.push_back(c);
-    }
-    return out;
-}
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-std::string base64_decode(const std::string& in) {
-    std::string out;
-    out.reserve((in.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : in) {
-        const int v = b64_value(c);
-        if (v < 0) continue;  // padding and whitespace
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<char>((acc >> bits) & 0xff));
+    // A scalar as text, or a list joined with commas (the operator config always allowed either).
+    std::string text(const char* key) const {
+        namespace RK = sdn::runtime;
+        if (!mcfg.ok() || !mcfg.has(key)) return {};
+        switch (mcfg.kind(key)) {
+            case RK::configValueKind_String: return std::string(mcfg.string(key));
+            case RK::configValueKind_Number: return format_number(mcfg.number(key));
+            case RK::configValueKind_Bool: return mcfg.boolean(key) ? "true" : "false";
+            case RK::configValueKind_NumberList: {
+                std::string joined;
+                for (double v : mcfg.numbers(key)) joined += (joined.empty() ? "" : ",") + format_number(v);
+                return joined;
+            }
+            case RK::configValueKind_StringList: {
+                std::string joined;
+                bool first = true;
+                for (std::string_view v : mcfg.strings(key)) { if (!first) joined += ","; joined += v; first = false; }
+                return joined;
+            }
+            default: return {};
         }
     }
-    return out;
-}
+    std::string string(const char* key, const char* fallback) const {
+        const std::string v = text(key);
+        return v.empty() ? fallback : v;
+    }
+    bool has(const char* key) const { return mcfg.ok() && mcfg.has(key); }
+    double number(const char* key, double fallback) const {
+        namespace RK = sdn::runtime;
+        if (!has(key)) return fallback;
+        const RK::configValueKind kind = mcfg.kind(key);
+        if (kind == RK::configValueKind_Number) return mcfg.number(key, fallback);
+        if (kind == RK::configValueKind_String) {
+            const std::string s(mcfg.string(key));
+            char* end = nullptr;
+            const double v = strtod(s.c_str(), &end);
+            if (end != s.c_str()) return v;
+        }
+        return fallback;
+    }
+};
 
-// plugin.getConfig builtin hostcall: node CONFIG for this flow service, or "{}".
-std::string load_config() {
-    static const char* op = "plugin.getConfig";
-    const std::string payload_json = "{}";
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)), req.data(),
-                  static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 4) return "{}";
-    std::vector<uint8_t> buf(static_cast<size_t>(len));
-    sdm_host_read_response(buf.data(), len);
-    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
-                          (static_cast<uint32_t>(buf[2]) << 16) |
-                          (static_cast<uint32_t>(buf[3]) << 24);
-    if (buf.size() < 4u + rlen) return "{}";
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
-}
+Config load_config() { return Config{sdm_piv::get_config()}; }
 
-std::string config_string(const std::string& config, const char* key, const char* fallback) {
-    std::string value;
-    if (json_string_field(config, key, &value) && !value.empty()) return value;
-    return fallback;
-}
-
-// The configured chunk size is CLAMPED, not merely defaulted. An operator who
-// sets 64 MiB "for throughput" would get a silently truncated body from the host
-// and a short parse that looks like a clean tail.
-long config_chunk_bytes(const std::string& config) {
-    long v = static_cast<long>(json_number_or(config, "cell_ingest_chunk_bytes",
-                                              static_cast<double>(kDefaultChunkBytes)));
+// The configured chunk size is CLAMPED, not merely defaulted: a 64 MiB ask would be truncated by the host and parse to
+// a short row set that looks like a clean tail.
+long config_chunk_bytes(const Config& c) {
+    const long v = static_cast<long>(c.number("cell_ingest_chunk_bytes", static_cast<double>(kDefaultChunkBytes)));
     if (v <= 0) return kDefaultChunkBytes;
-    if (v > kMaxChunkBytes) return kMaxChunkBytes;
-    return v;
+    return v > kMaxChunkBytes ? kMaxChunkBytes : v;
 }
-
-long config_timeout_ms(const std::string& config) {
-    const long v = static_cast<long>(json_number_or(config, "cell_ingest_http_timeout_ms",
-                                                    static_cast<double>(kDefaultTimeoutMs)));
+long config_timeout_ms(const Config& c) {
+    const long v = static_cast<long>(c.number("cell_ingest_http_timeout_ms", static_cast<double>(kDefaultTimeoutMs)));
     return v > 0 ? v : kDefaultTimeoutMs;
 }
+std::string config_provider(const Config& c) { return c.string("cell_ingest_provider_id", "opencellid"); }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Frame IO.
+// ---------------------------------------------------------------------------------------------------------------------
 
 const plugin_input_frame_t* frame_for(const char* port_id) {
     const int32_t index = plugin_find_input_index(port_id, 0);
@@ -369,859 +246,784 @@ const plugin_input_frame_t* frame_for(const char* port_id) {
     return plugin_get_input_frame(static_cast<uint32_t>(index));
 }
 
-std::string input_text(const char* port_id) {
-    const plugin_input_frame_t* f = frame_for(port_id);
-    if (!f || !f->payload || f->payload_length == 0) return std::string();
-    return std::string(reinterpret_cast<const char*>(f->payload), f->payload_length);
+std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
+    std::vector<const plugin_input_frame_t*> out;
+    for (uint32_t ordinal = 0;; ordinal++) {
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
+    }
+    return out;
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const uint8_t* data, uint32_t length) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 data, length);
-}
-
-// SURPLUS-FRAME REFUSAL. The compiled flow runtime drains a node's queue
-// PORT-BLIND up to a budget of 64; maxStreams/maxBatch/drainPolicy are purely
-// declarative there. A guest that reads ordinal 0 and returns destroys every
-// other frame it was handed, with nothing re-delivering and nothing logging the
-// loss — the live P1 `cellular-multiprovider-returns-only-first-provider`.
-// Every method here pairs exactly one frame per port (one tick = one chunk, one
-// result = one mark), so a surplus is refused by name rather than silently
-// halved. See `modules-guest-nodes-drop-batched-frames`.
-bool find_batched_input_port(char* message, size_t message_len) {
+// SURPLUS-FRAME REFUSAL (graph task modules-guest-nodes-drop-batched-frames). The compiled runtime drains a node's
+// queue PORT-BLIND; a guest that read ordinal 0 and returned would destroy the rest silently. Single-stream ports
+// refuse a surplus by name; the $FSB ports carry one query's result chunks and take every one.
+bool refuse_batched(std::initializer_list<const char*> multi = {}) {
     const uint32_t count = plugin_get_input_count();
     for (uint32_t i = 0; i < count; i++) {
         const plugin_input_frame_t* frame = plugin_get_input_frame(i);
         if (!frame || !frame->port_id) continue;
-        for (uint32_t j = 0; j < i; j++) {
-            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
-            if (!earlier || !earlier->port_id) continue;
-            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
-            uint32_t on_port = 0;
-            for (uint32_t k = 0; k < count; k++) {
-                const plugin_input_frame_t* f = plugin_get_input_frame(k);
-                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
-            }
-            std::snprintf(message, message_len,
-                          "This invocation carries %u frames on single-stream input port \"%s\" "
-                          "(the compiled flow runtime drains a node's whole queue port-blind; "
-                          "maxStreams is declarative only). The surplus frames are refused "
-                          "rather than silently discarded.",
+        bool exempt = false;
+        for (const char* m : multi) exempt = exempt || std::strcmp(m, frame->port_id) == 0;
+        if (exempt) continue;
+        uint32_t on_port = 0;
+        for (uint32_t k = 0; k < count; k++) {
+            const plugin_input_frame_t* f = plugin_get_input_frame(k);
+            if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+        }
+        if (on_port > 1) {
+            char message[384];
+            std::snprintf(message, sizeof(message),
+                          "This invocation carries %u frames on single-stream input port \"%s\" (the compiled flow "
+                          "runtime drains a node's whole queue port-blind; maxStreams is declarative only). The surplus "
+                          "frames are refused rather than silently discarded.",
                           on_port, frame->port_id);
+            plugin_set_error("batched-input-frames", message);
             return true;
         }
     }
     return false;
 }
 
-bool refuse_batched(void) {
-    char message[384];
-    if (!find_batched_input_port(message, sizeof(message))) return false;
-    plugin_set_error("batched-input-frames", message);
-    return true;
+int fail(int status, const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return status;
 }
 
-// Content-Range: "bytes 0-3145727/2147483648" -> the total after the slash.
-// The DENOMINATOR is the only authority on the object's size: Content-Length on
-// a 206 describes the CHUNK, and reading it as the total ends the run after one
-// chunk with every later byte silently unfetched.
-bool total_from_content_range(const std::string& headers_json, long* total) {
-    std::string value;
-    if (!json_string_field(headers_json, "content-range", &value) &&
-        !json_string_field(headers_json, "Content-Range", &value)) {
-        return false;
-    }
-    const size_t slash = value.rfind('/');
-    if (slash == std::string::npos || slash + 1 >= value.size()) return false;
-    if (value[slash + 1] == '*') return false;  // unknown total; not an answer
-    const long parsed = std::atol(value.c_str() + slash + 1);
-    if (parsed <= 0) return false;
-    *total = parsed;
-    return true;
+int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
+    return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data,
+                                 static_cast<uint32_t>(size));
+}
+int push_builder(const char* port, const char* schema, const char* id, const char* root,
+                 const flatbuffers::FlatBufferBuilder& b) {
+    return push(port, schema, id, root, b.GetBufferPointer(), b.GetSize());
 }
 
-// The mark also carries WHAT THE STORE HOLDS, not only where the fetch is.
-//
-// `stored_rows` and `stored_at` exist because the tile lane must answer
-// "how many records, ingested when" WITHOUT scanning the store: a COUNT over
-// millions of rows to fill one field of a capability envelope the client
-// fetches at startup is not a tile lane, it is a table scan with a URL. The
-// ingest lane is the only place those two numbers are ever established, so it
-// records them where the read side can find them. `stored_rows` is CUMULATIVE
-// across chunks — a per-chunk count would report the size of the last chunk as
-// the size of the dataset.
-std::string mark_json(const std::string& provider_id, const std::string& source_url,
-                      long next_offset, long total_bytes, long chunk_index,
-                      const std::string& batch_id, long stored_rows,
-                      const std::string& stored_at) {
-    char buf[160];
-    std::snprintf(buf, sizeof(buf), "%ld,\"total_bytes\":%ld,\"chunk_index\":%ld", next_offset,
-                  total_bytes, chunk_index);
-    return std::string("{\"provider_id\":\"") + json_escape(provider_id) + "\"" +
-           ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"next_offset\":" + buf +
-           ",\"stored_rows\":" + std::to_string(stored_rows) + ",\"stored_at\":\"" +
-           json_escape(stored_at) + "\"" + ",\"batch_id\":\"" + json_escape(batch_id) + "\"}";
+// A verified, aligned copy of one plain-finished FlatBuffer (a frame need not sit aligned in its payload).
+template <typename T>
+const T* verified_copy(const uint8_t* data, size_t size, Bytes* scratch, bool (*verify)(flatbuffers::Verifier&),
+                       const T* (*get)(const void*)) {
+    if (!data || size < 8) return nullptr;
+    scratch->assign(data, data + size);
+    flatbuffers::Verifier verifier(scratch->data(), scratch->size());
+    return verify(verifier) ? get(scratch->data()) : nullptr;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE DURABLE RESUME MARK — $IRM (graph tasks mod-cell-tower-ingest-flow /
-// sds-ingest-resume-mark-record / upstream-modules-2).
-//
-// `mod-cell-tower-ingest-flow` shipped with ONE REAL GAP, recorded rather than
-// worked around: the mark had nowhere durable to go. `hostcap/flatsql-store` is
-// wasi-threads (the flow compiler refuses to link it into a single-thread flow)
-// and admits only $OMM/$OCM/$OBD; `hostcap/file` fits but the Go host has no
-// filesystem capability handler; `storage.write` was exactly right but
-// SCHEMA-TYPED, and inventing an SDS record for a bookkeeping row is Themis's
-// call, not a flow's.
-//
-// Themis ruled. $IRM (Ingest Resume Mark) was minted and ratified in
-// spacedatastandards.org 1.196.0, so the loop closes here: publish_request
-// authors an $IRM record, hostcap/storage-write persists it under the
-// storage_write grant, and mark_query/ingest_plan read it back. ZERO Go host
-// changes; the whole lane is still the generic hooks.
-//
-// THE DECODE CONTEXT IS OPAQUE AND VERSION-STAMPED, AND THAT IS DELIBERATE.
-//
-// A ranged bulk fetch cuts a deflate stream at an arbitrary byte. There is no
-// sync point and back-references reach 32 KiB behind, so chunk N>0 cannot be
-// decoded at all without the decoder's state — and cell-tower-source's `parse`
-// ALREADY serializes exactly that (tinfl state + the 32 KiB dictionary window +
-// the partial line straddling the seam) into its `bulk_resume_next` job field.
-// So the mark carries that producer's own frame VERBATIM in
-// IRMDecodeContext.DECODER_STATE rather than re-deriving it: a re-derivation is
-// a second implementation of a format whose whole purpose is to be restored
-// bit-exactly, and the failure mode of getting it wrong is a resume into
-// nonsense that stores cleanly.
-//
-// What makes verbatim safe is the VERSION STAMP. DECODER_STATE_FORMAT names the
-// producer and its layout; a mark whose stamp this build does not recognise is
-// IGNORED and the run RESTARTS, never resumed. That is the same posture
-// cell-tower-source's own `bulk_state_decode` takes on a version, size or
-// length disagreement, and for the same reason.
-// ═══════════════════════════════════════════════════════════════════════════
-
-constexpr const char* kIrmType = "IRM";
-constexpr const char* kIrmDecoderStateFormat = "cell-tower-source/bulk-resume-v1";
-constexpr const char* kIrmDecoderStateVersion = "1";
-constexpr const char* kIrmDecoderStateMediaType = "application/json";
-// THE ENGINE-ROUTED READ FORM, which is the only one a current node answers.
-// Every embedded standard is served through a generated FlatSQL unified view
-// named by its SDS CODE over `_data`/`_rowid` (owner law 2026-08-25; sdn
-// storage/engine_records.go builds `CREATE VIEW "<CODE>" AS SELECT ... FROM
-// "<CODE>@<source>"`). The old `sds_irm`/`rowid` spelling named a table that
-// no longer exists, so this default read back NOTHING on a current node and a
-// resume mark could never be found — every run would have restarted at byte 0
-// even after the mark lane started working. Operators overrode it in node
-// CONFIG; a default that only works when it is overridden is not a default.
-constexpr const char* kDefaultMarkSql = "SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?";
-constexpr long kDefaultMarkScanRows = 32;
-
-// Everything the read side needs, from EITHER a durable $IRM record or the
-// legacy JSON frame the flow still lands on egress for observability. The two
-// are told apart by the FlatBuffer file identifier versus a leading '{' — an
-// unambiguous discrimination, not a heuristic.
-struct MarkView {
-    bool present = false;
-    bool durable = false;  // came from an $IRM record rather than the JSON frame
-    std::string provider_id;
-    std::string source_url;
-    std::string batch_id;
-    std::string updated_at;
-    long next_offset = 0;
-    long total_bytes = 0;
-    long chunk_index = 0;
-    long stored_rows = 0;
-    std::string header_line;
-    std::string decoder_state;         // the producer's own frame, verbatim
-    std::string decoder_state_format;  // its version stamp
-};
-
-// Locate an $IRM root buffer inside a frame that may be the bare buffer or one
-// element of a size-prefixed stream. Returns nullptr when the bytes are not an
-// $IRM buffer at all — absent, never assumed.
-const uint8_t* find_irm_root(const uint8_t* data, size_t length, size_t* out_length) {
-    if (!data) return nullptr;
-    if (length >= 8 && std::memcmp(data + 4, "$IRM", 4) == 0) {
-        *out_length = length;
-        return data;
-    }
-    if (length >= 12 && std::memcmp(data + 8, "$IRM", 4) == 0) {
-        const uint32_t size = static_cast<uint32_t>(data[0]) |
-                              (static_cast<uint32_t>(data[1]) << 8) |
-                              (static_cast<uint32_t>(data[2]) << 16) |
-                              (static_cast<uint32_t>(data[3]) << 24);
-        if (size > 0 && 4u + size <= length) {
-            *out_length = size;
-            return data + 4;
-        }
-    }
-    return nullptr;
-}
-
-// Read the mark frame. `want_provider` is the provider this run is ingesting; a
-// mark belonging to a DIFFERENT provider is skipped rather than trusted, because
-// resuming provider A at provider B's offset skips the head of B's file and
-// never reports it. The query returns the newest few rows so a shared $IRM table
-// can hold several ingest lanes at once.
-MarkView read_mark(const std::string& frame, const std::string& want_provider) {
-    MarkView view;
-    if (frame.empty()) return view;
-
-    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(frame.data());
-    size_t remaining = frame.size();
+// Walk a size-prefixed stream; zero-length prefixes are padding and skipped. False when the framing is broken.
+template <typename F>
+bool for_each_frame(const uint8_t* data, size_t size, F&& f) {
     size_t at = 0;
-
-    // Walk every element of the stream, keeping the first mark for this
-    // provider (the query orders newest first).
-    while (at < remaining) {
-        size_t buffer_length = 0;
-        const uint8_t* root = find_irm_root(bytes + at, remaining - at, &buffer_length);
-        if (!root) break;
-
-        const IRM* irm = GetIRM(root);
-        if (irm) {
-            const char* provider = irm->PROVIDER_ID() ? irm->PROVIDER_ID()->c_str() : "";
-            if (want_provider.empty() || want_provider == provider) {
-                view.present = true;
-                view.durable = true;
-                view.provider_id = provider;
-                view.next_offset = static_cast<long>(irm->NEXT_OFFSET());
-                view.chunk_index = static_cast<long>(irm->NEXT_CHUNK_INDEX());
-                view.stored_rows = static_cast<long>(irm->RECORDS_COMMITTED());
-                if (irm->UPDATED_AT()) view.updated_at = irm->UPDATED_AT()->str();
-                if (const IRMSource* source = irm->SOURCE()) {
-                    if (source->SOURCE_URL()) view.source_url = source->SOURCE_URL()->str();
-                    view.total_bytes = static_cast<long>(source->TOTAL_BYTES());
-                }
-                if (const IRMChunk* chunk = irm->LAST_CHUNK()) {
-                    if (chunk->BATCH_ID()) view.batch_id = chunk->BATCH_ID()->str();
-                }
-                if (const IRMDecodeContext* decode = irm->DECODE_CONTEXT()) {
-                    if (decode->HEADER_LINE()) view.header_line = decode->HEADER_LINE()->str();
-                    if (decode->DECODER_STATE_FORMAT()) {
-                        view.decoder_state_format = decode->DECODER_STATE_FORMAT()->str();
-                    }
-                    if (decode->DECODER_STATE()) {
-                        view.decoder_state.assign(
-                            reinterpret_cast<const char*>(decode->DECODER_STATE()->Data()),
-                            decode->DECODER_STATE()->size());
-                    }
-                }
-                return view;
-            }
-        }
-        // The whole element, including its size prefix when it had one.
-        at += (root == bytes + at) ? buffer_length : buffer_length + 4;
-        if (buffer_length == 0) break;
+    while (at + 4 <= size) {
+        const uint32_t n = static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) |
+                           (static_cast<uint32_t>(data[at + 2]) << 16) | (static_cast<uint32_t>(data[at + 3]) << 24);
+        at += 4;
+        if (n == 0) continue;
+        if (n > size - at) return false;
+        if (!f(data + at, static_cast<size_t>(n))) return true;
+        at += n;
     }
-
-    // LEGACY JSON. The flow still emits the mark as JSON on egress so an
-    // operator can read it, and the pre-$IRM tests exercise that shape. It is
-    // accepted here, and it is NEVER confused with a record: a FlatBuffer does
-    // not begin with '{'.
-    size_t first = 0;
-    while (first < frame.size() && is_ws(frame[first])) first++;
-    if (first < frame.size() && frame[first] == '{') {
-        std::string provider;
-        if (json_string_field(frame, "provider_id", &provider)) {
-            if (!want_provider.empty() && want_provider != provider) return view;
-            view.present = true;
-            view.durable = false;
-            view.provider_id = provider;
-            json_string_field(frame, "source_url", &view.source_url);
-            json_string_field(frame, "batch_id", &view.batch_id);
-            json_string_field(frame, "stored_at", &view.updated_at);
-            view.next_offset = static_cast<long>(json_number_or(frame, "next_offset", 0));
-            view.total_bytes = static_cast<long>(json_number_or(frame, "total_bytes", 0));
-            view.chunk_index = static_cast<long>(json_number_or(frame, "chunk_index", 0));
-            view.stored_rows = static_cast<long>(json_number_or(frame, "stored_rows", 0));
-        }
-    }
-    return view;
+    return at == size;
 }
 
-// Author the durable $IRM record.
-//
-// Every field here is something the run ESTABLISHED. Nothing is invented to
-// fill a slot: an unknown total is 0 (which the read side reads as "length still
-// unknown" and never as "finished"), an absent decode context is an absent
-// table, and STATE is COMPLETE only when the fetch has demonstrably reached the
-// end of a source whose length is known.
-std::vector<uint8_t> build_irm(const std::string& provider, const std::string& source_url,
-                               const std::string& batch_id, long next_offset, long total_bytes,
-                               long chunk_index, long stored_rows, long chunk_offset,
-                               long records_in, const std::string& header_line,
-                               const std::string& decoder_state, const std::string& format,
-                               const std::string& merge_policy, const std::string& updated_at) {
-    ::flatbuffers::FlatBufferBuilder b(2048 + decoder_state.size() + header_line.size());
-
-    // JOB_ID is required and must be STABLE for one (provider, source) lane, so
-    // a later chunk updates the same job rather than opening a new one.
-    const std::string job_id = provider + "@" + source_url;
-    const auto job_id_off = b.CreateString(job_id);
-    const auto provider_off = b.CreateString(provider);
-    const auto ingestor_off = b.CreateString("cell-tower-ingest-wasm/v1");
-    const auto updated_off = b.CreateString(updated_at);
-    const auto target_off = b.CreateString(kSchema);
-    // The $IRM mark records the mode the storage lane was actually asked for,
-    // so it must be a mode the host has (none|duplicates|current) — see the
-    // ingest_meta note on why this is `none`.
-    const auto reconcile_off = b.CreateString("none");
-    const auto merge_off = merge_policy.empty() ? 0 : b.CreateString(merge_policy);
-
-    const auto source_url_off = b.CreateString(source_url);
-    IRMSourceBuilder sb(b);
-    sb.add_SOURCE_URL(source_url_off);
-    if (total_bytes > 0) sb.add_TOTAL_BYTES(static_cast<uint64_t>(total_bytes));
-    const auto source_off = sb.Finish();
-
-    // The decode context exists ONLY when there is something to carry. An empty
-    // table would read as "resume context available" and hand the decoder
-    // nothing.
-    ::flatbuffers::Offset<IRMDecodeContext> decode_off = 0;
-    if (!header_line.empty() || !decoder_state.empty()) {
-        const auto format_off = b.CreateString(format.empty() ? "csv" : format);
-        const auto header_off = header_line.empty() ? 0 : b.CreateString(header_line);
-        const auto state_off =
-            decoder_state.empty()
-                ? 0
-                : b.CreateVector(reinterpret_cast<const uint8_t*>(decoder_state.data()),
-                                 decoder_state.size());
-        const auto state_format_off =
-            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateFormat);
-        const auto state_version_off =
-            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateVersion);
-        const auto state_media_off =
-            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateMediaType);
-        IRMDecodeContextBuilder db(b);
-        db.add_FORMAT(format_off);
-        if (header_off.o) {
-            db.add_HEADER_LINE(header_off);
-            db.add_HEADER_BYTE_LENGTH(static_cast<uint64_t>(header_line.size()));
-        }
-        if (state_off.o) {
-            db.add_DECODER_STATE(state_off);
-            db.add_DECODER_STATE_FORMAT(state_format_off);
-            db.add_DECODER_STATE_VERSION(state_version_off);
-            db.add_DECODER_STATE_MEDIA_TYPE(state_media_off);
-            db.add_DECODER_STATE_BYTE_LENGTH(static_cast<uint64_t>(decoder_state.size()));
-        }
-        decode_off = db.Finish();
-    }
-
-    const auto batch_off = b.CreateString(batch_id);
-    const auto committed_off = b.CreateString(updated_at);
-    IRMChunkBuilder cb(b);
-    cb.add_CHUNK_INDEX(static_cast<uint32_t>(chunk_index));
-    cb.add_BATCH_ID(batch_off);
-    cb.add_RANGE_FIRST_BYTE(static_cast<uint64_t>(chunk_offset));
-    if (next_offset > chunk_offset) {
-        cb.add_RANGE_LAST_BYTE(static_cast<uint64_t>(next_offset - 1));
-        cb.add_BYTE_LENGTH(static_cast<uint64_t>(next_offset - chunk_offset));
-    }
-    if (records_in >= 0) cb.add_RECORDS_DECODED(static_cast<uint32_t>(records_in));
-    cb.add_COMMITTED_AT(committed_off);
-    const auto chunk_off = cb.Finish();
-
-    const bool complete = total_bytes > 0 && next_offset >= total_bytes;
-
-    IRMBuilder ib(b);
-    ib.add_JOB_ID(job_id_off);
-    ib.add_SEQUENCE(static_cast<uint64_t>(chunk_index + 1));
-    ib.add_PROVIDER_ID(provider_off);
-    ib.add_INGESTOR_ID(ingestor_off);
-    ib.add_SOURCE(source_off);
-    ib.add_STATE(complete ? irmJobState_COMPLETE : irmJobState_IN_PROGRESS);
-    ib.add_RANGE_MODE(irmRangeMode_INCLUSIVE_BYTE_RANGE);
-    ib.add_NEXT_OFFSET(static_cast<uint64_t>(next_offset));
-    ib.add_NEXT_CHUNK_INDEX(static_cast<uint32_t>(chunk_index + 1));
-    if (decode_off.o) ib.add_DECODE_CONTEXT(decode_off);
-    ib.add_LAST_CHUNK(chunk_off);
-    ib.add_CHUNKS_COMMITTED(static_cast<uint32_t>(chunk_index + 1));
-    ib.add_BYTES_COMMITTED(static_cast<uint64_t>(next_offset));
-    ib.add_RECORDS_COMMITTED(static_cast<uint64_t>(stored_rows));
-    ib.add_TARGET_STANDARD(target_off);
-    ib.add_RECONCILE_MODE(reconcile_off);
-    if (merge_off.o) ib.add_MERGE_POLICY(merge_off);
-    ib.add_UPDATED_AT(updated_off);
-    if (complete) ib.add_COMPLETED_AT(updated_off);
-    FinishIRMBuffer(b, ib.Finish());
-
-    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+bool has_identifier(const uint8_t* buf, size_t size, const char* id) {
+    return size >= 8 && std::memcmp(buf + 4, id, 4) == 0;
 }
 
-// ── $HTQ request envelope (read-only) ──────────────────────────────────────
-//
-// The cache lane sits in FRONT of cell-tower-source's `route`, so it has to read
-// the same envelope `route` reads in order to decide whether a request can be
-// answered from the store. Hand-decoded exactly as cell-tower-source does it
-// (cell_tower_source_module.cpp:2374) — one table, six fields, slots
-// METHOD=0, PATH=1, QUERY=2, HEADERS=3, BODY=4, REMOTE=5. Deliberately a COPY
-// rather than a shared header: this reader is READ-ONLY and never constructs an
-// envelope, and linking the two plugins' sources together would drag
-// cell-tower-source's whole provider registry into a plugin whose entire point
-// is that it holds none.
-struct HtqPeek {
-    const uint8_t* buf = nullptr;
-    uint32_t len = 0;
-    uint32_t root = 0;
-    uint32_t vtable = 0;
-    uint16_t vtable_len = 0;
+void append_size_prefixed(Bytes* stream, const flatbuffers::FlatBufferBuilder& b) {
+    // Finished with FinishSizePrefixed: the buffer already carries its prefix. Pad to 8 with zero-length prefixes.
+    while (stream->size() % 8) stream->insert(stream->end(), {0, 0, 0, 0});
+    stream->insert(stream->end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
 
-    bool init(const uint8_t* data, uint32_t size) {
-        if (!data || size < 8) return false;
-        buf = data;
-        len = size;
-        root = rd32(0);
-        if (root + 4 > len) return false;
-        const int32_t soffset = static_cast<int32_t>(rd32(root));
-        const int64_t vt = static_cast<int64_t>(root) - soffset;
-        if (vt < 0 || vt + 4 > len) return false;
-        vtable = static_cast<uint32_t>(vt);
-        vtable_len = rd16(vtable);
-        return true;
-    }
-    uint32_t rd32(uint32_t at) const {
-        return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
-               (static_cast<uint32_t>(buf[at + 2]) << 16) |
-               (static_cast<uint32_t>(buf[at + 3]) << 24);
-    }
-    uint16_t rd16(uint32_t at) const {
-        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
-    }
-    uint16_t slot(int index) const {
-        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
-        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
-        return rd16(at);
-    }
-    std::string str(int index) const {
-        const uint16_t rel = slot(index);
-        if (!rel) return std::string();
-        const uint32_t at = root + rel;
-        if (at + 4 > len) return std::string();
-        const uint32_t off = at + rd32(at);
-        if (off + 4 > len) return std::string();
-        const uint32_t n = rd32(off);
-        if (off + 4 + n > len) return std::string();
-        return std::string(reinterpret_cast<const char*>(buf + off + 4), n);
-    }
+// hostcap/flatsql-query's $FSB result chunks on one port, reassembled by CHUNK_SEQUENCE: the host's result stream
+// verbatim. `present` says whether any chunk arrived; a malformed chunk is refused.
+struct FsbResult {
+    bool present = false;
+    bool ok = true;
+    Bytes data;
 };
+FsbResult fsb_result(const char* port) {
+    FsbResult out;
+    std::vector<std::pair<uint32_t, Bytes>> chunks;
+    for (const plugin_input_frame_t* f : frames_on(port)) {
+        if (!f || !f->payload) continue;
+        Bytes scratch;
+        const FSB* fsb = verified_copy<FSB>(f->payload, f->payload_length, &scratch, VerifyFSBBuffer, GetFSB);
+        if (!fsb) { out.ok = false; return out; }
+        out.present = true;
+        Bytes data;
+        if (fsb->DATA()) data.assign(fsb->DATA()->data(), fsb->DATA()->data() + fsb->DATA()->size());
+        chunks.emplace_back(fsb->CHUNK_SEQUENCE(), std::move(data));
+    }
+    std::sort(chunks.begin(), chunks.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (auto& c : chunks) out.data.insert(out.data.end(), c.second.begin(), c.second.end());
+    return out;
+}
 
-std::string upper_ascii(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+// One $FSO QUERY_RECORDS frame. Parameters in FlatSQL's tagged encoding ([u8 tag][u32le size][bytes]), written by
+// sdm_piv::SqlValues - the same encoding the storage hostcalls take on raw "params".
+struct SqlParam {
+    uint8_t tag;  // sdm_piv::kSqlI64 or kSqlF64
+    int64_t i = 0;
+    double f = 0;
+};
+SqlParam p_i64(int64_t v) { SqlParam p{sdm_piv::kSqlI64}; p.i = v; return p; }
+SqlParam p_f64(double v) { SqlParam p{sdm_piv::kSqlF64}; p.f = v; return p; }
+
+int push_fso(const char* port, const std::string& sql, const std::vector<SqlParam>& params) {
+    sdm_piv::SqlValues values;
+    for (const SqlParam& p : params) {
+        if (p.tag == sdm_piv::kSqlI64) values.i64(p.i); else values.f64(p.f);
+    }
+    const std::string_view tagged = values.view();
+    flatbuffers::FlatBufferBuilder b(256 + sql.size() + tagged.size());
+    const auto query = b.CreateVector(reinterpret_cast<const uint8_t*>(sql.data()), sql.size());
+    const auto parameters = b.CreateVector(reinterpret_cast<const uint8_t*>(tagged.data()), tagged.size());
+    FSOBuilder fso(b);
+    fso.add_OPERATION(flatSqlNodeOperation_QUERY_RECORDS);
+    fso.add_REQUEST_ID(0);
+    fso.add_QUERY(query);
+    fso.add_PARAMETERS(parameters);
+    fso.add_PARAMETER_COUNT(static_cast<uint32_t>(params.size()));
+    FinishFSOBuffer(b, fso.Finish());
+    return push_builder(port, "FSO.fbs", FSOIdentifier(), "FSO", b) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// $HTQ, $APR.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const H::HttpRequest* read_htq(const plugin_input_frame_t* frame) {
+    if (!frame || !frame->payload || frame->payload_length < 8) return nullptr;
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!H::HttpRequestBufferHasIdentifier(frame->payload) || !H::VerifyHttpRequestBuffer(verifier)) return nullptr;
+    return H::GetHttpRequest(frame->payload);
+}
+
+std::string lower(std::string s) {
+    for (char& c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return s;
+}
+std::string upper(std::string s) {
+    for (char& c : s) if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    return s;
+}
+
+std::string htq_header(const H::HttpRequest* r, const char* name) {
+    if (!r || !r->HEADERS()) return std::string();
+    for (const auto* h : *r->HEADERS())
+        if (h && h->NAME() && lower(h->NAME()->str()) == name) return h->VALUE() ? h->VALUE()->str() : std::string();
+    return std::string();
+}
+
+std::string url_decode(const std::string& in) {
+    std::string out;
+    for (size_t i = 0; i < in.size(); i++) {
+        if (in[i] == '+') out.push_back(' ');
+        else if (in[i] == '%' && i + 2 < in.size()) {
+            out.push_back(static_cast<char>(std::strtol(in.substr(i + 1, 2).c_str(), nullptr, 16)));
+            i += 2;
+        } else out.push_back(in[i]);
     }
     return out;
 }
 
-bool json_bool_or(const std::string& json, const char* key, bool fallback) {
+bool query_param(const std::string& query, const char* name, std::string* out) {
+    size_t at = 0;
+    while (at <= query.size()) {
+        size_t end = query.find('&', at);
+        if (end == std::string::npos) end = query.size();
+        const std::string pair = query.substr(at, end - at);
+        const size_t eq = pair.find('=');
+        if (url_decode(pair.substr(0, eq)) == name) {
+            *out = eq == std::string::npos ? std::string() : url_decode(pair.substr(eq + 1));
+            return true;
+        }
+        at = end + 1;
+    }
+    return false;
+}
+
+// Representation exactly as foundation/http-route decides it: ?format wins, then the Accept header.
+aprRepresentation representation_of(const H::HttpRequest* r) {
+    std::string f;
+    if (r && r->QUERY() && query_param(r->QUERY()->str(), "format", &f)) {
+        const std::string v = lower(f);
+        if (v == "json") return aprRepresentation_Json;
+        if (v == "flatbuffer" || v == "flatbuffers" || v == "fb") return aprRepresentation_FlatBuffer;
+        if (!v.empty()) return aprRepresentation_Default;
+    }
+    const std::string accept = lower(htq_header(r, "accept"));
+    if (accept.find("flatbuffers") != std::string::npos) return aprRepresentation_FlatBuffer;
+    if (accept.find("application/json") != std::string::npos) return aprRepresentation_Json;
+    return aprRepresentation_Default;
+}
+
+aprMethod method_of(const std::string& m) {
+    if (m == "GET") return aprMethod_GET;
+    if (m == "HEAD") return aprMethod_HEAD;
+    if (m == "POST") return aprMethod_POST;
+    if (m == "PUT") return aprMethod_PUT;
+    if (m == "PATCH") return aprMethod_PATCH;
+    if (m == "DELETE") return aprMethod_DELETE;
+    if (m == "OPTIONS") return aprMethod_OPTIONS;
+    return aprMethod_Unspecified;
+}
+
+// The normalized request of one $HTQ: the base every run contract and refusal starts from.
+APRT apr_from(const H::HttpRequest* r, const char* route) {
+    APRT apr;
+    apr.RECEIVED_AT_MS = now_unix_ms();
+    apr.ROUTE = route;
+    apr.SCHEMA_NAME = kSchemaName;
+    if (r) {
+        apr.METHOD = method_of(upper(r->METHOD() ? r->METHOD()->str() : std::string()));
+        apr.PATH = r->PATH() ? r->PATH()->str() : std::string();
+        apr.ACCEPT = representation_of(r);
+        apr.IF_NONE_MATCH = htq_header(r, "if-none-match");
+        apr.CONTENT_TYPE = htq_header(r, "content-type");
+    }
+    return apr;
+}
+
+void add_param(std::vector<std::unique_ptr<APRParameterT>>* list, const std::string& name, const std::string& value) {
+    auto p = std::make_unique<APRParameterT>();
+    p->NAME = name;
+    p->VALUE = value;
+    list->push_back(std::move(p));
+}
+
+std::string apr_param(const APRT& apr, const char* name, const char* fallback = "") {
+    for (const auto& p : apr.PARAMETERS)
+        if (p && p->NAME == name) return p->VALUE;
+    return fallback;
+}
+
+int push_apr(const char* port, const APRT& apr) {
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishAPRBuffer(b, APR::Pack(b, &apr));
+    return push_builder(port, "APR.fbs", APRIdentifier(), "APR", b) < 0 ? 500 : 0;
+}
+
+// The one $APR on a single-stream port, unpacked; false (node error set) when absent or not an $APR.
+bool read_apr(const char* port, APRT* out, int* status) {
+    const plugin_input_frame_t* f = frame_for(port);
+    Bytes scratch;
+    const APR* apr = f && f->payload ? verified_copy<APR>(f->payload, f->payload_length, &scratch, VerifyAPRBuffer, GetAPR) : nullptr;
+    if (!apr) {
+        *status = fail(400, f ? "invalid-job-frame" : "missing-job-frame",
+                       std::string("this node requires an $APR run contract on port \"") + port + "\".");
+        return false;
+    }
+    apr->UnPackTo(out);
+    return true;
+}
+
+// The client's own JSON request body (the external representation; parsed here, at the edge, and nowhere between
+// modules): REFRESH and LIMIT.
+bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+size_t json_value_at(const std::string& json, const char* key) {
     const std::string needle = std::string("\"") + key + "\"";
     const size_t k = json.find(needle);
-    if (k == std::string::npos) return fallback;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return fallback;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
+    if (k == std::string::npos) return std::string::npos;
+    size_t i = json.find(':', k + needle.size());
+    if (i == std::string::npos) return std::string::npos;
+    for (i++; i < json.size() && is_ws(json[i]); i++) {}
+    return i;
+}
+bool json_bool_or(const std::string& json, const char* key, bool fallback) {
+    const size_t i = json_value_at(json, key);
+    if (i == std::string::npos) return fallback;
     if (json.compare(i, 4, "true") == 0) return true;
     if (json.compare(i, 5, "false") == 0) return false;
     return fallback;
 }
-
-bool path_has_segment(const std::string& path, const char* segment) {
-    return path.find(segment) != std::string::npos;
+double json_number_or(const std::string& json, const char* key, double fallback) {
+    const size_t i = json_value_at(json, key);
+    if (i == std::string::npos) return fallback;
+    char* end = nullptr;
+    const double v = strtod(json.c_str() + i, &end);
+    return end == json.c_str() + i ? fallback : v;
 }
 
-// THE DEFAULT QUERY. This is the per-dataset default FlatSQL query of
-// `sdn-dataset-default-query-materialized-cache`, in its first concrete
-// instance: the SQL is node CONFIG (`cell_cache_sql`), not a compiled-in
-// constant, so an operator retargets the cache without a rebuild. The default
-// names the generated FlatSQL unified view the cellular ingest lane's storage
-// writes land in — the SDS CODE itself, over `_data`/`_rowid` (owner law
-// 2026-08-25: every embedded standard is engine-routed, never per-standard
-// hardcoded) — and takes the row cap as a bound parameter, so the caller's
-// LIMIT still bounds the answer.
-constexpr const char* kDefaultCacheSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
-constexpr long kDefaultCacheMaxRows = 5000;
+// ---------------------------------------------------------------------------------------------------------------------
+// $IRM — the durable resume mark, mirrored field for field so a mark can be read, advanced and re-written without
+// losing a field this build does not touch (IRM has no generated object API).
+// ---------------------------------------------------------------------------------------------------------------------
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE DENSITY-TILE SERVING LANE (graph tasks sdn-cellular-density-tiles /
-// upstream-modules-2; owner 2026-08-24: "all worldwide cell towers must reach
-// the cellular sandcastle").
-//
-// A worldwide site set is millions of rows. Handing them to a browser as one
-// answer is not slow, it is impossible — so the node serves BOUNDED tiles and
-// the client streams the ones its camera can see. THE TILING CONTRACT LIVES
-// SERVER-SIDE: the client re-derives nothing, and every mode decision below is
-// this node's, never the renderer's.
-//
-// The grammar is not negotiable and is not documented-only: the landed OrbPro
-// client (packages/sandcastle/gallery/_shared/cellularTileStream.js, f9e39b5437)
-// FAILS HARD on an off-contract envelope — points mode above budget, density
-// mode at or below budget, a density tile with an empty cells array, a missing
-// threshold, a non-ISO epoch. Its parser is the normative consumer, so these
-// constants and this envelope are written against it rather than against prose.
-//
-// ZERO GO HOST CHANGES. The lane is the existing generic hooks: plugin.getConfig
-// plus hostcap/flatsql-query frames. The plugin stays `capabilities: []`.
-// ═══════════════════════════════════════════════════════════════════════════
+std::string str_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+Bytes bytes_of(const flatbuffers::Vector<uint8_t>* v) { return v ? Bytes(v->begin(), v->end()) : Bytes(); }
 
-constexpr const char* kTileScheme = "xyz";
-constexpr long kTileMinZoom = 0;
-constexpr long kTileMaxZoom = 18;
+struct Irm {
+    std::string job_id, provider_id, ingestor_id, target_standard, reconcile_mode, merge_policy;
+    std::string created_at, started_at, updated_at, completed_at, expires_at, notes;
+    std::vector<std::string> tags;
+    uint64_t sequence = 0, next_offset = 0, chunk_byte_budget = 0, bytes_committed = 0, records_committed = 0;
+    uint32_t next_chunk_index = 0, chunks_committed = 0;
+    irmJobState state = irmJobState_UNSPECIFIED;
+    irmRangeMode range_mode = irmRangeMode_UNSPECIFIED;
+    struct Source {
+        std::string url, object_id, cid, media_type, entity_tag, last_modified, sha256, version, validated_at;
+        uint64_t total_bytes = 0;
+        irmValidatorMatch validator_match = irmValidatorMatch_UNSPECIFIED;
+    } source;
+    bool has_decode = false;
+    struct Decode {
+        std::string format, header_line, delimiter, quote, escape, line_terminator, charset, compression;
+        std::vector<std::string> column_names;
+        uint64_t header_byte_length = 0, decoded_offset = 0;
+        Bytes decoder_state, window, partial_record;
+        std::string state_format, state_version, state_sha256, build_id, state_media_type;
+        uint64_t state_byte_length = 0, window_byte_length = 0, window_position = 0;
+    } decode;
+    bool has_chunk = false;
+    struct Chunk {
+        uint32_t index = 0, records_decoded = 0, records_stored = 0, records_rejected = 0, attempts = 0;
+        std::string batch_id, sha256, committed_at;
+        uint64_t first = 0, last = 0, byte_length = 0;
+    } chunk;
+    bool has_fault = false;
+    struct Fault {
+        std::string code, message, occurred_at, retry_not_before;
+        uint32_t chunk_index = 0, consecutive_failures = 0;
+    } fault;
 
-// The mode boundaries. `threshold` is where raw points stop being sent whole;
-// `budget` is the client's per-tile point envelope (proven 250k points at
-// 360 fps across ~60 visible tiles). count <= threshold -> every point;
-// threshold < count <= budget -> a deterministic sample; count > budget ->
-// a density grid. The client refuses any tile that disagrees with this.
-constexpr long kTileThreshold = 2048;
-constexpr long kTileBudget = 4096;
-constexpr long kTileDensityN = 16;
+    void clear_decoder() {
+        decode.decoder_state.clear(); decode.window.clear(); decode.partial_record.clear();
+        decode.state_format.clear(); decode.state_version.clear(); decode.state_sha256.clear();
+        decode.build_id.clear(); decode.state_media_type.clear();
+        decode.state_byte_length = decode.window_byte_length = decode.window_position = 0;
+        decode.compression.clear();
+        decode.decoded_offset = 0;
+    }
+    bool decode_empty() const {
+        return decode.header_line.empty() && decode.decoder_state.empty() && decode.window.empty() &&
+               decode.partial_record.empty();
+    }
+};
 
-// Web Mercator's latitude limit. y = 0 and y = 2^z - 1 close exactly here.
-constexpr double kTileLatClamp = 85.05112878;
-
-// ONE SHARED EPSILON WITH THE CLIENT. A point produced by the round trip
-// lon/lat -> tileBounds -> lon/lat must never land on the wrong side of a seam
-// by one ulp, and server and client must agree on which tile owns a seam.
-// This is the client's TILE_INDEX_EPSILON verbatim (cellularTileStream.js).
-constexpr double kTileIndexEpsilon = 1e-9;
-
-// THE TILE READ IS SCOPED TO THE TILE, AND BOUNDED BY WHAT THE GUEST CAN HOLD.
-//
-// It used to be neither, and that is why the whole lane served 502.
-// `cell_tile_sql` defaulted to an UNSCOPED `SELECT _data FROM TBS ORDER BY
-// _rowid DESC LIMIT ?` at cell_tile_max_rows = 100000, so EVERY tile request —
-// a z=10 tile with three sites in it included — asked the engine to
-// materialize up to 100,000 whole $TBS records inside the mount's linear
-// memory. MEASURED on host-01 2026-08-27 (flows.mounts[].memory_pages 2048 =
-// 128 MiB, TBS hot window 400,000 records): WasmEdge refused the grow
-//   [error] Memory Instance: Memory grow page failed, exceeded limited 2048
-//   page size in configuration
-// one millisecond before the mount reported
-//   GET /api/v1/cellular/tiles/0/0/0 produced no HTTP response — nodes ran:
-//   cache_plan x1 last_status=0; tile_plan x1 last_status=0; never reached:
-//   ... tile_rows, tile_mark, tile, ... respond, egress
-// `tile_rows` reads as NEVER REACHED because the compiled runtime increments a
-// node's invocation count AFTER its entry returns, so a node that dies inside
-// its own hostcall is never counted — the read did run, it just could not land.
-// Reproduced on the Go host at 13,000 rows / 128 pages with a byte-identical
-// digest (graph sdn-cellular-tile-lane-stalls-after-tile-plan).
-//
-// THE BBOX IS A PREFILTER, NEVER THE MEMBERSHIP TEST. Tile membership is still
-// re-derived per point in `tile` with the client's own index math and the same
-// 1e-9 epsilon (property 2 of the tile contract), so the SQL only has to be a
-// SUPERSET of the tile — which a latitude/longitude rectangle over the tile's
-// own bounds always is. Nothing about seam ownership moves into SQL.
-//
-// LATITUDE and LONGITUDE are engine COLUMNS: the store projects each routed
-// standard's declared IDL fields as columns of its relation (TBS.fbs declares
-// LATITUDE:double, LONGITUDE:double), so the predicate binds against the
-// standard, not against a bespoke index some operator may or may not have.
-constexpr const char* kDefaultTileRelation = "TBS";
-
-// The tile lane's own default query, kept as an operator ESCAPE HATCH. When
-// `cell_tile_sql` is set the statement is used verbatim with the row budget as
-// its single bound parameter — the pre-scoping contract, unchanged — for a
-// store whose tile rows the module's generated predicate cannot name. An
-// operator who sets it is choosing an UNSCOPED read and owes it a
-// `cell_tile_max_rows` its mount's memory_pages can hold.
-constexpr const char* kDefaultTileSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
-
-// THE ROW BUDGET IS THE GUEST'S MEMORY BUDGET, NOT A TUNING KNOB.
-//
-// The read materializes whole $TBS records — id, native id, network addressing,
-// position, observation counts, SITE_NAME, and a required SOURCES vector with a
-// required per-provider licence and attribution on every entry — so a stored
-// site is hundreds of bytes to low kilobytes, not tens. 25,000 of them is tens
-// of MB against the 128 MiB a documented cellular mount is given, which leaves
-// the response body, the point vector and the guest's own arena room to exist.
-// 100,000 did not: it exceeded the whole instance on the first tile request.
-//
-// It stays configurable (`cell_tile_max_rows`) because memory_pages is, and the
-// two are one budget; but the DEFAULT now fits the mount this lane ships on.
-constexpr long kDefaultTileMaxRows = 25000;
-
-// The dataset identity the envelope names. The client only requires a non-empty
-// string; naming the dataset rather than the table keeps the store's physical
-// layout out of a public contract.
-constexpr const char* kTileDataset = "cellular-base-stations";
-
-// The honest "no epoch yet" answer. dataset.epoch MUST parse as a timestamp
-// (the client refuses anything Date.parse cannot read), so an empty store
-// cannot answer with "" or null — and it must not answer with NOW, which would
-// stamp an empty store as freshly current. The Unix epoch reads as what it is,
-// beside cacheState "empty" and records 0.
-constexpr const char* kTileNoEpoch = "1970-01-01T00:00:00Z";
-
-std::string iso_now(void) {
-    struct timeval tv;
-    gettimeofday(&tv, nullptr);
-    const time_t seconds = static_cast<time_t>(tv.tv_sec);
-    struct tm g;
-    gmtime_r(&seconds, &g);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &g);
-    return std::string(buf);
+Irm irm_read(const IRM& m) {
+    Irm o;
+    o.job_id = str_of(m.JOB_ID()); o.provider_id = str_of(m.PROVIDER_ID()); o.ingestor_id = str_of(m.INGESTOR_ID());
+    o.target_standard = str_of(m.TARGET_STANDARD()); o.reconcile_mode = str_of(m.RECONCILE_MODE());
+    o.merge_policy = str_of(m.MERGE_POLICY()); o.created_at = str_of(m.CREATED_AT()); o.started_at = str_of(m.STARTED_AT());
+    o.updated_at = str_of(m.UPDATED_AT()); o.completed_at = str_of(m.COMPLETED_AT()); o.expires_at = str_of(m.EXPIRES_AT());
+    o.notes = str_of(m.NOTES());
+    if (m.TAGS()) for (const auto* t : *m.TAGS()) o.tags.push_back(str_of(t));
+    o.sequence = m.SEQUENCE(); o.next_offset = m.NEXT_OFFSET(); o.chunk_byte_budget = m.CHUNK_BYTE_BUDGET();
+    o.bytes_committed = m.BYTES_COMMITTED(); o.records_committed = m.RECORDS_COMMITTED();
+    o.next_chunk_index = m.NEXT_CHUNK_INDEX(); o.chunks_committed = m.CHUNKS_COMMITTED();
+    o.state = m.STATE(); o.range_mode = m.RANGE_MODE();
+    if (const IRMSource* s = m.SOURCE()) {
+        o.source.url = str_of(s->SOURCE_URL()); o.source.object_id = str_of(s->SOURCE_OBJECT_ID());
+        o.source.cid = str_of(s->SOURCE_CID()); o.source.media_type = str_of(s->MEDIA_TYPE());
+        o.source.entity_tag = str_of(s->ENTITY_TAG()); o.source.last_modified = str_of(s->LAST_MODIFIED());
+        o.source.sha256 = str_of(s->SOURCE_SHA256()); o.source.version = str_of(s->SOURCE_VERSION());
+        o.source.validated_at = str_of(s->VALIDATED_AT()); o.source.total_bytes = s->TOTAL_BYTES();
+        o.source.validator_match = s->VALIDATOR_MATCH();
+    }
+    if (const IRMDecodeContext* d = m.DECODE_CONTEXT()) {
+        o.has_decode = true;
+        auto& x = o.decode;
+        x.format = str_of(d->FORMAT()); x.header_line = str_of(d->HEADER_LINE()); x.delimiter = str_of(d->DELIMITER());
+        x.quote = str_of(d->QUOTE()); x.escape = str_of(d->ESCAPE()); x.line_terminator = str_of(d->LINE_TERMINATOR());
+        x.charset = str_of(d->CHARSET()); x.compression = str_of(d->COMPRESSION());
+        if (d->COLUMN_NAMES()) for (const auto* c : *d->COLUMN_NAMES()) x.column_names.push_back(str_of(c));
+        x.header_byte_length = d->HEADER_BYTE_LENGTH(); x.decoded_offset = d->DECODED_OFFSET();
+        x.decoder_state = bytes_of(d->DECODER_STATE()); x.window = bytes_of(d->WINDOW());
+        x.partial_record = bytes_of(d->PARTIAL_RECORD());
+        x.state_format = str_of(d->DECODER_STATE_FORMAT()); x.state_version = str_of(d->DECODER_STATE_VERSION());
+        x.state_sha256 = str_of(d->DECODER_STATE_SHA256()); x.build_id = str_of(d->DECODER_BUILD_ID());
+        x.state_media_type = str_of(d->DECODER_STATE_MEDIA_TYPE());
+        x.state_byte_length = d->DECODER_STATE_BYTE_LENGTH(); x.window_byte_length = d->WINDOW_BYTE_LENGTH();
+        x.window_position = d->WINDOW_POSITION();
+    }
+    if (const IRMChunk* c = m.LAST_CHUNK()) {
+        o.has_chunk = true;
+        auto& x = o.chunk;
+        x.index = c->CHUNK_INDEX(); x.batch_id = str_of(c->BATCH_ID()); x.first = c->RANGE_FIRST_BYTE();
+        x.last = c->RANGE_LAST_BYTE(); x.byte_length = c->BYTE_LENGTH(); x.sha256 = str_of(c->CHUNK_SHA256());
+        x.records_decoded = c->RECORDS_DECODED(); x.records_stored = c->RECORDS_STORED();
+        x.records_rejected = c->RECORDS_REJECTED(); x.attempts = c->ATTEMPTS(); x.committed_at = str_of(c->COMMITTED_AT());
+    }
+    if (const IRMFault* f = m.FAULT()) {
+        o.has_fault = true;
+        o.fault.code = str_of(f->CODE()); o.fault.message = str_of(f->MESSAGE()); o.fault.occurred_at = str_of(f->OCCURRED_AT());
+        o.fault.retry_not_before = str_of(f->RETRY_NOT_BEFORE()); o.fault.chunk_index = f->CHUNK_INDEX();
+        o.fault.consecutive_failures = f->CONSECUTIVE_FAILURES();
+    }
+    return o;
 }
 
-// ── the XYZ scheme, byte-for-byte the client's math ────────────────────────
-//
-// These four functions are the SAME formulas as lonToTileX / latToTileY /
-// tileBounds in the landed client. They are duplicated rather than shared
-// because one of them is C++ in a wasm guest and the other is JS in a browser;
-// what makes the duplication safe is that the tests below assert the SERVER's
-// assignment against tiles the CLIENT's bounds produced.
+using SOff = flatbuffers::Offset<flatbuffers::String>;
+SOff opt_str(flatbuffers::FlatBufferBuilder& b, const std::string& s) { return s.empty() ? SOff() : b.CreateString(s); }
+flatbuffers::Offset<flatbuffers::Vector<uint8_t>> opt_bytes(flatbuffers::FlatBufferBuilder& b, const Bytes& v) {
+    return v.empty() ? flatbuffers::Offset<flatbuffers::Vector<uint8_t>>() : b.CreateVector(v);
+}
+
+// Finish an $IRM. `size_prefixed` for a frame inside a CONTEXT stream. Required fields always written.
+void irm_write(flatbuffers::FlatBufferBuilder& b, const Irm& m, bool size_prefixed) {
+    const auto& s = m.source;
+    const SOff s_url = b.CreateString(s.url), s_obj = opt_str(b, s.object_id), s_cid = opt_str(b, s.cid),
+               s_media = opt_str(b, s.media_type), s_etag = opt_str(b, s.entity_tag), s_lm = opt_str(b, s.last_modified),
+               s_sha = opt_str(b, s.sha256), s_ver = opt_str(b, s.version), s_vat = opt_str(b, s.validated_at);
+    IRMSourceBuilder sb(b);
+    sb.add_SOURCE_URL(s_url);
+    if (!s_obj.IsNull()) sb.add_SOURCE_OBJECT_ID(s_obj);
+    if (!s_cid.IsNull()) sb.add_SOURCE_CID(s_cid);
+    if (!s_media.IsNull()) sb.add_MEDIA_TYPE(s_media);
+    sb.add_TOTAL_BYTES(s.total_bytes);
+    if (!s_etag.IsNull()) sb.add_ENTITY_TAG(s_etag);
+    if (!s_lm.IsNull()) sb.add_LAST_MODIFIED(s_lm);
+    if (!s_sha.IsNull()) sb.add_SOURCE_SHA256(s_sha);
+    if (!s_ver.IsNull()) sb.add_SOURCE_VERSION(s_ver);
+    sb.add_VALIDATOR_MATCH(s.validator_match);
+    if (!s_vat.IsNull()) sb.add_VALIDATED_AT(s_vat);
+    const auto source = sb.Finish();
+
+    flatbuffers::Offset<IRMDecodeContext> decode;
+    if (m.has_decode) {
+        const auto& d = m.decode;
+        const SOff fmt = b.CreateString(d.format.empty() ? kDecodeFormat : d.format), hl = opt_str(b, d.header_line),
+                   del = opt_str(b, d.delimiter), quo = opt_str(b, d.quote), esc = opt_str(b, d.escape),
+                   lt = opt_str(b, d.line_terminator), cs = opt_str(b, d.charset), comp = opt_str(b, d.compression),
+                   sf = opt_str(b, d.state_format), sv = opt_str(b, d.state_version), ssha = opt_str(b, d.state_sha256),
+                   bid = opt_str(b, d.build_id), smt = opt_str(b, d.state_media_type);
+        flatbuffers::Offset<flatbuffers::Vector<SOff>> cols;
+        if (!d.column_names.empty()) cols = b.CreateVectorOfStrings(d.column_names);
+        const auto ds = opt_bytes(b, d.decoder_state), win = opt_bytes(b, d.window), pr = opt_bytes(b, d.partial_record);
+        IRMDecodeContextBuilder db(b);
+        db.add_FORMAT(fmt);
+        if (!hl.IsNull()) db.add_HEADER_LINE(hl);
+        db.add_HEADER_BYTE_LENGTH(d.header_byte_length);
+        if (!cols.IsNull()) db.add_COLUMN_NAMES(cols);
+        if (!del.IsNull()) db.add_DELIMITER(del);
+        if (!quo.IsNull()) db.add_QUOTE(quo);
+        if (!esc.IsNull()) db.add_ESCAPE(esc);
+        if (!lt.IsNull()) db.add_LINE_TERMINATOR(lt);
+        if (!cs.IsNull()) db.add_CHARSET(cs);
+        if (!comp.IsNull()) db.add_COMPRESSION(comp);
+        db.add_DECODED_OFFSET(d.decoded_offset);
+        if (!ds.IsNull()) db.add_DECODER_STATE(ds);
+        if (!sf.IsNull()) db.add_DECODER_STATE_FORMAT(sf);
+        if (!sv.IsNull()) db.add_DECODER_STATE_VERSION(sv);
+        db.add_DECODER_STATE_BYTE_LENGTH(d.state_byte_length);
+        if (!ssha.IsNull()) db.add_DECODER_STATE_SHA256(ssha);
+        if (!bid.IsNull()) db.add_DECODER_BUILD_ID(bid);
+        if (!smt.IsNull()) db.add_DECODER_STATE_MEDIA_TYPE(smt);
+        if (!win.IsNull()) db.add_WINDOW(win);
+        db.add_WINDOW_BYTE_LENGTH(d.window_byte_length);
+        db.add_WINDOW_POSITION(d.window_position);
+        if (!pr.IsNull()) db.add_PARTIAL_RECORD(pr);
+        decode = db.Finish();
+    }
+
+    flatbuffers::Offset<IRMChunk> chunk;
+    if (m.has_chunk) {
+        const auto& c = m.chunk;
+        const SOff bid = opt_str(b, c.batch_id), sha = opt_str(b, c.sha256), cat = opt_str(b, c.committed_at);
+        IRMChunkBuilder cb(b);
+        cb.add_CHUNK_INDEX(c.index);
+        if (!bid.IsNull()) cb.add_BATCH_ID(bid);
+        cb.add_RANGE_FIRST_BYTE(c.first);
+        cb.add_RANGE_LAST_BYTE(c.last);
+        cb.add_BYTE_LENGTH(c.byte_length);
+        if (!sha.IsNull()) cb.add_CHUNK_SHA256(sha);
+        cb.add_RECORDS_DECODED(c.records_decoded);
+        cb.add_RECORDS_STORED(c.records_stored);
+        cb.add_RECORDS_REJECTED(c.records_rejected);
+        cb.add_ATTEMPTS(c.attempts);
+        if (!cat.IsNull()) cb.add_COMMITTED_AT(cat);
+        chunk = cb.Finish();
+    }
+
+    flatbuffers::Offset<IRMFault> fault;
+    if (m.has_fault) {
+        const auto& f = m.fault;
+        const SOff code = b.CreateString(f.code.empty() ? "unspecified" : f.code), msg = opt_str(b, f.message),
+                   occ = opt_str(b, f.occurred_at), rnb = opt_str(b, f.retry_not_before);
+        IRMFaultBuilder fb(b);
+        fb.add_CODE(code);
+        if (!msg.IsNull()) fb.add_MESSAGE(msg);
+        fb.add_CHUNK_INDEX(f.chunk_index);
+        fb.add_CONSECUTIVE_FAILURES(f.consecutive_failures);
+        if (!occ.IsNull()) fb.add_OCCURRED_AT(occ);
+        if (!rnb.IsNull()) fb.add_RETRY_NOT_BEFORE(rnb);
+        fault = fb.Finish();
+    }
+
+    const SOff job = b.CreateString(m.job_id), prov = b.CreateString(m.provider_id), ing = opt_str(b, m.ingestor_id),
+               tgt = opt_str(b, m.target_standard), rec = opt_str(b, m.reconcile_mode), mp = opt_str(b, m.merge_policy),
+               cat = opt_str(b, m.created_at), sat = opt_str(b, m.started_at),
+               uat = b.CreateString(m.updated_at.empty() ? iso_ms(now_unix_ms()) : m.updated_at),
+               comp = opt_str(b, m.completed_at), exp = opt_str(b, m.expires_at), notes = opt_str(b, m.notes);
+    flatbuffers::Offset<flatbuffers::Vector<SOff>> tags;
+    if (!m.tags.empty()) tags = b.CreateVectorOfStrings(m.tags);
+    IRMBuilder ib(b);
+    ib.add_JOB_ID(job);
+    ib.add_SEQUENCE(m.sequence);
+    ib.add_PROVIDER_ID(prov);
+    if (!ing.IsNull()) ib.add_INGESTOR_ID(ing);
+    ib.add_SOURCE(source);
+    ib.add_STATE(m.state);
+    ib.add_RANGE_MODE(m.range_mode);
+    ib.add_NEXT_OFFSET(m.next_offset);
+    ib.add_NEXT_CHUNK_INDEX(m.next_chunk_index);
+    ib.add_CHUNK_BYTE_BUDGET(m.chunk_byte_budget);
+    if (!decode.IsNull()) ib.add_DECODE_CONTEXT(decode);
+    if (!chunk.IsNull()) ib.add_LAST_CHUNK(chunk);
+    ib.add_CHUNKS_COMMITTED(m.chunks_committed);
+    ib.add_BYTES_COMMITTED(m.bytes_committed);
+    ib.add_RECORDS_COMMITTED(m.records_committed);
+    if (!tgt.IsNull()) ib.add_TARGET_STANDARD(tgt);
+    if (!rec.IsNull()) ib.add_RECONCILE_MODE(rec);
+    if (!mp.IsNull()) ib.add_MERGE_POLICY(mp);
+    if (!fault.IsNull()) ib.add_FAULT(fault);
+    if (!cat.IsNull()) ib.add_CREATED_AT(cat);
+    if (!sat.IsNull()) ib.add_STARTED_AT(sat);
+    ib.add_UPDATED_AT(uat);
+    if (!comp.IsNull()) ib.add_COMPLETED_AT(comp);
+    if (!exp.IsNull()) ib.add_EXPIRES_AT(exp);
+    if (!tags.IsNull()) ib.add_TAGS(tags);
+    if (!notes.IsNull()) ib.add_NOTES(notes);
+    if (size_prefixed) FinishSizePrefixedIRMBuffer(b, ib.Finish());
+    else FinishIRMBuffer(b, ib.Finish());
+}
+
+int push_irm(const char* port, const Irm& m) {
+    flatbuffers::FlatBufferBuilder b(2048 + m.decode.decoder_state.size() + m.decode.window.size() +
+                                     m.decode.partial_record.size() + m.decode.header_line.size());
+    irm_write(b, m, false);
+    return push_builder(port, "IRM.fbs", IRMIdentifier(), "IRM", b) < 0 ? 500 : 0;
+}
+
+bool read_irm_port(const char* port, Irm* out, bool* present, int* status) {
+    const plugin_input_frame_t* f = frame_for(port);
+    *present = f && f->payload && f->payload_length > 0;
+    if (!*present) return true;
+    Bytes scratch;
+    const IRM* irm = verified_copy<IRM>(f->payload, f->payload_length, &scratch, VerifyIRMBuffer, GetIRM);
+    if (!irm) {
+        *status = fail(400, "invalid-mark-frame", std::string("the \"") + port + "\" frame is not an $IRM.");
+        return false;
+    }
+    *out = irm_read(*irm);
+    return true;
+}
+
+// An $IRM frame inside a size-prefixed stream: `rec` is the buffer after its 4-byte prefix. A row stored as a plain
+// buffer (the prefix prepended by the stream writer) verifies at `rec`; one finished FinishSizePrefixed is aligned at
+// its prefix, and the verifier checks alignment relative to the buffer start, so it verifies as a size-prefixed buffer.
+const IRM* verified_irm_frame(const uint8_t* rec, size_t n, Bytes* scratch) {
+    if (const IRM* irm = verified_copy<IRM>(rec, n, scratch, VerifyIRMBuffer, GetIRM)) return irm;
+    scratch->assign(rec - 4, rec + n);
+    flatbuffers::Verifier verifier(scratch->data(), scratch->size());
+    if (!VerifySizePrefixedIRMBuffer(verifier)) return nullptr;
+    return GetSizePrefixedIRM(scratch->data());
+}
+
+// The newest durable mark in a store read (the query orders newest first). `want_provider` empty = any provider; a
+// mark belonging to a DIFFERENT provider is skipped, never trusted: resuming provider A at provider B's offset skips
+// the head of B's file and never reports it. `frames` / `marks` say what the read held, so a reader can tell "no
+// mark" from "rows that are not marks".
+struct MarkView {
+    bool present = false;
+    size_t frames = 0;
+    size_t marks = 0;
+    Irm irm;
+};
+MarkView read_mark(const Bytes& stream, const std::string& want_provider) {
+    MarkView view;
+    for_each_frame(stream.data(), stream.size(), [&](const uint8_t* rec, size_t n) {
+        view.frames++;
+        if (!has_identifier(rec, n, "$IRM")) return true;
+        Bytes scratch;
+        const IRM* irm = verified_irm_frame(rec, n, &scratch);
+        if (!irm) return true;
+        view.marks++;
+        const std::string provider = str_of(irm->PROVIDER_ID());
+        if (!want_provider.empty() && want_provider != provider) return true;
+        view.present = true;
+        view.irm = irm_read(*irm);
+        return false;
+    });
+    return view;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// $QRP pages and decisions (tile lane), $DAV (cache lane).
+// ---------------------------------------------------------------------------------------------------------------------
+
+qrpRepresentation qrp_representation(aprRepresentation a) {
+    if (a == aprRepresentation_Json) return qrpRepresentation_Json;
+    if (a == aprRepresentation_FlatBuffer) return qrpRepresentation_FlatBuffer;
+    return qrpRepresentation_Default;
+}
+
+int push_qrp_decision(const APRT& job) {
+    QRPT q;
+    q.KIND = qrpKind_Request;
+    q.SCHEMA_NAME = "TBS";
+    q.REPRESENTATION = qrp_representation(job.ACCEPT);
+    q.ETAG = job.IF_NONE_MATCH;
+    flatbuffers::FlatBufferBuilder b(256);
+    FinishQRPBuffer(b, QRP::Pack(b, &q));
+    return push_builder("decision", "QRP.fbs", QRPIdentifier(), "QRP", b) < 0 ? 500 : 0;
+}
+
+void add_column(QRPT* q, const char* name, const char* type) {
+    auto c = std::make_unique<QRPColumnT>();
+    c->NAME = name;
+    c->TYPE = type;
+    q->COLUMNS.push_back(std::move(c));
+}
+std::unique_ptr<QRPValueT> v_text(const std::string& s) { auto v = std::make_unique<QRPValueT>(); v->KIND = qrpValueKind_Text; v->TEXT_VALUE = s; return v; }
+std::unique_ptr<QRPValueT> v_int(int64_t i) { auto v = std::make_unique<QRPValueT>(); v->KIND = qrpValueKind_Int; v->INT_VALUE = i; return v; }
+std::unique_ptr<QRPValueT> v_float(double f) { auto v = std::make_unique<QRPValueT>(); v->KIND = qrpValueKind_Float; v->FLOAT_VALUE = f; return v; }
+std::unique_ptr<QRPValueT> v_bool(bool x) { auto v = std::make_unique<QRPValueT>(); v->KIND = qrpValueKind_Bool; v->BOOL_VALUE = x; return v; }
+
+// The page: the size-prefixed QRP header alone (a projection carries its rows in the header).
+int push_qrp_page(const QRPT& header) {
+    flatbuffers::FlatBufferBuilder b(1024 + header.ROWS.size() * 64);
+    FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &header));
+    Bytes stream;
+    append_size_prefixed(&stream, b);
+    while (stream.size() % 8) stream.insert(stream.end(), {0, 0, 0, 0});
+    return push("page", "QRP.fbs", QRPIdentifier(), "QRP", stream.data(), stream.size()) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The tile scheme — byte-for-byte the client's math (cellularTileStream.js lonToTileX / latToTileY / tileBounds).
+// ---------------------------------------------------------------------------------------------------------------------
 
 double tile_lat_clamp(double lat) {
     if (lat > kTileLatClamp) return kTileLatClamp;
     if (lat < -kTileLatClamp) return -kTileLatClamp;
     return lat;
 }
-
 long tile_n(long z) { return 1L << z; }
-
 long lon_to_tile_x(double lon, long z) {
     const double n = static_cast<double>(tile_n(z));
-    const double raw = ((lon + 180.0) / 360.0) * n + kTileIndexEpsilon;
-    long x = static_cast<long>(std::floor(raw));
+    long x = static_cast<long>(std::floor(((lon + 180.0) / 360.0) * n + kTileIndexEpsilon));
     if (x < 0) x = 0;
     if (x > tile_n(z) - 1) x = tile_n(z) - 1;
     return x;
 }
-
 long lat_to_tile_y(double lat, long z) {
     const double n = static_cast<double>(tile_n(z));
     const double phi = (tile_lat_clamp(lat) * M_PI) / 180.0;
-    const double raw = ((1.0 - std::asinh(std::tan(phi)) / M_PI) / 2.0) * n + kTileIndexEpsilon;
-    long y = static_cast<long>(std::floor(raw));
+    long y = static_cast<long>(std::floor(((1.0 - std::asinh(std::tan(phi)) / M_PI) / 2.0) * n + kTileIndexEpsilon));
     if (y < 0) y = 0;
     if (y > tile_n(z) - 1) y = tile_n(z) - 1;
     return y;
 }
-
-struct TileBounds {
-    double west = 0, south = 0, north = 0, east = 0;
-};
-
+struct TileBounds { double west = 0, south = 0, north = 0, east = 0; };
 TileBounds tile_bounds(long z, long x, long y) {
     const double n = static_cast<double>(tile_n(z));
     TileBounds b;
     b.west = (static_cast<double>(x) / n) * 360.0 - 180.0;
     b.east = (static_cast<double>(x + 1) / n) * 360.0 - 180.0;
     b.north = std::atan(std::sinh(M_PI * (1.0 - (2.0 * static_cast<double>(y)) / n))) * 180.0 / M_PI;
-    b.south =
-        std::atan(std::sinh(M_PI * (1.0 - (2.0 * static_cast<double>(y + 1)) / n))) * 180.0 / M_PI;
+    b.south = std::atan(std::sinh(M_PI * (1.0 - (2.0 * static_cast<double>(y + 1)) / n))) * 180.0 / M_PI;
     return b;
 }
 
-// ── $TBS read-only peek ────────────────────────────────────────────────────
-//
-// The tile lane needs exactly two fields out of a stored $TBS record: LATITUDE
-// and LONGITUDE. Linking the generated TBS header in would drag the whole
-// schema (and cell-tower-source's registry, via its inlining build) into a
-// plugin whose entire point is that it holds neither — so the two doubles are
-// hand-decoded, exactly as HtqPeek above hand-decodes the $HTQ it only reads.
-//
-// SLOT INDICES ARE THE IDL'S DECLARATION ORDER, verified against
-// spacedatastandards.org schema/TBS: ID=0, NATIVE_ID=1, RADIO=2, MCC=3, MNC=4,
-// LAC=5, TAC=6, CELL_ID=7, LATITUDE=8, LONGITUDE=9. A field the writer omitted
-// has vtable slot 0 and is ABSENT, not zero — a record with no position must be
-// skipped, never plotted at null island.
-constexpr int kTbsSlotLatitude = 8;
-constexpr int kTbsSlotLongitude = 9;
-
+// $TBS read-only peek: LATITUDE (slot 8) and LONGITUDE (slot 9) only. A field the writer omitted is ABSENT, not
+// zero — a record with no position is skipped, never plotted at null island.
 struct TbsPeek {
     const uint8_t* buf = nullptr;
-    uint32_t len = 0;
-    uint32_t root = 0;
-    uint32_t vtable = 0;
+    uint32_t len = 0, root = 0, vtable = 0;
     uint16_t vtable_len = 0;
-
     uint32_t rd32(uint32_t at) const {
         return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
-               (static_cast<uint32_t>(buf[at + 2]) << 16) |
-               (static_cast<uint32_t>(buf[at + 3]) << 24);
+               (static_cast<uint32_t>(buf[at + 2]) << 16) | (static_cast<uint32_t>(buf[at + 3]) << 24);
     }
-    uint16_t rd16(uint32_t at) const {
-        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
-    }
-
+    uint16_t rd16(uint32_t at) const { return static_cast<uint16_t>(buf[at] | (buf[at + 1] << 8)); }
     bool init(const uint8_t* data, uint32_t size) {
         if (!data || size < 8) return false;
-        buf = data;
-        len = size;
-        root = rd32(0);
+        buf = data; len = size; root = rd32(0);
         if (root + 4 > len) return false;
-        const int32_t soffset = static_cast<int32_t>(rd32(root));
-        const int64_t vt = static_cast<int64_t>(root) - soffset;
+        const int64_t vt = static_cast<int64_t>(root) - static_cast<int32_t>(rd32(root));
         if (vt < 0 || vt + 4 > static_cast<int64_t>(len)) return false;
         vtable = static_cast<uint32_t>(vt);
         vtable_len = rd16(vtable);
         return vtable_len >= 4;
     }
-
-    uint16_t slot(int index) const {
-        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
-        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
-        return rd16(at);
-    }
-
     bool f64(int index, double* out) const {
-        const uint16_t rel = slot(index);
-        if (!rel) return false;  // ABSENT, not zero.
-        const uint32_t at = root + rel;
-        if (at + 8 > len) return false;
-        uint64_t bits = 0;
-        for (int i = 7; i >= 0; i--) bits = (bits << 8) | static_cast<uint64_t>(buf[at + i]);
-        double value;
-        std::memcpy(&value, &bits, sizeof(value));
-        *out = value;
+        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
+        if (at + 2 > vtable + vtable_len || at + 2 > len) return false;
+        const uint16_t rel = rd16(at);
+        if (!rel || root + rel + 8 > len) return false;
+        std::memcpy(out, buf + root + rel, 8);
         return true;
     }
 };
+struct TilePoint { double lat = 0, lon = 0; };
 
-struct TilePoint {
-    double lat = 0, lon = 0;
-};
-
-// Walk a size-prefixed record stream, keep the points that fall in ONE tile.
-//
-// Membership is decided by re-deriving the point's own (x, y) with the same
-// formulas and the same epsilon the client uses, NOT by a west<=lon<east
-// rectangle test: a rectangle test disagrees with the client's tile assignment
-// on the seams, and a site that both sides claim (or neither) is a duplicate or
-// a hole in the worldwide picture.
-//
-// `scanned` counts every well-formed positioned record the query returned, so
-// the envelope can say how much of the store this answer actually saw.
-void collect_tile_points(const uint8_t* stream, uint32_t stream_len, long z, long x, long y,
-                         std::vector<TilePoint>* out, long* scanned, long* malformed) {
-    uint32_t at = 0;
-    while (at + 4 <= stream_len) {
-        const uint32_t size = static_cast<uint32_t>(stream[at]) |
-                              (static_cast<uint32_t>(stream[at + 1]) << 8) |
-                              (static_cast<uint32_t>(stream[at + 2]) << 16) |
-                              (static_cast<uint32_t>(stream[at + 3]) << 24);
-        at += 4;
-        if (size == 0 || at + size > stream_len) break;
-        const uint8_t* record = stream + at;
-        at += size;
-
+// Keep the points that fall in ONE tile, by re-deriving each point's own (x, y) with the client's formulas — not a
+// rectangle test, which disagrees with the client on the seams.
+void collect_tile_points(const Bytes& stream, long z, long x, long y, std::vector<TilePoint>* out, long* scanned,
+                         long* malformed) {
+    for_each_frame(stream.data(), stream.size(), [&](const uint8_t* rec, size_t n) {
         TbsPeek peek;
         double lat = 0, lon = 0;
-        if (!peek.init(record, size) || !peek.f64(kTbsSlotLatitude, &lat) ||
-            !peek.f64(kTbsSlotLongitude, &lon)) {
+        if (!peek.init(rec, static_cast<uint32_t>(n)) || !peek.f64(8, &lat) || !peek.f64(9, &lon) ||
+            !(lat >= -90.0 && lat <= 90.0) || !(lon >= -180.0 && lon <= 180.0)) {
             (*malformed)++;
-            continue;
-        }
-        if (!(lat >= -90.0 && lat <= 90.0) || !(lon >= -180.0 && lon <= 180.0)) {
-            (*malformed)++;
-            continue;
+            return true;
         }
         (*scanned)++;
-        if (lon_to_tile_x(lon, z) != x || lat_to_tile_y(lat, z) != y) continue;
-        TilePoint p;
-        p.lat = lat;
-        p.lon = lon;
-        out->push_back(p);
-    }
+        if (lon_to_tile_x(lon, z) == x && lat_to_tile_y(lat, z) == y) out->push_back({lat, lon});
+        return true;
+    });
 }
 
-// Point coordinates: 1e-7 degrees is ~1 cm, far finer than any renderer needs,
-// and a tile ships up to 2048 of them — precision beyond this is payload, not
-// information.
-std::string fixed7(double v) {
-    char buf[40];
-    std::snprintf(buf, sizeof(buf), "%.7f", v);
-    return std::string(buf);
-}
-
-// DENSITY CELL CORNERS ARE FULL-PRECISION, and that is not fussiness.
-//
-// The client rebuilds a cell's rectangle from its south-west corner plus the
-// tile's own span (densityCellRectangle: east = cell.lon + (bounds.east -
-// bounds.west) / n). If the corner it is handed has been rounded, the
-// reconstructed east edge of the last column OVERSHOOTS the tile's east edge —
-// measured at 2e-8 degrees with %.7f corners, i.e. the cells no longer tile
-// their parent and adjacent tiles overlap by a sliver at every seam. A grid
-// whose cells do not partition the tile is a density product that double-counts
-// at its own boundaries. Round-trip precision (17 significant digits) hands the
-// client the EXACT double the server computed, so its arithmetic reproduces the
-// server's bit for bit. There are at most 256 cells, so the extra bytes are
-// nothing.
-std::string exact_double(double v) {
-    char buf[40];
-    std::snprintf(buf, sizeof(buf), "%.17g", v);
-    return std::string(buf);
-}
-
-// ── the dataset block ──────────────────────────────────────────────────────
-//
-// Every tile and the meta carry the SAME dataset block, sourced from the ingest
-// lane's resume mark and from nothing else. An empty store answers honestly:
-// cacheState "empty", records 0, the sentinel epoch, stale true. Nothing here
-// invents a count, a time, or a state it cannot establish — a tile layer that
-// draws zero towers over a store that was never ingested must say which of the
-// two it is.
-std::string tile_dataset_json(const std::string& mark, std::string* state_out) {
+// The dataset block every tile and the meta carry, from the resume mark and nothing else.
+struct Dataset {
     std::string state = "empty";
     std::string epoch = kTileNoEpoch;
+    int64_t epoch_ms = 0;
     long records = 0;
     bool stale = true;
-
-    const MarkView view = read_mark(mark, std::string());
+};
+Dataset dataset_of(const Bytes& marks) {
+    Dataset d;
+    const MarkView view = read_mark(marks, std::string());
     if (view.present) {
-        records = view.stored_rows < 0 ? 0 : view.stored_rows;
-        const bool complete = view.total_bytes > 0 && view.next_offset >= view.total_bytes;
-        state = complete ? "warm" : "ingesting";
-        stale = !complete;
-        if (!view.updated_at.empty()) epoch = view.updated_at;
+        d.records = static_cast<long>(view.irm.records_committed);
+        const bool complete = view.irm.source.total_bytes > 0 && view.irm.next_offset >= view.irm.source.total_bytes;
+        d.state = complete ? "warm" : "ingesting";
+        d.stale = !complete;
+        if (!view.irm.updated_at.empty()) {
+            d.epoch = view.irm.updated_at;
+            parse_rfc3339_ms(d.epoch, &d.epoch_ms);
+        }
     }
-
-    if (state_out) *state_out = state;
-    return std::string("{\"dataset\":\"") + kTileDataset + "\",\"epoch\":\"" + json_escape(epoch) +
-           "\",\"records\":" + std::to_string(records) + ",\"stale\":" + (stale ? "true" : "false") +
-           ",\"cacheState\":\"" + state + "\"}";
+    return d;
 }
 
-// THE ONE DURABLE MARK READ, shared by every planner.
-//
-// $IRM records land in the store's per-type table (sds_<lowercased type>, the
-// convention hostcap/flatsql-store encodes), so the mark is read back as
-// RECORDS rather than out of a bespoke bookkeeping table. The provider is NOT
-// pushed into the SQL: PROVIDER_ID lives inside the FlatBuffer, not in a
-// column, and inventing a column the store does not have returns an error on
-// some backends and an EMPTY SET on others — the second being
-// indistinguishable from "never ingested". The newest few rows are read and
-// `read_mark` picks the right provider's, which also lets one $IRM table serve
-// several ingest lanes at once.
-std::string durable_mark_query(const std::string& config) {
-    const std::string sql = config_string(config, "cell_ingest_mark_sql", kDefaultMarkSql);
-    long scan = static_cast<long>(json_number_or(config, "cell_ingest_mark_scan_rows",
-                                                 static_cast<double>(kDefaultMarkScanRows)));
-    if (scan <= 0) scan = kDefaultMarkScanRows;
-    return std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":[{\"t\":\"i64\",\"v\":" +
-           std::to_string(scan) + "}]}";
+void stamp_dataset(QRPT* q, const Dataset& d) {
+    q->STORED = static_cast<uint64_t>(d.records);
+    q->AS_OF_MS = d.epoch_ms;
+    q->STALE = d.stale;
 }
 
-// The tile path grammar: ".../tiles/meta" or ".../tiles/{z}/{x}/{y}".
-// Returns false when the path is not a tile path at all.
+std::string durable_mark_sql(const Config& c) { return c.string("cell_ingest_mark_sql", kDefaultMarkSql); }
+long durable_mark_scan(const Config& c) {
+    const long v = static_cast<long>(c.number("cell_ingest_mark_scan_rows", static_cast<double>(kDefaultMarkScanRows)));
+    return v > 0 ? v : kDefaultMarkScanRows;
+}
+int push_mark_query(const char* port, const Config& c) {
+    return push_fso(port, durable_mark_sql(c), {p_i64(durable_mark_scan(c))});
+}
+
+// The tile path grammar: ".../tiles/meta" or ".../tiles/{z}/{x}/{y}"; false when it is not a tile path at all.
 bool split_tile_path(const std::string& path, std::vector<std::string>* segments) {
     const size_t at = path.find("/tiles");
     if (at == std::string::npos) return false;
     size_t i = at + 6;
-    if (i < path.size() && path[i] != '/') return false;  // "/tilesfoo" is not ours
+    if (i < path.size() && path[i] != '/') return false;
     std::string current;
     for (; i <= path.size(); i++) {
         const char c = i < path.size() ? path[i] : '/';
@@ -1236,9 +1038,7 @@ bool split_tile_path(const std::string& path, std::vector<std::string>* segments
     return true;
 }
 
-// Strict non-negative integer parse. "3.5", "+3", "0x3", "", " 3" and "3abc"
-// are all REFUSED: a tile index that silently truncates serves a neighbour's
-// tile under the requested key, which is a wrong answer with a 200 on it.
+// Strict non-negative integer parse: a tile index that silently truncates serves a neighbour's tile.
 bool parse_index(const std::string& text, long* out) {
     if (text.empty() || text.size() > 10) return false;
     long value = 0;
@@ -1250,520 +1050,352 @@ bool parse_index(const std::string& text, long* out) {
     return true;
 }
 
-// HTTP 304: one notice frame on the "unchanged" port, nothing on meta or
-// records. hostcap/storage-ingest never becomes ready (its required meta and
-// records ports stay empty), so nothing is stored and no batch is announced;
-// the notice reaches the flow's egress sink so the operator can see the pull
-// happened and found nothing new. Byte-for-byte the celestrak-parser notice.
-int emit_unchanged(const std::string& job, const std::string& config) {
-    std::string source_url;
-    std::string dataset_id;
-    json_string_field(job, "source_url", &source_url);
-    json_string_field(job, "dataset_id", &dataset_id);
-    const std::string notice =
-        std::string("{\"status\":304,\"unchanged\":true") + ",\"source_name\":\"" +
-        json_escape(config_string(config, "cell_ingest_source_name", "cell-tower-bulk")) + "\"" +
-        ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"dataset_id\":\"" +
-        json_escape(dataset_id) + "\"}";
-    return push_json("unchanged", notice) < 0 ? 500 : 0;
+// ---------------------------------------------------------------------------------------------------------------------
+// The ingest lane helpers.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const char* const kMergeMethodNames[] = {"SINGLE_SOURCE", "HIGHEST_SAMPLE_COUNT", "MOST_RECENT", "AUTHORITY_PRECEDENCE", "CENTROID"};
+
+// MM_HIGHEST_SAMPLE_COUNT by default, never SINGLE_SOURCE: sites arrive from OVERLAPPING registries, and single-source
+// is the one mode that guarantees the duplicates survive into storage. The numeric config key is what the merge used
+// before; the name key is honoured when it is the only one set.
+std::string merge_method_name(const Config& c) {
+    if (c.has("cell_ingest_merge_method")) {
+        const long m = static_cast<long>(c.number("cell_ingest_merge_method", 1));
+        if (m >= 0 && m <= 4) return kMergeMethodNames[m];
+    }
+    return c.string("cell_ingest_merge_method_name", "HIGHEST_SAMPLE_COUNT");
+}
+
+std::string hrsp_header(const R::HttpResponse* r, const char* name) {
+    if (!r || !r->HEADERS()) return std::string();
+    for (const auto* h : *r->HEADERS())
+        if (h && h->NAME() && lower(h->NAME()->str()) == name) return h->VALUE() ? h->VALUE()->str() : std::string();
+    return std::string();
+}
+
+// Content-Range: "bytes 0-3145727/2147483648" -> the denominator, the only authority on the object's size.
+bool total_from_content_range(const std::string& value, uint64_t* total) {
+    const size_t slash = value.rfind('/');
+    if (slash == std::string::npos || slash + 1 >= value.size() || value[slash + 1] == '*') return false;
+    const long long parsed = std::atoll(value.c_str() + slash + 1);
+    if (parsed <= 0) return false;
+    *total = static_cast<uint64_t>(parsed);
+    return true;
+}
+
+// The job the HttpResponse carries in CONTEXT: [$APR run contract, $IRM job].
+bool context_irm(const R::HttpResponse* r, Irm* out) {
+    if (!r || !r->CONTEXT()) return false;
+    bool found = false;
+    for_each_frame(r->CONTEXT()->data(), r->CONTEXT()->size(), [&](const uint8_t* rec, size_t n) {
+        if (!has_identifier(rec, n, "$IRM")) return true;
+        Bytes scratch;
+        const IRM* irm = verified_irm_frame(rec, n, &scratch);
+        if (!irm) return true;
+        *out = irm_read(*irm);
+        found = true;
+        return false;
+    });
+    return found;
+}
+
+size_t count_frames(const uint8_t* data, size_t size) {
+    size_t n = 0;
+    for_each_frame(data, size, [&](const uint8_t*, size_t) { n++; return true; });
+    return n;
 }
 
 }  // namespace
 
 extern "C" {
 
-// ---------------------------------------------------------------------------
-// cache_plan — THE CACHE GATE. Owner 2026-08-14: "the cell towers should load
-// almost instantaneously."
-//
-// This node sits between the flow's ONE http trigger and cell-tower-source's
-// `route`, and it is the whole reason the request path stops costing ~9s. Before
-// this existed, every /aggregate request fanned out a live GET per provider and
-// merged the bodies while the caller waited. Now:
-//
-//   * an /aggregate read is answered FROM THE STORE — one FlatSQL SELECT over
-//     rows the cellular-network-ingest timer already persisted, streamed back
-//     verbatim by hostcap/flatsql-query;
-//   * every other route (/providers, /credentials/*) and any request that asks
-//     for `REFRESH: true` is PASSED THROUGH to `route` unchanged, so the live
-//     provider lane is intact and reachable, just no longer the default;
-//   * provider refresh is the timer flow's job (flows/cellular-network-ingest),
-//     never the request path's.
-//
-// It emits NOTHING on the cache ports when it passes through, and nothing on
-// `passthrough` when it serves from cache, so exactly one lane answers and the
-// two bodies can never race into `respond`.
-//
-// NO NEW HOST SURFACE. This is `plugin.getConfig` plus two flatsql-query frames
-// over the existing generic hooks; the plugin stays `capabilities: []`.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// cache_plan — THE CACHE GATE. Owner 2026-08-14: "the cell towers should load almost instantaneously."
+// Exactly one lane emits per request: the tile lane, the passthrough to route, or the cache read.
+// ---------------------------------------------------------------------------------------------------------------------
 int cache_plan(void) {
     if (refuse_batched()) return 500;
-
     const plugin_input_frame_t* frame = frame_for("request");
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-request-frame",
-                         "cache_plan requires the $HTQ request frame on port \"request\".");
-        return 400;
-    }
+    if (!frame || !frame->payload || frame->payload_length == 0)
+        return fail(400, "missing-request-frame", "cache_plan requires the $HTQ request frame on port \"request\".");
 
-    // A FORWARD ON EVERY UNCERTAINTY. If the envelope cannot be read, this node
-    // does not get to decide anything — it hands the frame to `route`, which
-    // owns the error vocabulary for a malformed request. Answering an
-    // unreadable request out of the cache would serve the last good answer to a
-    // request nobody could parse.
-    HtqPeek htq;
-    const bool readable = htq.init(frame->payload, frame->payload_length);
-    const std::string path = readable ? htq.str(1) : std::string();
-    const std::string verb = readable ? upper_ascii(htq.str(0)) : std::string();
-    const std::string body = readable ? htq.str(4) : std::string();
+    // A FORWARD ON EVERY UNCERTAINTY: an unreadable envelope goes to route, which owns the error vocabulary.
+    const H::HttpRequest* htq = read_htq(frame);
+    const std::string path = htq && htq->PATH() ? htq->PATH()->str() : std::string();
+    const std::string verb = upper(htq && htq->METHOD() ? htq->METHOD()->str() : std::string());
+    const std::string body = htq && htq->BODY()
+                                 ? std::string(reinterpret_cast<const char*>(htq->BODY()->data()), htq->BODY()->size())
+                                 : std::string();
+    if (htq && path.find("/tiles") != std::string::npos)
+        return push("tile", "HttpRequestAbi.fbs", "$HTQ", "HttpRequest", frame->payload, frame->payload_length) < 0 ? 500 : 0;
 
-    // THE TILE LANE gets the request BEFORE anything else looks at it. Without
-    // this branch `/tiles/...` is a GET that names neither /providers nor
-    // /credentials/, so the aggregate test below would claim it and answer a
-    // tile request with the whole cached record stream — a 200 carrying
-    // megabytes of the wrong shape. The $HTQ is forwarded byte-for-byte; this
-    // node re-serialises nothing.
-    if (readable && path_has_segment(path, "/tiles")) {
-        const int32_t pushed = plugin_push_output_ex(
-            "tile", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 8,
-            frame->payload, frame->payload_length);
-        return pushed < 0 ? 500 : 0;
-    }
+    const bool is_aggregate = htq && path.find("/providers") == std::string::npos &&
+                              path.find("/credentials/") == std::string::npos && (verb == "POST" || verb == "GET");
+    // REFRESH is the caller's explicit "go to the providers now"; opt-in, never a default.
+    if (!is_aggregate || json_bool_or(body, "REFRESH", false))
+        return push("passthrough", "HttpRequestAbi.fbs", "$HTQ", "HttpRequest", frame->payload, frame->payload_length) < 0 ? 500 : 0;
 
-    const bool is_aggregate = readable && !path_has_segment(path, "/providers") &&
-                              !path_has_segment(path, "/credentials/") &&
-                              (verb == "POST" || verb == "GET");
-    // REFRESH is the caller's explicit "go to the providers now". It is opt-IN:
-    // a default that refreshed would put the 9 s back for everyone.
-    const bool refresh = json_bool_or(body, "REFRESH", false);
-
-    if (!is_aggregate || refresh) {
-        // Verbatim forward. The payload is re-pushed byte-for-byte as aligned
-        // binary — `route` re-decodes the same $HTQ this node just read, and no
-        // field is re-serialised in between where it could drift.
-        const int32_t pushed = plugin_push_output_ex(
-            "passthrough", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0,
-            8, frame->payload, frame->payload_length);
-        return pushed < 0 ? 500 : 0;
-    }
-
-    const std::string config = load_config();
-    const std::string sql = config_string(config, "cell_cache_sql", kDefaultCacheSql);
-    long max_rows = static_cast<long>(json_number_or(config, "cell_cache_max_rows",
-                                                     static_cast<double>(kDefaultCacheMaxRows)));
+    const Config config = load_config();
+    const std::string sql = config.string("cell_cache_sql", kDefaultCacheSql);
+    long max_rows = static_cast<long>(config.number("cell_cache_max_rows", static_cast<double>(kDefaultCacheMaxRows)));
     if (max_rows <= 0) max_rows = kDefaultCacheMaxRows;
     long limit = static_cast<long>(json_number_or(body, "LIMIT", 2000));
     if (limit <= 0) limit = 2000;
     if (limit > max_rows) limit = max_rows;
+    const std::string provider = config_provider(config);
 
-    char limit_buf[32];
-    std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
-
-    const std::string query = std::string("{\"sql\":\"") + json_escape(sql) +
-                              "\",\"params\":[{\"t\":\"i64\",\"v\":" + limit_buf + "}]}";
-    if (push_json("query", query) < 0) return 500;
-
-    // The freshness read is a SECOND query, not a join onto the first: the
-    // records answer must stream back verbatim to the caller, and mixing
-    // bookkeeping columns into it would corrupt the record stream.
-    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    if (push_json("mark_query", durable_mark_query(config)) < 0) return 500;
-
-    const std::string job = std::string("{\"route\":\"cellular-aggregate-cache\"") +
-                            ",\"limit\":" + limit_buf + ",\"maxRows\":" +
-                            std::to_string(max_rows) + ",\"provider_id\":\"" +
-                            json_escape(provider) + "\"" + ",\"sql\":\"" + json_escape(sql) + "\"}";
-    return push_json("job", job) < 0 ? 500 : 0;
+    if (push_fso("query", sql, {p_i64(limit)})) return 500;
+    // The freshness read is a SECOND query: the records answer streams back verbatim and must not carry bookkeeping.
+    if (push_mark_query("mark_query", config)) return 500;
+    APRT job = apr_from(htq, "aggregate-cache");
+    job.SELECTION = sql;
+    add_param(&job.PARAMETERS, "LIMIT", std::to_string(limit));
+    add_param(&job.PARAMETERS, "maxRows", std::to_string(max_rows));
+    add_param(&job.PARAMETERS, "provider", provider);
+    return push_apr("job", job);
 }
 
-// ---------------------------------------------------------------------------
-// cache_freshness — the honest half of the cache.
-//
-// A cache that answers instantly and says nothing about its age is worse than
-// the 9 s fetch it replaced, because a stale answer becomes indistinguishable
-// from a current one. This node authors the decision envelope that rides beside
-// the cached record stream, and it exists so that the UI can say WHEN the towers
-// it is drawing were last ingested.
-//
-// It reports what it can actually establish and refuses to invent the rest:
-//
-//   * `cacheState: "empty"` when the ingest lane has left no mark at all. That
-//     is the "no fake instant-but-empty answers" case from the task — the
-//     answer is instant AND empty, and the envelope says so, names the reason,
-//     and tells the caller that REFRESH:true reaches the providers directly.
-//   * `cacheState: "warm"` when a mark exists, with the provider and byte
-//     progress the mark carries.
-//   * `freshness: "unavailable"` when the mark frame is present but not
-//     readable as the JSON `ingest_plan` already expects on this port
-//     (cell_tower_ingest_module.cpp `ingest_plan`, port "mark"). The read side
-//     of the mark lane is not yet closed end-to-end (see the file header), and
-//     a timestamp guessed at here would be a lie with a number on it.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// cache_freshness — the honest half of the cache: the cached rows WITH their age, never a stale answer presented as
+// a current one.
+// ---------------------------------------------------------------------------------------------------------------------
 int cache_freshness(void) {
-    if (refuse_batched()) return 500;
+    if (refuse_batched({"records", "mark"})) return 500;
+    APRT job;
+    int status = 0;
+    if (!read_apr("job", &job, &status)) return status;
+    const FsbResult rows = fsb_result("records");
+    const FsbResult marks = fsb_result("mark");
+    if (!rows.ok || !marks.ok) return fail(400, "invalid-fsb-frame", "a result chunk is not an $FSB.");
 
-    const std::string job = input_text("job");
-    if (job.empty()) {
-        plugin_set_error("missing-job-frame",
-                         "cache_freshness requires the cache job frame from cache_plan.");
-        return 400;
-    }
-    const long limit = static_cast<long>(json_number_or(job, "limit", 0));
-    std::string provider;
-    json_string_field(job, "provider_id", &provider);
-
-    const MarkView mark_view = read_mark(input_text("mark"), std::string());
-    const std::string mark = input_text("mark");
-
-    std::string state = "empty";
-    std::string freshness = "unknown";
-    std::string detail;
+    const MarkView view = read_mark(marks.data, std::string());
+    std::string state = "empty", freshness = "unknown", providers;
     bool stale = true;
-
-    if (!mark.empty()) {
-        if (mark_view.present) {
-            const std::string mark_provider = mark_view.provider_id;
-            const long next_offset = mark_view.next_offset;
-            const long total_bytes = mark_view.total_bytes;
-            const long chunk_index = mark_view.chunk_index;
-            state = "warm";
-            freshness = (total_bytes > 0 && next_offset >= total_bytes) ? "complete" : "ingesting";
-            stale = freshness != "complete";
-            char buf[224];
-            std::snprintf(buf, sizeof(buf),
-                          ",\"providers\":[{\"providerId\":\"%s\",\"nextOffset\":%ld"
-                          ",\"totalBytes\":%ld,\"chunkIndex\":%ld,\"state\":\"%s\"}]",
-                          json_escape(mark_provider).c_str(), next_offset, total_bytes, chunk_index,
-                          freshness.c_str());
-            detail = buf;
-        } else {
-            state = "warm";
-            freshness = "unavailable";
-            detail =
-                ",\"providers\":[],\"freshnessReason\":\"the resume-mark row is not readable as "
-                "JSON on this port; the mark read lane is not closed end-to-end yet\"";
-        }
+    DAVT dav;
+    dav.STANDARD = "TBS";
+    dav.SCHEMA_NAME = kSchemaName;
+    dav.SOURCE_NAME = "cellular-aggregate-cache";
+    dav.PROVIDER_ID = apr_param(job, "provider");
+    if (view.present) {
+        const Irm& m = view.irm;
+        state = "warm";
+        freshness = (m.source.total_bytes > 0 && m.next_offset >= m.source.total_bytes) ? "complete" : "ingesting";
+        stale = freshness != "complete";
+        providers = "providerId=" + m.provider_id + ";nextOffset=" + std::to_string(m.next_offset) +
+                    ";totalBytes=" + std::to_string(m.source.total_bytes) +
+                    ";chunkIndex=" + std::to_string(m.next_chunk_index) + ";state=" + freshness;
+        dav.PROVIDER_ID = m.provider_id;
+        dav.KNOWN = true;
+        dav.AVAILABLE = true;
+        dav.FRESH = !stale;
+        int64_t ms = 0;
+        if (parse_rfc3339_ms(m.updated_at, &ms)) dav.PUBLISHED_AT_MS = ms;
+        if (m.has_chunk) dav.BATCH_ID = m.chunk.batch_id;
+    } else if (view.frames > 0) {
+        // Rows came back but none is an $IRM: a timestamp guessed at here would be a lie with a number on it.
+        state = "warm";
+        freshness = "unavailable";
+        dav.KNOWN = true;
+        dav.AVAILABLE = true;
+        dav.FRESH = false;
     } else {
-        detail = std::string(
-                     ",\"providers\":[],\"freshnessReason\":\"no ingest mark for provider \\\"") +
-                 json_escape(provider) +
-                 "\\\" — the cellular-network-ingest timer has not stored anything yet; POST "
-                 "{\\\"REFRESH\\\":true} to reach the providers directly\"";
+        // No mark: the ingest lane has stored nothing. Instant AND empty, and it says so.
+        dav.KNOWN = false;
+        dav.AVAILABLE = false;
+        dav.UNAVAILABLE_REASON = davUnavailableReason_NotPublished;
+    }
+    if (rows.present) {
+        dav.RECORD_COUNT = count_frames(rows.data.data(), rows.data.size());
+        dav.BYTE_COUNT = rows.data.size();
     }
 
-    // THE FRESHNESS MUST REACH THE CALLER, and the body is a verbatim FlatBuffer
-    // stream that cannot carry it. So it rides as response HEADERS, through
-    // foundation/http-respond's `decision.headers` passthrough — string values
-    // only, which is why `providers` is serialised into one compact string
-    // rather than nested. The same fields stay on the decision object itself so
-    // an in-flow consumer reads them structurally.
-    std::string providers_header = detail;
-    const size_t marker = providers_header.find("\"providers\":");
-    providers_header = marker == std::string::npos
-                           ? std::string("[]")
-                           : providers_header.substr(marker + 12);
-    const size_t close = providers_header.find(']');
-    providers_header =
-        close == std::string::npos ? std::string("[]") : providers_header.substr(0, close + 1);
+    auto header = [&](const char* name, const std::string& value) { add_param(&job.RESPONSE_HEADERS, name, value); };
+    header("x-sdn-cache", state);
+    header("x-sdn-cache-freshness", freshness);
+    header("x-sdn-cache-stale", stale ? "true" : "false");
+    header("x-sdn-cache-providers", providers);
 
-    const std::string headers = std::string(",\"headers\":{\"x-sdn-cache\":\"") + state + "\"" +
-                                ",\"x-sdn-cache-freshness\":\"" + freshness + "\"" +
-                                ",\"x-sdn-cache-stale\":\"" + (stale ? "true" : "false") + "\"" +
-                                ",\"x-sdn-cache-providers\":\"" + json_escape(providers_header) +
-                                "\"}";
-
-    const std::string decision =
-        std::string("{\"route\":\"cellular-aggregate-cache\",\"format\":\"record-stream\"") +
-        ",\"status\":200,\"served\":\"cache\"" + ",\"cacheState\":\"" + state + "\"" +
-        ",\"freshness\":\"" + freshness + "\"" + ",\"stale\":" + (stale ? "true" : "false") +
-        ",\"limit\":" + std::to_string(limit) + detail + headers + "}";
-    return push_json("decision", decision) < 0 ? 500 : 0;
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishDAVBuffer(b, DAV::Pack(b, &dav));
+    if (push_builder("availability", "DAV.fbs", DAVIdentifier(), "DAV", b) < 0) return 500;
+    if (rows.present &&
+        push("records", "TBS.fbs", "$TBS", "TBS", rows.data.data(), rows.data.size()) < 0)
+        return 500;
+    return push_apr("decision", job);
 }
 
-// ---------------------------------------------------------------------------
-// tile_plan — THE TILE ROUTER. One $HTQ in, ONE lane out.
-//
-// `/tiles/meta` and `/tiles/{z}/{x}/{y}` are the only two shapes; everything
-// else under `/tiles` is refused with the reason named. The refusal travels on
-// the SAME `tile_job` port the tile lane uses, so exactly one node ever answers
-// a tile request and two bodies can never race into `respond` — the discipline
-// the cache gate established and the one property that makes this flow's
-// single-responder invariant checkable.
-//
-// BOUNDS ARE REFUSED, NEVER CLAMPED. A z of 19 clamped to 18, or an x of 2^z
-// clamped to 2^z - 1, answers 200 with a DIFFERENT tile's contents under the
-// requested key — a wrong answer that no client can detect. z outside [0, 18],
-// x or y outside [0, 2^z), and any non-canonical integer literal are 400s.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// tile_plan — THE TILE ROUTER. BOUNDS ARE REFUSED, NEVER CLAMPED: a clamped index answers 200 with a DIFFERENT
+// tile's contents under the requested key.
+// ---------------------------------------------------------------------------------------------------------------------
 int tile_plan(void) {
     if (refuse_batched()) return 500;
-
     const plugin_input_frame_t* frame = frame_for("request");
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-request-frame",
-                         "tile_plan requires the $HTQ request frame on port \"request\".");
-        return 400;
-    }
-
-    HtqPeek htq;
-    const bool readable = htq.init(frame->payload, frame->payload_length);
-    const std::string path = readable ? htq.str(1) : std::string();
+    if (!frame || !frame->payload || frame->payload_length == 0)
+        return fail(400, "missing-request-frame", "tile_plan requires the $HTQ request frame on port \"request\".");
+    const H::HttpRequest* htq = read_htq(frame);
+    const std::string path = htq && htq->PATH() ? htq->PATH()->str() : std::string();
 
     auto refuse = [&](const char* code, const std::string& why) -> int {
-        const std::string job = std::string("{\"route\":\"cellular-tile\",\"code\":\"") + code +
-                                "\",\"refuse\":\"" + json_escape(why) + "\"}";
-        return push_json("tile_job", job) < 0 ? 500 : 0;
+        APRT refusal = apr_from(htq, "tile");
+        refusal.STATUS = 400;
+        refusal.ERROR_CODE = code;
+        refusal.ERROR_MESSAGE = why;
+        return push_apr("refusal", refusal);
     };
 
     std::vector<std::string> segments;
-    if (!readable || !split_tile_path(path, &segments)) {
-        return refuse("tile-path",
-                      "the tile lane serves /tiles/meta and /tiles/{z}/{x}/{y} only");
-    }
+    if (!htq || !split_tile_path(path, &segments))
+        return refuse("tile-path", "the tile lane serves /tiles/meta and /tiles/{z}/{x}/{y} only");
 
-    const std::string config = load_config();
-    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string mark_sql = durable_mark_query(config);
+    const Config config = load_config();
+    const std::string provider = config_provider(config);
 
-    // ── the meta lane: capability envelope + store honesty, and NO row scan.
-    //
-    // `dataset.records` comes from the resume mark, not from a COUNT over the
-    // store. Counting would mean reading the whole record stream back through
-    // the guest to answer a question the client asks ONCE at startup — tens of
-    // MB to produce one integer. The mark is the number the ingest lane
-    // actually established, and it is the honest one.
+    // The meta lane: capability envelope + store honesty from the mark, and NO row scan.
     if (segments.size() == 1 && segments[0] == "meta") {
-        if (push_json("meta_mark_query", mark_sql) < 0) return 500;
-        const std::string job = std::string("{\"route\":\"cellular-tile-meta\",\"provider_id\":\"") +
-                                json_escape(provider) + "\"}";
-        return push_json("meta_job", job) < 0 ? 500 : 0;
+        if (push_mark_query("meta_mark_query", config)) return 500;
+        APRT job = apr_from(htq, "tile-meta");
+        add_param(&job.PARAMETERS, "provider", provider);
+        return push_apr("meta_job", job);
     }
-
-    if (segments.size() != 3) {
-        return refuse("tile-path",
-                      "a tile request is /tiles/{z}/{x}/{y}; got " +
-                          std::to_string(segments.size()) + " path segment(s) after /tiles");
-    }
-
+    if (segments.size() != 3)
+        return refuse("tile-path", "a tile request is /tiles/{z}/{x}/{y}; got " + std::to_string(segments.size()) +
+                                       " path segment(s) after /tiles");
     long z = 0, x = 0, y = 0;
-    if (!parse_index(segments[0], &z) || !parse_index(segments[1], &x) ||
-        !parse_index(segments[2], &y)) {
-        return refuse("tile-bounds",
-                      "z, x and y must be canonical non-negative integers");
-    }
-    if (z < kTileMinZoom || z > kTileMaxZoom) {
-        return refuse("tile-bounds", "zoom " + std::to_string(z) + " is outside [" +
-                                         std::to_string(kTileMinZoom) + ", " +
+    if (!parse_index(segments[0], &z) || !parse_index(segments[1], &x) || !parse_index(segments[2], &y))
+        return refuse("tile-bounds", "z, x and y must be canonical non-negative integers");
+    if (z < kTileMinZoom || z > kTileMaxZoom)
+        return refuse("tile-bounds", "zoom " + std::to_string(z) + " is outside [" + std::to_string(kTileMinZoom) + ", " +
                                          std::to_string(kTileMaxZoom) + "]");
-    }
     const long n = tile_n(z);
-    if (x >= n || y >= n) {
-        return refuse("tile-bounds", "tile " + std::to_string(z) + "/" + std::to_string(x) + "/" +
-                                         std::to_string(y) + " is outside [0, " +
-                                         std::to_string(n) + ") at this zoom");
-    }
+    if (x >= n || y >= n)
+        return refuse("tile-bounds", "tile " + std::to_string(z) + "/" + std::to_string(x) + "/" + std::to_string(y) +
+                                         " is outside [0, " + std::to_string(n) + ") at this zoom");
 
-    long max_rows = static_cast<long>(
-        json_number_or(config, "cell_tile_max_rows", static_cast<double>(kDefaultTileMaxRows)));
+    long max_rows = static_cast<long>(config.number("cell_tile_max_rows", static_cast<double>(kDefaultTileMaxRows)));
     if (max_rows <= 0) max_rows = kDefaultTileMaxRows;
-
-    // The tile's own rectangle, from the SAME bounds function `tile` uses to
-    // place density cells — one definition of where this tile is, on both
-    // sides of the query.
     const TileBounds bounds = tile_bounds(z, x, y);
-
-    const std::string configured_sql = config_string(config, "cell_tile_sql", "");
+    const std::string configured_sql = config.string("cell_tile_sql", "");
     const bool scoped = configured_sql.empty();
-    std::string sql;
-    std::string params;
+    int rc;
     if (!scoped) {
-        // AN OPT-OUT THE ANSWER ADMITS TO. An operator statement cannot carry
-        // the tile's rectangle, so this read is the newest `max_rows` rows of
-        // whatever it names, filtered to the tile afterwards. An empty tile
-        // then means "not in the slice that was read", which is NOT "no sites
-        // here" — so the envelope carries scoped:false and the client can tell
-        // the two apart instead of drawing a hole over a populated city.
-        sql = configured_sql;
-        params = std::string("[{\"t\":\"i64\",\"v\":") + std::to_string(max_rows) + "}]";
+        // AN OPT-OUT THE ANSWER ADMITS TO: an operator statement cannot carry the tile's rectangle (scoped false).
+        rc = push_fso("rows_query", configured_sql, {p_i64(max_rows)});
     } else {
-        const std::string relation =
-            config_string(config, "cell_tile_relation", kDefaultTileRelation);
-        sql = "SELECT _data FROM " + relation +
-              " WHERE LATITUDE >= ?1 AND LATITUDE <= ?2"
-              " AND LONGITUDE >= ?3 AND LONGITUDE <= ?4"
-              " ORDER BY _rowid DESC LIMIT ?5";
-        params = std::string("[{\"t\":\"f64\",\"v\":") + exact_double(bounds.south) +
-                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.north) +
-                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.west) +
-                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.east) +
-                 "},{\"t\":\"i64\",\"v\":" + std::to_string(max_rows) + "}]";
+        // THE BBOX IS A PREFILTER, NEVER THE MEMBERSHIP TEST (tile re-derives each point's x/y).
+        const std::string relation = config.string("cell_tile_relation", kDefaultTileRelation);
+        rc = push_fso("rows_query",
+                      "SELECT _data FROM " + relation +
+                          " WHERE LATITUDE >= ?1 AND LATITUDE <= ?2 AND LONGITUDE >= ?3 AND LONGITUDE <= ?4"
+                          " ORDER BY _rowid DESC LIMIT ?5",
+                      {p_f64(bounds.south), p_f64(bounds.north), p_f64(bounds.west), p_f64(bounds.east), p_i64(max_rows)});
     }
-
-    const std::string rows_query =
-        std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params + "}";
-    if (push_json("rows_query", rows_query) < 0) return 500;
-    if (push_json("tile_mark_query", mark_sql) < 0) return 500;
-
-    const std::string job = std::string("{\"route\":\"cellular-tile\",\"z\":") + std::to_string(z) +
-                            ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
-                            ",\"maxRows\":" + std::to_string(max_rows) +
-                            ",\"scoped\":" + (scoped ? "true" : "false") + ",\"provider_id\":\"" +
-                            json_escape(provider) + "\"}";
-    return push_json("tile_job", job) < 0 ? 500 : 0;
+    if (rc) return rc;
+    if (push_mark_query("tile_mark_query", config)) return 500;
+    APRT job = apr_from(htq, "tile");
+    add_param(&job.PARAMETERS, "z", std::to_string(z));
+    add_param(&job.PARAMETERS, "x", std::to_string(x));
+    add_param(&job.PARAMETERS, "y", std::to_string(y));
+    add_param(&job.PARAMETERS, "maxRows", std::to_string(max_rows));
+    add_param(&job.PARAMETERS, "scoped", scoped ? "true" : "false");
+    add_param(&job.PARAMETERS, "provider", provider);
+    return push_apr("tile_job", job);
 }
 
-// ---------------------------------------------------------------------------
-// tile_meta — the tile layer's capability envelope.
-//
-// The client fetches this ONCE and fails hard if it drifts: scheme must be
-// "xyz", and minZoom/maxZoom/threshold/budget/densityN must all be integers.
-// It is the server's declaration of the contract it will then honour on every
-// tile, which is why the same constants author both.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// tile_meta — the tile layer's capability envelope, one projection row. The client fetches it once and fails hard if
+// it drifts; the same constants author every tile.
+// ---------------------------------------------------------------------------------------------------------------------
 int tile_meta(void) {
-    if (refuse_batched()) return 500;
+    if (refuse_batched({"mark"})) return 500;
+    APRT job;
+    int status = 0;
+    if (!read_apr("job", &job, &status)) return status;
+    const FsbResult marks = fsb_result("mark");
+    if (!marks.ok) return fail(400, "invalid-fsb-frame", "a result chunk is not an $FSB.");
+    const Dataset d = dataset_of(marks.data);
 
-    const std::string job = input_text("job");
-    if (job.empty()) {
-        plugin_set_error("missing-job-frame", "tile_meta requires the meta job from tile_plan.");
-        return 400;
-    }
-
-    std::string state;
-    const std::string dataset = tile_dataset_json(input_text("mark"), &state);
-
-    const std::string envelope =
-        std::string("{\"scheme\":\"") + kTileScheme + "\"" +
-        ",\"minZoom\":" + std::to_string(kTileMinZoom) +
-        ",\"maxZoom\":" + std::to_string(kTileMaxZoom) +
-        ",\"threshold\":" + std::to_string(kTileThreshold) +
-        ",\"budget\":" + std::to_string(kTileBudget) +
-        ",\"densityN\":" + std::to_string(kTileDensityN) +
-        ",\"latClamp\":" + exact_double(kTileLatClamp) +
-        ",\"tileUrlTemplate\":\"/api/v1/cellular/tiles/{z}/{x}/{y}\"" +
-        ",\"deconfliction\":{\"statement\":\"Tiles are pre-deconflicted on the node: sites are "
-        "merged across provider registries before storage, so a tile never carries the same "
-        "site twice.\"}" +
-        ",\"dataset\":" + dataset + "}";
-
-    const std::string decision =
-        std::string("{\"route\":\"cellular-tile-meta\",\"format\":\"json\",\"status\":200") +
-        ",\"headers\":{\"x-sdn-cache\":\"" + state + "\"}}";
-
-    if (push_bytes("body", reinterpret_cast<const uint8_t*>(envelope.data()),
-                   static_cast<uint32_t>(envelope.size())) < 0) {
-        return 500;
-    }
-    return push_json("decision", decision) < 0 ? 500 : 0;
+    QRPT page;
+    page.KIND = qrpKind_Page;
+    page.STATUS = qrpStatus_Ok;
+    page.SCHEMA_NAME = "TBS";
+    page.REPRESENTATION = qrp_representation(job.ACCEPT);
+    page.GENERATED_AT_MS = now_unix_ms();
+    stamp_dataset(&page, d);
+    const std::pair<const char*, const char*> columns[] = {
+        {"scheme", "string"}, {"minZoom", "int64"}, {"maxZoom", "int64"}, {"threshold", "int64"}, {"budget", "int64"},
+        {"densityN", "int64"}, {"latClamp", "double"}, {"tileUrlTemplate", "string"}, {"deconfliction", "string"},
+        {"dataset", "string"}, {"epoch", "string"}, {"records", "int64"}, {"stale", "bool"}, {"cacheState", "string"}};
+    for (const auto& c : columns) add_column(&page, c.first, c.second);
+    auto row = std::make_unique<QRPRowT>();
+    row->CELLS.push_back(v_text(kTileScheme));
+    row->CELLS.push_back(v_int(kTileMinZoom));
+    row->CELLS.push_back(v_int(kTileMaxZoom));
+    row->CELLS.push_back(v_int(kTileThreshold));
+    row->CELLS.push_back(v_int(kTileBudget));
+    row->CELLS.push_back(v_int(kTileDensityN));
+    row->CELLS.push_back(v_float(kTileLatClamp));
+    row->CELLS.push_back(v_text(kTileUrlTemplate));
+    row->CELLS.push_back(v_text(kTileDeconfliction));
+    row->CELLS.push_back(v_text(kTileDataset));
+    row->CELLS.push_back(v_text(d.epoch));
+    row->CELLS.push_back(v_int(d.records));
+    row->CELLS.push_back(v_bool(d.stale));
+    row->CELLS.push_back(v_text(d.state));
+    page.ROWS.push_back(std::move(row));
+    page.MESSAGE = "tile meta cache " + d.state;
+    if (push_qrp_page(page)) return 500;
+    return push_qrp_decision(job);
 }
 
-// ---------------------------------------------------------------------------
-// tile — ONE bounded tile, and the mode is the SERVER's.
-//
-//   count <= 2048  -> every point, sampled false
-//   count <= 4096  -> a DETERMINISTIC stride sample, sampled true
-//   count >  4096  -> a 16x16 density grid, points null
-//
-// The client refuses any tile that disagrees with those boundaries, so `count`
-// is always the tile's TRUE population — never the number of points shipped.
-// Reporting the shipped count instead would make a sampled tile look complete
-// and a density tile look like a points tile that lost its rows.
-//
-// DETERMINISM IS THE POINT OF THE SAMPLE. The stride is derived from the count
-// alone, over the rows in the order the query returned them, so the same store
-// and the same tile produce byte-identical output on every runtime and every
-// request — no RNG, no time, no thread count. A "representative" sample that
-// varied per request would make the same tile flicker as the camera returned
-// to it.
-//
-// AN EMPTY STORE ANSWERS EMPTY, NEVER FABRICATED: count 0, points [], and the
-// dataset block saying cacheState "empty" so the client can say WHY there is
-// nothing to draw instead of drawing zero towers over a populated planet.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// tile — ONE bounded tile, and the mode is the SERVER's: count <= 2048 every point, count <= 4096 a DETERMINISTIC
+// stride sample, above a 16x16 density grid. TOTAL_COUNT is always the tile's TRUE population. AN EMPTY STORE
+// ANSWERS EMPTY, NEVER FABRICATED.
+// ---------------------------------------------------------------------------------------------------------------------
 int tile(void) {
-    if (refuse_batched()) return 500;
-
-    const std::string job = input_text("job");
-    if (job.empty()) {
-        plugin_set_error("missing-job-frame", "tile requires the tile job from tile_plan.");
-        return 400;
-    }
-
-    // A refusal authored by tile_plan. It travels this far so that exactly one
-    // node in the flow speaks to `respond`.
-    std::string why;
-    if (json_string_field(job, "refuse", &why) && !why.empty()) {
-        std::string code = "tile-bounds";
-        json_string_field(job, "code", &code);
-        const std::string decision =
-            std::string("{\"route\":\"error\",\"status\":400,\"code\":\"") + json_escape(code) +
-            "\",\"error\":\"" + json_escape(why) + "\"}";
-        return push_json("decision", decision) < 0 ? 500 : 0;
-    }
-
-    const long z = static_cast<long>(json_number_or(job, "z", -1));
-    const long x = static_cast<long>(json_number_or(job, "x", -1));
-    const long y = static_cast<long>(json_number_or(job, "y", -1));
-    if (z < kTileMinZoom || z > kTileMaxZoom || x < 0 || y < 0) {
-        plugin_set_error("invalid-tile-job", "the tile job does not carry a valid z/x/y.");
-        return 500;
-    }
-
-    std::string state;
-    const std::string dataset = tile_dataset_json(input_text("mark"), &state);
+    if (refuse_batched({"rows", "mark"})) return 500;
+    APRT job;
+    int status = 0;
+    if (!read_apr("job", &job, &status)) return status;
+    const auto index = [&](const char* name) {
+        long v = -1;
+        return parse_index(apr_param(job, name), &v) ? v : -1L;
+    };
+    const long z = index("z"), x = index("x"), y = index("y");
+    if (z < kTileMinZoom || z > kTileMaxZoom || x < 0 || y < 0 || x >= tile_n(z) || y >= tile_n(z))
+        return fail(500, "invalid-tile-job", "the tile job does not carry a valid z/x/y.");
+    const FsbResult rows = fsb_result("rows");
+    const FsbResult marks = fsb_result("mark");
+    if (!rows.ok || !marks.ok) return fail(400, "invalid-fsb-frame", "a result chunk is not an $FSB.");
+    const Dataset d = dataset_of(marks.data);
 
     std::vector<TilePoint> points;
-    long scanned = 0;
-    long malformed = 0;
-    const plugin_input_frame_t* rows = frame_for("rows");
-    if (rows && rows->payload && rows->payload_length > 0) {
-        collect_tile_points(rows->payload, rows->payload_length, z, x, y, &points, &scanned,
-                            &malformed);
-    }
-
+    long scanned = 0, malformed = 0;
+    collect_tile_points(rows.data, z, x, y, &points, &scanned, &malformed);
     const long count = static_cast<long>(points.size());
-
-    // A CAPPED READ SAYS SO. The row budget bounds what the guest can hold, so
-    // a tile whose population exceeds it is answered from a PREFIX of its rows
-    // and `count` is then a floor, not the tile's true population. Reporting
-    // that as a complete answer is the failure mode the tile contract's
-    // property 4 exists to prevent, one step further out: a client cannot tell
-    // a sparse tile from a truncated one unless the envelope tells it.
-    // Truncation is a 200 with the fact attached — never the 502 an
-    // out-of-memory read used to produce.
-    const long job_max_rows = static_cast<long>(json_number_or(job, "maxRows", 0));
+    // A CAPPED READ SAYS SO: a tile whose population exceeds the row budget is answered from a prefix.
+    long job_max_rows = 0;
+    parse_index(apr_param(job, "maxRows"), &job_max_rows);
     const bool truncated = job_max_rows > 0 && scanned >= job_max_rows;
-    // Did the read ask the store for THIS TILE, or for a slice of the whole
-    // store? tile_plan decides; the envelope reports what was actually done.
-    bool scoped = true;
-    {
-        std::string scoped_text;
-        if (json_string_field(job, "scoped", &scoped_text)) {
-            scoped = scoped_text != "false";
-        } else {
-            scoped = job.find("\"scoped\":false") == std::string::npos;
-        }
-    }
+    const bool scoped = apr_param(job, "scoped", "true") != "false";
 
-    std::string body;
-    body.reserve(count > 0 ? static_cast<size_t>(count) * 48 + 512 : 512);
-    body += std::string("{\"scheme\":\"") + kTileScheme + "\",\"z\":" + std::to_string(z) +
-            ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
-            ",\"count\":" + std::to_string(count) +
-            ",\"threshold\":" + std::to_string(kTileThreshold) +
-            ",\"budget\":" + std::to_string(kTileBudget) + ",\"deconflicted\":true" +
-            ",\"scanned\":" + std::to_string(scanned) +
-            ",\"malformed\":" + std::to_string(malformed) +
-            ",\"truncated\":" + (truncated ? "true" : "false") +
-            ",\"scoped\":" + (scoped ? "true" : "false") + ",\"dataset\":" + dataset;
-
+    QRPT page;
+    page.KIND = qrpKind_Page;
+    page.STATUS = qrpStatus_Ok;
+    page.SCHEMA_NAME = "TBS";
+    page.REPRESENTATION = qrp_representation(job.ACCEPT);
+    page.GENERATED_AT_MS = now_unix_ms();
+    page.TOTAL_COUNT = static_cast<uint64_t>(count);
+    page.SCANNED = static_cast<uint64_t>(scanned);
+    page.PARTIAL = truncated || !scoped;
+    stamp_dataset(&page, d);
+    std::string mode;
     if (count > kTileBudget) {
-        // DENSITY. The grid is linear in degrees inside the tile's own bounds,
-        // because that is exactly how the client rebuilds a cell rectangle from
-        // its south-west corner (densityCellRectangle: spanLon = (east - west)
-        // / n). A Mercator-linear grid here would draw cells that do not tile
-        // the parent, with visible gaps at the top of every tile.
+        // DENSITY: a grid linear in degrees inside the tile's own bounds; EMPTY CELLS ARE OMITTED (count > budget
+        // guarantees at least one populated cell).
+        mode = "density";
         const TileBounds b = tile_bounds(z, x, y);
         const double span_lon = (b.east - b.west) / static_cast<double>(kTileDensityN);
         const double span_lat = (b.north - b.south) / static_cast<double>(kTileDensityN);
@@ -1771,339 +1403,198 @@ int tile(void) {
         for (const TilePoint& p : points) {
             long col = span_lon > 0 ? static_cast<long>(std::floor((p.lon - b.west) / span_lon)) : 0;
             long row = span_lat > 0 ? static_cast<long>(std::floor((p.lat - b.south) / span_lat)) : 0;
-            if (col < 0) col = 0;
-            if (col > kTileDensityN - 1) col = kTileDensityN - 1;
-            if (row < 0) row = 0;
-            if (row > kTileDensityN - 1) row = kTileDensityN - 1;
+            col = std::min(std::max(col, 0L), kTileDensityN - 1);
+            row = std::min(std::max(row, 0L), kTileDensityN - 1);
             cells[static_cast<size_t>(row * kTileDensityN + col)]++;
         }
-        // EMPTY CELLS ARE OMITTED, and the client REFUSES an empty cells array
-        // outright. count > budget guarantees at least one cell is populated,
-        // so the two rules cannot collide.
-        body += ",\"mode\":\"density\",\"sampled\":false,\"points\":null";
-        body += ",\"density\":{\"n\":" + std::to_string(kTileDensityN) + ",\"cells\":[";
-        bool first = true;
+        add_column(&page, "lon", "double");
+        add_column(&page, "lat", "double");
+        add_column(&page, "count", "int64");
         for (long row = 0; row < kTileDensityN; row++) {
             for (long col = 0; col < kTileDensityN; col++) {
                 const long c = cells[static_cast<size_t>(row * kTileDensityN + col)];
                 if (c == 0) continue;
-                if (!first) body += ",";
-                first = false;
-                body += "{\"lon\":" + exact_double(b.west + static_cast<double>(col) * span_lon) +
-                        ",\"lat\":" + exact_double(b.south + static_cast<double>(row) * span_lat) +
-                        ",\"count\":" + std::to_string(c) + "}";
+                auto r = std::make_unique<QRPRowT>();
+                r->CELLS.push_back(v_float(b.west + static_cast<double>(col) * span_lon));
+                r->CELLS.push_back(v_float(b.south + static_cast<double>(row) * span_lat));
+                r->CELLS.push_back(v_int(c));
+                page.ROWS.push_back(std::move(r));
             }
         }
-        body += "]}";
     } else {
-        // POINTS, whole or deterministically sampled. The stride is
-        // ceil(count / threshold), so a tile at the threshold ships every point
-        // and one above it ships every other one — a monotone, reproducible
-        // step, not a heuristic.
+        // POINTS, whole or deterministically sampled: stride ceil(count / threshold) over the rows in query order.
+        mode = "points";
         long stride = 1;
-        bool sampled = false;
         if (count > kTileThreshold) {
             stride = (count + kTileThreshold - 1) / kTileThreshold;
-            sampled = true;
+            page.TRUNCATED = true;
         }
-        body += std::string(",\"mode\":\"points\",\"sampled\":") + (sampled ? "true" : "false") +
-                ",\"density\":null,\"points\":[";
-        bool first = true;
+        add_column(&page, "LATITUDE", "double");
+        add_column(&page, "LONGITUDE", "double");
         for (long i = 0; i < count; i += stride) {
-            if (!first) body += ",";
-            first = false;
-            body += "{\"LATITUDE\":" + fixed7(points[static_cast<size_t>(i)].lat) +
-                    ",\"LONGITUDE\":" + fixed7(points[static_cast<size_t>(i)].lon) + "}";
+            auto r = std::make_unique<QRPRowT>();
+            r->CELLS.push_back(v_float(points[static_cast<size_t>(i)].lat));
+            r->CELLS.push_back(v_float(points[static_cast<size_t>(i)].lon));
+            page.ROWS.push_back(std::move(r));
         }
-        body += "]";
     }
-    body += "}";
-
-    const std::string decision =
-        std::string("{\"route\":\"cellular-tile\",\"format\":\"json\",\"status\":200") +
-        ",\"headers\":{\"x-sdn-cache\":\"" + state + "\",\"x-sdn-tile\":\"" + std::to_string(z) +
-        "/" + std::to_string(x) + "/" + std::to_string(y) + "\"}}";
-
-    if (push_bytes("body", reinterpret_cast<const uint8_t*>(body.data()),
-                   static_cast<uint32_t>(body.size())) < 0) {
-        return 500;
-    }
-    return push_json("decision", decision) < 0 ? 500 : 0;
+    page.MESSAGE = "tile " + std::to_string(z) + "/" + std::to_string(x) + "/" + std::to_string(y) + " mode " + mode +
+                   " cache " + d.state + " scoped " + (scoped ? "true" : "false") + " malformed " +
+                   std::to_string(malformed);
+    if (push_qrp_page(page)) return 500;
+    return push_qrp_decision(job);
 }
 
-// mark_query: timer tick -> the flatsql-query JSON that reads this provider's
-// resume mark back. It is a SEPARATE node from ingest_plan on purpose: the plan
-// needs the mark as an input, and a node that emitted its own input would be a
-// cycle in the flow graph.
-//
-// EMITS {"sql","params"}, NOT {"table","where","limit"}. The original shape was
-// refused by the node that consumes it: hostcap/flatsql-query's `query` reads
-// `sql` and returns 400 `missing-sql` for anything else
-// (hostcap/flatsql-query/src/flatsql_query_module.cpp:465-469), so the mark read
-// could never have executed. It is fixed on discovery rather than filed, per the
-// standing rule on broken basics.
+// mark_query: timer tick -> the $FSO that reads the newest $IRM resume marks. A SEPARATE node from ingest_plan
+// because the plan takes the mark as an input, and a node that emitted its own input would be a cycle.
 int mark_query(void) {
     if (refuse_batched()) return 500;
-    const std::string config = load_config();
-
-    // THE DURABLE READ SIDE, now that the write side exists. $IRM records land
-    // in the store's per-type table (sds_<lowercased type>, the convention
-    // hostcap/flatsql-store encodes), so the mark is read back as RECORDS, not
-    // as a bespoke bookkeeping table.
-    //
-    // The provider is NOT pushed into the SQL as a WHERE clause: PROVIDER_ID
-    // lives inside the FlatBuffer, not in a column, and inventing a column that
-    // the store does not have returns an error on some backends and an empty
-    // set on others — the second being indistinguishable from "never ingested".
-    // So the newest few rows are read and `read_mark` picks this provider's,
-    // which also lets one $IRM table serve several ingest lanes at once.
-    return push_json("query", durable_mark_query(config)) < 0 ? 500 : 0;
+    return push_mark_query("query", load_config());
 }
 
-// ingest_plan: tick (+ the resume mark, when one exists) -> ONE ranged fetch
-// descriptor plus the cell-tower-source `parse` run contract for that chunk.
-//
-// Emitting one chunk per tick rather than looping in-guest is deliberate: the
-// loop's state then lives in the durable mark instead of in a guest instance
-// that a restart erases, which is the whole point of the exercise.
+// ingest_plan: tick (+ the resume marks) -> ONE ranged fetch whose CONTEXT is the run: [$APR run contract, $IRM job].
 int ingest_plan(void) {
-    if (refuse_batched()) return 500;
+    if (refuse_batched({"mark"})) return 500;
+    const Config config = load_config();
+    const std::string provider = config_provider(config);
+    const std::string url = config.string("cell_ingest_url", "");
+    // Fail-closed: inventing a default URL would ingest a provider nobody selected.
+    if (url.empty()) return fail(400, "missing-ingest-url", "ingest_plan requires cell_ingest_url in node CONFIG.");
+    const FsbResult marks = fsb_result("mark");
+    if (!marks.ok) return fail(400, "invalid-fsb-frame", "a result chunk is not an $FSB.");
 
-    const std::string config = load_config();
-    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string url = config_string(config, "cell_ingest_url", "");
-    if (url.empty()) {
-        // Fail-closed: with no source configured there is nothing to range over,
-        // and inventing a default URL would ingest a provider nobody selected.
-        plugin_set_error("missing-ingest-url",
-                         "ingest_plan requires cell_ingest_url in node CONFIG.");
-        return 400;
-    }
-
-    // The durable $IRM record (or the legacy JSON frame). `read_mark` refuses a
-    // mark belonging to a different provider outright: resuming provider A at
-    // provider B's offset skips the head of B's file and never reports it.
-    const MarkView mark = read_mark(input_text("mark"), provider);
-    long offset = mark.next_offset;
-    long total = mark.total_bytes;
-    long chunk_index = mark.chunk_index;
-    long prior_stored_rows = mark.stored_rows;
-    if (offset < 0) offset = 0;
-    if (prior_stored_rows < 0) prior_stored_rows = 0;
-
-    // THE DECODE CONTEXT, GATED ON ITS VERSION STAMP.
-    //
-    // A mark whose decoder-state format this build does not recognise is
-    // DISCARDED and the run restarts from the top, exactly as
-    // cell-tower-source's own bulk_state_decode restarts on a version, size or
-    // length disagreement. Handing a foreign blob to the decoder does not fail
-    // loudly — it resumes into nonsense that stores cleanly.
-    std::string bulk_resume;
-    if (!mark.decoder_state.empty() && mark.decoder_state_format == kIrmDecoderStateFormat) {
-        bulk_resume = mark.decoder_state;
-    }
-    // The CSV header row lives only in chunk 0. Carried forward here, it is what
-    // makes a chunk N>0 decode to rows at all instead of eating its own first
-    // data row as a column contract and reporting a clean empty tail.
-    const std::string csv_header = mark.header_line;
-
-    // Already complete: emit NOTHING. The downstream http node never becomes
-    // ready and the run ends without a fetch. A finished file is not an error.
-    if (total > 0 && offset >= total) return 0;
-
+    const std::string method = merge_method_name(config);
     const long chunk = config_chunk_bytes(config);
-    long last = offset + chunk - 1;
-    if (total > 0 && last > total - 1) last = total - 1;
+    const MarkView view = read_mark(marks.data, provider);
+    Irm job;
+    if (view.present) {
+        job = view.irm;
+        // THE DECODE CONTEXT, GATED ON ITS VERSION STAMP: a decoder state this build does not recognise is DISCARDED
+        // (the header line and the offset are this flow's and still apply). Handing a foreign blob to the decoder
+        // does not fail loudly — it resumes into nonsense that stores cleanly.
+        if (job.decode.state_format != kDecoderStateFormat) job.clear_decoder();
+        if (job.has_decode && job.decode_empty()) job.has_decode = false;
+    } else {
+        job.ingestor_id = kIngestorId;
+        job.state = irmJobState_IN_PROGRESS;
+        job.created_at = iso_ms(now_unix_ms());
+    }
+    // A finished object is not refetched; the downstream http node never becomes ready.
+    if (job.source.total_bytes > 0 && job.next_offset >= job.source.total_bytes) return 0;
 
-    char range_buf[80];
-    std::snprintf(range_buf, sizeof(range_buf), "bytes=%ld-%ld", offset, last);
-    char timeout_buf[24];
-    std::snprintf(timeout_buf, sizeof(timeout_buf), "%ld", config_timeout_ms(config));
+    job.job_id = provider + "@" + url;
+    job.provider_id = provider;
+    job.source.url = url;
+    job.range_mode = irmRangeMode_INCLUSIVE_BYTE_RANGE;
+    job.chunk_byte_budget = static_cast<uint64_t>(chunk);
+    job.merge_policy = method;
+    job.target_standard = kTargetStandard;
+    job.reconcile_mode = "none";
+    if (job.ingestor_id.empty()) job.ingestor_id = kIngestorId;
+    if (job.updated_at.empty()) job.updated_at = iso_ms(now_unix_ms());
+    if (job.started_at.empty()) job.started_at = iso_ms(now_unix_ms());
 
-    const std::string request = std::string("{\"method\":\"GET\",\"url\":\"") + json_escape(url) +
-                                "\",\"headers\":{\"Range\":\"" + range_buf + "\"}" +
-                                ",\"timeoutMs\":" + timeout_buf + "}";
+    const uint64_t offset = job.next_offset;
+    uint64_t last = offset + static_cast<uint64_t>(chunk) - 1;
+    if (job.source.total_bytes > 0 && last > job.source.total_bytes - 1) last = job.source.total_bytes - 1;
+    char range[80];
+    std::snprintf(range, sizeof(range), "bytes=%llu-%llu", static_cast<unsigned long long>(offset),
+                  static_cast<unsigned long long>(last));
 
-    // The job is cell-tower-source's `parse`/`deconflict` run contract verbatim
-    // (method/method_name/limit/providers_consulted/request_providers/skipped),
-    // so the ingest lane reuses those nodes without forking the deconfliction
-    // rules. `request_providers` is what correlates response frames to providers
-    // positionally, so it must name exactly the one descriptor emitted above.
-    // The chunk fields ride alongside for ingest_meta; parse ignores what it
-    // does not know.
-    // MM_HIGHEST_SAMPLE_COUNT (1), never MM_SINGLE_SOURCE (0). Sites arrive from
-    // OVERLAPPING registries, so single-source is the one mode that guarantees
-    // the duplicates survive into storage — and a duplicated site set is
-    // indistinguishable from a larger one once stored.
-    const long method = static_cast<long>(json_number_or(config, "cell_ingest_merge_method", 1));
-    const long limit = static_cast<long>(json_number_or(config, "cell_ingest_limit", 1000000));
-    char nums[128];
-    std::snprintf(nums, sizeof(nums), "%ld,\"limit\":%ld,\"chunk_offset\":%ld,\"chunk_index\":%ld",
-                  method, limit, offset, chunk_index);
-    const std::string job =
-        std::string("{\"method\":") + nums + ",\"method_name\":\"" +
-        json_escape(config_string(config, "cell_ingest_merge_method_name", "HIGHEST_SAMPLE_COUNT")) +
-        "\"" +
-        // THE INGEST LANE DECODES THE WHOLE CHUNK. cell-tower-source clamps a
-        // request-scoped decode to 1,000 rows unless the run contract says
-        // otherwise, and this job never said otherwise: a 3 MiB chunk carrying
-        // 127,939 rows was truncated to 1,000 sites, and — worse — the decoder
-        // stopped at the cap, so the resume mark it published still pointed at
-        // byte 0. Every tick refetched chunk 0 and stored the same first 1,000
-        // sites forever (graph: sdn-cellular-ingest-lands-no-batch, measured
-        // locally: inserted=1000, next_offset=0 out of 3,145,689 bytes).
-        ",\"full_population\":true" +
-        ",\"providers_consulted\":[\"" + json_escape(provider) + "\"]" +
-        ",\"request_providers\":[\"" + json_escape(provider) + "\"]" + ",\"skipped\":[]" +
-        ",\"provider_id\":\"" + json_escape(provider) + "\"" + ",\"source_url\":\"" +
-        json_escape(url) + "\"" + ",\"prior_stored_rows\":" + std::to_string(prior_stored_rows) +
-        (csv_header.empty() ? std::string()
-                            : ",\"csv_header\":\"" + json_escape(csv_header) + "\"") +
-        (bulk_resume.empty() ? std::string() : ",\"bulk_resume\":" + bulk_resume) +
-        ",\"chunk_bytes\":" + std::to_string(chunk) + "}";
+    // The run contract cell-tower-source parse/deconflict read. THE INGEST LANE DECODES THE WHOLE CHUNK
+    // (FULL_POPULATION): a 1,000-row clamp truncated a 127,939-row chunk and left the mark at byte 0 forever.
+    APRT run = apr_from(nullptr, "ingest");
+    add_param(&run.PARAMETERS, "PROVIDERS", provider);
+    add_param(&run.PARAMETERS, "METHOD", method);
+    add_param(&run.PARAMETERS, "LIMIT", format_number(config.number("cell_ingest_limit", 1000000)));
+    add_param(&run.PARAMETERS, "FULL_POPULATION", "true");
+    add_param(&run.PARAMETERS, "provider", provider);
+    add_param(&run.PARAMETERS, "fetches", "1");
+    add_param(&run.RESPONSE_HEADERS, "x-sdn-providers-consulted", provider);
 
-    // Job first: parse and deconflict both need the run contract, and a response
-    // arriving before it would have nothing to be interpreted against.
-    if (push_json("job", job) < 0) return 500;
-    if (push_json("request", request) < 0) return 500;
-    return 0;
+    Bytes context;
+    {
+        flatbuffers::FlatBufferBuilder b(512);
+        FinishSizePrefixedAPRBuffer(b, APR::Pack(b, &run));
+        append_size_prefixed(&context, b);
+    }
+    {
+        flatbuffers::FlatBufferBuilder b(2048 + job.decode.decoder_state.size() + job.decode.window.size());
+        irm_write(b, job, true);
+        append_size_prefixed(&context, b);
+    }
+    flatbuffers::FlatBufferBuilder b(1024 + context.size());
+    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range)};
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), &headers, nullptr,
+                                                             static_cast<uint32_t>(config_timeout_ms(config)), 0, &context));
+    return push_builder("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", b) < 0 ? 500 : 0;
 }
 
-// ingest_meta: the cell-tower-source `job`, the deconflicted $TBS record stream,
-// the deconflict `decision` and the raw http `response` -> the
-// hostcap/storage-ingest `meta` frame and the records, forwarded.
-//
-// The records are passed through untouched. This node exists to author the
-// attribution the storage lane cannot invent — provider, source, batch and the
-// $TBS.SOURCES provenance — which is why it sits between deconflict and storage
-// rather than being folded into either.
-//
-// It also takes the http `response` because THE OBJECT'S TOTAL SIZE IS ONLY
-// KNOWABLE HERE. `Content-Range: bytes A-B/TOTAL` is the sole authority on
-// TOTAL; the guest that dispatched the range never sees the reply, and
-// Content-Length on a 206 describes the CHUNK, so reading it as the total would
-// end the run after one chunk with every later byte silently unfetched. The
-// total is carried onto the meta so publish_request can write it into the mark.
+// ingest_meta: the deconflicted $TBS stream + the chunk's HttpResponse (its CONTEXT the job) + the decoder's own
+// resume mark -> the IngestRequest, the records forwarded untouched, and the candidate next $IRM.
 int ingest_meta(void) {
     if (refuse_batched()) return 500;
+    const plugin_input_frame_t* response_frame = frame_for("response");
+    Bytes response_scratch;
+    const R::HttpResponse* response =
+        response_frame && response_frame->payload
+            ? verified_copy<R::HttpResponse>(response_frame->payload, response_frame->payload_length, &response_scratch,
+                                             R::VerifyHttpResponseBuffer, R::GetHttpResponse)
+            : nullptr;
+    if (!response) return fail(400, "missing-response-frame", "ingest_meta requires the chunk's HttpResponse (HRSP).");
+    Irm job;
+    if (!context_irm(response, &job) || job.provider_id.empty() || job.source.url.empty())
+        return fail(400, "missing-context", "the HttpResponse carries no $IRM job (provider and source) in CONTEXT.");
+    const Config config = load_config();
+    const std::string source_name = config.string("cell_ingest_source_name", "cell-tower-bulk");
 
-    const std::string job = input_text("job");
-    if (job.empty()) {
-        plugin_set_error("missing-job-frame", "ingest_meta requires the run-contract job frame.");
-        return 400;
-    }
-
-    // Read before the records check: on a 304 there IS no chunk, deconflict's
-    // record stream is empty by construction, and refusing it as a missing
-    // frame is exactly the bug (see the 304 note in the file header). The
-    // status gate is the celestrak parser's: 200 and 304 are both successful
-    // fetches; everything else is still somebody else's error to report.
-    const std::string response = input_text("response");
-    if (static_cast<long>(json_number_or(response, "status", 0)) == 304) {
-        return emit_unchanged(job, load_config());
+    // HTTP 304 IS A SUCCESSFUL FETCH WITH NOTHING NEW: one notice, nothing on meta/records, the mark stays put.
+    if (response->STATUS() == 304) {
+        R::FlowNoticeT notice;
+        notice.KIND = R::flowNoticeKind_Unchanged;
+        notice.SCHEMA = kSchemaName;
+        notice.PROVIDER_ID = job.provider_id;
+        notice.SOURCE_NAME = source_name;
+        notice.REASON = "not-modified";
+        notice.ITEMS = {job.source.url};
+        notice.AT_MS = static_cast<uint64_t>(now_unix_ms());
+        flatbuffers::FlatBufferBuilder b(256);
+        R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+        return push_builder("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b) < 0 ? 500 : 0;
     }
 
     const plugin_input_frame_t* records = frame_for("records");
-    if (!records || !records->payload) {
-        plugin_set_error("missing-records-frame",
-                         "ingest_meta requires the deconflicted record stream.");
-        return 400;
-    }
+    if (!records) return fail(400, "missing-records-frame", "ingest_meta requires the deconflicted record stream.");
+    Irm resume;
+    bool has_resume = false;
+    int status = 0;
+    if (!read_irm_port("resume", &resume, &has_resume, &status)) return status;
 
-    const std::string config = load_config();
-    std::string provider;
-    std::string source_url;
-    json_string_field(job, "provider_id", &provider);
-    json_string_field(job, "source_url", &source_url);
-    if (provider.empty() || source_url.empty()) {
-        plugin_set_error("incomplete-job-attribution",
-                         "ingest_meta needs provider_id and source_url on the job frame.");
-        return 400;
-    }
+    const uint64_t chunk_offset = job.next_offset;
+    const uint32_t chunk_index = job.next_chunk_index;
+    const uint64_t chunk_bytes = job.chunk_byte_budget ? job.chunk_byte_budget : static_cast<uint64_t>(kDefaultChunkBytes);
+    const size_t records_in = records->payload ? count_frames(records->payload, records->payload_length) : 0;
 
-    const long chunk_index = static_cast<long>(json_number_or(job, "chunk_index", 0));
-    const long chunk_offset = static_cast<long>(json_number_or(job, "chunk_offset", 0));
-    const long chunk_bytes =
-        static_cast<long>(json_number_or(job, "chunk_bytes", kDefaultChunkBytes));
+    // TOTAL from Content-Range's denominator: Content-Length on a 206 describes the CHUNK.
+    uint64_t total = job.source.total_bytes;
+    total_from_content_range(hrsp_header(response, "content-range"), &total);
 
-    // Total object size from Content-Range's denominator (see the note above).
-    // Absent or "*" leaves total 0, which the mark reads as "length still
-    // unknown" and keeps ranging — it never reads as "finished".
-    // Read before the body block: the deconflict decision carries the decoder's
-    // own resume point, which overrides the byte estimate computed there.
-    const std::string decision_raw = input_text("decision");
-
-    long total_bytes = 0;
-    if (!response.empty()) {
-        std::string headers;
-        const size_t h = response.find("\"headers\"");
-        if (h != std::string::npos) {
-            const size_t open = response.find('{', h);
-            if (open != std::string::npos) {
-                int depth = 0;
-                size_t i = open;
-                for (; i < response.size(); i++) {
-                    if (response[i] == '{') depth++;
-                    else if (response[i] == '}' && --depth == 0) break;
-                }
-                if (i < response.size()) headers = response.substr(open, i - open + 1);
-            }
-        }
-        if (!headers.empty()) total_from_content_range(headers, &total_bytes);
-    }
-
-    // ROW-BOUNDARY CORRECTION. A byte range does not respect record boundaries:
-    // a chunk almost always ends mid-row, and the next chunk starting at
-    // offset+chunk_bytes would begin mid-row too. Both partial rows are then
-    // DROPPED by the decoder's own field guards — silently, because a short row
-    // is indistinguishable from a malformed one, and the loss is invisible in
-    // every count the run reports.
-    //
-    // So the next offset is the end of the last COMPLETE row in this chunk, not
-    // the end of the chunk. The overlap is re-fetched and re-decoded, which is
-    // free: the storage lane is content-addressed and the row is identical.
-    // This node is the only one that sees both the body and the offset, which is
-    // why the correction lives here.
-    // Falls back to the nominal chunk end only when the body is unavailable —
-    // never silently, since that is the case a test must be able to see.
-    long next_offset = chunk_offset + chunk_bytes;
+    // ROW-BOUNDARY CORRECTION: the next offset is the end of the last COMPLETE row in this chunk, never mid-row. No
+    // newline at all = no complete row: the offset does not move.
+    uint64_t next_offset = chunk_offset + chunk_bytes;
     std::string header_line;
-    std::string body_b64;
-    if (json_string_field(response, "bodyB64", &body_b64) && !body_b64.empty()) {
-        const std::string body = base64_decode(body_b64);
-        const size_t nl = body.rfind('\n');
-        // No newline at all means the chunk holds no complete row. Advancing by
-        // the chunk size would skip it; the run must widen the chunk instead, so
-        // the offset does not move and the condition is reported.
-        if (nl != std::string::npos) next_offset = chunk_offset + static_cast<long>(nl) + 1;
-
-        // THE HEADER ROW EXISTS IN CHUNK 0 AND NOWHERE ELSE, so chunk 0 is the
-        // only place it can ever be captured. Taken from a chunk that already
-        // carried a header (chunk_offset > 0 means a header was carried IN)
-        // would capture a data row and poison every later chunk's column
-        // contract, so it is read only at offset 0.
+    const auto* body = response->BODY();
+    if (body && body->size()) {
+        const std::string_view text(reinterpret_cast<const char*>(body->data()), body->size());
+        const size_t nl = text.rfind('\n');
+        if (nl != std::string_view::npos) next_offset = chunk_offset + static_cast<uint64_t>(nl) + 1;
+        // THE HEADER ROW EXISTS IN CHUNK 0 AND NOWHERE ELSE, and A CSV HEADER ROW IS TEXT: a gzip chunk 0's 0x0A
+        // is not a header (printable ASCII plus tabs only).
         if (chunk_offset == 0) {
-            const size_t first = body.find('\n');
-            if (first != std::string::npos) {
-                std::string candidate = body.substr(0, first);
+            const size_t first = text.find('\n');
+            if (first != std::string_view::npos) {
+                std::string candidate(text.substr(0, first));
                 if (!candidate.empty() && candidate.back() == '\r') candidate.pop_back();
-                // A CSV HEADER ROW IS TEXT. THIS BODY MAY NOT BE.
-                //
-                // The same reasoning the resume-offset correction below spells
-                // out applies here and was not applied: a `csv-gz` chunk 0 is a
-                // DEFLATE STREAM, and `find('\n')` finds a 0x0A that happens to
-                // occur in compressed bytes. What came back was 200-odd bytes of
-                // gzip sliced out as a "column contract" — which then went into
-                // the ingest meta unescaped and made the whole hostcall invalid
-                // JSON, so nothing was stored at all (graph:
-                // sdn-cellular-ingest-lands-no-batch).
-                //
-                // The test is on the BYTES, not on a configured format: a header
-                // row is printable ASCII plus tabs, and nothing else can be one.
-                // A compressed lane loses nothing by this — cell-tower-source's
-                // bulk decoder carries its column contract in its own resume
-                // state and falls back to the canonical bulk-export columns on a
-                // resumed chunk, so it never needed this field.
                 bool textual = !candidate.empty();
                 for (const char ch : candidate) {
                     const unsigned char u = static_cast<unsigned char>(ch);
@@ -2114,249 +1605,152 @@ int ingest_meta(void) {
             }
         }
     }
-    // A header carried IN on the job is carried straight back out: the mark must
-    // keep naming it for every later chunk, not only for the one after chunk 0.
-    if (header_line.empty()) json_string_field(job, "csv_header", &header_line);
+    if (header_line.empty()) header_line = job.decode.header_line;
 
-    // THE DECODER'S OWN NEXT BYTE WINS OVER THE NEWLINE CORRECTION.
-    //
-    // Row-boundary correction is right for a plain CSV chunk and WRONG for a
-    // compressed one: a deflate stream has no row boundaries in its compressed
-    // bytes, and the last newline in the DECOMPRESSED body says nothing about
-    // where to resume the fetch. When the decoder published its own resume point
-    // (cell-tower-source's `bulk_resume_next.next_byte`, advanced by what tinfl
-    // actually CONSUMED rather than by the chunk length), that is the only
-    // authority. The two are never averaged or cross-checked; the decoder's
-    // answer replaces the estimate.
-    std::string bulk_resume_next;
-    if (!decision_raw.empty()) {
-        bulk_resume_next = json_object_slice_local(decision_raw, "bulkResume");
-        if (!bulk_resume_next.empty()) {
-            const double decoder_next = json_number_or(bulk_resume_next, "next_byte", -1);
-            if (decoder_next >= 0) next_offset = static_cast<long>(decoder_next);
-        }
+    // THE DECODER'S OWN NEXT BYTE WINS OVER THE NEWLINE CORRECTION: a deflate stream has no row boundaries.
+    Irm mark = job;
+    bool complete = total > 0 && next_offset >= total;
+    if (has_resume) {
+        next_offset = resume.next_offset;
+        mark.decode = resume.decode;
+        mark.has_decode = resume.has_decode;
+        complete = resume.state == irmJobState_COMPLETE || (total > 0 && next_offset >= total);
+    } else {
+        mark.clear_decoder();
     }
+    mark.decode.header_line = header_line;
+    mark.decode.header_byte_length = header_line.empty() ? 0 : header_line.size();
+    if (mark.decode.format.empty()) mark.decode.format = kDecodeFormat;
+    mark.has_decode = !mark.decode_empty();
 
-    // The record count this chunk actually produced, from deconflict's decision.
-    // publish_request needs it to tell a real empty tail from a stored-nothing
-    // refusal; -1 (absent) disables that check rather than faking a count.
-    const long records_in =
-        decision_raw.empty() ? -1 : static_cast<long>(json_number_or(decision_raw, "sitesOut", -1));
-
-    // ONE BATCH PER CHUNK. A single batch id spanning every chunk would make the
-    // storage lane's source-batch reconcile treat each chunk as the provider's
-    // complete current set and delete the chunks before it — the whole ingest
-    // would converge on the last chunk alone.
-    char batch_buf[96];
-    std::snprintf(batch_buf, sizeof(batch_buf), "%s@%ld", provider.c_str(), chunk_offset);
+    char batch_buf[160];
+    std::snprintf(batch_buf, sizeof(batch_buf), "%s@%llu", job.provider_id.c_str(), static_cast<unsigned long long>(chunk_offset));
     const std::string batch_id = batch_buf;
 
-    char prov_buf[192];
-    std::snprintf(prov_buf, sizeof(prov_buf),
-                  "{\"source_url\":\"%s\",\"chunk_index\":%ld,\"chunk_offset\":%ld}",
-                  json_escape(source_url).c_str(), chunk_index, chunk_offset);
-    const std::string provenance = prov_buf;
+    mark.source.total_bytes = total;
+    mark.next_offset = next_offset;
+    mark.state = complete ? irmJobState_COMPLETE : irmJobState_IN_PROGRESS;
+    mark.has_chunk = true;
+    mark.chunk = Irm::Chunk();
+    mark.chunk.index = chunk_index;
+    mark.chunk.batch_id = batch_id;
+    mark.chunk.first = chunk_offset;
+    if (next_offset > chunk_offset) {
+        mark.chunk.last = next_offset - 1;
+        mark.chunk.byte_length = next_offset - chunk_offset;
+    }
+    mark.chunk.records_decoded = static_cast<uint32_t>(records_in);
+    mark.next_chunk_index = chunk_index + 1;
+    mark.sequence = chunk_index + 1;
+    mark.chunks_committed = chunk_index + 1;
+    mark.bytes_committed = next_offset;
+    mark.updated_at = iso_ms(now_unix_ms());
 
-    const std::string meta =
-        std::string("{\"schema\":\"") + kSchema + "\"" + ",\"provider_id\":\"" +
-        json_escape(provider) + "\"" + ",\"source_name\":\"" +
-        json_escape(config_string(config, "cell_ingest_source_name", "cell-tower-bulk")) + "\"" +
-        ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"batch_id\":\"" +
-        json_escape(batch_id) + "\"" +
-        // `duplicates` and NOT `current`: this batch is one CHUNK of the
-        // provider's set, not the set. `current` is the celestrak lane's
-        // whole-snapshot mode and would delete every earlier chunk the moment
-        // the next one arrived; `duplicates` reconciles only WITHIN this batch
-        // id (`<provider>@<chunk offset>`) and leaves every sibling chunk alone.
-        //
-        // MEASURED, NOT ASSUMED. The word this used to emit was `append`, which
-        // the host has never had: `storage.ingest_with_source` takes
-        // none|duplicates|current and refuses anything else, so EVERY chunk was
-        // rejected with "unknown reconcile mode append" and the whole run stored
-        // nothing (graph: sdn-cellular-ingest-lands-no-batch).
-        //
-        // `duplicates` was tried next and is WORSE than wrong here: the host's
-        // intra-batch duplicate reconcile partitions on the SATELLITE index
-        // (norad_cat_id / entity_id / object_type / ops_status / epoch), which a
-        // $TBS cell site populates with none of. Six distinct sites therefore
-        // shared one partition key and five were deleted as "duplicates" — a
-        // six-row chunk landed as ONE row. The host-side guard against that is
-        // landing alongside this, but the mode this lane WANTS was never
-        // duplicate collapse: it is "store this chunk, touch nothing else".
-        ",\"reconcile\":\"none\"" +
-        // Chunk state rides on the meta because the meta is the ONLY frame that
-        // reaches publish_request alongside the storage result, and that is
-        // where the resume mark is authored.
-        ",\"chunk_offset\":" + std::to_string(chunk_offset) +
-        ",\"chunk_index\":" + std::to_string(chunk_index) +
-        ",\"chunk_bytes\":" + std::to_string(chunk_bytes) +
-        ",\"total_bytes\":" + std::to_string(total_bytes) +
-        ",\"next_offset\":" + std::to_string(next_offset) +
-        ",\"records_in\":" + std::to_string(records_in) +
-        ",\"prior_stored_rows\":" +
-        std::to_string(static_cast<long>(json_number_or(job, "prior_stored_rows", 0))) +
-        // The decode context rides to publish_request, which is the only node
-        // that reaches the durable mark. Verbatim: it is the producer's own
-        // frame and re-serialising it here would be a second implementation of
-        // a format whose entire purpose is bit-exact restoration.
-        (header_line.empty() ? std::string()
-                             : ",\"csv_header\":\"" + json_escape(header_line) + "\"") +
-        (bulk_resume_next.empty() ? std::string()
-                                  : ",\"bulk_resume_next\":" + bulk_resume_next) +
-        // A PATH COMPONENT, NOT A VERSION STRING. The host writes provenance to
-        // <raw>/provenance/<source>/<ts>.json and refuses any source carrying a
-        // separator (caps/storage.go sanitizePathComponent). This read
-        // "cell-tower-ingest-wasm/v1", which sanitized to the empty string, so
-        // the hostcall was refused with "provenance requires source and json
-        // bytes" AFTER the records had already been stored — the batch landed
-        // and the run still reported failure, leaving the resume mark unwritten
-        // so the next tick refetched the same chunk (graph:
-        // sdn-cellular-ingest-lands-no-batch). The version lives in the $IRM
-        // INGESTOR field, which is a record field and can keep its slash.
-        ",\"provenance\":{\"source\":\"cell-tower-ingest-wasm-v1\"" + ",\"json\":\"" +
-        base64_encode(reinterpret_cast<const uint8_t*>(provenance.data()), provenance.size()) +
-        "\"}}";
-
-    if (push_json("meta", meta) < 0) return 500;
-    if (push_bytes("records", records->payload, records->payload_length) < 0) return 500;
-    return 0;
+    // The IngestRequest: SCHEMA, attribution, RECONCILE None (this batch is one CHUNK of the provider's set: `current`
+    // would delete every earlier chunk, `duplicates` partitions on the satellite index and collapsed six sites to one).
+    R::IngestRequestT meta;
+    meta.SCHEMA = kSchemaName;
+    meta.TAGS = std::make_unique<R::SourceTagsT>();
+    meta.TAGS->PROVIDER_ID = job.provider_id;
+    meta.TAGS->SOURCE_NAME = source_name;
+    meta.TAGS->BATCH_ID = batch_id;
+    meta.TAGS->SOURCE_URL = job.source.url;
+    meta.RECONCILE = R::reconcileMode_None;
+    meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+    meta.PROVENANCE->SOURCE_URL = job.source.url;
+    meta.PROVENANCE->HTTP_STATUS = response->STATUS();
+    meta.PROVENANCE->ETAG = hrsp_header(response, "etag");
+    meta.PROVENANCE->LAST_MODIFIED = hrsp_header(response, "last-modified");
+    meta.PROVENANCE->CONTENT_TYPE = hrsp_header(response, "content-type");
+    meta.PROVENANCE->RETRIEVED_MS = response->RETRIEVED_MS();
+    meta.PROVENANCE->PARSER = kParser;
+    meta.PROVENANCE->PARSER_VERSION = kParserVersion;
+    meta.PROVENANCE->NORMALIZED_COUNT = records_in;
+    flatbuffers::FlatBufferBuilder mb(1024);
+    R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+    if (push_builder("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", mb) < 0) return 500;
+    if (push("records", "TBS.fbs", "$TBS", "TBS", records->payload, records->payload_length) < 0) return 500;
+    return push_irm("mark", mark);
 }
 
-// publish_request: the storage-ingest `result` joined with the `meta` that
-// produced it -> the advanced resume mark, and (only when configured) the
-// dataset-publication POST.
-//
-// The mark is emitted on its own port and is NOT gated on the publish URL: a
-// node that stores without publishing must still make progress, or an unpublished
-// deployment re-ingests chunk 0 forever.
+// publish_request: the storage result joined with the IngestRequest and the candidate mark -> the durable mark, and
+// (only when configured) the dataset-publication POST. The mark is NOT gated on the publish URL.
 int publish_request(void) {
     if (refuse_batched()) return 500;
+    const plugin_input_frame_t* result_frame = frame_for("result");
+    const plugin_input_frame_t* meta_frame = frame_for("meta");
+    Bytes rs, ms;
+    const R::IngestResult* result =
+        result_frame && result_frame->payload
+            ? verified_copy<R::IngestResult>(result_frame->payload, result_frame->payload_length, &rs,
+                                             R::VerifyIngestResultBuffer, R::GetIngestResult)
+            : nullptr;
+    if (!result) return fail(400, "missing-result-frame", "publish_request requires the storage-ingest IngestResult (INGR).");
+    const R::IngestRequest* meta =
+        meta_frame && meta_frame->payload
+            ? verified_copy<R::IngestRequest>(meta_frame->payload, meta_frame->payload_length, &ms,
+                                              R::VerifyIngestRequestBuffer, R::GetIngestRequest)
+            : nullptr;
+    if (!meta || !meta->TAGS()) return fail(400, "missing-meta-frame", "publish_request requires the IngestRequest (INGQ).");
+    Irm mark;
+    bool has_mark = false;
+    int status = 0;
+    if (!read_irm_port("mark", &mark, &has_mark, &status)) return status;
+    if (!has_mark) return fail(400, "missing-mark-frame", "publish_request requires the candidate $IRM from ingest_meta.");
 
-    const std::string result = input_text("result");
-    if (result.empty()) {
-        plugin_set_error("missing-result-frame",
-                         "publish_request requires the storage-ingest result frame.");
-        return 400;
+    const std::string provider = str_of(meta->TAGS()->PROVIDER_ID());
+    const std::string batch = str_of(meta->TAGS()->BATCH_ID());
+    if (result->REFUSED() && result->REFUSED()->size()) {
+        return fail(502, "ingest-refused",
+                    "storage.ingest_with_source refused batch " + batch + " (" + result->REFUSED()->str() +
+                        "). The resume mark is NOT advanced: nothing was stored.");
     }
-    const std::string meta = input_text("meta");
-    if (meta.empty()) {
-        plugin_set_error("missing-meta-frame", "publish_request requires the ingest meta frame.");
-        return 400;
-    }
-
-    std::string provider;
-    std::string source_url;
-    std::string batch_id;
-    json_string_field(meta, "provider_id", &provider);
-    json_string_field(meta, "source_url", &source_url);
-    json_string_field(meta, "batch_id", &batch_id);
-
-    // THE SILENT NOP, CAUGHT. hostcap/storage-ingest already errors on
-    // `ok:false`, which covers the disk-floor errCapJSON refusal. What survives
-    // that check is `ok:true, inserted:0` — byte-identical to a healthy empty
-    // tail. It is only distinguishable against the count the run actually
-    // produced, so the flow carries `records_in` on the result join and the mark
-    // does NOT advance when records went in and nothing came out.
-    const long inserted = static_cast<long>(json_number_or(result, "inserted", -1));
-    const long records_in = static_cast<long>(json_number_or(meta, "records_in", -1));
+    // THE SILENT NOP, CAUGHT: INSERTED 0 for a chunk that carried records is byte-identical to a healthy empty tail.
+    const uint64_t inserted = result->INSERTED();
+    const uint64_t records_in = meta->PROVENANCE() ? meta->PROVENANCE()->NORMALIZED_COUNT()
+                                                   : (mark.has_chunk ? mark.chunk.records_decoded : 0);
     if (inserted == 0 && records_in > 0) {
-        char message[256];
+        char message[320];
         std::snprintf(message, sizeof(message),
-                      "storage.ingest_with_source reported ok with inserted=0 for a chunk "
-                      "carrying %ld records (provider %s, batch %s). The resume mark is NOT "
-                      "advanced: advancing here would skip these rows permanently.",
-                      records_in, provider.c_str(), batch_id.c_str());
-        plugin_set_error("ingest-stored-nothing", message);
-        return 502;
+                      "storage.ingest_with_source reported ok with inserted=0 for a chunk carrying %llu records "
+                      "(provider %s, batch %s). The resume mark is NOT advanced: advancing here would skip these rows "
+                      "permanently.",
+                      static_cast<unsigned long long>(records_in), provider.c_str(), batch.c_str());
+        return fail(502, "ingest-stored-nothing", message);
     }
 
-    const long chunk_offset = static_cast<long>(json_number_or(meta, "chunk_offset", 0));
-    const long chunk_index = static_cast<long>(json_number_or(meta, "chunk_index", 0));
-    const long total = static_cast<long>(json_number_or(meta, "total_bytes", 0));
-    // The ROW-BOUNDARY-CORRECTED offset ingest_meta computed from the body, not
-    // the nominal chunk end: resuming at the nominal end would start mid-row and
-    // silently drop the row that straddles the boundary.
-    const long next_offset =
-        static_cast<long>(json_number_or(meta, "next_offset", static_cast<double>(chunk_offset)));
+    // CUMULATIVE, and only what STORAGE confirmed.
+    const std::string now = iso_ms(now_unix_ms());
+    mark.records_committed += inserted;
+    mark.updated_at = now;
+    mark.has_chunk = true;
+    mark.chunk.records_stored = static_cast<uint32_t>(inserted);
+    mark.chunk.committed_at = now;
+    if (mark.state == irmJobState_COMPLETE && mark.completed_at.empty()) mark.completed_at = now;
+    if (push_irm("mark_record", mark)) return 500;
 
-    // CUMULATIVE, and only what STORAGE confirmed. `inserted` is the storage
-    // lane's own count; a negative (absent) value adds nothing rather than
-    // guessing from records_in, because the read side reports this number to
-    // users as "records in the store".
-    long prior_stored = static_cast<long>(json_number_or(meta, "prior_stored_rows", 0));
-    if (prior_stored < 0) prior_stored = 0;
-    const long stored_rows = prior_stored + (inserted > 0 ? inserted : 0);
-
-    const std::string stamped_at = iso_now();
-
-    // The JSON mark stays: it is what an operator reads off egress, and it is
-    // the frame the pre-$IRM tests exercise. It is NOT the durable one.
-    const std::string next_mark = mark_json(provider, source_url, next_offset, total,
-                                            chunk_index + 1, batch_id, stored_rows, stamped_at);
-    if (push_json("mark", next_mark) < 0) return 500;
-
-    // THE DURABLE MARK. This is the gap `mod-cell-tower-ingest-flow` recorded
-    // and could not close: `storage.write` is schema-typed, and the record it
-    // needed did not exist. Themis minted and ratified $IRM in
-    // spacedatastandards.org 1.196.0, so the record is authored here and
-    // hostcap/storage-write persists it under the storage_write grant.
-    //
-    // It is emitted on the SAME condition as the JSON mark — after a VERIFIED
-    // store, never at dispatch. A mark advanced when a chunk is requested turns
-    // a crash between fetch and store into permanently skipped rows, and the
-    // gap is invisible: the next run resumes past data that was never
-    // persisted.
-    std::string header_line;
-    json_string_field(meta, "csv_header", &header_line);
-    const std::string decoder_state = json_object_slice_local(meta, "bulk_resume_next");
-    std::string merge_policy;
-    json_string_field(meta, "method_name", &merge_policy);
-
-    const std::vector<uint8_t> record = build_irm(
-        provider, source_url, batch_id, next_offset, total, chunk_index, stored_rows, chunk_offset,
-        records_in, header_line, decoder_state,
-        config_string(load_config(), "cell_ingest_format", "csv"), merge_policy, stamped_at);
-    if (push_bytes("mark_record", record.data(), static_cast<uint32_t>(record.size())) < 0) {
-        return 500;
-    }
-    // `source` is the record's attribution string; `type` is asserted here AND
-    // re-derived by storage-write from the buffer's own file identifier, which
-    // refuses the pair if they ever disagree.
-    const std::string mark_meta = std::string("{\"source\":\"") + json_escape(provider) +
-                                  "\",\"type\":\"" + kIrmType + "\"}";
-    if (push_json("mark_meta", mark_meta) < 0) return 500;
-
-    const std::string config = load_config();
-    std::string publish_url;
-    if (!json_string_field(config, "cell_ingest_publish_url", &publish_url) || publish_url.empty()) {
-        // Fail-closed. Absence of configuration is not permission to publish.
-        return 0;
-    }
-
-    std::string schema;
-    if (!json_string_field(result, "schema", &schema) || schema.empty()) {
-        json_string_field(meta, "schema", &schema);
-    }
-    std::string source;
-    json_string_field(meta, "source_name", &source);
-    if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
-        plugin_set_error("incomplete-publication-identity",
-                         "publish_request needs schema, batchId, providerId and sourceName.");
-        return 400;
-    }
-
-    const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\"" +
-                             ",\"providerId\":\"" + json_escape(provider) + "\"" +
-                             ",\"sourceName\":\"" + json_escape(source) + "\"" +
-                             ",\"batchId\":\"" + json_escape(batch_id) + "\"}";
-    char timeout_buf[24];
-    std::snprintf(timeout_buf, sizeof(timeout_buf), "%ld", config_timeout_ms(config));
-    const std::string request =
-        std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(publish_url) + "\"" +
-        ",\"headers\":{\"content-type\":\"application/json\"}" + ",\"bodyB64\":\"" +
-        base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
-        ",\"timeoutMs\":" + timeout_buf + "}";
-    return push_json("request", request) < 0 ? 500 : 0;
+    const Config config = load_config();
+    const std::string publish_url = config.string("cell_ingest_publish_url", "");
+    if (publish_url.empty()) return 0;  // fail-closed: absence of configuration is not permission to publish
+    std::string schema = str_of(result->SCHEMA());
+    if (schema.empty()) schema = str_of(meta->SCHEMA());
+    std::string batch_id = str_of(result->BATCH_ID());
+    if (batch_id.empty()) batch_id = batch;
+    const std::string source = str_of(meta->TAGS()->SOURCE_NAME());
+    if (schema.empty() || batch_id.empty() || provider.empty() || source.empty())
+        return fail(400, "incomplete-publication-identity", "publish_request needs schema, batchId, providerId and sourceName.");
+    flatbuffers::FlatBufferBuilder rb(512);
+    R::FinishIngestResultBuffer(rb, R::CreateIngestResultDirect(rb, schema.c_str(), provider.c_str(), source.c_str(), batch_id.c_str(),
+                                                                inserted, result->RECONCILED_DUPLICATES(),
+                                                                result->RECONCILED_OLD_BATCHES(),
+                                                                result->ARCHIVED() && result->ARCHIVED()->size() ? result->ARCHIVED()->c_str() : nullptr,
+                                                                nullptr));
+    const Bytes body(rb.GetBufferPointer(), rb.GetBufferPointer() + rb.GetSize());
+    flatbuffers::FlatBufferBuilder b(1024 + body.size());
+    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "content-type", "application/octet-stream")};
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "POST", publish_url.c_str(), &headers, &body,
+                                                             static_cast<uint32_t>(config_timeout_ms(config)), 0, nullptr));
+    return push_builder("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", b) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

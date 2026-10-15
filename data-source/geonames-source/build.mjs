@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 import { minizSourceFragments } from "./miniz-source.mjs";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -44,7 +45,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const inlineStandards = ["GNP"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
@@ -77,7 +78,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. All four methods are
+  // THREAD MODEL — declared explicitly, never inferred. All three methods are
   // pure single-pass transforms and this guest provably never spawns a thread
   // (manifest.sequentialJustification records why), so it carries no pthreads
   // contract. Declaring it keeps the SDK's isomorphic-pthreads artifact guard

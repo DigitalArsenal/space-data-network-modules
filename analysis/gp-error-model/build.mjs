@@ -8,13 +8,14 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 // One translation unit: SDS headers, ERFA and the foundation/frames axis
 // engine (TEME -> GCRF), the Vallado SGP4 that propagator/sgp4 compiles,
 // Izzo's Lambert kernel (analysis/lambert-izzo), the SHA-256 that orbit-products
-// uses for record hashes, and nlohmann::json for the control frames.
-// fit_elements.cpp (SGP4 element fitting) comes last.
+// uses for record hashes, and nlohmann::json for the methods' working values. src/erm_bridge.cpp is the wire boundary:
+// every data, option and report port carries one SDS $ERM record (typed contracts 1.0), and the node config
+// (plugin.getConfig, sdm_piv::get_config) carries the recipes. fit_elements.cpp (SGP4 element fitting) comes last.
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'MNV'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'MNV', 'ERM'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
@@ -27,6 +28,7 @@ const json = await fs.readFile(jsonHeader, 'utf8');
 const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
+const bridge = await fs.readFile(path.join(root, 'src', 'erm_bridge.cpp'), 'utf8');
 const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'fit_elements.cpp']
   .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
@@ -35,15 +37,18 @@ const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', '#define JSON_NOEXCEPTION 1', json, header, erfa.source, bodyModels, axisEngine,
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#define JSON_NOEXCEPTION 1', json, header, erfa.source, bodyModels, axisEngine,
     // The vendored SGP4 has internal linkage: analysis/od, analysis/epoch-state and this module each compile the same
     // SGP4Funcs, and the flow compiler links their objects into one artifact, where equal external C++ symbols are
     // duplicates. The standard headers SGP4.h includes come first, outside the namespace.
     '#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace',
-    '#undef pi', lambert, sha256, ...sources].join('\n\n'),
+    '#undef pi', lambert, sha256, bridge, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',
+  // attach_covariance and attribute_maneuvers read their recipes through the sync space_data_module_host hostcall bridge
+  // (plugin.getConfig, typedHostcall.hpp); its symbols resolve at instantiation.
+  allowUndefinedImports: true,
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));

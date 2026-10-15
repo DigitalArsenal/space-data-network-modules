@@ -95,11 +95,14 @@ const sdsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatast
 const flatbuffers = createRequire(path.join(sdsRoot, 'package.json'))('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(sdsRoot, `lib/js/${code}/main.js`)));
 const [OEM, NCD, EOP] = await Promise.all(['OEM', 'NCD', 'EOP'].map(load));
+// eop-parser takes the file as one $FIL on "body" (its tests' body() helper, against the same standards checkout).
+process.env.SPACE_DATA_STANDARDS_ROOT ??= sdsRoot;
+const { body: eopBody } = await import(new URL('../../../data-source/eop-parser/tests/harness.mjs', import.meta.url).href);
 const modules = new URL('../../../', import.meta.url);
-async function harness(dir) {
+async function harness(dir, config) {
   const wasmSource = fs.readFileSync(new URL(`${dir}/dist/isomorphic/module.wasm`, modules));
   const manifest = JSON.parse(fs.readFileSync(new URL(`${dir}/plugin-manifest.json`, modules)));
-  return createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct' });
+  return createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct', ...(config ? { hostOptions: { config } } : {}) });
 }
 const typeRef = (code) => ({ schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' });
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -166,7 +169,7 @@ async function earthOrientation(startMs, stopMs) {
     const body = values.eop === 'c04' ? fetched : observedFinals(fetched);
     const method = values.eop === 'c04' ? 'parse_c04' : 'parse_finals2000a';
     const h = await harness('data-source/eop-parser');
-    const r = await h.invoke({ methodId: method, inputs: [{ portId: 'body', payload: body, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: body.length } }] });
+    const r = await h.invoke({ methodId: method, inputs: [eopBody(body)] });
     await h.destroy();
     if (r.statusCode !== 0) throw new Error(`${method}: ${r.errorMessage}`);
     const stream = Buffer.from(r.outputs.find((o) => o.portId === 'records').payload);
@@ -185,7 +188,7 @@ async function earthOrientation(startMs, stopMs) {
 }
 
 // ── product -> reference states ──
-let reader, reference;
+let reader;
 function frameOf(bytes) {  // [u32 n][$NCD][container], as read_container takes it
   const b = new flatbuffers.Builder(1024);
   const sha = b.createString(sha256(bytes));
@@ -197,7 +200,6 @@ function frameOf(bytes) {  // [u32 n][$NCD][container], as read_container takes 
 }
 async function referenceStates(key, sp3, identities, provenance) {
   reader ??= await harness('files/orbit-products');
-  reference ??= await harness('analysis/reference-states');
   const read = await reader.invoke({ methodId: 'read_container', inputs: [{ portId: 'container', payload: frameOf(sp3), typeRef: typeRef('NCD') }] });
   if (read.statusCode !== 0) return console.warn(`${key}: read_container: ${read.errorMessage}`);
   const port = (id, code) => ({ portId: id, payload: Buffer.from(read.outputs.find((o) => o.portId === id).payload), typeRef: typeRef(code) });
@@ -205,8 +207,10 @@ async function referenceStates(key, sp3, identities, provenance) {
   const start = Date.parse(`${ncd.START_TIME()?.slice(0, 19)}Z`), stop = Date.parse(`${ncd.STOP_TIME()?.slice(0, 19)}Z`);
   const eop = await earthOrientation(start, stop);
   if (!eop) return console.warn(`${key}: no C04 rows bracket ${ncd.START_TIME()} .. ${ncd.STOP_TIME()}`);
-  const r = await reference.invoke({ methodId: 'reference_states', inputs: [port('ephemeris', 'OEM'), port('descriptor', 'NCD'), eop,
-    { portId: 'identities', payload: Buffer.from(JSON.stringify(identities)), typeRef: { schemaName: 'application/json' } }] });
+  // The identities are this file's node config (plugin.getConfig), so one instance per file.
+  const reference = await harness('analysis/reference-states', identities);
+  const r = await reference.invoke({ methodId: 'reference_states', inputs: [port('ephemeris', 'OEM'), port('descriptor', 'NCD'), eop] });
+  reference.destroy();
   if (r.statusCode !== 0) return console.warn(`${key}: reference_states: ${r.errorMessage}`);
   const dir = path.join(out, 'reference', key);
   fs.mkdirSync(dir, { recursive: true });

@@ -174,6 +174,12 @@ struct RFOT : public ::flatbuffers::NativeTable {
   std::string DESCRIPTOR{};
   std::string URL{};
   std::vector<std::string> TAGS{};
+  double CORR_MAHALANOBIS_SQ = 0.0;
+  uint8_t CORR_DOF = 0;
+  double CORR_GATE = 0.0;
+  double CORR_P_VALUE = 0.0;
+  bool CORR_AMBIGUOUS = false;
+  double FREQUENCY_UNC = 0.0;
 };
 
 /// RF Observation
@@ -255,7 +261,13 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_RAW_FILE_URI = 144,
     VT_DESCRIPTOR = 146,
     VT_URL = 148,
-    VT_TAGS = 150
+    VT_TAGS = 150,
+    VT_CORR_MAHALANOBIS_SQ = 152,
+    VT_CORR_DOF = 154,
+    VT_CORR_GATE = 156,
+    VT_CORR_P_VALUE = 158,
+    VT_CORR_AMBIGUOUS = 160,
+    VT_FREQUENCY_UNC = 162
   };
   /// Unique identifier
   const ::flatbuffers::String *ID() const {
@@ -345,7 +357,8 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double RANGE_UNC() const {
     return GetField<double>(VT_RANGE_UNC, 0.0);
   }
-  /// Range rate (km/s)
+  /// Range rate, the time derivative of RANGE (km/s): positive when the range
+  /// is opening, negative when it is closing.
   double RANGE_RATE() const {
     return GetField<double>(VT_RANGE_RATE, 0.0);
   }
@@ -381,7 +394,9 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *COLLECTION_MODE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_COLLECTION_MODE);
   }
-  /// Measured center frequency (MHz)
+  /// Measured center frequency as received at the sensor (MHz). One-way: it
+  /// includes the Doppler shift of the emitter's motion relative to the
+  /// sensor.
   double FREQUENCY() const {
     return GetField<double>(VT_FREQUENCY, 0.0);
   }
@@ -397,7 +412,10 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double END_FREQUENCY() const {
     return GetField<double>(VT_END_FREQUENCY, 0.0);
   }
-  /// Frequency shift from nominal (MHz)
+  /// Frequency shift from nominal, FREQUENCY - NOMINAL_FREQUENCY (MHz). When
+  /// NOMINAL_FREQUENCY is the emitted frequency this is the one-way Doppler
+  /// shift, positive when the range is closing: to first order in
+  /// RANGE_RATE / c, RANGE_RATE = -c * FREQUENCY_SHIFT / NOMINAL_FREQUENCY.
   double FREQUENCY_SHIFT() const {
     return GetField<double>(VT_FREQUENCY_SHIFT, 0.0);
   }
@@ -553,6 +571,31 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_TAGS);
   }
+  /// Association: squared Mahalanobis distance of the observation's
+  /// innovation against its predicted value, d^2 = v^T (H P H^T + R)^-1 v.
+  double CORR_MAHALANOBIS_SQ() const {
+    return GetField<double>(VT_CORR_MAHALANOBIS_SQ, 0.0);
+  }
+  /// Association: degrees of freedom of d^2 (measurement dimension).
+  uint8_t CORR_DOF() const {
+    return GetField<uint8_t>(VT_CORR_DOF, 0);
+  }
+  /// Association: the chi-square gate d^2 was tested against.
+  double CORR_GATE() const {
+    return GetField<double>(VT_CORR_GATE, 0.0);
+  }
+  /// Association: p-value of d^2, Q(dof/2, d^2/2).
+  double CORR_P_VALUE() const {
+    return GetField<double>(VT_CORR_P_VALUE, 0.0);
+  }
+  /// Association: true when the assignment was ambiguous.
+  bool CORR_AMBIGUOUS() const {
+    return GetField<uint8_t>(VT_CORR_AMBIGUOUS, 0) != 0;
+  }
+  /// One-sigma uncertainty of FREQUENCY, in the same units.
+  double FREQUENCY_UNC() const {
+    return GetField<double>(VT_FREQUENCY_UNC, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -652,6 +695,12 @@ struct RFO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_TAGS) &&
            verifier.VerifyVector(TAGS()) &&
            verifier.VerifyVectorOfStrings(TAGS()) &&
+           VerifyField<double>(verifier, VT_CORR_MAHALANOBIS_SQ, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CORR_DOF, 1) &&
+           VerifyField<double>(verifier, VT_CORR_GATE, 8) &&
+           VerifyField<double>(verifier, VT_CORR_P_VALUE, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CORR_AMBIGUOUS, 1) &&
+           VerifyField<double>(verifier, VT_FREQUENCY_UNC, 8) &&
            verifier.EndTable();
   }
   RFOT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -885,6 +934,24 @@ struct RFOBuilder {
   void add_TAGS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS) {
     fbb_.AddOffset(RFO::VT_TAGS, TAGS);
   }
+  void add_CORR_MAHALANOBIS_SQ(double CORR_MAHALANOBIS_SQ) {
+    fbb_.AddElement<double>(RFO::VT_CORR_MAHALANOBIS_SQ, CORR_MAHALANOBIS_SQ, 0.0);
+  }
+  void add_CORR_DOF(uint8_t CORR_DOF) {
+    fbb_.AddElement<uint8_t>(RFO::VT_CORR_DOF, CORR_DOF, 0);
+  }
+  void add_CORR_GATE(double CORR_GATE) {
+    fbb_.AddElement<double>(RFO::VT_CORR_GATE, CORR_GATE, 0.0);
+  }
+  void add_CORR_P_VALUE(double CORR_P_VALUE) {
+    fbb_.AddElement<double>(RFO::VT_CORR_P_VALUE, CORR_P_VALUE, 0.0);
+  }
+  void add_CORR_AMBIGUOUS(bool CORR_AMBIGUOUS) {
+    fbb_.AddElement<uint8_t>(RFO::VT_CORR_AMBIGUOUS, static_cast<uint8_t>(CORR_AMBIGUOUS), 0);
+  }
+  void add_FREQUENCY_UNC(double FREQUENCY_UNC) {
+    fbb_.AddElement<double>(RFO::VT_FREQUENCY_UNC, FREQUENCY_UNC, 0.0);
+  }
   explicit RFOBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -971,8 +1038,18 @@ inline ::flatbuffers::Offset<RFO> CreateRFO(
     ::flatbuffers::Offset<::flatbuffers::String> RAW_FILE_URI = 0,
     ::flatbuffers::Offset<::flatbuffers::String> DESCRIPTOR = 0,
     ::flatbuffers::Offset<::flatbuffers::String> URL = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS = 0,
+    double CORR_MAHALANOBIS_SQ = 0.0,
+    uint8_t CORR_DOF = 0,
+    double CORR_GATE = 0.0,
+    double CORR_P_VALUE = 0.0,
+    bool CORR_AMBIGUOUS = false,
+    double FREQUENCY_UNC = 0.0) {
   RFOBuilder builder_(_fbb);
+  builder_.add_FREQUENCY_UNC(FREQUENCY_UNC);
+  builder_.add_CORR_P_VALUE(CORR_P_VALUE);
+  builder_.add_CORR_GATE(CORR_GATE);
+  builder_.add_CORR_MAHALANOBIS_SQ(CORR_MAHALANOBIS_SQ);
   builder_.add_TRANSMIT_FILTER_ROLL_OFF(TRANSMIT_FILTER_ROLL_OFF);
   builder_.add_CONFIDENCE(CONFIDENCE);
   builder_.add_BIT_ERROR_RATE(BIT_ERROR_RATE);
@@ -1040,6 +1117,8 @@ inline ::flatbuffers::Offset<RFO> CreateRFO(
   builder_.add_ID(ID);
   builder_.add_SWITCH_POINT(SWITCH_POINT);
   builder_.add_CHANNEL(CHANNEL);
+  builder_.add_CORR_AMBIGUOUS(CORR_AMBIGUOUS);
+  builder_.add_CORR_DOF(CORR_DOF);
   builder_.add_OUTER_CODING_RATE(OUTER_CODING_RATE);
   builder_.add_INNER_CODING_RATE(INNER_CODING_RATE);
   builder_.add_INCOMING(INCOMING);
@@ -1130,7 +1209,13 @@ inline ::flatbuffers::Offset<RFO> CreateRFODirect(
     const char *RAW_FILE_URI = nullptr,
     const char *DESCRIPTOR = nullptr,
     const char *URL = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS = nullptr,
+    double CORR_MAHALANOBIS_SQ = 0.0,
+    uint8_t CORR_DOF = 0,
+    double CORR_GATE = 0.0,
+    double CORR_P_VALUE = 0.0,
+    bool CORR_AMBIGUOUS = false,
+    double FREQUENCY_UNC = 0.0) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto OB_TIME__ = OB_TIME ? _fbb.CreateString(OB_TIME) : 0;
   auto ID_SENSOR__ = ID_SENSOR ? _fbb.CreateString(ID_SENSOR) : 0;
@@ -1227,7 +1312,13 @@ inline ::flatbuffers::Offset<RFO> CreateRFODirect(
       RAW_FILE_URI__,
       DESCRIPTOR__,
       URL__,
-      TAGS__);
+      TAGS__,
+      CORR_MAHALANOBIS_SQ,
+      CORR_DOF,
+      CORR_GATE,
+      CORR_P_VALUE,
+      CORR_AMBIGUOUS,
+      FREQUENCY_UNC);
 }
 
 ::flatbuffers::Offset<RFO> CreateRFO(::flatbuffers::FlatBufferBuilder &_fbb, const RFOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1315,6 +1406,12 @@ inline void RFO::UnPackTo(RFOT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = DESCRIPTOR(); if (_e) _o->DESCRIPTOR = _e->str(); }
   { auto _e = URL(); if (_e) _o->URL = _e->str(); }
   { auto _e = TAGS(); if (_e) { _o->TAGS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TAGS[_i] = _e->Get(_i)->str(); } } else { _o->TAGS.resize(0); } }
+  { auto _e = CORR_MAHALANOBIS_SQ(); _o->CORR_MAHALANOBIS_SQ = _e; }
+  { auto _e = CORR_DOF(); _o->CORR_DOF = _e; }
+  { auto _e = CORR_GATE(); _o->CORR_GATE = _e; }
+  { auto _e = CORR_P_VALUE(); _o->CORR_P_VALUE = _e; }
+  { auto _e = CORR_AMBIGUOUS(); _o->CORR_AMBIGUOUS = _e; }
+  { auto _e = FREQUENCY_UNC(); _o->FREQUENCY_UNC = _e; }
 }
 
 inline ::flatbuffers::Offset<RFO> CreateRFO(::flatbuffers::FlatBufferBuilder &_fbb, const RFOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1399,6 +1496,12 @@ inline ::flatbuffers::Offset<RFO> RFO::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _DESCRIPTOR = _o->DESCRIPTOR.empty() ? 0 : _fbb.CreateString(_o->DESCRIPTOR);
   auto _URL = _o->URL.empty() ? 0 : _fbb.CreateString(_o->URL);
   auto _TAGS = _o->TAGS.size() ? _fbb.CreateVectorOfStrings(_o->TAGS) : 0;
+  auto _CORR_MAHALANOBIS_SQ = _o->CORR_MAHALANOBIS_SQ;
+  auto _CORR_DOF = _o->CORR_DOF;
+  auto _CORR_GATE = _o->CORR_GATE;
+  auto _CORR_P_VALUE = _o->CORR_P_VALUE;
+  auto _CORR_AMBIGUOUS = _o->CORR_AMBIGUOUS;
+  auto _FREQUENCY_UNC = _o->FREQUENCY_UNC;
   return CreateRFO(
       _fbb,
       _ID,
@@ -1474,7 +1577,13 @@ inline ::flatbuffers::Offset<RFO> RFO::Pack(::flatbuffers::FlatBufferBuilder &_f
       _RAW_FILE_URI,
       _DESCRIPTOR,
       _URL,
-      _TAGS);
+      _TAGS,
+      _CORR_MAHALANOBIS_SQ,
+      _CORR_DOF,
+      _CORR_GATE,
+      _CORR_P_VALUE,
+      _CORR_AMBIGUOUS,
+      _FREQUENCY_UNC);
 }
 
 inline const RFO *GetRFO(const void *buf) {

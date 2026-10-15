@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -30,13 +31,15 @@ function inlineGeneratedHeader(source) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-// Topological order over the flatc include graph: RFM/TIM/MET feed OMM,
+// Topological order over the flatc include graph: RFM/TIM/MET/CVR/PVN feed OMM,
 // MET feeds MPE, IDM->PLD + LCC feed CAT, CAT feeds CSM, SPW and EOP are
-// standalone.
-const inlineStandards = ["RFM", "TIM", "MET", "IDM", "PLD", "LCC", "OMM", "MPE", "CAT", "SPW", "EOP", "CSM"];
+// standalone; ICN is the job the request builder sends in
+// HttpResponse.CONTEXT. The runtime types (HttpResponse, IngestRequest,
+// FlowNotice) are staged by the SDK compiler.
+const inlineStandards = ["RFM", "TIM", "MET", "CVR", "PVN", "IDM", "PLD", "LCC", "OMM", "MPE", "CAT", "SPW", "EOP", "CSM", "ICN"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");

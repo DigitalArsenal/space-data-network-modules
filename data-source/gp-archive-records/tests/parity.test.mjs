@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { formatParityReport, normalizeParityFixture, runParityHarness } from "space-data-module-sdk/testing";
 
-import { CAT_FIELDS, MPE_FIELDS, encodeFieldBatch } from "./field-batch.mjs";
+import { CAT, CAT_FIELDS, MPE, MPE_FIELDS, encodeRecord, encodeStream } from "./records.mjs";
 
 // Tri-runtime parity (SDK harness): the one artifact in headless Chrome, native
 // WasmEdge at the SDK pin and the pinned Docker WasmEdge must return identical
@@ -30,13 +30,19 @@ function request(methodId, payload) {
       {
         portId: "records",
         payloadBase64: Buffer.from(payload).toString("base64"),
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.length },
+        typeRef: {
+          schemaName: `${methodId === "build_mpe" ? "MPE" : "CAT"}.fbs`,
+          fileIdentifier: methodId === "build_mpe" ? "$MPE" : "$CAT",
+          rootTypeName: methodId === "build_mpe" ? "MPE" : "CAT",
+          wireFormat: "flatbuffer",
+        },
       },
     ],
   };
 }
 
-const batch = (fields, vectors) => Buffer.from(encodeFieldBatch(fields, vectors.map((v) => fieldValues(v, fields))));
+const batch = (fields, vectors) =>
+  Buffer.from(encodeStream(fields === MPE_FIELDS ? MPE : CAT, fields, vectors.map((v) => fieldValues(v, fields))));
 
 test(
   "one artifact produces identical records in Chromium, native WasmEdge and container WasmEdge",
@@ -49,7 +55,7 @@ test(
         { id: "build-mpe-archive-v1-vectors", request: request("build_mpe", batch(MPE_FIELDS, VECTORS.mpe)), expect: "ok" },
         { id: "build-cat-archive-v1-vectors", request: request("build_cat", batch(CAT_FIELDS, VECTORS.cat)), expect: "ok" },
         { id: "build-mpe-empty", request: request("build_mpe", batch(MPE_FIELDS, [])), expect: "ok" },
-        { id: "build-mpe-missing-field", request: request("build_mpe", batch(MPE_FIELDS.slice(0, 3), VECTORS.mpe.slice(0, 2))), expect: "ok" },
+        { id: "build-mpe-missing-field", request: request("build_mpe", Buffer.from(encodeRecord(MPE, MPE_FIELDS, fieldValues(VECTORS.mpe[0], MPE_FIELDS), { omit: ["BSTAR"] }))), expect: "ok" },
         { id: "build-cat-truncated", request: request("build_cat", batch(CAT_FIELDS, VECTORS.cat.slice(0, 3)).subarray(0, 40)), expect: "ok" },
       ],
     });

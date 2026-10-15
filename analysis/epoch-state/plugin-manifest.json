@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.epoch-state",
   "name": "SDN Epoch State",
-  "version": "0.2.0",
-  "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE (derive) or $OMM (derive_omm) element set with SGP4 at zero elapsed time, or at the epoch plus the ages of the options frame, transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one $OEM per element set with its lineage and initial-condition uncertainty marked unknown. omm_from_mpe converts the GP history archive's $MPE to $OMM. answer_propagation_requests plugs SGP4 into the propagator query port of analysis/maneuver-detection. Pure compute; output bytes depend only on input bytes.",
+  "version": "0.3.0",
+  "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE (derive) or $OMM (derive_omm) element set with SGP4 at zero elapsed time, or at the epoch plus the ages of the node config (ModuleConfig NumberList \"derive.ages\", else \"ages\", read through plugin.getConfig), transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one $OEM per element set with its lineage and initial-condition uncertainty marked unknown, plus a FlowNotice report. omm_from_mpe converts the GP history archive's $MPE to $OMM. answer_propagation_requests plugs SGP4 into the propagator query port of analysis/maneuver-detection ($PRW WINDOW_REQUEST in, one $OEM per query and a $PRW WINDOW_REPORT out). Pure compute; output bytes depend only on input bytes and the configured ages.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -27,51 +27,22 @@
           "portId": "elements",
           "acceptedTypeSets": [
             {
-              "setId": "sds-mpe-aligned-stream",
+              "setId": "sds-mpe-stream",
               "allowedTypes": [
                 {
                   "schemaName": "MPE.fbs",
                   "fileIdentifier": "$MPE",
-                  "rootTypeName": "MPE"
-                },
-                {
-                  "schemaName": "MPE.fbs",
-                  "fileIdentifier": "$MPE",
                   "rootTypeName": "MPE",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+              "description": "Size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
           "description": "Element sets to hand off."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
         }
       ],
       "outputPorts": [
@@ -79,22 +50,16 @@
           "portId": "states",
           "acceptedTypeSets": [
             {
-              "setId": "sds-oem-aligned-stream",
+              "setId": "sds-oem-stream",
               "allowedTypes": [
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $OEM stream, one single-row OEM (GCRF, UTC, km and km/s) per derived element set, in input order."
+              "description": "Size-prefixed $OEM stream, one single-row OEM (GCRF, UTC, km and km/s) per derived element set, in input order."
             }
           ],
           "minStreams": 0,
@@ -106,29 +71,27 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Derives one GCRF epoch state per $MPE element set (and, with options.ages, the states at the epoch plus each age). Refused element sets (theory other than SGP4, non-finite or invalid elements, SGP4 errors, round trip outside tolerance) are listed in the report and produce no OEM."
+      "description": "Derives one GCRF epoch state per $MPE element set (and, with the configured ages (\"derive.ages\", else \"ages\"), the states at the epoch plus each age). Refused element sets (theory other than SGP4, non-finite or invalid elements, SGP4 errors, round trip outside tolerance) are listed in the FlowNotice report and produce no OEM."
     },
     {
       "methodId": "omm_from_mpe",
@@ -138,22 +101,16 @@
           "portId": "mpe",
           "acceptedTypeSets": [
             {
-              "setId": "sds-mpe-aligned-stream",
+              "setId": "sds-mpe-stream",
               "allowedTypes": [
                 {
                   "schemaName": "MPE.fbs",
                   "fileIdentifier": "$MPE",
-                  "rootTypeName": "MPE"
-                },
-                {
-                  "schemaName": "MPE.fbs",
-                  "fileIdentifier": "$MPE",
                   "rootTypeName": "MPE",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+              "description": "Size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
             }
           ],
           "minStreams": 1,
@@ -188,24 +145,22 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         }
       ],
       "maxBatch": 1,
@@ -225,14 +180,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
@@ -242,29 +191,6 @@
           "maxStreams": 1,
           "required": true,
           "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
         }
       ],
       "outputPorts": [
@@ -272,22 +198,16 @@
           "portId": "states",
           "acceptedTypeSets": [
             {
-              "setId": "sds-oem-aligned-stream",
+              "setId": "sds-oem-stream",
               "allowedTypes": [
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $OEM stream, one $OEM (GCRF, UTC, km and km/s; one line per age) per derived element set, in input order. OBJECT carries the $OMM's NORAD_CAT_ID, OBJECT_ID (NORAD:<n> for a numbered object) and OBJECT_NAME."
+              "description": "Size-prefixed $OEM stream, one $OEM (GCRF, UTC, km and km/s; one line per age) per derived element set, in input order. OBJECT carries the $OMM's NORAD_CAT_ID, OBJECT_ID (NORAD:<n> for a numbered object) and OBJECT_NAME."
             }
           ],
           "minStreams": 0,
@@ -299,29 +219,27 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Derives the GCRF epoch state of each $OMM element set, with the same checks and lineage as derive. Refused sets are listed in the report and produce no OEM."
+      "description": "Derives the GCRF epoch state of each $OMM element set, with the same checks and lineage as derive. Refused sets are listed in the FlowNotice report and produce no OEM."
     },
     {
       "methodId": "answer_propagation_requests",
@@ -331,24 +249,22 @@
           "portId": "requests",
           "acceptedTypeSets": [
             {
-              "setId": "requests-v1",
+              "setId": "sds-prw-window-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The propagation_requests of analysis/maneuver-detection: {queries: [{sequence, set, start, stop, step_s, ...}]}.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "A query list: control metadata only."
-              }
+              "description": "One $PRW whose WINDOW_REQUEST arm holds the queries of analysis/maneuver-detection's propagation_requests (plain or size-prefixed): per PRWWindowQuery, SET_INDEX (the element set among the records of element_sets, in input order over all frames; ENTITY_HANDLE must be 0), START and STOP (TIMInstant, TIME_SYSTEM UTC, ISO8601 text or UNIX_SECONDS) and STEP_SECONDS."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The propagation_requests of analysis/maneuver-detection: {queries: [{sequence, set, start, stop, step_s, ...}]}."
+          "description": "One $PRW whose WINDOW_REQUEST arm holds the queries of analysis/maneuver-detection's propagation_requests (plain or size-prefixed): per PRWWindowQuery, SET_INDEX (the element set among the records of element_sets, in input order over all frames; ENTITY_HANDLE must be 0), START and STOP (TIMInstant, TIME_SYSTEM UTC, ISO8601 text or UNIX_SECONDS) and STEP_SECONDS."
         },
         {
           "portId": "element_sets",
@@ -359,7 +275,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The element sets the queries name, as given to the detector: the query's `set` indexes the records in input order over all frames."
@@ -369,29 +286,6 @@
           "maxStreams": 64,
           "required": true,
           "description": "The element sets the queries name, as given to the detector: the query's `set` indexes the records in input order over all frames."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
         }
       ],
       "outputPorts": [
@@ -404,7 +298,8 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One $OEM per query in query order, one block each: the set's TEME trajectory (UTC, km, km/s) from start to stop in uniform steps no longer than step_s. A set SGP4 will not propagate is answered by an empty block whose COMMENT begins REFUSED."
@@ -424,7 +319,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "The element sets, forwarded unchanged for the detector's second pass."
@@ -436,55 +332,30 @@
           "description": "The element sets, forwarded unchanged for the detector's second pass."
         },
         {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The options frame, forwarded unchanged.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Control metadata only; no observations encoded here."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The options frame, forwarded unchanged."
-        },
-        {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "SGP4 as the plugged propagator of the detector's query port: answers every query of a propagation_requests document and forwards the element sets and options for the second pass."
+      "description": "SGP4 as the plugged propagator of the detector's query port: answers every PRWWindowQuery of a $PRW WINDOW_REQUEST with one $OEM, forwards the element sets for the second pass, and reports in a $PRW WINDOW_REPORT."
     }
   ],
   "schemasUsed": [
@@ -502,6 +373,11 @@
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
       "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
     }
   ],
   "buildArtifacts": [

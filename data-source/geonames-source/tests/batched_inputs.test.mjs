@@ -8,13 +8,15 @@
 //
 // Every input port of data-source/geonames-source is single-stream BY CONTRACT,
 // so a surplus is refused by name. The refusal runs before any port parsing or
-// hostcall, which is why these cases need no host stub.
+// hostcall, which is why these cases need no host stub. Every frame is a typed
+// HttpResponse (HRSP), as hostcap/http-request and inflate emit them.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -22,15 +24,11 @@ const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.me
 
 const encoder = new TextEncoder();
 
-// Any-flatbuffer wildcard ports accept opaque aligned bytes. The SDK invoke
-// codec requires BOTH requiredAlignment and byteLength on an aligned typeRef —
-// omitting them throws before the wasm is entered.
 function bytesInput(portId, text) {
-  const payload = encoder.encode(text);
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
+    typeRef: { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" },
+    payload: encodeHttpResponse({ status: 200, body: encoder.encode(text) }),
   };
 }
 
@@ -46,13 +44,11 @@ async function invoke(t, methodId, inputs) {
 
 // [methodId, the port that is doubled, the other ports one frame each]
 const CASES = [
-  ["inflate", "response", ["job"]],
-  ["inflate", "job", ["response"]],
-  ["parse_lookups", "admin1", ["job"]],
-  ["parse_lookups", "country", ["job"]],
-  ["parse_places", "text", ["job"]],
-  ["parse_places", "job", ["text"]],
-  ["parse_deletes", "text", ["job"]],
+  ["inflate", "response", []],
+  ["parse_places", "text", ["admin1"]],
+  ["parse_places", "admin1", ["text"]],
+  ["parse_places", "country", ["text", "admin2"]],
+  ["parse_deletes", "text", []],
 ];
 
 for (const [methodId, port, others] of CASES) {

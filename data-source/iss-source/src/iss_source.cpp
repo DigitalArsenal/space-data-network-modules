@@ -1,10 +1,9 @@
 /*
  * ISS (NASA public OEM) data-source module (A2.2c, second Tier-1 adapter).
  *
- * On a TIMERS-driven `pull` this fetches the single public NASA ISS ephemeris
+ * For each run this fetches the single public NASA ISS ephemeris
  * file — a CCSDS OEM KVN document — and re-emits it as a schema-exact SDS OEM
- * record, then stores it, signs its content id, and publishes a schema-exact
- * PNM pointer. Unlike the SpaceX Starlink adapter there is no manifest and no
+ * record. Unlike the SpaceX Starlink adapter there is no manifest and no
  * per-object loop: the ISS is a single object (NORAD 25544) and the source is
  * already an OEM, so the "parser" faithfully re-serializes it.
  *
@@ -12,7 +11,7 @@
  * REF_FRAME = EME2000, TIME_SYSTEM = UTC, CENTER = Earth. We preserve those as
  * declared — REFERENCE_FRAME = "EME2000" — and DO NOT transform to TEME here;
  * the OD side owns the EME2000->TEME transform (validated in A2.2a). The raw
- * OEM text is bound into signed provenance by SHA-256 (never mislabeled).
+ * OEM text is never relabelled.
  *
  * REPRESENTATION: the NASA ISS OEM carries an explicit epoch on every state
  * line and is NON-uniform in time (mostly 240 s / 4-min steps, but with shorter
@@ -23,11 +22,15 @@
  * correct choice for an explicit-epoch, possibly-non-uniform source and avoids
  * any reconstruction drift.
  *
- * The fetch/hash/store/sign/publish skeleton lives in the shared
- * common/provider_source.hpp (promoted from spacex-starlink-source in A2.2c);
- * only the OEM-KVN parse + verbose-OEM mapping stay here.
- *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * TYPED CONTRACTS 1.0 (FlatBuffers only, no JSON, no base64): the module makes no
+ * fetch and no store itself. `request` turns the flow's TimerTick (TICK) into a GET
+ * HttpRequest (HREQ) for hostcap/http-request; `emit` turns the
+ * HttpResponse (HRSP) into $OEM FlatBuffers on "oem", consumed in memory by
+ * analysis/od.fit. Nothing is stored, signed or published (the former `pull`
+ * path declared a $PNM it never produced and is gone). Node config (sourceUrl) is
+ * plugin.getConfig through sdm_piv (one ModuleConfig, read in place), the only
+ * hostcall. A transport error, another status than 200, an empty body or a
+ * file with nothing fittable fails closed (fetch-failed / fetch-empty).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -35,34 +38,18 @@
 #include <string>
 #include <vector>
 
-#include "provider_source.hpp"
+#include <string_view>
+
+#include <HttpRequest_generated.h>
+#include <HttpResponse_generated.h>
+#include <typedHostcall.hpp>
 
 // SDS $OEM FlatBuffer + the shared builder. math.h SVID macros (SING/DOMAIN/…)
 // collide with generated enum ids on native builds; undef before the generated
 // header (the em++/WASI sysroot is clean).
 #include <cmath>
-#ifdef SING
-#undef SING
-#endif
-#ifdef DOMAIN
-#undef DOMAIN
-#endif
-#ifdef OVERFLOW
-#undef OVERFLOW
-#endif
-#ifdef UNDERFLOW
-#undef UNDERFLOW
-#endif
-#ifdef TLOSS
-#undef TLOSS
-#endif
-#ifdef PLOSS
-#undef PLOSS
-#endif
-#include "OEM_generated.h"
-#include "oem_fb_builder.hpp"
 
-namespace ps = provider_source;
+namespace R = sdn::runtime;
 
 // ── Provider constants ──────────────────────────────────────────────────────
 
@@ -71,23 +58,11 @@ namespace ps = provider_source;
 static const char* kDefaultSourceURL =
     "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt";
 
-// Node signing key slot (host-side only) used to sign published PNMs.
-static const char* kSigningKeySlot = "node-signing";
-// PubSub topic the module publishes PNM pointers on.
-static const char* kPublishTopic = "sdn/data-source/iss";
 
 // The ISS is a single, well-known object; NORAD 25544 is canonical and is NOT
 // carried in the OEM file, so it is a constant here (per the A2.2c FILE_ID
 // convention iss:OEM:25544:<epoch>).
 static const long kIssNoradCatId = 25544;
-
-extern "C" {
-// Guest allocator used by the host to pass request/response buffers.
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
 
 namespace {
 
@@ -228,77 +203,89 @@ std::vector<uint8_t> build_oem_fb(const OemMeta& m, const std::vector<StateLine>
                                         static_cast<int>(states.size()));
 }
 
-// ── Config (optional, from the invoke request payload) ───────────────────────
 
-struct PullConfig {
-    std::string source_url = kDefaultSourceURL;
-};
+// ── Typed contracts 1.0: node config, HttpRequest out, HttpResponse in, $OEM out ─────────────────
+// Config is plugin.getConfig through sdm_piv (one ModuleConfig, read in place); the fetch is the flow's
+// hostcap/http-request (an HttpRequest out, its HttpResponse back in); every frame is a FlatBuffer.
 
-PullConfig parse_config(const uint8_t* req, uint32_t len) {
-    PullConfig c;
-    if (req == nullptr || len == 0) return c;
-    size_t i = 0;
-    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-    if (i >= len || req[i] != '{') return c;  // binary PIV request leaves defaults intact
-    std::string json(reinterpret_cast<const char*>(req), len);
-    std::string url;
-    if (ps::json_string_field(json, "sourceUrl", &url) && !url.empty()) c.source_url = url;
-    return c;
+int fail(const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return 1;
 }
 
-// ── The pull method ──────────────────────────────────────────────────────────
+// A config string, or `fallback` when the key is absent or empty.
+std::string config_text(const sdm_piv::Config& config, const char* key, const char* fallback) {
+    const std::string_view v = config.string(key);
+    return v.empty() ? std::string(fallback) : std::string(v);
+}
 
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
-    ps::HttpResult src = ps::http_get(cfg.source_url);
+// One GET HttpRequest (HREQ) on `port`, as the legacy ps::http_get asked for it (method and URL only).
+int push_get(const char* port, const std::string& url) {
+    flatbuffers::FlatBufferBuilder b(256 + url.size());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str()));
+    return plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, b.GetBufferPointer(), b.GetSize());
+}
 
-    // Emit an $OEM STREAM (in-memory, never stored): [u32le count] then
-    // count x ( [u32le len][non-size-prefixed $OEM] ). ISS is a single object.
-    std::string stream(4, '\0');
-    uint32_t count = 0;
-    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
-        s[at + 0] = static_cast<char>(v & 0xFF);
-        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
-    };
-
-    if (src.status == 200 && !src.body.empty()) {
-        OemMeta m;
-        std::vector<StateLine> states;
-        std::string content(src.body.begin(), src.body.end());
-        parse_oem(content, &m, &states);
-        if (!states.empty()) {
-            std::vector<uint8_t> oem = build_oem_fb(m, states);
-            if (!oem.empty()) {
-                const size_t hdr = stream.size();
-                stream.append(4, '\0');
-                put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-                stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-                count++;
-            }
-        }
+// The HttpResponse (HRSP) on `port`: STATUS 200 with a body, or nullptr with the error set (a transport ERROR, another
+// status or an empty body fails closed, as the legacy fetch did).
+const R::HttpResponse* response_on(const char* port, const char* what) {
+    const int32_t index = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* f = index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
+    if (!f || !f->payload || !f->payload_length) {
+        fail("missing-response-frame", std::string("an HttpResponse frame is required on '") + port + "'");
+        return nullptr;
     }
+    flatbuffers::Verifier verifier(f->payload, f->payload_length, 64, 1000000, false);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        fail("invalid-response-frame", std::string("the '") + port + "' frame is not an HttpResponse (HRSP)");
+        return nullptr;
+    }
+    const R::HttpResponse* r = R::GetHttpResponse(f->payload);
+    const std::string url = r->URL() ? r->URL()->str() : std::string();
+    if (r->ERROR() && r->ERROR()->size()) {
+        fail("fetch-failed", std::string(what) + " " + url + ": " + r->ERROR()->str());
+        return nullptr;
+    }
+    if (r->STATUS() != 200 || !r->BODY() || r->BODY()->size() == 0) {
+        fail("fetch-empty", std::string(what) + " " + url + " returned HTTP status " + std::to_string(r->STATUS()) +
+                                (r->BODY() && r->BODY()->size() ? "" : " with no body"));
+        return nullptr;
+    }
+    return r;
+}
 
-    put_u32le(stream, 0, count);
-    return stream;
+std::string body_of(const R::HttpResponse& r) {
+    return std::string(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size());
+}
+
+// One $OEM FlatBuffer (not size-prefixed) on "oem".
+int push_oem(const std::vector<uint8_t>& oem) {
+    return plugin_push_output_ex("oem", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
+                                 static_cast<uint32_t>(oem.size()));
 }
 
 }  // namespace
 
 extern "C" {
 
-// Canonical streaming invoke entrypoint. The TIMERS `pull` entry (and any manual
-// invoke) triggers a fetch+parse+store+sign+publish cycle for the single ISS OEM.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pull(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
-    }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+// request: a TimerTick (its fields are not read) -> the GET of the ISS OEM (config sourceUrl, default NASA's).
+int request(void) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    return push_get("request", config_text(config, "sourceUrl", kDefaultSourceURL)) < 0 ? 1 : 0;
+}
+
+// emit: the HttpResponse of that GET -> one $OEM (verbose, EME2000/UTC as declared). Nothing is stored.
+int emit(void) {
+    const R::HttpResponse* response = response_on("response", "the ISS OEM");
+    if (!response) return 1;
+    OemMeta m;
+    std::vector<StateLine> states;
+    parse_oem(body_of(*response), &m, &states);
+    if (states.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider: the OEM has no state vectors");
+    const std::vector<uint8_t> oem = build_oem_fb(m, states);
+    if (oem.empty()) return fail("fetch-empty", "no fittable $OEM objects from provider");
+    return push_oem(oem) < 0 ? 1 : 0;
 }
 
 }  // extern "C"

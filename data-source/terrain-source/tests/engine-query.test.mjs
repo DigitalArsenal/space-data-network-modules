@@ -27,7 +27,21 @@ import { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/
 
 import { publishedStandardsRoot } from "../sds-headers.mjs";
 
-import { buildGeoTiff, decodeDtt, splitStream } from "./helpers.mjs";
+import {
+  buildGeoTiff,
+  decodeDtt,
+  splitStream,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -52,25 +66,23 @@ const CONFIG = {
   terrain_available: [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]],
 };
 
-const frame = (portId, bytes) => ({
-  portId,
-  typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-  payload: bytes,
-});
-const jsonFrame = (portId, value) => frame(portId, encoder.encode(JSON.stringify(value)));
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 async function invoke(t, methodId, inputs) {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return CONFIG;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
   });
   t.after(() => harness.destroy());
-  return harness.invoke({ methodId, inputs });
+  return invokeTyped(harness, { methodId, inputs });
 }
 
 // Two real records at two addresses, from the module's own encoder.
@@ -85,7 +97,7 @@ async function encodeRecords(t) {
     heightFn: (px, py) => 100 + px + 2 * py,
   });
   const response = await invoke(t, "tile", [
-    jsonFrame("plan", {
+    typedFrame("plan", {
       tilesetId: "spaceaware-terrain",
       level: 8,
       gridSize: 33,
@@ -101,7 +113,7 @@ async function encodeRecords(t) {
         license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
       },
     }),
-    jsonFrame("dem", { status: 200, headers: {}, bodyB64: Buffer.from(tiff).toString("base64") }),
+    granuleFrame("dem", tiff, 200),
   ]);
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const records = response.outputs.find((o) => o.portId === "records").payload;
@@ -124,7 +136,7 @@ async function routedQuery(t, level, x, y) {
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const query = response.outputs.find((o) => o.portId === "query");
   assert.ok(query, "route must emit the store query for a real address");
-  return JSON.parse(decoder.decode(query.payload));
+  return decodeFsoQuery(query.payload);
 }
 
 // SCHEMA TEXT, COMMENTS REMOVED — and that is not tidying.

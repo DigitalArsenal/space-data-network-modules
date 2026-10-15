@@ -10,27 +10,17 @@
 //   unitRoles          the roles of one unit of a partitioned screen
 //
 // This file builds frames and moves bytes; all geometry is in the module.
-import { blockFrame, control, refineCandidates, sds, sortTriples } from './allVsAll.mjs';
+import { blockFrame, refineCandidates, sds, sortTriples } from './allVsAll.mjs';
+import { candidateTriples, gridFrame, gridOf, rolesFrame, searchReport } from './scrFrames.mjs';
+
+export { rolesFrame };
 
 export const ROLE = Object.freeze({ SECONDARY: 0, PRIMARY: 1, SKIP: 2 });
-const GRID = 'application/vnd.sdn.ca-coarse-grid';
-const ROW_BYTES = 32;   // f32 (x, y, z, D, vx, vy, vz, 0)
-const BAND_BYTES = 8;   // f32 (lo, hi)
+const ROW_FLOATS = 8;    // f32 (x, y, z, D, vx, vy, vz, 0)
+const BAND_FLOATS = 2;   // f32 (lo, hi)
 
 const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
-const header = (frame) => {
-  const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
-  return { first: view.getUint32(4, true), count: view.getUint32(8, true), objects: view.getUint32(12, true) };
-};
-
-/** The CAR1 frame of a role per object (ROLE values). */
-export function rolesFrame(roles) {
-  const bytes = new Uint8Array(8 + roles.length);
-  bytes.set([0x43, 0x41, 0x52, 0x31]);   // "CAR1"
-  new DataView(bytes.buffer).setUint32(4, roles.length, true);
-  bytes.set(roles, 8);
-  return bytes;
-}
+const floats = (bytes) => new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 
 /**
  * The coarse grid of one window, as coarse_grid returns it in blocks: the
@@ -40,7 +30,7 @@ export function rolesFrame(roles) {
  * @param {Uint8Array} o.request  $CQR WINDOW_REQUEST on the resident index.
  * @param {number} [o.blockSteps=32]  Coarse steps per call (at most 256).
  * @returns {Promise<{blocks: Uint8Array[], excluded: Map<number, number>, objects: number, lastStep: number}>}
- *   CAG1 frames in step order, and index -> first failing JD for the objects
+ *   $SCR GRID records in step order, and index -> first failing JD for the objects
  *   the window cannot evaluate.
  */
 export async function sampleWindowGrid(o) {
@@ -50,9 +40,9 @@ export async function sampleWindowGrid(o) {
   for (let first = 0; lastStep === null || first <= lastStep;) {
     const count = lastStep === null ? 1 : Math.min(blockSteps, lastStep - first + 1);
     const response = await o.invoke('coarse_grid', [sds('request', 'CQR', o.request),
-      control('block', 'application/vnd.sdn.ca-grid-block', blockFrame(first, count))]);
+      sds('block', 'SCR', blockFrame(first, count))]);
     if (response.statusCode !== 0) throw new Error(`coarse_grid: ${response.errorCode}: ${response.errorMessage}`);
-    const report = JSON.parse(new TextDecoder().decode(port(response.outputs, 'report')));
+    const report = searchReport(port(response.outputs, 'report'));
     lastStep = report.last_step;
     objects = report.objects;
     for (const x of report.excluded) {
@@ -79,37 +69,36 @@ export function spliceGridRows(grid, part, rows) {
   let objects = grid.objects;
   for (const r of rows) objects = Math.max(objects, r + 1);
   grid.blocks = grid.blocks.map((frame, b) => {
-    const g = header(frame), p = header(part.blocks[b]);
-    if (g.first !== p.first || g.count !== p.count || p.objects !== rows.length) throw new Error(`Block ${b} differs between the grids.`);
-    let out = frame;
-    if (objects !== g.objects) {
-      // Grow: copy each step's rows and the bands; new rows are NaN.
-      out = new Uint8Array(16 + g.count * objects * ROW_BYTES + objects * BAND_BYTES);
-      new Float32Array(out.buffer, 16).fill(Number.NaN);
-      out.set(frame.subarray(0, 16));
-      new DataView(out.buffer).setUint32(12, objects, true);
-      for (let s = 0; s < g.count; s++) {
-        out.set(frame.subarray(16 + s * g.objects * ROW_BYTES, 16 + (s + 1) * g.objects * ROW_BYTES), 16 + s * objects * ROW_BYTES);
-      }
-      out.set(frame.subarray(16 + g.count * g.objects * ROW_BYTES), 16 + g.count * objects * ROW_BYTES);
-    }
-    const from = part.blocks[b];
-    for (let s = 0; s < g.count; s++) {
+    const g = gridOf(frame), p = gridOf(part.blocks[b]);
+    if (g.firstStep !== p.firstStep || g.stepCount !== p.stepCount || p.objects !== rows.length) throw new Error(`Block ${b} differs between the grids.`);
+    // Rows of the grown grid not yet written are NaN.
+    const states = new Float32Array(g.stepCount * objects * ROW_FLOATS).fill(Number.NaN);
+    const bands = new Float32Array(objects * BAND_FLOATS).fill(Number.NaN);
+    const gs = floats(g.states), gb = floats(g.bands), ps = floats(p.states), pb = floats(p.bands);
+    for (let s = 0; s < g.stepCount; s++) {
+      states.set(gs.subarray(s * g.objects * ROW_FLOATS, (s + 1) * g.objects * ROW_FLOATS), s * objects * ROW_FLOATS);
       for (let k = 0; k < rows.length; k++) {
-        const at = 16 + (s * p.objects + k) * ROW_BYTES;
-        out.set(from.subarray(at, at + ROW_BYTES), 16 + (s * objects + rows[k]) * ROW_BYTES);
+        const at = (s * p.objects + k) * ROW_FLOATS;
+        states.set(ps.subarray(at, at + ROW_FLOATS), (s * objects + rows[k]) * ROW_FLOATS);
       }
     }
-    for (let k = 0; k < rows.length; k++) {
-      const at = 16 + g.count * p.objects * ROW_BYTES + k * BAND_BYTES;
-      out.set(from.subarray(at, at + BAND_BYTES), 16 + g.count * objects * ROW_BYTES + rows[k] * BAND_BYTES);
-    }
-    return out;
+    bands.set(gb);
+    for (let k = 0; k < rows.length; k++) bands.set(pb.subarray(k * BAND_FLOATS, (k + 1) * BAND_FLOATS), rows[k] * BAND_FLOATS);
+    return gridFrame({ firstStep: g.firstStep, stepCount: g.stepCount, objects, stepS: g.stepS, states, bands });
   });
   grid.objects = objects;
   for (const row of rows) grid.excluded.delete(row);
   for (const [k, jd] of part.excluded) grid.excluded.set(rows[k], jd);
   return grid;
+}
+
+/** A window grid of `objects` unwritten (NaN) rows over the blocks of `like`. */
+export function emptyGrid(like, objects) {
+  return { excluded: new Map(), objects, blocks: like.blocks.map((frame) => {
+    const g = gridOf(frame);
+    return gridFrame({ firstStep: g.firstStep, stepCount: g.stepCount, objects, stepS: g.stepS,
+      states: new Float32Array(g.stepCount * objects * ROW_FLOATS).fill(Number.NaN), bands: new Float32Array(objects * BAND_FLOATS).fill(Number.NaN) });
+  }) };
 }
 
 /**
@@ -123,25 +112,24 @@ export function spliceGridRows(grid, part, rows) {
  * @param {Function} o.decodeCatalogResult
  * @param {Uint8Array} o.request  $CQR WINDOW_REQUEST of the window (search_grid reads its controls only).
  * @param {{blocks: Uint8Array[], excluded: Map<number, number>, objects: number}} o.grid
- * @param {Uint8Array} [o.roles]  A role per object (ROLE); absent: all-vs-all.
+ * @param {ArrayLike<number>} [o.roles]  A role per object (ROLE); absent: all-vs-all.
  * @param {(rows: number[]) => Promise<{request: Uint8Array, release?: () => Promise<void>}>} o.refineIndex
  *   A resident index whose sources are those grid rows, in that order, and its window's WINDOW_REQUEST.
  * @param {(payload: Uint8Array) => void} [o.onResult]  Each refine result frame, in order.
  */
 export async function screenStoredWindow(o) {
   const { invoke, grid } = o;
-  const scope = o.roles ? [control('roles', 'application/vnd.sdn.ca-roles', rolesFrame(o.roles))] : [];
+  const scope = o.roles ? [sds('roles', 'SCR', rolesFrame(o.roles))] : [];
   const timings = { searchMs: 0, refineMs: 0 };
   const parts = [];
   let candidates = 0;
   for (const frame of grid.blocks) {
     const t = performance.now();
-    const response = await invoke('search_grid', [sds('request', 'CQR', o.request), control('grid', GRID, frame), ...scope]);
+    const response = await invoke('search_grid', [sds('request', 'CQR', o.request), sds('grid', 'SCR', frame), ...scope]);
     if (response.statusCode !== 0) throw new Error(`search_grid: ${response.errorCode}: ${response.errorMessage}`);
-    const out = port(response.outputs, 'candidates');
-    const n = new DataView(out.buffer, out.byteOffset, out.byteLength).getUint32(4, true);
-    parts.push(new Uint32Array(out.slice(8, 8 + n * 12).buffer));
-    candidates += n;
+    const found = candidateTriples(port(response.outputs, 'candidates'));
+    parts.push(found);
+    candidates += found.length / 3;
     timings.searchMs += performance.now() - t;
   }
   const all = new Uint32Array(candidates * 3);

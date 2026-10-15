@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
   "name": "Ephemeris Source Retriever",
-  "version": "0.1.5",
-  "description": "Portable C++ ephemeris discovery and raw source descriptor processing. Network replies are explicit frames; scheduled acquisition uses the companion host adapter.",
+  "version": "0.2.0",
+  "description": "Portable C++ ephemeris discovery and raw source descriptor processing (typed contracts 1.0: FlatBuffers only, no JSON between modules, no host imports). $SRG (data source registry) carries the registry, retrieval settings, discovery queues and single jobs; HttpRequest/HttpResponse carry the fetches; $NCD and $CAT the descriptors and declared coverage. Network replies are explicit HttpResponse frames; scheduled acquisition uses the companion host adapter.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -22,6 +22,7 @@
     {
       "methodId": "describe_sources",
       "displayName": "Describe Sources",
+      "description": "The compiled provider registry (sources.json, mirrored from starlink_downloader) as one $SRG with PROVIDERS and the upstream repository, revision and path.",
       "inputPorts": [],
       "outputPorts": [
         {
@@ -29,19 +30,19 @@
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG: PROVIDERS (SOURCE_ID, NAME, OPERATOR, FORMAT, ORIGINS, REFRESH_INTERVAL_S, CREDENTIALED) and UPSTREAM_REPOSITORY / UPSTREAM_REVISION / REGISTRY_PATH.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-sources",
+              "setId": "srg-registry",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "One size-prefixed $SRG: PROVIDERS (SOURCE_ID, NAME, OPERATOR, FORMAT, ORIGINS, REFRESH_INTERVAL_S, CREDENTIALED) and UPSTREAM_REPOSITORY / UPSTREAM_REVISION / REGISTRY_PATH."
             }
           ]
         }
@@ -51,26 +52,27 @@
     },
     {
       "methodId": "plan_source_requests",
-      "displayName": "Plan source discovery requests",
+      "displayName": "Plan Source Requests",
+      "description": "Retrieval settings -> the first-round listing requests of the provider (GET HttpRequests with the settings' timeout and byte budget, CONTEXT the settings $SRG). A direct-URL provider needs none.",
       "inputPorts": [
         {
-          "portId": "config",
+          "portId": "settings",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG whose SETTINGS name the provider (SOURCE_ID) and the limits: EPOCH_MS (0 = now), TIMEOUT_MS, MAX_BYTES, MAX_RUNTIME_MS; a zero field takes the default.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-config",
+              "setId": "srg-settings",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "One size-prefixed $SRG whose SETTINGS name the provider (SOURCE_ID) and the limits: EPOCH_MS (0 = now), TIMEOUT_MS, MAX_BYTES, MAX_RUNTIME_MS; a zero field takes the default."
             }
           ]
         }
@@ -78,22 +80,22 @@
       "outputPorts": [
         {
           "portId": "requests",
-          "required": true,
-          "minStreams": 1,
-          "maxStreams": 1,
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 16,
+          "description": "One GET HttpRequest (HREQ) per listing URL, CONTEXT the settings $SRG.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-resources",
+              "setId": "http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded credential-free HTTP request descriptors for generic browser orchestration."
-              }
+              "description": "One GET HttpRequest (HREQ) per listing URL, CONTEXT the settings $SRG."
             }
           ]
         }
@@ -104,25 +106,26 @@
     {
       "methodId": "discover_sources",
       "displayName": "Discover Sources",
+      "description": "Retrieval settings plus the listings' HttpResponses (matched by URL; a 404 GPS-week listing permits previous-week fallback) -> the discovery queue as one $SRG with RESOURCES, and one GET HttpRequest per resource whose CONTEXT is its job ($SRG with that one resource).",
       "inputPorts": [
         {
-          "portId": "config",
+          "portId": "settings",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG whose SETTINGS name the provider (SOURCE_ID) and the limits: EPOCH_MS (0 = now), TIMEOUT_MS, MAX_BYTES, MAX_RUNTIME_MS; a zero field takes the default.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-config",
+              "setId": "srg-settings",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "One size-prefixed $SRG whose SETTINGS name the provider (SOURCE_ID) and the limits: EPOCH_MS (0 = now), TIMEOUT_MS, MAX_BYTES, MAX_RUNTIME_MS; a zero field takes the default."
             }
           ]
         },
@@ -130,20 +133,20 @@
           "portId": "responses",
           "required": false,
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 128,
+          "description": "The HttpResponses (HRSP) of the planned listing requests, one per URL; none for a direct-URL provider.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-responses",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "The HttpResponses (HRSP) of the planned listing requests, one per URL; none for a direct-URL provider."
             }
           ]
         }
@@ -154,19 +157,40 @@
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG: RESOURCES (SOURCE_ID, RESOURCE_ID, URL, FORMAT, DISCOVERED_AT_MS) in retrieval order, GENERATED_AT_MS the discovery epoch.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-resources",
+              "setId": "srg-queue",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "One size-prefixed $SRG: RESOURCES (SOURCE_ID, RESOURCE_ID, URL, FORMAT, DISCOVERED_AT_MS) in retrieval order, GENERATED_AT_MS the discovery epoch."
+            }
+          ]
+        },
+        {
+          "portId": "requests",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "description": "One GET HttpRequest (HREQ) per resource, CONTEXT its job: a size-prefixed $SRG with that one resource.",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One GET HttpRequest (HREQ) per resource, CONTEXT its job: a size-prefixed $SRG with that one resource."
             }
           ]
         }
@@ -177,25 +201,26 @@
     {
       "methodId": "describe_artifact",
       "displayName": "Describe Artifact",
+      "description": "A resource's HttpResponse (job in CONTEXT, the raw file as BODY) and the content store's receipt -> one canonical size-prefixed $NCD (format, byte length, SHA-256, source CID). The URL must lie in the provider's origins.",
       "inputPorts": [
         {
-          "portId": "resource",
+          "portId": "response",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "The HttpResponse (HRSP) of one resource: STATUS 200 with BODY the raw file verbatim, CONTEXT the job - a size-prefixed $SRG with exactly one RESOURCES entry (as discover_sources puts it in the request).",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-resource",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
+              "description": "The HttpResponse (HRSP) of one resource: STATUS 200 with BODY the raw file verbatim, CONTEXT the job - a size-prefixed $SRG with exactly one RESOURCES entry (as discover_sources puts it in the request)."
             }
           ]
         },
@@ -204,40 +229,19 @@
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG with exactly one RECEIPTS entry: the CID the content store gave the raw bytes.",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-receipt",
+              "setId": "srg-receipt",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
-            }
-          ]
-        },
-        {
-          "portId": "body",
-          "required": true,
-          "minStreams": 1,
-          "maxStreams": 1,
-          "acceptedTypeSets": [
-            {
-              "setId": "ephemeris-body",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.ephemeris-source-file",
-                "detail": "Exact bytes of the resource format named in the accompanying discovery descriptor: Starlink MEME, OneWeb LTEF, Planet states/TLE, CCSDS OEM KVN, SES I11, Intelsat TXT, Telesat CSV, CSS OEM ZIP, compressed SP3, ESA CPF or EUMETSAT TLE JavaScript. No SDS identity is asserted for foreign source bytes."
-              }
+              "description": "One size-prefixed $SRG with exactly one RECEIPTS entry: the CID the content store gave the raw bytes."
             }
           ]
         }
@@ -245,9 +249,10 @@
       "outputPorts": [
         {
           "portId": "descriptor",
-          "required": false,
-          "minStreams": 0,
-          "maxStreams": 64,
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "description": "Canonical size-prefixed $NCD.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd",
@@ -255,10 +260,11 @@
                 {
                   "schemaName": "NCD.fbs",
                   "fileIdentifier": "$NCD",
-                  "rootTypeName": "NCD"
+                  "rootTypeName": "NCD",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical size-prefixed SDS record."
+              "description": "Canonical size-prefixed $NCD."
             }
           ]
         }
@@ -268,47 +274,27 @@
     },
     {
       "methodId": "describe_coverage",
-      "displayName": "Describe primary object coverage",
+      "displayName": "Describe Coverage",
+      "description": "A resource's HttpResponse (job in CONTEXT naming its FORMAT, the raw file as BODY) -> the international designators declared in complete CCSDS OEM metadata or in checksummed TLE pairs, as size-prefixed $CAT records; nothing for other formats.",
       "inputPorts": [
         {
-          "portId": "resource",
+          "portId": "response",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "The HttpResponse (HRSP) of one resource: STATUS 200 with BODY the raw file verbatim, CONTEXT the job - a size-prefixed $SRG with exactly one RESOURCES entry (as discover_sources puts it in the request).",
           "acceptedTypeSets": [
             {
-              "setId": "ephemeris-resource",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
-              }
-            }
-          ]
-        },
-        {
-          "portId": "body",
-          "required": true,
-          "minStreams": 1,
-          "maxStreams": 1,
-          "acceptedTypeSets": [
-            {
-              "setId": "ephemeris-body",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.ephemeris-source-file",
-                "detail": "Exact bytes of the resource format named in the accompanying discovery descriptor: Starlink MEME, OneWeb LTEF, Planet states/TLE, CCSDS OEM KVN, SES I11, Intelsat TXT, Telesat CSV, CSS OEM ZIP, compressed SP3, ESA CPF or EUMETSAT TLE JavaScript. No SDS identity is asserted for foreign source bytes."
-              }
+              "description": "The HttpResponse (HRSP) of one resource: STATUS 200 with BODY the raw file verbatim, CONTEXT the job - a size-prefixed $SRG with exactly one RESOURCES entry (as discover_sources puts it in the request)."
             }
           ]
         }
@@ -318,17 +304,20 @@
           "portId": "catalog",
           "required": false,
           "minStreams": 0,
-          "maxStreams": 64,
+          "maxStreams": 1,
+          "description": "Size-prefixed $CAT records (OBJECT_ID, OBJECT_NAME), concatenated.",
           "acceptedTypeSets": [
             {
-              "setId": "coverage-cat",
+              "setId": "sds-cat",
               "allowedTypes": [
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
-              ]
+              ],
+              "description": "Size-prefixed $CAT records (OBJECT_ID, OBJECT_NAME), concatenated."
             }
           ]
         }
@@ -339,9 +328,34 @@
   ],
   "schemasUsed": [
     {
+      "schemaName": "SRG.fbs",
+      "fileIdentifier": "$SRG",
+      "rootTypeName": "SRG",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
       "schemaName": "NCD.fbs",
       "fileIdentifier": "$NCD",
-      "rootTypeName": "NCD"
+      "rootTypeName": "NCD",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
     }
   ]
 }

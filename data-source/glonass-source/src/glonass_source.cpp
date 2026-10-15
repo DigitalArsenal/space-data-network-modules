@@ -2,11 +2,10 @@
  * GLONASS precise ephemeris (IAC SP3) data-source module
  * (A2.2c-2, fourth Tier-1 adapter on the shared provider template).
  *
- * On a TIMERS-driven `pull` this fetches a GLONASS precise ephemeris from the
+ * For each run this fetches a GLONASS precise ephemeris from the
  * Russian Information-Analytical Center (IAC), an SP3-d file, and for each
  * GLONASS satellite (SP3 id `Rnn`) emits a schema-exact SDS **OEM** record with
- * the state-vector series, stores it, signs its content id, and publishes a
- * schema-exact PNM pointer. The OEM/verbose skeleton mirrors the ISS adapter;
+ * the state-vector series. The OEM/verbose skeleton mirrors the ISS adapter;
  * only the SP3 parse stays here.
  *
  * ─── FRAME / TIME (honest, preserved AS DECLARED — with a mission correction) ─
@@ -22,7 +21,7 @@
  * DECLARES: REFERENCE_FRAME = the SP3 coordinate-system field (e.g. "IGS20"),
  * TIME_SYSTEM = the SP3 time-system field (e.g. "GPS"). It does NOT relabel to
  * PZ-90.11 and does NOT transform frames — the OD module owns any frame transform
- * (A2.2a). The raw SP3 bytes are bound into signed provenance by SHA-256.
+ * (A2.2a). 
  *
  * ─── REPRESENTATION: position-only (no fabricated velocity) ──────────────────
  * Every IAC SP3 sampled is POSITION-ONLY (P records only; no V/velocity records).
@@ -33,7 +32,15 @@
  * NOT invalidate the position). An absent position (SP3 sentinel 0.000000 on all
  * of X/Y/Z) is skipped.
  *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * TYPED CONTRACTS 1.0 (FlatBuffers only, no JSON, no base64): the module makes no
+ * fetch and no store itself. `request` turns the flow's TimerTick (TICK) into a GET
+ * HttpRequest (HREQ) for hostcap/http-request; `emit` turns the
+ * HttpResponse (HRSP) into $OEM FlatBuffers on "oem", consumed in memory by
+ * analysis/od.fit. Nothing is stored, signed or published (the former `pull`
+ * path declared a $PNM it never produced and is gone). Node config (sourceUrl, objectCap) is
+ * plugin.getConfig through sdm_piv (one ModuleConfig, read in place), the only
+ * hostcall. A transport error, another status than 200, an empty body or a
+ * file with nothing fittable fails closed (fetch-failed / fetch-empty).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -41,37 +48,21 @@
 #include <string>
 #include <vector>
 
-#include "provider_source.hpp"
+#include <string_view>
+
+#include <HttpRequest_generated.h>
+#include <HttpResponse_generated.h>
+#include <typedHostcall.hpp>
 
 // SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
 #include <cmath>
-#ifdef SING
-#undef SING
-#endif
-#ifdef DOMAIN
-#undef DOMAIN
-#endif
-#ifdef OVERFLOW
-#undef OVERFLOW
-#endif
-#ifdef UNDERFLOW
-#undef UNDERFLOW
-#endif
-#ifdef TLOSS
-#undef TLOSS
-#endif
-#ifdef PLOSS
-#undef PLOSS
-#endif
-#include "OEM_generated.h"
-#include "oem_fb_builder.hpp"
 
-namespace ps = provider_source;
+namespace R = sdn::runtime;
 
 // ── Provider constants ──────────────────────────────────────────────────────
 
 // IAC precise ephemeris, rolling "latest" product (SP3-d), fetched via the host
-// `http` capability (ps::http_get). TRANSPORT (2026-07-19 re-verified): every IAC
+// hostcap/http-request (the HttpRequest `request` emits). TRANSPORT (2026-07-19 re-verified): every IAC
 // HTTP/HTTPS frontend is dead — www.glonass-iac.ru => 502, ftp.glonass-iac.ru
 // speaks only ftp (http/https connect fails) — so the ONLY live source is this
 // ftp:// product (curl on the node => 226). The kubo host `http` cap uses net/http,
@@ -85,21 +76,12 @@ namespace ps = provider_source;
 static const char* kDefaultSp3URL =
     "ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/LATEST/Final.sp3";
 
-static const char* kSigningKeySlot = "node-signing";
-static const char* kPublishTopic = "sdn/data-source/glonass";
 
 // One record per GLONASS satellite. The DEFAULT is UNLIMITED — the WASM-only OD
 // flow sends no per-run cap, so a default run emits the WHOLE constellation
 // (~21-24 sats). `objectCap` stays an OPTIONAL invoke override: a positive value
 // caps; <=0 means the whole constellation.
 static const long kDefaultObjectCap = 0;  // 0 => unlimited (whole constellation)
-
-extern "C" {
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
 
 namespace {
 
@@ -281,124 +263,101 @@ std::vector<uint8_t> build_oem_fb(const SatEphem& sat, const std::string& object
                                         static_cast<int>(full.size()));
 }
 
-std::string build_oem_record(const Sp3Meta& m, const SatEphem& sat,
-                             const std::string& object_name) {
-    const std::string& start = sat.states.empty() ? std::string() : sat.states.front().epoch;
-    const std::string& stop = sat.states.empty() ? std::string() : sat.states.back().epoch;
-    std::string s;
-    s.reserve(sat.states.size() * 90 + 640);
-    s += "{";
-    s += "\"CCSDS_OEM_VERS\":2.0,";
-    s += "\"CREATION_DATE\":\"" + ps::json_escape(m.creation_date) + "\",";
-    s += "\"ORIGINATOR\":\"" + ps::json_escape(m.agency.empty() ? std::string("IAC") : m.agency) + "\",";
-    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
-    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
-    s += "\"COMMENT\":\"IAC GLONASS precise SP3-" + ps::json_escape(m.version) +
-         " ephemeris. REFERENCE_FRAME + TIME_SYSTEM preserved AS DECLARED in the SP3 header ("
-         + ps::json_escape(m.coord_system) + " / " + ps::json_escape(m.time_system) +
-         "): IAC's precise product is IGS20 (an ITRF2020 realization) / GPS time, NOT PZ-90.11 / "
-         "GLONASS time (that is the broadcast-nav frame). OD owns any frame transform (A2.2a). "
-         "Position-only: SP3 has no velocity records (STATE_VECTOR_SIZE=3); clock dropped "
-         "(not orbital). OBJECT_ID/NORAD_CAT_ID absent (SP3 carries only the GLONASS slot id).\",";
-    s += "\"OBJECT_NAME\":\"" + ps::json_escape(object_name) + "\",";
-    s += "\"OBJECT_ID\":\"\",";                    // no international designator in SP3
-    s += "\"NORAD_CAT_ID\":0,";                    // GLONASS slot is not a NORAD id — not fabricated
-    s += "\"CENTER_NAME\":\"EARTH\",";
-    s += "\"REFERENCE_FRAME\":\"" + ps::json_escape(m.coord_system) + "\",";  // AS DECLARED
-    s += "\"TIME_SYSTEM\":\"" + ps::json_escape(m.time_system) + "\",";       // AS DECLARED
-    s += "\"START_TIME\":\"" + ps::json_escape(start) + "\",";
-    s += "\"USEABLE_START_TIME\":\"" + ps::json_escape(start) + "\",";
-    s += "\"USEABLE_STOP_TIME\":\"" + ps::json_escape(stop) + "\",";
-    s += "\"STOP_TIME\":\"" + ps::json_escape(stop) + "\",";
-    s += "\"STEP_SIZE\":0,";                        // verbose (explicit epoch per line)
-    s += "\"STATE_VECTOR_SIZE\":3,";                // position-only (no fabricated velocity)
-    s += "\"EPHEMERIS_DATA_LINES\":[";
-    for (size_t i = 0; i < sat.states.size(); ++i) {
-        const StateLine& st = sat.states[i];
-        if (i) s += ",";
-        s += "{\"EPOCH\":\"" + ps::json_escape(st.epoch) + "\",";
-        s += "\"X\":" + ps::double_to_json(st.x) + ",";
-        s += "\"Y\":" + ps::double_to_json(st.y) + ",";
-        s += "\"Z\":" + ps::double_to_json(st.z) + "}";
-    }
-    s += "]}]}";
-    return s;
+
+
+// ── Typed contracts 1.0: node config, HttpRequest out, HttpResponse in, $OEM out ─────────────────
+// Config is plugin.getConfig through sdm_piv (one ModuleConfig, read in place); the fetch is the flow's
+// hostcap/http-request (an HttpRequest out, its HttpResponse back in); every frame is a FlatBuffer.
+
+int fail(const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    return 1;
 }
 
-// ── Config (optional, from the invoke request payload) ───────────────────────
-
-struct PullConfig {
-    long object_cap = kDefaultObjectCap;  // <=0 => unlimited (whole constellation)
-    std::string source_url = kDefaultSp3URL;
-};
-
-PullConfig parse_config(const uint8_t* req, uint32_t len) {
-    PullConfig c;
-    if (req == nullptr || len == 0) return c;
-    size_t i = 0;
-    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-    if (i >= len || req[i] != '{') return c;  // binary PIV request leaves defaults intact
-    std::string json(reinterpret_cast<const char*>(req), len);
-    long cap = ps::json_number_field(json, "objectCap", -1);
-    if (cap > 0) c.object_cap = cap;
-    std::string url;
-    if (ps::json_string_field(json, "sourceUrl", &url) && !url.empty()) c.source_url = url;
-    return c;
+// A config string, or `fallback` when the key is absent or empty.
+std::string config_text(const sdm_piv::Config& config, const char* key, const char* fallback) {
+    const std::string_view v = config.string(key);
+    return v.empty() ? std::string(fallback) : std::string(v);
 }
 
-// ── The pull method ──────────────────────────────────────────────────────────
+// One GET HttpRequest (HREQ) on `port`, as the legacy ps::http_get asked for it (method and URL only).
+int push_get(const char* port, const std::string& url) {
+    flatbuffers::FlatBufferBuilder b(256 + url.size());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str()));
+    return plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, b.GetBufferPointer(), b.GetSize());
+}
 
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
-    ps::HttpResult src = ps::http_get(cfg.source_url);
-
-    // $OEM STREAM (in-memory, never stored): [u32le count] then count x
-    // ( [u32le len][non-size-prefixed $OEM] ). One $OEM per GLONASS satellite.
-    std::string stream(4, '\0');
-    uint32_t count = 0;
-    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
-        s[at + 0] = static_cast<char>(v & 0xFF);
-        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
-    };
-
-    if (src.status == 200 && !src.body.empty()) {
-        std::string content(src.body.begin(), src.body.end());
-        Sp3Meta meta;
-        std::vector<SatEphem> sats;
-        parse_sp3(content, &meta, &sats);
-        for (const SatEphem& sat : sats) {
-            if (sat.states.empty()) continue;
-            if (cfg.object_cap > 0 && static_cast<long>(count) >= cfg.object_cap) break;
-            std::string object_name = "GLONASS " + sat.sat_id;
-            std::vector<uint8_t> oem = build_oem_fb(sat, object_name);
-            if (oem.empty()) continue;
-            const size_t hdr = stream.size();
-            stream.append(4, '\0');
-            put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-            stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-            count++;
-        }
+// The HttpResponse (HRSP) on `port`: STATUS 200 with a body, or nullptr with the error set (a transport ERROR, another
+// status or an empty body fails closed, as the legacy fetch did).
+const R::HttpResponse* response_on(const char* port, const char* what) {
+    const int32_t index = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* f = index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
+    if (!f || !f->payload || !f->payload_length) {
+        fail("missing-response-frame", std::string("an HttpResponse frame is required on '") + port + "'");
+        return nullptr;
     }
+    flatbuffers::Verifier verifier(f->payload, f->payload_length, 64, 1000000, false);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        fail("invalid-response-frame", std::string("the '") + port + "' frame is not an HttpResponse (HRSP)");
+        return nullptr;
+    }
+    const R::HttpResponse* r = R::GetHttpResponse(f->payload);
+    const std::string url = r->URL() ? r->URL()->str() : std::string();
+    if (r->ERROR() && r->ERROR()->size()) {
+        fail("fetch-failed", std::string(what) + " " + url + ": " + r->ERROR()->str());
+        return nullptr;
+    }
+    if (r->STATUS() != 200 || !r->BODY() || r->BODY()->size() == 0) {
+        fail("fetch-empty", std::string(what) + " " + url + " returned HTTP status " + std::to_string(r->STATUS()) +
+                                (r->BODY() && r->BODY()->size() ? "" : " with no body"));
+        return nullptr;
+    }
+    return r;
+}
 
-    put_u32le(stream, 0, count);
-    return stream;
+std::string body_of(const R::HttpResponse& r) {
+    return std::string(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size());
+}
+
+// One $OEM FlatBuffer (not size-prefixed) on "oem".
+int push_oem(const std::vector<uint8_t>& oem) {
+    return plugin_push_output_ex("oem", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
+                                 static_cast<uint32_t>(oem.size()));
 }
 
 }  // namespace
 
 extern "C" {
 
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pull(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
+// request: a TimerTick (its fields are not read) -> the GET of the IAC SP3 (config sourceUrl, default IAC's latest).
+int request(void) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    return push_get("request", config_text(config, "sourceUrl", kDefaultSp3URL)) < 0 ? 1 : 0;
+}
+
+// emit: the HttpResponse of that GET -> one $OEM per GLONASS satellite with states, in file order, at most config
+// objectCap of them when it is positive (default: the whole constellation). Nothing is stored.
+int emit(void) {
+    const R::HttpResponse* response = response_on("response", "the GLONASS SP3");
+    if (!response) return 1;
+    const sdm_piv::Config config = sdm_piv::get_config();
+    const double cap_value = config.number("objectCap", static_cast<double>(kDefaultObjectCap));
+    const long object_cap = cap_value > 0 ? static_cast<long>(cap_value) : kDefaultObjectCap;
+    Sp3Meta meta;
+    std::vector<SatEphem> sats;
+    parse_sp3(body_of(*response), &meta, &sats);
+    long count = 0;
+    for (const SatEphem& sat : sats) {
+        if (sat.states.empty()) continue;
+        if (object_cap > 0 && count >= object_cap) break;
+        const std::vector<uint8_t> oem = build_oem_fb(sat, "GLONASS " + sat.sat_id);
+        if (oem.empty()) continue;
+        if (push_oem(oem) < 0) return 1;
+        count++;
     }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+    if (count == 0) return fail("fetch-empty", "no fittable $OEM objects from provider: the SP3 has no position records");
+    return 0;
 }
 
 }  // extern "C"

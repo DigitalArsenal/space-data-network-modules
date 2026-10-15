@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -35,7 +36,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const inlineStandards = ["LKS", "RFB"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
@@ -70,7 +71,10 @@ const compilation = await compileModuleFromSource({
   // memory.
   threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // plugin.getConfig (an SDS $PIV invocation through typedHostcall.hpp);
+  // symbols resolve at instantiation. The module-sdk runtime types (TimerTick,
+  // HttpRequest, HttpResponse, IngestRequest, FlowNotice) are staged by the
+  // SDK compiler.
   allowUndefinedImports: true,
 });
 

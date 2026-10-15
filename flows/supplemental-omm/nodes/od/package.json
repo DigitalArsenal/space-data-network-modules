@@ -1,9 +1,10 @@
 {
-  "name": "@sdn/supplemental-omm-od",
+  "name": "@digitalarsenal/sdn-supplemental-omm-od",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "build": "node build.mjs",
-    "test": "node --test ../../tests/od-node.test.mjs"
+    "build": "node ./build.mjs"
   }
 }

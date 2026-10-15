@@ -3,6 +3,9 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as flatbuffers from "flatbuffers";
+import { AtmosphericModelFamily, ATMT, HFC, HFCT } from "spacedatastandards.org/lib/js/HFC/main.js";
+
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import {
@@ -15,37 +18,25 @@ const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
 const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
-const REQUEST_FIXTURE_PATH = new URL(
-  "../tests/fixtures/request.altitude.json",
-  import.meta.url,
-);
 const FLOW_EXAMPLE_PATH = new URL(
   "../tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
   import.meta.url,
 );
 const HFC_ALLOWED_TYPES = [
-  { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC" },
-  {
-    schemaName: "HFC.fbs",
-    fileIdentifier: "$HFC",
-    rootTypeName: "HFC",
-    wireFormat: "aligned-binary",
-    requiredAlignment: 8,
-  },
+  { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC", wireFormat: "flatbuffer" },
 ];
 const SPW_ALLOWED_TYPES = [
-  { schemaName: "SPW.fbs", fileIdentifier: "$SPW", rootTypeName: "SPW" },
-  {
-    schemaName: "SPW.fbs",
-    fileIdentifier: "$SPW",
-    rootTypeName: "SPW",
-    wireFormat: "aligned-binary",
-    requiredAlignment: 8,
-  },
+  { schemaName: "SPW.fbs", fileIdentifier: "$SPW", rootTypeName: "SPW", wireFormat: "flatbuffer" },
 ];
 
+// A US76 HFC query at 10 km, the request the hosted-runtime example sends.
 function readFixtureBytes() {
-  return fs.readFileSync(REQUEST_FIXTURE_PATH);
+  const t = new HFCT();
+  t.ATMOSPHERE = new ATMT(AtmosphericModelFamily.USSA_XX, 1976);
+  t.ALTITUDE_M = [10_000];
+  const builder = new flatbuffers.Builder(256);
+  HFC.finishHFCBuffer(builder, t.pack(builder));
+  return builder.asUint8Array();
 }
 
 function createHarnessScenario(surface) {
@@ -53,13 +44,15 @@ function createHarnessScenario(surface) {
   const plan = generateManifestHarnessPlan({
     manifest,
     payloadForPort({ portId }) {
-      if (portId !== "request") {
+      if (portId !== "atmosphere") {
         return null;
       }
       return readFixtureBytes();
     },
   });
-  const scenario = plan.generatedCases.find((entry) => entry.surface === surface);
+  const scenario = plan.generatedCases.find(
+    (entry) => entry.surface === surface && entry.methodId === "query_atmosphere_state_batch",
+  );
   assert.ok(scenario, `missing ${surface} harness scenario`);
   return materializeHarnessScenario(scenario);
 }
@@ -73,16 +66,14 @@ function createInvokeRequest() {
 }
 
 function assertSuccessfulResponse(response) {
-  assert.equal(response.statusCode, 0);
+  assert.equal(response.statusCode, 0, response.errorMessage);
   assert.ok(response.errorCode === "" || response.errorCode === null);
   assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "response");
-
-  const payload = JSON.parse(new TextDecoder().decode(response.outputs[0].payload));
-  assert.equal(payload.model, "US76");
-  assert.equal(payload.altitudeM, 10000);
-  assert.ok(payload.state.density > 0);
-  assert.ok(payload.state.temperature > 200);
+  assert.equal(response.outputs[0].portId, "states");
+  const hfc = HFC.getRootAsHFC(new flatbuffers.ByteBuffer(response.outputs[0].payload));
+  assert.equal(hfc.ALTITUDE_M(0), 10000);
+  assert.ok(hfc.DENSITY_KG_PER_M3(0) > 0);
+  assert.ok(hfc.TEMPERATURE_K(0) > 200);
 }
 
 test("build publishes canonical browser and isomorphic artifact paths", () => {
@@ -169,10 +160,10 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
   assertSuccessfulResponse(response);
 });
 
-test("hosted-runtime example is wired to the canonical invoke contract", () => {
+test("hosted-runtime example is wired to the typed HFC query", () => {
   const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
   assert.equal(flow.nodes.length, 1);
   assert.equal(flow.nodes[0].pluginId, "atmosphere-model");
-  assert.equal(flow.nodes[0].methodId, "invoke");
-  assert.equal(flow.triggerBindings[0].targetPortId, "request");
+  assert.equal(flow.nodes[0].methodId, "query_atmosphere_state_batch");
+  assert.equal(flow.triggerBindings[0].targetPortId, "atmosphere");
 });

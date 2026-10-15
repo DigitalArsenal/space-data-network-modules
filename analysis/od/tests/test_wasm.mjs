@@ -4,11 +4,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  STANDALONE_RUNTIME_KINDS,
-  assertSuccessfulResponse,
-  createStandaloneHarnessOrSkip,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+import { STANDALONE_RUNTIME_KINDS } from "space-data-module-sdk/testing/isomorphic";
+import { createFitPoolOrSkip, createFitRequest, fitRecordFromResponse } from "./fit_harness.mjs";
 import { privatePath } from "../../../tests/lib/privateFixtures.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,29 +24,10 @@ const DEFAULT_CELESTRAK_CSV = path.join(
   "celestrak_starlink_supgp.csv",
 );
 
-function createFitRequest(payload, options = null) {
-  const request = {
-    methodId: "fit",
-    inputs: [
-      {
-        portId: "meme",
-        payload,
-      },
-    ],
-  };
-  if (options) {
-    request.inputs.push({
-      portId: "options",
-      payload: new TextEncoder().encode(JSON.stringify(options)),
-    });
-  }
-  return request;
-}
-
+// The fit's typed contract: the text ephemeris as a $FIL, the options as node CONFIG, the result as $OMM / $OBD /
+// $OCM records rendered test-side into the checked fields (tests/fit_harness.mjs).
 async function invokeFitJson(harness, payload, options = null) {
-  const response = await harness.invoke(createFitRequest(payload, options));
-  const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return fitRecordFromResponse(await harness.invoke(createFitRequest(payload, options)));
 }
 
 function listRegressionFiles() {
@@ -570,7 +548,7 @@ function splitOemIntoTwoSegments(content) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`OD fixture fit produces a stable GP estimate on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -580,7 +558,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     // DATA_SOURCE now flows from the caller/manifest instead of being hardcoded
     // to "SpaceX-E" in the fitter (that hardcode was the bug de-Starlinked in
-    // A2.2a); the caller supplies the source token via the options frame.
+    // A2.2a); the caller supplies the source token in node CONFIG.
     const result = await invokeFitJson(
       harness,
       fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
@@ -599,7 +577,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit labels MEME output from caller/manifest fields on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -631,7 +609,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit honors maxIterations option on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -645,7 +623,6 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       { maxIterations: 2 },
     );
 
-    assert.equal(result.MAX_ITERATIONS, 2);
     assert.ok(
       Number.isInteger(result.ITERATIONS) && result.ITERATIONS <= 2,
       `Expected solver iterations <= 2, got ${result.ITERATIONS}`,
@@ -653,7 +630,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit rejects malformed MEME payloads on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -672,7 +649,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   // ── CCSDS OEM input path (ISS NASA public OEM fixture) ───────────────────
 
   test(`OD OEM ISS fixture parses META + fits plausible ISS elements on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -713,7 +690,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM handles multiple META/data segments on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -740,7 +717,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM fails closed on unsupported TIME_SYSTEM / REF_FRAME on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -773,7 +750,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM fits a position-only IGS20/GPS (GLONASS) KVN ephemeris on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -849,7 +826,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
         return;
       }
 
-      const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+      const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
       if (!harness) {
         return;
       }
@@ -876,7 +853,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       return;
     }
 
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }

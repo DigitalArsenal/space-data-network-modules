@@ -3,6 +3,46 @@
 Empirical SGP4 prediction error by orbit regime and prediction age, in RTN,
 and the coverage tests that decide which strata's covariance is calibrated.
 
+## Wire contract (typed contracts 1.0)
+
+FlatBuffers only: no JSON travels between modules. Every model, accumulator,
+option, request and report port carries one SDS Orbit Error Model (`$ERM`)
+record (size-prefixed), with the arm of the port set:
+
+| Port | `$ERM` arm |
+| --- | --- |
+| `accumulate.options` | `STRATA_SETTINGS` (regimes, age bins, reference step, clip) |
+| `accumulate.prior`, `accumulate.accumulator`, `finalize.accumulator` | `ACCUMULATOR` |
+| `finalize.options` | `GATE` |
+| every `model` and `truth` port | `MODEL`: `StratifiedStatistics` (finalize, scale_model), `ElementSetModel` (E14's S3-KC, `data/e14-s3-kc.erm`), `HorizonFactors`, `PropagatorCovariance` (hpop_coverage) |
+| `scale_model.options` | `SCALE_OPTIONS` |
+| `screening_evaluation.options`, `screening_cases.options` | `SCREENING_SETTINGS` |
+| `screening_cases.cases` | `SCREENING_CASES` |
+| `screening_evaluation.report`, `screening_cases.report` | `SCREENING_REPORT` |
+| `hpop_arcs.options` / `hpop_arcs.plan`, `hpop_coverage.plan` / `hpop_coverage.predictions` / `hpop_coverage.options` / `hpop_coverage.report` | `ARC_OPTIONS` / `ARC_PLAN` / `ARC_PREDICTIONS` / `COVERAGE_OPTIONS` / `PROPAGATOR_COVERAGE` |
+| `common_epoch.options` (`REQUESTS`) and `.differences` (`RESULTS`) | `COMMON_EPOCH` |
+| `map_covariance.options` (`REQUESTS`) and `.covariance` (`RESULTS`) | `COVARIANCE_MAP` |
+| `pair_statistics.pairs` (`PAIRS`) and `.statistics` (`STATISTICS`) | `PAIR_STATISTICS` |
+| `fit_calibration.samples` (`SAMPLES`), `.options` (`METHOD`, `COVERAGE`, minimums) and `.calibration` (`STRATA`) | `CALIBRATION` |
+| `calibrate_covariance.objects` (`OBJECTS`) and `.covariance` (`RESULTS`) | `CALIBRATED_COVARIANCES` |
+| `dcp_covariance.request` and `.dcp` (`RESULTS`) | `CONSIDER_COVARIANCES` |
+| `noise_responses.request` and `.responses` (`RESULTS`) | `NOISE_RESPONSES` |
+| `fit_elements.options` (`OPTIONS`) and `.report` (`FITS`); `element_residuals.options` (`RESIDUAL_REQUESTS`) and `.residuals` (`RESIDUAL_RESULTS`) | `ELEMENT_FITS` |
+| `attach_covariance.report`, `attribute_maneuvers.report` | `ATTACH_REPORT` |
+| `attach_covariance.models` | `MODEL` records, any number |
+
+The products are `$OMM`, `$OCM` and `$MNV` with `$CVR` and `$PVN`, unchanged.
+The recipes of `attach_covariance` and `attribute_maneuvers` are node config
+(`plugin.getConfig`, one `ModuleConfig`; see below). `scripts/erm-codec.mjs`
+renders the records in the readable form this README describes (the form of
+`docs/*.json`) and encodes that form into records; the tests and scripts use
+it. Numbers pass through as the same doubles: on the test fixtures every
+number is bit-identical to the 0.6.0 JSON ports and every `$OMM`, `$OCM` and
+`$MNV` stream byte-identical (`GP_LEGACY_DIST=<0.6.0 dist> node --test
+tests/*.test.mjs` checks it). Not carried: the constant unit notes, the fit
+report's `elements` (the companion `$OMM` holds them), and a factor model's
+echo of each object's `horizon`.
+
 ## Methods
 
 ### `accumulate`
@@ -13,10 +53,10 @@ Inputs:
 - `reference` (optional): `$OEM` reference states (GCRF, UTC).
 - `model` (optional, needs `reference`): a model whose covariance each error
   is tested against.
-- `options` (optional): JSON.
+- `options` (optional): `STRATA_SETTINGS`.
 - `prior` (optional): an accumulator from an earlier batch.
 
-Output: `accumulator` (JSON).
+Output: `accumulator` (`ACCUMULATOR`).
 
 What it does:
 
@@ -61,7 +101,7 @@ What it does:
 
 ### `finalize`
 
-Input: `accumulator`. Output: `model` (JSON). Per stratum:
+Input: `accumulator`. Output: `model` (`MODEL`, form `StratifiedStatistics`). Per stratum:
 
 - count;
 - mean;
@@ -132,7 +172,7 @@ set's day). The host runs HPOP (`scripts/hpop-calibration.mjs`).
 
 ### `screening_cases`
 
-Inputs: `cases` (JSON: `pairs` of `{e1, c1, e2, c2}`, RTN position errors in
+Inputs: `cases` (`SCREENING_CASES`, readable as `pairs` of `{e1, c1, e2, c2}`, RTN position errors in
 km and positive definite position covariances as lower triangles RR, TR, TT,
 NR, NT, NN in km²) and `options` (as `screening_evaluation`). Output:
 `report`. The same rules and geometries as `screening_evaluation`, on pairs
@@ -140,7 +180,7 @@ the caller draws, each object with its own covariance.
 
 ### `common_epoch`
 
-Inputs: `elements`, `reference` (optional) and `options` (JSON `targets`).
+Inputs: `elements`, `reference` (optional) and `options` (`COMMON_EPOCH` `REQUESTS`, readable as `targets`).
 Output: `differences`. For each target, the listed element sets of one object
 are propagated by SGP4 to its epoch (backwards for a set after it), and each
 one's difference from an origin is given in the origin's RTN axes (GCRF, km,
@@ -153,7 +193,7 @@ km/s, prediction minus origin), with its age. The origin is:
 
 ### `map_covariance`
 
-Inputs: `elements` (the anchor sets) and `options` (JSON `requests`). Output:
+Inputs: `elements` (the anchor sets) and `options` (`COVARIANCE_MAP` `REQUESTS`, readable as `requests`). Output:
 `covariance`. Each request maps a 6×6 RTN covariance (lower triangle, km,
 km/s, in the RTN axes of the anchor's SGP4 state at `from`) to the `to`
 epochs, C(t) = B Φ B₀ᵀ C₀ B₀ Φᵀ Bᵀ, B the RTN rotations of the anchor's
@@ -254,7 +294,7 @@ Inputs:
   - Covariance lines at a state's epoch are its covariance, in `COV_REFERENCE_FRAME` (absent: the state frame; RSW, RTN, RIC or UVW: the state's own axes).
   - Every state goes to TEME: EME2000 through the IAU 2006 frame bias, then GCRF through `gcrfToTeme` (IAU 2006/2000A and the equation of the equinoxes).
 - `elements` (optional): a priori `$OMM` sets, the B* source or the starting elements.
-- `options` (JSON):
+- `options` (`ELEMENT_FITS` `OPTIONS`: `SHARED` settings and per-object `FITS`; readable as below):
   - span: `from`, `to`;
   - `epoch`: `first`, `last`, `middle` or an ISO instant;
   - `stepSeconds`: thins the fitted states;
@@ -265,7 +305,7 @@ Inputs:
   - OMM metadata;
   - `fits[]` with per-object overrides.
 
-Outputs: `elements`, one size-prefixed `$OMM` per converged fit; `report` (JSON).
+Outputs: `elements`, one size-prefixed `$OMM` per converged fit; `report` (`ELEMENT_FITS` `FITS`).
 
 Method:
 
@@ -358,8 +398,12 @@ terms is computed on and cited, never republished, and the publishing node
 reads `licence` from the report.
 
 Inputs: `elements` (`$OMM`), `states` (`$OEM`, from
-`analysis/epoch-state` `derive_omm` with `options.ages`), `operator` (`$OEM`
-with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
+`analysis/epoch-state` `derive_omm` with its config `ages`), `operator` (`$OEM`
+with covariance), `fit` (`$OCM`), `models` (`$ERM` `MODEL` records). The
+recipe is node config (`plugin.getConfig`): its keys under `attach.` (a flow
+configures several nodes; `attribute_maneuvers` reads `attribute.`), else the
+same keys at the root. In readable form (`version` may be left out; the models
+go on the `models` port, each with its `SOURCES` and `POOLED`):
 
 ```json
 {
@@ -374,6 +418,10 @@ with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
   "models": [{"...": "data/e14-s3-kc.json", "sources": ["celestrak-gp"], "pooled": true}]
 }
 ```
+
+`scripts/encode-model.mjs data/e14-s3-kc.json --out <file>.erm --sources celestrak-gp --pooled`
+writes such a model record; `data/e14-s3-kc.erm` is the frozen model as E14 published
+it (no sources, not pooled).
 
 `provider` is the plugin id of the module that gave the records, `licence.class`
 the `reproduce` field of the audited licence register and `licence.id` its source id.
@@ -508,10 +556,12 @@ Each test has an expected value that does not come from this module:
     CelesTrak's sets have no reuse licence, so that set is a private fixture (`SDN_MODULES_PRIVATE_FIXTURES`, `tests/lib/privateFixtures.mjs`), not in the tree; the check is skipped where the variable is not set.
   - Sources: Vallado, Crawford, Hujsak and Kelso (2006), Revisiting Spacetrack Report #3, AIAA 2006-6753 (SGP4-VER.TLE, tcppver.out); ISS trajectory, NASA JSC Flight Operations Directorate (TOPO), a U.S. Government work; CelesTrak (T. S. Kelso), https://celestrak.org.
 
-Tri-runtime parity of these methods (E14's four, `attach_covariance`,
-`attribute_maneuvers`, `fit_elements` and `element_residuals` included):
-`PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`
+Tri-runtime parity of these methods (E14's four, `fit_elements` and
+`element_residuals` included): `PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`
 (browser, WasmEdge, Docker WasmEdge; report in `conformance/parity.json`).
+Since 0.7.0 the artifact imports the sync hostcall bridge (`plugin.getConfig`
+for the recipes), which the SDK parity harness does not provide, so the run
+cannot instantiate it; `conformance/parity.json` is the 0.6.0 report.
 
 `tests/source_products.test.mjs` checks `attach_covariance` against numbers
 that do not come from the module: the model file's strata and the held-out

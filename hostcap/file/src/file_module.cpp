@@ -1,223 +1,74 @@
 /*
- * hostcap/file (loop C.3c2).
+ * hostcap/file — the host filesystem connector (typed contracts 1.0).
  *
- * Capability node for the host filesystem hostcall group:
+ *   read_file  — "request" $FIL (SDS standard FIL) naming PATH
+ *                -> filesystem.readFile (SDS $PIV: raw "path" in, the bytes on raw "data")
+ *                   and filesystem.stat (raw "path" in, "result" FsStat) for MODIFIED_AT_MS when the host has it
+ *                -> one "file" frame, a $FIL: PATH, NAME, KIND File, SIZE, CONTENT verbatim, MODIFIED_AT_MS.
+ *   write_file — "file" $FIL with PATH, CONTENT and APPEND
+ *                -> filesystem.writeFile, or filesystem.appendFile when APPEND (raw "path" + raw "data")
+ *                   and clock.now for the write time
+ *                -> one "result" frame, a $FIL: PATH, NAME, KIND File, SIZE = the bytes written, APPEND,
+ *                   WRITTEN_AT_MS; no CONTENT.
  *
- *   read_file  — "request" JSON {"path":"..."} -> filesystem.readFile; the
- *                file bytes (hostcall binary segment 0) pass through
- *                VERBATIM to the "content" port.
- *   write_file — "content" raw bytes + "request" JSON {"path":"..."} ->
- *                filesystem.writeFile with the content forwarded as the
- *                hostcall binary segment; emits
- *                {"ok":true,"bytesWritten":N,"path":"..."} on "result".
+ * The methodIds are read_file/write_file (not read/write): the SDK invoke glue binds each methodId to an identically
+ * named extern "C" symbol, and `read`/`write` collide with the POSIX declarations in the wasi/emscripten sysroot.
  *
- * The methodIds are read_file/write_file (not read/write): the SDK invoke
- * glue binds each methodId to an identically named extern "C" symbol, and
- * `read`/`write` collide with the POSIX declarations in the wasi/emscripten
- * sysroot pulled into the generated plugin-invoke-bridge translation unit.
- *
- * Cross-host support (verified against SDK nodeHost.js/browserHost.js and
- * sdn-server internal/modulert): filesystem.readFile/writeFile exist on the
- * SDK NodeHost (sandboxed root) and BrowserHost (requires a configured
- * filesystem adapter). The Go server host has NO filesystem cap handler
- * today; server-side invokes fail with operation-not-supported. Documented,
- * not faked.
- *
- * The write path sends a request envelope with one binary segment referenced
- * from the meta document as {"value":{"$bin":0}}: the SDK JS hosts re-attach
- * it as a Uint8Array (hostcallWire attachBinaryValues) and a future Go
- * filesystem handler receives it base64-attached (hostbridge
- * attachHostcallBinaryRefs).
+ * Host support: the SDK NodeHost serves filesystem.* against a sandboxed root; the SDK BrowserHost only with a
+ * filesystem adapter. The Go server host has no filesystem handler today, so server-side invokes fail closed with the
+ * host's error. filesystem.stat is best effort (MODIFIED_AT_MS 0 = unknown when it fails); clock.now likewise
+ * (WRITTEN_AT_MS 0 when the host clock is not granted) - the write itself has already succeeded. No JSON anywhere.
  */
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "FIL_generated.h"  // spacedatastandards.org lib/cpp/FIL/main_generated.h, inlined by build.mjs
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Hostcall wire envelope helpers. Unlike the read-only nodes, hostcall()
-// here supports an optional binary request segment (the write content).
-// ---------------------------------------------------------------------------
+namespace A = sdn::runtime::Aligned;
 
-void write_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
-
-uint32_t read_u32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json,
-                              const uint8_t* seg = nullptr, uint32_t seg_len = 0) {
-    const bool has_seg = seg != nullptr;
-    std::vector<uint8_t> req(4 + payload_json.size() + 4 + (has_seg ? 4 + seg_len : 0), 0);
-    size_t off = 0;
-    write_u32le(req.data() + off, static_cast<uint32_t>(payload_json.size()));
-    off += 4;
-    std::memcpy(req.data() + off, payload_json.data(), payload_json.size());
-    off += payload_json.size();
-    write_u32le(req.data() + off, has_seg ? 1u : 0u);
-    off += 4;
-    if (has_seg) {
-        write_u32le(req.data() + off, seg_len);
-        off += 4;
-        if (seg_len > 0) std::memcpy(req.data() + off, seg, seg_len);
-    }
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) {
-        sdm_host_read_response(buf.data(), len);
-    }
-    return buf;
-}
-
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    const uint32_t meta_len = read_u32le(env.data());
-    if (env.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-bool envelope_first_segment(const std::vector<uint8_t>& env,
-                            const uint8_t** seg_out, uint32_t* seg_len_out) {
-    *seg_out = nullptr;
-    *seg_len_out = 0;
-    if (env.size() < 4) return false;
-    const uint32_t meta_len = read_u32le(env.data());
-    size_t off = 4u + meta_len;
-    if (off + 4 > env.size()) return false;
-    const uint32_t seg_count = read_u32le(env.data() + off);
-    off += 4;
-    if (seg_count == 0 || off + 4 > env.size()) return false;
-    const uint32_t seg_len = read_u32le(env.data() + off);
-    off += 4;
-    if (off + seg_len > env.size()) return false;
-    *seg_out = env.data() + off;
-    *seg_len_out = seg_len;
-    return true;
-}
-
-bool meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// ---------------------------------------------------------------------------
-// Minimal JSON field extraction (control metadata only).
-// ---------------------------------------------------------------------------
-
-bool is_json_ws(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_json_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else out.push_back(c);
-    }
-    return out;
-}
-
-int fail_from_meta(const char* code, const std::string& meta, const char* fallback) {
-    std::string message;
-    json_string_field(meta, "message", &message);
+int fail(const char* code, const sdm_piv::Response& response, const char* fallback) {
+    const std::string message = response.error_message();
     plugin_set_error(code, message.empty() ? fallback : message.c_str());
     return 502;
 }
 
-// ---------------------------------------------------------------------------
-// Frame helpers.
-// ---------------------------------------------------------------------------
-
-const plugin_input_frame_t* find_frame(const char* port_id) {
-    const int32_t index = plugin_find_input_index(port_id, 0);
-    return index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
-}
-
-std::string frame_text(const plugin_input_frame_t* frame) {
-    if (!frame || !frame->payload || frame->payload_length == 0) return std::string();
-    return std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-}
-
-// Extract the required {"path":...} from the request frame; sets the plugin
-// error and returns false when absent.
-bool request_path(const char* method, std::string* path_out) {
-    const plugin_input_frame_t* frame = find_frame("request");
-    const std::string request = frame_text(frame);
-    if (request.empty() || !json_string_field(request, "path", path_out) || path_out->empty()) {
-        plugin_set_error("missing-path",
-                         (std::string(method) +
-                          " requires a request JSON frame {\"path\":\"...\"}.")
-                             .c_str());
-        return false;
+// The one $FIL frame on `port`, verified, with a non-empty PATH; sets the plugin error and returns nullptr otherwise.
+const FIL* input_file(const char* method, const char* port) {
+    const int32_t index = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* frame = index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
+    if (!frame || !frame->payload) {
+        plugin_set_error("missing-path", (std::string(method) + " requires a $FIL frame naming PATH on \"" + port + "\".").c_str());
+        return nullptr;
     }
-    return true;
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyFILBuffer(verifier)) {
+        plugin_set_error("invalid-request", (std::string(method) + ": the \"" + port + "\" frame is not a $FIL (File).").c_str());
+        return nullptr;
+    }
+    const FIL* file = GetFIL(frame->payload);
+    if (!file->PATH() || file->PATH()->size() == 0) {
+        plugin_set_error("missing-path", (std::string(method) + " requires a $FIL frame naming PATH on \"" + port + "\".").c_str());
+        return nullptr;
+    }
+    return file;
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(
-        port, nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1,
-        reinterpret_cast<const uint8_t*>(json.data()),
-        static_cast<uint32_t>(json.size()));
+std::string base_name(const std::string& path) {
+    const size_t slash = path.find_last_of('/');
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+int push_file(const char* port, flatbuffers::FlatBufferBuilder& b) {
+    return plugin_push_output_ex(port, "FIL.fbs", FILIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FIL", 0, 0,
+                                 b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
 }
 
 // ---------------------------------------------------------------------------
@@ -240,10 +91,9 @@ int push_json(const char* port, const std::string& json) {
 // returned the first provider's records, byte-identical to that provider run
 // alone, with no error anywhere.
 //
-// `read_file` performs ONE read per request frame and `write_file` pairs ONE
-// content frame with ONE request. Silently reading the first path of two, or
-// writing the first content to a path that came with different bytes, are both
-// unrecoverable and both invisible at the output.
+// `read_file` performs ONE read per request frame and `write_file` ONE write per
+// file frame. Silently reading the first path of two, or writing the first of two
+// files, are both unrecoverable and both invisible at the output.
 //
 // So a surplus is REFUSED rather than silently dropped — a named node error
 // the flow surfaces, instead of an answer assembled from whichever frame the
@@ -281,85 +131,67 @@ bool find_batched_input_port(char* message, size_t message_len) {
 
 extern "C" {
 
-// read_file: {"path"} -> filesystem.readFile -> "content" raw bytes verbatim.
+// read_file: "request" $FIL {PATH} -> filesystem.readFile (+ filesystem.stat) -> "file" $FIL with CONTENT.
 int read_file(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
+    const FIL* request = input_file("read_file", "request");
+    if (!request) return 400;
+    const std::string path = request->PATH()->str();
 
-    std::string path;
-    if (!request_path("read_file", &path)) return 400;
+    const auto read = sdm_piv::call("filesystem.readFile", {sdm_piv::raw("path", path)});
+    if (!read.ok()) return fail("file-read-failed", read, "filesystem.readFile hostcall failed.");
+    const std::string_view data = read.raw("data");
 
-    const std::vector<uint8_t> env =
-        hostcall("filesystem.readFile", std::string("{\"path\":\"") + json_escape(path) + "\"}");
-    const std::string meta = envelope_meta_json(env);
-    if (!meta_ok(meta)) {
-        return fail_from_meta("file-read-failed", meta, "filesystem.readFile hostcall failed.");
-    }
+    int64_t modified_ms = 0;
+    const auto stat = sdm_piv::call("filesystem.stat", {sdm_piv::raw("path", path)});
+    if (const auto* st = stat.ok() ? stat.result<A::FsStat>("FsStat") : nullptr) modified_ms = static_cast<int64_t>(st->MTIME_MS);
 
-    // The JS hosts return the content as a Uint8Array, detached into binary
-    // segment 0. Empty files still produce a (zero-length) segment.
-    const uint8_t* seg = nullptr;
-    uint32_t seg_len = 0;
-    if (!envelope_first_segment(env, &seg, &seg_len)) {
-        plugin_set_error("file-read-failed",
-                         "filesystem.readFile response carried no binary segment.");
-        return 502;
-    }
-    const int32_t pushed = plugin_push_output_ex(
-        "content", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1, seg, seg_len);
-    return pushed < 0 ? 500 : 0;
+    flatbuffers::FlatBufferBuilder b(data.size() + 256);
+    const auto content = b.CreateVector(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+    const auto path_offset = b.CreateString(path);
+    const auto name_offset = b.CreateString(base_name(path));
+    FILBuilder fil(b);
+    fil.add_PATH(path_offset);
+    fil.add_NAME(name_offset);
+    fil.add_KIND(filEntryKind_File);
+    fil.add_SIZE(data.size());
+    fil.add_MODIFIED_AT_MS(modified_ms);
+    fil.add_CONTENT(content);
+    FinishFILBuffer(b, fil.Finish());
+    return push_file("file", b) < 0 ? 500 : 0;
 }
 
-// write_file: "content" bytes + {"path"} -> filesystem.writeFile ->
-// {"ok":true,"bytesWritten":N,"path":"..."} on "result".
+// write_file: "file" $FIL {PATH, CONTENT, APPEND} -> filesystem.writeFile / appendFile -> "result" $FIL (no CONTENT).
 int write_file(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
+    const FIL* file = input_file("write_file", "file");
+    if (!file) return 400;
+    const std::string path = file->PATH()->str();
+    const auto* content = file->CONTENT();
+    const uint8_t* data = content ? content->data() : reinterpret_cast<const uint8_t*>("");
+    const size_t size = content ? content->size() : 0;
+    const bool append = file->APPEND();
 
-    const plugin_input_frame_t* content = find_frame("content");
-    if (!content || (!content->payload && content->payload_length > 0)) {
-        plugin_set_error("missing-content", "write_file requires a content bytes frame.");
-        return 400;
-    }
-    std::string path;
-    if (!request_path("write_file", &path)) return 400;
+    const char* op = append ? "filesystem.appendFile" : "filesystem.writeFile";
+    const auto written = sdm_piv::call(op, {sdm_piv::raw("path", path), sdm_piv::raw("data", data, size)});
+    if (!written.ok()) return fail("file-write-failed", written, append ? "filesystem.appendFile hostcall failed." : "filesystem.writeFile hostcall failed.");
 
-    // Meta references the content as binary segment 0 so raw bytes never
-    // round-trip through JSON on the wire.
-    const std::string payload =
-        std::string("{\"path\":\"") + json_escape(path) + "\",\"value\":{\"$bin\":0}}";
-    const std::vector<uint8_t> env = hostcall(
-        "filesystem.writeFile", payload,
-        content->payload ? content->payload : reinterpret_cast<const uint8_t*>(""),
-        content->payload_length);
-    const std::string meta = envelope_meta_json(env);
-    if (!meta_ok(meta)) {
-        return fail_from_meta("file-write-failed", meta, "filesystem.writeFile hostcall failed.");
-    }
+    const auto now = sdm_piv::call("clock.now");
+    const auto* now_value = now.ok() ? now.result<A::TimeValue>("TimeValue") : nullptr;
 
-    // NodeHost reports the resolved path in result.path; fall back to the
-    // requested path when the host result carries none.
-    std::string resolved = path;
-    {
-        std::string host_path;
-        if (json_string_field(meta, "path", &host_path) && !host_path.empty()) {
-            resolved = host_path;
-        }
-    }
-    char count_buf[32];
-    std::snprintf(count_buf, sizeof(count_buf), "%u", content->payload_length);
-    const std::string result = std::string("{\"ok\":true,\"bytesWritten\":") + count_buf +
-                               ",\"path\":\"" + json_escape(resolved) + "\"}";
-    const int32_t pushed = push_json("result", result);
-    return pushed < 0 ? 500 : 0;
+    flatbuffers::FlatBufferBuilder b(256);
+    FinishFILBuffer(b, CreateFILDirect(b, path.c_str(), base_name(path).c_str(), filEntryKind_File, nullptr, size, 0, 0,
+                                       filDigestAlgorithm_None, nullptr, nullptr, append,
+                                       now_value ? static_cast<int64_t>(now_value->UNIX_MS) : 0));
+    return push_file("result", b) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

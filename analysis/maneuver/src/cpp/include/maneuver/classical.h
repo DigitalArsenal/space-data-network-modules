@@ -42,6 +42,8 @@ struct BiEllipticResult {
     Vector3 dv1_ric;
     Vector3 dv2_ric;
     Vector3 dv3_ric;
+    double tof1;         // first half-ellipse, r1 to the intermediate apoapsis [s]
+    double tof2;         // second half-ellipse, intermediate apoapsis to r2 [s]
 };
 
 /// Compute a bi-elliptic transfer between two circular orbits via an

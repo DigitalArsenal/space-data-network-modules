@@ -45,7 +45,7 @@ export async function epochStates(list, batch = 20000) {
       let offset = 0;
       frames.forEach((f, i) => { payload.set(f, offset); offset += sizes[i]; });
       const res = await harness.invoke({ methodId: 'derive', inputs: [{ portId: 'elements', payload,
-        typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE', wireFormat: 'aligned-binary', requiredAlignment: 8, byteLength: payload.byteLength } }] });
+        typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE', wireFormat: 'flatbuffer' } }] });
       if (res.statusCode !== 0) throw new Error(`epoch-state: ${res.errorCode}: ${res.errorMessage}`);
       const bytes = res.outputs.find((f) => f.portId === 'states')?.payload ?? new Uint8Array();
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

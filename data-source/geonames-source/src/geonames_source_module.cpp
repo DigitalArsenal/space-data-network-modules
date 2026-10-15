@@ -1,54 +1,52 @@
 /*
- * data-source/geonames-source — the PURE half of the GeoNames gazetteer lane
- * (graph task `geonames-ingest-flow`).
+ * data-source/geonames-source — the PURE half of the GeoNames gazetteer lane (graph task `geonames-ingest-flow`),
+ * on the typed contracts (1.0): FlatBuffers only between modules, no JSON and no base64.
  *
- * This plugin performs NO I/O. `capabilities: []`, runtime targets browser +
- * wasmedge, every method a single-pass transform over the frames the flow hands
- * it. Every byte it decodes was fetched by `com.digitalarsenal.hostcap.http-
- * request` and every record it emits is persisted by
- * `com.digitalarsenal.hostcap.storage-ingest`. The split mirrors
- * cell-tower-source / cell-tower-ingest exactly: parsing a gazetteer dump and
- * orchestrating a scheduled ingest of it are different jobs with different
- * blast radii, and folding them together would make the parser un-runnable in a
- * browser.
+ * This plugin performs NO I/O. `capabilities: []`, runtime targets browser + wasmedge, every method a single-pass
+ * transform over the frames the flow hands it; its one hostcall is the builtin plugin.getConfig (SDS $PIV) for the
+ * operator's record cap. Every byte it decodes was fetched by `com.digitalarsenal.hostcap.http-request` (an
+ * HttpResponse, HRSP) and every record it emits is persisted by `com.digitalarsenal.hostcap.storage-ingest`. The split
+ * mirrors cell-tower-source / cell-tower-ingest: parsing a gazetteer dump and orchestrating a scheduled ingest of it are
+ * different jobs with different blast radii, and folding them together would make the parser un-runnable in a browser.
  *
  * Methods:
- *   inflate       job + response          -> text, report
- *   parse_lookups job + admin1/2/country  -> tables
- *   parse_places  job + text + tables?    -> records ($GNP stream), decision
- *   parse_deletes job + text              -> tombstones
+ *   inflate       response (HRSP)                          -> text (HRSP, BODY = the decoded text), report (FNTC)
+ *   parse_places  text (HRSP) + admin1/admin2/country (HRSP) -> records ($GNP stream), decision (FNTC)
+ *   parse_deletes text (HRSP)                              -> tombstones (FNTC)
  *
- * WHY THE INFLATE IS IN-GUEST.
+ * THE JOB TRAVELS AS HttpRequest.CONTEXT. geonames-ingest puts ONE size-prefixed $GNP HEADER RECORD (no position, no
+ * place) in the CONTEXT of every fetch it plans; hostcap/http-request echoes it in the HttpResponse, inflate copies it
+ * into the text frame, and the decoders read it as the run contract:
+ *   ID                     the id prefix every record is minted under ("<ID>:<geonameid>"; empty reads as "geonames")
+ *   NAME                   the gazetteer text the job decodes: the archive MEMBER for a .zip edition (empty = the
+ *                          archive's first member), else the plain file's own name
+ *   DEM_MODEL              the model DEM_ELEVATION_M was sampled from, when stated
+ *   SOURCE (GNPProvenance) the DATASET CONTRACT every record is published under: DATASET_ID, DATASET_NAME, DATASET_URL,
+ *                          DATASET_EPOCH, DATASET_CID, SOURCE_URL, SOURCE_QUERY (the file selection: a ".zip" selection
+ *                          is an archive inflated in-guest, anything else is served plain), LICENSE, LICENSE_URL,
+ *                          ATTRIBUTION, NON_COMMERCIAL_ONLY, SHARE_ALIKE. RETRIEVED_AT and NATIVE_ID are per record
+ *                          and are empty on the header.
+ * This replaces the JSON job frame and its lane/container/member keys, which were all functions of the file selection.
  *
- * The seed edition ships as `cities15000.zip` — one ZIP holding one 19-column
- * tab-separated file. There is NO host unzip capability and none may be added
- * (owner law: all functionality is WASM over the existing generic hooks). So
- * miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, Rich Geldreich /
- * Tenacious Software / RAD Game Tools; LICENSE carried verbatim beside the
- * sources, SHA-256 pinned and re-verified on every build by miniz-source.mjs)
- * and the central directory is walked by hand — the same vendored copy and the
- * same sanctioned pattern data-source/cell-tower-source already uses for the
- * four national bulk archives, deliberately reused rather than hand-rolling a
- * second inflate in this repo.
+ * WHY THE INFLATE IS IN-GUEST. The seed edition ships as `cities15000.zip` — one ZIP holding one 19-column
+ * tab-separated file. There is NO host unzip capability and none may be added, so miniz 3.1.2 is vendored under
+ * vendor/miniz-3.1.2 (MIT; LICENSE carried verbatim, SHA-256 pinned and re-verified on every build by miniz-source.mjs)
+ * and the central directory is walked by hand — the same vendored copy data-source/cell-tower-source uses.
  *
- * WHY THE ADMIN/COUNTRY TABLES ARE A SEPARATE METHOD.
+ * WHY THE ADMIN/COUNTRY FILES ARE INPUTS OF parse_places. $GNP requires RESOLVED NAMES beside the codes ("Carried
+ * beside the code so a consumer need not hold the division tables to render a place"); GeoNames publishes them in three
+ * plain-text files. They used to be folded by a parse_lookups method into a JSON join table for parse_places; no SDS
+ * record models a code-to-name join table, so on the typed contracts the three HttpResponses go to parse_places itself
+ * and the join is built and applied in one pass. A file the flow did not fetch contributes nothing and the affected
+ * places carry their codes with the name UNSET — a missing name is recoverable, a wrong one is not.
  *
- * $GNP requires RESOLVED NAMES beside the codes ("Carried beside the code so a
- * consumer need not hold the division tables to render a place"). GeoNames
- * publishes those names in three separate plain-text files. Joining them at
- * parse time is the only place the join can happen without a consumer holding
- * the tables, and they are decoded by their own method because they arrive on
- * their own fetches and change on their own cadence.
- *
- * NOTHING IS INVENTED. A column GeoNames leaves empty is left UNSET on the
- * record rather than defaulted: FlatBuffers omits default-valued fields, which
- * is what keeps "the gazetteer did not publish an elevation" distinguishable
- * from "the gazetteer published zero" — the distinction $GNP's
- * ELEVATION_PUBLISHED exists to carry. Time-zone UTC offsets are NOT in this
- * file, so they are never written; a consumer resolves TIME_ZONE_ID against a
- * tz database, exactly as the IDL instructs.
+ * NOTHING IS INVENTED. A column GeoNames leaves empty is left UNSET on the record rather than defaulted: FlatBuffers
+ * omits default-valued fields, which is what keeps "no elevation published" distinguishable from "an elevation of zero"
+ * — the distinction $GNP's ELEVATION_PUBLISHED exists to carry. Time-zone UTC offsets are NOT in this file, so they are
+ * never written.
  */
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -60,197 +58,101 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpResponse_generated.h"
+#include "FlowNotice_generated.h"
+// $GNP (spacedatastandards.org lib/cpp/GNP/main_generated.h) and miniz 3.1.2 are inlined ahead of this file by build.mjs.
 
 namespace {
 
-// ── tiny JSON readers (the intra-flow control frames are all flat JSON) ─────
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 
-bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+using Bytes = std::vector<uint8_t>;
 
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char esc = json[i + 1];
-            if (esc == 'n') value.push_back('\n');
-            else if (esc == 't') value.push_back('\t');
-            else if (esc == 'r') value.push_back('\r');
-            else value.push_back(esc);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
+// ── node config: plugin.getConfig as an SDS $PIV hostcall (one ModuleConfig FlatBuffer on raw "config") ──────────
+//
+// Read for ONE key only: geonames_limit, the operator's record cap (0 / absent = no cap). It used to ride on the JSON
+// job frame; the job is a $GNP header now and a place record has no field for "how many records", so the cap is read
+// from the same node config geonames-ingest reads it from. No config (a browser, a host with no config) = no cap.
+double config_number(const char* key, double fallback) {
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return fallback;
+    if (config.kind(key) == sdn::runtime::configValueKind_String) {
+        const std::string s(config.string(key));
+        char* end = nullptr;
+        const double v = strtod(s.c_str(), &end);
+        return end != s.c_str() ? v : fallback;
     }
-    *out = value;
-    return true;
+    return config.number(key, fallback);
 }
 
-std::string json_string(const std::string& json, const char* key, const char* fallback) {
-    std::string v;
-    if (json_string_field(json, key, &v)) return v;
-    return fallback;
-}
+// ── frames ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-double json_number(const std::string& json, const char* key, double fallback) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return fallback;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return fallback;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return fallback;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return fallback;
-    char* end = nullptr;
-    const double v = strtod(json.c_str() + i, &end);
-    return end == json.c_str() + i ? fallback : v;
-}
-
-bool json_bool(const std::string& json, const char* key, bool fallback) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return fallback;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return fallback;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (json.compare(i, 4, "true") == 0) return true;
-    if (json.compare(i, 5, "false") == 0) return false;
-    return fallback;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() + 8);
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
-}
-
-// ── base64 (the http connector hands bodies base64-encoded) ────────────────
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-std::string base64_decode(const std::string& in) {
-    std::string out;
-    out.reserve((in.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : in) {
-        const int v = b64_value(c);
-        if (v < 0) continue;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<char>((acc >> bits) & 0xff));
-        }
-    }
-    return out;
-}
-
-// The http connector's response frame carries the body base64-encoded under
-// "bodyB64" (browser harness dialect) or "body" with body_encoding base64 (the
-// Go host dialect). Both are read; a plain-text body is taken verbatim.
-std::string response_body(const std::string& response) {
-    std::string b64;
-    if (json_string_field(response, "bodyB64", &b64) && !b64.empty()) return base64_decode(b64);
-    std::string encoding = json_string(response, "body_encoding", "");
-    std::string body;
-    if (!json_string_field(response, "body", &body)) return std::string();
-    if (encoding == "base64") return base64_decode(body);
-    return body;
-}
-
-long response_status(const std::string& response) {
-    return static_cast<long>(json_number(response, "status", 0));
-}
-
-// Content-Length as the ORIGIN stated it, so a body the host truncated at its
-// 4 MiB response cap can be told from a file that is genuinely that short. The
-// difference matters: a truncated division table silently drops the names of
-// every division after the cut, and a place then carries a code with no name
-// while the run reports success.
-bool declared_content_length(const std::string& response, long* out) {
-    const size_t h = response.find("\"headers\"");
-    if (h == std::string::npos) return false;
-    const size_t open = response.find('{', h);
-    if (open == std::string::npos) return false;
-    int depth = 0;
-    size_t i = open;
-    for (; i < response.size(); i++) {
-        if (response[i] == '{') depth++;
-        else if (response[i] == '}' && --depth == 0) break;
-    }
-    if (i >= response.size()) return false;
-    const std::string headers = response.substr(open, i - open + 1);
-    std::string value;
-    if (!json_string_field(headers, "content-length", &value) &&
-        !json_string_field(headers, "Content-Length", &value)) {
-        return false;
-    }
-    const long parsed = std::atol(value.c_str());
-    if (parsed <= 0) return false;
-    *out = parsed;
-    return true;
-}
-
-// ── frame helpers ──────────────────────────────────────────────────────────
-
-std::string input_text(const char* port_id) {
+const plugin_input_frame_t* frame_for(const char* port_id) {
     const int32_t idx = plugin_find_input_index(port_id, 0);
-    if (idx < 0) return std::string();
-    const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!f || !f->payload) return std::string();
-    return std::string(reinterpret_cast<const char*>(f->payload), f->payload_length);
+    if (idx < 0) return nullptr;
+    return plugin_get_input_frame(static_cast<uint32_t>(idx));
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
+// The HttpResponse on `port`, verified; nullptr when the port carries no frame. *bad is set when it carries a frame
+// that is not an HttpResponse.
+const R::HttpResponse* response_on(const char* port, bool* bad) {
+    const plugin_input_frame_t* f = frame_for(port);
+    if (!f || !f->payload || f->payload_length == 0) return nullptr;
+    flatbuffers::Verifier verifier(f->payload, f->payload_length);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        *bad = true;
+        return nullptr;
+    }
+    return R::GetHttpResponse(f->payload);
 }
 
-int push_gnp_stream(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, "GNP.fbs", "$GNP", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 "GNP", 0, 0, bytes.data(), static_cast<uint32_t>(bytes.size()));
+std::string body_of(const R::HttpResponse* r) {
+    if (!r || !r->BODY()) return std::string();
+    return std::string(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
 }
 
-// SURPLUS-FRAME REFUSAL. The compiled flow runtime drains a node's queue
-// PORT-BLIND up to a budget of 64; maxStreams/maxBatch/drainPolicy are purely
-// declarative there. A guest that reads ordinal 0 and returns therefore
-// destroys every other frame it was handed, with nothing re-delivering them and
-// nothing logging the loss (the live P1 that produced
-// `modules-guest-nodes-drop-batched-frames`). Every input port here is
-// single-stream BY CONTRACT, so a surplus is refused by name.
+// A response header by lower-case name (the connector writes HEADERS sorted by lower-case NAME).
+std::string header_of(const R::HttpResponse* r, const char* name) {
+    if (!r || !r->HEADERS()) return std::string();
+    for (const auto* h : *r->HEADERS()) {
+        if (!h || !h->NAME()) continue;
+        const std::string n = h->NAME()->str();
+        if (n.size() != std::strlen(name)) continue;
+        bool same = true;
+        for (size_t i = 0; i < n.size() && same; i++) same = std::tolower(static_cast<unsigned char>(n[i])) == name[i];
+        if (same) return h->VALUE() ? h->VALUE()->str() : std::string();
+    }
+    return std::string();
+}
+
+int push_notice(const char* port, R::flowNoticeKind kind, const std::string& reason, uint64_t count,
+                std::vector<std::string> items, const std::string& source_name = std::string(), uint64_t at_ms = 0) {
+    R::FlowNoticeT notice;
+    notice.KIND = kind;
+    notice.SCHEMA = "GNP.fbs";
+    notice.SOURCE_NAME = source_name;
+    notice.REASON = reason;
+    notice.COUNT = count;
+    notice.ITEMS = std::move(items);
+    notice.AT_MS = at_ms;
+    flatbuffers::FlatBufferBuilder b(512);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return plugin_push_output_ex(port, "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "FlowNotice", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+int push_gnp_stream(const char* port, const Bytes& bytes) {
+    return plugin_push_output_ex(port, "GNP.fbs", GNPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "GNP", 0, 0,
+                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
+}
+
+// SURPLUS-FRAME REFUSAL. The compiled flow runtime drains a node's queue PORT-BLIND up to a budget of 64;
+// maxStreams/maxBatch/drainPolicy are purely declarative there. A guest that reads ordinal 0 and returns therefore
+// destroys every other frame it was handed, with nothing re-delivering them and nothing logging the loss (the live P1
+// that produced `modules-guest-nodes-drop-batched-frames`). Every input port here is single-stream BY CONTRACT, so a
+// surplus is refused by name.
 bool find_batched_input_port(char* message, size_t message_len) {
     const uint32_t count = plugin_get_input_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -282,6 +184,78 @@ bool refuse_batched(void) {
     if (!find_batched_input_port(message, sizeof(message))) return false;
     plugin_set_error("batched-input-frames", message);
     return true;
+}
+
+// ── the job: the $GNP header record in the response's CONTEXT ────────────────────────────────────────────────
+
+struct Job {
+    bool present = false;
+    std::string id_prefix;
+    std::string text_name;  // NAME: the archive member (zip) or the plain file
+    std::string dem_model;
+    std::string dataset_id, dataset_name, dataset_url, dataset_epoch, dataset_cid;
+    std::string source_url, source_query;
+    std::string license, license_url, attribution;
+    bool share_alike = false;
+    bool non_commercial_only = false;
+
+    bool zip() const {
+        return source_query.size() >= 4 && source_query.compare(source_query.size() - 4, 4, ".zip") == 0;
+    }
+    // The edition's UTC date, the first ten characters of its RFC 3339 epoch.
+    std::string date() const { return dataset_epoch.size() >= 10 ? dataset_epoch.substr(0, 10) : dataset_epoch; }
+};
+
+std::string str_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+// Unix milliseconds of an RFC 3339 instant's date and time ("YYYY-MM-DDTHH:MM:SS..."); 0 when it is not one.
+uint64_t epoch_ms(const std::string& iso) {
+    if (iso.size() < 10 || iso[4] != '-' || iso[7] != '-') return 0;
+    int64_t y = atoi(iso.substr(0, 4).c_str());
+    const int m = atoi(iso.substr(5, 2).c_str()), d = atoi(iso.substr(8, 2).c_str());
+    int hh = 0, mm = 0, ss = 0;
+    if (iso.size() >= 19 && iso[10] == 'T') {
+        hh = atoi(iso.substr(11, 2).c_str());
+        mm = atoi(iso.substr(14, 2).c_str());
+        ss = atoi(iso.substr(17, 2).c_str());
+    }
+    if (y < 1970 || m < 1 || m > 12 || d < 1 || d > 31) return 0;
+    y -= m <= 2;
+    const int64_t era = y / 400;
+    const int64_t yoe = y - era * 400;
+    const int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    const int64_t days = era * 146097 + doe - 719468;
+    return static_cast<uint64_t>(((days * 24 + hh) * 60 + mm) * 60 + ss) * 1000u;
+}
+
+// The job a response carries back in CONTEXT; !present when it carries none (or not a $GNP).
+Job job_of(const R::HttpResponse* r) {
+    Job job;
+    if (!r || !r->CONTEXT() || r->CONTEXT()->size() < 8) return job;
+    flatbuffers::Verifier verifier(r->CONTEXT()->data(), r->CONTEXT()->size());
+    if (!VerifySizePrefixedGNPBuffer(verifier)) return job;
+    const GNP* header = GetSizePrefixedGNP(r->CONTEXT()->data());
+    const GNPProvenance* source = header->SOURCE();
+    if (!source) return job;
+    job.present = true;
+    job.id_prefix = str_of(header->ID());
+    if (job.id_prefix.empty()) job.id_prefix = "geonames";
+    job.text_name = str_of(header->NAME());
+    job.dem_model = str_of(header->DEM_MODEL());
+    job.dataset_id = str_of(source->DATASET_ID());
+    job.dataset_name = str_of(source->DATASET_NAME());
+    job.dataset_url = str_of(source->DATASET_URL());
+    job.dataset_epoch = str_of(source->DATASET_EPOCH());
+    job.dataset_cid = str_of(source->DATASET_CID());
+    job.source_url = str_of(source->SOURCE_URL());
+    job.source_query = str_of(source->SOURCE_QUERY());
+    job.license = str_of(source->LICENSE());
+    job.license_url = str_of(source->LICENSE_URL());
+    job.attribution = str_of(source->ATTRIBUTION());
+    job.share_alike = source->SHARE_ALIKE();
+    job.non_commercial_only = source->NON_COMMERCIAL_ONLY();
+    return job;
 }
 
 std::string iso_now() {
@@ -450,75 +424,7 @@ gnpFeatureClass feature_class_of(const std::string& code) {
     }
 }
 
-// A lookup table frame, as parse_lookups writes it and parse_places reads it.
-// Kept as flat JSON objects rather than a bespoke binary layout because it is
-// an INTRA-FLOW control frame: no SDS record models "the admin1 division
-// names", and inventing one to move a join table between two nodes of one flow
-// is not this lane's call to make.
-struct Lookups {
-    std::map<std::string, std::string> admin1;
-    std::map<std::string, std::string> admin2;
-    std::map<std::string, std::string> country;
-};
 
-// Reads one flat {"k":"v",...} object out of `json` under `key`.
-void read_lookup_object(const std::string& json, const char* key,
-                        std::map<std::string, std::string>* out) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return;
-    size_t i = json.find('{', k + needle.size());
-    if (i == std::string::npos) return;
-    i++;
-    while (i < json.size()) {
-        while (i < json.size() && (is_ws(json[i]) || json[i] == ',')) i++;
-        if (i >= json.size() || json[i] == '}') return;
-        if (json[i] != '"') return;
-        i++;
-        std::string mapkey;
-        while (i < json.size() && json[i] != '"') {
-            if (json[i] == '\\' && i + 1 < json.size()) { mapkey.push_back(json[i + 1]); i += 2; }
-            else { mapkey.push_back(json[i]); i++; }
-        }
-        i++;  // closing quote
-        while (i < json.size() && is_ws(json[i])) i++;
-        if (i >= json.size() || json[i] != ':') return;
-        i++;
-        while (i < json.size() && is_ws(json[i])) i++;
-        if (i >= json.size() || json[i] != '"') return;
-        i++;
-        std::string value;
-        while (i < json.size() && json[i] != '"') {
-            if (json[i] == '\\' && i + 1 < json.size()) {
-                const char esc = json[i + 1];
-                if (esc == 'n') value.push_back('\n');
-                else if (esc == 't') value.push_back('\t');
-                else value.push_back(esc);
-                i += 2;
-            } else { value.push_back(json[i]); i++; }
-        }
-        i++;
-        (*out)[mapkey] = value;
-    }
-}
-
-Lookups read_lookups(const std::string& json) {
-    Lookups l;
-    if (json.empty()) return l;
-    read_lookup_object(json, "admin1", &l.admin1);
-    read_lookup_object(json, "admin2", &l.admin2);
-    read_lookup_object(json, "country", &l.country);
-    return l;
-}
-
-std::string lookup_or_empty(const std::map<std::string, std::string>& table,
-                            const std::string& key) {
-    if (key.empty()) return std::string();
-    const auto it = table.find(key);
-    return it == table.end() ? std::string() : it->second;
-}
-
-// Iterate the lines of a buffer without copying the whole thing again.
 template <typename OnLine>
 void for_each_line(const std::string& text, OnLine on_line) {
     size_t start = 0;
@@ -539,54 +445,7 @@ void for_each_line(const std::string& text, OnLine on_line) {
     }
 }
 
-// ── the dataset contract carried on every job frame ─────────────────────────
-//
-// $GNP.SOURCE requires DATASET_ID, DATASET_EPOCH, RETRIEVED_AT, LICENSE and
-// NATIVE_ID on EVERY record: "a redistributed place whose dataset, epoch, and
-// licence are unstated is not publishable". Four of those five come from the
-// job frame (the orchestrator owns dataset identity), RETRIEVED_AT is stamped
-// here, and NATIVE_ID is the gazetteer's own row id. A job that cannot supply
-// the dataset identity is REFUSED rather than defaulted — a record published
-// under a guessed epoch is worse than none, because it is comparable to the
-// wrong bytes.
-struct DatasetContract {
-    std::string dataset_id;
-    std::string dataset_name;
-    std::string dataset_url;
-    std::string dataset_epoch;
-    std::string dataset_cid;
-    std::string source_url;
-    std::string source_query;
-    std::string license;
-    std::string license_url;
-    std::string attribution;
-    std::string dem_model;
-    std::string id_prefix;
-    bool share_alike = false;
-    bool non_commercial_only = false;
-};
 
-DatasetContract contract_of(const std::string& job) {
-    DatasetContract c;
-    c.dataset_id = json_string(job, "dataset_id", "");
-    c.dataset_name = json_string(job, "dataset_name", "");
-    c.dataset_url = json_string(job, "dataset_url", "");
-    c.dataset_epoch = json_string(job, "dataset_epoch", "");
-    c.dataset_cid = json_string(job, "dataset_cid", "");
-    c.source_url = json_string(job, "source_url", "");
-    c.source_query = json_string(job, "source_query", "");
-    c.license = json_string(job, "license", "");
-    c.license_url = json_string(job, "license_url", "");
-    c.attribution = json_string(job, "attribution", "");
-    c.dem_model = json_string(job, "dem_model", "");
-    c.id_prefix = json_string(job, "id_prefix", "geonames");
-    c.share_alike = json_bool(job, "share_alike", false);
-    c.non_commercial_only = json_bool(job, "non_commercial_only", false);
-    return c;
-}
-
-// GeoNames' 19 columns, by ordinal. Named rather than indexed inline so a
-// column drift shows up as one edit and not nineteen.
 enum GeoNameColumn {
     COL_GEONAMEID = 0,
     COL_NAME = 1,
@@ -610,6 +469,32 @@ enum GeoNameColumn {
     GEONAME_COLUMNS = 19,
 };
 
+
+// The gazetteer text as an HttpResponse: the fetched response with its BODY replaced by `text` and everything else
+// (URL, STATUS, HEADERS, the job in CONTEXT, RETRIEVED_MS) carried verbatim, so the decoders read the job the fetch
+// was planned with and nothing downstream needs to know whether the edition arrived compressed.
+int push_text(const R::HttpResponse& response, const std::string& text) {
+    R::HttpResponseT t;
+    response.UnPackTo(&t);
+    t.BODY.assign(text.begin(), text.end());
+    flatbuffers::FlatBufferBuilder b(text.size() + (response.CONTEXT() ? response.CONTEXT()->size() : 0) + 1024);
+    R::FinishHttpResponseBuffer(b, R::HttpResponse::Pack(b, &t));
+    return plugin_push_output_ex("text", "HttpResponse.fbs", R::HttpResponseIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpResponse", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+struct Lookups {
+    std::map<std::string, std::string> admin1;
+    std::map<std::string, std::string> admin2;
+    std::map<std::string, std::string> country;
+};
+
+std::string lookup_or_empty(const std::map<std::string, std::string>& table, const std::string& key) {
+    if (key.empty()) return std::string();
+    const auto it = table.find(key);
+    return it == table.end() ? std::string() : it->second;
+}
+
 }  // namespace
 
 extern "C" {
@@ -617,61 +502,59 @@ extern "C" {
 // ---------------------------------------------------------------------------
 // inflate — the ZIP/deflate assembly step.
 //
-// Takes the raw hostcap/http-request response and hands the next node PLAIN
-// TEXT, so parse_places never has to know whether the edition arrived
-// compressed. `job.container` selects the treatment:
+// Takes the fetched HttpResponse and hands the next node the PLAIN TEXT as an HttpResponse (BODY = the text, CONTEXT =
+// the job, verbatim), so parse_places never has to know whether the edition arrived compressed. The job's file
+// selection decides the treatment:
 //
-//   "zip"   — walk the central directory, select `job.member` (or the FIRST
-//             member when none is named), inflate it whole.
-//   "plain" — the daily modifications/deletes and the three lookup files, which
-//             are served uncompressed; the body passes through verbatim.
+//   SOURCE_QUERY "*.zip" — walk the central directory, select the member the job's NAME names (or the FIRST member
+//                          when it names none), inflate it whole.
+//   anything else        — the daily modifications/deletes and the lookup files, served uncompressed; the body passes
+//                          through verbatim. A response with no job is plain.
 //
-// A non-2xx status is an ERROR here rather than an empty text frame: an empty
+// A non-2xx status (or a fetch that failed outright, STATUS 0) is an ERROR rather than an empty text frame: an empty
 // gazetteer and a failed fetch must never be the same observation.
 // ---------------------------------------------------------------------------
 int inflate(void) {
     if (refuse_batched()) return 500;
 
-    const std::string job = input_text("job");
-    const std::string response = input_text("response");
-    if (response.empty()) {
-        plugin_set_error("missing-response-frame",
-                         "inflate requires the http response frame on port \"response\".");
+    bool bad = false;
+    const R::HttpResponse* response = response_on("response", &bad);
+    if (bad) {
+        plugin_set_error("invalid-response-frame", "the frame on port \"response\" is not an HttpResponse (HRSP).");
         return 400;
     }
-    const long status = response_status(response);
-    // 304 NOT MODIFIED is the SAME-DATA LEDGER paying off, not a failure.
-    // geonames-ingest attaches If-None-Match from the resume mark, so an
-    // unchanged upstream file costs one conditional request. Nothing is pushed
-    // on `text`, so parse_places never becomes ready and the run ends quietly;
-    // the report still records the tick so a no-op is observable rather than
-    // indistinguishable from a flow that never fired.
-    if (status == 304) {
-        const std::string report =
-            std::string("{\"container\":\"") + json_escape(json_string(job, "container", "plain")) +
-            "\",\"member\":\"\",\"bytesIn\":0,\"bytesOut\":0,\"status\":304"
-            ",\"ledgeredNoOp\":true}";
-        return push_json("report", report) < 0 ? 500 : 0;
+    if (!response) {
+        plugin_set_error("missing-response-frame", "inflate requires the http response frame on port \"response\".");
+        return 400;
     }
-    if (status != 0 && (status < 200 || status >= 300)) {
-        char message[192];
+    const Job job = job_of(response);
+    const std::string container = job.zip() ? "zip" : "plain";
+    const long status = response->STATUS();
+    // 304 NOT MODIFIED is the SAME-DATA LEDGER paying off, not a failure. geonames-ingest attaches If-None-Match from
+    // the resume mark, so an unchanged upstream file costs one conditional request. Nothing is pushed on `text`, so
+    // parse_places never becomes ready and the run ends quietly; the report still records the tick (an Unchanged
+    // notice) so a no-op is observable rather than indistinguishable from a flow that never fired.
+    if (status == 304) {
+        return push_notice("report", R::flowNoticeKind_Unchanged, "not-modified", 0,
+                           {"container=" + container, "member=", "bytes_in=0", "bytes_out=0", "status=304"},
+                           job.dataset_id, epoch_ms(job.dataset_epoch)) < 0 ? 500 : 0;
+    }
+    if (status < 200 || status >= 300) {
+        char message[384];
         std::snprintf(message, sizeof(message),
-                      "the gazetteer fetch answered HTTP %ld; an empty edition and a failed "
-                      "fetch are not the same observation, so this is refused rather than "
-                      "decoded to zero places.",
-                      status);
+                      "the gazetteer fetch answered HTTP %ld%s%s; an empty edition and a failed fetch are not the same "
+                      "observation, so this is refused rather than decoded to zero places.",
+                      status, response->ERROR() && response->ERROR()->size() ? ": " : "",
+                      response->ERROR() ? response->ERROR()->c_str() : "");
         plugin_set_error("upstream-status", message);
         return 502;
     }
 
-    const std::string body = response_body(response);
-    const std::string container = json_string(job, "container", "plain");
-
+    const std::string body = body_of(response);
     std::string text;
     std::string member_name;
-    if (container == "zip") {
-        const std::string want = json_string(job, "member", "");
-        const ZipEntry entry = zip_find_member(body, want);
+    if (job.zip()) {
+        const ZipEntry entry = zip_find_member(body, job.text_name);
         if (!entry.found) {
             plugin_set_error("zip-member-not-found",
                              "no readable member in the archive (ZIP64, an encrypted member, an "
@@ -685,8 +568,7 @@ int inflate(void) {
         } else {
             size_t out_len = 0;
             // flags 0 == RAW deflate: a ZIP member carries no zlib header.
-            void* out = tinfl_decompress_mem_to_heap(body.data() + entry.data_offset,
-                                                     entry.compressed_size, &out_len, 0);
+            void* out = tinfl_decompress_mem_to_heap(body.data() + entry.data_offset, entry.compressed_size, &out_len, 0);
             if (!out) {
                 plugin_set_error("inflate-failed",
                                  "the archive member did not inflate; a partial inflate is "
@@ -695,11 +577,9 @@ int inflate(void) {
             }
             text.assign(static_cast<const char*>(out), out_len);
             mz_free(out);
-            // The central directory states the member's uncompressed size. A
-            // disagreement means the inflate stopped early, which would parse
-            // to a plausible short place set with no error anywhere.
-            if (entry.uncompressed_size != 0 &&
-                text.size() != static_cast<size_t>(entry.uncompressed_size)) {
+            // The central directory states the member's uncompressed size. A disagreement means the inflate stopped
+            // early, which would parse to a plausible short place set with no error anywhere.
+            if (entry.uncompressed_size != 0 && text.size() != static_cast<size_t>(entry.uncompressed_size)) {
                 char message[224];
                 std::snprintf(message, sizeof(message),
                               "inflated %zu bytes but the central directory states %u for "
@@ -713,164 +593,106 @@ int inflate(void) {
         text = body;
     }
 
-    const std::string report = std::string("{\"container\":\"") + json_escape(container) + "\"" +
-                               ",\"member\":\"" + json_escape(member_name) + "\"" +
-                               ",\"bytesIn\":" + std::to_string(body.size()) +
-                               ",\"bytesOut\":" + std::to_string(text.size()) +
-                               ",\"status\":" + std::to_string(status) + "}";
-
-    if (plugin_push_output_ex("text", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-                              nullptr, 0, 1, reinterpret_cast<const uint8_t*>(text.data()),
-                              static_cast<uint32_t>(text.size())) < 0) {
-        return 500;
-    }
-    return push_json("report", report) < 0 ? 500 : 0;
+    if (push_text(*response, text) < 0) return 500;
+    return push_notice("report", R::flowNoticeKind_Info, "inflated", text.size(),
+                       {"container=" + container, "member=" + member_name, "bytes_in=" + std::to_string(body.size()),
+                        "bytes_out=" + std::to_string(text.size()), "status=" + std::to_string(status)},
+                       job.dataset_id, epoch_ms(job.dataset_epoch)) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
-// parse_lookups — the three plain-text division/country files -> one compact
-// lookup-table frame.
+// parse_places — 19-column geoname rows -> a size-prefixed $GNP record stream, the division and country NAMES joined
+// from the three lookup files (when the flow fetched them).
 //
-// admin1CodesASCII.txt : "CC.A1"       TAB name TAB asciiname TAB geonameid
-// admin2Codes.txt      : "CC.A1.A2"    TAB name TAB asciiname TAB geonameid
-// countryInfo.txt      : ISO TAB ISO3 TAB numeric TAB fips TAB Country TAB ...
-//                        (# comment lines, including the column header, skipped)
+// The SAME row shape serves both lanes, which is what makes the daily delta free: `modifications-YYYY-MM-DD.txt` is a
+// file of FULL geoname rows, verified live 2026-08-15, so a modification is simply an upsert of the same record the
+// seed would have produced. There is no second decoder and no second record shape to keep in step.
 //
-// A file the flow did not fetch simply contributes nothing: the lane must be
-// able to run with only the country table (or none), and a place then carries
-// its codes without resolved names rather than failing. What it must never do
-// is carry a WRONG name, which is why a lookup miss leaves the field unset.
+// The lookup files:
+//   admin1CodesASCII.txt : "CC.A1"       TAB name TAB asciiname TAB geonameid
+//   admin2Codes.txt      : "CC.A1.A2"    TAB name TAB asciiname TAB geonameid
+//   countryInfo.txt      : ISO TAB ISO3 TAB numeric TAB fips TAB Country TAB ...
+//                          (# comment lines, including the column header, skipped)
 // ---------------------------------------------------------------------------
-int parse_lookups(void) {
+int parse_places(void) {
     if (refuse_batched()) return 500;
 
-    Lookups tables;
-    size_t admin1_rows = 0, admin2_rows = 0, country_rows = 0;
+    bool bad = false;
+    const R::HttpResponse* text_frame = response_on("text", &bad);
+    if (bad) {
+        plugin_set_error("invalid-text-frame", "the frame on port \"text\" is not an HttpResponse (HRSP).");
+        return 400;
+    }
+    if (!text_frame) {
+        plugin_set_error("missing-text-frame", "parse_places requires the decoded gazetteer text on port \"text\".");
+        return 400;
+    }
+    const Job job = job_of(text_frame);
+    if (!job.present || job.dataset_id.empty() || job.dataset_epoch.empty() || job.license.empty()) {
+        plugin_set_error("incomplete-dataset-contract",
+                         "$GNP.SOURCE requires DATASET_ID, DATASET_EPOCH and LICENSE on every "
+                         "record. The job ($GNP header in the text frame's CONTEXT) supplies them and they are never "
+                         "defaulted: a place published under a guessed epoch is comparable to the wrong "
+                         "bytes, which is worse than not publishing it.");
+        return 400;
+    }
 
-    // TRUNCATION IS AN ERROR, NOT A SMALLER TABLE. Checked before a single row
-    // is folded in, for all three files, because a half-read division table
-    // produces places whose codes resolve to nothing while every count in the
-    // run still reads as a success.
+    // TRUNCATION IS AN ERROR, NOT A SMALLER TABLE. Checked before a single row is folded in, for all three files,
+    // because a half-read division table produces places whose codes resolve to nothing while every count in the run
+    // still reads as a success. Content-Length is the length the ORIGIN stated.
     const char* lookup_ports[3] = {"admin1", "admin2", "country"};
-    for (const char* port_id : lookup_ports) {
-        const std::string raw = input_text(port_id);
-        if (raw.empty()) continue;
-        long declared = 0;
-        if (!declared_content_length(raw, &declared)) continue;
-        const long actual = static_cast<long>(response_body(raw).size());
+    const R::HttpResponse* lookups[3] = {nullptr, nullptr, nullptr};
+    for (int i = 0; i < 3; i++) {
+        lookups[i] = response_on(lookup_ports[i], &bad);
+        if (bad) {
+            plugin_set_error("invalid-lookup-frame",
+                             (std::string("the frame on port \"") + lookup_ports[i] + "\" is not an HttpResponse (HRSP).").c_str());
+            return 400;
+        }
+        if (!lookups[i]) continue;
+        const long declared = std::atol(header_of(lookups[i], "content-length").c_str());
+        if (declared <= 0) continue;
+        const long actual = lookups[i]->BODY() ? static_cast<long>(lookups[i]->BODY()->size()) : 0;
         if (actual < declared) {
             char message[256];
             std::snprintf(message, sizeof(message),
                           "the \"%s\" lookup body is %ld bytes but the origin declared %ld; a "
                           "truncated division table resolves later codes to nothing while the "
                           "run still reports success, so it is refused rather than folded in.",
-                          port_id, actual, declared);
+                          lookup_ports[i], actual, declared);
             plugin_set_error("lookup-truncated", message);
             return 502;
         }
     }
 
-    const std::string admin1 = response_body(input_text("admin1"));
-    for_each_line(admin1, [&](const std::string& line) -> bool {
+    Lookups tables;
+    for_each_line(body_of(lookups[0]), [&](const std::string& line) -> bool {
         if (line.empty() || line[0] == '#') return true;
         const std::vector<std::string> cols = split_tabs(line);
         if (cols.size() < 2 || cols[0].empty() || cols[1].empty()) return true;
         tables.admin1[cols[0]] = cols[1];
-        admin1_rows++;
         return true;
     });
-
-    const std::string admin2 = response_body(input_text("admin2"));
-    for_each_line(admin2, [&](const std::string& line) -> bool {
+    for_each_line(body_of(lookups[1]), [&](const std::string& line) -> bool {
         if (line.empty() || line[0] == '#') return true;
         const std::vector<std::string> cols = split_tabs(line);
         if (cols.size() < 2 || cols[0].empty() || cols[1].empty()) return true;
         tables.admin2[cols[0]] = cols[1];
-        admin2_rows++;
         return true;
     });
-
-    const std::string country = response_body(input_text("country"));
-    for_each_line(country, [&](const std::string& line) -> bool {
+    for_each_line(body_of(lookups[2]), [&](const std::string& line) -> bool {
         if (line.empty() || line[0] == '#') return true;
         const std::vector<std::string> cols = split_tabs(line);
         if (cols.size() < 5 || cols[0].empty() || cols[4].empty()) return true;
         tables.country[cols[0]] = cols[4];
-        country_rows++;
         return true;
     });
 
-    std::string out = "{\"admin1\":{";
-    bool first = true;
-    for (const auto& kv : tables.admin1) {
-        if (!first) out += ",";
-        first = false;
-        out += "\"" + json_escape(kv.first) + "\":\"" + json_escape(kv.second) + "\"";
-    }
-    out += "},\"admin2\":{";
-    first = true;
-    for (const auto& kv : tables.admin2) {
-        if (!first) out += ",";
-        first = false;
-        out += "\"" + json_escape(kv.first) + "\":\"" + json_escape(kv.second) + "\"";
-    }
-    out += "},\"country\":{";
-    first = true;
-    for (const auto& kv : tables.country) {
-        if (!first) out += ",";
-        first = false;
-        out += "\"" + json_escape(kv.first) + "\":\"" + json_escape(kv.second) + "\"";
-    }
-    out += "},\"counts\":{\"admin1\":" + std::to_string(admin1_rows) +
-           ",\"admin2\":" + std::to_string(admin2_rows) +
-           ",\"country\":" + std::to_string(country_rows) + "}}";
-
-    return push_json("tables", out) < 0 ? 500 : 0;
-}
-
-// ---------------------------------------------------------------------------
-// parse_places — 19-column geoname rows -> a size-prefixed $GNP record stream.
-//
-// The SAME row shape serves both lanes, which is what makes the daily delta
-// free: `modifications-YYYY-MM-DD.txt` is a file of FULL geoname rows, verified
-// live 2026-08-15, so a modification is simply an upsert of the same record the
-// seed would have produced. There is no second decoder and no second record
-// shape to keep in step.
-// ---------------------------------------------------------------------------
-int parse_places(void) {
-    if (refuse_batched()) return 500;
-
-    const std::string job = input_text("job");
-    const DatasetContract contract = contract_of(job);
-    if (contract.dataset_id.empty() || contract.dataset_epoch.empty() ||
-        contract.license.empty()) {
-        plugin_set_error("incomplete-dataset-contract",
-                         "$GNP.SOURCE requires DATASET_ID, DATASET_EPOCH and LICENSE on every "
-                         "record. The job frame supplies them and they are never defaulted: a "
-                         "place published under a guessed epoch is comparable to the wrong "
-                         "bytes, which is worse than not publishing it.");
-        return 400;
-    }
-
-    const int32_t text_index = plugin_find_input_index("text", 0);
-    if (text_index < 0) {
-        plugin_set_error("missing-text-frame",
-                         "parse_places requires the decoded gazetteer text on port \"text\".");
-        return 400;
-    }
-    const plugin_input_frame_t* text_frame =
-        plugin_get_input_frame(static_cast<uint32_t>(text_index));
-    const std::string text =
-        text_frame && text_frame->payload
-            ? std::string(reinterpret_cast<const char*>(text_frame->payload),
-                          text_frame->payload_length)
-            : std::string();
-
-    const Lookups tables = read_lookups(input_text("tables"));
-    const long limit = static_cast<long>(json_number(job, "limit", 0));
+    const long limit = static_cast<long>(config_number("geonames_limit", 0));
     const std::string retrieved_at = iso_now();
+    const std::string text = body_of(text_frame);
 
-    std::vector<uint8_t> stream;
+    Bytes stream;
     long rows_in = 0, written = 0, skipped_short = 0, skipped_position = 0, skipped_identity = 0;
     bool truncated = false;
 
@@ -883,8 +705,8 @@ int parse_places(void) {
         if (c.size() < GEONAME_COLUMNS) { skipped_short++; return true; }
         if (c[COL_GEONAMEID].empty() || c[COL_NAME].empty()) { skipped_identity++; return true; }
 
-        // A position outside the WGS 84 domain is DROPPED, never clamped: a
-        // clamped place is a place in the wrong location, silently.
+        // A position outside the WGS 84 domain is DROPPED, never clamped: a clamped place is a place in the wrong
+        // location, silently.
         char* lat_end = nullptr;
         char* lon_end = nullptr;
         const double lat = strtod(c[COL_LATITUDE].c_str(), &lat_end);
@@ -898,32 +720,22 @@ int parse_places(void) {
         flatbuffers::FlatBufferBuilder b(2048);
 
         // ── provenance ──────────────────────────────────────────────────────
-        // NATIVE_ID is the gazetteer's own row id, verbatim and never
-        // re-minted. It is deliberately NOT a vendor-named field on GNP: the
-        // standard names no gazetteer, and the join key back to the source
+        // NATIVE_ID is the gazetteer's own row id, verbatim and never re-minted; the join key back to the source
         // belongs in SOURCE.NATIVE_ID by the IDL's own instruction.
-        const auto p_dataset_id = b.CreateString(contract.dataset_id);
-        const auto p_dataset_epoch = b.CreateString(contract.dataset_epoch);
+        const auto p_dataset_id = b.CreateString(job.dataset_id);
+        const auto p_dataset_epoch = b.CreateString(job.dataset_epoch);
         const auto p_retrieved_at = b.CreateString(retrieved_at);
-        const auto p_license = b.CreateString(contract.license);
+        const auto p_license = b.CreateString(job.license);
         const auto p_native_id = b.CreateString(c[COL_GEONAMEID]);
-        const auto p_dataset_name =
-            contract.dataset_name.empty() ? 0 : b.CreateString(contract.dataset_name);
-        const auto p_dataset_url =
-            contract.dataset_url.empty() ? 0 : b.CreateString(contract.dataset_url);
-        const auto p_dataset_cid =
-            contract.dataset_cid.empty() ? 0 : b.CreateString(contract.dataset_cid);
-        const auto p_source_url =
-            contract.source_url.empty() ? 0 : b.CreateString(contract.source_url);
-        const auto p_source_query =
-            contract.source_query.empty() ? 0 : b.CreateString(contract.source_query);
-        const auto p_license_url =
-            contract.license_url.empty() ? 0 : b.CreateString(contract.license_url);
-        const auto p_attribution =
-            contract.attribution.empty() ? 0 : b.CreateString(contract.attribution);
-        const auto p_native_modified = c[COL_MODIFICATION_DATE].empty()
-                                           ? 0
-                                           : b.CreateString(c[COL_MODIFICATION_DATE]);
+        const auto p_dataset_name = job.dataset_name.empty() ? 0 : b.CreateString(job.dataset_name);
+        const auto p_dataset_url = job.dataset_url.empty() ? 0 : b.CreateString(job.dataset_url);
+        const auto p_dataset_cid = job.dataset_cid.empty() ? 0 : b.CreateString(job.dataset_cid);
+        const auto p_source_url = job.source_url.empty() ? 0 : b.CreateString(job.source_url);
+        const auto p_source_query = job.source_query.empty() ? 0 : b.CreateString(job.source_query);
+        const auto p_license_url = job.license_url.empty() ? 0 : b.CreateString(job.license_url);
+        const auto p_attribution = job.attribution.empty() ? 0 : b.CreateString(job.attribution);
+        const auto p_native_modified =
+            c[COL_MODIFICATION_DATE].empty() ? 0 : b.CreateString(c[COL_MODIFICATION_DATE]);
 
         GNPProvenanceBuilder pb(b);
         pb.add_DATASET_ID(p_dataset_id);
@@ -939,15 +751,13 @@ int parse_places(void) {
         if (p_license_url.o) pb.add_LICENSE_URL(p_license_url);
         if (p_attribution.o) pb.add_ATTRIBUTION(p_attribution);
         if (p_native_modified.o) pb.add_NATIVE_MODIFIED(p_native_modified);
-        if (contract.share_alike) pb.add_SHARE_ALIKE(true);
-        if (contract.non_commercial_only) pb.add_NON_COMMERCIAL_ONLY(true);
+        if (job.share_alike) pb.add_SHARE_ALIKE(true);
+        if (job.non_commercial_only) pb.add_NON_COMMERCIAL_ONLY(true);
         const auto provenance = pb.Finish();
 
         // ── alternate names ─────────────────────────────────────────────────
-        // The dump publishes them as one comma-joined list with no language
-        // tags, so LANGUAGE and every flag are left UNSET. Guessing a language
-        // from a script would be a fabricated attribute on a required-verbatim
-        // field.
+        // The dump publishes them as one comma-joined list with no language tags, so LANGUAGE and every flag are
+        // left UNSET. Guessing a language from a script would be a fabricated attribute on a required-verbatim field.
         std::vector<flatbuffers::Offset<GNPName>> alternates;
         for (const std::string& alt : split_commas(c[COL_ALTERNATENAMES])) {
             const auto alt_name = b.CreateString(alt);
@@ -963,14 +773,12 @@ int parse_places(void) {
         flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> cc2_vec;
         if (!cc2.empty()) cc2_vec = b.CreateVector(cc2);
 
-        const std::string record_id = contract.id_prefix + ":" + c[COL_GEONAMEID];
-        const std::string admin1_key =
-            c[COL_COUNTRY_CODE].empty() || c[COL_ADMIN1].empty()
-                ? std::string()
-                : c[COL_COUNTRY_CODE] + "." + c[COL_ADMIN1];
+        const std::string record_id = job.id_prefix + ":" + c[COL_GEONAMEID];
+        const std::string admin1_key = c[COL_COUNTRY_CODE].empty() || c[COL_ADMIN1].empty()
+                                           ? std::string()
+                                           : c[COL_COUNTRY_CODE] + "." + c[COL_ADMIN1];
         const std::string admin2_key =
-            admin1_key.empty() || c[COL_ADMIN2].empty() ? std::string()
-                                                        : admin1_key + "." + c[COL_ADMIN2];
+            admin1_key.empty() || c[COL_ADMIN2].empty() ? std::string() : admin1_key + "." + c[COL_ADMIN2];
         const std::string admin1_name = lookup_or_empty(tables.admin1, admin1_key);
         const std::string admin2_name = lookup_or_empty(tables.admin2, admin2_key);
         const std::string country_name = lookup_or_empty(tables.country, c[COL_COUNTRY_CODE]);
@@ -978,12 +786,9 @@ int parse_places(void) {
         const auto f_id = b.CreateString(record_id);
         const auto f_name = b.CreateString(c[COL_NAME]);
         const auto f_ascii = c[COL_ASCIINAME].empty() ? 0 : b.CreateString(c[COL_ASCIINAME]);
-        const auto f_class_code =
-            c[COL_FEATURE_CLASS].empty() ? 0 : b.CreateString(c[COL_FEATURE_CLASS]);
-        const auto f_feature_code =
-            c[COL_FEATURE_CODE].empty() ? 0 : b.CreateString(c[COL_FEATURE_CODE]);
-        const auto f_country_code =
-            c[COL_COUNTRY_CODE].empty() ? 0 : b.CreateString(c[COL_COUNTRY_CODE]);
+        const auto f_class_code = c[COL_FEATURE_CLASS].empty() ? 0 : b.CreateString(c[COL_FEATURE_CLASS]);
+        const auto f_feature_code = c[COL_FEATURE_CODE].empty() ? 0 : b.CreateString(c[COL_FEATURE_CODE]);
+        const auto f_country_code = c[COL_COUNTRY_CODE].empty() ? 0 : b.CreateString(c[COL_COUNTRY_CODE]);
         const auto f_country_name = country_name.empty() ? 0 : b.CreateString(country_name);
         const auto f_admin1_code = c[COL_ADMIN1].empty() ? 0 : b.CreateString(c[COL_ADMIN1]);
         const auto f_admin1_name = admin1_name.empty() ? 0 : b.CreateString(admin1_name);
@@ -992,9 +797,8 @@ int parse_places(void) {
         const auto f_admin3_code = c[COL_ADMIN3].empty() ? 0 : b.CreateString(c[COL_ADMIN3]);
         const auto f_admin4_code = c[COL_ADMIN4].empty() ? 0 : b.CreateString(c[COL_ADMIN4]);
         const auto f_timezone = c[COL_TIMEZONE].empty() ? 0 : b.CreateString(c[COL_TIMEZONE]);
-        const auto f_dem_model = contract.dem_model.empty() || c[COL_DEM].empty()
-                                     ? 0
-                                     : b.CreateString(contract.dem_model);
+        const auto f_dem_model =
+            job.dem_model.empty() || c[COL_DEM].empty() ? 0 : b.CreateString(job.dem_model);
 
         GNPBuilder gb(b);
         gb.add_ID(f_id);
@@ -1003,15 +807,13 @@ int parse_places(void) {
         if (!alternates.empty()) gb.add_ALTERNATE_NAMES(alternates_vec);
         gb.add_LATITUDE(lat);
         gb.add_LONGITUDE(lon);
-        // ELEVATION_PUBLISHED is the whole point of the field: an unpublished
-        // elevation is zero-and-false, a surveyed sea-level place is
-        // zero-and-TRUE, and the two are never the same record.
+        // ELEVATION_PUBLISHED is the whole point of the field: an unpublished elevation is zero-and-false, a surveyed
+        // sea-level place is zero-and-TRUE, and the two are never the same record.
         if (!c[COL_ELEVATION].empty()) {
             gb.add_ELEVATION_M(strtod(c[COL_ELEVATION].c_str(), nullptr));
             gb.add_ELEVATION_PUBLISHED(true);
         }
-        // The DEM sample is kept in its own field, never substituted for a
-        // survey: "a model sample is not a survey".
+        // The DEM sample is kept in its own field, never substituted for a survey: "a model sample is not a survey".
         if (!c[COL_DEM].empty()) gb.add_DEM_ELEVATION_M(strtod(c[COL_DEM].c_str(), nullptr));
         if (f_dem_model.o) gb.add_DEM_MODEL(f_dem_model);
         gb.add_FEATURE_CLASS(feature_class_of(c[COL_FEATURE_CLASS]));
@@ -1043,94 +845,84 @@ int parse_places(void) {
         return true;
     });
 
-    // A CROPPED ANSWER MUST SAY SO. `truncated` is the difference between "the
-    // gazetteer published this many places" and "we stopped counting", and a
-    // partial edition that reads as a complete one is the failure mode this
-    // whole repo keeps re-learning.
-    const std::string decision =
-        std::string("{\"lane\":\"") + json_escape(json_string(job, "lane", "seed")) + "\"" +
-        ",\"format\":\"record-stream\",\"schema\":\"GNP\"" +
-        ",\"rowsIn\":" + std::to_string(rows_in) + ",\"recordsOut\":" + std::to_string(written) +
-        ",\"skippedShortRow\":" + std::to_string(skipped_short) +
-        ",\"skippedNoIdentity\":" + std::to_string(skipped_identity) +
-        ",\"skippedOutOfRange\":" + std::to_string(skipped_position) +
-        ",\"truncated\":" + (truncated ? "true" : "false") + ",\"datasetId\":\"" +
-        json_escape(contract.dataset_id) + "\"" + ",\"datasetEpoch\":\"" +
-        json_escape(contract.dataset_epoch) + "\"" + ",\"retrievedAt\":\"" +
-        json_escape(retrieved_at) + "\"" + ",\"admin1Resolved\":" +
-        std::to_string(tables.admin1.size()) + ",\"admin2Resolved\":" +
-        std::to_string(tables.admin2.size()) + ",\"countriesResolved\":" +
-        std::to_string(tables.country.size()) + "}";
-
     if (push_gnp_stream("records", stream) < 0) return 500;
-    return push_json("decision", decision) < 0 ? 500 : 0;
+    // THE RUN SUMMARY, as a FlowNotice (KIND Info, COUNT = records out, SOURCE_NAME = the dataset, AT_MS = its epoch).
+    // A CROPPED ANSWER MUST SAY SO: REASON "places-cropped" (and truncated=true) is the difference between "the
+    // gazetteer published this many places" and "we stopped counting".
+    return push_notice("decision", R::flowNoticeKind_Info, truncated ? "places-cropped" : "places-decoded",
+                       static_cast<uint64_t>(written),
+                       {std::string("lane=") + (job.zip() ? "seed" : "delta"), "rows_in=" + std::to_string(rows_in),
+                        "records_out=" + std::to_string(written), "skipped_short_row=" + std::to_string(skipped_short),
+                        "skipped_no_identity=" + std::to_string(skipped_identity),
+                        "skipped_out_of_range=" + std::to_string(skipped_position),
+                        std::string("truncated=") + (truncated ? "true" : "false"), "dataset_id=" + job.dataset_id,
+                        "dataset_epoch=" + job.dataset_epoch, "retrieved_at=" + retrieved_at,
+                        "admin1_resolved=" + std::to_string(tables.admin1.size()),
+                        "admin2_resolved=" + std::to_string(tables.admin2.size()),
+                        "countries_resolved=" + std::to_string(tables.country.size())},
+                       job.dataset_id, epoch_ms(job.dataset_epoch)) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
 // parse_deletes — `deletes-YYYY-MM-DD.txt` -> the tombstone list.
 //
-// Three tab-separated columns: geonameid TAB name TAB reason (verified live
-// 2026-08-15). The reason is carried verbatim because it is the only record of
-// WHY a place left the gazetteer — "duplicate" and "not a real place" are
-// different facts about the same id, and a consumer reconciling its own copy
-// needs to be able to tell them apart.
+// Three tab-separated columns: geonameid TAB name TAB reason (verified live 2026-08-15). The reason is carried verbatim
+// because it is the only record of WHY a place left the gazetteer — "duplicate" and "not a real place" are different
+// facts about the same id.
 //
-// THIS METHOD EMITS A LIST, NOT A DELETION. There is no host capability that
-// removes a stored row: hostcap/storage-ingest offers `ingest` only, and
-// hostcap/flatsql-query is read-only. Inventing a delete op would be a new host
-// capability, which this lane may not add. So the tombstones ride out of the
-// flow on their own port, exactly as the cellular lane's resume mark does, and
-// closing that loop needs one durable delete lane — recorded as a gap rather
-// than papered over with a fake.
+// THIS METHOD EMITS A LIST, NOT A DELETION. No host capability removes a stored row (storage-ingest offers ingest only,
+// flatsql-query is read-only) and inventing one would be a new host capability this lane may not add, so the tombstones
+// ride out of the flow on their own port — ONE FlowNotice (KIND Info, REASON "tombstones", COUNT = tombstones,
+// SOURCE_NAME = the dataset, AT_MS = its epoch) whose ITEMS are "<record ID>\t<name>\t<reason>", the record ID being the
+// one the stored place carries ("<prefix>:<geonameid>"). No SDS record models a gazetteer tombstone. Rows that are not
+// tombstones are counted on a second notice (REASON "deletes-rows-skipped") only when there are any.
 // ---------------------------------------------------------------------------
 int parse_deletes(void) {
     if (refuse_batched()) return 500;
 
-    const std::string job = input_text("job");
-    const int32_t text_index = plugin_find_input_index("text", 0);
-    if (text_index < 0) {
-        plugin_set_error("missing-text-frame",
-                         "parse_deletes requires the deletes text on port \"text\".");
+    bool bad = false;
+    const R::HttpResponse* frame = response_on("text", &bad);
+    if (bad) {
+        plugin_set_error("invalid-text-frame", "the frame on port \"text\" is not an HttpResponse (HRSP).");
         return 400;
     }
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(text_index));
-    const std::string text =
-        frame && frame->payload ? std::string(reinterpret_cast<const char*>(frame->payload),
-                                              frame->payload_length)
-                                : std::string();
+    if (!frame) {
+        plugin_set_error("missing-text-frame", "parse_deletes requires the deletes text on port \"text\".");
+        return 400;
+    }
+    const Job job = job_of(frame);
+    const std::string prefix = job.present ? job.id_prefix : "geonames";
+    const std::string text = body_of(frame);
 
-    const std::string prefix = json_string(job, "id_prefix", "geonames");
-    std::string entries;
-    long rows_in = 0, written = 0, skipped = 0;
+    std::vector<std::string> entries;
+    long rows_in = 0, skipped = 0;
     for_each_line(text, [&](const std::string& line) -> bool {
         if (line.empty() || line[0] == '#') return true;
         rows_in++;
         const std::vector<std::string> c = split_tabs(line);
         if (c.empty() || c[0].empty()) { skipped++; return true; }
-        // A row whose first column is not an id is not a tombstone. GeoNames
-        // serves an HTML 404 body for a day it no longer retains, and decoding
-        // that to "delete everything named <html>" is precisely the class of
-        // failure this guard exists for.
+        // A row whose first column is not an id is not a tombstone. GeoNames serves an HTML 404 body for a day it no
+        // longer retains, and decoding that to "delete everything named <html>" is precisely the class of failure
+        // this guard exists for.
         for (const char ch : c[0]) {
             if (ch < '0' || ch > '9') { skipped++; return true; }
         }
-        if (written) entries += ",";
-        entries += "{\"native_id\":\"" + json_escape(c[0]) + "\",\"id\":\"" +
-                   json_escape(prefix + ":" + c[0]) + "\",\"name\":\"" +
-                   json_escape(c.size() > 1 ? c[1] : std::string()) + "\",\"reason\":\"" +
-                   json_escape(c.size() > 2 ? c[2] : std::string()) + "\"}";
-        written++;
+        entries.push_back(prefix + ":" + c[0] + "\t" + (c.size() > 1 ? c[1] : std::string()) + "\t" +
+                          (c.size() > 2 ? c[2] : std::string()));
         return true;
     });
 
-    const std::string out =
-        std::string("{\"lane\":\"deletes\",\"datasetId\":\"") +
-        json_escape(json_string(job, "dataset_id", "")) + "\"" + ",\"datasetEpoch\":\"" +
-        json_escape(json_string(job, "dataset_epoch", "")) + "\"" +
-        ",\"rowsIn\":" + std::to_string(rows_in) + ",\"tombstones\":" + std::to_string(written) +
-        ",\"skipped\":" + std::to_string(skipped) + ",\"entries\":[" + entries + "]}";
-
-    return push_json("tombstones", out) < 0 ? 500 : 0;
+    const uint64_t tombstones = entries.size();
+    if (push_notice("tombstones", R::flowNoticeKind_Info, "tombstones", tombstones, std::move(entries), job.dataset_id,
+                    epoch_ms(job.dataset_epoch)) < 0) {
+        return 500;
+    }
+    if (skipped > 0 &&
+        push_notice("tombstones", R::flowNoticeKind_Info, "deletes-rows-skipped", static_cast<uint64_t>(skipped),
+                    {"rows_in=" + std::to_string(rows_in)}, job.dataset_id, epoch_ms(job.dataset_epoch)) < 0) {
+        return 500;
+    }
+    return 0;
 }
 
 }  // extern "C"

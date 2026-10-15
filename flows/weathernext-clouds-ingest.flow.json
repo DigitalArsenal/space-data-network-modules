@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.weathernext-clouds-ingest",
   "name": "Global Ensemble Forecast Cloud-Cover Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow for the cloud-cover fields of a machine-learned global ensemble weather forecast served as Zarr v3 objects: a module cron TIMER tick enters at weathernext-source:plan, which (only when node CONFIG sets weathernext_live_access) emits one raw-body-v1 hostcap/http-request GET per (array x lead x chunk) plus the positional chunk job; hostcap/http-request fetches every chunk in order; weathernext-parser:parse_cloud_chunks pairs job k with response k, decodes each chunk through its declared codec chain and emits one size-prefixed $WXF tile per chunk (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance); hostcap/storage-ingest persists the batch through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "description": "Per-provider ingest flow for the cloud-cover fields of a machine-learned global ensemble weather forecast served as Zarr v3 objects (typed contracts 1.0): the host cron TimerTick enters at weathernext-source:plan, which (only when node CONFIG sets weathernext_live_access) emits one HttpRequest GET per (array x lead x chunk) carrying the chunk's parse job in CONTEXT as a size-prefixed $WXF header record (field, model, init/lead/valid time, member, variable, the tile's GRID and TILE_INDEX/TILE_COUNT, dtype, codec chain, origin, dataset, source URL, licence); hostcap/http-request fetches every chunk in order and echoes each CONTEXT in its HttpResponse; weathernext-parser:parse_cloud_chunks reads each response's own job (no positional pairing), decodes each chunk through its declared codec chain (chunk extents and dimension order from the same node config) and emits one size-prefixed $WXF tile per chunk plus the batch's IngestRequest (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance); hostcap/storage-ingest persists the batch (IngestRequest on meta, the stream on wxf_records) through the policy-mediated storage.ingest_with_source hostcall. IngestResults and Skipped FlowNotices land on the egress sink. After each store, weathernext-source:publish_request joins the IngestResult with the IngestRequest and (only when node CONFIG carries weathernext_publish_url, and not for a REFUSED batch) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its HttpResponse also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; its token rides only the request HEADERS. Every edge carries one concrete FlatBuffer type; no JSON frames between nodes.",
   "nodes": [
     {
       "nodeId": "req",
@@ -64,17 +64,7 @@
       "toPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 4096,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-jobs",
-      "fromNodeId": "req",
-      "fromPortId": "jobs",
-      "toNodeId": "parse",
-      "toPortId": "jobs",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4096,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "http-parse",
@@ -84,7 +74,7 @@
       "toPortId": "responses",
       "backpressurePolicy": "queue",
       "queueDepth": 4096,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-wxf-meta",
@@ -94,18 +84,17 @@
       "toPortId": "meta",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-wxf-records",
       "fromNodeId": "parse",
       "fromPortId": "wxf_records",
       "toNodeId": "ingest_wxf",
-      "toPortId": "records",
+      "toPortId": "wxf_records",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $WXF identity, so the record type is declared on the wire rather than signed away."
+      "opaque": false
     },
     {
       "edgeId": "ingest-wxf-egress",
@@ -115,7 +104,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "ingest-wxf-publish",
@@ -125,7 +114,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-wxf-meta-publish",
@@ -135,7 +124,7 @@
       "toPortId": "meta",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "publish-wxf-http",
@@ -145,7 +134,7 @@
       "toPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "publish-wxf-egress",
@@ -155,7 +144,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "req-status-egress",
@@ -165,7 +154,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     }
   ],
   "triggers": [

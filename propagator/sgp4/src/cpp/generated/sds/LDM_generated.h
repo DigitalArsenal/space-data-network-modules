@@ -52,6 +52,7 @@ struct LDMT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<EPMT>> COLA_POINTS_OF_CONTACT{};
   std::vector<std::string> ORBITAL_PARAMETERS{};
   std::vector<std::unique_ptr<BOVT>> BURN_OUT_VECTORS{};
+  std::string ID{};
   LDMT() = default;
   LDMT(const LDMT &o);
   LDMT(LDMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -90,7 +91,8 @@ struct LDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_COLA_RUNS_REQUIRED = 50,
     VT_COLA_POINTS_OF_CONTACT = 52,
     VT_ORBITAL_PARAMETERS = 54,
-    VT_BURN_OUT_VECTORS = 56
+    VT_BURN_OUT_VECTORS = 56,
+    VT_ID = 58
   };
   /// Launch Site Information
   const SIT *SITE() const {
@@ -200,6 +202,11 @@ struct LDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<BOV>> *BURN_OUT_VECTORS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<BOV>> *>(VT_BURN_OUT_VECTORS);
   }
+  /// APPENDED. Stable identifier of this launch in the registry that
+  /// published it; unchanged when the launch time or status changes.
+  const ::flatbuffers::String *ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -267,6 +274,8 @@ struct LDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_BURN_OUT_VECTORS) &&
            verifier.VerifyVector(BURN_OUT_VECTORS()) &&
            verifier.VerifyVectorOfTables(BURN_OUT_VECTORS()) &&
+           VerifyOffset(verifier, VT_ID) &&
+           verifier.VerifyString(ID()) &&
            verifier.EndTable();
   }
   LDMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -359,6 +368,9 @@ struct LDMBuilder {
   void add_BURN_OUT_VECTORS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<BOV>>> BURN_OUT_VECTORS) {
     fbb_.AddOffset(LDM::VT_BURN_OUT_VECTORS, BURN_OUT_VECTORS);
   }
+  void add_ID(::flatbuffers::Offset<::flatbuffers::String> ID) {
+    fbb_.AddOffset(LDM::VT_ID, ID);
+  }
   explicit LDMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -398,8 +410,10 @@ inline ::flatbuffers::Offset<LDM> CreateLDM(
     ::flatbuffers::Offset<::flatbuffers::String> COLA_RUNS_REQUIRED = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<EPM>>> COLA_POINTS_OF_CONTACT = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ORBITAL_PARAMETERS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<BOV>>> BURN_OUT_VECTORS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<BOV>>> BURN_OUT_VECTORS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ID = 0) {
   LDMBuilder builder_(_fbb);
+  builder_.add_ID(ID);
   builder_.add_BURN_OUT_VECTORS(BURN_OUT_VECTORS);
   builder_.add_ORBITAL_PARAMETERS(ORBITAL_PARAMETERS);
   builder_.add_COLA_POINTS_OF_CONTACT(COLA_POINTS_OF_CONTACT);
@@ -463,7 +477,8 @@ inline ::flatbuffers::Offset<LDM> CreateLDMDirect(
     const char *COLA_RUNS_REQUIRED = nullptr,
     const std::vector<::flatbuffers::Offset<EPM>> *COLA_POINTS_OF_CONTACT = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ORBITAL_PARAMETERS = nullptr,
-    const std::vector<::flatbuffers::Offset<BOV>> *BURN_OUT_VECTORS = nullptr) {
+    const std::vector<::flatbuffers::Offset<BOV>> *BURN_OUT_VECTORS = nullptr,
+    const char *ID = nullptr) {
   auto REFERENCES__ = REFERENCES ? _fbb.CreateString(REFERENCES) : 0;
   auto AGENCY_NAME__ = AGENCY_NAME ? _fbb.CreateString(AGENCY_NAME) : 0;
   auto POINTS_OF_CONTACT__ = POINTS_OF_CONTACT ? _fbb.CreateVector<::flatbuffers::Offset<EPM>>(*POINTS_OF_CONTACT) : 0;
@@ -488,6 +503,7 @@ inline ::flatbuffers::Offset<LDM> CreateLDMDirect(
   auto COLA_POINTS_OF_CONTACT__ = COLA_POINTS_OF_CONTACT ? _fbb.CreateVector<::flatbuffers::Offset<EPM>>(*COLA_POINTS_OF_CONTACT) : 0;
   auto ORBITAL_PARAMETERS__ = ORBITAL_PARAMETERS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ORBITAL_PARAMETERS) : 0;
   auto BURN_OUT_VECTORS__ = BURN_OUT_VECTORS ? _fbb.CreateVector<::flatbuffers::Offset<BOV>>(*BURN_OUT_VECTORS) : 0;
+  auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   return CreateLDM(
       _fbb,
       SITE,
@@ -516,7 +532,8 @@ inline ::flatbuffers::Offset<LDM> CreateLDMDirect(
       COLA_RUNS_REQUIRED__,
       COLA_POINTS_OF_CONTACT__,
       ORBITAL_PARAMETERS__,
-      BURN_OUT_VECTORS__);
+      BURN_OUT_VECTORS__,
+      ID__);
 }
 
 ::flatbuffers::Offset<LDM> CreateLDM(::flatbuffers::FlatBufferBuilder &_fbb, const LDMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -543,7 +560,8 @@ inline LDMT::LDMT(const LDMT &o)
         COLA_SCREEN_DURATION(o.COLA_SCREEN_DURATION),
         PROBABILITY_OF_COLLISION_THRESHOLD(o.PROBABILITY_OF_COLLISION_THRESHOLD),
         COLA_RUNS_REQUIRED(o.COLA_RUNS_REQUIRED),
-        ORBITAL_PARAMETERS(o.ORBITAL_PARAMETERS) {
+        ORBITAL_PARAMETERS(o.ORBITAL_PARAMETERS),
+        ID(o.ID) {
   POINTS_OF_CONTACT.reserve(o.POINTS_OF_CONTACT.size());
   for (const auto &POINTS_OF_CONTACT_ : o.POINTS_OF_CONTACT) { POINTS_OF_CONTACT.emplace_back((POINTS_OF_CONTACT_) ? new EPMT(*POINTS_OF_CONTACT_) : nullptr); }
   OPERATIONS_POINTS_OF_CONTACT.reserve(o.OPERATIONS_POINTS_OF_CONTACT.size());
@@ -584,6 +602,7 @@ inline LDMT &LDMT::operator=(LDMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(COLA_POINTS_OF_CONTACT, o.COLA_POINTS_OF_CONTACT);
   std::swap(ORBITAL_PARAMETERS, o.ORBITAL_PARAMETERS);
   std::swap(BURN_OUT_VECTORS, o.BURN_OUT_VECTORS);
+  std::swap(ID, o.ID);
   return *this;
 }
 
@@ -623,6 +642,7 @@ inline void LDM::UnPackTo(LDMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = COLA_POINTS_OF_CONTACT(); if (_e) { _o->COLA_POINTS_OF_CONTACT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COLA_POINTS_OF_CONTACT[_i]) { _e->Get(_i)->UnPackTo(_o->COLA_POINTS_OF_CONTACT[_i].get(), _resolver); } else { _o->COLA_POINTS_OF_CONTACT[_i] = std::unique_ptr<EPMT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COLA_POINTS_OF_CONTACT.resize(0); } }
   { auto _e = ORBITAL_PARAMETERS(); if (_e) { _o->ORBITAL_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ORBITAL_PARAMETERS[_i] = _e->Get(_i)->str(); } } else { _o->ORBITAL_PARAMETERS.resize(0); } }
   { auto _e = BURN_OUT_VECTORS(); if (_e) { _o->BURN_OUT_VECTORS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BURN_OUT_VECTORS[_i]) { _e->Get(_i)->UnPackTo(_o->BURN_OUT_VECTORS[_i].get(), _resolver); } else { _o->BURN_OUT_VECTORS[_i] = std::unique_ptr<BOVT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BURN_OUT_VECTORS.resize(0); } }
+  { auto _e = ID(); if (_e) _o->ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<LDM> CreateLDM(::flatbuffers::FlatBufferBuilder &_fbb, const LDMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -660,6 +680,7 @@ inline ::flatbuffers::Offset<LDM> LDM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _COLA_POINTS_OF_CONTACT = _o->COLA_POINTS_OF_CONTACT.size() ? _fbb.CreateVector<::flatbuffers::Offset<EPM>> (_o->COLA_POINTS_OF_CONTACT.size(), [](size_t i, _VectorArgs *__va) { return CreateEPM(*__va->__fbb, __va->__o->COLA_POINTS_OF_CONTACT[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _ORBITAL_PARAMETERS = _o->ORBITAL_PARAMETERS.size() ? _fbb.CreateVectorOfStrings(_o->ORBITAL_PARAMETERS) : 0;
   auto _BURN_OUT_VECTORS = _o->BURN_OUT_VECTORS.size() ? _fbb.CreateVector<::flatbuffers::Offset<BOV>> (_o->BURN_OUT_VECTORS.size(), [](size_t i, _VectorArgs *__va) { return CreateBOV(*__va->__fbb, __va->__o->BURN_OUT_VECTORS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ID = _o->ID.empty() ? 0 : _fbb.CreateString(_o->ID);
   return CreateLDM(
       _fbb,
       _SITE,
@@ -688,7 +709,8 @@ inline ::flatbuffers::Offset<LDM> LDM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _COLA_RUNS_REQUIRED,
       _COLA_POINTS_OF_CONTACT,
       _ORBITAL_PARAMETERS,
-      _BURN_OUT_VECTORS);
+      _BURN_OUT_VECTORS,
+      _ID);
 }
 
 inline const LDM *GetLDM(const void *buf) {

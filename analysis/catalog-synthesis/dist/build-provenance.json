@@ -1,0 +1,14 @@
+{
+  "spacedatastandards": "1.249.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "MET",
+    "CVR",
+    "PVN",
+    "OMM"
+  ],
+  "gateStatusVersion": "2026-07-13",
+  "threadModel": "single-thread",
+  "wasmSha256": "00dde60e01fad9f831d5adea79ca0e99f3b2c2cc147ef612c4681499574f9632"
+}

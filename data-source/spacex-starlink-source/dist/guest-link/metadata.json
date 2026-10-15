@@ -2,9 +2,11 @@
   "version": 1,
   "format": "wasm-object",
   "language": "c++",
-  "threadModel": "wasi-threads",
+  "threadModel": "single-thread",
   "symbolPrefix": "sdm_guest_636f6d2e6f726270726f2e7370616365782d737461726c696e6b2d736f75726365_",
   "methodSymbols": {
+    "plan": "sdm_guest_636f6d2e6f726270726f2e7370616365782d737461726c696e6b2d736f75726365_plan",
+    "select_objects": "sdm_guest_636f6d2e6f726270726f2e7370616365782d737461726c696e6b2d736f75726365_select_objects",
     "emit": "sdm_guest_636f6d2e6f726270726f2e7370616365782d737461726c696e6b2d736f75726365_emit"
   }
 }

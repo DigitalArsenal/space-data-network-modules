@@ -1,4 +1,11 @@
+// Catalog Source (typed contracts 1.0): FlatBuffers only. Each method takes ONE HttpResponse (HRSP) on "response"
+// whose BODY is a complete provider edition (GCAT TSV or McCants TLE text) verbatim, and emits a size-prefixed $CAT
+// record stream on "catalog" plus one FlowNotice (FNTC, kind Info) on "report": SCHEMA CAT.fbs, SOURCE_NAME the
+// edition kind, COUNT the records, ITEMS the source-native keys in record order, REASON the parser diagnostics as
+// ';'-separated key=value pairs. A STATUS other than 200 fails the node. No hostcalls: this node performs no I/O.
 #include "space_data_module_invoke.h"
+#include "HttpResponse_generated.h"
+#include "FlowNotice_generated.h"
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -10,7 +17,7 @@
 #include <string>
 #include <vector>
 
-using Json = nlohmann::json;
+namespace R = sdn::runtime;
 namespace {
 constexpr size_t kMaxBytes = 128 * 1024 * 1024;
 constexpr size_t kMaxRows = 250000;
@@ -61,6 +68,28 @@ std::string fullDate(const std::string& value) {
   return output;
 }
 int fail(const std::string& message) { plugin_set_error("invalid-catalog-source", message.c_str()); return 1; }
+// The one HttpResponse input: verified, STATUS 200, BODY bounded. Returns the body or nullptr after setting the error.
+const flatbuffers::Vector<uint8_t>* responseBody(const char* edition) {
+  if (plugin_get_input_count() != 1) { fail(std::string("Exactly one complete ")+edition+" edition is required."); return nullptr; }
+  const auto* input = plugin_get_input_frame(0);
+  if (!input || !input->port_id || std::strcmp(input->port_id, "response") || !input->payload || !input->payload_length) { fail("The input must be one HttpResponse on the response port."); return nullptr; }
+  flatbuffers::Verifier verifier(input->payload, input->payload_length);
+  if (!R::VerifyHttpResponseBuffer(verifier)) { plugin_set_error("invalid-response-frame", "the response frame is not an HttpResponse (HRSP)."); return nullptr; }
+  const auto* response = R::GetHttpResponse(input->payload);
+  if (response->STATUS() != 200) { plugin_set_error("fetch-failed", ("the HttpResponse STATUS is "+std::to_string(response->STATUS())+", not 200.").c_str()); return nullptr; }
+  const auto* body = response->BODY();
+  if (!body || !body->size() || body->size() > kMaxBytes) { fail(std::string("The body must be a bounded ")+edition+" edition."); return nullptr; }
+  return body;
+}
+int pushReport(const char* sourceName, size_t records, std::vector<std::string>&& keys, const std::string& reason) {
+  R::FlowNoticeT notice;
+  notice.KIND = R::flowNoticeKind_Info; notice.SCHEMA = "CAT.fbs"; notice.SOURCE_NAME = sourceName;
+  notice.COUNT = records; notice.ITEMS = std::move(keys); notice.REASON = reason;
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+  return plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+    b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
 bool tleNumber(const std::string& value, uint32_t& out) {
   if (value.size() != 5) return false;
   if (value[0] >= '0' && value[0] <= '9') return unsignedNumber(value, out);
@@ -83,15 +112,14 @@ bool tleLine(const std::string& line, char kind) {
 }
 
 extern "C" int parse_gcat(void) {
-  if (plugin_get_input_count() != 1) return fail("Exactly one complete GCAT edition is required.");
-  const auto* input = plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) return fail("The source must be a bounded GCAT TSV edition.");
-  const std::string source(reinterpret_cast<const char*>(input->payload), input->payload_length);
+  const auto* body = responseBody("GCAT");
+  if (!body) return 1;
+  const std::string source(reinterpret_cast<const char*>(body->data()), body->size());
   if (source.find('\0') != std::string::npos) return fail("GCAT text contains an embedded NUL.");
   std::map<std::string,size_t> columns;
   std::set<uint32_t> seen;
   std::vector<uint8_t> output;
-  Json nativeKeys=Json::array();
+  std::vector<std::string> nativeKeys;
   size_t lineNumber=0, columnCount=0, omittedDesignators=0, omittedDates=0, unnumbered=0;
   std::string update;
   for (size_t start=0; start < source.size();) {
@@ -134,9 +162,9 @@ extern "C" int parse_gcat(void) {
     record.add_LAUNCH_DATE(launchDate); record.add_ORBIT_CENTER(primary);
     const auto type=cell("Type");
     if (!type.empty()) {
-      if (type[0] == 'P') record.add_OBJECT_TYPE(spaceObjectClass::PAYLOAD);
-      else if (type[0] == 'R') record.add_OBJECT_TYPE(spaceObjectClass::ROCKET_BODY);
-      else if (type[0] == 'D') record.add_OBJECT_TYPE(spaceObjectClass::DEBRIS);
+      if (type[0] == 'P') record.add_OBJECT_TYPE(spaceObjectClass_PAYLOAD);
+      else if (type[0] == 'R') record.add_OBJECT_TYPE(spaceObjectClass_ROCKET_BODY);
+      else if (type[0] == 'D') record.add_OBJECT_TYPE(spaceObjectClass_DEBRIS);
     }
     double value=0;
     if (cell("PF") != "?" && scalar(cell("Perigee"),value)) record.add_PERIGEE(value);
@@ -149,24 +177,21 @@ extern "C" int parse_gcat(void) {
     output.insert(output.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()); nativeKeys.push_back(native);
   }
   if (seen.empty()) return fail("No standard GCAT objects were supplied.");
-  const auto report=Json({{"version",1},{"records",seen.size()},{"nativeKeys",nativeKeys},{"sourceUpdate",update},
-    {"unrepresentedDesignators",omittedDesignators},{"unrepresentedLaunchDates",omittedDates},{"unnumberedObjects",unnumbered}}).dump();
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-      reinterpret_cast<const uint8_t*>(report.data()),static_cast<uint32_t>(report.size())) < 0) return 1;
+  if (pushReport("gcat", seen.size(), std::move(nativeKeys), "sourceUpdate="+update+";unrepresentedDesignators="+std::to_string(omittedDesignators)+
+      ";unrepresentedLaunchDates="+std::to_string(omittedDates)+";unnumberedObjects="+std::to_string(unnumbered)) < 0) return 1;
   return plugin_push_output_ex("catalog", "CAT.fbs", "$CAT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CAT", 0, 0,
     output.data(),static_cast<uint32_t>(output.size())) < 0 ? 1 : 0;
 }
 
 extern "C" int parse_mccants_tle_catalog(void) {
-  if (plugin_get_input_count()!=1) return fail("Exactly one complete McCants element edition is required.");
-  const auto* input=plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id,"source") || !input->payload || !input->payload_length || input->payload_length>kMaxBytes) return fail("The source must be a bounded, decompressed McCants TLE edition.");
-  const std::string source(reinterpret_cast<const char*>(input->payload),input->payload_length);
+  const auto* body=responseBody("decompressed McCants element");
+  if (!body) return 1;
+  const std::string source(reinterpret_cast<const char*>(body->data()),body->size());
   if (source.find('\0')!=std::string::npos) return fail("McCants text contains an embedded NUL.");
   std::string name, first;
   std::set<uint32_t> seen;
   std::vector<uint8_t> output;
-  Json nativeKeys=Json::array();
+  std::vector<std::string> nativeKeys;
   size_t unnumbered=0, omittedDesignators=0;
   for (size_t start=0;start<source.size();) {
     const auto end=source.find('\n',start);
@@ -217,7 +242,6 @@ extern "C" int parse_mccants_tle_catalog(void) {
   }
   if (!name.empty() || !first.empty()) return fail("McCants edition ends with an incomplete element record.");
   if (seen.empty()) return fail("No McCants element records were supplied.");
-  const auto report=Json({{"version",1},{"records",seen.size()},{"nativeKeys",nativeKeys},{"unnumberedObjects",unnumbered},{"unrepresentedDesignators",omittedDesignators}}).dump();
-  if (plugin_push_output_ex("report",nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(report.data()),static_cast<uint32_t>(report.size()))<0) return 1;
+  if (pushReport("mccants",seen.size(),std::move(nativeKeys),"unnumberedObjects="+std::to_string(unnumbered)+";unrepresentedDesignators="+std::to_string(omittedDesignators))<0) return 1;
   return plugin_push_output_ex("catalog","CAT.fbs","$CAT",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"CAT",0,0,output.data(),static_cast<uint32_t>(output.size()))<0 ? 1 : 0;
 }

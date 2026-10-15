@@ -2,7 +2,7 @@
 // ASO Catalog whitepaper, section 5, as one pure-compute node.
 //
 // derive: aligned size-prefixed $MPE stream -> aligned size-prefixed $OEM
-// stream, one single-row OEM per element set, plus a JSON report.
+// stream, one single-row OEM per element set, plus a FlowNotice (FNTC) report.
 //
 // Per element set:
 //   1. SGP4 (Vallado 2020-07-13, WGS-72, opsmode 'i' — the same
@@ -23,19 +23,21 @@
 //
 // derive_omm: the same derivation for $OMM element sets (what element-set
 // sources publish), with the object identity of the $OMM carried into the
-// $OEM. Both methods take an optional `options` frame, {"ages": [days...]}:
-// one row per age, SGP4 propagated forward from the element set's epoch
-// (default [0], the epoch state alone).
+// $OEM. Both methods read the ages from the node config (plugin.getConfig, one
+// ModuleConfig): the NumberList "derive.ages", else "ages", in days: one row per
+// age, SGP4 propagated forward from the element set's epoch (default [0], the
+// epoch state alone).
 //
 // omm_from_mpe: the $OMM of each $MPE element set (what the GP history archive stores), so an archive can feed
 // anything that reads $OMM; the fields map one to one, the identity as derive_omm names it.
 //
 // answer_propagation_requests: SGP4 answers the propagator query port of
-// analysis/maneuver-detection (its `propagation_requests`): per query, the
-// trajectory of one element set in TEME from the query's start to its stop,
+// analysis/maneuver-detection (its `propagation_requests`, one $PRW WINDOW_REQUEST): per PRWWindowQuery, the
+// trajectory of one element set in TEME from the query's START to its STOP,
 // one $OEM per query in query order, so a flow can plug SGP4 into the
-// detector's second pass. The element sets and options are forwarded
-// unchanged, so the second pass sees exactly what the first pass saw.
+// detector's second pass. The element sets are forwarded unchanged, so the
+// second pass sees exactly what the first pass saw; the answers are summarised
+// in one $PRW WINDOW_REPORT.
 
 #include <algorithm>
 #include <cmath>
@@ -46,10 +48,12 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "FlowNotice_generated.h"
 
 namespace {
 
-using Json = nlohmann::json;
+namespace R = sdn::runtime;
 using sdn::frames::Epoch;
 using sdn::frames::Mat3;
 using sdn::frames::Vec3;
@@ -78,28 +82,6 @@ std::string format_double(double value) {
     char buffer[40];
     std::snprintf(buffer, sizeof(buffer), "%.17g", value);
     return buffer;
-}
-
-void append_json_string(std::string* out, const std::string& value) {
-    out->push_back('"');
-    for (unsigned char c : value) {
-        switch (c) {
-            case '"': *out += "\\\""; break;
-            case '\\': *out += "\\\\"; break;
-            case '\n': *out += "\\n"; break;
-            case '\r': *out += "\\r"; break;
-            case '\t': *out += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    char escaped[8];
-                    std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
-                    *out += escaped;
-                } else {
-                    out->push_back(static_cast<char>(c));
-                }
-        }
-    }
-    out->push_back('"');
 }
 
 // Proleptic Gregorian civil date from days since 1970-01-01.
@@ -445,28 +427,25 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
-// The `options` frame of derive and derive_omm: {"ages": [days, ...]}, the
-// rows to evaluate at the epoch plus each age. Absent: the epoch alone.
+// The ages of derive and derive_omm, from the node config: the NumberList "derive.ages" (a flow that also configures
+// other nodes names this node's key), else "ages"; the rows to evaluate at the epoch plus each age. Absent: the
+// epoch alone. A host that serves no config reads as absent.
 constexpr size_t kMaxAges = 64;
 constexpr double kMaxAgeDays = 400.0;
 
 std::string read_ages(std::vector<double>* ages) {
     ages->assign(1, 0.0);
-    const int32_t index = plugin_find_input_index("options", 0);
-    const plugin_input_frame_t* frame =
-        index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length == 0) return "";
-    const Json options = Json::parse(frame->payload, frame->payload + frame->payload_length, nullptr, false);
-    if (options.is_discarded() || !options.is_object()) return "The options frame is not a JSON object.";
-    if (!options.contains("ages")) return "";
-    const Json& list = options["ages"];
-    if (!list.is_array() || list.empty() || list.size() > kMaxAges) {
-        return "options.ages is an array of one to 64 ages in days.";
+    const sdm_piv::Config config = sdm_piv::get_config();
+    if (!config.ok()) return "";
+    const char* key = config.has("derive.ages") ? "derive.ages" : "ages";
+    if (!config.has(key)) return "";
+    const sdm_piv::Span<double> list = config.numbers(key);
+    if (config.kind(key) != R::configValueKind_NumberList || list.size() == 0 || list.size() > kMaxAges) {
+        return std::string(key) + " is a list of one to 64 ages in days.";
     }
     std::vector<double> parsed;
-    for (const Json& value : list) {
-        if (!value.is_number()) return "options.ages holds numbers.";
-        const double age = value.get<double>();
+    for (size_t i = 0; i < list.size(); ++i) {
+        const double age = list[i];
         if (!(age >= 0.0 && age <= kMaxAgeDays)) return "Each age is between 0 and 400 days.";
         parsed.push_back(age);
     }
@@ -474,6 +453,28 @@ std::string read_ages(std::vector<double>* ages) {
     parsed.erase(std::unique(parsed.begin(), parsed.end()), parsed.end());
     *ages = parsed;
     return "";
+}
+
+// One FlowNotice (FNTC, Info) on "report": what a pass did, counts and refusals as ITEMS.
+int push_notice(const char* schema, const char* source, uint64_t count, const char* reason,
+                std::vector<std::string> items) {
+    R::FlowNoticeT notice;
+    notice.KIND = R::flowNoticeKind_Info;
+    notice.SCHEMA = schema;
+    notice.SOURCE_NAME = source;
+    notice.COUNT = count;
+    notice.REASON = reason;
+    notice.ITEMS = std::move(items);
+    ::flatbuffers::FlatBufferBuilder b(512);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "FlowNotice", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+std::string failure_item(const Failure& f, bool with_sgp4_error) {
+    std::string item = "failure index=" + std::to_string(f.index) + " entity_id=" + f.entity_id + " reason=" + f.reason;
+    if (with_sgp4_error) item += " sgp4_error=" + std::to_string(f.sgp4_error);
+    return item;
 }
 
 // Calls `consume` with each size-prefixed record of a stream: [u32le size][buffer], zero-length
@@ -555,48 +556,27 @@ void derive_element(const ElementInput& in, const std::string& refusal, const st
 }
 
 int finish_derive(const DeriveTotals& totals, const std::vector<double>& ages) {
-    std::string report = "{\"records\":";
-    report += std::to_string(totals.index);
-    report += ",\"derived\":";
-    report += std::to_string(totals.derived);
-    report += ",\"failed\":";
-    report += std::to_string(totals.failed);
-    report += ",\"rows\":";
-    report += std::to_string(totals.rows);
-    report += ",\"agesDays\":[";
-    for (size_t i = 0; i < ages.size(); ++i) {
-        if (i > 0) report += ",";
-        report += format_double(ages[i]);
-    }
-    report += "],\"epochsOutsideLeapSecondTable\":";
-    report += std::to_string(totals.dubious_time);
-    report += ",\"maxRoundTripPositionKm\":";
-    report += format_double(totals.max_position);
-    report += ",\"maxRoundTripVelocityKmPerS\":";
-    report += format_double(totals.max_velocity);
-    report += ",\"failures\":[";
-    for (size_t i = 0; i < totals.failures.size(); ++i) {
-        if (i > 0) report += ",";
-        report += "{\"index\":";
-        report += std::to_string(totals.failures[i].index);
-        report += ",\"entityId\":";
-        append_json_string(&report, totals.failures[i].entity_id);
-        report += ",\"reason\":";
-        append_json_string(&report, totals.failures[i].reason);
-        report += ",\"sgp4Error\":";
-        report += std::to_string(totals.failures[i].sgp4_error);
-        report += "}";
-    }
-    report += "]}";
+    std::string ages_text;
+    for (size_t i = 0; i < ages.size(); ++i) ages_text += (i ? "," : "") + format_double(ages[i]);
+    std::vector<std::string> items{
+        "records=" + std::to_string(totals.index),
+        "derived=" + std::to_string(totals.derived),
+        "failed=" + std::to_string(totals.failed),
+        "rows=" + std::to_string(totals.rows),
+        "ages_days=" + ages_text,
+        "epochs_outside_leap_second_table=" + std::to_string(totals.dubious_time),
+        "max_round_trip_position_km=" + format_double(totals.max_position),
+        "max_round_trip_velocity_km_s=" + format_double(totals.max_velocity),
+    };
+    for (const Failure& f : totals.failures) items.push_back(failure_item(f, true));
 
     if (!totals.states.empty() &&
-        plugin_push_output_ex("states", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-                              "OEM", 0, 8, totals.states.data(), static_cast<uint32_t>(totals.states.size())) < 0) {
+        plugin_push_output_ex("states", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                              "OEM", 0, 0, totals.states.data(), static_cast<uint32_t>(totals.states.size())) < 0) {
         return 500;
     }
-    if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-                              nullptr, 0, 1, reinterpret_cast<const uint8_t*>(report.data()),
-                              static_cast<uint32_t>(report.size())) < 0) {
+    if (push_notice("$OEM", "epoch-state derive", totals.derived, totals.failed ? "refused-element-sets" : "derived",
+                    std::move(items)) < 0) {
         return 500;
     }
     return 0;
@@ -931,18 +911,44 @@ int omm_from_mpe(void) {
         plugin_set_error("malformed-stream", error.c_str());
         return 400;
     }
-    Json report = {{"records", index}, {"converted", converted}, {"failed", failures.size()}, {"failures", Json::array()}};
-    for (const Failure& f : failures) report["failures"].push_back({{"index", f.index}, {"entityId", f.entity_id}, {"reason", f.reason}});
-    const std::string text = report.dump();
+    const uint32_t failed = index - converted;
+    std::vector<std::string> items{"records=" + std::to_string(index), "converted=" + std::to_string(converted),
+                                   "failed=" + std::to_string(failed)};
+    for (const Failure& f : failures) items.push_back(failure_item(f, false));
     if (!out.empty() && plugin_push_output_ex("omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OMM", 0, 0,
                                               out.data(), static_cast<uint32_t>(out.size())) < 0) {
         return 500;
     }
-    if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                              reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0) {
+    if (push_notice("$OMM", "epoch-state omm_from_mpe", converted, failed ? "refused-element-sets" : "converted",
+                    std::move(items)) < 0) {
         return 500;
     }
     return 0;
+}
+
+// The window request: one $PRW whose WINDOW_REQUEST arm is set, plain or size-prefixed.
+const PRWWindowRequest* window_request(const plugin_input_frame_t* frame, std::vector<uint8_t>* keep) {
+    if (!frame || !frame->payload || frame->payload_length < 8) return nullptr;
+    keep->assign(frame->payload, frame->payload + frame->payload_length);
+    const PRW* prw = nullptr;
+    ::flatbuffers::Verifier prefixed(keep->data(), keep->size());
+    if (VerifySizePrefixedPRWBuffer(prefixed)) {
+        prw = GetSizePrefixedPRW(keep->data());
+    } else {
+        ::flatbuffers::Verifier plain(keep->data(), keep->size());
+        if (PRWBufferHasIdentifier(keep->data()) && VerifyPRWBuffer(plain)) prw = GetPRW(keep->data());
+    }
+    return prw ? prw->WINDOW_REQUEST() : nullptr;
+}
+
+// A query's START or STOP: a UTC instant as ISO 8601 text or Unix seconds.
+bool window_instant(const TIMInstant* at, UtcInstant* out) {
+    if (!at || at->TIME_SYSTEM() != timingStandard::UTC) return false;
+    if (at->EPOCH_FORMAT() == timEpochRepresentation::ISO8601) {
+        return at->ISO8601() && utc_instant_from_iso(at->ISO8601()->str(), out);
+    }
+    if (at->EPOCH_FORMAT() == timEpochRepresentation::UNIX_SECONDS) return utc_instant_from_unix(at->SECONDS(), out);
+    return false;
 }
 
 int answer_propagation_requests(void) {
@@ -954,19 +960,19 @@ int answer_propagation_requests(void) {
                          "answer_propagation_requests requires the detector's propagation_requests on port \"requests\".");
         return 400;
     }
-    const Json requests =
-        Json::parse(request_frame->payload, request_frame->payload + request_frame->payload_length, nullptr, false);
-    if (requests.is_discarded() || !requests.is_object() || !requests.contains("queries") || !requests["queries"].is_array()) {
-        plugin_set_error("invalid-requests", "The requests frame is not the detector's {queries: [...]} document.");
+    std::vector<uint8_t> request_bytes;
+    const PRWWindowRequest* request = window_request(request_frame, &request_bytes);
+    if (!request) {
+        plugin_set_error("invalid-requests", "The requests frame is not a $PRW with a WINDOW_REQUEST.");
         return 400;
     }
-    const Json& queries = requests["queries"];
-    if (queries.size() > kMaxQueries) {
+    const size_t query_count = request->QUERIES() ? request->QUERIES()->size() : 0;
+    if (query_count > kMaxQueries) {
         plugin_set_error("invalid-requests", "Too many queries in one request.");
         return 400;
     }
 
-    // Every element-set record over every frame of the port, in input order: the index the queries' `set` names.
+    // Every element-set record over every frame of the port, in input order: the index the queries' SET_INDEX names.
     std::vector<std::vector<uint8_t>> records;
     std::vector<const plugin_input_frame_t*> element_frames;
     for (uint32_t ordinal = 0;; ++ordinal) {
@@ -994,41 +1000,48 @@ int answer_propagation_requests(void) {
     }
 
     std::vector<uint8_t> answers;
-    uint64_t refused = 0;
-    Json refusals = Json::array();
-    for (size_t q = 0; q < queries.size(); ++q) {
-        const Json& query = queries[q];
+    uint32_t refused = 0;
+    struct Refusal { uint32_t sequence, set; std::string reason; };
+    std::vector<Refusal> refusals;
+    for (size_t q = 0; q < query_count; ++q) {
+        const PRWWindowQuery* query = request->QUERIES()->Get(static_cast<::flatbuffers::uoffset_t>(q));
+        if (query->ENTITY_HANDLE() != 0) {
+            plugin_set_error("invalid-requests", "A query names an ENTITY_HANDLE; this provider answers SET_INDEX queries.");
+            return 400;
+        }
         std::string reason;
         UtcInstant start, stop;
-        if (!query.is_object() || !query.contains("set") || !query["set"].is_number_unsigned() || !query.contains("start") ||
-            !query["start"].is_string() || !query.contains("stop") || !query["stop"].is_string() || !query.contains("step_s") ||
-            !query["step_s"].is_number()) {
-            plugin_set_error("invalid-requests", "Each query needs set, start, stop and step_s.");
+        if (!window_instant(query->START(), &start) || !window_instant(query->STOP(), &stop)) {
+            plugin_set_error("invalid-requests", "A query's START or STOP is not a UTC ISO 8601 or Unix-seconds instant.");
             return 400;
         }
-        const size_t set = query["set"].get<size_t>();
-        if (!utc_instant_from_iso(query["start"].get<std::string>(), &start) ||
-            !utc_instant_from_iso(query["stop"].get<std::string>(), &stop)) {
-            plugin_set_error("invalid-requests", "A query's start or stop is not an ISO 8601 UTC time.");
-            return 400;
-        }
+        const size_t set = query->SET_INDEX();
         if (set >= records.size()) {
             reason = "set-out-of-range";
         } else {
             const OMM* omm = GetSizePrefixedOMM(records[set].data());
-            reason = answer_query(*omm, unix_micros(start), unix_micros(stop), query["step_s"].get<double>(), &answers);
+            reason = answer_query(*omm, unix_micros(start), unix_micros(stop), query->STEP_SECONDS(), &answers);
         }
         if (!reason.empty()) {
             append_refusal(&answers, reason);
             ++refused;
-            refusals.push_back({{"sequence", q}, {"set", set}, {"reason", reason}});
+            refusals.push_back({static_cast<uint32_t>(q), static_cast<uint32_t>(set), reason});
         }
     }
 
-    const Json report = {{"queries", queries.size()}, {"answered", queries.size() - refused}, {"refused", refused},
-                         {"elementSets", records.size()}, {"refusals", refusals},
-                         {"provider", "SGP4, Vallado " SGP4Version ", WGS-72, opsmode i; TEME, UTC, km and km/s"}};
-    const std::string report_text = report.dump();
+    ::flatbuffers::FlatBufferBuilder report(512);
+    std::vector<::flatbuffers::Offset<PRWWindowRefusal>> refusal_offsets;
+    for (const Refusal& r : refusals) {
+        refusal_offsets.push_back(CreatePRWWindowRefusalDirect(report, r.sequence, r.set, r.reason.c_str()));
+    }
+    const auto summary = CreatePRWWindowReportDirect(
+        report, static_cast<uint32_t>(query_count), static_cast<uint32_t>(query_count) - refused, refused,
+        static_cast<uint32_t>(records.size()), &refusal_offsets,
+        "SGP4, Vallado " SGP4Version ", WGS-72, opsmode i; TEME, UTC, km and km/s");
+    PRWBuilder envelope(report);
+    envelope.add_WINDOW_REPORT(summary);
+    FinishSizePrefixedPRWBuffer(report, envelope.Finish());
+
     if (!answers.empty() &&
         plugin_push_output_ex("propagation", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0,
                               answers.data(), static_cast<uint32_t>(answers.size())) < 0) {
@@ -1041,17 +1054,8 @@ int answer_propagation_requests(void) {
             return 500;
         }
     }
-    const int32_t options_index = plugin_find_input_index("options", 0);
-    const plugin_input_frame_t* options_frame =
-        options_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(options_index)) : nullptr;
-    if (options_frame && options_frame->payload && options_frame->payload_length > 0 &&
-        plugin_push_output_ex("options", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                              options_frame->payload, options_frame->payload_length) < 0) {
-        return 500;
-    }
-    if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                              reinterpret_cast<const uint8_t*>(report_text.data()),
-                              static_cast<uint32_t>(report_text.size())) < 0) {
+    if (plugin_push_output_ex("report", "PRW.fbs", "$PRW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PRW", 0, 0,
+                              report.GetBufferPointer(), report.GetSize()) < 0) {
         return 500;
     }
     return 0;

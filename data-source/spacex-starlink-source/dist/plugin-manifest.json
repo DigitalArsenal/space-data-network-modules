@@ -1,0 +1,232 @@
+{
+  "pluginId": "com.orbpro.spacex-starlink-source",
+  "name": "SpaceX Starlink Data Source",
+  "version": "1.1.0",
+  "description": "Request-builder and parser flow nodes for SpaceX Starlink operator ephemeris (the public MEME files at api.starlink.com/public-files/ephemerides) as SDS $OEM for the OD flow (typed contracts 1.0: FlatBuffers only, no JSON and no base64). plan turns a TimerTick into the MANIFEST.txt HttpRequest; select_objects reads the manifest's HttpResponse and emits one HttpRequest per MEME file in the configured window (objectCap, offset, count; default the whole constellation), each a leading byte range (rangeBytes, default 131072: the ~2-3 orbit fit window; 0 = the whole file), 16 per invocation, the rest yielded as backlog (probe: a FlowNotice Info with the object count instead); emit parses each MEME HttpResponse into one compact SDS $OEM (EME2000, UTC), in memory only - nothing is stored, signed or published. JOB STATE TRAVELS AS HttpRequest.CONTEXT: one size-prefixed $OEM header record naming the object, echoed by hostcap/http-request; pairing is by CONTEXT. Node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig on raw \"config\"): manifestUrl, objectCap, offset, count, rangeBytes, probe, timeoutMs. No credentials: capabilities none.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns its typed frames into output frames in one pass: plan emits one request, select_objects queues one request per object and hands them out 16 an invocation as the compiled runtime resumes the yielded node, emit parses each response it is given. The only state is the request queue; no worker pool and no thread."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Starlink Manifest Request",
+      "description": "TimerTick -> the HttpRequest for the ephemeris MANIFEST.txt (manifestUrl). One tick per invocation (a surplus is refused as batched-input-frames); its fields are not read.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "description": "TimerTick (module-sdk runtime type TICK) from the flow's timer trigger.",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Timer tick (fields not read)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET MANIFEST.txt, no CONTEXT.",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The manifest request."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "select_objects",
+      "displayName": "Starlink Object Requests",
+      "description": "The manifest's HttpResponse -> one HttpRequest per MEME file in [offset, offset+count) of the first objectCap entries (objectCap <= 0 or unset: the whole manifest), GET with range bytes=0-(rangeBytes-1) unless rangeBytes is 0, 16 per invocation, the rest yielded as backlog and resumed without input. probe: a FlowNotice Info (REASON object-count, COUNT the objects covered) and no requests. A manifest not answered 200 is a FlowNotice Missing (manifest-unavailable); an empty window a FlowNotice Skipped (nothing-to-fetch).",
+      "inputPorts": [
+        {
+          "portId": "manifest",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "description": "HttpResponse (HRSP) from hostcap/http-request: BODY the MANIFEST.txt listing, one MEME filename a line.",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The manifest response (none: resume the yielded backlog)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "description": "HttpRequest (HREQ) for hostcap/http-request: GET <base>/<MEME filename>, range bytes=0-(rangeBytes-1) unless rangeBytes is 0; CONTEXT: the job, one size-prefixed $OEM header record (one ephemeris data block whose OBJECT carries OBJECT_NAME and NORAD_CAT_ID from the MEME filename; no states).",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "Object requests, 16 per invocation."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "description": "FlowNotice (FNTC): Info (object-count, COUNT), Missing (manifest-unavailable, ITEMS the URL and status), Skipped (nothing-to-fetch).",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why the pass emitted no requests."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "emit",
+      "displayName": "Starlink MEME to $OEM",
+      "description": "The MEME files' HttpResponses (each with its $OEM object header in CONTEXT) -> one SDS $OEM per object: compact row-major states (km, km/s), REFERENCE_FRAME CelestialFrame EME2000, TIME_SYSTEM UTC, CENTER_NAME EARTH, START/STOP_TIME and STEP_SIZE from the MEME header, OBJECT_NAME and NORAD_CAT_ID from the job (OBJECT_ID empty: the MEME 4th field is SpaceX-internal). A range's truncated trailing record is dropped. An object answered other than 200/206, with an empty body or without a state vector is listed in a FlowNotice Missing (objects-unavailable); a response without the job header is refused (missing-context). In memory only: nothing stored, signed or published.",
+      "inputPorts": [
+        {
+          "portId": "ephemerides",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS 200 or 206, BODY the MEME text (or its leading range), CONTEXT the job select_objects sent.",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "Object responses, in any order (paired by CONTEXT)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "description": "SDS $OEM (not size-prefixed), one per object; consumed in memory by analysis/od fit, never stored.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "Parsed $OEM ephemerides."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "description": "FlowNotice (FNTC): Missing (objects-unavailable, ITEMS '<OBJECT_NAME> (<NORAD>): HTTP <status>' or ': no state vectors').",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Objects that yielded no $OEM."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    }
+  ]
+}

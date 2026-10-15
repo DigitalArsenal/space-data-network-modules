@@ -1,34 +1,35 @@
 /*
- * data-source/celestrak-parser (loop C.8a).
+ * data-source/celestrak-parser (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
  *
  * Pure provider-parser flow nodes: the WASM port of sdn-server's
  * internal/ingest CelesTrak parsers (GP CSV -> OMM + MPE, SATCAT txt/csv ->
- * CAT, SW-All.csv -> SPW), built on the spacedatastandards.org GENERATED C++
- * code (OMM/MPE/CAT/SPW main_generated.h inlined by build.mjs — never
- * hand-written bindings).
+ * CAT, SW-All.csv -> SPW, EOP-All.csv -> EOP, SOCRATES sort CSV -> CSM),
+ * built on the spacedatastandards.org GENERATED C++ code (main_generated.h
+ * inlined by build.mjs - never hand-written bindings).
  *
  * Contract per method (parse_gp / parse_satcat / parse_spw / parse_eop /
  * parse_socrates):
- *   inputs:
- *     "job"      UTF-8 JSON from the request-builder node:
- *                {"source_url","source_name","provider_id"?,
- *                 "archive_source"?,"archive_name"?,"reconcile"?}
- *   "response"   UTF-8 JSON from hostcap/http-request:
- *                {"status":N,"headers":{...},"bodyB64":"..."}
+ *   input:
+ *     "response"  the HttpResponse (HRSP) from hostcap/http-request: STATUS,
+ *                 HEADERS (lower-cased names), BODY verbatim, and CONTEXT the
+ *                 job the request builder (celestrak-request) sent: ONE
+ *                 size-prefixed $ICN record (ENDPOINT_URL, SOURCE_NAME,
+ *                 PROVIDER_ID, DATASET_ID, LICENSE / LICENSE_URL / CITATION,
+ *                 ORIGIN_ID / ORIGIN_NAME). A response without one is refused
+ *                 (missing-context): pairing is by CONTEXT, never by position.
  *   outputs (per produced schema):
- *     "<x>_meta"    UTF-8 JSON — the full storage.ingest_with_source meta
- *                   (schema, provider/source/url/batch attribution,
- *                   content_key_id, source_peer, reconcile mode, archive
- *                   naming, provenance record) MINUS the binary segments.
+ *     "<x>_meta"    IngestRequest (INGQ) for hostcap/storage-ingest: SCHEMA,
+ *                   TAGS (provider/source/url/batch attribution, content key
+ *                   "public", source peer "source:celestrak", licence
+ *                   identifier, licence URL, citation), RECONCILE, ARCHIVE
+ *                   naming (keyed by the job's DATASET_ID) and PROVENANCE.
  *     "<x>_records" size-prefixed FlatBuffer record stream
  *                   ([u32le len][record bytes], records unprefixed inside).
- *     "raw"         the decoded source payload (for raw archiving by the
- *                   ingest capability node; emitted once per fetch).
- *     "unchanged"   ONLY on HTTP 304: one JSON notice
- *                   {"status":304,"unchanged":true,"source_name","source_url",
- *                   "dataset_id"}; no meta/records/raw frames are emitted.
- *   The job also carries origin_id/origin_name/dataset_id and
- *   license/license_url/citation; every ingest meta forwards them.
+ *     "raw"         the HttpResponse the batch was made from, verbatim (its
+ *                   BODY is the payload the ingest node archives; once per
+ *                   fetch).
+ *     "unchanged"   ONLY on HTTP 304: one FlowNotice (Unchanged, REASON
+ *                   not-modified, ITEMS [source_url]); no meta/records/raw.
  *
  * Behavior parity with the Go runner is FIELD-EXACT and, for the record
  * bytes, aims byte-exact: builders replicate internal/sds builder defaults
@@ -50,6 +51,11 @@
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+// The record standards (RFM, TIM, MET, IDM, PLD, LCC, OMM, MPE, CAT, SPW, EOP, CSM) and the job standard ICN
+// (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) are inlined ahead of this file by build.mjs.
 
 namespace {
 
@@ -59,8 +65,7 @@ constexpr const char* kContentKeyID = "public";
 constexpr int64_t kStaleThresholdSeconds = 7 * 24 * 3600;  // runner sourceTimestampStaleThreshold
 
 // ---------------------------------------------------------------------------
-// Small string / JSON helpers (control metadata only — same style as the
-// other node modules).
+// Small string helpers.
 // ---------------------------------------------------------------------------
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -95,160 +100,6 @@ std::string normalize_key(const std::string& raw) {
         if (c == ' ' || c == '-') c = '_';
     }
     return s;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '{') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') depth++;
-        else if (c == '}') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else out.push_back(c);
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (standard alphabet).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -672,37 +523,46 @@ bool require_csv_column(const std::vector<std::string>& header,
 }
 
 // ---------------------------------------------------------------------------
-// Frame IO helpers.
+// Frame IO (typed contracts 1.0). Every frame is a FlatBuffer: the HttpResponse (HRSP) in, its CONTEXT the job ($ICN);
+// IngestRequest (INGQ) metas, size-prefixed SDS record streams, the HttpResponse again as the raw document, and a
+// FlowNotice (FNTC) on 304. A negative plugin_push_output_ex return is a failure.
 // ---------------------------------------------------------------------------
 
-bool read_json_frame(const char* port, std::string* out) {
+namespace R = sdn::runtime;
+
+constexpr const char* kArchiveSource = "celestrak";
+
+// Archive naming: the same constants the request builder used to put in the job, keyed by the job's DATASET_ID (never
+// configurable). A dataset not listed is not archived.
+const char* archive_name_for(const std::string& dataset_id) {
+    static const struct { const char* dataset; const char* name; } kArchive[] = {
+        {"gp-full-catalog", "catalog.csv"},   {"satcat", "satcat.txt"},
+        {"satcat-csv", "satcat.csv"},         {"sw-all", "SW-All.csv"},
+        {"eop-all", "EOP-All.csv"},           {"socrates-minrange", "sort-minRange.csv"},
+        {"socrates-maxprob", "sort-maxProb.csv"},
+    };
+    for (const auto& a : kArchive)
+        if (dataset_id == a.dataset) return a.name;
+    return nullptr;
+}
+
+const plugin_input_frame_t* frame_for(const char* port) {
     const int32_t idx = plugin_find_input_index(port, 0);
-    if (idx < 0) return false;
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload || frame->payload_length == 0) return false;
-    out->assign(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-    return true;
+    if (idx < 0) return nullptr;
+    return plugin_get_input_frame(static_cast<uint32_t>(idx));
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
+int push_typed(const char* port, const char* schema, const char* identifier, const char* root,
+               const uint8_t* bytes, size_t size) {
+    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
+                                 bytes, static_cast<uint32_t>(size));
 }
 
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 bytes.data(), static_cast<uint32_t>(bytes.size()));
-}
-
-// Record streams whose port declares a concrete SDS identity carry it on the
-// frame too (schema name, file identifier, root type).
+// Record streams whose port declares a concrete SDS identity carry it on the frame too (schema name, file identifier,
+// root type).
 int push_record_stream(const char* port, const char* schema, const char* identifier,
                        const char* root, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 root, 0, 0, bytes.data(), static_cast<uint32_t>(bytes.size()));
+    return push_typed(port, schema, identifier, root, bytes.data(), bytes.size());
 }
 
 void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_t>& record) {
@@ -714,24 +574,15 @@ void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_
     stream->insert(stream->end(), record.begin(), record.end());
 }
 
-// Shared job/response decode: returns the decoded body bytes or sets a
-// plugin error (non-200s and malformed frames fail the node, matching the
-// runner's fetch error handling).
+// The job ($ICN from the response's CONTEXT) + the response: the decoded body or a plugin error (non-200s and malformed
+// frames fail the node, matching the runner's fetch error handling).
 struct FetchContext {
-    std::string job_json;
-    std::string response_json;
+    const plugin_input_frame_t* response_frame = nullptr;
     std::string source_url;
     std::string source_name;
     std::string provider_id;
-    std::string archive_source;
-    std::string archive_name;
-    std::string reconcile;
-    // Upstream origin + licence, carried from the request-builder job into
-    // the ingest meta (the host records the licence against the batch and
-    // feeds the origin keys to its $ICN connector ledger).
-    std::string origin_id;
-    std::string origin_name;
     std::string dataset_id;
+    // Usage terms, carried from the request-builder job into the ingest request's source tags.
     std::string license;
     std::string license_url;
     std::string citation;
@@ -740,68 +591,73 @@ struct FetchContext {
     std::string content_type;
     std::string response_date;
     long status = 0;
-    // HTTP 304 Not Modified: the host sent the validators it recorded from
-    // the previous pull (If-None-Match / If-Modified-Since) and the origin
-    // answered that nothing changed. No body, no batch — the parser emits one
-    // "unchanged" notice and no record ports.
+    // HTTP 304 Not Modified: the host sent the validators it recorded from the previous pull (If-None-Match /
+    // If-Modified-Since) and the origin answered that nothing changed. No body, no batch - the parser emits one
+    // FlowNotice on "unchanged" and no record ports.
     bool not_modified = false;
     std::vector<uint8_t> body;
     std::string batch_id;
 };
 
+std::string str_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+std::string header_value(const R::HttpResponse& r, const char* name) {
+    if (!r.HEADERS()) return std::string();
+    // NAME is a FlatBuffers key, lower-cased; read linearly so an unsorted vector is still read correctly.
+    for (const R::Header* h : *r.HEADERS())
+        if (h && h->NAME() && lower(h->NAME()->str()) == name) return str_of(h->VALUE());
+    return std::string();
+}
+
 bool load_fetch_context(FetchContext* ctx) {
-    if (!read_json_frame("job", &ctx->job_json)) {
-        plugin_set_error("missing-job-frame", "parser requires the job JSON frame.");
+    const plugin_input_frame_t* frame = frame_for("response");
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-response-frame", "parser requires the HttpResponse frame.");
         return false;
     }
-    if (!read_json_frame("response", &ctx->response_json)) {
-        plugin_set_error("missing-response-frame", "parser requires the http response JSON frame.");
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!R::VerifyHttpResponseBuffer(verifier)) {
+        plugin_set_error("invalid-response-frame", "the response frame is not an HttpResponse (HRSP).");
         return false;
     }
-    json_string_field(ctx->job_json, "source_url", &ctx->source_url);
-    json_string_field(ctx->job_json, "source_name", &ctx->source_name);
-    json_string_field(ctx->job_json, "provider_id", &ctx->provider_id);
-    json_string_field(ctx->job_json, "archive_source", &ctx->archive_source);
-    json_string_field(ctx->job_json, "archive_name", &ctx->archive_name);
-    json_string_field(ctx->job_json, "reconcile", &ctx->reconcile);
-    json_string_field(ctx->job_json, "origin_id", &ctx->origin_id);
-    json_string_field(ctx->job_json, "origin_name", &ctx->origin_name);
-    json_string_field(ctx->job_json, "dataset_id", &ctx->dataset_id);
-    json_string_field(ctx->job_json, "license", &ctx->license);
-    json_string_field(ctx->job_json, "license_url", &ctx->license_url);
-    json_string_field(ctx->job_json, "citation", &ctx->citation);
+    ctx->response_frame = frame;
+    const R::HttpResponse& r = *R::GetHttpResponse(frame->payload);
+    const auto* context = r.CONTEXT();
+    const ICN* job = nullptr;
+    if (context && context->size() >= 8) {
+        flatbuffers::Verifier job_verifier(context->data(), context->size());
+        if (VerifySizePrefixedICNBuffer(job_verifier)) job = GetSizePrefixedICN(context->data());
+    }
+    if (!job) {
+        // pairing is by CONTEXT: a response that names no job cannot be attributed, so it is refused, not guessed
+        plugin_set_error("missing-context",
+                         "the HttpResponse carries no $ICN job in CONTEXT; it cannot be attributed and is refused.");
+        return false;
+    }
+    ctx->source_url = str_of(job->ENDPOINT_URL());
+    ctx->source_name = str_of(job->SOURCE_NAME());
+    ctx->provider_id = str_of(job->PROVIDER_ID());
+    ctx->dataset_id = str_of(job->DATASET_ID());
+    ctx->license = str_of(job->LICENSE());
+    ctx->license_url = str_of(job->LICENSE_URL());
+    ctx->citation = str_of(job->CITATION());
     if (ctx->provider_id.empty()) ctx->provider_id = kDefaultProviderID;
     if (ctx->source_name.empty()) {
-        plugin_set_error("missing-source-name", "job must carry source_name.");
+        plugin_set_error("missing-source-name", "job must carry SOURCE_NAME.");
         return false;
     }
 
-    double status = 0;
-    if (!json_number_field(ctx->response_json, "status", &status)) {
-        plugin_set_error("missing-status", "http response frame carries no status.");
-        return false;
-    }
-    ctx->status = static_cast<long>(status);
+    ctx->status = r.STATUS();
     if (ctx->status != 200 && ctx->status != 304) {
         char msg[96];
         std::snprintf(msg, sizeof(msg), "source fetch returned HTTP status %ld", ctx->status);
         plugin_set_error("fetch-failed", msg);
         return false;
     }
-    const std::string headers = json_object_slice(ctx->response_json, "headers");
-    // Header names as the hosts spell them: the SDK JS hosts lower-case
-    // (fetch Headers), the Go host uses net/http canonical keys ("Etag",
-    // "Last-Modified", "Content-Type", "Date"). Exact-key lookups, every
-    // spelling tried, so the validators are captured on every host.
-    json_string_field(headers, "etag", &ctx->etag);
-    if (ctx->etag.empty()) json_string_field(headers, "Etag", &ctx->etag);
-    if (ctx->etag.empty()) json_string_field(headers, "ETag", &ctx->etag);
-    json_string_field(headers, "last-modified", &ctx->last_modified);
-    if (ctx->last_modified.empty()) json_string_field(headers, "Last-Modified", &ctx->last_modified);
-    json_string_field(headers, "content-type", &ctx->content_type);
-    if (ctx->content_type.empty()) json_string_field(headers, "Content-Type", &ctx->content_type);
-    json_string_field(headers, "date", &ctx->response_date);
-    if (ctx->response_date.empty()) json_string_field(headers, "Date", &ctx->response_date);
+    ctx->etag = header_value(r, "etag");
+    ctx->last_modified = header_value(r, "last-modified");
+    ctx->content_type = header_value(r, "content-type");
+    ctx->response_date = header_value(r, "date");
 
     if (ctx->status == 304) {
         // Nothing changed upstream: no body is expected and no batch exists.
@@ -809,109 +665,105 @@ bool load_fetch_context(FetchContext* ctx) {
         ctx->body.clear();
         return true;
     }
-
-    std::string body_b64;
-    if (!json_string_field(ctx->response_json, "bodyB64", &body_b64) || body_b64.empty()) {
+    if (!r.BODY() || r.BODY()->size() == 0) {
         plugin_set_error("empty-body", "http response frame carries no body.");
         return false;
     }
-    if (!base64_decode(body_b64, &ctx->body)) {
-        plugin_set_error("invalid-body", "http response bodyB64 is not valid base64.");
-        return false;
-    }
+    ctx->body.assign(r.BODY()->data(), r.BODY()->data() + r.BODY()->size());
     ctx->batch_id = sha256_hex(ctx->body.data(), ctx->body.size());
     return true;
 }
 
-// Builds the storage.ingest_with_source meta JSON for one schema. archive
-// naming is attached only when with_archive is set (once per fetch — the
-// runner archives the payload once, not per schema).
-std::string build_ingest_meta(const FetchContext& ctx, const char* schema,
-                              const std::string& reconcile_default, bool with_archive,
-                              const std::string& provenance_source,
-                              const std::string& provenance_json) {
-    std::string reconcile = ctx.reconcile.empty() ? reconcile_default : ctx.reconcile;
-    std::string meta = std::string("{\"schema\":\"") + schema + "\"" +
-                       ",\"provider_id\":\"" + json_escape(ctx.provider_id) + "\"" +
-                       ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                       ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                       ",\"batch_id\":\"" + ctx.batch_id + "\"" +
-                       ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-                       ",\"source_peer\":\"" + kSourcePeer + "\"" +
-                       ",\"reconcile\":\"" + json_escape(reconcile) + "\"";
-    // Licence carriage (the host records it against the batch via
-    // SourceTags and binds it into the publication) and the upstream origin
-    // (host $ICN connector ledger: ORIGIN_ID/ORIGIN_NAME/DATASET_ID). Keys
-    // are emitted only when the job declared them; an empty value is never
-    // a declaration.
-    if (!ctx.license.empty()) meta += ",\"license\":\"" + json_escape(ctx.license) + "\"";
-    if (!ctx.license_url.empty())
-        meta += ",\"license_url\":\"" + json_escape(ctx.license_url) + "\"";
-    if (!ctx.citation.empty()) meta += ",\"citation\":\"" + json_escape(ctx.citation) + "\"";
-    if (!ctx.origin_id.empty()) meta += ",\"origin_id\":\"" + json_escape(ctx.origin_id) + "\"";
-    if (!ctx.origin_name.empty())
-        meta += ",\"origin_name\":\"" + json_escape(ctx.origin_name) + "\"";
-    if (!ctx.dataset_id.empty())
-        meta += ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"";
-    if (with_archive && !ctx.archive_source.empty() && !ctx.archive_name.empty()) {
-        meta += ",\"archive\":{\"source\":\"" + json_escape(ctx.archive_source) +
-                "\",\"name\":\"" + json_escape(ctx.archive_name) + "\"}";
-    }
-    if (!provenance_json.empty()) {
-        meta += ",\"provenance\":{\"source\":\"" + json_escape(provenance_source) +
-                "\",\"json\":\"" +
-                base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()),
-                              provenance_json.size()) +
-                "\"}";
-    }
-    meta += "}";
-    return meta;
+// TAGS.LICENSE is an SPDX identifier the host record bounds to 64 bytes. An operator-configured identifier (no
+// whitespace, <= 64 bytes) travels as is; the origin's usage-policy sentence is not one, so the lane names it by
+// reference and its text stays in the job.
+std::string license_identifier(const std::string& license) {
+    if (license.empty()) return std::string();
+    bool identifier = license.size() <= 64;
+    for (char c : license) if (is_ws(c)) identifier = false;
+    return identifier ? license : std::string("LicenseRef-CelesTrak-Usage-Policy");
 }
 
-// Provenance JSON mirroring the runner's ingestBatchProvenance shape (the
-// wasm side authors it; the host only places the file).
-std::string build_provenance_json(const FetchContext& ctx, const char* parser_version,
-                                  const std::string& normalized_sha256, int normalized_count,
-                                  const std::string& schema_counts_json) {
-    std::string retrieved_at;
-    int64_t date_unix = 0;
-    if (!ctx.response_date.empty() && parse_http_date(ctx.response_date, &date_unix)) {
-        retrieved_at = format_rfc3339(date_unix);
-    } else {
-        retrieved_at = format_rfc3339(now_unix_seconds());
+// Provenance of a batch (the runner's ingestBatchProvenance, typed): the parser authors it; the host only places it.
+struct ProvenanceSpec {
+    const char* parser_version;  // "<parser>/<version>"
+    std::string normalized_sha256;
+    int normalized_count = 0;
+    std::vector<std::pair<const char*, int>> schema_counts;
+};
+
+// The batch's IngestRequest (INGQ) for one schema: source tags, reconcile mode, archive naming (only when with_archive:
+// the runner archives the payload once, not per schema) and provenance (when given).
+std::vector<uint8_t> build_ingest_request(const FetchContext& ctx, const char* schema, R::reconcileMode reconcile,
+                                          bool with_archive, const ProvenanceSpec* spec) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    const auto opt = [](const std::string& s) { return s.empty() ? nullptr : s.c_str(); };
+    flatbuffers::Offset<R::Provenance> provenance = 0;
+    if (spec) {
+        int64_t retrieved = 0;
+        if (ctx.response_date.empty() || !parse_http_date(ctx.response_date, &retrieved)) retrieved = now_unix_seconds();
+        const std::string pv = spec->parser_version;
+        const size_t slash = pv.find('/');
+        const std::string parser = pv.substr(0, slash), version = slash == std::string::npos ? std::string() : pv.substr(slash + 1);
+        std::vector<flatbuffers::Offset<flatbuffers::String>> schemas;
+        std::vector<uint64_t> counts;
+        for (const auto& [name, count] : spec->schema_counts) {
+            schemas.push_back(b.CreateString(name));
+            counts.push_back(static_cast<uint64_t>(count));
+        }
+        const std::vector<flatbuffers::Offset<flatbuffers::String>> warnings;
+        provenance = R::CreateProvenanceDirect(
+            b, ctx.source_url.c_str(), static_cast<int32_t>(ctx.status), opt(ctx.etag), opt(ctx.last_modified),
+            opt(ctx.content_type), static_cast<uint64_t>(retrieved) * 1000, parser.c_str(), opt(version),
+            ctx.batch_id.c_str(), spec->normalized_sha256.c_str(), static_cast<uint64_t>(spec->normalized_count),
+            &schemas, &counts, &warnings, false);
     }
-    char status_buf[16];
-    std::snprintf(status_buf, sizeof(status_buf), "%ld", ctx.status);
-    std::string out = std::string("{\"source_url\":\"") + json_escape(ctx.source_url) + "\"" +
-                      ",\"http_status\":" + status_buf;
-    if (!ctx.etag.empty()) out += ",\"etag\":\"" + json_escape(ctx.etag) + "\"";
-    if (!ctx.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(ctx.last_modified) + "\"";
-    if (!ctx.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(ctx.content_type) + "\"";
-    char count_buf[16];
-    std::snprintf(count_buf, sizeof(count_buf), "%d", normalized_count);
-    out += std::string(",\"retrieved_at\":\"") + retrieved_at + "\"" +
-           ",\"parser_version\":\"" + parser_version + "\"" +
-           ",\"source_sha256\":\"" + ctx.batch_id + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + count_buf +
-           ",\"schema_counts\":" + schema_counts_json +
-           ",\"warnings\":[],\"from_cache\":false}";
-    return out;
+    const std::string license = license_identifier(ctx.license);
+    const auto tags = R::CreateSourceTagsDirect(b, ctx.provider_id.c_str(), ctx.source_name.c_str(), ctx.batch_id.c_str(),
+                                                ctx.source_url.c_str(), kContentKeyID, kSourcePeer, opt(license),
+                                                opt(ctx.license_url), opt(ctx.citation), false);
+    flatbuffers::Offset<R::ArchiveTarget> archive = 0;
+    const char* archive_name = archive_name_for(ctx.dataset_id);
+    if (with_archive && archive_name) archive = R::CreateArchiveTargetDirect(b, kArchiveSource, archive_name);
+    R::FinishIngestRequestBuffer(b, R::CreateIngestRequestDirect(b, schema, tags, reconcile, archive, provenance));
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-// HTTP 304: one notice frame on the "unchanged" port, nothing on the record
-// ports. The ingest nodes never become ready (their required meta/records
-// ports stay empty), so nothing is stored and no batch is announced; the
-// notice reaches the flow's egress sink so the operator can see the pull
-// happened and found nothing new.
-int emit_unchanged(const FetchContext& ctx) {
-    const std::string notice = std::string("{\"status\":304,\"unchanged\":true") +
-                               ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                               ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                               ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"}";
-    return push_json("unchanged", notice) < 0 ? 500 : 0;
+int push_ingest_request(const char* port, const std::vector<uint8_t>& bytes) {
+    return push_typed(port, "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", bytes.data(), bytes.size());
+}
+
+// The raw document for the ingest node to archive: the HttpResponse the batch was made from, forwarded verbatim.
+int push_raw(const FetchContext& ctx) {
+    return push_typed("raw", "HttpResponse.fbs", R::HttpResponseIdentifier(), "HttpResponse", ctx.response_frame->payload,
+                      ctx.response_frame->payload_length);
+}
+
+// One batch's three frames for its primary schema: meta, records, raw.
+int emit_batch(const FetchContext& ctx, const char* meta_port, const char* records_port, const char* schema,
+               const char* identifier, const char* root, R::reconcileMode reconcile, const ProvenanceSpec& spec,
+               const std::vector<uint8_t>& stream) {
+    if (push_ingest_request(meta_port, build_ingest_request(ctx, schema, reconcile, /*with_archive=*/true, &spec)) < 0) return 500;
+    if (push_record_stream(records_port, schema, identifier, root, stream) < 0) return 500;
+    if (push_raw(ctx) < 0) return 500;
+    return 0;
+}
+
+// HTTP 304: one FlowNotice (Unchanged) on the "unchanged" port, nothing on the record ports. The ingest nodes never
+// become ready (their required meta/records ports stay empty), so nothing is stored and no batch is announced; the
+// notice reaches the flow's egress sink so the operator can see the pull happened and found nothing new.
+int emit_unchanged(const FetchContext& ctx, const char* schema) {
+    R::FlowNoticeT notice;
+    notice.KIND = R::flowNoticeKind_Unchanged;
+    notice.SCHEMA = schema;
+    notice.PROVIDER_ID = ctx.provider_id;
+    notice.SOURCE_NAME = ctx.source_name;
+    notice.REASON = "not-modified";
+    notice.COUNT = 1;
+    notice.ITEMS = {ctx.source_url};
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return push_typed("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b.GetBufferPointer(), b.GetSize()) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1554,7 +1406,7 @@ int parse_gp(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
-    if (ctx.not_modified) return emit_unchanged(ctx);
+    if (ctx.not_modified) return emit_unchanged(ctx, "OMM.fbs");
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1666,25 +1518,17 @@ int parse_gp(void) {
         return 422;
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[96];
-    std::snprintf(counts, sizeof(counts), "{\"OMM.fbs\":%d,\"MPE.fbs\":%d}", count_omm, count_mpe);
-    const std::string provenance =
-        build_provenance_json(ctx, "celestrak-gp-wasm/v2", normalized_hex, count_omm + count_mpe,
-                              counts);
-
-    const std::string omm_meta =
-        build_ingest_meta(ctx, "OMM.fbs", "duplicates", /*with_archive=*/true,
-                          ctx.source_name, provenance);
-    const std::string mpe_meta =
-        build_ingest_meta(ctx, "MPE.fbs", "duplicates", /*with_archive=*/false,
-                          ctx.source_name, std::string());
-
-    if (push_json("omm_meta", omm_meta) < 0) return 500;
-    if (push_bytes("omm_records", omm_stream) < 0) return 500;
-    if (push_json("mpe_meta", mpe_meta) < 0) return 500;
-    if (push_bytes("mpe_records", mpe_stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
+    const ProvenanceSpec provenance{"celestrak-gp-wasm/v2", normalized.hex_digest(), count_omm + count_mpe,
+                                    {{"OMM.fbs", count_omm}, {"MPE.fbs", count_mpe}}};
+    // The OMM meta carries the archive naming and the provenance (the runner archives the payload once, not per
+    // schema); the MPE meta carries neither.
+    if (emit_batch(ctx, "omm_meta", "omm_records", "OMM.fbs", "$OMM", "OMM", R::reconcileMode_Duplicates, provenance,
+                   omm_stream) != 0)
+        return 500;
+    if (push_ingest_request("mpe_meta", build_ingest_request(ctx, "MPE.fbs", R::reconcileMode_Duplicates,
+                                                             /*with_archive=*/false, nullptr)) < 0)
+        return 500;
+    if (push_record_stream("mpe_records", "MPE.fbs", "$MPE", "MPE", mpe_stream) < 0) return 500;
     return 0;
 }
 
@@ -1698,7 +1542,7 @@ int parse_satcat(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
-    if (ctx.not_modified) return emit_unchanged(ctx);
+    if (ctx.not_modified) return emit_unchanged(ctx, "CAT.fbs");
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1735,21 +1579,12 @@ int parse_satcat(void) {
         return 422;
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[48];
-    std::snprintf(counts, sizeof(counts), "{\"CAT.fbs\":%d}", count);
-    const std::string provenance = build_provenance_json(
-        ctx, "celestrak-satcat-wasm/v1", normalized_hex, count, counts);
+    const ProvenanceSpec provenance{"celestrak-satcat-wasm/v1", normalized.hex_digest(), count, {{"CAT.fbs", count}}};
 
     // SATCAT is a snapshot source — only the newest batch is meaningful
     // (runner reconcileCelestrakCurrentSourceBatch).
-    const std::string cat_meta = build_ingest_meta(ctx, "CAT.fbs", "current",
-                                                   /*with_archive=*/true, ctx.source_name,
-                                                   provenance);
-    if (push_json("cat_meta", cat_meta) < 0) return 500;
-    if (push_bytes("cat_records", cat_stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
-    return 0;
+    return emit_batch(ctx, "cat_meta", "cat_records", "CAT.fbs", "$CAT", "CAT", R::reconcileMode_Current, provenance,
+                      cat_stream);
 }
 
 // parse_spw: CelesTrak SW-All.csv -> SPW records (with the runner's
@@ -1763,7 +1598,7 @@ int parse_spw(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
-    if (ctx.not_modified) return emit_unchanged(ctx);
+    if (ctx.not_modified) return emit_unchanged(ctx, "SPW.fbs");
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1824,11 +1659,7 @@ int parse_spw(void) {
         return 422;
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[48];
-    std::snprintf(counts, sizeof(counts), "{\"SPW.fbs\":%d}", count);
-    const std::string provenance = build_provenance_json(
-        ctx, "celestrak-space-weather-wasm/v1", normalized_hex, count, counts);
+    const ProvenanceSpec provenance{"celestrak-space-weather-wasm/v1", normalized.hex_digest(), count, {{"SPW.fbs", count}}};
 
     // SW-All.csv is the COMPLETE history (1957 to the prediction horizon):
     // every fetch is a whole snapshot, not an increment, so each new batch
@@ -1840,13 +1671,8 @@ int parse_spw(void) {
     // verbatim by the batch that replaced them. The duplicates pass is a
     // no-op for SPW (rows carry no indexed identity key), and freshness stays
     // the DATE stale gate above.
-    const std::string spw_meta = build_ingest_meta(ctx, "SPW.fbs", "current",
-                                                   /*with_archive=*/true, ctx.source_name,
-                                                   provenance);
-    if (push_json("spw_meta", spw_meta) < 0) return 500;
-    if (push_bytes("spw_records", spw_stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
-    return 0;
+    return emit_batch(ctx, "spw_meta", "spw_records", "SPW.fbs", "$SPW", "SPW", R::reconcileMode_Current, provenance,
+                      spw_stream);
 }
 
 // parse_eop: CelesTrak EOP-All.csv -> $EOP records. Whole-history snapshot
@@ -1861,7 +1687,7 @@ int parse_eop(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
-    if (ctx.not_modified) return emit_unchanged(ctx);
+    if (ctx.not_modified) return emit_unchanged(ctx, "EOP.fbs");
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1940,21 +1766,12 @@ int parse_eop(void) {
         return 422;
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[48];
-    std::snprintf(counts, sizeof(counts), "{\"EOP.fbs\":%d}", count);
-    const std::string provenance =
-        build_provenance_json(ctx, "celestrak-eop-wasm/v1", normalized_hex, count, counts);
+    const ProvenanceSpec provenance{"celestrak-eop-wasm/v1", normalized.hex_digest(), count, {{"EOP.fbs", count}}};
 
     // Whole-history snapshot: each batch supersedes the previous one (the
     // same reconciliation the space-weather lane uses).
-    const std::string eop_meta = build_ingest_meta(ctx, "EOP.fbs", "current",
-                                                   /*with_archive=*/true, ctx.source_name,
-                                                   provenance);
-    if (push_json("eop_meta", eop_meta) < 0) return 500;
-    if (push_record_stream("eop_records", "EOP.fbs", "$EOP", "EOP", eop_stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
-    return 0;
+    return emit_batch(ctx, "eop_meta", "eop_records", "EOP.fbs", "$EOP", "EOP", R::reconcileMode_Current, provenance,
+                      eop_stream);
 }
 
 // parse_socrates: one SOCRATES sort file (sort-minRange.csv or
@@ -1969,7 +1786,7 @@ int parse_socrates(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
-    if (ctx.not_modified) return emit_unchanged(ctx);
+    if (ctx.not_modified) return emit_unchanged(ctx, "CSM.fbs");
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -2019,19 +1836,9 @@ int parse_socrates(void) {
         return 422;
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[48];
-    std::snprintf(counts, sizeof(counts), "{\"CSM.fbs\":%d}", count);
-    const std::string provenance =
-        build_provenance_json(ctx, "celestrak-socrates-wasm/v1", normalized_hex, count, counts);
-
-    const std::string csm_meta = build_ingest_meta(ctx, "CSM.fbs", "current",
-                                                   /*with_archive=*/true, ctx.source_name,
-                                                   provenance);
-    if (push_json("csm_meta", csm_meta) < 0) return 500;
-    if (push_record_stream("csm_records", "CSM.fbs", "$CSM", "CSM", csm_stream) < 0) return 500;
-    if (push_bytes("raw", ctx.body) < 0) return 500;
-    return 0;
+    const ProvenanceSpec provenance{"celestrak-socrates-wasm/v1", normalized.hex_digest(), count, {{"CSM.fbs", count}}};
+    return emit_batch(ctx, "csm_meta", "csm_records", "CSM.fbs", "$CSM", "CSM", R::reconcileMode_Current, provenance,
+                      csm_stream);
 }
 
 }  // extern "C"

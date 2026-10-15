@@ -5,11 +5,13 @@ SATCAT as `$CAT`. It is the Space-Track entry of the per-source products (`flows
 takes its `$OMM` on `element_sets` and gives the source's `$OMM`, `$OCM` (covariance and its label) and `$MNV`.
 
 The same artifact runs in the browser and WasmEdge, byte for byte. Retrieval belongs to the SDN host flow: the login and its
-credentials, the polite request rate (the ephemeris-source registry's), the schedule and the archive. The module sees bytes only.
+credentials, the polite request rate (the ephemeris-source registry's), the schedule and the archive. Typed contracts 1.0: the module takes the `hostcap/http-request` HttpResponse (HRSP), its
+BODY the Space-Track JSON verbatim, and writes FlatBuffers only (no JSON between modules). HTTP 304 gives one FlowNotice
+(Unchanged, `not-modified`) on `report` and no records; another status, or a transport ERROR, is refused (`fetch-failed`).
 
 ## Methods
 
-| Method | In (`source`) | Out |
+| Method | In (`response`: HttpResponse, BODY =) | Out |
 | --- | --- | --- |
 | `parse_gp` | `gp` or `gp_history` JSON (omm-gp-json): a JSON array of flat objects, or JSON lines | `omm`: size-prefixed `$OMM`, input order, no padding between records; `report` |
 | `parse_satcat` | `satcat` JSON | `catalog`: size-prefixed `$CAT`, input order; `report` |
@@ -53,8 +55,10 @@ codes the enum lacks (CZE, TWN, PER, SVK, BGR, AGO, JOR, KWT, PRI, UGA, HRV, BWA
 
 ## Reports
 
-`report` is module control metadata (JSON), kept by the host beside the input it describes: records read and emitted, duplicates,
-the dropped records by reason with the first 20 examples, Alpha-5 count, theories, and the epoch and creation-date ranges. A record
+`report` is one FlowNotice (FNTC, KIND Info, REASON `gp` or `satcat`, COUNT the records emitted): module control metadata kept by
+the host beside the input it describes. Its ITEMS are `name=value` counters (a map's entries `name.key=value`, a range
+`first/last`): records read and emitted, duplicates, the dropped records by reason (`rejections.<reason>`) with the first 20
+examples (`rejectionExample.<index>=<reason>`), Alpha-5 count, theories, and the epoch and creation-date ranges. A record
 that cannot be read is dropped and counted; an input that is not a JSON array of objects (or JSON lines of them), or that gives
 nothing readable, is refused whole with no partial output. Errors are flags (an invoke error code and message), never exceptions.
 

@@ -8,7 +8,7 @@
 // Operator files are read in memory; <work> receives derived records only.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadModule, json, TYPES, iso, seconds, outputsOf, jsonOf, unpackMnv, mnvRecord, MNV } from './lib/host.mjs';
+import { loadModule, config, TYPES, iso, seconds, outputsOf, reportFrom, unpackMnv, mnvRecord, MNV } from './lib/host.mjs';
 import { listFiles, readFiles, versionOem, plannedBurns, plannedMnv, listedEvents, coverage, truthMnv } from './lib/nasa.mjs';
 import { detectHistories, scoreVariants, printScores, writeJson, log } from './lib/run.mjs';
 
@@ -41,9 +41,9 @@ async function truth() {
     const r = await compare.invoke('compare_ephemerides', [
       ...versions.map((f) => ({ portId: 'versions', payload: versionOem(f), typeRef: TYPES.OEM })),
       { portId: 'planned', payload: Buffer.concat(planned.map((b) => Buffer.from(plannedMnv(b)))), typeRef: TYPES.MNV },
-      json('options', { margin_s: 1800, post_start_after_s: 3600 }),
+      config({ margin_s: 1800, post_start_after_s: 3600 }),
     ]);
-    const report = jsonOf(r, 'report');
+    const report = await reportFrom(r);
     const rows = new Map((report.objects[0]?.planned ?? []).map((p) => [p.id, p]));
     for (const m of outputsOf(r, 'maneuvers').map(unpackMnv)) {
       const id = m.ID.replace(/:check$/, '');

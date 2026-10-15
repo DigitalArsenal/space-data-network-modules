@@ -4,8 +4,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { json, call as ermCall } from './erm-harness.mjs';
 
 // Expected values are independent of the module:
 // - Vallado SGP4-VER element sets with their t = 0 TEME states and pyerfa GCRF
@@ -66,21 +66,26 @@ function expectedError(c, o) {
   const d = c.gcrfR.map((x, i) => x - truth[i]);
   return axes(truth, c.gcrfV).map((a) => dot(d, a));
 }
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
 
-async function call(t, methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h.destroy());
-  const r = await h.invoke({ methodId, inputs });
-  assert.equal(r.statusCode, 0, r.errorMessage);
-  return JSON.parse(Buffer.from(r.outputs[0].payload).toString());
-}
+// Each port's value in its readable form; the harness sends it as the method's $ERM record and decodes the output.
+const call = (t, methodId, inputs) => ermCall(methodId, inputs);
 const elements = (...records) => ({ portId: 'elements', payload: Buffer.concat(records), typeRef: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' } });
 const stratum = (model, regime, age) => model.strata.find((s) => s.regime === regime && s.ageIndex === age);
 
-test('the artifact satisfies the SDK contract', async () => {
+test('the artifact satisfies the SDK contract; every port names one concrete FlatBuffer type', async () => {
   const report = await validateArtifactWithStandards({ wasmPath, manifest, standardsRoot: root });
   assert.equal(report.ok, true, JSON.stringify(report.issues));
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, `${method.methodId}.${port.portId}`);
+      const types = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(types.length, 1, `${method.methodId}.${port.portId}`);
+      assert.equal(types[0].acceptsAnyFlatbuffer, undefined, `${method.methodId}.${port.portId}`);
+      assert.ok(types[0].fileIdentifier && types[0].rootTypeName, `${method.methodId}.${port.portId}`);
+      assert.ok(['flatbuffer', 'aligned-binary'].includes(types[0].wireFormat), `${method.methodId}.${port.portId}`);
+    }
+    assert.ok(!method.inputPorts.some((p) => p.portId === 'recipe'), `${method.methodId}: recipes are node config`);
+  }
 });
 
 test('consecutive-set differences: the first later set in each age bin, in its RTN axes', async (t) => {

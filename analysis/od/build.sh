@@ -102,6 +102,23 @@ const {getInvokeCppSchemaHeaders} = await import(pathToFileURL(require.resolve('
 for (const [name, content] of Object.entries(await getInvokeCppSchemaHeaders())) {
     await fs.writeFile(path.join(root, 'src/cpp/generated', name), content);
 }
+// The typed module runtime (typedHostcall.hpp: sdm_piv::get_config) and the runtime headers it reads
+// (ModuleConfig, HostOps), staged as the SDK compiler stages them for every C++ compile.
+const sdkRoot = path.join(root, 'node_modules/space-data-module-sdk');
+await fs.copyFile(path.join(sdkRoot, 'src/host/cpp/typedHostcall.hpp'), path.join(root, 'src/cpp/generated/typedHostcall.hpp'));
+const runtimeDir = path.join(sdkRoot, 'src/generated/runtime/cpp');
+for (const name of await fs.readdir(runtimeDir)) {
+    if (name.endsWith('.h')) await fs.copyFile(path.join(runtimeDir, name), path.join(root, 'src/cpp/generated', name));
+}
+// SDS $FIL (the text ephemeris file in, the two-line set out), generated from the standard's schema with the object
+// API (scripts/lib/sds-cpp-headers.mjs) and inlined as FIL_generated.h: the include guard is renamed (the SDK's sds/PIV
+// and sds/TAB headers are also "main_generated.h") and the flatc version static_assert dropped, as hostcap/clock does.
+if (!process.env.SPACE_DATA_STANDARDS_ROOT) throw new Error('SPACE_DATA_STANDARDS_ROOT must name the spacedatastandards package');
+const {generateSdsHeader} = await import(pathToFileURL(path.join(root, '../../scripts/lib/sds-cpp-headers.mjs')));
+const fil = (await generateSdsHeader('FIL', path.join(root, 'package.json')))
+    .replaceAll('FLATBUFFERS_GENERATED_MAIN_H_', 'FLATBUFFERS_GENERATED_SDS_FIL_MAIN_H_')
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, '');
+await fs.writeFile(path.join(root, 'src/cpp/generated/FIL_generated.h'), fil);
 JS
 }
 

@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-socrates-ingest",
   "name": "CelesTrak SOCRATES Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow, SOCRATES conjunctions: a module cron TIMER tick enters at celestrak-request:socrates, which fans out to BOTH sort files (sort-minRange.csv and sort-maxProb.csv; URLs, byte budget and usage terms from node CONFIG / the origin registry); two hostcap/http-request nodes fetch them with the recorded ETag / Last-Modified validators, two celestrak-parser:parse_socrates nodes normalize each into a $CSM record stream (nested CAT identities with the status suffix split into OPS_STATUS_CODE, TCA as unix seconds with the published fraction; batch = sha256 of the payload; HTTP 304 emits one unchanged notice to the egress sink and stores nothing), and two hostcap/storage-ingest nodes persist them under their own source tags with reconcile \"current\" (each sort file is a snapshot of the current conjunction list). Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication responses also land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow, SOCRATES conjunctions. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:socrates fans out to BOTH sort files (sort-minRange.csv and sort-maxProb.csv, 8 MiB budget each); two hostcap/http-request nodes fetch them, two celestrak-parser:parse_socrates nodes normalize each into a $CSM record stream (nested CAT identities with the status suffix split into OPS_STATUS_CODE, TCA as unix seconds with the published fraction; batch = sha256 of the payload) with its IngestRequest (own source tags, reconcile Current: each sort file is a snapshot of the current conjunction list; archived under celestrak/), and two hostcap/storage-ingest nodes persist them. After each store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponses). All decisions live in-wasm.",
   "nodes": [
     {
       "nodeId": "req",
@@ -98,8 +98,7 @@
       "toNodeId": "http_minrange",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "req-http-maxprob",
@@ -108,28 +107,7 @@
       "toNodeId": "http_maxprob",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-minrange-job",
-      "fromNodeId": "req",
-      "fromPortId": "job_minrange",
-      "toNodeId": "parse_minrange",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-maxprob-job",
-      "fromNodeId": "req",
-      "fromPortId": "job_maxprob",
-      "toNodeId": "parse_maxprob",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse-minrange",
@@ -138,8 +116,7 @@
       "toNodeId": "parse_minrange",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse-maxprob",
@@ -148,8 +125,7 @@
       "toNodeId": "parse_maxprob",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-minrange-meta",
@@ -158,18 +134,16 @@
       "toNodeId": "ingest_minrange",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-minrange-records",
       "fromNodeId": "parse_minrange",
       "fromPortId": "csm_records",
       "toNodeId": "ingest_minrange",
-      "toPortId": "records",
+      "toPortId": "csm_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-minrange-raw",
@@ -178,8 +152,7 @@
       "toNodeId": "ingest_minrange",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-maxprob-meta",
@@ -188,18 +161,16 @@
       "toNodeId": "ingest_maxprob",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-maxprob-records",
       "fromNodeId": "parse_maxprob",
       "fromPortId": "csm_records",
       "toNodeId": "ingest_maxprob",
-      "toPortId": "records",
+      "toPortId": "csm_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-maxprob-raw",
@@ -208,8 +179,7 @@
       "toNodeId": "ingest_maxprob",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-minrange-egress",
@@ -218,8 +188,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-maxprob-egress",
@@ -228,8 +197,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-minrange-publish",
@@ -238,8 +206,7 @@
       "toNodeId": "publish_minrange",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-minrange-meta-publish",
@@ -248,8 +215,7 @@
       "toNodeId": "publish_minrange",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-maxprob-publish",
@@ -258,8 +224,7 @@
       "toNodeId": "publish_maxprob",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-maxprob-meta-publish",
@@ -268,8 +233,7 @@
       "toNodeId": "publish_maxprob",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-minrange-http",
@@ -278,8 +242,7 @@
       "toNodeId": "publish_http_minrange",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-maxprob-http",
@@ -288,48 +251,43 @@
       "toNodeId": "publish_http_maxprob",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-minrange-egress",
       "fromNodeId": "publish_http_minrange",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-maxprob-egress",
       "fromNodeId": "publish_http_maxprob",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-minrange-unchanged-egress",
       "fromNodeId": "parse_minrange",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     },
     {
       "edgeId": "parse-maxprob-unchanged-egress",
       "fromNodeId": "parse_maxprob",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     }
   ],
   "triggers": [

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import * as flatbuffers from 'flatbuffers';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
-import { EOPT } from 'spacedatastandards.org/lib/js/EOP/main.js';
+import { S as P, call, dayOfMjd } from './dcl.mjs';
+
+const { flatbuffers, EOPT } = P;
 
 // NRLMSISE-00 (atmosphere "NRLMSISE00" of evaluate and drag_work) against propagator/hpop, the module that drives the same model in its force model.
 //
@@ -25,18 +25,7 @@ async function harnessOf(dir) {
   const manifest = JSON.parse(fs.readFileSync(dir === '.' ? here('../plugin-manifest.json') : modules(`${dir}/plugin-manifest.json`)));
   return createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct' });
 }
-async function call(method, request) {
-  const h = await harnessOf('.');
-  try {
-    const r = await h.invoke({ methodId: method, inputs: [{ portId: 'request', payload: Buffer.from(JSON.stringify(request)), typeRef: { schemaName: 'application/json' } }] });
-    if (r.statusCode !== 0) throw new Error(`${r.errorCode}: ${r.errorMessage}`);
-    return JSON.parse(Buffer.from(r.outputs[0].payload).toString('utf8'));
-  } finally {
-    await h.destroy();
-  }
-}
 const isoOfMjd = (mjd) => new Date((mjd - 40587) * 86400000).toISOString().replace('Z', '');
-const dayOfMjd = (mjd) => isoOfMjd(mjd).slice(0, 10);
 
 function keplerState(a, e, iDeg, raanDeg, argpDeg, nuDeg) {
   const d = Math.PI / 180, nu = nuDeg * d, p = a * (1 - e * e), r = p / (1 + e * Math.cos(nu)), vq = Math.sqrt(GM / p);
@@ -57,7 +46,7 @@ const spwRows = (fromDay, toDay) => {
   }
   return rows;
 };
-// The module's rows: the same days as JSON.
+// The module's $SPW rows: the fields it reads, of the same days.
 const jsonRows = (rows) => rows.map((r) => ({ DATE: r.DATE, F107_OBS: r.F107_OBS, F107_OBS_CENTER81: r.F107_OBS_CENTER81, AP_AVG: r.AP_AVG }));
 
 // HPOP with NRLMSISE-00 drag over [t0, t0 + span], samples every stepSeconds, from a GCRF state (m, m/s), zero Earth orientation (UT1 = UTC, no polar motion).
@@ -119,12 +108,12 @@ test('the fall of the energy under NRLMSISE-00 drag equals the drag work, across
   const B = 0.02;
   const track = await hpopTrack(MJD0, start, 6 * 3600, 30, { B, rows });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
-  const energy = await call('energy', { states, degree: 36, gm: GM, omega: 7.292115e-5 });
+  const energy = (await call('energy', { states, degree: 36, gm: GM, omega: 7.292115e-5 })).STATES.ENERGY_J_KG;
   const work = await call('drag_work', { states, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rows) }, B });
-  assert.equal(work.refused.length, 0);
-  assert.equal(work.settings.atmosphere, 'NRLMSISE00');
-  const fall = energy.energy.at(-1) - energy.energy[0];
-  const integral = work.cumulativeWork.at(-1);
+  assert.equal(work.STATES.REFUSED.length, 0);
+  assert.equal(work.ATMOSPHERE.MODEL, P.AtmosphericModelFamily.NRLMSIS00E);
+  const fall = energy.at(-1) - energy[0];
+  const integral = work.STATES.CUMULATIVE_DRAG_WORK_J_KG.at(-1);
   t.diagnostic(`energy fell by ${fall.toFixed(3)} J/kg, NRLMSISE-00 drag work ${integral.toFixed(3)} J/kg, ratio ${(fall / integral).toFixed(5)}`);
   assert.ok(fall < -20, `the energy fell by ${fall} J/kg`);
   assert.ok(Math.abs(fall / integral - 1) < 0.003, `energy fell by ${fall} J/kg, drag work ${integral} J/kg (ratio ${fall / integral})`);
@@ -132,7 +121,7 @@ test('the fall of the energy under NRLMSISE-00 drag equals the drag work, across
   // The day each input is read from matters: F10.7 of the epoch's own day (instead of the day before) moves the integral by more than the tolerance.
   const sameDay = rows.map((r, i) => ({ ...jsonRows([r])[0], F107_OBS: i + 1 < rows.length ? rows[i + 1].F107_OBS : r.F107_OBS }));
   const wrongDay = await call('drag_work', { states, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: sameDay }, B });
-  const wrongRatio = fall / wrongDay.cumulativeWork.at(-1);
+  const wrongRatio = fall / wrongDay.STATES.CUMULATIVE_DRAG_WORK_J_KG.at(-1);
   t.diagnostic(`F10.7 read from the epoch's own day: ratio ${wrongRatio.toFixed(5)}`);
   assert.ok(Math.abs(wrongRatio - 1) > 0.01, `reading F10.7 from the wrong day changes the integral by only ${(100 * (wrongRatio - 1)).toFixed(3)} %`);
 });
@@ -142,8 +131,9 @@ test('evaluate: NRLMSISE-00 densities at points, with the local solar time of th
   const rowsEval = spwRows(jan1 + 160, jan1 + 180);
   const mjd = jan1 + 171 + 29000 / 86400;   // day of year 172, 29000 s
   const points = { mjd: [mjd, mjd, mjd, mjd], latDeg: [60, 60, 60, 0], lonDeg: [-70, 110, -70, 30], altKm: [400, 400, 1200, 300] };
-  const out = await call('evaluate', { points, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rowsEval) } });
-  assert.equal(out.kind, 'nrlmsise00-densities');
+  const answer = await call('evaluate', { points, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rowsEval) } });
+  assert.equal(answer.ATMOSPHERE.MODEL, P.AtmosphericModelFamily.NRLMSIS00E);
+  const out = { refused: answer.POINTS.REFUSED, lstHours: answer.POINTS.LOCAL_SOLAR_TIME_H, density: answer.POINTS.DENSITY_KG_M3 };
   assert.deepEqual(out.refused, [2], 'a point above 1000 km is refused');
   // UT + longitude/15 (the package's recommended consistency relation): 29000 s = 8.0556 h
   assert.ok(Math.abs(out.lstHours[0] - ((8.0556 - 70 / 15 + 24) % 24)) < 1e-3, `lst ${out.lstHours[0]}`);
@@ -154,9 +144,9 @@ test('evaluate: NRLMSISE-00 densities at points, with the local solar time of th
   assert.notEqual(out.density[0], out.density[1], 'local solar time changes the density');
   // A day without rows is refused, not guessed; the correction and derivative of JB2008 do not apply.
   const far = await call('evaluate', { points: { mjd: [mjd + 40], latDeg: [0], lonDeg: [0], altKm: [400] }, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rowsEval) } });
-  assert.deepEqual(far.refused, [0]);
+  assert.deepEqual(far.POINTS.REFUSED, [0]);
   await assert.rejects(call('evaluate', { points, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rowsEval) }, derivative: true }), /NRLMSISE00/);
-  await assert.rejects(call('evaluate', { points, atmosphere: 'MSIS2' }), /atmosphere/);
+  await assert.rejects(call('evaluate', { points, atmosphere: 'MSIS_86' }), /atmosphere/);
   await assert.rejects(call('drag_work', { states: [{ mjd, r: [7e6, 0, 0], v: [0, 7.5e3, 0] }], atmosphere: 'NRLMSISE00' }), /nrlmsise00/);
   await assert.rejects(call('calibrate', { points: { mjd: [mjd], latDeg: [0], lonDeg: [0], altKm: [400], rho: [1e-12] }, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rowsEval) } }), /JB2008/);
 });

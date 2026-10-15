@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -14,28 +15,27 @@ const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
-// flatc emits every SDS header with the same include guard
-// (FLATBUFFERS_GENERATED_MAIN_H_) and a self-named `#include
-// "main_generated.h"`; inlining several standards into one translation unit
-// requires stripping both (same pattern as data-source/celestrak-parser).
-function inlineGeneratedHeader(source) {
+// flatc emits every SDS header with the same include guard (FLATBUFFERS_GENERATED_MAIN_H_, also the guard of the
+// SDK's staged sds/PIV and sds/TAB headers) and a flatc version static_assert. Each inlined standard gets its own
+// guard and the assert is relaxed, as hostcap/clock/build.mjs does.
+function inlineGeneratedHeader(source, standard) {
   return source
-    .replace(/#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/, "")
-    .replace(/#include "main_generated\.h"\s*\n/g, "")
-    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${standard}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\s*\n/g, "");
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-// The vCard projection inlines only $EPM — the record whose fields it
-// projects to vCard 3.0 text. No other SDS standard is needed.
-const inlineStandards = ["EPM"];
+// The vCard projection inlines $EPM (the record it projects, and the record card_parse emits) and $VCF (the card
+// record its projections emit and card_parse reads). Neither standard includes another.
+const inlineStandards = ["EPM", "VCF"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
-const sourceCode = [...headers.map(inlineGeneratedHeader), implementationSource].join("\n\n");
+const sourceCode = [...headers.map((header, i) => inlineGeneratedHeader(header, inlineStandards[i])), implementationSource].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -48,4 +48,9 @@ const result = await compileModuleFromSource({
   threadModel: "wasi-sequential",
 });
 
-console.log(`vcard-projection compiled: ${result.wasmPath} (${result.wasmSize} bytes)`);
+console.log(`vcard-projection compiled: ${outputPath}`);
+
+await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
+if (!result.report?.ok) {
+  throw new Error(`Compiled artifact failed SDK validation:\n${JSON.stringify(result.report?.issues ?? [], null, 2)}`);
+}

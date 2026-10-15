@@ -52,35 +52,47 @@ test("licensing package publishes canonical artifacts and both role entrypoints"
     "server_handle_message",
   );
 
-  const configureMethod = manifest.methods.find(
-    (entry) => entry.methodId === "server_configure_runtime",
-  );
-  const grantMethod = manifest.methods.find(
-    (entry) => entry.methodId === "client_request_grant",
-  );
-  assert.equal(
-    configureMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "$LCF",
-  );
-  assert.equal(
-    configureMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "$LCF",
-  );
-  assert.equal(
-    grantMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "$LCH",
-  );
-  assert.equal(
-    grantMethod.inputPorts[1].portId,
-    "requester_signing_key",
-  );
-  assert.equal(
-    grantMethod.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "$KMF",
-  );
-  assert.equal(
-    grantMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "$LGR",
+  assert.equal(manifest.capabilities.includes("secrets"), true);
+
+  // Typed contracts 1.0: every port names exactly one concrete SDS FlatBuffer type.
+  const portTypes = {};
+  for (const method of manifest.methods) {
+    for (const [direction, ports] of [["in", method.inputPorts], ["out", method.outputPorts]]) {
+      for (const port of ports) {
+        const types = port.acceptedTypeSets.flatMap((set) => set.allowedTypes);
+        assert.equal(types.length, 1, `${method.methodId}.${port.portId} names one type`);
+        const [type] = types;
+        assert.equal(type.acceptsAnyFlatbuffer, undefined, `${method.methodId}.${port.portId} is not a wildcard`);
+        assert.equal(type.wireFormat, "flatbuffer");
+        assert.equal(type.schemaName, `${type.rootTypeName}.fbs`);
+        assert.equal(type.fileIdentifier, `$${type.rootTypeName}`);
+        portTypes[`${method.methodId}.${direction}.${port.portId}`] = type.fileIdentifier;
+      }
+    }
+  }
+  assert.deepEqual(portTypes, {
+    "server_configure_runtime.in.config": "$LCF",
+    "server_configure_runtime.out.status": "$LCF",
+    "server_publish_module.in.module_descriptor": "$PLG",
+    "server_publish_module.in.protected_content": "$FIL",
+    "server_publish_module.out.response": "$PLG",
+    "server_handle_message.in.request": "$LCH",
+    "server_handle_message.in.proof": "$LPF",
+    "server_handle_message.out.challenge": "$LCH",
+    "server_handle_message.out.grant": "$LGR",
+    "client_request_grant.in.request": "$LCH",
+    "client_request_grant.out.response": "$LGR",
+    "client_fetch_and_decrypt.in.grant_response": "$LGR",
+    "client_fetch_and_decrypt.in.protected_content": "$FIL",
+    "client_fetch_and_decrypt.out.plaintext": "$FIL",
+    "decrypt_and_verify.in.protected_content": "$FIL",
+    "decrypt_and_verify.in.signer_key": "$KMF",
+    "decrypt_and_verify.out.plaintext": "$FIL",
+  });
+  // The only $KMF port is the public verification key: secrets never travel on a port.
+  assert.deepEqual(
+    Object.entries(portTypes).filter(([, id]) => id === "$KMF").map(([port]) => port),
+    ["decrypt_and_verify.in.signer_key"],
   );
 });
 

@@ -1,43 +1,34 @@
 /*
- * data-source/celestrak-reference (fbcs-06b).
+ * data-source/celestrak-reference (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
  *
- * One self-contained CelesTrak reference module: request builders AND parsers
- * for the two reference lanes that make the CelesTrak dataset set definitive:
+ * One self-contained CelesTrak reference module: request builders AND parsers for the two reference lanes that make
+ * the CelesTrak dataset set definitive:
  *
- *   gp_groups              tick -> N request frames (port "request") + ONE job
- *                          frame (port "job") for the 47 GP GROUP queries and
- *                          the 2 SPECIAL queries (gpz, gpz-plus).
- *   parse_gp_groups        (job, N responses) -> one $EGP per group
- *                          (egp_meta / egp_records / raw), optional OMM
- *                          re-emission (omm_meta / omm_records), and an
- *                          "unchanged" frame for groups that answered 304.
- *   satcat_reference       tick -> two request/job pairs (launch sites,
- *                          owners/sources tables).
- *   parse_satcat_reference (job, response) -> $SIT rows (launch sites) or
- *                          $LCC rows (owner codes) from the HTML tables.
+ *   gp_groups              TimerTick -> one HttpRequest (HREQ) per GP group query on "request" (the 47 GROUP tokens
+ *                          and the 2 SPECIAL queries gpz / gpz-plus, or node CONFIG celestrak_gp_groups), each carrying
+ *                          its job in CONTEXT.
+ *   parse_gp_groups        the groups' HttpResponses (HRSP, paired by CONTEXT, any order) -> one $EGP per group
+ *                          (egp_meta IngestRequest / egp_records / raw HttpResponse), optional OMM re-emission
+ *                          (omm_meta / omm_records), and a FlowNotice on "unchanged" for groups that answered 304.
+ *   satcat_reference       TimerTick -> the launch-site and owners/sources table fetches (request_sites,
+ *                          request_owners), each HREQ carrying its job in CONTEXT.
+ *   parse_satcat_reference HttpResponse -> $SIT rows (launch sites) or $LCC rows (owner codes) from the HTML tables;
+ *                          the job's DATASET_ID decides.
  *
- * Helpers (config, JSON, base64, sha256, csv, civil time, frame IO) are copied
- * from data-source/celestrak-request and data-source/celestrak-parser, which
- * are single-file modules and stay untouched by this module.
+ * JOB CONTRACT (shared with the other CelesTrak lanes): the job travels as HttpRequest.CONTEXT - ONE size-prefixed
+ * $ICN (Ingest Connector) record - and hostcap/http-request echoes it verbatim in the HttpResponse, so a response is
+ * attributed by what it carries, never by its position. The $ICN names CONNECTOR_ID (the lane's source name; a GP group
+ * job: "celestrak-gp-groups/<TOKEN>"), KIND HttpsPull, HTTP_METHOD GET, ENDPOINT_URL, TARGET_SCHEMA, EMITS_SCHEMAS,
+ * POST_INGEST_ACTION Archive, ORIGIN_ID celestrak.org, ORIGIN_NAME CelesTrak, DATASET_ID, PROVIDER_ID, SOURCE_NAME and
+ * the usage terms LICENSE / LICENSE_URL / CITATION. Each ingest meta is an IngestRequest (INGQ): SCHEMA, TAGS (provider,
+ * source, batch, url, content key "public", source peer "source:celestrak", licence identifier, licence url, citation),
+ * RECONCILE, ARCHIVE (source "celestrak", the lane's archive name, keyed by the job's DATASET_ID) and PROVENANCE.
  *
- * JOB CONTRACT (shared with the other CelesTrak lanes): every job JSON carries
- * source_url, source_name, provider_id, archive_source/archive_name,
- * origin_id "celestrak.org", origin_name "CelesTrak", dataset_id and
- * license/license_url/citation; every ingest meta carries schema, provider_id,
- * source_name, source_url, batch_id, content_key_id, source_peer, reconcile,
- * license, license_url, citation, origin_id, origin_name, dataset_id, archive
- * and provenance (the parser's build_provenance_json shape, warnings[]
- * included).
- *
- * ONE JOB FRAME FOR N GROUPS. The compiled flow runtime hands a node at most
- * 64 frames per invocation (space_data_module_runtime_begin_node_invocation,
- * kMaxInvocationFrames) and pops them port-blind. N job frames + N response
- * frames for the 49 default groups would be 98 frames, so the parser would
- * always see a partial batch and, being fail-closed on count mismatch, would
- * never land a batch. The job therefore carries the ordered group list once
- * (1 + 49 = 50 frames); hostcap/http-request answers one response per request
- * in request order, so response ordinal i is group i. The list is capped at
- * 63 entries for the same reason.
+ * GROUP PAIRING. parse_gp_groups reads each response's group token from its $ICN CONNECTOR_ID and resolves the group
+ * plan from its own node CONFIG exactly as gp_groups does (the flow service gives every node the same config); it
+ * refuses the batch unless exactly one response per planned group arrived (group-count-mismatch) and refuses a token
+ * outside the plan or a URL other than the plan's (group-url-mismatch). Output order and the batch hash follow the plan.
+ * The compiled flow runtime hands a node at most 64 frames per invocation, so the list is capped at 63 groups.
  */
 
 #include <algorithm>
@@ -54,20 +45,19 @@
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+// The SDS standards (RFM TIM MET IDM PLD LCC OMM CAT EGP SIT ICN, lib/cpp/<CODE>/main_generated.h) are inlined
+// ahead of this file by build.mjs.
 
 namespace {
+
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
+
 
 // ---------------------------------------------------------------------------
 // Lane constants.
@@ -88,7 +78,7 @@ constexpr const char* kDefaultSourcesURL = "https://celestrak.org/satcat/sources
 
 constexpr long kGroupMaxBytes = 8388608;      // 8 MiB per GP group payload
 constexpr long kReferenceMaxBytes = 2097152;  // 2 MiB per reference page
-constexpr size_t kMaxGroups = 63;             // 1 job + 63 responses = runtime budget
+constexpr size_t kMaxGroups = 63;             // 63 responses within the runtime budget of 64 frames
 
 constexpr const char* kSourceGPGroups = "celestrak-gp-groups";
 constexpr const char* kDatasetGPGroups = "gp-groups";
@@ -107,6 +97,8 @@ constexpr const char* kDefaultLicense =
     "and report the results to a human for investigation.\"";
 constexpr const char* kDefaultLicenseURL = "https://celestrak.org/usage-policy.php";
 constexpr const char* kDefaultCitation = "CelesTrak, Dr. T.S. Kelso, https://celestrak.org/";
+// TAGS.LICENSE (an SPDX identifier, at most 64 bytes) when the configured terms are prose, as they are by default.
+constexpr const char* kLicenseRef = "LicenseRef-CelesTrak-Usage-Policy";
 
 // ---------------------------------------------------------------------------
 // Compiled GP group registry: the 47 GROUP tokens and 2 SPECIAL tokens listed
@@ -219,231 +211,6 @@ std::string normalize_key(const std::string& raw) {
         if (c == ' ' || c == '-') c = '_';
     }
     return s;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    const char c = json[i];
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-// true / "true" / 1 all read as set.
-bool json_truthy_field(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0) return true;
-    if (json[i] == '1') return true;
-    if (json[i] == '"') {
-        std::string v;
-        if (json_string_field(json, key, &v)) {
-            const std::string l = lower(trim(v));
-            return l == "true" || l == "1" || l == "yes";
-        }
-    }
-    return false;
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '{') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') depth++;
-        else if (c == '}') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
-
-// The objects of a JSON array field, each returned as its own "{...}" slice.
-std::vector<std::string> json_array_objects(const std::string& json, const std::string& key) {
-    std::vector<std::string> out;
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return out;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return out;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '[') return out;
-    i++;
-    int depth = 0;
-    bool in_string = false;
-    size_t start = std::string::npos;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') {
-            if (depth == 0) start = i;
-            depth++;
-        } else if (c == '}') {
-            depth--;
-            if (depth == 0 && start != std::string::npos) {
-                out.push_back(json.substr(start, i - start + 1));
-                start = std::string::npos;
-            }
-        } else if (c == ']' && depth == 0) {
-            break;
-        }
-    }
-    return out;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else out.push_back(c);
-    }
-    return out;
-}
-
-std::string json_string_array(const std::vector<std::string>& values) {
-    std::string out = "[";
-    for (size_t i = 0; i < values.size(); i++) {
-        if (i) out += ",";
-        out += "\"" + json_escape(values[i]) + "\"";
-    }
-    out += "]";
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (standard alphabet).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-int b64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
-    out->clear();
-    out->reserve((text.size() / 4) * 3);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xff));
-        }
-    }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,47 +802,48 @@ bool scan_html_table(const std::vector<uint8_t>& content,
 // Frame IO helpers.
 // ---------------------------------------------------------------------------
 
-bool read_json_frame_at(const char* port, uint32_t ordinal, std::string* out) {
-    const int32_t idx = plugin_find_input_index(port, ordinal);
-    if (idx < 0) return false;
-    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload || frame->payload_length == 0) return false;
-    out->assign(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
-    return true;
+using Bytes = std::vector<uint8_t>;
+
+Bytes finished_bytes(const ::flatbuffers::FlatBufferBuilder& b) {
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-bool read_json_frame(const char* port, std::string* out) {
-    return read_json_frame_at(port, 0, out);
+std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
+    std::vector<const plugin_input_frame_t*> out;
+    for (uint32_t ordinal = 0;; ordinal++) {
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
+    }
+    return out;
 }
 
-uint32_t frames_on_port(const char* port) {
-    uint32_t n = 0;
-    while (plugin_find_input_index(port, n) >= 0) n++;
-    return n;
-}
-
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
-}
-
-int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+int push_typed(const char* port, const char* schema, const char* identifier, const char* root, const Bytes& bytes) {
+    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
                                  bytes.data(), static_cast<uint32_t>(bytes.size()));
 }
 
-// The record streams declare their concrete SDS identity on the port, so the
-// frame must carry it too (schema name, file identifier and root type).
-int push_record_stream(const char* port, const char* schema, const char* identifier,
-                       const char* root, const std::vector<uint8_t>& bytes) {
-    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                 root, 0, 0, bytes.data(), static_cast<uint32_t>(bytes.size()));
+// The record streams declare their concrete SDS identity on the port, so the frame carries it too.
+int push_record_stream(const char* port, const char* schema, const char* identifier, const char* root,
+                       const Bytes& bytes) {
+    return push_typed(port, schema, identifier, root, bytes);
+}
+int push_request(const char* port, const Bytes& bytes) {
+    return push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", bytes);
+}
+int push_response(const char* port, const uint8_t* data, size_t length) {
+    return plugin_push_output_ex(port, "HttpResponse.fbs", R::HttpResponseIdentifier(),
+                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "HttpResponse", 0, 0, data,
+                                 static_cast<uint32_t>(length));
+}
+int push_ingest_request(const char* port, const Bytes& bytes) {
+    return push_typed(port, "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", bytes);
+}
+int push_notice(const Bytes& bytes) {
+    return push_typed("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", bytes);
 }
 
-void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_t>& record) {
+void append_size_prefixed(Bytes* stream, const Bytes& record) {
     const uint32_t len = static_cast<uint32_t>(record.size());
     stream->push_back(static_cast<uint8_t>(len & 0xff));
     stream->push_back(static_cast<uint8_t>((len >> 8) & 0xff));
@@ -1117,45 +885,80 @@ bool find_batched_input_port(const char* multi_port, char* message, size_t messa
 }
 
 // ---------------------------------------------------------------------------
-// Node CONFIG (builtin plugin.getConfig hostcall; copied from celestrak-request).
+// Node CONFIG: plugin.getConfig as an SDS $PIV hostcall - one ModuleConfig (MCFG) FlatBuffer on raw "config", read in
+// place through sdm_piv::get_config(). No config reads as the defaults.
 // ---------------------------------------------------------------------------
 
-std::string load_config() {
-    static const char* op = "plugin.getConfig";
-    const std::string payload_json = "{}";
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op),
-                  static_cast<int32_t>(std::strlen(op)), req.data(),
-                  static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 4) return "{}";
-    std::vector<uint8_t> buf(static_cast<size_t>(len));
-    sdm_host_read_response(buf.data(), len);
-    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
-                          (static_cast<uint32_t>(buf[2]) << 16) |
-                          (static_cast<uint32_t>(buf[3]) << 24);
-    if (buf.size() < 4u + rlen) return "{}";
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
+std::string format_number(double v) {
+    char buf[40];
+    if (std::fabs(v - std::round(v)) < 1e-9 && std::fabs(v) < 9.0e15) std::snprintf(buf, sizeof(buf), "%.0f", v);
+    else std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
 }
 
-std::string config_string(const std::string& config, const char* key, const char* fallback) {
-    std::string value;
-    if (json_string_field(config, key, &value) && !value.empty()) return value;
-    return fallback;
-}
+struct Config {
+    sdm_piv::Config cfg;
 
-long config_timeout_ms(const std::string& config) {
-    double v = 0;
-    if (json_number_field(config, "celestrak_http_timeout_ms", &v) && v > 0) {
-        return static_cast<long>(v);
+    using Entry = sdn::runtime::ConfigEntry;
+    static std::string str_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
+    // A scalar's text; a StringList / NumberList joined with commas.
+    static std::string text_of(const Entry& e) {
+        switch (e.KIND()) {
+            case sdn::runtime::configValueKind_String: return str_of(e.STRING_VALUE());
+            case sdn::runtime::configValueKind_Number: return format_number(e.NUMBER_VALUE());
+            case sdn::runtime::configValueKind_Bool: return e.BOOL_VALUE() ? "true" : "false";
+            case sdn::runtime::configValueKind_StringList: {
+                std::string joined;
+                if (e.STRINGS()) for (flatbuffers::uoffset_t i = 0; i < e.STRINGS()->size(); i++) joined += (i ? "," : "") + str_of(e.STRINGS()->Get(i));
+                return joined;
+            }
+            case sdn::runtime::configValueKind_NumberList: {
+                std::string joined;
+                if (e.NUMBERS()) for (flatbuffers::uoffset_t i = 0; i < e.NUMBERS()->size(); i++) joined += (i ? "," : "") + format_number(e.NUMBERS()->Get(i));
+                return joined;
+            }
+            default: return std::string();
+        }
     }
-    return kDefaultTimeoutMs;
+    // A scalar, or a list joined with commas; `fallback` when absent or empty.
+    std::string string(const char* key, const char* fallback) const {
+        if (const Entry* e = cfg.entry(key)) {
+            const std::string v = text_of(*e);
+            return v.empty() ? fallback : v;
+        }
+        return fallback;
+    }
+    double number(const char* key, double fallback) const {
+        const Entry* e = cfg.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == sdn::runtime::configValueKind_Number) return e->NUMBER_VALUE();
+        if (e->KIND() == sdn::runtime::configValueKind_String) {
+            const std::string s = str_of(e->STRING_VALUE());
+            char* end = nullptr;
+            const double v = strtod(s.c_str(), &end);
+            if (end != s.c_str()) return v;
+        }
+        return fallback;
+    }
+    // true / "true" / 1 read as set (the legacy truthy rule).
+    bool boolean(const char* key, bool fallback) const {
+        const Entry* e = cfg.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == sdn::runtime::configValueKind_Bool) return e->BOOL_VALUE();
+        if (e->KIND() == sdn::runtime::configValueKind_Number) return e->NUMBER_VALUE() != 0;
+        if (e->KIND() != sdn::runtime::configValueKind_String) return fallback;
+        const std::string s = str_of(e->STRING_VALUE());
+        if (s == "true" || s == "1") return true;
+        if (s == "false" || s == "0") return false;
+        return fallback;
+    }
+};
+
+Config load_config() { return Config{sdm_piv::get_config()}; }
+
+long config_timeout_ms(const Config& config) {
+    const double v = config.number("celestrak_http_timeout_ms", 0);
+    return v > 0 ? static_cast<long>(v) : kDefaultTimeoutMs;
 }
 
 struct LaneAttribution {
@@ -1165,40 +968,13 @@ struct LaneAttribution {
     std::string citation;
 };
 
-LaneAttribution lane_attribution(const std::string& config) {
+LaneAttribution lane_attribution(const Config& config) {
     LaneAttribution a;
-    a.provider_id = config_string(config, "celestrak_provider_id", kDefaultProviderID);
-    a.license = config_string(config, "celestrak_license", kDefaultLicense);
-    a.license_url = config_string(config, "celestrak_license_url", kDefaultLicenseURL);
-    a.citation = config_string(config, "celestrak_citation", kDefaultCitation);
+    a.provider_id = config.string("celestrak_provider_id", kDefaultProviderID);
+    a.license = config.string("celestrak_license", kDefaultLicense);
+    a.license_url = config.string("celestrak_license_url", kDefaultLicenseURL);
+    a.citation = config.string("celestrak_citation", kDefaultCitation);
     return a;
-}
-
-// {"method":"GET","url":...,"timeoutMs":N,"maxBytes":N}
-std::string build_request_json(const std::string& url, long timeout_ms, long max_bytes) {
-    char timeout_buf[24];
-    std::snprintf(timeout_buf, sizeof(timeout_buf), "%ld", timeout_ms);
-    char max_buf[24];
-    std::snprintf(max_buf, sizeof(max_buf), "%ld", max_bytes);
-    return std::string("{\"method\":\"GET\",\"url\":\"") + json_escape(url) +
-           "\",\"timeoutMs\":" + timeout_buf + ",\"maxBytes\":" + max_buf + "}";
-}
-
-// The shared job JSON, opened so callers can append lane-specific fields.
-std::string job_json_fields(const LaneAttribution& a, const std::string& url,
-                            const char* source_name, const char* archive_name,
-                            const char* dataset_id) {
-    return std::string("\"source_url\":\"") + json_escape(url) + "\"" +
-           ",\"source_name\":\"" + source_name + "\"" +
-           ",\"provider_id\":\"" + json_escape(a.provider_id) + "\"" +
-           ",\"archive_source\":\"" + kArchiveSource + "\"" +
-           ",\"archive_name\":\"" + archive_name + "\"" +
-           ",\"origin_id\":\"" + kOriginID + "\"" +
-           ",\"origin_name\":\"" + kOriginName + "\"" +
-           ",\"dataset_id\":\"" + dataset_id + "\"" +
-           ",\"license\":\"" + json_escape(a.license) + "\"" +
-           ",\"license_url\":\"" + json_escape(a.license_url) + "\"" +
-           ",\"citation\":\"" + json_escape(a.citation) + "\"";
 }
 
 std::string group_url(const GroupSpec* spec, const std::string& token) {
@@ -1207,17 +983,67 @@ std::string group_url(const GroupSpec* spec, const std::string& token) {
 }
 
 // ---------------------------------------------------------------------------
-// Fetch context: job + one http response, shared by the reference parsers.
+// The job: one size-prefixed $ICN record in HttpRequest.CONTEXT.
 // ---------------------------------------------------------------------------
 
+struct JobSpec {
+    std::string connector_id;
+    std::string target_schema;
+    std::vector<std::string> emits;
+    std::string url;
+    std::string source_name;
+    std::string dataset_id;
+};
+
+Bytes job_record(const JobSpec& spec, const LaneAttribution& a) {
+    ::flatbuffers::FlatBufferBuilder b(1024);
+    const auto connector_id = b.CreateString(spec.connector_id);
+    const auto target_schema = b.CreateString(spec.target_schema);
+    const auto endpoint = b.CreateString(spec.url);
+    const auto method = b.CreateString("GET");
+    const auto origin_id = b.CreateString(kOriginID);
+    const auto origin_name = b.CreateString(kOriginName);
+    const auto dataset_id = b.CreateString(spec.dataset_id);
+    const auto provider_id = b.CreateString(a.provider_id);
+    const auto source_name = b.CreateString(spec.source_name);
+    const auto license = b.CreateString(a.license);
+    const auto license_url = b.CreateString(a.license_url);
+    const auto citation = b.CreateString(a.citation);
+    const auto emits = b.CreateVectorOfStrings(spec.emits);
+    ICNBuilder icn(b);
+    icn.add_CONNECTOR_ID(connector_id);
+    icn.add_KIND(icnConnectorKind_HttpsPull);
+    icn.add_TARGET_SCHEMA(target_schema);
+    icn.add_ENDPOINT_URL(endpoint);
+    icn.add_HTTP_METHOD(method);
+    icn.add_POST_INGEST_ACTION(icnPostIngestAction_Archive);
+    icn.add_ORIGIN_ID(origin_id);
+    icn.add_ORIGIN_NAME(origin_name);
+    icn.add_DATASET_ID(dataset_id);
+    icn.add_PROVIDER_ID(provider_id);
+    icn.add_SOURCE_NAME(source_name);
+    icn.add_LICENSE(license);
+    icn.add_LICENSE_URL(license_url);
+    icn.add_CITATION(citation);
+    icn.add_EMITS_SCHEMAS(emits);
+    FinishSizePrefixedICNBuffer(b, icn.Finish());
+    return finished_bytes(b);
+}
+
+// A GET HttpRequest (no headers: the host presents its recorded validators), its job in CONTEXT.
+Bytes http_get(const std::string& url, long timeout_ms, long max_bytes, const Bytes& context) {
+    ::flatbuffers::FlatBufferBuilder b(512 + context.size());
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), nullptr, nullptr,
+                                                             static_cast<uint32_t>(timeout_ms),
+                                                             static_cast<uint64_t>(max_bytes), &context));
+    return finished_bytes(b);
+}
+
 struct JobContext {
-    std::string job_json;
-    std::string source_url;
+    std::string connector_id;
+    std::string source_url;   // the $ICN ENDPOINT_URL
     std::string source_name;
     std::string provider_id;
-    std::string archive_source;
-    std::string archive_name;
-    std::string reconcile;
     std::string dataset_id;
     std::string origin_id;
     std::string origin_name;
@@ -1226,174 +1052,189 @@ struct JobContext {
     std::string citation;
 };
 
-bool load_job(JobContext* ctx) {
-    if (!read_json_frame("job", &ctx->job_json)) {
-        plugin_set_error("missing-job-frame", "parser requires the job JSON frame.");
+std::string text_of(const ::flatbuffers::String* s) { return s ? s->str() : std::string(); }
+
+// The job a response carries back in CONTEXT; false (with a plugin error) when it carries none, or not an $ICN.
+bool load_job(const R::HttpResponse& response, size_t index, JobContext* ctx) {
+    const auto* context = response.CONTEXT();
+    bool ok = context && context->size() >= 8;
+    if (ok) {
+        ::flatbuffers::Verifier verifier(context->data(), context->size());
+        ok = VerifySizePrefixedICNBuffer(verifier);
+    }
+    if (!ok) {
+        const std::string message = "response " + std::to_string(index) + " (" + text_of(response.URL()) +
+                                    ") carries no size-prefixed $ICN job in CONTEXT; it cannot be attributed and is "
+                                    "refused.";
+        plugin_set_error("missing-context", message.c_str());
         return false;
     }
-    json_string_field(ctx->job_json, "source_url", &ctx->source_url);
-    json_string_field(ctx->job_json, "source_name", &ctx->source_name);
-    json_string_field(ctx->job_json, "provider_id", &ctx->provider_id);
-    json_string_field(ctx->job_json, "archive_source", &ctx->archive_source);
-    json_string_field(ctx->job_json, "archive_name", &ctx->archive_name);
-    json_string_field(ctx->job_json, "reconcile", &ctx->reconcile);
-    json_string_field(ctx->job_json, "dataset_id", &ctx->dataset_id);
-    json_string_field(ctx->job_json, "origin_id", &ctx->origin_id);
-    json_string_field(ctx->job_json, "origin_name", &ctx->origin_name);
-    json_string_field(ctx->job_json, "license", &ctx->license);
-    json_string_field(ctx->job_json, "license_url", &ctx->license_url);
-    json_string_field(ctx->job_json, "citation", &ctx->citation);
+    const ICN* job = GetSizePrefixedICN(context->data());
+    ctx->connector_id = text_of(job->CONNECTOR_ID());
+    ctx->source_url = text_of(job->ENDPOINT_URL());
+    ctx->source_name = text_of(job->SOURCE_NAME());
+    ctx->provider_id = text_of(job->PROVIDER_ID());
+    ctx->dataset_id = text_of(job->DATASET_ID());
+    ctx->origin_id = text_of(job->ORIGIN_ID());
+    ctx->origin_name = text_of(job->ORIGIN_NAME());
+    ctx->license = text_of(job->LICENSE());
+    ctx->license_url = text_of(job->LICENSE_URL());
+    ctx->citation = text_of(job->CITATION());
     if (ctx->provider_id.empty()) ctx->provider_id = kDefaultProviderID;
     if (ctx->origin_id.empty()) ctx->origin_id = kOriginID;
     if (ctx->origin_name.empty()) ctx->origin_name = kOriginName;
     if (ctx->source_name.empty()) {
-        plugin_set_error("missing-source-name", "job must carry source_name.");
+        plugin_set_error("missing-source-name", "the $ICN job must carry SOURCE_NAME.");
         return false;
     }
     return true;
 }
 
-struct HttpResponse {
+// ---------------------------------------------------------------------------
+// Responses.
+// ---------------------------------------------------------------------------
+
+struct Fetched {
     long status = 0;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string response_date;
-    std::string request_url;  // present only when the connector echoes it
     std::vector<uint8_t> body;
     std::string sha256;
-    int64_t retrieved_unix = 0;
+    int64_t retrieved_unix = 0;   // the Date header, else the wasm clock (legacy retrieved_at)
+    uint64_t retrieved_ms = 0;    // the host's RETRIEVED_MS
 };
 
-// Decodes one hostcap/http-request response JSON. Returns false with a plugin
-// error set for malformed frames; non-200/304 statuses are the caller's call.
-bool decode_response(const std::string& response_json, HttpResponse* out) {
-    double status = 0;
-    if (!json_number_field(response_json, "status", &status)) {
-        plugin_set_error("missing-status", "http response frame carries no status.");
-        return false;
+// One HttpResponse frame, verified; nullptr with a plugin error otherwise.
+const R::HttpResponse* response_of(const plugin_input_frame_t* frame, size_t index) {
+    bool ok = frame && frame->payload && frame->payload_length > 0;
+    if (ok) {
+        ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+        ok = R::VerifyHttpResponseBuffer(verifier);
     }
-    out->status = static_cast<long>(status);
-    const std::string headers = json_object_slice(response_json, "headers");
-    json_string_field(headers, "etag", &out->etag);
-    if (out->etag.empty()) json_string_field(headers, "ETag", &out->etag);
-    json_string_field(headers, "last-modified", &out->last_modified);
-    if (out->last_modified.empty()) json_string_field(headers, "Last-Modified", &out->last_modified);
-    json_string_field(headers, "content-type", &out->content_type);
-    if (out->content_type.empty()) json_string_field(headers, "Content-Type", &out->content_type);
-    json_string_field(headers, "date", &out->response_date);
-    if (out->response_date.empty()) json_string_field(headers, "Date", &out->response_date);
-    json_string_field(response_json, "url", &out->request_url);
-    if (out->request_url.empty()) json_string_field(response_json, "requestUrl", &out->request_url);
+    if (!ok) {
+        const std::string message = "response " + std::to_string(index) + " is not an HttpResponse (HRSP).";
+        plugin_set_error("invalid-response-frame", message.c_str());
+        return nullptr;
+    }
+    return R::GetHttpResponse(frame->payload);
+}
 
+// Header NAMEs are lower-cased by the connector (a FlatBuffers key).
+std::string header_of(const R::HttpResponse& r, const char* name) {
+    if (const auto* headers = r.HEADERS())
+        for (const auto* h : *headers)
+            if (h && h->NAME() && h->NAME()->str() == name) return text_of(h->VALUE());
+    return std::string();
+}
+
+Fetched decode_response(const R::HttpResponse& r) {
+    Fetched out;
+    out.status = r.STATUS();
+    out.etag = header_of(r, "etag");
+    out.last_modified = header_of(r, "last-modified");
+    out.content_type = header_of(r, "content-type");
+    out.response_date = header_of(r, "date");
     int64_t date_unix = 0;
-    if (!out->response_date.empty() && parse_http_date(out->response_date, &date_unix)) {
-        out->retrieved_unix = date_unix;
-    } else {
-        out->retrieved_unix = now_unix_seconds();
-    }
+    out.retrieved_unix = !out.response_date.empty() && parse_http_date(out.response_date, &date_unix)
+                             ? date_unix
+                             : now_unix_seconds();
+    out.retrieved_ms = r.RETRIEVED_MS();
+    if (r.BODY()) out.body.assign(r.BODY()->data(), r.BODY()->data() + r.BODY()->size());
+    out.sha256 = sha256_hex(out.body.data(), out.body.size());
+    return out;
+}
 
-    std::string body_b64;
-    json_string_field(response_json, "bodyB64", &body_b64);
-    if (!body_b64.empty()) {
-        if (!base64_decode(body_b64, &out->body)) {
-            plugin_set_error("invalid-body", "http response bodyB64 is not valid base64.");
-            return false;
+// ---------------------------------------------------------------------------
+// The IngestRequest (INGQ) meta and the FlowNotice.
+// ---------------------------------------------------------------------------
+
+// Archive naming: the request builder's constants, keyed by the job's DATASET_ID (never configurable).
+const char* archive_name_for(const std::string& dataset_id) {
+    if (dataset_id == kDatasetGPGroups) return "gp-groups.csv";
+    if (dataset_id == kDatasetLaunchSites) return "launchsites.html";
+    if (dataset_id == kDatasetOwners) return "sources.html";
+    return nullptr;
+}
+
+// TAGS.LICENSE is an SPDX identifier (storage-ingest bounds it to 64 bytes and refuses a longer one): an
+// identifier-shaped value is used as is; the verbatim usage terms are named by this LicenseRef (they stay in the
+// $ICN job and in the $EGP PROVENANCE.LICENSE).
+std::string license_identifier(const std::string& license) {
+    bool identifier = !license.empty() && license.size() <= 64;
+    for (const char c : license)
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') identifier = false;
+    return identifier ? license : std::string(kLicenseRef);
+}
+
+struct ProvenanceSpec {
+    std::string source_url;
+    long status = 0;
+    std::string etag, last_modified, content_type;
+    int64_t retrieved_unix = 0;
+    std::string parser_version;   // legacy "<parser>/<version>"
+    std::string source_sha256, normalized_sha256;
+    uint64_t normalized_count = 0;
+    std::vector<std::pair<std::string, uint64_t>> schema_counts;
+    std::vector<std::string> warnings;
+};
+
+R::reconcileMode reconcile_mode(const std::string& reconcile) {
+    if (reconcile == "current") return R::reconcileMode_Current;
+    if (reconcile == "none") return R::reconcileMode_None;
+    return R::reconcileMode_Duplicates;
+}
+
+Bytes build_ingest_request(const JobContext& ctx, const char* schema, const std::string& batch_id,
+                           const std::string& reconcile, bool with_archive, const ProvenanceSpec* p) {
+    ::flatbuffers::FlatBufferBuilder b(2048);
+    const auto opt = [](const std::string& s) { return s.empty() ? nullptr : s.c_str(); };
+    ::flatbuffers::Offset<R::Provenance> provenance = 0;
+    if (p) {
+        const size_t slash = p->parser_version.find('/');
+        const std::string parser = p->parser_version.substr(0, slash);
+        const std::string version = slash == std::string::npos ? std::string() : p->parser_version.substr(slash + 1);
+        std::vector<::flatbuffers::Offset<::flatbuffers::String>> schemas, warnings;
+        std::vector<uint64_t> counts;
+        for (const auto& [name, count] : p->schema_counts) {
+            schemas.push_back(b.CreateString(name));
+            counts.push_back(count);
         }
+        for (const std::string& w : p->warnings) warnings.push_back(b.CreateString(w));
+        provenance = R::CreateProvenanceDirect(
+            b, p->source_url.c_str(), static_cast<int32_t>(p->status), opt(p->etag), opt(p->last_modified),
+            opt(p->content_type), static_cast<uint64_t>(p->retrieved_unix) * 1000, parser.c_str(), opt(version),
+            p->source_sha256.c_str(), p->normalized_sha256.c_str(), p->normalized_count, &schemas, &counts, &warnings,
+            false);
     }
-    out->sha256 = sha256_hex(out->body.data(), out->body.size());
-    return true;
+    const std::string license = license_identifier(ctx.license);
+    const auto tags = R::CreateSourceTagsDirect(b, ctx.provider_id.c_str(), ctx.source_name.c_str(), batch_id.c_str(),
+                                                ctx.source_url.c_str(), kContentKeyID, kSourcePeer, license.c_str(),
+                                                opt(ctx.license_url), opt(ctx.citation), false);
+    ::flatbuffers::Offset<R::ArchiveTarget> archive = 0;
+    const char* archive_name = archive_name_for(ctx.dataset_id);
+    if (with_archive && archive_name) archive = R::CreateArchiveTargetDirect(b, kArchiveSource, archive_name);
+    R::FinishIngestRequestBuffer(b, R::CreateIngestRequestDirect(b, schema, tags, reconcile_mode(reconcile), archive,
+                                                                 provenance));
+    return finished_bytes(b);
 }
 
-// {"status":304,"unchanged":true,...} — emitted instead of records when the
-// source answered Not Modified.
-std::string build_unchanged_json(const JobContext& ctx, const std::vector<std::string>& groups,
-                                 int changed_count) {
-    char changed_buf[16];
-    std::snprintf(changed_buf, sizeof(changed_buf), "%d", changed_count);
-    std::string out = std::string("{\"status\":304,\"unchanged\":true") +
-                      ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                      ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                      ",\"provider_id\":\"" + json_escape(ctx.provider_id) + "\"" +
-                      ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"" +
-                      ",\"origin_id\":\"" + json_escape(ctx.origin_id) + "\"" +
-                      ",\"origin_name\":\"" + json_escape(ctx.origin_name) + "\"";
-    if (!groups.empty()) out += ",\"groups\":" + json_string_array(groups);
-    out += std::string(",\"changed_count\":") + changed_buf + "}";
-    return out;
+// 304: a FlowNotice Unchanged instead of records.
+Bytes build_unchanged(const JobContext& ctx, const char* schema, uint64_t count, const std::vector<std::string>& items) {
+    R::FlowNoticeT notice;
+    notice.KIND = R::flowNoticeKind_Unchanged;
+    notice.SCHEMA = schema;
+    notice.PROVIDER_ID = ctx.provider_id;
+    notice.SOURCE_NAME = ctx.source_name;
+    notice.REASON = "not-modified";
+    notice.COUNT = count;
+    notice.ITEMS = items;
+    ::flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return finished_bytes(b);
 }
 
-// storage.ingest_with_source meta for one schema (the parser's shape plus the
-// origin/licence keys every CelesTrak lane now carries).
-std::string build_ingest_meta(const JobContext& ctx, const char* schema,
-                              const std::string& batch_id, const std::string& reconcile_default,
-                              bool with_archive, const std::string& provenance_source,
-                              const std::string& provenance_json) {
-    const std::string reconcile = ctx.reconcile.empty() ? reconcile_default : ctx.reconcile;
-    std::string meta = std::string("{\"schema\":\"") + schema + "\"" +
-                       ",\"provider_id\":\"" + json_escape(ctx.provider_id) + "\"" +
-                       ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
-                       ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
-                       ",\"batch_id\":\"" + batch_id + "\"" +
-                       ",\"content_key_id\":\"" + kContentKeyID + "\"" +
-                       ",\"source_peer\":\"" + kSourcePeer + "\"" +
-                       ",\"reconcile\":\"" + json_escape(reconcile) + "\"" +
-                       ",\"license\":\"" + json_escape(ctx.license) + "\"" +
-                       ",\"license_url\":\"" + json_escape(ctx.license_url) + "\"" +
-                       ",\"citation\":\"" + json_escape(ctx.citation) + "\"" +
-                       ",\"origin_id\":\"" + json_escape(ctx.origin_id) + "\"" +
-                       ",\"origin_name\":\"" + json_escape(ctx.origin_name) + "\"" +
-                       ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"";
-    if (with_archive && !ctx.archive_source.empty() && !ctx.archive_name.empty()) {
-        meta += ",\"archive\":{\"source\":\"" + json_escape(ctx.archive_source) +
-                "\",\"name\":\"" + json_escape(ctx.archive_name) + "\"}";
-    }
-    if (!provenance_json.empty()) {
-        meta += ",\"provenance\":{\"source\":\"" + json_escape(provenance_source) +
-                "\",\"json\":\"" +
-                base64_encode(reinterpret_cast<const uint8_t*>(provenance_json.data()),
-                              provenance_json.size()) +
-                "\"}";
-    }
-    meta += "}";
-    return meta;
-}
-
-// Provenance JSON in the parser's build_provenance_json shape, with warnings.
-std::string build_provenance_json(const JobContext& ctx, const HttpResponse& primary,
-                                  const std::string& source_url, const std::string& source_sha256,
-                                  const char* parser_version,
-                                  const std::string& normalized_sha256, int normalized_count,
-                                  const std::string& schema_counts_json,
-                                  const std::vector<std::string>& warnings,
-                                  const std::string& extra_fields) {
-    char status_buf[16];
-    std::snprintf(status_buf, sizeof(status_buf), "%ld", primary.status);
-    std::string out = std::string("{\"source_url\":\"") + json_escape(source_url) + "\"" +
-                      ",\"http_status\":" + status_buf;
-    if (!primary.etag.empty()) out += ",\"etag\":\"" + json_escape(primary.etag) + "\"";
-    if (!primary.last_modified.empty())
-        out += ",\"last_modified\":\"" + json_escape(primary.last_modified) + "\"";
-    if (!primary.content_type.empty())
-        out += ",\"content_type\":\"" + json_escape(primary.content_type) + "\"";
-    char count_buf[16];
-    std::snprintf(count_buf, sizeof(count_buf), "%d", normalized_count);
-    out += std::string(",\"retrieved_at\":\"") + format_rfc3339(primary.retrieved_unix) + "\"" +
-           ",\"parser_version\":\"" + parser_version + "\"" +
-           ",\"source_sha256\":\"" + source_sha256 + "\"" +
-           ",\"normalized_sha256\":\"" + normalized_sha256 + "\"" +
-           ",\"normalized_count\":" + count_buf +
-           ",\"schema_counts\":" + schema_counts_json +
-           ",\"origin_id\":\"" + json_escape(ctx.origin_id) + "\"" +
-           ",\"origin_name\":\"" + json_escape(ctx.origin_name) + "\"" +
-           ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"" +
-           ",\"license\":\"" + json_escape(ctx.license) + "\"" +
-           ",\"license_url\":\"" + json_escape(ctx.license_url) + "\"" +
-           ",\"citation\":\"" + json_escape(ctx.citation) + "\"";
-    if (!extra_fields.empty()) out += "," + extra_fields;
-    out += ",\"warnings\":" + json_string_array(warnings) + ",\"from_cache\":false}";
-    return out;
-}
 
 // ---------------------------------------------------------------------------
 // Record builders.
@@ -1417,7 +1258,7 @@ struct GroupResult {
     std::string label;
     std::string url;
     const GroupSpec* spec = nullptr;
-    HttpResponse response;
+    Fetched response;
     std::vector<Row> rows;
     std::vector<GroupMember> members;
 };
@@ -1716,10 +1557,9 @@ struct GroupPlan {
     const GroupSpec* spec;
 };
 
-std::vector<GroupPlan> resolve_groups(const std::string& config, std::string* err) {
+std::vector<GroupPlan> resolve_groups(const Config& config, std::string* err) {
     std::vector<GroupPlan> plan;
-    std::string override_list;
-    json_string_field(config, "celestrak_gp_groups", &override_list);
+    const std::string override_list = config.string("celestrak_gp_groups", "");
     std::vector<std::string> tokens;
     if (!trim(override_list).empty()) {
         std::string current;
@@ -1761,12 +1601,18 @@ std::vector<GroupPlan> resolve_groups(const std::string& config, std::string* er
         char msg[160];
         std::snprintf(msg, sizeof(msg),
                       "the GP group list carries %zu entries; at most %zu fit one flow invocation "
-                      "(one job frame plus one response per group).",
+                      "(one response per group).",
                       plan.size(), kMaxGroups);
         *err = msg;
         return {};
     }
     return plan;
+}
+
+std::vector<std::string> gp_group_emits(bool emit_omm) {
+    std::vector<std::string> emits{"EGP"};
+    if (emit_omm) emits.push_back("OMM");
+    return emits;
 }
 
 }  // namespace
@@ -1777,15 +1623,15 @@ std::vector<GroupPlan> resolve_groups(const std::string& config, std::string* er
 
 extern "C" {
 
-// gp_groups: timer tick -> N request frames (one per GP group/special query)
-// on "request" and ONE job frame carrying the ordered group list on "job".
+// gp_groups: TimerTick -> one HttpRequest per GP group/special query on "request", each carrying its own $ICN job
+// (CONNECTOR_ID "celestrak-gp-groups/<TOKEN>") in CONTEXT. The tick's fields are not read.
 int gp_groups(void) {
     char batch_message[384];
     if (find_batched_input_port(nullptr, batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-    const std::string config = load_config();
+    const Config config = load_config();
     std::string err;
     const std::vector<GroupPlan> plan = resolve_groups(config, &err);
     if (plan.empty()) {
@@ -1794,128 +1640,124 @@ int gp_groups(void) {
     }
     const long timeout = config_timeout_ms(config);
     const LaneAttribution attribution = lane_attribution(config);
-
-    std::string groups_json = "[";
-    for (size_t i = 0; i < plan.size(); i++) {
-        if (push_json("request", build_request_json(plan[i].url, timeout, kGroupMaxBytes)) < 0) {
+    const std::vector<std::string> emits = gp_group_emits(config.boolean("celestrak_gp_groups_emit_omm", false));
+    for (const GroupPlan& g : plan) {
+        JobSpec spec{std::string(kSourceGPGroups) + "/" + g.token, "EGP.fbs", emits, g.url, kSourceGPGroups,
+                     kDatasetGPGroups};
+        if (push_request("request", http_get(g.url, timeout, kGroupMaxBytes, job_record(spec, attribution))) < 0)
             return 500;
-        }
-        if (i) groups_json += ",";
-        groups_json += std::string("{\"token\":\"") + json_escape(plan[i].token) + "\"" +
-                       ",\"kind\":\"" + (plan[i].spec && plan[i].spec->special ? "SPECIAL" : "GROUP") +
-                       "\"" + ",\"label\":\"" + json_escape(plan[i].label) + "\"" +
-                       ",\"url\":\"" + json_escape(plan[i].url) + "\"}";
     }
-    groups_json += "]";
-    char count_buf[16];
-    std::snprintf(count_buf, sizeof(count_buf), "%zu", plan.size());
-    const std::string job = "{" +
-                            job_json_fields(attribution, kGPIndexURL, kSourceGPGroups,
-                                            "gp-groups.csv", kDatasetGPGroups) +
-                            ",\"group_count\":" + count_buf + ",\"groups\":" + groups_json + "}";
-    return push_json("job", job) < 0 ? 500 : 0;
+    return 0;
 }
 
-// satcat_reference: timer tick -> the launch-site and owner/source table
-// fetches, each as a request/job pair.
+// satcat_reference: TimerTick -> the launch-site and owner/source table fetches, each HttpRequest carrying its $ICN job.
 int satcat_reference(void) {
     char batch_message[384];
     if (find_batched_input_port(nullptr, batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-    const std::string config = load_config();
+    const Config config = load_config();
     const long timeout = config_timeout_ms(config);
     const LaneAttribution attribution = lane_attribution(config);
-    const std::string sites_url =
-        config_string(config, "celestrak_satcat_launchsites_url", kDefaultLaunchSitesURL);
-    const std::string sources_url =
-        config_string(config, "celestrak_satcat_sources_url", kDefaultSourcesURL);
-
-    if (push_json("request_sites", build_request_json(sites_url, timeout, kReferenceMaxBytes)) < 0)
+    const std::string sites_url = config.string("celestrak_satcat_launchsites_url", kDefaultLaunchSitesURL);
+    const std::string sources_url = config.string("celestrak_satcat_sources_url", kDefaultSourcesURL);
+    const JobSpec sites{kSourceLaunchSites, "SIT.fbs", {"SIT"}, sites_url, kSourceLaunchSites, kDatasetLaunchSites};
+    const JobSpec owners{kSourceOwners, "LCC.fbs", {"LCC"}, sources_url, kSourceOwners, kDatasetOwners};
+    if (push_request("request_sites", http_get(sites_url, timeout, kReferenceMaxBytes, job_record(sites, attribution))) < 0)
         return 500;
-    if (push_json("job_sites", "{" + job_json_fields(attribution, sites_url, kSourceLaunchSites,
-                                                     "launchsites.html", kDatasetLaunchSites) +
-                                   "}") < 0)
-        return 500;
-    if (push_json("request_owners", build_request_json(sources_url, timeout, kReferenceMaxBytes)) < 0)
-        return 500;
-    if (push_json("job_owners", "{" + job_json_fields(attribution, sources_url, kSourceOwners,
-                                                      "sources.html", kDatasetOwners) +
-                                    "}") < 0)
+    if (push_request("request_owners", http_get(sources_url, timeout, kReferenceMaxBytes, job_record(owners, attribution))) < 0)
         return 500;
     return 0;
 }
 
-// parse_gp_groups: (job with N groups, N responses in request order) -> one
-// $EGP per group. 304 groups go to "unchanged"; a group answering anything
-// else than 200/304 fails the batch (CelesTrak policy: stop on non-200).
+// parse_gp_groups: the groups' HttpResponses, each naming its group in its $ICN job (CONTEXT) -> one $EGP per group, in
+// plan order. 304 groups go to "unchanged"; a group answering anything else than 200/304 fails the batch (CelesTrak
+// policy: stop on non-200).
 int parse_gp_groups(void) {
     char batch_message[384];
     if (find_batched_input_port("response", batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-    JobContext ctx;
-    if (!load_job(&ctx)) return 400;
-    if (ctx.dataset_id.empty()) ctx.dataset_id = kDatasetGPGroups;
-
-    const std::vector<std::string> group_objects = json_array_objects(ctx.job_json, "groups");
-    const uint32_t response_count = frames_on_port("response");
-    if (group_objects.empty()) {
-        plugin_set_error("missing-group-list", "the gp-groups job carries no groups.");
+    const std::vector<const plugin_input_frame_t*> frames = frames_on("response");
+    if (frames.empty()) {
+        plugin_set_error("missing-response-frame", "parse_gp_groups requires the groups' HttpResponses.");
         return 400;
     }
-    if (response_count != group_objects.size()) {
-        char msg[192];
+    const Config config = load_config();
+    std::string err;
+    const std::vector<GroupPlan> plan = resolve_groups(config, &err);
+    if (plan.empty()) {
+        plugin_set_error("invalid-group-list", err.c_str());
+        return 400;
+    }
+    const bool emit_omm = config.boolean("celestrak_gp_groups_emit_omm", false);
+
+    // Pair every response with its planned group by the CONNECTOR_ID its job carries.
+    const std::string prefix = std::string(kSourceGPGroups) + "/";
+    std::vector<const R::HttpResponse*> by_plan(plan.size(), nullptr);
+    JobContext ctx;
+    size_t paired = 0;
+    for (size_t k = 0; k < frames.size(); k++) {
+        const R::HttpResponse* r = response_of(frames[k], k);
+        if (!r) return 400;
+        JobContext job;
+        if (!load_job(*r, k, &job)) return 400;
+        if (k == 0) ctx = job;
+        const std::string token = job.connector_id.compare(0, prefix.size(), prefix) == 0
+                                      ? job.connector_id.substr(prefix.size())
+                                      : std::string();
+        size_t at = plan.size();
+        for (size_t i = 0; i < plan.size(); i++)
+            if (plan[i].token == token) at = i;
+        if (at == plan.size() || job.source_url != plan[at].url) {
+            const std::string msg = "response " + std::to_string(k) + " answers group \"" + token + "\" (" +
+                                    job.source_url + ")" +
+                                    (at == plan.size() ? std::string(", which the group plan does not list.")
+                                                       : " but the plan expected " + plan[at].url + ".");
+            plugin_set_error("group-url-mismatch", msg.c_str());
+            return 409;
+        }
+        if (!by_plan[at]) paired++;
+        by_plan[at] = r;
+    }
+    if (paired != plan.size() || frames.size() != plan.size()) {
+        char msg[224];
         std::snprintf(msg, sizeof(msg),
-                      "the job lists %zu groups but %u responses arrived; the group snapshot is "
-                      "refused rather than published partially.",
-                      group_objects.size(), response_count);
+                      "the group plan lists %zu groups but %zu responses arrived for %zu of them; the group "
+                      "snapshot is refused rather than published partially.",
+                      plan.size(), frames.size(), paired);
         plugin_set_error("group-count-mismatch", msg);
         return 409;
     }
+    // The lane: one dataset, its source URL the GP elements index (the legacy lane job's).
+    ctx.source_name = kSourceGPGroups;
+    ctx.dataset_id = kDatasetGPGroups;
+    ctx.source_url = kGPIndexURL;
 
     std::vector<GroupResult> changed;
     std::vector<std::string> unchanged;
     std::vector<std::string> warnings;
-    const bool emit_omm = json_truthy_field(load_config(), "celestrak_gp_groups_emit_omm");
-
-    for (uint32_t i = 0; i < response_count; i++) {
+    for (size_t i = 0; i < plan.size(); i++) {
         GroupResult g;
-        json_string_field(group_objects[i], "token", &g.token);
-        json_string_field(group_objects[i], "label", &g.label);
-        json_string_field(group_objects[i], "url", &g.url);
-        g.spec = find_group(g.token);
-        if (g.token.empty() || g.url.empty()) {
-            plugin_set_error("invalid-group-entry", "every job group needs token and url.");
-            return 400;
-        }
-        std::string response_json;
-        if (!read_json_frame_at("response", i, &response_json)) {
-            plugin_set_error("missing-response-frame", "a response frame is empty.");
-            return 400;
-        }
-        if (!decode_response(response_json, &g.response)) return 400;
-        if (!g.response.request_url.empty() && g.response.request_url != g.url) {
-            const std::string msg = "response " + std::to_string(i) + " answers " +
-                                    g.response.request_url + " but the job expected " + g.url + ".";
-            plugin_set_error("group-url-mismatch", msg.c_str());
-            return 409;
-        }
+        g.token = plan[i].token;
+        g.label = plan[i].label;
+        g.url = plan[i].url;
+        g.spec = plan[i].spec;
+        g.response = decode_response(*by_plan[i]);
         if (g.response.status == 304) {
             unchanged.push_back(g.token);
             continue;
         }
         if (g.response.status != 200) {
             char msg[160];
-            std::snprintf(msg, sizeof(msg), "GP group %s returned HTTP status %ld",
-                          g.token.c_str(), g.response.status);
+            std::snprintf(msg, sizeof(msg), "GP group %s returned HTTP status %ld", g.token.c_str(),
+                          g.response.status);
             plugin_set_error("fetch-failed", msg);
             return 400;
         }
         std::vector<std::string> header;
-        std::string err;
         if (!parse_csv(g.response.body, &g.rows, &header, &err)) {
             plugin_set_error("gp-group-parse-failed", ("GP group " + g.token + ": " + err).c_str());
             return 422;
@@ -1927,8 +1769,7 @@ int parse_gp_groups(void) {
         }
         for (const Row& row : g.rows) {
             uint32_t norad = 0;
-            if (!parse_uint32(row_value(row, {"NORAD_CAT_ID", "NORAD_CAT_NUM"}), &norad) ||
-                norad == 0) {
+            if (!parse_uint32(row_value(row, {"NORAD_CAT_ID", "NORAD_CAT_NUM"}), &norad) || norad == 0) {
                 warnings.push_back("GP group " + g.token + ": row without NORAD_CAT_ID skipped");
                 continue;
             }
@@ -1942,15 +1783,11 @@ int parse_gp_groups(void) {
     }
 
     if (!unchanged.empty()) {
-        if (push_json("unchanged", build_unchanged_json(ctx, unchanged,
-                                                        static_cast<int>(changed.size()))) < 0) {
-            return 500;
-        }
+        if (push_notice(build_unchanged(ctx, "EGP.fbs", unchanged.size(), unchanged)) < 0) return 500;
     }
     if (changed.empty()) return 0;
 
-    // batch id = sha256 of the concatenated group payloads in list order; the
-    // raw archive is that same concatenation.
+    // batch id = sha256 of the concatenated group payloads in plan order; the raw archive is that same concatenation.
     Sha256 batch_hash;
     std::vector<uint8_t> raw;
     for (const GroupResult& g : changed) {
@@ -1979,11 +1816,10 @@ int parse_gp_groups(void) {
                                         row_value(row, {"EPOCH", "EPOCH_UTC"});
                 if (!seen.insert(key).second) continue;
                 std::vector<uint8_t> omm;
-                std::string err;
-                if (!gp_row_to_omm(row, &omm, &err)) {
-                    if (!err.empty()) {
-                        plugin_set_error("gp-group-parse-failed",
-                                         ("GP group " + g.token + ": " + err).c_str());
+                std::string row_err;
+                if (!gp_row_to_omm(row, &omm, &row_err)) {
+                    if (!row_err.empty()) {
+                        plugin_set_error("gp-group-parse-failed", ("GP group " + g.token + ": " + row_err).c_str());
                         return 422;
                     }
                     continue;
@@ -1995,73 +1831,70 @@ int parse_gp_groups(void) {
         }
     }
 
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[96];
-    if (emit_omm) {
-        std::snprintf(counts, sizeof(counts), "{\"EGP.fbs\":%d,\"OMM.fbs\":%d}", count_egp, count_omm);
-    } else {
-        std::snprintf(counts, sizeof(counts), "{\"EGP.fbs\":%d}", count_egp);
-    }
-    std::vector<std::string> group_tokens, group_urls;
-    for (const GroupResult& g : changed) {
-        group_tokens.push_back(g.token);
-        group_urls.push_back(g.url);
-    }
-    const std::string extra = "\"groups\":" + json_string_array(group_tokens) +
-                              ",\"group_urls\":" + json_string_array(group_urls) +
-                              ",\"unchanged_groups\":" + json_string_array(unchanged);
-    const std::string provenance = build_provenance_json(
-        ctx, changed[0].response, ctx.source_url, batch_id, "celestrak-gp-groups-wasm/v1",
-        normalized_hex, count_egp + count_omm, counts, warnings, extra);
+    ProvenanceSpec p;
+    const Fetched& primary = changed[0].response;
+    p.source_url = ctx.source_url;
+    p.status = primary.status;
+    p.etag = primary.etag;
+    p.last_modified = primary.last_modified;
+    p.content_type = primary.content_type;
+    p.retrieved_unix = primary.retrieved_unix;
+    p.parser_version = "celestrak-gp-groups-wasm/v1";
+    p.source_sha256 = batch_id;
+    p.normalized_sha256 = normalized.hex_digest();
+    p.normalized_count = static_cast<uint64_t>(count_egp + count_omm);
+    p.schema_counts.push_back({"EGP.fbs", static_cast<uint64_t>(count_egp)});
+    if (emit_omm) p.schema_counts.push_back({"OMM.fbs", static_cast<uint64_t>(count_omm)});
+    p.warnings = warnings;
 
-    // A complete snapshot (every group answered 200) supersedes the lane;
-    // a partial refresh (some groups unchanged) is appended, and $EGP's
-    // latest-UPDATED_AT-per-GROUP_ID rule picks the current version.
+    // A complete snapshot (every group answered 200) supersedes the lane; a partial refresh (some groups unchanged) is
+    // appended, and $EGP's latest-UPDATED_AT-per-GROUP_ID rule picks the current version.
     const std::string reconcile = unchanged.empty() ? "current" : "duplicates";
-    const std::string egp_meta = build_ingest_meta(ctx, "EGP.fbs", batch_id, reconcile,
-                                                   /*with_archive=*/true, ctx.source_name,
-                                                   provenance);
-    if (push_json("egp_meta", egp_meta) < 0) return 500;
+    if (push_ingest_request("egp_meta", build_ingest_request(ctx, "EGP.fbs", batch_id, reconcile, true, &p)) < 0)
+        return 500;
     if (push_record_stream("egp_records", "EGP.fbs", "$EGP", "EGP", egp_stream) < 0) return 500;
-    if (push_bytes("raw", raw) < 0) return 500;
+    // The raw document the batch was made from: the concatenated payloads, as one HttpResponse naming the index.
+    ::flatbuffers::FlatBufferBuilder rb(256 + raw.size());
+    R::FinishHttpResponseBuffer(rb, R::CreateHttpResponseDirect(rb, kGPIndexURL, 200, nullptr, &raw, nullptr, nullptr,
+                                                                changed[0].response.retrieved_ms));
+    if (push_response("raw", rb.GetBufferPointer(), rb.GetSize()) < 0) return 500;
     if (emit_omm && count_omm > 0) {
-        const std::string omm_meta = build_ingest_meta(ctx, "OMM.fbs", batch_id, "duplicates",
-                                                       /*with_archive=*/false, ctx.source_name,
-                                                       std::string());
-        if (push_json("omm_meta", omm_meta) < 0) return 500;
+        if (push_ingest_request("omm_meta", build_ingest_request(ctx, "OMM.fbs", batch_id, "duplicates", false, nullptr)) < 0)
+            return 500;
         if (push_record_stream("omm_records", "OMM.fbs", "$OMM", "OMM", omm_stream) < 0) return 500;
     }
     return 0;
 }
 
-// parse_satcat_reference: (job, response) -> $SIT rows for the launch-site
-// table or $LCC rows for the owner/source table; the job's dataset_id decides.
+// parse_satcat_reference: one HttpResponse -> $SIT rows for the launch-site table or $LCC rows for the owner/source
+// table; the $ICN job's DATASET_ID decides.
 int parse_satcat_reference(void) {
     char batch_message[384];
     if (find_batched_input_port(nullptr, batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-    JobContext ctx;
-    if (!load_job(&ctx)) return 400;
-    std::string response_json;
-    if (!read_json_frame("response", &response_json)) {
-        plugin_set_error("missing-response-frame", "parser requires the http response JSON frame.");
+    const std::vector<const plugin_input_frame_t*> frames = frames_on("response");
+    if (frames.empty()) {
+        plugin_set_error("missing-response-frame", "parser requires the HttpResponse frame.");
         return 400;
     }
-    HttpResponse response;
-    if (!decode_response(response_json, &response)) return 400;
+    const R::HttpResponse* r = response_of(frames[0], 0);
+    if (!r) return 400;
+    JobContext ctx;
+    if (!load_job(*r, 0, &ctx)) return 400;
+    const Fetched response = decode_response(*r);
 
     const bool sites = ctx.dataset_id == kDatasetLaunchSites;
     const bool owners = ctx.dataset_id == kDatasetOwners;
     if (!sites && !owners) {
         plugin_set_error("unknown-reference-dataset",
-                         ("dataset_id \"" + ctx.dataset_id + "\" is not a SATCAT reference table.")
-                             .c_str());
+                         ("dataset_id \"" + ctx.dataset_id + "\" is not a SATCAT reference table.").c_str());
         return 400;
     }
+    const char* schema = sites ? "SIT.fbs" : "LCC.fbs";
     if (response.status == 304) {
-        return push_json("unchanged", build_unchanged_json(ctx, {}, 0)) < 0 ? 500 : 0;
+        return push_notice(build_unchanged(ctx, schema, 1, {ctx.source_url})) < 0 ? 500 : 0;
     }
     if (response.status != 200) {
         char msg[96];
@@ -2107,36 +1940,40 @@ int parse_satcat_reference(void) {
                 warnings.push_back("unknown owner code " + code);
                 continue;
             }
-            const std::vector<uint8_t> lcc =
-                build_lcc_record(owner, description, ctx.source_url, retrieved_at);
+            const std::vector<uint8_t> lcc = build_lcc_record(owner, description, ctx.source_url, retrieved_at);
             append_size_prefixed(&stream, lcc);
             normalized_hash_record(&normalized, "LCC.fbs", lcc);
             count++;
         }
     }
     if (count == 0) {
-        plugin_set_error("reference-parse-failed",
-                         sites ? "no launch-site rows parsed" : "no owner rows parsed");
+        plugin_set_error("reference-parse-failed", sites ? "no launch-site rows parsed" : "no owner rows parsed");
         return 422;
     }
 
-    const char* schema = sites ? "SIT.fbs" : "LCC.fbs";
-    const std::string normalized_hex = normalized.hex_digest();
-    char counts[48];
-    std::snprintf(counts, sizeof(counts), "{\"%s\":%d}", schema, count);
-    const std::string provenance = build_provenance_json(
-        ctx, response, ctx.source_url, response.sha256, "celestrak-satcat-reference-wasm/v1",
-        normalized_hex, count, counts, warnings, std::string());
-    const std::string meta = build_ingest_meta(ctx, schema, response.sha256, "current",
-                                               /*with_archive=*/true, ctx.source_name,
-                                               provenance);
-    if (push_json(sites ? "sit_meta" : "lcc_meta", meta) < 0) return 500;
+    ProvenanceSpec p;
+    p.source_url = ctx.source_url;
+    p.status = response.status;
+    p.etag = response.etag;
+    p.last_modified = response.last_modified;
+    p.content_type = response.content_type;
+    p.retrieved_unix = response.retrieved_unix;
+    p.parser_version = "celestrak-satcat-reference-wasm/v1";
+    p.source_sha256 = response.sha256;
+    p.normalized_sha256 = normalized.hex_digest();
+    p.normalized_count = static_cast<uint64_t>(count);
+    p.schema_counts.push_back({schema, static_cast<uint64_t>(count)});
+    p.warnings = warnings;
+    if (push_ingest_request(sites ? "sit_meta" : "lcc_meta",
+                            build_ingest_request(ctx, schema, response.sha256, "current", true, &p)) < 0)
+        return 500;
     if (sites) {
         if (push_record_stream("sit_records", "SIT.fbs", "$SIT", "SIT", stream) < 0) return 500;
     } else {
         if (push_record_stream("lcc_records", "LCC.fbs", "$LCC", "LCC", stream) < 0) return 500;
     }
-    if (push_bytes("raw", response.body) < 0) return 500;
+    // raw: the HttpResponse the batch was made from, verbatim.
+    if (push_response("raw", frames[0]->payload, frames[0]->payload_length) < 0) return 500;
     return 0;
 }
 

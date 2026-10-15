@@ -3,22 +3,16 @@
 // moves buffers and sizes the grid. Works in a window or a worker, in any
 // WebGPU host.
 
+import { gridOf } from './scrFrames.mjs';
+
 const WG = 256;
 const SLACK_KM = 0.01;          // covers f32 rounding of positions near 7000 km (0.5 m)
 const MARGIN_KM = 0.01;         // the kernel's box margin
 const BIG_CAPACITY = 4096;      // big boxes per step
 const ENTRIES_PER_OBJECT = 12;  // cell entries budgeted per object and step (about 7 at the 99th-percentile edge)
 
-/** Parses a coarse_grid "grid" frame (CAG1). */
-export function parseGridFrame(bytes) {
-  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  if (view.getUint32(0, true) !== 0x31474143) throw new Error('Not a coarse_grid CAG1 frame.');
-  const firstStep = view.getUint32(4, true), stepCount = view.getUint32(8, true), objects = view.getUint32(12, true);
-  const stateBytes = stepCount * objects * 32, bandBytes = objects * 8;
-  if (u8.byteLength !== 16 + stateBytes + bandBytes) throw new Error('coarse_grid frame length does not match its header.');
-  return { firstStep, stepCount, objects, states: u8.subarray(16, 16 + stateBytes), bands: u8.subarray(16 + stateBytes) };
-}
+/** Parses a coarse_grid "grid" record ($SCR GRID): { firstStep, stepCount, objects, states, bands } (row bytes). */
+export const parseGridFrame = gridOf;
 
 // The cell edge: the 99th percentile box edge over a sample of the block's
 // first step, as screening_tight.cpp sizes its grid. Any edge is correct; this

@@ -1,0 +1,257 @@
+{
+  "pluginId": "com.orbpro.celestrak-supgp",
+  "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
+  "version": "1.1.0",
+  "description": "Request-builder and parser flow nodes for CelesTrak's Supplemental GP (SupGP) OMM sets of the providers whose raw operator ephemeris is not public (SES, Planet, Iridium, Telesat, Kuiper, AST SpaceMobile, China Space Station) - typed contracts 1.0: FlatBuffers only, no JSON and no base64 between modules. request turns a TimerTick into one GET HttpRequest per SOURCE token of the registry (sup-gp.php?SOURCE=<token>&FORMAT=<format>), each with its parse job in CONTEXT (ONE size-prefixed $ICN record: CONNECTOR_ID celestrak-supgp-<token>, KIND HttpsPull, TARGET_SCHEMA OMM.fbs, ENDPOINT_URL, DATASET_ID supgp-<token>, SOURCE_NAME the provider's source name, PROVIDER_ID (config providerId, default space-data-network-02), ORIGIN celestrak.org / CelesTrak, LICENSE / LICENSE_URL / CITATION (CelesTrak's usage policy unless config license / licenseUrl / citation)); hostcap/http-request fetches them. parse turns one HttpResponse into that token's batch for hostcap/storage-ingest: an IngestRequest (SCHEMA OMM.fbs, SOURCE_NAME the provider's), the size-prefixed $OMM record stream and the response as the raw document; 304 is a FlowNotice Unchanged, a transport error or another status a FlowNotice Missing. The records are CelesTrak-FITTED SGP4 mean elements (TEME, UTC, EARTH), NON-INDEPENDENT: never our OD and never ranked above Space-Track GP (USER_DEFINED SDN_INDEPENDENT false, SDN_DATA_SOURCE CelesTrak SupGP, CelesTrak's RMS and DATA_SOURCE). Storing, signing and publishing are the flow's (hostcap/storage-ingest, the flow's publication step). Node CONFIG through plugin.getConfig (one ModuleConfig): baseUrl, format (JSON or CSV), objectCap (default 2000 per token), token / sourceName / sourceUrl (one token instead of the registry), providerId, license, licenseUrl, citation. No capabilities.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "protocols": [],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "request",
+      "displayName": "Request the SupGP sets",
+      "description": "A TimerTick -> one GET HttpRequest per SupGP registry token (de-duplicated; or the one token config names), each with its $ICN parse job in CONTEXT. The flow's trigger sets the cadence (SupGP refreshes every 2 h; the former module timer supgp-pull). One tick per invocation: a surplus is refused (batched-input-frames).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The flow trigger firing."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One GET HttpRequest (HREQ) per token for hostcap/http-request, CONTEXT the parse job: ONE size-prefixed $ICN record: CONNECTOR_ID celestrak-supgp-<token>, KIND HttpsPull, TARGET_SCHEMA OMM.fbs, ENDPOINT_URL, DATASET_ID supgp-<token>, SOURCE_NAME the provider's source name, PROVIDER_ID (config providerId, default space-data-network-02), ORIGIN celestrak.org / CelesTrak, LICENSE / LICENSE_URL / CITATION (CelesTrak's usage policy unless config license / licenseUrl / citation)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "The SupGP GETs."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse",
+      "displayName": "Parse one SupGP set",
+      "description": "One HttpResponse (its $ICN job in CONTEXT) -> the token's OMM batch: omm_meta, omm_records and raw; or a FlowNotice. JSON or CSV, detected from the body; at most config objectCap records (default 2000). A response without the job is refused (missing-context); a surplus frame is refused (batched-input-frames).",
+      "inputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) from hostcap/http-request: STATUS 200 parses, 304 is a FlowNotice Unchanged, a transport ERROR or any other status a FlowNotice Missing; HEADERS etag / last-modified / content-type into the provenance; BODY the SupGP set verbatim; CONTEXT the job request sent (ONE size-prefixed $ICN record: CONNECTOR_ID celestrak-supgp-<token>, KIND HttpsPull, TARGET_SCHEMA OMM.fbs, ENDPOINT_URL, DATASET_ID supgp-<token>, SOURCE_NAME the provider's source name, PROVIDER_ID (config providerId, default space-data-network-02), ORIGIN celestrak.org / CelesTrak, LICENSE / LICENSE_URL / CITATION (CelesTrak's usage policy unless config license / licenseUrl / citation))."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One SupGP response (its job in CONTEXT)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (INGQ) for hostcap/storage-ingest: SCHEMA OMM.fbs; TAGS PROVIDER_ID / SOURCE_NAME / SOURCE_URL from the job, BATCH_ID sha256 of the body, CONTENT_KEY_ID public, SOURCE_PEER source:celestrak, LICENSE (the job's when an identifier of at most 64 bytes, else LicenseRef-CelesTrak-Usage-Policy), LICENSE_URL, CITATION; RECONCILE duplicates; ARCHIVE celestrak/celestrak_supgp_<token>.<json|csv>; PROVENANCE (source URL, HTTP status, validators, retrieval time, parser celestrak-supgp 1.1.0, body and normalized SHA-256, OMM.fbs count, ATTRIBUTES celestrak_token, format, data_source CelesTrak SupGP, independent false)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OMM ingest request."
+        },
+        {
+          "portId": "omm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $OMM record stream ([u32le len][record]), one per valid object in feed order: CCSDS_OMM_VERS 2.0, COMMENT (the non-independence statement, SOURCE_NAME, CELESTRAK_DATA_SOURCE, CELESTRAK_RMS), OBJECT_NAME, OBJECT_ID, CENTER_NAME EARTH, REFERENCE_FRAME TEME, TIME_SYSTEM UTC, MEAN_ELEMENT_THEORY SGP4, EPOCH as the feed writes it, the mean elements, EPHEMERIS_TYPE, CLASSIFICATION_TYPE, NORAD_CAT_ID, ELEMENT_SET_NO, REV_AT_EPOCH, BSTAR, MEAN_MOTION_DOT / DDOT, USER_DEFINED_PARAMETERS SDN_SOURCE_NAME, SDN_DATA_SOURCE, SDN_INDEPENDENT, SDN_CELESTRAK_DATA_SOURCE, SDN_CELESTRAK_RMS."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OMM records."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse the batch was made from, forwarded verbatim: its BODY is the document hostcap/storage-ingest archives under the ARCHIVE naming."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Raw document (once per batch)."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC) Unchanged on HTTP 304 only: SCHEMA OMM.fbs, PROVIDER_ID, SOURCE_NAME, REASON not-modified, COUNT 1, ITEMS [the URL]."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Not-modified notice."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC) Missing when the token gave no batch: REASON supgp-unavailable: <transport error | HTTP status N>, supgp-empty (no body) or supgp-no-records (no valid object); SCHEMA OMM.fbs, PROVIDER_ID, SOURCE_NAME, COUNT 1, ITEMS [the URL]. The other tokens are unaffected."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Token-unavailable notice."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ICN.fbs",
+      "fileIdentifier": "$ICN",
+      "rootTypeName": "ICN",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one frame into the next requests or one token's batch on the calling thread; the host fetches the tokens independently and this module creates no threads."
+  }
+}

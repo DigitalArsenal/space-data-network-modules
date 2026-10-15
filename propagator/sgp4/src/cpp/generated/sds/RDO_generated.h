@@ -113,6 +113,13 @@ struct RDOT : public ::flatbuffers::NativeTable {
   std::string RAW_FILE_URI{};
   std::string DESCRIPTOR{};
   std::vector<std::string> TAGS{};
+  double CORR_MAHALANOBIS_SQ = 0.0;
+  uint8_t CORR_DOF = 0;
+  double CORR_GATE = 0.0;
+  double CORR_P_VALUE = 0.0;
+  bool CORR_AMBIGUOUS = false;
+  double CORR_QUALITY = 0.0;
+  double DOPPLER_FREQUENCY = 0.0;
 };
 
 /// Radar Observation
@@ -172,7 +179,14 @@ struct RDO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TIMING_BIAS = 100,
     VT_RAW_FILE_URI = 102,
     VT_DESCRIPTOR = 104,
-    VT_TAGS = 106
+    VT_TAGS = 106,
+    VT_CORR_MAHALANOBIS_SQ = 108,
+    VT_CORR_DOF = 110,
+    VT_CORR_GATE = 112,
+    VT_CORR_P_VALUE = 114,
+    VT_CORR_AMBIGUOUS = 116,
+    VT_CORR_QUALITY = 118,
+    VT_DOPPLER_FREQUENCY = 120
   };
   /// Unique identifier
   const ::flatbuffers::String *ID() const {
@@ -274,7 +288,8 @@ struct RDO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double RANGE_BIAS() const {
     return GetField<double>(VT_RANGE_BIAS, 0.0);
   }
-  /// Range rate (km/s)
+  /// Range rate, the time derivative of RANGE (km/s): positive when the range
+  /// is opening, negative when it is closing.
   double RANGE_RATE() const {
     return GetField<double>(VT_RANGE_RATE, 0.0);
   }
@@ -290,11 +305,15 @@ struct RDO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double RANGE_ACCEL_UNC() const {
     return GetField<double>(VT_RANGE_ACCEL_UNC, 0.0);
   }
-  /// Doppler shift (Hz)
+  /// Two-way (monostatic radar) Doppler shift (Hz): the received echo's
+  /// frequency minus the transmitted carrier DOPPLER_FREQUENCY. Positive when
+  /// the range is closing. To first order in RANGE_RATE / c,
+  /// RANGE_RATE = -c * DOPPLER / (2 * DOPPLER_FREQUENCY), c = 299792.458 km/s.
   double DOPPLER() const {
     return GetField<double>(VT_DOPPLER, 0.0);
   }
-  /// Doppler uncertainty (Hz, 1-sigma)
+  /// Uncertainty of DOPPLER (Hz, 1-sigma). The range-rate uncertainty is
+  /// c * DOPPLER_UNC / (2 * DOPPLER_FREQUENCY).
   double DOPPLER_UNC() const {
     return GetField<double>(VT_DOPPLER_UNC, 0.0);
   }
@@ -382,6 +401,37 @@ struct RDO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_TAGS);
   }
+  /// Association: squared Mahalanobis distance of the observation's
+  /// innovation against its predicted value, d^2 = v^T (H P H^T + R)^-1 v.
+  double CORR_MAHALANOBIS_SQ() const {
+    return GetField<double>(VT_CORR_MAHALANOBIS_SQ, 0.0);
+  }
+  /// Association: degrees of freedom of d^2 (measurement dimension).
+  uint8_t CORR_DOF() const {
+    return GetField<uint8_t>(VT_CORR_DOF, 0);
+  }
+  /// Association: the chi-square gate d^2 was tested against.
+  double CORR_GATE() const {
+    return GetField<double>(VT_CORR_GATE, 0.0);
+  }
+  /// Association: p-value of d^2, Q(dof/2, d^2/2).
+  double CORR_P_VALUE() const {
+    return GetField<double>(VT_CORR_P_VALUE, 0.0);
+  }
+  /// Association: true when the assignment was ambiguous.
+  bool CORR_AMBIGUOUS() const {
+    return GetField<uint8_t>(VT_CORR_AMBIGUOUS, 0) != 0;
+  }
+  /// Association: posterior probability of the association.
+  double CORR_QUALITY() const {
+    return GetField<double>(VT_CORR_QUALITY, 0.0);
+  }
+  /// Transmitted carrier frequency (Hz) that the two-way DOPPLER shift is
+  /// relative to. Set whenever DOPPLER is: without it DOPPLER cannot be
+  /// converted to range rate.
+  double DOPPLER_FREQUENCY() const {
+    return GetField<double>(VT_DOPPLER_FREQUENCY, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -452,6 +502,13 @@ struct RDO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_TAGS) &&
            verifier.VerifyVector(TAGS()) &&
            verifier.VerifyVectorOfStrings(TAGS()) &&
+           VerifyField<double>(verifier, VT_CORR_MAHALANOBIS_SQ, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CORR_DOF, 1) &&
+           VerifyField<double>(verifier, VT_CORR_GATE, 8) &&
+           VerifyField<double>(verifier, VT_CORR_P_VALUE, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CORR_AMBIGUOUS, 1) &&
+           VerifyField<double>(verifier, VT_CORR_QUALITY, 8) &&
+           VerifyField<double>(verifier, VT_DOPPLER_FREQUENCY, 8) &&
            verifier.EndTable();
   }
   RDOT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -619,6 +676,27 @@ struct RDOBuilder {
   void add_TAGS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS) {
     fbb_.AddOffset(RDO::VT_TAGS, TAGS);
   }
+  void add_CORR_MAHALANOBIS_SQ(double CORR_MAHALANOBIS_SQ) {
+    fbb_.AddElement<double>(RDO::VT_CORR_MAHALANOBIS_SQ, CORR_MAHALANOBIS_SQ, 0.0);
+  }
+  void add_CORR_DOF(uint8_t CORR_DOF) {
+    fbb_.AddElement<uint8_t>(RDO::VT_CORR_DOF, CORR_DOF, 0);
+  }
+  void add_CORR_GATE(double CORR_GATE) {
+    fbb_.AddElement<double>(RDO::VT_CORR_GATE, CORR_GATE, 0.0);
+  }
+  void add_CORR_P_VALUE(double CORR_P_VALUE) {
+    fbb_.AddElement<double>(RDO::VT_CORR_P_VALUE, CORR_P_VALUE, 0.0);
+  }
+  void add_CORR_AMBIGUOUS(bool CORR_AMBIGUOUS) {
+    fbb_.AddElement<uint8_t>(RDO::VT_CORR_AMBIGUOUS, static_cast<uint8_t>(CORR_AMBIGUOUS), 0);
+  }
+  void add_CORR_QUALITY(double CORR_QUALITY) {
+    fbb_.AddElement<double>(RDO::VT_CORR_QUALITY, CORR_QUALITY, 0.0);
+  }
+  void add_DOPPLER_FREQUENCY(double DOPPLER_FREQUENCY) {
+    fbb_.AddElement<double>(RDO::VT_DOPPLER_FREQUENCY, DOPPLER_FREQUENCY, 0.0);
+  }
   explicit RDOBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -683,8 +761,20 @@ inline ::flatbuffers::Offset<RDO> CreateRDO(
     double TIMING_BIAS = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> RAW_FILE_URI = 0,
     ::flatbuffers::Offset<::flatbuffers::String> DESCRIPTOR = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS = 0,
+    double CORR_MAHALANOBIS_SQ = 0.0,
+    uint8_t CORR_DOF = 0,
+    double CORR_GATE = 0.0,
+    double CORR_P_VALUE = 0.0,
+    bool CORR_AMBIGUOUS = false,
+    double CORR_QUALITY = 0.0,
+    double DOPPLER_FREQUENCY = 0.0) {
   RDOBuilder builder_(_fbb);
+  builder_.add_DOPPLER_FREQUENCY(DOPPLER_FREQUENCY);
+  builder_.add_CORR_QUALITY(CORR_QUALITY);
+  builder_.add_CORR_P_VALUE(CORR_P_VALUE);
+  builder_.add_CORR_GATE(CORR_GATE);
+  builder_.add_CORR_MAHALANOBIS_SQ(CORR_MAHALANOBIS_SQ);
   builder_.add_TIMING_BIAS(TIMING_BIAS);
   builder_.add_BEAM(BEAM);
   builder_.add_SNR(SNR);
@@ -735,6 +825,8 @@ inline ::flatbuffers::Offset<RDO> CreateRDO(
   builder_.add_ID_SENSOR(ID_SENSOR);
   builder_.add_OB_TIME(OB_TIME);
   builder_.add_ID(ID);
+  builder_.add_CORR_AMBIGUOUS(CORR_AMBIGUOUS);
+  builder_.add_CORR_DOF(CORR_DOF);
   builder_.add_OBS_TYPE(OBS_TYPE);
   builder_.add_UCT(UCT);
   return builder_.Finish();
@@ -798,7 +890,14 @@ inline ::flatbuffers::Offset<RDO> CreateRDODirect(
     double TIMING_BIAS = 0.0,
     const char *RAW_FILE_URI = nullptr,
     const char *DESCRIPTOR = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS = nullptr,
+    double CORR_MAHALANOBIS_SQ = 0.0,
+    uint8_t CORR_DOF = 0,
+    double CORR_GATE = 0.0,
+    double CORR_P_VALUE = 0.0,
+    bool CORR_AMBIGUOUS = false,
+    double CORR_QUALITY = 0.0,
+    double DOPPLER_FREQUENCY = 0.0) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto OB_TIME__ = OB_TIME ? _fbb.CreateString(OB_TIME) : 0;
   auto ID_SENSOR__ = ID_SENSOR ? _fbb.CreateString(ID_SENSOR) : 0;
@@ -866,7 +965,14 @@ inline ::flatbuffers::Offset<RDO> CreateRDODirect(
       TIMING_BIAS,
       RAW_FILE_URI__,
       DESCRIPTOR__,
-      TAGS__);
+      TAGS__,
+      CORR_MAHALANOBIS_SQ,
+      CORR_DOF,
+      CORR_GATE,
+      CORR_P_VALUE,
+      CORR_AMBIGUOUS,
+      CORR_QUALITY,
+      DOPPLER_FREQUENCY);
 }
 
 ::flatbuffers::Offset<RDO> CreateRDO(::flatbuffers::FlatBufferBuilder &_fbb, const RDOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -932,6 +1038,13 @@ inline void RDO::UnPackTo(RDOT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = RAW_FILE_URI(); if (_e) _o->RAW_FILE_URI = _e->str(); }
   { auto _e = DESCRIPTOR(); if (_e) _o->DESCRIPTOR = _e->str(); }
   { auto _e = TAGS(); if (_e) { _o->TAGS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TAGS[_i] = _e->Get(_i)->str(); } } else { _o->TAGS.resize(0); } }
+  { auto _e = CORR_MAHALANOBIS_SQ(); _o->CORR_MAHALANOBIS_SQ = _e; }
+  { auto _e = CORR_DOF(); _o->CORR_DOF = _e; }
+  { auto _e = CORR_GATE(); _o->CORR_GATE = _e; }
+  { auto _e = CORR_P_VALUE(); _o->CORR_P_VALUE = _e; }
+  { auto _e = CORR_AMBIGUOUS(); _o->CORR_AMBIGUOUS = _e; }
+  { auto _e = CORR_QUALITY(); _o->CORR_QUALITY = _e; }
+  { auto _e = DOPPLER_FREQUENCY(); _o->DOPPLER_FREQUENCY = _e; }
 }
 
 inline ::flatbuffers::Offset<RDO> CreateRDO(::flatbuffers::FlatBufferBuilder &_fbb, const RDOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -994,6 +1107,13 @@ inline ::flatbuffers::Offset<RDO> RDO::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _RAW_FILE_URI = _o->RAW_FILE_URI.empty() ? 0 : _fbb.CreateString(_o->RAW_FILE_URI);
   auto _DESCRIPTOR = _o->DESCRIPTOR.empty() ? 0 : _fbb.CreateString(_o->DESCRIPTOR);
   auto _TAGS = _o->TAGS.size() ? _fbb.CreateVectorOfStrings(_o->TAGS) : 0;
+  auto _CORR_MAHALANOBIS_SQ = _o->CORR_MAHALANOBIS_SQ;
+  auto _CORR_DOF = _o->CORR_DOF;
+  auto _CORR_GATE = _o->CORR_GATE;
+  auto _CORR_P_VALUE = _o->CORR_P_VALUE;
+  auto _CORR_AMBIGUOUS = _o->CORR_AMBIGUOUS;
+  auto _CORR_QUALITY = _o->CORR_QUALITY;
+  auto _DOPPLER_FREQUENCY = _o->DOPPLER_FREQUENCY;
   return CreateRDO(
       _fbb,
       _ID,
@@ -1047,7 +1167,14 @@ inline ::flatbuffers::Offset<RDO> RDO::Pack(::flatbuffers::FlatBufferBuilder &_f
       _TIMING_BIAS,
       _RAW_FILE_URI,
       _DESCRIPTOR,
-      _TAGS);
+      _TAGS,
+      _CORR_MAHALANOBIS_SQ,
+      _CORR_DOF,
+      _CORR_GATE,
+      _CORR_P_VALUE,
+      _CORR_AMBIGUOUS,
+      _CORR_QUALITY,
+      _DOPPLER_FREQUENCY);
 }
 
 inline const RDO *GetRDO(const void *buf) {

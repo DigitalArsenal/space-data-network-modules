@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.nwp-field-ingest",
   "name": "Numerical Weather Prediction Field Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Six-hourly ingest of numerical-weather-prediction model fields from NOAA Open Data Dissemination's anonymous public buckets (NCEP GFS and GEFS GRIB2, message by message through each file's .idx inventory) as $WXF records carrying the GRIB2 packing integers exactly - the fields the world-clouds display reads: GFS 1 deg winds (and early heights) at 1000-200 hPa, GEFS 0.5 deg wind spread at every other point and GFS 0.5 deg cloud cover, each lead 0..384 h by 3, and GFS 0.25 deg surface and profile fields at leads 0 and 3 (owner 2026-10-02: SDN carries raw feeds; the display derives). timer -> plan (the run's inventories, 16 an invocation, backlog) -> http -> select_messages (each lead-file's wanted messages as merged byte ranges, a batch of at most 16 ranges an invocation, backlog) -> http -> parse -> storage-ingest -> publish_request -> http (dataset publication, only when nwp_publish_url is set). Nodes are listed in pipeline order: the runtime's fair ready-node cursor carries each batch through parse and storage-ingest before the source resumes, so storage-ingest receives one meta and one record stream at a time. Memory: measured 252 MiB of linear memory for a full GFS 0.25 deg physics lead (140 fields, 119 MB of ranges in five batches, 4.4 s) - run the service with memory_pages 8192 (512 MiB). Cadence: every 6 h (GFS cycles). Volume: the records carry delta-coded integers, uncompressed - a physics lead is 292 MB of records, a motion lead about 4 MB.",
+  "description": "Six-hourly ingest of numerical-weather-prediction model fields from NOAA Open Data Dissemination's anonymous public buckets (NCEP GFS and GEFS GRIB2, message by message through each file's .idx inventory) as $WXF records carrying the GRIB2 packing integers exactly - the fields the world-clouds display reads: GFS 1 deg winds (and early heights) at 1000-200 hPa, GEFS 0.5 deg wind spread at every other point and GFS 0.5 deg cloud cover, each lead 0..384 h by 3, GFS 0.25 deg surface and profile fields at leads 0 and 3, and (asked for by name) the GFS 0.25 deg sea product cut into 11.25 deg tiles (owner 2026-10-02: SDN carries raw feeds; the display derives). Typed contracts 1.0 (FlatBuffers only, no JSON): timer (TimerTick) -> plan (the run's inventory HttpRequests, 16 an invocation, backlog) -> http (HttpResponse) -> select_messages (each lead-file's wanted messages as merged byte-range HttpRequests, a batch of at most 16 ranges an invocation, backlog) -> http -> parse ($WXF record stream + IngestRequest) -> storage-ingest (IngestResult) -> publish_request -> http (dataset publication, its body the IngestResult; only when nwp_publish_url is set). Job state travels as HttpRequest.CONTEXT - one size-prefixed $WXF header record per (product, lead), echoed in the HttpResponse - so the requests and their jobs are never paired by position. Egress: result (IngestResult), notice (FlowNotice: skipped, unchanged - already-planned / inventory-304 - and missing leads), publication (the publication HttpResponse). Nodes are listed in pipeline order: the runtime's fair ready-node cursor carries each batch through parse and storage-ingest before the source resumes, so storage-ingest receives one meta and one record stream at a time. Memory: measured 252 MiB of linear memory for a full GFS 0.25 deg physics lead (140 fields, 119 MB of ranges in five batches, 4.4 s) - run the service with memory_pages 8192 (512 MiB). Cadence: every 6 h (GFS cycles). Volume: the records carry delta-coded integers, uncompressed - a physics lead is 292 MB of records, a motion lead about 4 MB.",
   "nodes": [
     {
       "nodeId": "plan",
@@ -77,18 +77,7 @@
       "toNodeId": "http_idx",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 64,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-select-jobs",
-      "fromNodeId": "plan",
-      "fromPortId": "jobs",
-      "toNodeId": "select",
-      "toPortId": "idx_jobs",
-      "backpressurePolicy": "queue",
-      "queueDepth": 64,
-      "opaque": true
+      "queueDepth": 64
     },
     {
       "edgeId": "http-idx-select",
@@ -97,8 +86,7 @@
       "toNodeId": "select",
       "toPortId": "inventories",
       "backpressurePolicy": "queue",
-      "queueDepth": 64,
-      "opaque": true
+      "queueDepth": 64
     },
     {
       "edgeId": "select-http-grib",
@@ -107,18 +95,7 @@
       "toNodeId": "http_grib",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 32,
-      "opaque": true
-    },
-    {
-      "edgeId": "select-parse-jobs",
-      "fromNodeId": "select",
-      "fromPortId": "jobs",
-      "toNodeId": "parse",
-      "toPortId": "jobs",
-      "backpressurePolicy": "queue",
-      "queueDepth": 32,
-      "opaque": true
+      "queueDepth": 32
     },
     {
       "edgeId": "http-grib-parse",
@@ -127,8 +104,7 @@
       "toNodeId": "parse",
       "toPortId": "responses",
       "backpressurePolicy": "queue",
-      "queueDepth": 32,
-      "opaque": true
+      "queueDepth": 32
     },
     {
       "edgeId": "parse-wxf-meta",
@@ -137,19 +113,16 @@
       "toNodeId": "ingest_wxf",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-wxf-records",
       "fromNodeId": "parse",
       "fromPortId": "wxf_records",
       "toNodeId": "ingest_wxf",
-      "toPortId": "records",
+      "toPortId": "wxf_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $WXF identity, so the record type is declared on the wire rather than signed away."
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-wxf-egress",
@@ -158,8 +131,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-wxf-publish",
@@ -168,8 +140,7 @@
       "toNodeId": "publish_wxf",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-wxf-meta-publish",
@@ -178,8 +149,7 @@
       "toNodeId": "publish_wxf",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-wxf-http",
@@ -188,38 +158,34 @@
       "toNodeId": "publish_http_wxf",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-wxf-egress",
       "fromNodeId": "publish_http_wxf",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-status-egress",
       "fromNodeId": "plan",
       "fromPortId": "status",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "select-status-egress",
       "fromNodeId": "select",
       "fromPortId": "status",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     }
   ],
   "triggers": [

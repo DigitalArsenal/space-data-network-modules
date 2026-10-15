@@ -20,8 +20,6 @@ PACKAGES=(
     basilisk/runtime
     licensing/core
     licensing/client-decrypt
-    licensing/protection-key-server
-    licensing/protection-license-client
 )
 
 if [ "$#" -gt 0 ]; then

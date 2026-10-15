@@ -23,12 +23,14 @@ For each `$MPE` on the `elements` stream:
      as unknown.
    - There is no `CREATION_DATE`: the output bytes depend only on the input.
 
-`report` is JSON. It gives:
+`report` is one FlowNotice (`FNTC`, kind Info, `SCHEMA` `$OEM`, `COUNT` the states
+derived, `REASON` `derived` or `refused-element-sets`). Its `ITEMS` give:
 
-- counts of records, derived states and failures;
-- epochs outside the leap-second table (before 1960, which are still derived);
-- the maximum round-trip residuals;
-- each refused element set, with its input index, reason and SGP4 error code.
+- `records=`, `derived=`, `failed=`, `rows=` and `ages_days=`;
+- `epochs_outside_leap_second_table=` (before 1960, which are still derived);
+- `max_round_trip_position_km=` and `max_round_trip_velocity_km_s=` (`%.17g`);
+- one `failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>` per refused
+  element set.
 
 ## `derive_omm`
 
@@ -53,10 +55,12 @@ report and not converted.
 
 ## Ages
 
-`derive` and `derive_omm` take an optional `options` frame, `{"ages": [days]}`
-(up to 64 ages, 0 to 400 days). The `$OEM` then has one line per age: SGP4
+`derive` and `derive_omm` read the ages from the node config (`plugin.getConfig`,
+one ModuleConfig): the NumberList `derive.ages`, else `ages`, in days (up to 64
+ages, 0 to 400 days; another kind is refused). A flow whose config also holds
+other nodes' recipes names this node's key, `derive.ages`. The `$OEM` then has one line per age: SGP4
 evaluated at the epoch plus the age (forward only), rotated to GCRF at that
-row's instant, each row with its own round-trip check. Without `options` the
+row's instant, each row with its own round-trip check. Without ages the
 output is the epoch state alone, byte for byte as before. The covariance
 models of `analysis/gp-error-model` are indexed by this age.
 
@@ -69,28 +73,32 @@ answers. This method is the answering step, so a flow can run both passes:
 
 | Port | Direction | Content |
 | --- | --- | --- |
-| `requests` | in | The detector's `propagation_requests` |
-| `element_sets` | in | The `$OMM` sets the queries name; `set` indexes them in input order over all frames |
-| `options` | in, out | The detector's options, forwarded unchanged |
+| `requests` | in | The detector's `propagation_requests`: one `$PRW` whose `WINDOW_REQUEST` holds a `PRWWindowQuery` per window (`SET_INDEX`, `START`/`STOP` as UTC `TIMInstant`s in ISO 8601 or Unix seconds, `STEP_SECONDS`; `ENTITY_HANDLE` 0) |
+| `element_sets` | in | The `$OMM` sets the queries name; `SET_INDEX` indexes them in input order over all frames |
 | `propagation` | out | One `$OEM` per query, in query order |
 | `element_sets` | out | The sets, forwarded unchanged |
-| `report` | out | Queries answered and refused, with reasons |
+| `report` | out | One `$PRW` `WINDOW_REPORT`: queries, answered, refused, source records, the refusals (`SEQUENCE`, `SET_INDEX`, `REASON`) and the provider |
 
 Each answer is one block: the set's SGP4 trajectory in TEME (UTC, km, km/s)
-from the query's start to its stop in uniform steps no longer than `step_s`,
+from the query's start to its stop in uniform steps no longer than `STEP_SECONDS`,
 with the first sample at the start and the last at the stop. A set SGP4 will not
 propagate (theory other than SGP4, invalid elements, an SGP4 error) is answered
 by an empty block whose `COMMENT` begins `REFUSED`, the detector's refusal
-convention. Forwarding the sets and options makes the second pass see exactly
-what the first saw.
+convention. Forwarding the sets makes the second pass see exactly what the first saw; the
+detector reads its own options from its node config, so none are forwarded.
 
 ## Build and test
 
 ```sh
-npm ci
+mkdir -p node_modules && ln -sfn <space-data-module-sdk 0.9.3> node_modules/space-data-module-sdk
+export SPACE_DATA_STANDARDS_ROOT=<SDS tree with the $PRW window arms>
 SDM_MODULE_SIGNING_KEYPAIR_PATH=<keypair.json> npm run build
 npm test
 ```
+
+The C++ headers of every SDS family the module reads are generated from
+`$SPACE_DATA_STANDARDS_ROOT/schema` (`generate-sds-headers.mjs`), and the tests
+build and read `$PRW` through flatc from the same schema.
 
 The tests check the results against Vallado's verification set
 (`tests/vallado-verification.json`: `SGP4-VER.TLE` and the t=0 rows of
