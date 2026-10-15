@@ -18,7 +18,7 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "eopSeries": "foundation/frames/src/eop_series.hpp",
-  "moduleSdk": "0.9.5",
+  "moduleSdk": "0.9.7",
   "threadModel": "wasi-sequential",
   "wasmSha256": "5eaa6ae43506fb1f1b06b2c868545924aeebc0741bef64e5355ac64f8aff2fc2"
 }

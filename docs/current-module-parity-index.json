@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-14T22:54:13.102Z",
-  "moduleCount": 115,
-  "parityScopeModuleCount": 47,
-  "isomorphicWasmCount": 114,
+  "generatedAt": "2026-10-15T02:58:18.400Z",
+  "moduleCount": 117,
+  "parityScopeModuleCount": 49,
+  "isomorphicWasmCount": 116,
   "missingIsomorphicWasm": [
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 109,
+  "browserWasmEdgeTargetCount": 111,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -40,6 +40,8 @@
     "analysis/vcm-adapter",
     "basilisk/runtime",
     "files/ccsds-messages",
+    "files/geotiff",
+    "files/misb-klv",
     "files/orbit-products",
     "foundation/attitude-math",
     "foundation/frames",
@@ -3616,6 +3618,96 @@
         "tests/ndm_real_data.test.mjs",
         "tests/ndm_xsd.test.mjs",
         "tests/parity.mjs"
+      ]
+    },
+    {
+      "modulePath": "files/geotiff",
+      "pluginId": "com.digitalarsenal.files.geotiff",
+      "name": "GeoTIFF imagery",
+      "pluginFamily": "parser",
+      "version": "0.2.0",
+      "methodIds": [
+        "describe",
+        "render"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 1,
+      "testFileCount": 20,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/geotiff.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
+      ],
+      "testFiles": [
+        "tests/fixtures/cases.json",
+        "tests/fixtures/f32-4326-pred3-bigendian.rgba",
+        "tests/fixtures/f32-4326-pred3-bigendian.tif",
+        "tests/fixtures/palette-4326-packbits-strips.rgba",
+        "tests/fixtures/palette-4326-packbits-strips.tif",
+        "tests/fixtures/rgb-3857-deflate-cog.rgba",
+        "tests/fixtures/rgb-3857-deflate-cog.tif",
+        "tests/fixtures/rgb-4326-jpeg-cog.rgba",
+        "tests/fixtures/rgb-4326-jpeg-cog.tif",
+        "tests/fixtures/rgb-4326-lzw-cog.rgba",
+        "tests/fixtures/rgb-4326-lzw-cog.tif",
+        "tests/fixtures/rgb-mask-32633-jpeg-cog.rgba",
+        "tests/fixtures/rgb-mask-32633-jpeg-cog.tif",
+        "tests/fixtures/rgb-webp-cog.tif",
+        "tests/fixtures/rgba-32718-bigtiff-planar.rgba",
+        "tests/fixtures/rgba-32718-bigtiff-planar.tif",
+        "tests/fixtures/u16-32633-deflate-pred2.rgba",
+        "tests/fixtures/u16-32633-deflate-pred2.tif",
+        "tests/geotiff.test.mjs",
+        "tests/make-fixtures.py"
+      ]
+    },
+    {
+      "modulePath": "files/misb-klv",
+      "pluginId": "com.digitalarsenal.files.misb-klv",
+      "name": "MISB ST 0601 full-motion video",
+      "pluginFamily": "parser",
+      "version": "0.2.0",
+      "methodIds": [
+        "footprints",
+        "remux"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/misb_klv.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/testsrc2-64x48-baseline.h264",
+        "tests/fixtures/testsrc2-64x48-bframes.h264",
+        "tests/lib/oracle.mjs",
+        "tests/lib/ts-writer.mjs",
+        "tests/misb_klv.test.mjs"
       ]
     },
     {

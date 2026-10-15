@@ -20,6 +20,9 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.5"
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }
