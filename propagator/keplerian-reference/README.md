@@ -150,7 +150,8 @@ epochs, not all in one snapshot. Each checkpoint is the one before it on its
 side of the epoch integrated one grid step (Encke's method, RK4) under the Sun
 and the eight planets (Mercury, Venus, the Earth-Moon barycentre, the Mars,
 Jupiter, Saturn, Uranus and Neptune systems; DE440 GMs, places from Standish's
-JPL SSD mean orbits, 1800-2050) and re-osculated, and an export at et uses the
+JPL SSD mean orbits, 1800-2050), with the Sun's relativistic term (PPN,
+beta = gamma = 1; 1.9.1), and re-osculated, and an export at et uses the
 conic of the checkpoint nearest et. The RK4 step is the grid step, refined
 within 0.2 AU of a planet and near the Sun (0.08 of the body's dynamical time
 sqrt(r^3/GM): about half a day at (3200) Phaethon's 0.14 AU perihelion). The
@@ -182,10 +183,16 @@ Evidence (`tests/small-history.e2e.test.mjs`): states and snapshots
 bit-identical after excursions to -50, +55 and -55/+55/-3 days, along a run
 from +58 days back across the epoch to -58 days, and after random histories
 (runs either way at 0.3-4 days a snapshot, jumps, epoch crossings); against JPL
-Horizons over +-55 days after any of those histories, Phaethon 39-102 km and
-(137924) 2000 BD19 (q 0.092 AU) 54-254 km. (329915) 2005 MB is 600-3,013 km:
+Horizons over +-55 days after any of those histories, Phaethon 40-101 km and
+(137924) 2000 BD19 (q 0.092 AU) 49-257 km. (329915) 2005 MB is 554-3,011 km:
 Lowell's orbit for it (computed 2025-08-02, CEU 0.46") is itself 2,192 km from
-JPL's at the element epoch, before any propagation. A 56-day sweep of the
+JPL's at the element epoch, before any propagation. Against JPL Horizons
+propagating the same Lowell elements (its own integrator, DE441 and 16 asteroid
+perturbers), the module is within 1.5 km over +-58 days for (3200) Phaethon,
+(137924) 2000 BD19, (329915) 2005 MB, (433) Eros, (99942) Apophis, (101955)
+Bennu and (162173) Ryugu and within 8.4 km for (1036) Ganymed; without the
+relativistic term (1.9.0) Phaethon was 76 km off, 2000 BD19 133 km and 2005 MB
+54 km. A 56-day sweep of the
 1,004-row sample at a snapshot per 12 hours: 25-28 ms away from the epoch and
 30-35 ms toward it, the slowest snapshot 0.5-0.7 ms (1.8.2: 29-32 ms, slowest
 1.9-2.4 ms).

@@ -43,7 +43,7 @@ const cases = [
   { id: "missing-frame", inputs: [] },
 ];
 const plan = await normalizeParityFixture({
-  name: "keplerian-reference 1.9.0 (pthreads) ingest_omm",
+  name: "keplerian-reference 1.9.1 (pthreads) ingest_omm",
   cases: cases.map((c) => ({ id: c.id, request: { methodId: "ingest_omm", inputs: c.inputs } })),
 });
 const report = await runParityHarness({ wasmPath: path.join(here, "..", "dist", "isomorphic", "module.wasm"), plan, timeoutMs: 300000, log: console.log });

@@ -1238,7 +1238,7 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
 // perturbed path on its grid of checkpoints (its grid step and phase):
 // each checkpoint is the one before it on its side of the element epoch
 // integrated one grid step (Encke's method: the deviation from the osculating
-// conic, RK4) under the Sun and the eight planets (Mercury, Venus, the
+// conic, RK4) under the Sun (with its relativistic term, 1.9.1) and the eight planets (Mercury, Venus, the
 // Earth-Moon barycentre, the Mars, Jupiter, Saturn, Uranus and Neptune
 // systems; DE440 GMs), and its osculating elements there. A snapshot uses the
 // nearest checkpoint's conic; over the 2 days at most from it the conic is
@@ -1265,6 +1265,8 @@ bool small_position(const SmallBody& b, double et, double r[3], double v[3]) {
 // Jupiter to about 400" (0.01 AU at 5.2 AU), which moves a two-month main-belt
 // perturbation by a few hundredths of an arcsecond.
 constexpr double kSunStepFraction = 0.08;
+/// c^2 (m^2/s^2), the SI speed of light squared: the Sun's relativistic term.
+constexpr double kSpeedOfLightSq = 299792458.0 * 299792458.0;
 constexpr int kPlanets = 8;
 // a (AU), e, I, L, long. perihelion, long. node (deg) at J2000 and per Julian century.
 constexpr double kStandish[kPlanets][12] = {
@@ -1365,17 +1367,26 @@ void planet_acceleration(const double r[3], double et, double out[3], double* ne
 /// Encke: the deviation's acceleration at t (the planets' pull at the body's
 /// perturbed place, plus the difference of the Sun's pull there and on the
 /// conic).
-bool encke_acceleration(const Conic& b, double gm, double t, const double dr[3], double out[3], double* nearest,
-                        double* radius) {
-  double rho[3];
-  if (!small_conic(b, t, rho, nullptr)) return false;
+bool encke_acceleration(const Conic& b, double gm, double t, const double dr[3], const double dv[3], double out[3],
+                        double* nearest, double* radius) {
+  double rho[3], vrho[3];
+  if (!small_conic(b, t, rho, vrho)) return false;
   const double r[3] = {rho[0] + dr[0], rho[1] + dr[1], rho[2] + dr[2]};
+  const double v[3] = {vrho[0] + dv[0], vrho[1] + dv[1], vrho[2] + dv[2]};
   const double rho3 = std::pow(rho[0] * rho[0] + rho[1] * rho[1] + rho[2] * rho[2], 1.5);
   const double r2 = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
-  const double r3 = std::pow(r2, 1.5);
-  if (radius != nullptr) *radius = std::sqrt(r2);
+  const double rn = std::sqrt(r2);
+  const double r3 = r2 * rn;
+  if (radius != nullptr) *radius = rn;
   planet_acceleration(r, t, out, nearest);
-  for (int c = 0; c < 3; ++c) out[c] += gm * (rho[c] / rho3 - r[c] / r3);
+  // The Sun's relativistic term (PPN, beta = gamma = 1):
+  // GM / (c^2 r^3) [(4 GM / r - v^2) r + 4 (r . v) v].
+  const double v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  const double rv = r[0] * v[0] + r[1] * v[1] + r[2] * v[2];
+  const double k = gm / (kSpeedOfLightSq * r3);
+  for (int c = 0; c < 3; ++c) {
+    out[c] += gm * (rho[c] / rho3 - r[c] / r3) + k * ((4.0 * gm / rn - v2) * r[c] + 4.0 * rv * v[c]);
+  }
   return true;
 }
 
@@ -1389,7 +1400,7 @@ bool advance_conic(Conic& c, double t_end) {
   double t = c.osc_et;
   while (std::fabs(t_end - t) > 1e-6) {
     double k1v[3], k2v[3], k3v[3], k4v[3], nearest = INFINITY, radius = INFINITY;
-    if (!encke_acceleration(c, gm, t, dr, k1v, &nearest, &radius)) return false;
+    if (!encke_acceleration(c, gm, t, dr, dv, k1v, &nearest, &radius)) return false;
     double h = span;
     const double close = 0.2 * kAuMeters;
     if (nearest < close) {
@@ -1402,11 +1413,11 @@ bool advance_conic(Conic& c, double t_end) {
     const double hh = 0.5 * h;
     double r2[3], v2[3], r3[3], v3[3], r4[3], v4[3];
     for (int i = 0; i < 3; ++i) { r2[i] = dr[i] + hh * dv[i]; v2[i] = dv[i] + hh * k1v[i]; }
-    if (!encke_acceleration(c, gm, t + hh, r2, k2v, nullptr, nullptr)) return false;
+    if (!encke_acceleration(c, gm, t + hh, r2, v2, k2v, nullptr, nullptr)) return false;
     for (int i = 0; i < 3; ++i) { r3[i] = dr[i] + hh * v2[i]; v3[i] = dv[i] + hh * k2v[i]; }
-    if (!encke_acceleration(c, gm, t + hh, r3, k3v, nullptr, nullptr)) return false;
+    if (!encke_acceleration(c, gm, t + hh, r3, v3, k3v, nullptr, nullptr)) return false;
     for (int i = 0; i < 3; ++i) { r4[i] = dr[i] + h * v3[i]; v4[i] = dv[i] + h * k3v[i]; }
-    if (!encke_acceleration(c, gm, t + h, r4, k4v, nullptr, nullptr)) return false;
+    if (!encke_acceleration(c, gm, t + h, r4, v4, k4v, nullptr, nullptr)) return false;
     for (int i = 0; i < 3; ++i) {
       dr[i] += h / 6.0 * (dv[i] + 2.0 * v2[i] + 2.0 * v3[i] + v4[i]);
       dv[i] += h / 6.0 * (k1v[i] + 2.0 * k2v[i] + 2.0 * k3v[i] + k4v[i]);
