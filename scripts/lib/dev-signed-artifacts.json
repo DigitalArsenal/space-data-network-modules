@@ -1,5 +1,5 @@
 {
-  "note": "Committed artifacts still signed by the REVOKED dev module signer (keyId sdm-dev-test-2026; its private seed is public in space-data-module-sdk test/support, security audit SEC-005). They await the owner's key-rotation decision and are then re-signed with the release key, one by one, removing each from this list in the same commit. tests/module_signing_hygiene.test.mjs holds the list exact: no other committed artifact may carry this signer, and each listed one must still carry it. Re-sign: SDM_MODULE_SIGNING_KEYPAIR_PATH=<release keypair> node scripts/sign-module-artifact.mjs <artifact>.",
+  "note": "Committed artifacts still signed by the REVOKED dev module signer (keyId sdm-dev-test-2026; its private seed is public in space-data-module-sdk test/support, security audit SEC-005). They await the owner's key-rotation decision and are then re-signed with the release key, one by one, removing each from this list in the same commit. tests/module_signing_hygiene.test.mjs holds the list exact: no other committed artifact may carry this signer, and each listed one must still carry it. The same commit moves every test in devTrustTests (they pin the dev signer) to the owner key and empties that list too; the test holds it exact. Re-sign: SDM_MODULE_SIGNING_KEYPAIR_PATH=<release keypair> node scripts/sign-module-artifact.mjs <artifact>.",
   "revokedSignerPublicKeyHex": "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78",
   "revokedSignerKeyId": "sdm-dev-test-2026",
   "artifacts": [
@@ -17,5 +17,11 @@
     "files/orbit-products/dist/isomorphic/module.wasm",
     "foundation/frames/dist/isomorphic/module.wasm",
     "propagator/hypersonics/dist/isomorphic/module.wasm"
+  ],
+  "devTrustTests": [
+    "data-source/gps-source/test/module.test.mjs",
+    "data-source/oneweb-source/test/module.test.mjs",
+    "data-source/spk-source/tests/module_abi.test.mjs",
+    "foundation/frames/tests/sdk_compat.test.mjs"
   ]
 }

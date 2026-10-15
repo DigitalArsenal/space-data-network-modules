@@ -4,6 +4,13 @@
 // There is no default key. The seeds the old per-node builds embedded for development are public, so they are
 // refused. A production release (NODE_ENV=production or SUPPLEMENTAL_OMM_BUILD_MODE=production) also compiles the
 // WasmEdge universal-AOT section into every child and the parent before signing.
+//
+// The revoked signers of the whole repository (the space-data-module-sdk dev
+// fixture sdm-dev-test-2026, whose seed is public, and the leaked dev-admin key:
+// security audit SEC-005, SEC-007) are refused too, by the public key DERIVED from
+// the seed, so a renamed key id does not get them past this.
+import { assertModuleSignerNotRevoked, ed25519PublicKeyHexFromSeed } from "../../../scripts/lib/module-signing-key.mjs";
+
 const embeddedDevelopmentSigningSeeds = new Set(
   ["43", "44", "45", "51", "52", "53", "54", "55"].map((byte) => byte.repeat(32)),
 );
@@ -28,5 +35,6 @@ export function resolveReleaseSigning(environment = process.env) {
   if (isEmbeddedDevelopmentSigningSeed(signingSeed)) {
     throw new Error("a Supplemental OMM release rejects every embedded development signing seed");
   }
+  assertModuleSignerNotRevoked(ed25519PublicKeyHexFromSeed(signingSeed), signingKeyId);
   return { signingSeed, signingKeyId, productionMode };
 }

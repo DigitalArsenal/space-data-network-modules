@@ -4,35 +4,19 @@ import { fileURLToPath } from "node:url";
 
 import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
 import { cleanupCompilation, compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { loadModuleSigningKeypair, signModuleArtifactWithConfiguredKey } from "../../scripts/lib/module-signing-key.mjs";
 import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
-const repoRoot = path.resolve(packageRoot, "../..");
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "module.cpp");
 const outputPath = path.join(packageRoot, "dist", "isomorphic", "module.wasm");
 
-// The shipped artifact is signed with the development module signing key
-// (sdm-dev-test-2026), which Sandcastle trusts by default. Rebuilds keep that.
-const signingKeypairCandidates = [
-  process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH,
-  path.resolve(repoRoot, "../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json"),
-  path.resolve(repoRoot, "../space-data-module-sdk/test/support/dev-module-signing-keypair.json"),
-].filter(Boolean);
-
-async function resolveSigningKeypairPath() {
-  for (const candidate of signingKeypairCandidates) {
-    try {
-      if ((await fs.stat(candidate)).isFile()) return candidate;
-    } catch {
-      // try the next candidate
-    }
-  }
-  throw new Error(
-    "Module signing keypair not found. Set SDM_MODULE_SIGNING_KEYPAIR_PATH " +
-      `or provide one of: ${signingKeypairCandidates.join(", ")}`,
-  );
-}
+// Signed with the key SDM_MODULE_SIGNING_KEYPAIR_PATH names, and only that key
+// (scripts/lib/module-signing-key.mjs). There is no default: the SDK's dev
+// fixture (sdm-dev-test-2026) has a public seed and is refused (SEC-005). The
+// build refuses before compiling when no key is configured.
+loadModuleSigningKeypair(process.env);
 
 const standardsRoot =
   process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
@@ -90,15 +74,10 @@ try {
       `Compiled artifact failed SDK validation:\n${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`,
     );
   }
-  const keypair = JSON.parse(await fs.readFile(await resolveSigningKeypairPath(), "utf8"));
-  const signed = await signModuleArtifact(compilation.wasmBytes, {
-    privateKeySeedHex: keypair.privateKeySeedHex,
-    keyId: keypair.keyId ?? null,
-  });
-  await verifyModuleArtifact(signed.wasmBytes, {
-    trustedPublicKeys: [keypair.publicKeyHex],
-    requireSignature: true,
-  });
+  const signed = await signModuleArtifactWithConfiguredKey(
+    { signModuleArtifact, verifyModuleArtifact },
+    compilation.wasmBytes,
+  );
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, signed.wasmBytes);
   console.log(

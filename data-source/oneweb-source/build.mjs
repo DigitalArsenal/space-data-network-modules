@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
+import { loadModuleSigningKeypair, signModuleArtifactWithConfiguredKey } from "../../scripts/lib/module-signing-key.mjs";
 import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
 import createOnewebSourcePluginManifest from "./manifest.js";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
@@ -48,9 +49,13 @@ const SRC_DIR = path.join(__dirname, "src");
 const CORE_SDS_GENERATED_DIR = path.resolve(__dirname, "../../licensing/core/src/cpp/generated/sds");
 const SDN_COMMON_DIR = path.resolve(__dirname, "../../common");
 const SDM_HOST_CPP_DIR = path.resolve(__dirname, "../../node_modules/space-data-module-sdk/src/host/cpp");
-const MODULE_SIGNING_KEYPAIR_PATH =
-  process.env.SDN_MODULE_SIGNING_KEYPAIR ||
-  path.resolve(__dirname, "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
+// The signing key comes only from SDM_MODULE_SIGNING_KEYPAIR_PATH (or the legacy
+// SDN_MODULE_SIGNING_KEYPAIR). There is no default: the SDK's dev fixture
+// (sdm-dev-test-2026) has a public seed and is refused (SEC-005).
+const MODULE_SIGNING_ENVIRONMENT = {
+  SDM_MODULE_SIGNING_KEYPAIR_PATH:
+    process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH || process.env.SDN_MODULE_SIGNING_KEYPAIR || "",
+};
 
 function run(cmd, opts = {}) {
   console.log(`  $ ${cmd}`);
@@ -75,22 +80,23 @@ function resolveFlatbuffersInclude() {
   throw new Error("FlatBuffers C++ headers not found. Set FLATBUFFERS_INCLUDE_DIR=/path/to/include");
 }
 
+// Signed with the configured key only, the revoked dev signer refused, and
+// verified against that key before the file is replaced
+// (../../scripts/lib/module-signing-key.mjs).
 async function signBuiltModule(wasmPath) {
-  if (!fs.existsSync(MODULE_SIGNING_KEYPAIR_PATH)) {
-    throw new Error(`Module signing keypair not found: ${MODULE_SIGNING_KEYPAIR_PATH}`);
-  }
-  const keypair = JSON.parse(fs.readFileSync(MODULE_SIGNING_KEYPAIR_PATH, "utf8"));
-  const signed = await signModuleArtifact(fs.readFileSync(wasmPath), {
-    privateKeySeedHex: keypair.privateKeySeedHex,
-    keyId: keypair.keyId ?? null,
-  });
+  const signed = await signModuleArtifactWithConfiguredKey(
+    { signModuleArtifact, verifyModuleArtifact },
+    new Uint8Array(fs.readFileSync(wasmPath)),
+    { environment: MODULE_SIGNING_ENVIRONMENT },
+  );
   fs.writeFileSync(wasmPath, signed.wasmBytes);
-  await verifyModuleArtifact(signed.wasmBytes, { trustedPublicKeys: [keypair.publicKeyHex], requireSignature: true });
-  console.log(`  Signed module artifact: ${wasmPath}`);
+  console.log(`  Signed module artifact: ${wasmPath} (signer ${signed.keypair.publicKeyHex.slice(0, 8)})`);
 }
 
 async function main() {
   console.log("SDN Plugin Build — oneweb-source");
+  // Refuse before compiling anything when no usable signing key is configured.
+  loadModuleSigningKeypair(MODULE_SIGNING_ENVIRONMENT);
   const laneToolchain = activateLaneToolchain({
     moduleDir: "data-source/oneweb-source",
     extraCandidates: [EMSDK_DIR],

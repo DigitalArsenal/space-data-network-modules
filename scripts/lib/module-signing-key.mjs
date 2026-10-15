@@ -30,10 +30,30 @@ export const OWNER_MODULE_SIGNER_PUBLIC_KEY_HEX =
 
 // Signers whose private key is public. A build refuses to sign with them.
 export const REVOKED_MODULE_SIGNERS = Object.freeze({
-  cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78:
+  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78":
     "sdm-dev-test-2026, the space-data-module-sdk test fixture whose private seed is committed to a public repository",
+  "0b56dbd9b3b6c8698550753b1867765831b3000454369ad23b690aa21a613c5c":
+    "the leaked SDN dev-admin wallet's Ed25519 signing key (its mnemonic is in public space-data-network history, security audit SEC-007)",
 });
+// Compared trimmed and case-folded.
 export const REVOKED_MODULE_SIGNER_KEY_IDS = Object.freeze(["sdm-dev-test-2026"]);
+
+// Publisher (PNM, secp256k1 HD-wallet) identities whose mnemonic is public. The
+// SDN dev-admin wallet's 24 words were committed to the public
+// space-data-network repository (config/dev-wallet.env, removed from HEAD in
+// f0338079b but still in history: security audit SEC-007). Both values below are
+// PUBLIC: the account xpub at m/44'/0'/0' was committed beside the mnemonic, and
+// the signing key at m/44'/0'/0'/0/0 is derived from that xpub alone. A
+// publisher mnemonic is refused when it derives either one.
+export const REVOKED_PUBLISHER_IDENTITIES = Object.freeze([
+  Object.freeze({
+    accountXpub:
+      "xpub6DHm9a1bDz4qPHGMQqQ386E76KFhxsx4ZmVjm1K9HfiCVh2jNc77AgFtWtEScGRKNqArC7gEjRW8iPFJSgroCAB8tdZpkoXQj2hkZgRiENw",
+    signingPublicKeyHex: "0239ac5ff81fd6a1d58ab0558bfe63349eaf8533231298b70ea49eb16e1b31a1fe",
+    reason: "the leaked SDN dev-admin wallet (SDN_TRACKED_DEV_ADMIN_MNEMONIC, security audit SEC-007)",
+  }),
+]);
+export const PUBLISHER_ACCOUNT_PATH = "m/44'/0'/0'";
 
 const ED25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 const HEX_32 = /^[0-9a-fA-F]{64}$/;
@@ -70,7 +90,7 @@ export function assertModuleSignerNotRevoked(publicKeyHex, keyId = null) {
       `refusing to sign with revoked module signer ${key} (${REVOKED_MODULE_SIGNERS[key]})`,
     );
   }
-  if (keyId != null && REVOKED_MODULE_SIGNER_KEY_IDS.includes(String(keyId).trim())) {
+  if (keyId != null && REVOKED_MODULE_SIGNER_KEY_IDS.includes(String(keyId).trim().toLowerCase())) {
     throw new ModuleSigningKeyError(
       "revoked_signer",
       `refusing to sign with revoked module signer keyId ${String(keyId).trim()}`,
@@ -88,7 +108,7 @@ export function loadModuleSigningKeypair(environment = process.env) {
       "signing_key_not_configured",
       `refusing to sign: ${MODULE_SIGNING_KEYPAIR_ENV} is not set. There is no default module-signing key. ` +
         "Point it at the release keypair, or, for a build that publishes nothing, at a throwaway key " +
-        "(writeEphemeralModuleSigningKeypair / scripts/write-ephemeral-signing-keypair.mjs).",
+        "(writeEphemeralModuleSigningKeypair in scripts/lib/module-signing-key.mjs).",
     );
   }
   const keypairPath = path.resolve(configured);
@@ -211,16 +231,47 @@ export async function resolvePublisherIdentity(wallet, mnemonic, label = "the pu
     );
   }
   const root = wallet.hdkey.fromSeed(wallet.mnemonic.toSeed(words));
-  const signingKey = wallet.getSigningKey(root, 0, 0, 0);
-  return {
+  let accountXpub;
+  let signingKey;
+  try {
+    const account = root.derivePath(PUBLISHER_ACCOUNT_PATH);
+    try {
+      accountXpub = account.toXpub();
+    } finally {
+      account.wipe();
+    }
+    signingKey = wallet.getSigningKey(root, 0, 0, 0);
+  } finally {
+    root.wipe();
+  }
+  const identity = {
     mnemonic: words,
     signingKey,
+    accountXpub,
     signingPublicKeyHex: Buffer.from(signingKey.publicKey).toString("hex"),
   };
+  assertPublisherNotRevoked(identity, label);
+  return identity;
+}
+
+// Refuses a publisher identity whose mnemonic is public (REVOKED_PUBLISHER_IDENTITIES),
+// matched by its account xpub or its PNM signing key. Neither value is secret.
+export function assertPublisherNotRevoked(identity, label = "the publisher mnemonic") {
+  const xpub = String(identity?.accountXpub ?? "").trim();
+  const signer = String(identity?.signingPublicKeyHex ?? "").trim().toLowerCase();
+  for (const revoked of REVOKED_PUBLISHER_IDENTITIES) {
+    if ((xpub && xpub === revoked.accountXpub) || (signer && signer === revoked.signingPublicKeyHex)) {
+      throw new ModuleSigningKeyError(
+        "revoked_publisher",
+        `refusing to sign: ${label} is a revoked publisher identity (signing key ${revoked.signingPublicKeyHex}, ${revoked.reason})`,
+      );
+    }
+  }
 }
 
 export function assertProtectedByPublisher(protection, identity) {
   const signer = String(protection?.signingPublicKeyHex ?? "").toLowerCase();
+  assertPublisherNotRevoked({ signingPublicKeyHex: signer });
   if (!signer || signer !== identity.signingPublicKeyHex.toLowerCase()) {
     throw new ModuleSigningKeyError(
       "publisher_mismatch",
