@@ -1,0 +1,548 @@
+{
+  "tool": "tools/build_kernels.py",
+  "cspice": "CSPICE_N0067",
+  "inputs": [
+    {
+      "file": "de440s.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+      "bytes": 32726016,
+      "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2"
+    },
+    {
+      "file": "mar099s.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/mar099s.bsp",
+      "bytes": 67594240,
+      "sha256": "997dc93ba640e476da7a494d2237dcdeb145e528db37be8ccee588c615e4e1ff"
+    },
+    {
+      "file": "jup365.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/jup365.bsp",
+      "bytes": 1136581632,
+      "sha256": "dbf016c01ba4d022154838000cf3f06962cf958ddc503a366f7fe8f81495c5cb"
+    },
+    {
+      "file": "sat441.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
+      "bytes": 661592064,
+      "sha256": "d7e444a9ba7a52b8f448ff0747030789524d2f0c1212e4e2bd7f5fc3c96444d5"
+    },
+    {
+      "file": "ura184_part-3.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/ura184_part-3.bsp",
+      "bytes": 386885632,
+      "sha256": "273cd4ccc470d1098562cd4e94fa48fc2b4c6b1c2896308e473c949b87937c53"
+    },
+    {
+      "file": "nep097.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/nep097.bsp",
+      "bytes": 105262080,
+      "sha256": "5c1132fdc48c54e5d2e4eb663e1ed1a876911eae9433c203f29a5a1b5e1fa9b1"
+    },
+    {
+      "file": "plu060.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
+      "bytes": 135207936,
+      "sha256": "dfbb102491a26ed41ae08ca3f8963f22f0219df1d8f265ab87b9ad825a826fc6"
+    },
+    {
+      "file": "sb441-n16.bsp",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+      "bytes": 645727232,
+      "sha256": "919d612ce3c72a78fc7158f9120156542d0f21e6b8b052e4c1339c759747fd90"
+    },
+    {
+      "file": "moon_pa_de440_200625.bpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc",
+      "bytes": 12863488,
+      "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f"
+    },
+    {
+      "file": "pck00011.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+      "bytes": 131226,
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+    },
+    {
+      "file": "gm_de440.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+      "bytes": 12406,
+      "sha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140"
+    },
+    {
+      "file": "moon_de440_250416.tf",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf",
+      "bytes": 19478,
+      "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "moon-pa-1950.bpc",
+      "bytes": 125952,
+      "sha256": "1927bf93bf1e595ab20f4993349defdec14aa85d7a45a1a75edbabc19b3bf408",
+      "coverage": [
+        "1950-01-01 TDB",
+        "1960-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-1950.bsp",
+      "bytes": 1099776,
+      "sha256": "17b71ff2ed24de15353abc0397397f86162c59d0e37cb86dbe47bb955bea8dfd",
+      "coverage": [
+        "1950-01-01 TDB",
+        "1960-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-1960.bpc",
+      "bytes": 125952,
+      "sha256": "8e441d30984118136e0ea40bbbaa080798959f9e62c893fc6432f3f56d166a4d",
+      "coverage": [
+        "1960-01-01 TDB",
+        "1970-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-1960.bsp",
+      "bytes": 1100800,
+      "sha256": "03e70809567f920bf973d6d2b95d368fdc766b906c2be274104c196a46e86779",
+      "coverage": [
+        "1960-01-01 TDB",
+        "1970-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-1970.bpc",
+      "bytes": 125952,
+      "sha256": "3117233e8134f6ff024b253a569c99cdba8a99324eed000de7f9caed0e7f37b0",
+      "coverage": [
+        "1970-01-01 TDB",
+        "1980-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-1970.bsp",
+      "bytes": 1099776,
+      "sha256": "fbf66c130b1dd93bf5772a33f4dcfd502ac17576ebe2f30d86c0b9bea5c19521",
+      "coverage": [
+        "1970-01-01 TDB",
+        "1980-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-1980.bpc",
+      "bytes": 125952,
+      "sha256": "03cf7a74ff7bd919e809ccb29d1d987ff752220a76f340de8cf393ec46258e43",
+      "coverage": [
+        "1980-01-01 TDB",
+        "1990-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-1980.bsp",
+      "bytes": 1102848,
+      "sha256": "31b96af6810586bbcc9bfee1d65a3d78454e7cd387fe866edf02f6b95fcd794c",
+      "coverage": [
+        "1980-01-01 TDB",
+        "1990-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-1990.bpc",
+      "bytes": 125952,
+      "sha256": "81f0eed6499739b8e856c06a275d7efe1f54a16c632b232a4b1be6575a85d5bd",
+      "coverage": [
+        "1990-01-01 TDB",
+        "2000-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-1990.bsp",
+      "bytes": 1100800,
+      "sha256": "ffbf157b5b5567231c890e5fbf8b398aed0a5cb384e7afd0baf952d3d196efe8",
+      "coverage": [
+        "1990-01-01 TDB",
+        "2000-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-2000.bpc",
+      "bytes": 125952,
+      "sha256": "14b3a0e0725ee033cef35c8e4591b57266538874d7f10a9b692c7984a53a4e81",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-2000.bsp",
+      "bytes": 6617088,
+      "sha256": "f7c39ed6df4a88e9514695d6f1dd9747dea4455ec7776c680dfe111c2e4cd633",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "mars-2000.bsp",
+      "bytes": 8776704,
+      "sha256": "4a8d29a9f879912383e3403e32bc4142296c7af2147cc5df2b55ae72b9fbb12b",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "jupiter-2000.bsp",
+      "bytes": 3893248,
+      "sha256": "5ee8c9ae9d4430ad82aa00b68ede815c619006c3e9badb09ea1532bf504d50a6",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "saturn-2000.bsp",
+      "bytes": 6220800,
+      "sha256": "390af0b6e4327dd511160a24a846384bb41f4d1d3cb36022090e5da860fea83f",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "uranus-2000.bsp",
+      "bytes": 3770368,
+      "sha256": "8f7eb473df5fbe89a047edce3a353ff823044fc5b35d8e8a5bd84ca77cf28a20",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "neptune-2000.bsp",
+      "bytes": 739328,
+      "sha256": "8195f8723562d178d16fdf7ff6bede1a41ffd357ff50f40bdbce2793979a59ef",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pluto-2000.bsp",
+      "bytes": 495616,
+      "sha256": "dab3b58d9c2746763dd9146f65b7b45be90ac064b70e2a95a1ac2a6f9e1ccc6f",
+      "coverage": [
+        "2000-01-01 TDB",
+        "2010-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-2010.bpc",
+      "bytes": 125952,
+      "sha256": "04085e6e6aace3bdc0c99bc5f947ed9d583352cef88f39b23ebfebc8c10d44bd",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-2010.bsp",
+      "bytes": 6618112,
+      "sha256": "a74a643b88d20701d8e82f9a9f582e9497de922361e7dee09cf9e54464888066",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "mars-2010.bsp",
+      "bytes": 8774656,
+      "sha256": "02454d52861b5845a2a1a30342cfd6d612ef0993c70d019baed1f4a036c8cba3",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "jupiter-2010.bsp",
+      "bytes": 3892224,
+      "sha256": "c0536895ba4c0c29bec36fe68ff6532eb2b815128e1aed505dd545df1dc5f78c",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "saturn-2010.bsp",
+      "bytes": 6217728,
+      "sha256": "6ac54265a1c31013ccf06657682acd71d031d1fcc20df93f209b6815c3d75af1",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "uranus-2010.bsp",
+      "bytes": 3769344,
+      "sha256": "b8d3f12fac09a6af1ec8d62ce0a1f8a903864a8bee870058474f59bd40e17e8c",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "neptune-2010.bsp",
+      "bytes": 739328,
+      "sha256": "82b14e92a928b2042a277caeac39a8e1596c9c84d17367148723e61b98c9578c",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pluto-2010.bsp",
+      "bytes": 496640,
+      "sha256": "6e237b04537baca335d44c35826889a21ee464f6fea7be6cf6daac09b5bf1ca5",
+      "coverage": [
+        "2010-01-01 TDB",
+        "2020-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-2020.bpc",
+      "bytes": 125952,
+      "sha256": "0b9042a2ce11b2beba564f2f3a7f45371a3fe58d2297c60d707f626be95288ca",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-2020.bsp",
+      "bytes": 6618112,
+      "sha256": "1907dd4aeeafaeaa7a8466bea7b936304f0504413e866e7962ab9f2cd9894dbc",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "mars-2020.bsp",
+      "bytes": 8776704,
+      "sha256": "ee9cdd7794b377518c9e823e9f1c1b38a9996d130ae842f734ffa2429ca28ff3",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "jupiter-2020.bsp",
+      "bytes": 3893248,
+      "sha256": "b6c56e6501338b98c334bcddaf210fc97da6e70eb96b7b81cf6527895aa4d3c9",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "saturn-2020.bsp",
+      "bytes": 6220800,
+      "sha256": "c921108b148c1b414b6a17ce31d906129580f7306b62ef6049d5884675a6bce9",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "uranus-2020.bsp",
+      "bytes": 3771392,
+      "sha256": "45e552fe3862b6aa65ded2bc54e5e1bb7a7dd16109339e32b4f8d4bd04f6f6ef",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "neptune-2020.bsp",
+      "bytes": 740352,
+      "sha256": "ada6015e9536f38c3ac19c5ac9fea532a4f0c782ad2f9d4c7af04b8cb31bc2e8",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pluto-2020.bsp",
+      "bytes": 495616,
+      "sha256": "4aa3dd8d955f178e323ac8eb666498b4892f7e18b258f3f4615268ad256fb317",
+      "coverage": [
+        "2020-01-01 TDB",
+        "2030-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-2030.bpc",
+      "bytes": 125952,
+      "sha256": "10864c945cfbb7062e15ffb46a71fb477b9349d9edb582e869be4be80c1cac43",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-2030.bsp",
+      "bytes": 6617088,
+      "sha256": "7cda6a2e7cfc97c6acf36873de0d8580a350e6a080b1f6b6cc366a5c5970a3bb",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "mars-2030.bsp",
+      "bytes": 8774656,
+      "sha256": "929b46c14e0fc399b92f4771030968d33f1c89ac85d49fb5e23f79eba5876553",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "jupiter-2030.bsp",
+      "bytes": 3892224,
+      "sha256": "74a77c65c488112077183d682aec145dea4fb0d17f71516472fa9f8434db06d4",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "saturn-2030.bsp",
+      "bytes": 6217728,
+      "sha256": "43b1cd6f73edce164417ca9fb57db435777c72fbfcb677067455a3ab9fe03365",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "uranus-2030.bsp",
+      "bytes": 3769344,
+      "sha256": "905029ff26ae15bb2fdadf579e33ac09d4c9d2aa96c7552c8f3f33ba5adaed73",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "neptune-2030.bsp",
+      "bytes": 739328,
+      "sha256": "8f803d22a9a9a6a7f4730c8cab6a4e91170adddff4abd12b577a5d023c7365a1",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pluto-2030.bsp",
+      "bytes": 496640,
+      "sha256": "bcebf0810e4ee217f148444f538d34202b54ea037dc26574d11bd3ef2f98d17b",
+      "coverage": [
+        "2030-01-01 TDB",
+        "2040-01-01 TDB"
+      ]
+    },
+    {
+      "file": "moon-pa-2040.bpc",
+      "bytes": 125952,
+      "sha256": "8d34a2da2c3d3b76e0986486c0731909ee3b0b38ab73d0c9282ef098b5bd78eb",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "core-2040.bsp",
+      "bytes": 6618112,
+      "sha256": "ed5e50a2513dc05b993427d46ea55104d3da87a1b99e72586e1c2a90f3b44f5b",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "mars-2040.bsp",
+      "bytes": 8776704,
+      "sha256": "33225c713df29b65206240b3f0a84c03d1b04f43c078daac1d6ef981ef386500",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "jupiter-2040.bsp",
+      "bytes": 3893248,
+      "sha256": "27a6d03532e9ff106f4ac6d36bcfa2ddcfca8907b8da7ebc82932fef1735c49e",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "saturn-2040.bsp",
+      "bytes": 6220800,
+      "sha256": "456aed76350198acb8bab9fad46836f31f2c29c68f344ddd56710ab63d26f167",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "uranus-2040.bsp",
+      "bytes": 3770368,
+      "sha256": "09d9e0710f994174d8457ea49c4e44e5f164b7bba64176215899bfb5feaf1d6f",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "neptune-2040.bsp",
+      "bytes": 739328,
+      "sha256": "31d4360dfdc43430e47f5f0ee8ea2ce4809e522d4072ddfa9ee4953323ab233d",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pluto-2040.bsp",
+      "bytes": 495616,
+      "sha256": "107078df47393e482b2192394042be23724a87c94d041ca0c1dadd2173335e35",
+      "coverage": [
+        "2040-01-01 TDB",
+        "2050-01-01 TDB"
+      ]
+    },
+    {
+      "file": "pck00011.tpc",
+      "bytes": 131226,
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+      "coverage": null
+    },
+    {
+      "file": "gm_de440.tpc",
+      "bytes": 12406,
+      "sha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
+      "coverage": null
+    },
+    {
+      "file": "moon_de440_250416.tf",
+      "bytes": 19478,
+      "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768",
+      "coverage": null
+    }
+  ]
+}
