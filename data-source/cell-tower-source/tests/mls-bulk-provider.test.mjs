@@ -25,14 +25,14 @@
 //      does not have must refuse, and must name what it does have.
 
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+import { Buffer } from "node:buffer";
+
+import { byPort, drainParse, harnessFor, ingestContext, reportsOf, responseFor, sds } from "./helpers.mjs";
+
 const BULK_GZ = fs.readFileSync(
   fileURLToPath(new URL("./fixtures/opencellid-bulk.slice.csv.gz", import.meta.url)),
 );
@@ -45,66 +45,24 @@ const BULK_GZ = fs.readFileSync(
 // same bytes must produce the same six sites under the MLS name.
 const BULK_SITES = 6;
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-const jsonInput = (portId, value) => ({
-  portId,
-  typeRef: { wireFormat: "flatbuffer" },
-  payload: encoder.encode(JSON.stringify(value)),
-});
-const byPort = (response) => {
-  const map = new Map();
-  for (const frame of response.outputs) map.set(frame.portId, frame);
-  return map;
-};
+const MLS_URL = "https://archive.org/download/MLS_Full_Cell_Export_Final/MLS-full-cell-export-final.csv.gz";
 
-async function harnessFor(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-// The run contract cell-tower-ingest's `ingest_plan` emits, verbatim in shape:
-// one provider, one ranged descriptor, full population.
-function ingestJob(providerId) {
-  return {
-    method: 1,
-    method_name: "HIGHEST_SAMPLE_COUNT",
-    limit: 1000000,
-    full_population: true,
-    chunk_offset: 0,
-    chunk_index: 0,
-    chunk_bytes: 3145728,
-    prior_stored_rows: 0,
-    providers_consulted: [providerId],
-    request_providers: [providerId],
-    skipped: [],
-    provider_id: providerId,
-    source_url:
-      "https://archive.org/download/MLS_Full_Cell_Export_Final/MLS-full-cell-export-final.csv.gz",
-  };
-}
-
+// The CONTEXT cell-tower-ingest's `ingest_plan` writes, verbatim in shape: the
+// ingest run contract (one provider, full population, one fetch) and the $IRM
+// the chunk continues (here chunk 0: nothing to resume).
 async function parseChunk(harness, providerId) {
   let parsed = await harness.invoke({
     methodId: "parse",
     inputs: [
-      jsonInput("job", ingestJob(providerId)),
-      jsonInput("responses", {
-        status: 206,
-        headers: { "Content-Range": `bytes 0-${BULK_GZ.length - 1}/1565271921` },
-        bodyB64: Buffer.from(BULK_GZ).toString("base64"),
-      }),
+      responseFor(
+        { url: MLS_URL, context: ingestContext(providerId, { sourceUrl: MLS_URL }) },
+        { status: 206, headers: { "content-range": `bytes 0-${BULK_GZ.length - 1}/1565271921` }, body: BULK_GZ },
+      ),
     ],
   });
   let ports = byPort(parsed);
-  // Idle ticks let a multi-frame run finish its fan-in. A REFUSAL is final, so
-  // stop on it: ticking past it would replace the answer under test with a
-  // later invocation's "no input" complaint.
+  // A REFUSAL is final, so stop on it: ticking past it would replace the answer
+  // under test with a later invocation's quiet answer.
   for (let tick = 0; tick < 8 && !ports.get("reports") && parsed.statusCode === 0; tick += 1) {
     parsed = await harness.invoke({ methodId: "parse", inputs: [] });
     ports = byPort(parsed);
@@ -118,7 +76,7 @@ test("the MLS bulk export decodes to sites under the MLS name", async (t) => {
 
   const frame = ports.get("reports");
   assert.ok(frame, "parse emitted no reports frame for provider mls");
-  const reports = JSON.parse(decoder.decode(frame.payload));
+  const reports = reportsOf(frame.payload);
 
   assert.equal(
     reports.length,
@@ -170,4 +128,37 @@ test("a run contract naming an unknown provider REFUSES instead of reporting an 
     `the refusal does not name what this build DOES have: ${message}`,
   );
   assert.match(message, /mls-archive/, `the refusal does not list the real MLS provider: ${message}`);
+});
+
+// THE CSV HEADER RIDES THE $IRM. In a ranged CSV export the column header
+// exists once, at offset 0; a chunk N>0 is headerless, and without the header
+// the decoder eats its first data row as a column contract and reports a clean
+// empty tail. cell-tower-ingest carries it in IRMDecodeContext.HEADER_LINE.
+const CSV = fs.readFileSync(fileURLToPath(new URL("./fixtures/opencellid.sample.csv", import.meta.url)), "utf8");
+const [CSV_HEADER, ...CSV_ROWS] = CSV.trimEnd().split("\n");
+
+async function csvChunk(harness, irm) {
+  const url = "https://example.invalid/opencellid.csv";
+  const body = Buffer.from(CSV_ROWS.join("\n") + "\n");
+  const parsed = await drainParse(harness, [
+    responseFor({ url, context: ingestContext("opencellid", { sourceUrl: url, irm }) }, { status: 206, body }),
+  ]);
+  return { reports: reportsOf(parsed.get("reports").payload), resume: parsed.get("resume") };
+}
+
+test("a headerless CSV chunk decodes with the header its $IRM carries", async (t) => {
+  const harness = await harnessFor(t);
+  const DecodeContext = sds.IRM.IRMDecodeContextT;
+  const withHeader = await csvChunk(harness, {
+    NEXT_OFFSET: BigInt(CSV_HEADER.length + 1),
+    DECODE_CONTEXT: Object.assign(new DecodeContext(), { FORMAT: "text/csv", HEADER_LINE: CSV_HEADER }),
+  });
+  assert.equal(withHeader.reports.length, CSV_ROWS.length, "every data row of the resumed chunk decodes");
+  assert.ok(withHeader.reports.every((r) => r.provider_id === "opencellid"));
+  // A plain CSV lane runs no stateful decoder, so parse writes no resume mark:
+  // the ingest node corrects the offset to a row boundary itself.
+  assert.equal(withHeader.resume, undefined);
+
+  const withoutHeader = await csvChunk(harness, { NEXT_OFFSET: BigInt(CSV_HEADER.length + 1) });
+  assert.equal(withoutHeader.reports.length, 0, "without the carried header the first row is eaten as a header");
 });

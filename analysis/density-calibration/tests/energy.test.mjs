@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import * as flatbuffers from 'flatbuffers';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
-import { EOPT } from 'spacedatastandards.org/lib/js/EOP/main.js';
+import { S as P, call, dayOfMjd } from './dcl.mjs';
+
+const { flatbuffers, EOPT } = P;
 
 // energy and drag_work against propagator/hpop, the module that integrates the
 // equations of motion.
@@ -34,18 +34,7 @@ async function harnessOf(dir) {
   const manifest = JSON.parse(fs.readFileSync(dir === '.' ? here('../plugin-manifest.json') : modules(`${dir}/plugin-manifest.json`)));
   return createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct' });
 }
-async function call(method, request) {
-  const h = await harnessOf('.');
-  try {
-    const r = await h.invoke({ methodId: method, inputs: [{ portId: 'request', payload: Buffer.from(JSON.stringify(request)), typeRef: { schemaName: 'application/json' } }] });
-    if (r.statusCode !== 0) throw new Error(`${r.errorCode}: ${r.errorMessage}`);
-    return JSON.parse(Buffer.from(r.outputs[0].payload).toString('utf8'));
-  } finally {
-    await h.destroy();
-  }
-}
 const isoOfMjd = (mjd) => new Date((mjd - 40587) * 86400000).toISOString().replace('Z', '');
-const dayOfMjd = (mjd) => isoOfMjd(mjd).slice(0, 10);
 
 // A Cartesian GCRF state from Keplerian elements (a m, e, angles deg): the textbook rotation, as an independent starting state.
 function keplerState(a, e, iDeg, raanDeg, argpDeg, nuDeg) {
@@ -123,10 +112,10 @@ const start = keplerState(6378137 + 500e3, 0.001, 97.4, 120, 80, 10);
 test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and the Kepler energy is not', { skip }, async (t) => {
   const track = await hpopTrack(MJD0, start, 6 * 3600, 60, { degree: 36, jbRows: rows(MJD0, MJD0 + 1) });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
-  const out = await call('energy', { states, degree: 36, gm: GM, omega: OMEGA });
-  assert.equal(out.refused.length, 0);
-  const c0 = out.energy[0];
-  const drift = Math.max(...out.energy.map((c) => Math.abs(c - c0)));
+  const out = (await call('energy', { states, degree: 36, gm: GM, omega: OMEGA })).STATES;
+  assert.equal(out.REFUSED.length, 0);
+  const c0 = out.ENERGY_J_KG[0];
+  const drift = Math.max(...out.ENERGY_J_KG.map((c) => Math.abs(c - c0)));
   // What is left is not the integrator (relative tolerance 1e-12: ~1e-3 J/kg over 6 h) but the Earth's axis, which is not fixed in
   // GCRF: precession and nutation move the CIP by ~2e-11 rad/s, and dU/dtilt ~ 8e4 J/kg per rad at 500 km, so the Jacobi integral of a
   // field that turns uniformly about a fixed axis changes by ~0.01 J/kg an hour (the series steps by 0.0097 J/kg each hour, the
@@ -135,8 +124,8 @@ test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and th
   t.diagnostic(`Jacobi energy drift over 6 h: ${drift.toFixed(4)} J/kg`);
   assert.ok(drift < 0.1, `Jacobi energy drifted by ${drift} J/kg over 6 h`);
   for (const degree of [35, 37]) {
-    const off = await call('energy', { states, degree, gm: GM, omega: OMEGA });
-    const offDrift = Math.max(...off.energy.map((c) => Math.abs(c - off.energy[0])));
+    const off = (await call('energy', { states, degree, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
+    const offDrift = Math.max(...off.map((c) => Math.abs(c - off[0])));
     t.diagnostic(`module degree ${degree} against HPOP's 36: drift ${offDrift.toFixed(3)} J/kg`);
     assert.ok(offDrift > 0.4, `degree ${degree} against HPOP's 36 drifts by only ${offDrift} J/kg`);
   }
@@ -144,17 +133,17 @@ test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and th
   const keplerRange = Math.max(...kepler) - Math.min(...kepler);
   assert.ok(keplerRange > 5e3, `the Kepler energy varies by ${keplerRange} J/kg: the test orbit exercises the field`);
   // A wrong field must show: degree 2 against HPOP's degree 36.
-  const wrong = await call('energy', { states, degree: 2, gm: GM, omega: OMEGA });
-  const wrongDrift = Math.max(...wrong.energy.map((c) => Math.abs(c - wrong.energy[0])));
+  const wrong = (await call('energy', { states, degree: 2, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
+  const wrongDrift = Math.max(...wrong.map((c) => Math.abs(c - wrong[0])));
   assert.ok(wrongDrift > 0.5, `degree 2 against degree 36 drifts by only ${wrongDrift} J/kg`);
   // Without the rotation term omega . (r x v) the quantity is not conserved either (the orbit's angular momentum is not constant in a non-spherical field).
-  const noRotation = out.energy.map((c, i) => c + out.rotation[i]);
+  const noRotation = out.ENERGY_J_KG.map((c, i) => c + out.ROTATIONAL_J_KG[i]);
   const rotationRange = Math.max(...noRotation) - Math.min(...noRotation);
   assert.ok(rotationRange > 50, `without omega . (r x v) the energy varies by ${rotationRange} J/kg`);
   // The WGS84 geodetic point must reproduce the geocentric radius (rotation preserves it): |r|^2 = ((N + h) cos(lat))^2 + ((N (1 - e^2) + h) sin(lat))^2.
   const a = 6378137, e2 = 0.00669437999014;
   states.forEach((st, i) => {
-    const lat = out.geodetic.latDeg[i] * Math.PI / 180, h = out.geodetic.altKm[i] * 1000, N = a / Math.sqrt(1 - e2 * Math.sin(lat) ** 2);
+    const lat = out.LATITUDE_DEG[i] * Math.PI / 180, h = out.ALTITUDE_KM[i] * 1000, N = a / Math.sqrt(1 - e2 * Math.sin(lat) ** 2);
     const radius = Math.hypot((N + h) * Math.cos(lat), (N * (1 - e2) + h) * Math.sin(lat));
     assert.ok(Math.abs(radius - Math.hypot(...st.r)) < 1e-3, `sample ${i}: geodetic point gives radius ${radius}, state ${Math.hypot(...st.r)}`);
   });
@@ -162,8 +151,8 @@ test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and th
 
 test('the energy gradient equals finite differences of energy', async () => {
   const s = { mjd: MJD0 + 0.1, r: start.r, v: start.v };
-  const g = (await call('energy', { states: [s], degree: 36, gm: GM, omega: OMEGA, gradient: true })).gradient[0];
-  const energyAt = async (r, v) => (await call('energy', { states: [{ mjd: s.mjd, r, v }], degree: 36, gm: GM, omega: OMEGA })).energy[0];
+  const g = (await call('energy', { states: [s], degree: 36, gm: GM, omega: OMEGA, gradient: true })).STATES.ENERGY_GRADIENT.slice(0, 6);
+  const energyAt = async (r, v) => (await call('energy', { states: [{ mjd: s.mjd, r, v }], degree: 36, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG[0];
   for (let k = 0; k < 3; ++k) {
     const h = 2.0;  // m
     const rp = [...s.r], rm = [...s.r];
@@ -185,11 +174,14 @@ test('the fall of the energy under JB2008 drag equals the drag work', { skip }, 
   const jbRows = rows(MJD0, MJD0 + 1);
   const track = await hpopTrack(MJD0, start, 6 * 3600, 30, { degree: 36, B, jbRows });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
-  const energy = await call('energy', { states, degree: 36, gm: GM, omega: OMEGA });
-  const work = await call('drag_work', { states, jb2008: { rows: jbRows }, B });
-  assert.equal(work.refused.length, 0);
-  const fall = energy.energy.at(-1) - energy.energy[0];
-  const integral = work.cumulativeWork.at(-1);
+  const energy = (await call('energy', { states, degree: 36, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
+  const answer = await call('drag_work', { states, jb2008: { rows: jbRows }, B });
+  const work = answer.STATES;
+  assert.equal(work.REFUSED.length, 0);
+  assert.equal(answer.BALLISTIC_COEFFICIENT_M2_KG, B);
+  assert.equal(work.DRAG_WORK_J_KG.length, states.length - 1);
+  const fall = energy.at(-1) - energy[0];
+  const integral = work.CUMULATIVE_DRAG_WORK_J_KG.at(-1);
   // Trapezoid rule on 30 s samples of a smooth integrand (the density varies by a factor of ~2 around the orbit) and a
   // drag-only change of C: 0.3 % allows the quadrature and the first-order drag-gravity cross terms.
   t.diagnostic(`energy fell by ${fall.toFixed(3)} J/kg, drag work ${integral.toFixed(3)} J/kg, ratio ${(fall / integral).toFixed(5)}`);
@@ -197,14 +189,27 @@ test('the fall of the energy under JB2008 drag equals the drag work', { skip }, 
   assert.ok(Math.abs(fall / integral - 1) < 0.003, `energy fell by ${fall} J/kg, drag work ${integral} J/kg (ratio ${fall / integral})`);
   // A correction that raises the exospheric temperature raises the work done by the drag.
   const warm = await call('drag_work', { states, jb2008: { rows: jbRows }, B, correction: { nodesMjd: [MJD0 - 1, MJD0 + 2], altitudeKm: [], values: [[60], [60]] } });
-  assert.ok(warm.cumulativeWork.at(-1) < integral * 1.05, 'a +60 K correction changes the work');
-  assert.ok(Math.abs(warm.cumulativeWork.at(-1)) > Math.abs(integral), '+60 K raises the density and so the drag work');
+  const warmWork = warm.STATES.CUMULATIVE_DRAG_WORK_J_KG.at(-1);
+  assert.ok(warmWork < integral * 1.05, 'a +60 K correction changes the work');
+  assert.ok(Math.abs(warmWork) > Math.abs(integral), '+60 K raises the density and so the drag work');
 });
 
 test('invalid requests are refused', async () => {
-  await assert.rejects(call('energy', { states: [] }), /states/);
+  await assert.rejects(call('energy', { states: [] }), /STATES/);
   await assert.rejects(call('energy', { states: [{ mjd: 61000, r: [7e6, 0, 0], v: [0, 7.5e3, 0] }], degree: 1 }), /degree/);
   await assert.rejects(call('drag_work', { states: [{ mjd: 61000, r: [7e6, 0, 0], v: [0, 7.5e3, 0] }] }), /jb2008/);
   const out = await call('energy', { states: [{ mjd: 61000, r: [1e6, 0, 0], v: [0, 7.5e3, 0] }] });
-  assert.deepEqual(out.refused, [0]);
+  assert.deepEqual(out.STATES.REFUSED, [0]);
+  assert.ok(Number.isNaN(out.STATES.ENERGY_J_KG[0]));
+  // Defaults: degree 36, order = degree, GM 3.986004418e14, the Earth's rotation 7.292115e-5 rad/s, field EGM2008.
+  assert.deepEqual([out.GRAVITY_FIELD, out.GRAVITY_DEGREE, out.GRAVITY_ORDER, out.GM_M3_S2, out.EARTH_ROTATION_RAD_S], ['EGM2008', 36, 36, 3.986004418e14, 7.292115e-5]);
+  // Not a $DCL: refused.
+  const h = await harnessOf('.');
+  try {
+    const r = await h.invoke({ methodId: 'energy', inputs: [{ portId: 'request', payload: Buffer.from('{"states":[]}'), typeRef: { schemaName: 'DCL.fbs', fileIdentifier: '$DCL', rootTypeName: 'DCL', wireFormat: 'flatbuffer' } }] });
+    assert.notEqual(r.statusCode, 0);
+    assert.match(r.errorMessage, /\$DCL/);
+  } finally {
+    await h.destroy();
+  }
 });

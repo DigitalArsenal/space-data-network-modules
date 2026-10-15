@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-import { decodeHttpResponse } from "space-data-module-sdk/http";
+import { decodeHttpResponse, encodeHttpRequest } from "space-data-module-sdk/http";
 
 import {
   buildGeoTiff,
@@ -21,6 +21,12 @@ import {
   decodeDtt,
   splitStream,
   geodeticToEcef,
+  decodeTileReport,
+  granuleFrame,
+  input,
+  typedInput,
+  configFrame,
+  TYPE,
 } from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -92,37 +98,12 @@ const PLAN = {
   provenance: PROVENANCE,
 };
 
-function frame(portId, payload) {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-}
-
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
-
-const responseFrame = (portId, body, extra = {}) =>
-  jsonFrame(portId, {
-    status: 200,
-    headers: {},
-    bodyB64: Buffer.from(body).toString("base64"),
-    ...extra,
-  });
-
-// hostcap/http-request responseWire "raw-body-v1": "$HRB", little-endian
-// status, body verbatim. This is the lane both granule ports actually run on;
-// the JSON dialect above stays exercised so a recorded fixture keeps working.
-export function rawBody(body, status = 200) {
-  const out = Buffer.alloc(8 + body.length);
-  out.write("$HRB", 0, "latin1");
-  out.writeUInt32LE(status >>> 0, 4);
-  Buffer.from(body).copy(out, 8);
-  return out;
-}
-
-const rawBodyFrame = (portId, body, status = 200) => frame(portId, rawBody(body, status));
+// Typed contracts 1.0 (helpers.mjs): a plan object travels as the $DTT header stream (+ ModuleConfig options), a
+// granule as the HttpResponse hostcap/http-request answers, bytes as the frame their file identifier names.
+const frame = (portId, payload) => typedInput(portId, payload);
+const typedFrame = input;
+const responseFrame = (portId, body, extra = {}) => granuleFrame(portId, body, extra.status ?? 200);
+const rawBodyFrame = (portId, body, status = 200) => granuleFrame(portId, body, status);
 
 async function invoke(t, methodId, inputs) {
   const harness = await createBrowserModuleHarness({
@@ -131,7 +112,7 @@ async function invoke(t, methodId, inputs) {
     surface: "direct",
   });
   t.after(() => harness.destroy());
-  return harness.invoke({ methodId, inputs });
+  return harness.invoke({ methodId, inputs: inputs.flat() });
 }
 
 function outputsByPort(response) {
@@ -181,7 +162,7 @@ async function encodeTile(
   { layout = "strip", predictor = 1, plan = PLAN, water = null, records: expect = 1 } = {},
 ) {
   const tiff = buildGeoTiff({ ...GRANULE, layout, predictor });
-  const inputs = [jsonFrame("plan", plan), rawBodyFrame("dem", tiff)];
+  const inputs = [typedFrame("plan", plan), rawBodyFrame("dem", tiff)];
   if (water) inputs.push(rawBodyFrame("water", water));
   const outputs = outputsByPort(await invoke(t, "tile", inputs));
   const records = splitStream(outputs.get("records"));
@@ -189,7 +170,7 @@ async function encodeTile(
   return {
     dtt: expect === 1 ? decodeDtt(records[0]) : undefined,
     records: records.map((r) => decodeDtt(r)),
-    report: asJson(outputs.get("report")),
+    report: decodeTileReport(outputs.get("report")),
   };
 }
 
@@ -510,7 +491,7 @@ test("tile writes the watermask extension: uniform by default, raster from the w
   // A directive whose geometry is not the 256x256 this encoder cuts is
   // refused: the shared-edge identity between adjacent tiles depends on it.
   const mismatch = await invoke(t, "tile", [
-    jsonFrame("plan", { ...PLAN, waterMask: { kind: "RASTER", width: 128, height: 128 } }),
+    typedFrame("plan", { ...PLAN, waterMask: { kind: "RASTER", width: 128, height: 128 } }),
     rawBodyFrame("dem", buildGeoTiff({ ...GRANULE })),
     rawBodyFrame("water", waterGranule),
   ]);
@@ -519,7 +500,7 @@ test("tile writes the watermask extension: uniform by default, raster from the w
   // And a RASTER directive with no granule to classify is refused rather than
   // fabricated from the directive alone.
   const noGranule = await invoke(t, "tile", [
-    jsonFrame("plan", { ...PLAN, waterMask: { kind: "RASTER" } }),
+    typedFrame("plan", { ...PLAN, waterMask: { kind: "RASTER" } }),
     rawBodyFrame("dem", buildGeoTiff({ ...GRANULE })),
   ]);
   assert.equal(noGranule.errorCode, "missing-water-granule");
@@ -528,8 +509,8 @@ test("tile writes the watermask extension: uniform by default, raster from the w
 test("an absent granule (404) is open ocean: height 0, UNIFORM_WATER, coverage 0", async (t) => {
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", PLAN),
-      jsonFrame("dem", { status: 404, headers: {}, bodyB64: "" }),
+      typedFrame("plan", PLAN),
+      granuleFrame("dem", new Uint8Array(0), 404),
     ]),
   );
   const dtt = decodeDtt(splitStream(outputs.get("records"))[0]);
@@ -542,14 +523,14 @@ test("an absent granule (404) is open ocean: height 0, UNIFORM_WATER, coverage 0
   assert.equal(mesh.header.maxHeight, 0);
   const ext = mesh.extensions.find((e) => e.id === 2);
   assert.equal(ext.bytes[0], 0xff, "uniform water byte");
-  const report = asJson(outputs.get("report"));
+  const report = decodeTileReport(outputs.get("report"));
   assert.equal(report.granulesAbsent, 1);
   assert.equal(report.waterMaskKind, "UNIFORM_WATER");
   // …and the plan can still overrule the ocean default.
   const overruled = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", { ...PLAN, waterMask: { kind: "UNIFORM_LAND" } }),
-      jsonFrame("dem", { status: 404, headers: {}, bodyB64: "" }),
+      typedFrame("plan", { ...PLAN, waterMask: { kind: "UNIFORM_LAND" } }),
+      granuleFrame("dem", new Uint8Array(0), 404),
     ]),
   );
   assert.equal(decodeDtt(splitStream(overruled.get("records"))[0]).waterMaskKind, 1);
@@ -564,10 +545,10 @@ test("NO_DATA samples decode to 0 and are counted in DATA_COVERAGE_FRACTION, nev
   };
   const tiff = buildGeoTiff({ ...holed, layout: "strip", predictor: 1 });
   const outputs = outputsByPort(
-    await invoke(t, "tile", [jsonFrame("plan", PLAN), responseFrame("dem", tiff)]),
+    await invoke(t, "tile", [typedFrame("plan", PLAN), responseFrame("dem", tiff)]),
   );
   const dtt = decodeDtt(splitStream(outputs.get("records"))[0]);
-  const report = asJson(outputs.get("report"));
+  const report = decodeTileReport(outputs.get("report"));
   assert.equal(dtt.minHeightM, 0, "a NO_DATA post reads 0");
   assert.equal(dtt.maxHeightM, 50);
   assert.ok(report.noDataSamples > 0);
@@ -582,7 +563,7 @@ test("tile refuses what must never be defaulted or silently decoded", async (t) 
     const provenance = { ...PROVENANCE };
     delete provenance[missing];
     const response = await invoke(t, "tile", [
-      jsonFrame("plan", { ...PLAN, provenance }),
+      typedFrame("plan", { ...PLAN, provenance }),
       responseFrame("dem", tiff),
     ]);
     assert.notEqual(response.statusCode, 0, `${missing} must not be defaultable`);
@@ -591,14 +572,14 @@ test("tile refuses what must never be defaulted or silently decoded", async (t) 
   }
   // A failed fetch is not open ocean.
   const failed = await invoke(t, "tile", [
-    jsonFrame("plan", PLAN),
-    jsonFrame("dem", { status: 503, headers: {}, bodyB64: "" }),
+    typedFrame("plan", PLAN),
+    granuleFrame("dem", new Uint8Array(0), 503),
   ]);
   assert.notEqual(failed.statusCode, 0);
   assert.equal(failed.errorCode, "upstream-status");
   // A truncated granule is refused, never decoded to a partial raster.
   const truncated = await invoke(t, "tile", [
-    jsonFrame("plan", PLAN),
+    typedFrame("plan", PLAN),
     responseFrame("dem", tiff.subarray(0, Math.floor(tiff.length / 2))),
   ]);
   assert.notEqual(truncated.statusCode, 0);
@@ -615,7 +596,7 @@ test("tile accepts multiple granules but refuses a batched plan and a granule su
   });
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", PLAN),
+      typedFrame("plan", PLAN),
       responseFrame("dem", westGranule),
       responseFrame("dem", eastGranule),
     ]),
@@ -627,8 +608,8 @@ test("tile accepts multiple granules but refuses a batched plan and a granule su
 
   // A second plan frame is a surplus the runtime would otherwise destroy.
   const doublePlan = await invoke(t, "tile", [
-    jsonFrame("plan", PLAN),
-    jsonFrame("plan", PLAN),
+    typedFrame("plan", PLAN),
+    typedFrame("plan", PLAN),
     responseFrame("dem", westGranule),
   ]);
   assert.notEqual(doublePlan.statusCode, 0);
@@ -636,7 +617,7 @@ test("tile accepts multiple granules but refuses a batched plan and a granule su
 
   // Five dem frames exceed the four-corner-granule budget.
   const five = await invoke(t, "tile", [
-    jsonFrame("plan", PLAN),
+    typedFrame("plan", PLAN),
     ...Array.from({ length: 5 }, () => responseFrame("dem", westGranule)),
   ]);
   assert.notEqual(five.statusCode, 0);
@@ -652,12 +633,15 @@ test("layer_json renders the complete body inside the canonical $HTR envelope", 
     [{ startX: 0, startY: 0, endX: 1, endY: 0 }],
     [{ startX: 0, startY: 0, endX: 3, endY: 1 }],
   ];
+  // The plan is the routed layer.json request ($HTQ) itself; the body is composed from the mount's config, here
+  // handed in on the optional ModuleConfig "config" port (dotted keys for the nested availability).
   const response = await invoke(t, "layer_json", [
-    jsonFrame("plan", {
-      tilesetId: "spaceaware-terrain",
-      maxzoom: 10,
-      attribution: PROVENANCE.attribution,
-      available,
+    typedInput("plan", encodeHttpRequest({ method: "GET", path: "/api/v1/terrain/layer.json" })),
+    configFrame({
+      terrain_tileset_id: "spaceaware-terrain",
+      terrain_maxzoom: 10,
+      terrain_attribution: PROVENANCE.attribution,
+      terrain_available: available,
     }),
   ]);
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
@@ -693,17 +677,19 @@ test("layer_json renders the complete body inside the canonical $HTR envelope", 
   assert.equal(body.attribution, PROVENANCE.attribution);
 });
 
-test("layer_json refuses a plan that cannot state maxzoom or availability", async (t) => {
-  const noZoom = await invoke(t, "layer_json", [
-    jsonFrame("plan", { tilesetId: "x", available: [[]] }),
+test("layer_json refuses a plan that is not the routed $HTQ request, and a config that is not a ModuleConfig", async (t) => {
+  const none = await invoke(t, "layer_json", []);
+  assert.notEqual(none.statusCode, 0);
+  const garbled = encodeHttpRequest({ method: "GET", path: "/api/v1/terrain/layer.json" });
+  const broken = Uint8Array.from(garbled);
+  broken.fill(0xff, 8);  // keeps the $HTQ identifier, breaks the table
+  const invalid = await invoke(t, "layer_json", [typedInput("plan", broken)]);
+  assert.equal(invalid.errorCode, "invalid-plan-frame");
+  const badConfig = await invoke(t, "layer_json", [
+    typedInput("plan", garbled),
+    { portId: "config", typeRef: TYPE.MCFG, payload: Uint8Array.from([8, 0, 0, 0, 77, 67, 70, 71, 255, 255, 255, 255]) },
   ]);
-  assert.notEqual(noZoom.statusCode, 0);
-  assert.equal(noZoom.errorCode, "missing-maxzoom");
-  const noAvail = await invoke(t, "layer_json", [
-    jsonFrame("plan", { tilesetId: "x", maxzoom: 4 }),
-  ]);
-  assert.notEqual(noAvail.statusCode, 0);
-  assert.equal(noAvail.errorCode, "missing-availability");
+  assert.equal(badConfig.errorCode, "invalid-config-frame");
 });
 
 // ── DENSITY ADAPTS TO RELIEF, INSIDE A CAP THAT NEVER MOVES ────────────────
@@ -724,11 +710,11 @@ async function encodeRelief(t, heightFn, plan = {}) {
   const tiff = buildGeoTiff({ ...GRANULE, width: 256, height: 256, scaleLon: 0.8 / 255, scaleLat: 0.9 / 255, heightFn, layout: "strip", predictor: 1 });
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", { ...PLAN, minGridSize: 5, ...plan }),
+      typedFrame("plan", { ...PLAN, minGridSize: 5, ...plan }),
       responseFrame("dem", tiff),
     ]),
   );
-  const report = asJson(outputs.get("report"));
+  const report = decodeTileReport(outputs.get("report"));
   return {
     dtt: decodeDtt(splitStream(outputs.get("records"))[0]),
     tile: report.tiles[0],
@@ -975,11 +961,11 @@ const probeGranule = (withRelief) => ({
 async function encodeProbeFixture(t, { maxGridSize, withRelief = true }) {
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize }),
+      typedFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize }),
       responseFrame("dem", buildGeoTiff(probeGranule(withRelief))),
     ]),
   );
-  const report = asJson(outputs.get("report"));
+  const report = decodeTileReport(outputs.get("report"));
   return { dtt: decodeDtt(splitStream(outputs.get("records"))[0]), tile: report.tiles[0] };
 }
 
@@ -1119,11 +1105,11 @@ test("relief that lives BETWEEN lattice posts is measured, not smoothed away", a
 
   const outputs = outputsByPort(
     await invoke(t, "tile", [
-      jsonFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize: 13 }),
+      typedFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize: 13 }),
       responseFrame("dem", buildGeoTiff(offLatticeGranule())),
     ]),
   );
-  const tile = asJson(outputs.get("report")).tiles[0];
+  const tile = decodeTileReport(outputs.get("report")).tiles[0];
   const dtt = decodeDtt(splitStream(outputs.get("records"))[0]);
   assert.equal(tile.accuracyProbes, PROBE_SOURCE_POSTS, "it walked the source, not the lattice");
   assert.ok(

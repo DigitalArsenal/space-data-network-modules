@@ -9,26 +9,13 @@
 // - DCP weights: 2 * integral of (t - s) over each whole day / t^2 at t = 3 days is 5/9, 3/9, 1/9 (Hejduk 2019);
 //   sigma_eff^2 = w' C w; the start-relative sensitivity S(t) - Phi(t) Phi(s0)^-1 S(s0) for designed matrices.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { json, call as ermCall, invoke } from './erm-harness.mjs';
 
-const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
-const wasm = fs.readFileSync(wasmPath);
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
-async function call(t, methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h.destroy());
-  const r = await h.invoke({ methodId, inputs });
-  assert.equal(r.statusCode, 0, r.errorMessage);
-  return JSON.parse(Buffer.from(r.outputs[0].payload).toString());
-}
+// Each port's value in its readable form; the harness sends it as the method's $ERM record and decodes the output.
+const call = (t, methodId, inputs) => ermCall(methodId, inputs);
 async function refused(t, methodId, inputs, pattern) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  t.after(() => h.destroy());
-  const r = await h.invoke({ methodId, inputs });
+  const r = await invoke(methodId, inputs);
   assert.notEqual(r.statusCode, 0);
   assert.match(r.errorMessage ?? '', pattern);
 }

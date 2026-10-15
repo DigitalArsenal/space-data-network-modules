@@ -22,6 +22,8 @@
 #endif
 #include "CQR_generated.h"
 #include "EOP_generated.h"
+#include "ERM_generated.h"
+#include "SCR_generated.h"
 #include "conjunction/ephemeris_upload.h"
 #include "conjunction/earth_orientation.h"
 #include "space_data_module_invoke.h"
@@ -1012,14 +1014,15 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
 // An SGP4 object's covariance at TCA from an empirical prediction-error model
 // (analysis/gp-error-model, scaled and gated by its calibration), chosen by
 // the object's orbit regime and its prediction age (TCA minus the element
-// set's epoch), with the gate's label. Optional frame "uncertainty_model":
-//   "CAU1", u32 n + label (n bytes, padded to 4),
-//   u32 regimes x (f64 mean altitude lo, hi km; f64 eccentricity lo, hi),
-//   u32 ages x (f64 lo, hi days),
-//   u32 strata x (u32 regime, u32 age, f64[21] RTN position-velocity
-//   covariance lower triangle in km^2, km^2/s, km^2/s^2, u32 calibrated,
-//   u32 n + reference (n bytes, padded to 4)).
-// scripts/uncertainty-model.mjs writes it from the model and calibration JSON.
+// set's epoch), with the gate's label. Optional frame "uncertainty_model": one
+// $ERM whose MODEL arm gives the label (LABEL), the regimes (STRATA_SETTINGS
+// REGIMES: mean altitude and eccentricity bounds), the age bins (AGE_BINS,
+// days), and per stratum the RTN position-velocity covariance lower triangle
+// (CLIPPED.COVARIANCE when the stratum's clipped statistics have one, else
+// COVARIANCE; 21 values in km^2, km^2/s, km^2/s^2; strata without 21 values
+// are not used), CALIBRATION (Calibrated: the gate passed) and
+// CALIBRATION_REFERENCE. scripts/uncertainty-model.mjs writes it from the model
+// and calibration JSON.
 struct EmpiricalStratum {
   std::array<double, 21> cov{};
   bool calibrated = false;
@@ -1036,50 +1039,54 @@ bool empiricalModel(EmpiricalModel &m) {
   const plugin_input_frame_t *f = input("uncertainty_model");
   if (!f)
     return true;
-  const uint8_t *p = f->payload;
-  const size_t n = f->payload ? f->payload_length : 0;
-  size_t at = 4;
-  auto get = [&](auto &v) {
-    if (at + sizeof v > n) return false;
-    std::memcpy(&v, p + at, sizeof v);
-    at += sizeof v;
-    return true;
-  };
-  auto text = [&](std::string &out) {
-    uint32_t len = 0;
-    if (!get(len) || len > n - at) return false;
-    out.assign(reinterpret_cast<const char *>(p + at), len);
-    at += (len + 3u) & ~3u;
-    return at <= n;
-  };
-  auto bad = [] { return error("invalid-uncertainty-model", "uncertainty_model is not a well-formed CAU1 frame."); };
-  uint32_t count = 0;
-  if (n < 4 || std::memcmp(p, "CAU1", 4) != 0 || !text(m.label) || !get(count) || count > 1024)
+  auto bad = [] { return error("invalid-uncertainty-model", "uncertainty_model is not a well-formed $ERM MODEL."); };
+  const ERM *erm = decode<ERM>(f, "$ERM");
+  if (!erm)
+    return false;
+  const ERMModel *model = erm->MODEL();
+  const ERMStrataSettings *settings = model ? model->STRATA_SETTINGS() : nullptr;
+  if (!model || !settings)
     return bad();
-  m.regimes.resize(count);
-  for (auto &r : m.regimes)
-    for (double &x : r)
-      if (!get(x) || !isFinite(x)) return bad();
-  if (!get(count) || count > 1024)
+  m.label = text(model->LABEL());
+  const auto *regimes = settings->REGIMES();
+  const auto *ages = settings->AGE_BINS();
+  if ((regimes ? regimes->size() : 0) > 1024 || (ages ? ages->size() : 0) > 1024)
     return bad();
-  m.ages.resize(count);
-  for (auto &a : m.ages)
-    if (!get(a.first) || !get(a.second) || !(a.first >= 0 && a.second > a.first)) return bad();
-  if (!get(count))
-    return bad();
-  for (uint32_t k = 0; k < count; ++k) {
-    uint32_t r = 0, a = 0, calibrated = 0;
-    EmpiricalStratum s;
-    if (!get(r) || !get(a) || r >= m.regimes.size() || a >= m.ages.size())
-      return bad();
-    for (double &x : s.cov)
-      if (!get(x) || !isFinite(x)) return bad();
-    if (!get(calibrated) || !text(s.reference))
-      return bad();
-    s.calibrated = calibrated != 0;
-    if (s.cov[0] > 0 && s.cov[2] > 0 && s.cov[5] > 0)  // a usable position block
-      m.strata[{r, a}] = std::move(s);
-  }
+  m.regimes.clear();
+  if (regimes)
+    for (const ERMRegime *r : *regimes) {
+      // Unbounded regimes (an infinite top) are capped at 1e300, as the model's
+      // bounds always were.
+      std::array<double, 4> x = {std::min(r->ALTITUDE_MIN_KM(), 1e300), std::min(r->ALTITUDE_MAX_KM(), 1e300),
+                                 std::min(r->ECCENTRICITY_MIN(), 1e300), std::min(r->ECCENTRICITY_MAX(), 1e300)};
+      for (double v : x)
+        if (!isFinite(v)) return bad();
+      m.regimes.push_back(x);
+    }
+  m.ages.clear();
+  if (ages)
+    for (const ERMAgeBin *a : *ages) {
+      if (!(a->MIN_DAYS() >= 0 && a->MAX_DAYS() > a->MIN_DAYS())) return bad();
+      m.ages.emplace_back(a->MIN_DAYS(), a->MAX_DAYS());
+    }
+  if (const auto *strata = model->STRATA())
+    for (const ERMModelStratum *t : *strata) {
+      const auto *clipped = t->CLIPPED();
+      const auto *cov = clipped && clipped->COVARIANCE() && clipped->COVARIANCE()->size() ? clipped->COVARIANCE() : t->COVARIANCE();
+      if (!cov || cov->size() != 21)
+        continue;
+      const uint32_t r = t->REGIME_INDEX(), a = t->AGE_INDEX();
+      if (r >= m.regimes.size() || a >= m.ages.size())
+        return bad();
+      EmpiricalStratum s;
+      for (size_t k = 0; k < 21; ++k)
+        if (!isFinite(s.cov[k] = cov->Get(static_cast<flatbuffers::uoffset_t>(k)))) return bad();
+      s.calibrated = t->CALIBRATION() == covarianceCalibration::Calibrated;
+      if (s.calibrated)
+        s.reference = text(t->CALIBRATION_REFERENCE());
+      if (s.cov[0] > 0 && s.cov[2] > 0 && s.cov[5] > 0)  // a usable position block
+        m.strata[{r, a}] = std::move(s);
+    }
   m.loaded = true;
   return true;
 }
@@ -2382,79 +2389,89 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
   return true;
 }
 
-// Little-endian binary control frames: a 4-byte tag, then u32 / f64 fields.
-struct Reader {
-  const uint8_t *p = nullptr;
-  size_t n = 0, at = 0;
-  bool tag(const char *t) {
-    if (n < 4 || std::memcmp(p, t, 4) != 0) return false;
-    at = 4;
-    return true;
-  }
-  template <class T> bool get(T &v) {
-    if (at + sizeof(T) > n) return false;
-    std::memcpy(&v, p + at, sizeof(T));
-    at += sizeof(T);
-    return true;
-  }
-};
-Reader reader(const plugin_input_frame_t *f) {
-  Reader r;
-  if (f && f->payload) { r.p = f->payload; r.n = f->payload_length; }
-  return r;
+// The screening work products are $SCR records, one arm each.
+// false on a refused frame; out is null when an optional port is absent.
+bool scrArm(const char *port, bool required, const char *code, const char *what, const SCR *&out) {
+  out = nullptr;
+  const plugin_input_frame_t *f = input(port);
+  if (!f)
+    return required ? error(code, std::string(port) + " is required: " + what + ".") : true;
+  out = decode<SCR>(f, "$SCR");
+  return out ? true : error(code, std::string(port) + " must be a $SCR record: " + what + ".");
 }
-std::string jsonString(const std::string &s) {
-  std::string o = "\"";
-  for (char ch : s) {
-    if (ch == '"' || ch == '\\') { o.push_back('\\'); o.push_back(ch); }
-    else if (static_cast<unsigned char>(ch) < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", ch); o += b; }
-    else o.push_back(ch);
-  }
-  return o + "\"";
+bool pushScr(const char *port, flatbuffers::FlatBufferBuilder &b, flatbuffers::Offset<SCR> root) {
+  FinishSCRBuffer(b, root);
+  return plugin_push_output_ex(port, "SCR.fbs", "$SCR", 0, "SCR", 0, 0, b.GetBufferPointer(), b.GetSize()) >= 0;
+}
+flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SCRExclusion>>>
+exclusions(flatbuffers::FlatBufferBuilder &b, const std::map<uint32_t, ExcludedObject> &excluded) {
+  std::vector<flatbuffers::Offset<SCRExclusion>> rows;
+  for (const auto &[index, x] : excluded)
+    rows.push_back(CreateSCRExclusion(b, index, x.first_failure_jd, b.CreateString(x.reason)));
+  return b.CreateVector(rows);
+}
+// candidates: $SCR CANDIDATES, by step then pair as found.
+bool pushCandidates(const std::vector<TightCandidate> &found) {
+  flatbuffers::FlatBufferBuilder b(64 + found.size() * 12);
+  SCRCandidatePair *rows = nullptr;
+  auto v = b.CreateUninitializedVectorOfStructs<SCRCandidatePair>(found.size(), &rows);
+  for (size_t k = 0; k < found.size(); ++k)
+    rows[k] = SCRCandidatePair(found[k].obj1, found[k].obj2, static_cast<uint32_t>(found[k].step));
+  SCRBuilder r(b);
+  r.add_CANDIDATES(CreateSCRCandidates(b, v));
+  return pushScr("candidates", b, r.Finish());
+}
+// report: $SCR SEARCH_REPORT.
+struct SearchCounts {
+  uint32_t primaries = 0, secondaries = 0, skipped = 0, candidates = 0;
+};
+bool pushSearchReport(uint32_t first, uint32_t count, int32_t last, size_t objects,
+                      const std::map<uint32_t, ExcludedObject> &excluded, const SearchCounts &n) {
+  flatbuffers::FlatBufferBuilder b(256);
+  auto x = exclusions(b, excluded);
+  SCRSearchReportBuilder rb(b);
+  rb.add_FIRST_STEP(first);
+  rb.add_STEP_COUNT(count);
+  rb.add_LAST_STEP(last);
+  rb.add_OBJECTS(static_cast<uint32_t>(objects));
+  rb.add_EXCLUDED(x);
+  rb.add_PRIMARIES(n.primaries);
+  rb.add_SECONDARIES(n.secondaries);
+  rb.add_SKIPPED(n.skipped);
+  rb.add_CANDIDATE_COUNT(n.candidates);
+  auto report = rb.Finish();
+  SCRBuilder r(b);
+  r.add_SEARCH_REPORT(report);
+  return pushScr("report", b, r.Finish());
 }
 } // namespace ca_cqr
 
 namespace ca_cqr {
-// The block ("CAB1", u32 first_step, u32 step_count) of a tight request.
+// The block ($SCR BLOCK: FIRST_STEP, STEP_COUNT) of a tight request.
 bool tightBlock(const char *method, ScreeningConfig &c, TightSet &t, uint32_t max_steps,
                 uint32_t &first, uint32_t &count, int32_t &last) {
   if (!tightRequest(method, c, t))
     return false;
-  auto b = reader(input("block"));
-  if (!b.tag("CAB1") || !b.get(first) || !b.get(count))
-    return error("invalid-block", "block must be CAB1, u32 first_step, u32 step_count.");
+  const SCR *b = nullptr;
+  if (!scrArm("block", true, "invalid-block", "a BLOCK of the window's coarse steps", b))
+    return false;
+  if (!b->BLOCK())
+    return error("invalid-block", "block must be a $SCR BLOCK (FIRST_STEP, STEP_COUNT).");
+  first = b->BLOCK()->FIRST_STEP();
+  count = b->BLOCK()->STEP_COUNT();
   last = tight_last_coarse_step(c);
   if (count == 0 || count > max_steps || static_cast<int64_t>(first) + count - 1 > last)
     return error("invalid-block", "The block must hold 1 to " + std::to_string(max_steps) +
                                       " steps of the window (steps 0.." + std::to_string(last) + ").");
   return true;
 }
-// report (JSON): the block, the window's last step, and the objects that
-// cannot be evaluated in it (index, earliest failing JD, reason).
-bool pushBlockReport(uint32_t first, uint32_t count, int32_t last, size_t objects,
-                     const std::map<uint32_t, ExcludedObject> &excluded) {
-  std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
-                       ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(objects) + ",\"excluded\":[";
-  bool comma = false;
-  for (const auto &[index, x] : excluded) {
-    char jd[40];
-    std::snprintf(jd, sizeof jd, "%.17g", x.first_failure_jd);
-    report += std::string(comma ? "," : "") + "{\"index\":" + std::to_string(index) + ",\"first_failure_jd\":" + jd +
-              ",\"reason\":" + jsonString(x.reason) + "}";
-    comma = true;
-  }
-  report += "]}";
-  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t *>(report.data()),
-                               static_cast<uint32_t>(report.size())) >= 0;
-}
 } // namespace ca_cqr
 
 // One block of coarse steps in the GPU layout (screening_tight.h).
-// Inputs: request ($CQR WINDOW_REQUEST on a resident index), block
-// ("CAB1", u32 first_step, u32 step_count, 1-256 steps). Outputs: grid
-// ("CAG1", u32 first_step, u32 step_count, u32 objects, then f32 states
-// [step][object][8] and f32 bands [object][2]) and report.
+// Inputs: request ($CQR WINDOW_REQUEST on a resident index), block ($SCR
+// BLOCK, 1-256 steps). Outputs: grid ($SCR GRID: STATES step-major, one
+// (x, y, z, D, vx, vy, vz, 0) row per step and object, and BANDS per object)
+// and report ($SCR SEARCH_REPORT with the block's exclusions).
 extern "C" int coarse_grid() {
   using namespace ca_cqr;
   ScreeningConfig c;
@@ -2464,22 +2481,36 @@ extern "C" int coarse_grid() {
   if (!tightBlock("coarse_grid", c, t, 256, first, count, last))
     return 400;
   auto g = tight_coarse_grid_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count), {});
-  std::vector<uint8_t> out(16 + (g.states.size() + g.bands.size()) * sizeof(float));
-  const uint32_t header[4] = {0x31474143u /* "CAG1" */, first, count, g.objects};
-  std::memcpy(out.data(), header, 16);
-  std::memcpy(out.data() + 16, g.states.data(), g.states.size() * sizeof(float));
-  std::memcpy(out.data() + 16 + g.states.size() * sizeof(float), g.bands.data(), g.bands.size() * sizeof(float));
-  if (plugin_push_output_ex("grid", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 16,
-                            out.data(), static_cast<uint32_t>(out.size())) < 0)
+  static_assert(sizeof(SCRGridState) == 8 * sizeof(float) && sizeof(SCRRadiusBand) == 2 * sizeof(float),
+                "SCR grid rows are the tight grid's float rows");
+  flatbuffers::FlatBufferBuilder b(256 + (g.states.size() + g.bands.size()) * sizeof(float));
+  SCRGridState *states = nullptr;
+  SCRRadiusBand *bands = nullptr;
+  auto sv = b.CreateUninitializedVectorOfStructs<SCRGridState>(g.states.size() / 8, &states);
+  if (!g.states.empty())
+    std::memcpy(states, g.states.data(), g.states.size() * sizeof(float));
+  auto bv = b.CreateUninitializedVectorOfStructs<SCRRadiusBand>(g.bands.size() / 2, &bands);
+  if (!g.bands.empty())
+    std::memcpy(bands, g.bands.data(), g.bands.size() * sizeof(float));
+  SCRGridBuilder gb(b);
+  gb.add_FIRST_STEP(first);
+  gb.add_STEP_COUNT(count);
+  gb.add_OBJECTS(g.objects);
+  gb.add_STEP_S(c.coarse_step_sec);
+  gb.add_STATES(sv);
+  gb.add_BANDS(bv);
+  auto grid = gb.Finish();
+  SCRBuilder r(b);
+  r.add_GRID(grid);
+  if (!pushScr("grid", b, r.Finish()))
     return 500;
-  return pushBlockReport(first, count, last, g.objects, g.excluded) ? 0 : 500;
+  return pushSearchReport(first, count, last, g.objects, g.excluded, {}) ? 0 : 500;
 }
 
 // The CPU counterpart of coarse_grid plus the GPU search: the candidates of a
 // block of coarse steps, found in the module (tight_search_block). Inputs:
 // request and block as coarse_grid (up to 65,535 steps). Outputs: candidates
-// ("CAC1", u32 count, then count x (u32 obj1, u32 obj2, u32 step)), the
-// frame refine_candidates takes, and report.
+// ($SCR CANDIDATES), the record refine_candidates takes, and report.
 extern "C" int search_candidates() {
   using namespace ca_cqr;
   ScreeningConfig c;
@@ -2491,33 +2522,26 @@ extern "C" int search_candidates() {
   auto found = tight_search_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count));
   if (conjunction::has_error())
     return error("screening-failed", conjunction::error_message()), 422;
-  std::vector<uint32_t> out(2 + found.candidates.size() * 3);
-  std::memcpy(out.data(), "CAC1", 4);
-  out[1] = static_cast<uint32_t>(found.candidates.size());
-  for (size_t k = 0; k < found.candidates.size(); ++k) {
-    out[2 + 3 * k] = found.candidates[k].obj1;
-    out[3 + 3 * k] = found.candidates[k].obj2;
-    out[4 + 3 * k] = static_cast<uint32_t>(found.candidates[k].step);
-  }
-  if (plugin_push_output_ex("candidates", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
-                            reinterpret_cast<const uint8_t *>(out.data()), static_cast<uint32_t>(out.size() * 4)) < 0)
+  if (!pushCandidates(found.candidates))
     return 500;
-  return pushBlockReport(first, count, last, t.refs.size(), found.excluded) ? 0 : 500;
+  SearchCounts n;
+  n.candidates = static_cast<uint32_t>(found.candidates.size());
+  return pushSearchReport(first, count, last, t.refs.size(), found.excluded, n) ? 0 : 500;
 }
 
 // The candidates of a coarse grid the host kept from coarse_grid (the same
 // window and block), found on the module's threads: the CPU counterpart of the
 // GPU search for a stored grid. Inputs: request (a $CQR WINDOW_REQUEST whose
 // controls give the window, coarse step, threshold and workers; its index is
-// not consulted: the grid holds every state the search reads); grid (CAG1 as
-// coarse_grid returned it); roles (optional: CAR1, u32 count = the grid's
-// objects, then one byte per object: 0 secondary, 1 primary, 2 skip; a pair is
-// searched when one member is a primary and neither is skipped; absent: every
-// pair). Outputs: candidates (CAC1 in grid rows, by step then pair) and report
-// (JSON: the block and the roles counted). Rows that are not finite (objects
-// coarse_grid excluded) are not searched. refine_candidates takes the
-// candidates on an index whose sources are the grid's rows, or the rows the
-// candidates name, in the same order.
+// not consulted: the grid holds every state the search reads); grid ($SCR GRID
+// as coarse_grid returned it); roles (optional: $SCR ROLES, one per grid
+// object; a pair is searched when one member is a primary and neither is
+// skipped; absent: every pair). Outputs: candidates ($SCR CANDIDATES in grid
+// rows, by step then pair) and report ($SCR SEARCH_REPORT: the block, the roles
+// counted and the candidates). Rows that are not finite (objects coarse_grid
+// excluded) are not searched. refine_candidates takes the candidates on an
+// index whose sources are the grid's rows, or the rows the candidates name, in
+// the same order.
 extern "C" int search_grid() {
   using namespace ca_cqr;
   auto q = request();
@@ -2526,73 +2550,70 @@ extern "C" int search_grid() {
   ScreeningConfig c;
   if (!controls(q->WINDOW_REQUEST()->CONTROLS(), c))
     return 400;
-  auto g = reader(input("grid"));
-  uint32_t first = 0, count = 0, objects = 0;
-  if (!g.tag("CAG1") || !g.get(first) || !g.get(count) || !g.get(objects))
-    return error("invalid-grid", "grid must be CAG1, u32 first_step, u32 step_count, u32 objects, then f32 states and bands."), 400;
+  const SCR *gr = nullptr;
+  if (!scrArm("grid", true, "invalid-grid", "the GRID coarse_grid returned", gr))
+    return 400;
+  const SCRGrid *g = gr->GRID();
+  if (!g)
+    return error("invalid-grid", "grid must be a $SCR GRID as coarse_grid returned it."), 400;
+  const uint32_t first = g->FIRST_STEP(), count = g->STEP_COUNT(), objects = g->OBJECTS();
   const int32_t last = tight_last_coarse_step(c);
-  const size_t values = static_cast<size_t>(count) * objects * 8;
-  if (objects == 0 || count == 0 || static_cast<int64_t>(first) + count - 1 > last ||
-      g.n != 16 + (values + static_cast<size_t>(objects) * 2) * sizeof(float))
+  const size_t rows = static_cast<size_t>(count) * objects;
+  if (objects == 0 || count == 0 || static_cast<int64_t>(first) + count - 1 > last || !g->STATES() ||
+      !g->BANDS() || g->STATES()->size() != rows || g->BANDS()->size() != objects)
     return error("invalid-grid", "The grid must hold rows for 1 or more steps of the window (steps 0.." +
                                      std::to_string(last) + "), in coarse_grid's layout."), 400;
   std::vector<uint8_t> roles;
-  if (const auto rf = input("roles")) {
-    auto r = reader(rf);
-    uint32_t n = 0;
-    if (!r.tag("CAR1") || !r.get(n) || n != objects || r.n != 8 + static_cast<size_t>(n))
-      return error("invalid-roles", "roles must be CAR1, u32 count (the grid's objects), then one byte per object."), 400;
-    roles.assign(r.p + 8, r.p + 8 + n);
+  const SCR *rr = nullptr;
+  if (!scrArm("roles", false, "invalid-roles", "ROLES, one per grid object", rr))
+    return 400;
+  if (rr) {
+    const auto *v = rr->ROLES() ? rr->ROLES()->ROLES() : nullptr;
+    if (!rr->ROLES() || !v || v->size() != objects)
+      return error("invalid-roles", "roles must be a $SCR ROLES with one role per grid object."), 400;
+    roles.reserve(v->size());
+    for (const scrScreeningRole x : *v)
+      roles.push_back(static_cast<uint8_t>(x));
     if (std::any_of(roles.begin(), roles.end(), [](uint8_t x) { return x > kTightRoleSkip; }))
-      return error("invalid-roles", "A role is 0 (secondary), 1 (primary) or 2 (skip)."), 400;
+      return error("invalid-roles", "A role is Secondary, Primary or Skip."), 400;
   }
-  // The rows are read in place when the frame is 4-byte aligned past its tag, else copied.
-  std::vector<float> copy;
-  const float* rows = reinterpret_cast<const float*>(g.p + 16);
-  if (reinterpret_cast<uintptr_t>(rows) % alignof(float) != 0) {
-    copy.resize(values + static_cast<size_t>(objects) * 2);
-    std::memcpy(copy.data(), g.p + 16, copy.size() * sizeof(float));
-    rows = copy.data();
+  // The rows are read in place when the frame keeps them 4-byte aligned, else copied.
+  const uint8_t *stateBytes = g->STATES()->Data(), *bandBytes = g->BANDS()->Data();
+  std::vector<float> stateCopy, bandCopy;
+  if (reinterpret_cast<uintptr_t>(stateBytes) % alignof(float) != 0 ||
+      reinterpret_cast<uintptr_t>(bandBytes) % alignof(float) != 0) {
+    stateCopy.resize(rows * 8);
+    bandCopy.resize(static_cast<size_t>(objects) * 2);
+    std::memcpy(stateCopy.data(), stateBytes, stateCopy.size() * sizeof(float));
+    std::memcpy(bandCopy.data(), bandBytes, bandCopy.size() * sizeof(float));
   }
   StoredCoarseGrid grid;
   grid.first_step = static_cast<int32_t>(first);
   grid.step_count = static_cast<int32_t>(count);
   grid.objects = objects;
-  grid.states = rows;
-  grid.bands = rows + values;
+  grid.states = stateCopy.empty() ? reinterpret_cast<const float *>(stateBytes) : stateCopy.data();
+  grid.bands = bandCopy.empty() ? reinterpret_cast<const float *>(bandBytes) : bandCopy.data();
   auto found = tight_grid_search_block(grid, c, roles);
   if (conjunction::has_error())
     return error("screening-failed", conjunction::error_message()), 422;
-  std::vector<uint32_t> out(2 + found.candidates.size() * 3);
-  std::memcpy(out.data(), "CAC1", 4);
-  out[1] = static_cast<uint32_t>(found.candidates.size());
-  for (size_t k = 0; k < found.candidates.size(); ++k) {
-    out[2 + 3 * k] = found.candidates[k].obj1;
-    out[3 + 3 * k] = found.candidates[k].obj2;
-    out[4 + 3 * k] = static_cast<uint32_t>(found.candidates[k].step);
-  }
-  if (plugin_push_output_ex("candidates", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
-                            reinterpret_cast<const uint8_t *>(out.data()), static_cast<uint32_t>(out.size() * 4)) < 0)
+  if (!pushCandidates(found.candidates))
     return 500;
-  size_t counted[3] = {0, 0, 0};
+  uint32_t counted[3] = {0, 0, 0};
   if (roles.empty()) counted[kTightRolePrimary] = objects;
   for (const uint8_t x : roles) ++counted[x];
-  const std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
-                             ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(objects) +
-                             ",\"primaries\":" + std::to_string(counted[kTightRolePrimary]) +
-                             ",\"secondaries\":" + std::to_string(counted[kTightRoleSecondary]) +
-                             ",\"skipped\":" + std::to_string(counted[kTightRoleSkip]) +
-                             ",\"candidates\":" + std::to_string(found.candidates.size()) + "}";
-  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t *>(report.data()), static_cast<uint32_t>(report.size())) >= 0
-             ? 0 : 500;
+  SearchCounts n;
+  n.primaries = counted[kTightRolePrimary];
+  n.secondaries = counted[kTightRoleSecondary];
+  n.skipped = counted[kTightRoleSkip];
+  n.candidates = static_cast<uint32_t>(found.candidates.size());
+  return pushSearchReport(first, count, last, objects, {}, n) ? 0 : 500;
 }
 
 // Refines candidate pairs into the catalog result screen_catalog returns.
-// Inputs: request as coarse_grid; candidates ("CAC1", u32 count,
-// then count x (u32 obj1, u32 obj2, u32 step)) - absent: search every coarse
-// step in the module, as search_candidates does; excluded ("CAX1", u32 count, then count x (u32 index, f64
-// first_failure_jd)) - the exclusions coarse_grid reported for the window.
+// Inputs: request as coarse_grid; candidates ($SCR CANDIDATES) - absent:
+// search every coarse step in the module, as search_candidates does; excluded
+// ($SCR EXCLUSIONS: INDEX, FIRST_FAILURE_JD) - the exclusions coarse_grid
+// reported for the window.
 extern "C" int refine_candidates() {
   using namespace ca_cqr;
   if (hasPending("refine_candidates"))
@@ -2602,45 +2623,50 @@ extern "C" int refine_candidates() {
   if (!tightRequest("refine_candidates", c, t))
     return 400;
   std::map<uint32_t, ExcludedObject> excluded;
-  if (auto xf = input("excluded")) {
-    auto x = reader(xf);
-    uint32_t count = 0;
-    if (!x.tag("CAX1") || !x.get(count))
-      return error("invalid-excluded", "excluded must be CAX1, u32 count, then u32 index + f64 first_failure_jd."), 400;
-    for (uint32_t k = 0; k < count; ++k) {
-      uint32_t index = 0;
-      double jd = 0;
-      if (!x.get(index) || !x.get(jd) || index >= t.refs.size() || !std::isfinite(jd))
-        return error("invalid-excluded", "An excluded entry is truncated or out of range."), 400;
-      ExcludedObject e;
-      e.index = index;
-      e.first_failure_jd = jd;
-      conjunction::StateVector state;
-      double deviation = 0;
-      e.reason = "excluded by coarse_grid";      // the source's own reason at that epoch
-      tight_sample(*t.refs[index], jd, 0.5 * c.coarse_step_sec, state, deviation, e.reason);
-      excluded[index] = e;
-    }
+  const SCR *xr = nullptr;
+  if (!scrArm("excluded", false, "invalid-excluded", "EXCLUSIONS (INDEX, FIRST_FAILURE_JD)", xr))
+    return 400;
+  if (xr) {
+    if (!xr->EXCLUSIONS())
+      return error("invalid-excluded", "excluded must be a $SCR EXCLUSIONS (INDEX, FIRST_FAILURE_JD)."), 400;
+    if (const auto *rows = xr->EXCLUSIONS()->EXCLUSIONS())
+      for (const SCRExclusion *row : *rows) {
+        const uint32_t index = row->INDEX();
+        const double jd = row->FIRST_FAILURE_JD();
+        if (index >= t.refs.size() || !std::isfinite(jd))
+          return error("invalid-excluded", "An excluded entry is out of range."), 400;
+        ExcludedObject e;
+        e.index = index;
+        e.first_failure_jd = jd;
+        conjunction::StateVector state;
+        double deviation = 0;
+        e.reason = "excluded by coarse_grid";      // the source's own reason at that epoch
+        tight_sample(*t.refs[index], jd, 0.5 * c.coarse_step_sec, state, deviation, e.reason);
+        excluded[index] = e;
+      }
   }
   std::vector<TightCandidate> candidates;
-  const auto cf = input("candidates");
-  if (cf) {
-    auto r = reader(cf);
-    uint32_t count = 0;
-    if (!r.tag("CAC1") || !r.get(count) || r.n != 8 + static_cast<size_t>(count) * 12)
-      return error("invalid-candidates", "candidates must be CAC1, u32 count, then count x (u32 obj1, u32 obj2, u32 step)."), 400;
-    candidates.resize(count);
-    for (auto &k : candidates) {
-      uint32_t step = 0;
-      r.get(k.obj1); r.get(k.obj2); r.get(step);
-      k.step = static_cast<int32_t>(step);
+  const SCR *cr = nullptr;
+  if (!scrArm("candidates", false, "invalid-candidates", "CANDIDATES (OBJECT1, OBJECT2, STEP)", cr))
+    return 400;
+  if (cr) {
+    if (!cr->CANDIDATES())
+      return error("invalid-candidates", "candidates must be a $SCR CANDIDATES (OBJECT1, OBJECT2, STEP)."), 400;
+    if (const auto *pairs = cr->CANDIDATES()->PAIRS()) {
+      candidates.resize(pairs->size());
+      for (flatbuffers::uoffset_t k = 0; k < pairs->size(); ++k) {
+        const SCRCandidatePair *p = pairs->Get(k);
+        candidates[k].obj1 = p->OBJECT1();
+        candidates[k].obj2 = p->OBJECT2();
+        candidates[k].step = static_cast<int32_t>(p->STEP());
+      }
     }
   }
   ScreeningStats stats;
   EmpiricalModel model;
   if (!empiricalModel(model))
     return 400;
-  auto events = screen_tight_candidates(t.refs, c, cf ? &candidates : nullptr, std::move(excluded), stats);
+  auto events = screen_tight_candidates(t.refs, c, cr ? &candidates : nullptr, std::move(excluded), stats);
   if (conjunction::has_error())
     return error("screening-failed", conjunction::error_message()), 422;
   std::map<int, const GPElement *> gp;

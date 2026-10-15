@@ -80,24 +80,22 @@ const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 // The representative set the REBUILD lane draws from when asked for N modules.
 // Chosen to cover the distinct compile paths rather than to be a big number:
 // a hostcall capability node, a pure-transform foundation node, a data-source
-// carrying SDS C++ bindings, and a flow node that imports a shared helper from
-// outside its own package. The last two are deliberately modules whose artifacts
-// landed at an OLDER SDK pin — a lane where every member was rebuilt yesterday
-// proves only that today equals today. Order is the priority order.
+// carrying SDS C++ bindings, and a flow node that compiles SDS headers from
+// outside its own package (flows/supplemental-omm/nodes/status; the timer and
+// Starlink provider nodes that held this place were retired with the flow's
+// typed-contracts conversion). Order is the priority order.
 const REPRESENTATIVE_MODULES = Object.freeze([
   "hostcap/storage-ingest",
   "hostcap/http-request",
-  "foundation/omm-json",
   "data-source/celestrak-parser",
-  "flows/supplemental-omm/nodes/timer",
-  "flows/supplemental-omm/nodes/providers/starlink",
+  "flows/supplemental-omm/nodes/status",
 ]);
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-// THE RAW EM++ LANE. Fourteen modules never reach the SDK compiler; they drive a
+// THE RAW EM++ LANE. Some modules never reach the SDK compiler; they drive a
 // repo-local Emscripten directly, so `generatedBy` — which describes the SDK
 // toolchain — says nothing about their bytes. Their toolchain is recorded per
 // module, at build time, in dist/build-toolchain.json (see
@@ -441,7 +439,7 @@ async function writeLedger({ superRepo, withRebuild }) {
     // spacedatastandards.org, never by argument.
     eraPinReproductions: loadLedger()?.eraPinReproductions ?? {},
     // The raw-em++ lane, which the fields above cannot describe: those record the
-    // SDK toolchain, and these fourteen modules never touch it. `unknownToolchain`
+    // SDK toolchain, and these lane modules never touch it. `unknownToolchain`
     // is a RATCHET — artifacts of a lane module that shipped before the pin
     // existed and therefore carry no build-time toolchain record. It may shrink
     // (rebuild a module under the pin and its sidecar lands) but never grow.

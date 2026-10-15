@@ -3,36 +3,35 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  inspectModule,
-  validateArtifactWithStandards,
-  validateManifestWithStandards,
-} from "space-data-module-sdk";
+import { validateArtifactWithStandards, validateManifestWithStandards } from "space-data-module-sdk/compliance";
+import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { STANDARDS_ROOT } from "./sds.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
+const manifest = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
 
-test("manifest declares the covariance analysis contract", async () => {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  const report = await validateManifestWithStandards(manifest);
+test("every port names one concrete SDS type", async () => {
+  const report = await validateManifestWithStandards(manifest, { standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
-  assert.equal(manifest.pluginId, "covariance-analysis");
-  assert.equal(manifest.runtimeTargets.includes("browser"), true);
-  assert.equal(manifest.runtimeTargets.includes("wasmedge"), true);
-  assert.equal(manifest.methods[0].methodId, "compute_covariance");
+  const [method] = manifest.methods;
+  assert.equal(method.methodId, "compute_covariance");
+  const types = (ports) => Object.fromEntries(ports.map((p) => {
+    assert.equal(p.acceptedTypeSets.length, 1);
+    assert.equal(p.acceptedTypeSets[0].allowedTypes.length, 1);
+    const [type] = p.acceptedTypeSets[0].allowedTypes;
+    assert.equal(type.acceptsAnyFlatbuffer, undefined);
+    assert.equal(type.wireFormat, "flatbuffer");
+    return [p.portId, type.fileIdentifier];
+  }));
+  assert.deepEqual(types(method.inputPorts), { covariance: "$SBC" });
+  assert.deepEqual(types(method.outputPorts), { covariance: "$OCM", diagnostics: "$SBC" });
 });
 
-test("built artifact exposes the canonical isomorphic command surface", async () => {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  const report = await validateArtifactWithStandards({
-    manifest,
-    wasmPath: fileURLToPath(WASM_PATH),
-  });
+test("the artifact passes SDK compliance and imports only WASI", async () => {
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
-
   const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
-  assert.equal(inspection.profile, "standalone");
-  assert.ok(inspection.exports.includes("_start"));
-  assert.ok(inspection.exports.includes("plugin_invoke_stream"));
   assert.ok(inspection.exports.includes("compute_covariance"));
+  assert.ok(inspection.exports.includes("plugin_invoke_stream"));
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((e) => e.module))).filter((m) => m !== "wasi_snapshot_preview1" && m !== "wasi"), []);
 });

@@ -1,22 +1,49 @@
 {
   "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
   "name": "CelesTrak Reference Nodes",
-  "version": "0.1.0",
-  "description": "Request-builder and parser flow nodes for the CelesTrak reference lanes: gp_groups turns a timer tick into one hostcap/http-request frame per GP group query (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries, overridable via node CONFIG celestrak_gp_groups) and ONE job frame carrying the ordered group list; parse_gp_groups pairs the responses with that list by ordinal and emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group, with the concatenated payloads as the raw archive and an 'unchanged' frame for groups that answered 304. satcat_reference emits the launch-site and owner/source table fetches; parse_satcat_reference reads those HTML tables into $SIT rows (launch sites) and $LCC rows (legacy owner codes, matched strictly against the generated enum; unknown codes become provenance warnings and are skipped). Every job carries origin_id celestrak.org, origin_name CelesTrak, dataset_id and the licence terms (node CONFIG celestrak_license / celestrak_license_url / celestrak_citation override the defaults), and every ingest meta carries the same attribution plus the wasm-authored provenance JSON. The job is one frame for all groups because the compiled flow runtime hands a node at most 64 frames per invocation; the group list is capped at 63 for the same reason. No capabilities: plugin.getConfig is a builtin and this module performs no I/O of its own.",
+  "version": "0.2.0",
+  "description": "Request-builder and parser flow nodes for the CelesTrak reference lanes (typed contracts 1.0: FlatBuffers only, no JSON and no base64). gp_groups turns a TimerTick into one HttpRequest per GP group query (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries, overridable via node CONFIG celestrak_gp_groups, at most 63), each carrying its job in CONTEXT; parse_gp_groups pairs the groups' HttpResponses with the group plan by the job each carries (any order), resolving the plan from its own node CONFIG exactly as gp_groups does, refuses a partial or foreign set (group-count-mismatch, group-url-mismatch) and emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group in plan order, with the concatenated payloads as the raw archive (one HttpResponse naming the elements index) and a FlowNotice Unchanged for groups that answered 304. satcat_reference emits the launch-site and owner/source table fetches; parse_satcat_reference reads those HTML tables into $SIT rows (launch sites) or $LCC rows (legacy owner codes, matched strictly against the generated enum; unknown codes become provenance warnings and are skipped), deciding by the job's DATASET_ID. JOB STATE TRAVELS AS HttpRequest.CONTEXT: one size-prefixed $ICN (Ingest Connector) record naming the lane - CONNECTOR_ID (the source name; a GP group: celestrak-gp-groups/<TOKEN>), ENDPOINT_URL, TARGET_SCHEMA, EMITS_SCHEMAS, ORIGIN_ID celestrak.org, ORIGIN_NAME CelesTrak, DATASET_ID, PROVIDER_ID, SOURCE_NAME and the usage terms LICENSE / LICENSE_URL / CITATION (node CONFIG celestrak_provider_id / celestrak_license / celestrak_license_url / celestrak_citation override the defaults) - echoed by hostcap/http-request. Every ingest meta is an IngestRequest (SourceTags attribution, RECONCILE, ARCHIVE celestrak/<the lane's archive name, keyed by DATASET_ID>, PROVENANCE); TAGS.LICENSE is an SPDX identifier, so prose terms are named LicenseRef-CelesTrak-Usage-Policy there (the verbatim text stays in the job and in each $EGP's PROVENANCE.LICENSE). Node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig FlatBuffer). No capabilities: plugin.getConfig is a builtin and this module performs no I/O of its own.",
   "pluginFamily": "data_source",
   "capabilities": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Every method is a single pass over the frames of one invocation: the request builders read the node config once and emit request and job frames; the parsers decode each response once into records. There is no shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across group queries is the flow's, through the http connector node. This guest can never spawn a thread, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Every method is a single pass over the frames of one invocation: the request builders read the node config once and emit request frames; the parsers decode each response once into records. There is no shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across group queries is the flow's, through the http connector node. This guest can never spawn a thread, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "schemasUsed": [
-    { "schemaName": "EGP.fbs", "fileIdentifier": "$EGP", "rootTypeName": "EGP" },
-    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
-    { "schemaName": "SIT.fbs", "fileIdentifier": "$SIT", "rootTypeName": "SIT" },
-    { "schemaName": "LCC.fbs", "fileIdentifier": "$LCC", "rootTypeName": "LCC" }
+    {
+      "schemaName": "ICN.fbs",
+      "fileIdentifier": "$ICN",
+      "rootTypeName": "ICN"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC"
+    }
   ],
   "methods": [
     {
@@ -27,14 +54,16 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
-              }
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK) from the flow's timer trigger; its fields are not read."
             }
           ],
           "minStreams": 1,
@@ -48,86 +77,52 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\",\"maxBytes\":8388608}, one frame per GP group query in list order.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request request descriptor ({method,url,timeoutMs,maxBytes}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
-              }
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (module-sdk runtime type HREQ) for hostcap/http-request: GET, TIMEOUT_MS celestrak_http_timeout_ms (90000), MAX_BYTES the lane budget, CONTEXT the job - ONE size-prefixed $ICN record (CONNECTOR_ID, KIND HttpsPull, HTTP_METHOD GET, ENDPOINT_URL, TARGET_SCHEMA, EMITS_SCHEMAS, POST_INGEST_ACTION Archive, ORIGIN_ID celestrak.org, ORIGIN_NAME CelesTrak, DATASET_ID, PROVIDER_ID, SOURCE_NAME, LICENSE, LICENSE_URL, CITATION)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 64,
           "required": true,
-          "description": "One GP group query request per group."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "celestrak-gp-groups-job-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON: the shared CelesTrak job fields (source_url, source_name, provider_id, archive_source, archive_name, origin_id, origin_name, dataset_id, license, license_url, citation) plus group_count and groups:[{token, kind, label, url}] in request order.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution and the ordered GP group list consumed by this module's parser sibling inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The ordered group list and lane attribution for the parser."
+          "description": "One GP group query request per group, each carrying its job."
         }
       ],
       "maxBatch": 64,
       "drainPolicy": "single-shot",
-      "description": "Emits one request frame per GP group (default: the 47 GROUP tokens and 2 SPECIAL tokens listed on the CelesTrak elements index; node CONFIG celestrak_gp_groups, a comma list, overrides) and one job frame carrying the same list in the same order. A second tick in one invocation is refused (batched-input-frames)."
+      "description": "TimerTick -> one HttpRequest per GP group (default: the 47 GROUP tokens and 2 SPECIAL tokens listed on the CelesTrak elements index; node CONFIG celestrak_gp_groups, a comma list, overrides; at most 63), each GET with MAX_BYTES 8388608 and its own $ICN job in CONTEXT (CONNECTOR_ID celestrak-gp-groups/<TOKEN>, ENDPOINT_URL the group query URL, SOURCE_NAME celestrak-gp-groups, DATASET_ID gp-groups, TARGET_SCHEMA EGP.fbs). A second tick in one invocation is refused (batched-input-frames)."
     },
     {
       "methodId": "parse_gp_groups",
       "displayName": "Parse CelesTrak GP groups into Entity Groups",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "celestrak-gp-groups-job-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "The gp_groups job JSON with the ordered groups[] list.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution and the ordered GP group list emitted by this module's gp_groups node inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Group list and attribution from gp_groups."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON from hostcap/http-request: {\"status\",\"headers\",\"bodyB64\"}, one per group in request order.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
-              }
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (module-sdk runtime type HRSP) from hostcap/http-request: STATUS, HEADERS (lower-cased: etag, last-modified, content-type, date), BODY verbatim, CONTEXT the $ICN job the request carried."
             }
           ],
           "minStreams": 1,
           "maxStreams": 64,
           "required": true,
-          "description": "One HTTP response per group query, in request order."
+          "description": "One HTTP response per group query, in any order (paired by CONTEXT)."
         }
       ],
       "outputPorts": [
@@ -135,30 +130,37 @@
           "portId": "egp_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the EGP batch (batch_id = sha256 of the concatenated group payloads; reconcile 'current' for a complete snapshot, 'duplicates' when some groups were unchanged).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, origin, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA, TAGS (PROVIDER_ID, SOURCE_NAME, BATCH_ID sha256, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER source:celestrak, LICENSE identifier, LICENSE_URL, CITATION), RECONCILE, ARCHIVE (celestrak / the lane's archive name), PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "EGP ingest meta."
+          "description": "EGP ingest request (archive naming + provenance)."
         },
         {
           "portId": "egp_records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-egp-record-stream",
+              "setId": "sds-egp",
               "allowedTypes": [
-                { "schemaName": "EGP.fbs", "fileIdentifier": "$EGP", "rootTypeName": "EGP", "wireFormat": "flatbuffer" }
+                {
+                  "schemaName": "EGP.fbs",
+                  "fileIdentifier": "$EGP",
+                  "rootTypeName": "EGP",
+                  "wireFormat": "flatbuffer"
+                }
               ],
-              "description": "Size-prefixed $EGP FlatBuffer record stream, one record per group."
+              "description": "Size-prefixed $EGP record stream."
             }
           ],
           "minStreams": 0,
@@ -170,68 +172,79 @@
           "portId": "raw",
           "acceptedTypeSets": [
             {
-              "setId": "celestrak-gp-group-csv",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "The concatenated group payload bytes in list order (the bytes the batch id hashes), for raw archiving.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/csv",
-                "detail": "The verbatim GP group CSV payloads as fetched, concatenated in list order and archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
-              }
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) the batch was made from, for hostcap/storage-ingest's optional raw port (archived under the meta's ARCHIVE naming)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Raw fetched payloads."
+          "description": "The concatenated group payloads as one HttpResponse (URL the elements index, STATUS 200)."
         },
         {
           "portId": "unchanged",
           "acceptedTypeSets": [
             {
-              "setId": "celestrak-unchanged-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\",\"origin_id\",\"groups\":[tokens],\"changed_count\"} when at least one group answered Not Modified.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Not-Modified notice delivered to the flow's egress sink so an operator can see which groups were unchanged this cycle; flow bookkeeping, never persisted as a record."
-              }
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (module-sdk runtime type FNTC) KIND Unchanged, REASON not-modified: the source answered HTTP 304; nothing is stored."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Not-Modified notice."
+          "description": "Not-Modified notice: COUNT and ITEMS the groups that answered 304."
         },
         {
           "portId": "omm_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the optional OMM re-emission (node CONFIG celestrak_gp_groups_emit_omm=true; reconcile 'duplicates').",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta for the optional OMM batch (schema, provider/source/url/batch attribution, reconcile mode, origin, licence and citation) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA, TAGS (PROVIDER_ID, SOURCE_NAME, BATCH_ID sha256, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER source:celestrak, LICENSE identifier, LICENSE_URL, CITATION), RECONCILE, ARCHIVE (celestrak / the lane's archive name), PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional OMM ingest meta."
+          "description": "Optional OMM ingest request."
         },
         {
           "portId": "omm_records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-omm-record-stream",
+              "setId": "sds-omm",
               "allowedTypes": [
-                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM", "wireFormat": "flatbuffer" }
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
               ],
-              "description": "Size-prefixed $OMM FlatBuffer record stream built from the group rows (deduplicated by NORAD id and epoch across groups)."
+              "description": "Size-prefixed $OMM record stream."
             }
           ],
           "minStreams": 0,
@@ -242,7 +255,7 @@
       ],
       "maxBatch": 64,
       "drainPolicy": "single-shot",
-      "description": "Reads the single job frame and every response frame; response ordinal i is group i of the job list. The batch is refused (group-count-mismatch) when the counts differ and (group-url-mismatch) when a response names a different request URL. A group answering 304 is reported on 'unchanged'; any other non-200 status fails the batch, matching the CelesTrak usage policy. Each $EGP carries GROUP_ID celestrak.org/gp/<token>, sorted and deduplicated TAGS, QUERY_SNAPSHOT membership with one member per OMM row ($OMM, OBJECT_ID, NORAD_CAT_ID), the query URL, and provenance with the group payload's sha256 and the licence terms."
+      "description": "The groups' HttpResponses -> one $EGP per group. Each response names its group by its $ICN job's CONNECTOR_ID (celestrak-gp-groups/<TOKEN>); the group plan is resolved from node CONFIG (celestrak_gp_groups) exactly as gp_groups resolves it. The batch is refused (group-count-mismatch) unless exactly one response per planned group arrived and (group-url-mismatch) for a group outside the plan or a URL other than the plan's; a response without an $ICN job is refused (missing-context). A group answering 304 is reported on 'unchanged'; any other non-200 status fails the batch, matching the CelesTrak usage policy. Records, the batch id (sha256 of the concatenated payloads) and the raw archive follow plan order. Each $EGP carries GROUP_ID celestrak.org/gp/<token>, sorted and deduplicated TAGS, QUERY_SNAPSHOT membership with one member per OMM row ($OMM, OBJECT_ID, NORAD_CAT_ID), the query URL, and provenance with the group payload's sha256 and the licence terms. Reconcile Current for a complete snapshot, Duplicates when some groups answered 304. node CONFIG celestrak_gp_groups_emit_omm re-emits the group rows as $OMM."
     },
     {
       "methodId": "satcat_reference",
@@ -252,14 +265,16 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Timer tick frame (content ignored).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
-              }
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK) from the flow's timer trigger; its fields are not read."
             }
           ],
           "minStreams": 1,
@@ -273,124 +288,73 @@
           "portId": "request_sites",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON for hostcap/http-request: the launch-site table page (maxBytes 2097152).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request request descriptor ({method,url,timeoutMs,maxBytes}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
-              }
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (module-sdk runtime type HREQ) for hostcap/http-request: GET, TIMEOUT_MS celestrak_http_timeout_ms (90000), MAX_BYTES the lane budget, CONTEXT the job - ONE size-prefixed $ICN record (CONNECTOR_ID, KIND HttpsPull, HTTP_METHOD GET, ENDPOINT_URL, TARGET_SCHEMA, EMITS_SCHEMAS, POST_INGEST_ACTION Archive, ORIGIN_ID celestrak.org, ORIGIN_NAME CelesTrak, DATASET_ID, PROVIDER_ID, SOURCE_NAME, LICENSE, LICENSE_URL, CITATION)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Launch-site table request."
-        },
-        {
-          "portId": "job_sites",
-          "acceptedTypeSets": [
-            {
-              "setId": "celestrak-reference-job-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON job for the launch-site lane (dataset_id satcat-launch-sites, source_name celestrak-satcat-launch-sites).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution (source, archive naming, origin, dataset, licence) consumed by this module's parser sibling inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Launch-site lane attribution."
+          "description": "Launch-site table request (job: celestrak-satcat-launch-sites)."
         },
         {
           "portId": "request_owners",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON for hostcap/http-request: the owner/source table page (maxBytes 2097152).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request request descriptor ({method,url,timeoutMs,maxBytes}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
-              }
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (module-sdk runtime type HREQ) for hostcap/http-request: GET, TIMEOUT_MS celestrak_http_timeout_ms (90000), MAX_BYTES the lane budget, CONTEXT the job - ONE size-prefixed $ICN record (CONNECTOR_ID, KIND HttpsPull, HTTP_METHOD GET, ENDPOINT_URL, TARGET_SCHEMA, EMITS_SCHEMAS, POST_INGEST_ACTION Archive, ORIGIN_ID celestrak.org, ORIGIN_NAME CelesTrak, DATASET_ID, PROVIDER_ID, SOURCE_NAME, LICENSE, LICENSE_URL, CITATION)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Owner table request."
-        },
-        {
-          "portId": "job_owners",
-          "acceptedTypeSets": [
-            {
-              "setId": "celestrak-reference-job-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON job for the owner lane (dataset_id satcat-owners, source_name celestrak-satcat-owners).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution (source, archive naming, origin, dataset, licence) consumed by this module's parser sibling inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Owner lane attribution."
+          "description": "Owner table request (job: celestrak-satcat-owners)."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Emits the launch-site and owner/source table fetches (node CONFIG celestrak_satcat_launchsites_url / celestrak_satcat_sources_url override the page URLs) with their job frames. A second tick in one invocation is refused (batched-input-frames)."
+      "description": "TimerTick -> the launch-site and owner/source table fetches (node CONFIG celestrak_satcat_launchsites_url / celestrak_satcat_sources_url override the page URLs), each GET with MAX_BYTES 2097152 and its $ICN job in CONTEXT (DATASET_ID satcat-launch-sites / satcat-owners). A second tick in one invocation is refused (batched-input-frames)."
     },
     {
       "methodId": "parse_satcat_reference",
       "displayName": "Parse CelesTrak SATCAT reference tables",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "celestrak-reference-job-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "The satcat_reference job JSON; dataset_id selects the table kind.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Fetch-job attribution emitted by this module's satcat_reference node inside the same flow; ingest bookkeeping, never persisted as a record."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Lane attribution from satcat_reference."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON from hostcap/http-request carrying the HTML page.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
-              }
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (module-sdk runtime type HRSP) from hostcap/http-request: STATUS, HEADERS (lower-cased: etag, last-modified, content-type, date), BODY verbatim, CONTEXT the $ICN job the request carried."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The HTTP response carrying the reference table."
+          "description": "The HTTP response carrying the reference table and its job."
         }
       ],
       "outputPorts": [
@@ -398,30 +362,37 @@
           "portId": "sit_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the SIT batch (reconcile 'current').",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, origin, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA, TAGS (PROVIDER_ID, SOURCE_NAME, BATCH_ID sha256, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER source:celestrak, LICENSE identifier, LICENSE_URL, CITATION), RECONCILE, ARCHIVE (celestrak / the lane's archive name), PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "SIT ingest meta (launch-site lane)."
+          "description": "SIT ingest request (launch-site lane)."
         },
         {
           "portId": "sit_records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-sit-record-stream",
+              "setId": "sds-sit",
               "allowedTypes": [
-                { "schemaName": "SIT.fbs", "fileIdentifier": "$SIT", "rootTypeName": "SIT", "wireFormat": "flatbuffer" }
+                {
+                  "schemaName": "SIT.fbs",
+                  "fileIdentifier": "$SIT",
+                  "rootTypeName": "SIT",
+                  "wireFormat": "flatbuffer"
+                }
               ],
-              "description": "Size-prefixed $SIT FlatBuffer record stream, one per launch-site code."
+              "description": "Size-prefixed $SIT record stream."
             }
           ],
           "minStreams": 0,
@@ -433,30 +404,37 @@
           "portId": "lcc_meta",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-ingest-meta-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON storage.ingest_with_source meta for the LCC batch (reconcile 'current').",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, origin, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
-              }
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (module-sdk runtime type INGQ) for hostcap/storage-ingest: SCHEMA, TAGS (PROVIDER_ID, SOURCE_NAME, BATCH_ID sha256, SOURCE_URL, CONTENT_KEY_ID public, SOURCE_PEER source:celestrak, LICENSE identifier, LICENSE_URL, CITATION), RECONCILE, ARCHIVE (celestrak / the lane's archive name), PROVENANCE."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "LCC ingest meta (owner lane)."
+          "description": "LCC ingest request (owner lane)."
         },
         {
           "portId": "lcc_records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-lcc-record-stream",
+              "setId": "sds-lcc",
               "allowedTypes": [
-                { "schemaName": "LCC.fbs", "fileIdentifier": "$LCC", "rootTypeName": "LCC", "wireFormat": "flatbuffer" }
+                {
+                  "schemaName": "LCC.fbs",
+                  "fileIdentifier": "$LCC",
+                  "rootTypeName": "LCC",
+                  "wireFormat": "flatbuffer"
+                }
               ],
-              "description": "Size-prefixed $LCC FlatBuffer record stream, one per owner code present in the generated enum."
+              "description": "Size-prefixed $LCC record stream."
             }
           ],
           "minStreams": 0,
@@ -468,33 +446,37 @@
           "portId": "raw",
           "acceptedTypeSets": [
             {
-              "setId": "celestrak-reference-html",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "The fetched HTML page bytes (for raw archiving).",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/html",
-                "detail": "The verbatim reference-table HTML page as fetched, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
-              }
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) the batch was made from, for hostcap/storage-ingest's optional raw port (archived under the meta's ARCHIVE naming)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Raw fetched payload."
+          "description": "The HttpResponse the batch was made from, verbatim."
         },
         {
           "portId": "unchanged",
           "acceptedTypeSets": [
             {
-              "setId": "celestrak-unchanged-json",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\",\"origin_id\"} when the page answered Not Modified.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Not-Modified notice delivered to the flow's egress sink so an operator can see that the page was unchanged this cycle; flow bookkeeping, never persisted as a record."
-              }
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (module-sdk runtime type FNTC) KIND Unchanged, REASON not-modified: the source answered HTTP 304; nothing is stored."
             }
           ],
           "minStreams": 0,
@@ -505,7 +487,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Scans the page's first HTML table (tags stripped, entities decoded) and emits $SIT rows (ID and ABBREVIATION = the code, NAME and DESCRIPTION = the table description, SITE_TYPE LAUNCH_SITE, SOURCE CelesTrak) for dataset satcat-launch-sites, or $LCC rows (OWNER matched exactly against the generated legacyCountryCode labels, NAME/DESCRIPTION, ACTIVE, SOURCE_URL, RETRIEVED_AT from the response Date header) for dataset satcat-owners. An owner code absent from the enum is recorded as a provenance warning and skipped, never remapped. Every input port is single-stream; a surplus is refused (batched-input-frames)."
+      "description": "HttpResponse -> scans the page's first HTML table (tags stripped, entities decoded) and emits $SIT rows (ID and ABBREVIATION = the code, NAME and DESCRIPTION = the table description, SITE_TYPE LAUNCH_SITE, SOURCE CelesTrak) when the $ICN job's DATASET_ID is satcat-launch-sites, or $LCC rows (OWNER matched exactly against the generated legacyCountryCode labels, NAME/DESCRIPTION, ACTIVE, SOURCE_URL, RETRIEVED_AT from the response Date header) when it is satcat-owners; any other dataset is refused (unknown-reference-dataset). An owner code absent from the enum is recorded as a provenance warning and skipped, never remapped. 304 emits only a FlowNotice on 'unchanged'. The input port is single-stream; a surplus is refused (batched-input-frames)."
     }
   ],
   "buildArtifacts": [

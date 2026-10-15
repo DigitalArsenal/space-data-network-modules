@@ -38,6 +38,7 @@ import {
   createStandaloneHarnessOrSkip,
 } from "space-data-module-sdk/testing/isomorphic";
 
+import { probeOperation } from "./mpl_client.mjs";
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const IZZO_PATH = new URL("../../lambert-izzo/dist/isomorphic/module.wasm", import.meta.url);
 
@@ -54,18 +55,8 @@ const norm = (v) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
 
 /** One `solveLambert` call, returning the structured body whatever the status. */
 async function solveOurs(harness, params) {
-  const raw = await harness.invoke({
-    methodId: "invoke",
-    inputs: [{
-      portId: "request",
-      payload: Buffer.from(JSON.stringify({ operation: "solveLambert", params }), "utf8"),
-    }],
-  });
-  const frame = raw.outputs?.find((entry) => entry.portId === "response");
-  return {
-    statusCode: raw.statusCode,
-    body: frame ? JSON.parse(new TextDecoder().decode(frame.payload)) : null,
-  };
+  const outcome = await probeOperation(harness, { operation: "solveLambert", params });
+  return { statusCode: outcome.statusCode, body: outcome.body };
 }
 
 /** One `solve_lambert` call on the Izzo module, over the canonical $LMS/$LMO records. */

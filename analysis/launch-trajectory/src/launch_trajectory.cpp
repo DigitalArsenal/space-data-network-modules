@@ -33,7 +33,6 @@
 // state is for whichever propagator the caller composes next.
 
 namespace {
-using Json = nlohmann::json;
 using Vec3 = std::array<double, 3>;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg = kPi / 180.0;
@@ -786,23 +785,6 @@ std::vector<std::string> commonAssumptions() {
   };
 }
 
-Json insertionJson(const InsertionResult& ins, double liftoff) {
-  if (!ins.present) return nullptr;
-  return Json{{"epoch", isoMs(liftoff + ins.state.t)}, {"time_from_launch_s", ins.state.t},
-    {"inclination_deg", ins.el.inc}, {"raan_deg", ins.el.raan}, {"argument_of_latitude_deg", ins.el.argLat},
-    {"periapsis_altitude_km", ins.el.peri / 1000.0}, {"apoapsis_altitude_km", std::isfinite(ins.el.apo) ? Json(ins.el.apo / 1000.0) : Json(nullptr)},
-    {"raan_sigma_deg", ins.raanSigma}, {"argument_of_latitude_sigma_deg", ins.argLatSigma}};
-}
-
-Json lastSampleJson(const Output& out) {
-  const size_t i = out.t.size() - 1;
-  const auto num = [](double x) { return std::isfinite(x) ? Json(x) : Json(nullptr); };
-  return Json{{"time_from_launch_s", out.t[i]}, {"latitude_deg", out.lat[i]}, {"longitude_deg", out.lon[i]},
-    {"altitude_km", out.alt[i] / 1000.0}, {"downrange_km", out.downrange[i] / 1000.0}, {"speed_m_s", out.speed[i]},
-    {"iip_latitude_deg", num(out.iipLat[i])}, {"iip_longitude_deg", num(out.iipLon[i])},
-    {"periapsis_altitude_km", num(out.peri[i] / 1000.0)}, {"apoapsis_altitude_km", num(out.apo[i] / 1000.0)}};
-}
-
 bool readLam(const char* port, const LAM*& lam) {
   NEED(plugin_get_input_count() == 1, "Exactly one $LAM frame is required.");
   const auto* frame = plugin_get_input_frame(0);
@@ -834,7 +816,7 @@ bool passOf(const lamTargetOrbit* target, bool& northbound) {
 }
 
 // ── track_ascent ─────────────────────────────────────────────────────────────
-bool track(const LAM* lam, Builder& b, std::string& report) {
+bool track(const LAM* lam, Builder& b) {
   double liftoff;
   if (!liftoffOf(lam, liftoff)) return false;
   bool inertial, northbound;
@@ -931,10 +913,6 @@ bool track(const LAM* lam, Builder& b, std::string& report) {
     assumptions.push_back("No cutoff yet: the azimuth puts an orbital-speed vehicle at the latest sample into the target plane.");
   }
   writeLam(b, lam, A, out, ins, lamTrajectorySource::TELEMETRY, phase, {}, assumptions, events);
-  Json j{{"method", "track_ascent"}, {"launch_epoch", isoMs(liftoff)}, {"samples", out.t.size()},
-    {"azimuth_deg", wrap360(beta / kDeg)}, {"phase", ins.present ? "orbit-insertion" : (phase == lamMissionPhase::UPPER_STAGE ? "upper-stage" : "boost")},
-    {"cutoff_s", ins.present ? Json(cutoff) : Json(nullptr)}, {"insertion", insertionJson(ins, liftoff)}, {"last", lastSampleJson(out)}};
-  report = j.dump();
   return true;
 }
 
@@ -1022,7 +1000,7 @@ double referenceCutoff(const LAM* lam, const Samples& s) {
   return s.t[size_t(std::max_element(s.v.begin(), s.v.end()) - s.v.begin())];
 }
 
-bool project(const LAM* lam, Builder& b, std::string& report) {
+bool project(const LAM* lam, Builder& b) {
   const lamTargetOrbit* target = lam->TARGET_ORBIT();
   bool inertial, northbound;
   if (!speedReference(lam, inertial) || !passOf(target, northbound)) return false;
@@ -1166,23 +1144,10 @@ bool project(const LAM* lam, Builder& b, std::string& report) {
   if (rendezvous) assumptions.push_back("Inclination and plane from PLANE_REFERENCE at insertion; IN_PLANE_LIFTOFF_EPOCHS joins that plane.");
   writeLam(b, lam, A, out, ins, lamTrajectorySource::PROJECTED, lamMissionPhase::PRELAUNCH, inPlane, assumptions, events);
 
-  Json j{{"method", "project_insertion"}, {"launch_epoch", isoMs(liftoff)}, {"samples", out.t.size()},
-    {"azimuth_deg", wrap360(beta / kDeg)}, {"reference_cutoff_s", refCutoff}, {"insertion", insertionJson(ins, liftoff)},
-    {"in_plane_liftoffs", inPlane}};
-  if (rendezvous) {
-    double pinc, praan;
-    if (planeAt(plane, liftoff + tIns, pinc, praan)) j["plane_offset_deg"] = wrap180(ins.el.raan - praan);
-    Json inside = Json::array();
-    for (double t : inPlaneTimes) if (std::isfinite(windowOpen) && t >= windowOpen - 1e-3 && t <= windowClose + 1e-3) inside.push_back(isoMs(t));
-    j["in_plane_liftoffs_in_window"] = inside;
-  }
-  report = j.dump();
   return true;
 }
 
-int emit(const char* port, Builder& b, const std::string& report) {
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-        reinterpret_cast<const uint8_t*>(report.data()), report.size()) < 0) return 1;
+int emit(const char* port, Builder& b) {
   return plugin_push_output_ex(port, "LAM.fbs", "$LAM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "LAM", 0, 0,
     b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
 }
@@ -1192,16 +1157,14 @@ extern "C" int track_ascent() {
   const LAM* lam = nullptr;
   if (!readLam("telemetry", lam)) return fail(error);
   Builder b(1 << 16);
-  std::string report;
-  if (!track(lam, b, report)) return fail(error);
-  return emit("trajectory", b, report);
+  if (!track(lam, b)) return fail(error);
+  return emit("trajectory", b);
 }
 
 extern "C" int project_insertion() {
   const LAM* lam = nullptr;
   if (!readLam("request", lam)) return fail(error);
   Builder b(1 << 16);
-  std::string report;
-  if (!project(lam, b, report)) return fail(error);
-  return emit("projection", b, report);
+  if (!project(lam, b)) return fail(error);
+  return emit("projection", b);
 }

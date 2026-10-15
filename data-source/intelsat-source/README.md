@@ -1,26 +1,26 @@
 # Intelsat (public ephemeris) Data Source (A2.2c-2)
 
-A Tier-1 `data_source` adapter on the shared provider template
-(`common/provider_source.hpp`). On a TIMERS-driven `pull` it discovers the newest
-**ECF** ephemeris for a target satellite from the unauthenticated MyIntelsat
-public ephemeris page, fetches it, and re-emits it as a schema-exact SDS **OEM**
-record with the frame **preserved as declared**, then stores it, signs its
-content id, and publishes a schema-exact **PNM** pointer.
+Typed contracts 1.0 (FlatBuffers only, no JSON, no base64). The module fetches and stores nothing itself: it is a
+pure request-and-parse node beside `hostcap/http-request`, and its `$OEM` output is consumed in memory by
+`analysis/od` (`fit`), never stored, signed or published.
 
-## Pull flow (`src/intelsat_source.cpp`)
+## Flow (`src/intelsat_source.cpp`)
 
-1. **Discover** — GET the listing page
-   (`https://my.intelsat.com/ephemeris/public`, unauthenticated HTML). The file
-   dropdowns' `<option value="…">` are the bare ephemeris filenames. The adapter
-   selects the **newest ECF** file for the target satellite (filename contains
-   both `_<sat>_` and the ECF category token `_e_`; newest = lexically-max
-   filename, whose `YYYYMMDD_HHMMSS` sorts chronologically).
-2. **Fetch** — GET the selected file at
-   `https://my.intelsat.com/Resource/Ephemeris/<name>.txt` (`text/plain`).
-3. **Parse** — the ECF header + the position table (UTC + X/Y/Z metres).
-4. **Canonical record** — a schema-exact SDS OEM, `storage.write` under schema
-   `OEM`, `keyslot.sign` its CID, `pubsub.publish` a PNM on
-   `sdn/data-source/intelsat`.
+| Method | In | Out |
+| --- | --- | --- |
+| `request` | `tick`: `TimerTick` (TICK; fields not read) | `request`: one GET `HttpRequest` (HREQ) for the public MyIntelsat ephemeris listing |
+| `select_file` | `listing`: the listing's `HttpResponse` (HRSP) | `request`: one GET `HttpRequest` for the newest file of the target |
+| `emit` | `response`: the file's `HttpResponse` (HRSP) | `oem`: one $OEM (position-only, ECEF/UTC as declared, metres to km, NORAD 0) |
+
+Node config through `plugin.getConfig` (sdm_piv, one `ModuleConfig` read in place; the module's only hostcall):
+`listingUrl`, `ephemerisBase`, `target`. Capabilities: none. A transport error, a status other than 200, an empty body, a listing without the target's file
+or a file with nothing fittable fails closed (`fetch-failed` / `fetch-empty`); nothing partial is emitted. The flow's
+trigger sets the cadence (the former module timer's cadence is noted in the manifest).
+
+The former `pull` method (JSON hostcalls; it declared a signed `$PNM` output but only ever returned the in-memory `$OEM`
+stream) and the hand-built guest-link (`guest-link/emit_entry.cpp`, `manifest.js`) are gone: the SDK compiler builds the
+module and its guest-link object (`dist/guest-link/`). `test/module.test.mjs` runs the methods in the SDK browser harness
+on the fixtures and checks the `$OEM` bytes against the legacy artifact's (`test/fixtures/legacy/oem-stream.bin`).
 
 ## Which Intelsat product? ECF (state vectors), not 11-Parameter
 
@@ -91,8 +91,8 @@ its own portal access.
 
 ## Fetch politeness / cadence math
 
-- One listing page + one ECF file per pull (ECF ≈ 32 KB; listing ≈ 79 KB).
-- **Cadence** — `pull` every **24h** (daily). Intelsat regenerates the public
+- One listing page + one ECF file per run (ECF ≈ 32 KB; listing ≈ 79 KB).
+- **Cadence** — a run (flow trigger) every **24h** (daily). Intelsat regenerates the public
   ephemeris **weekly** (Thu/Fri, epochs Sat/Sun, 7-day validity) plus 1–3
   maneuver messages/month, so a daily poll catches every weekly refresh with
   margin. Configurable via `{"listingUrl":…,"ephemerisBase":…,"target":…}`.
@@ -100,35 +100,18 @@ its own portal access.
   (text/html, unauthenticated, Microsoft-IIS). Intelsat is reachable from this
   env (CelesTrak is not).
 
-## PNM / provenance
-
-- `FILE_ID` = `intelsat:OEM:<sat>:<START_TIME>` (`<sat>` = the filename short name,
-  e.g. `is-21` — the ECF has no NORAD to key on). Published message =
-  `{"PNM":{…}, "provenance":{…}}`; provenance carries `SOURCE_NAME` `intelsat`,
-  `DATA_SOURCE` `Intelsat-11P`, `RECORD_SCHEMA` `OEM`, `NORAD_CAT_ID:0`,
-  `OBJECT_ID:""`, `OBJECT_NAME`, `INTELSAT_SAT`/`INTELSAT_REGION`/
-  `INTELSAT_LONGITUDE_DEG_E`/`INTELSAT_HEADER`, `REFERENCE_FRAME:"ECEF"`,
-  `SOURCE_UNITS`/`RECORD_UNITS`, `HAS_VELOCITY:false`, `PRODUCT_KIND:"ephemeris"`,
-  `START_TIME`/`STOP_TIME`, `ROW_COUNT`.
-
 ## Build & test
 
 ```
-SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org checkout>
+node build.mjs
 node --test test/*.test.mjs
 ```
 
-`test/module.test.mjs` drives the rebuilt WASM with a mock
-`space_data_module_host` bridge serving a real MyIntelsat listing page + the
-trimmed real IS-21 ECF fixture, and asserts: listing discovery → newest-ECF
-selection (category + date filtered), ECF parse → position-only OEM with
-schema-exact keys, `REFERENCE_FRAME = ECEF` (not transformed),
-`STATE_VECTOR_SIZE = 3` with no fabricated velocity keys, metres→km, honest
-`NORAD_CAT_ID:0`/`OBJECT_ID:""` with real `OBJECT_NAME`, signed PNM structure,
-provenance `SOURCE_SHA256` binding, `target` override, and fail-closed on
-failed-listing / 404-file / malformed-ECF. No live network is touched.
-
-Test result: **10/10 pass** against the rebuilt artifact.
+`build.mjs` compiles through the SDK (`scripts/lib/build-source-module.mjs`: the SDS `$OEM` headers generated for the
+build, `common/oem_fb_builder.hpp`, this module's source). The test drives the methods in the SDK browser harness with
+the node config on `plugin.getConfig`, hands the fixtures back as `HttpResponse`s, compares the `$OEM` bytes with the
+legacy artifact's and checks the config overrides and the fail-closed cases. No live network is touched.
 
 ## Residuals (handoff)
 
@@ -150,5 +133,4 @@ Test result: **10/10 pass** against the rebuilt artifact.
 - **Discovery HTML dependency.** Selection parses the listing page's
   `<option value>` filenames; a page-structure change would need the extractor
   updated (it scans for `_<sat>_` + `_e_` filename tokens).
-- **Binary FlatBuffer / ingest lane / OD consumption** — same A2.2c/A2.3
-  residuals as the Starlink/ISS adapters.
+- **Resolved by typed contracts 1.0:** the module emits `$OEM` FlatBuffers that `analysis/od` reads in memory; no JSON record is built.

@@ -1,5 +1,5 @@
 // Covariance realism by data source (orbit-accuracy-experiments E14). Built in one translation unit after
-// gp_error_model.cpp, common_epoch.cpp and state_transition.cpp, whose JSON frames, element loading, regime rule,
+// gp_error_model.cpp, common_epoch.cpp and state_transition.cpp, whose working values ($ERM records at the ports, src/erm_bridge.cpp), element loading, regime rule,
 // RTN axes, positive-definite test and 6x6 algebra it uses. Units are SI throughout (m, m/s; m^2, m^2/s, m^2/s^2)
 // unless a field says otherwise.
 //
@@ -214,7 +214,7 @@ std::string interpolate_side(const nlohmann::json& side, nlohmann::json* out) {
 extern "C" int pair_statistics() {
   using namespace covreal;
   const nlohmann::json in = json_input("pairs");
-  if (!in.is_object() || !in.contains("pairs") || !in["pairs"].is_array()) return fail("invalid-pairs", "pairs must be JSON {pairs: [...]}.");
+  if (!in.is_object() || !in.contains("pairs") || !in["pairs"].is_array()) return fail("invalid-pairs", "pairs must be an $ERM PAIR_STATISTICS record with PAIRS.");
   const std::string axes_from = in.value("axesFrom", std::string("predicted"));
   if (axes_from != "predicted" && axes_from != "truth") return fail("invalid-pairs", "axesFrom is predicted or truth.");
   nlohmann::json rows = nlohmann::json::array();
@@ -331,9 +331,9 @@ extern "C" int pair_statistics() {
 extern "C" int fit_calibration() {
   using namespace covreal;
   const nlohmann::json in = json_input("samples");
-  if (!in.is_object() || !in.contains("samples") || !in["samples"].is_array()) return fail("invalid-samples", "samples must be JSON {samples: [...]}.");
+  if (!in.is_object() || !in.contains("samples") || !in["samples"].is_array()) return fail("invalid-samples", "samples must be an $ERM CALIBRATION record with SAMPLES.");
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
-  if (!opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  if (!opt.is_object()) return fail("invalid-options", "options must be an $ERM CALIBRATION record.");
   const std::string method = opt.value("method", std::string("scalar-mle"));
   if (method != "scalar-mle" && method != "axes-mle" && method != "coverage") return fail("invalid-options", "method is scalar-mle, axes-mle or coverage.");
   const double coverage = json_number(opt, "coverage", 0.95);
@@ -511,13 +511,13 @@ std::string read_factor_cells(const nlohmann::json& j, std::vector<FactorCell>* 
 extern "C" int calibrate_covariance() {
   using namespace covreal;
   const nlohmann::json model = json_input("model"), objects = json_input("objects");
-  if (!model.is_object() || !model.contains("kind") || !model["kind"].is_string()) return fail("invalid-model", "model must be JSON with a kind.");
-  if (!objects.is_object() || !objects.contains("objects") || !objects["objects"].is_array()) return fail("invalid-objects", "objects must be JSON {objects: [...]}.");
+  if (!model.is_object() || !model.contains("kind") || !model["kind"].is_string()) return fail("invalid-model", "model must be an $ERM MODEL record.");
+  if (!objects.is_object() || !objects.contains("objects") || !objects["objects"].is_array()) return fail("invalid-objects", "objects must be an $ERM CALIBRATED_COVARIANCES record with OBJECTS.");
   const std::string kind = model["kind"].get<std::string>();
   const std::string version = json_string(model, "version");
   if (version.empty()) return fail("invalid-model", "model needs a version (the calibration version).");
   const bool set_model = kind == "e14-element-set-model";
-  if (!set_model && kind != "e14-factors") return fail("invalid-model", "model kind is e14-factors or e14-element-set-model.");
+  if (!set_model && kind != "e14-factors") return fail("invalid-model", "model form is HorizonFactors or ElementSetModel.");
   SetModel sm;
   std::vector<FactorCell> cells;
   std::string e = set_model ? read_set_model(model, &sm) : read_factor_cells(model, &cells);
@@ -545,7 +545,7 @@ extern "C" int calibrate_covariance() {
   nlohmann::json rows = nlohmann::json::array();
   uint64_t outside = 0;
   for (const auto& o : objects["objects"]) {
-    if (!o.is_object()) return fail("invalid-objects", "each object is a JSON object.");
+    if (!o.is_object()) return fail("invalid-objects", "each object is an ERMCalibrationObject.");
     nlohmann::json row{{"id", id_of(o)}};
     double r[3], v[3];
     const bool has_state = o.contains("state") && o["state"].is_object() && vec(o["state"]["position"], 3, r) && vec(o["state"]["velocity"], 3, v);
@@ -647,7 +647,7 @@ extern "C" int calibrate_covariance() {
 extern "C" int dcp_covariance() {
   using namespace covreal;
   const nlohmann::json in = json_input("request");
-  if (!in.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  if (!in.is_object()) return fail("invalid-request", "request must be an $ERM CONSIDER_COVARIANCES record.");
   if (!in.contains("leadCovariance") || !in["leadCovariance"].is_array() || in["leadCovariance"].empty())
     return fail("invalid-request", "leadCovariance is a K x K array (variance of the daily ln-density error by lead day).");
   const size_t K = in["leadCovariance"].size();

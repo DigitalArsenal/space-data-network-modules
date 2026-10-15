@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "single-thread",
+  "symbolPrefix": "sdm_guest_636f6d2e6f726270726f2e63656c65737472616b2d7375706770_",
+  "methodSymbols": {
+    "request": "sdm_guest_636f6d2e6f726270726f2e63656c65737472616b2d7375706770_request",
+    "parse": "sdm_guest_636f6d2e6f726270726f2e63656c65737472616b2d7375706770_parse"
+  }
+}

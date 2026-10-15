@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { integrateRecipe, recipeFrame, decodeXmt } from './xmt-recipes.mjs';
 
 const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const require = createRequire(path.join(root, 'package.json'));
@@ -24,8 +25,8 @@ export const ASOF = Date.UTC(2026, 9, 10) / 1000;
 const iso = (seconds) => new Date(seconds * 1000).toISOString();
 export const ommEpoch = (daysBefore) => iso(ASOF - daysBefore * DAY).replace('Z', '');
 export const ocmEpoch = (daysBefore) => iso(ASOF - daysBefore * DAY);
-// The same instant as the integrator's report writes it: microseconds.
-export const reportEpoch = (daysBefore) => `${ommEpoch(daysBefore)}000Z`;
+// The same instant as the integrator's report writes it: Unix milliseconds.
+export const reportEpoch = (daysBefore) => BigInt(Math.round((ASOF - daysBefore * DAY) * 1000));
 
 const finish = (finisher, build, size = 1024) => {
   const b = new flatbuffers.Builder(size);
@@ -81,7 +82,7 @@ export function mnvRecord({ source, id, norad = 0, cospar = '', native = '', at,
 // ── invoking ──
 const ref = (schemaName, fileIdentifier, rootTypeName) => ({ schemaName, fileIdentifier, rootTypeName, wireFormat: 'flatbuffer' });
 export const frames = {
-  recipe: (value) => ({ portId: 'recipe', payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } }),
+  recipe: (value) => recipeFrame(integrateRecipe(value)),
   catalog: (payload) => ({ portId: 'catalog', payload, typeRef: ref('CAT.fbs', '$CAT', 'CAT') }),
   ephemerides: (payload) => ({ portId: 'ephemerides', payload, typeRef: ref('OEM.fbs', '$OEM', 'OEM') }),
   omm: (payload) => ({ portId: 'omm_products', payload, typeRef: ref('OMM.fbs', '$OMM', 'OMM') }),
@@ -99,7 +100,8 @@ export async function integrate(inputs) {
       response,
       statusCode: response.statusCode,
       message: `${response.errorCode ?? ''} ${response.errorMessage ?? ''}`.trim(),
-      report: port('report').length ? JSON.parse(port('report')[0].toString()) : null,
+      reportBytes: port('report')[0] ?? null,
+      report: port('report').length ? decodeXmt(port('report')[0]).INTEGRATE_REPORT : null,
       catalog: Buffer.concat(port('catalog')),
       omm: Buffer.concat(port('omm')),
       ocm: Buffer.concat(port('ocm')),

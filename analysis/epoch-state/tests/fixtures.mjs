@@ -7,21 +7,8 @@ import { OMM, OMMT } from "spacedatastandards.org/lib/js/OMM/main.js";
 
 export const FIXTURE = JSON.parse(fs.readFileSync(new URL("./vallado-verification.json", import.meta.url), "utf8"));
 
-export const mpeType = (byteLength) => ({
-  schemaName: "MPE.fbs",
-  fileIdentifier: "$MPE",
-  rootTypeName: "MPE",
-  wireFormat: "aligned-binary",
-  requiredAlignment: 8,
-  byteLength,
-});
+export const mpeType = () => ({ schemaName: "MPE.fbs", fileIdentifier: "$MPE", rootTypeName: "MPE", wireFormat: "flatbuffer" });
 export const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM", wireFormat: "flatbuffer" };
-
-export const jsonFrame = (portId, value) => ({
-  portId,
-  payload: new TextEncoder().encode(JSON.stringify(value)),
-  typeRef: { schemaName: "application/json" },
-});
 
 export function encodeMpe(record) {
   const builder = new flatbuffers.Builder(256);
@@ -92,3 +79,61 @@ export function encodeOmm(record, overrides = {}) {
 }
 export const ommStream = (records, overridesFor = () => ({})) =>
   Buffer.concat(records.map((record, i) => Buffer.from(encodeOmm(record, overridesFor(record, i)))));
+
+// $PRW window requests and reports, through flatc (flatc-wasm) and the SDS tree's own schema: the JSON bindings of
+// the published packages predate the WINDOW_REQUEST / WINDOW_REPORT arms.
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import createFlatc from "flatc-wasm/module";
+
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : fileURLToPath(new URL("../node_modules/spacedatastandards.org/", import.meta.url));
+let flatcReady;
+async function flatc() {
+  flatcReady ??= (async () => {
+    const f = await createFlatc();
+    for (const dir of ["/schemas", "/in", "/out"]) f.FS.mkdir(dir);
+    for (const family of fs.readdirSync(path.join(STANDARDS_ROOT, "schema"))) {
+      const schema = path.join(STANDARDS_ROOT, "schema", family, "main.fbs");
+      if (!fs.existsSync(schema)) continue;
+      f.FS.mkdir(`/schemas/${family}`);
+      f.FS.writeFile(`/schemas/${family}/main.fbs`, fs.readFileSync(schema, "utf8"));
+    }
+    return f;
+  })();
+  return flatcReady;
+}
+let serial = 0;
+
+/** One $PRW (plain) from its JSON form. */
+export async function encodePrw(value) {
+  const f = await flatc();
+  const name = `prw${serial++}`;
+  f.FS.writeFile(`/in/${name}.json`, JSON.stringify(value));
+  if (f.callMain(["-b", "--no-warnings", "-I", "/schemas", "-o", "/out", "/schemas/PRW/main.fbs", `/in/${name}.json`]) !== 0) throw new Error("flatc -b PRW failed");
+  return new Uint8Array(f.FS.readFile(`/out/${name}.bin`));
+}
+
+/** The JSON form of one size-prefixed $PRW. */
+export async function decodePrw(bytes) {
+  const f = await flatc();
+  const name = `prw${serial++}`;
+  f.FS.writeFile(`/in/${name}.bin`, bytes);
+  if (f.callMain(["-t", "--no-warnings", "--strict-json", "--defaults-json", "--size-prefixed", "-I", "/schemas", "-o", "/out", "/schemas/PRW/main.fbs", "--", `/in/${name}.bin`]) !== 0) {
+    throw new Error("flatc -t PRW failed");
+  }
+  return JSON.parse(f.FS.readFile(`/out/${name}.json`, { encoding: "utf8" }));
+}
+
+export const prwType = { schemaName: "PRW.fbs", fileIdentifier: "$PRW", rootTypeName: "PRW", wireFormat: "flatbuffer" };
+export const utc = (iso) => ({ TIME_SYSTEM: "UTC", EPOCH_FORMAT: "ISO8601", ISO8601: iso });
+
+/** The $PRW WINDOW_REQUEST of the detector's queries ({set, start, stop, step_s}). */
+export const windowRequest = (queries, extra = {}) =>
+  encodePrw({
+    WINDOW_REQUEST: {
+      QUERIES: queries.map((q, i) => ({ SEQUENCE: i, SET_INDEX: q.set, OBJECT_KEY: q.object ?? "", START: utc(q.start), STOP: utc(q.stop), STEP_SECONDS: q.step_s })),
+      ...extra,
+    },
+  });

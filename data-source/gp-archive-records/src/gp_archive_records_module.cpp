@@ -1,8 +1,8 @@
 // data-source/gp-archive-records: builds the GP archive's $MPE and $CAT records
 // in ARCHIVE ENCODING V1, the byte layout the archive's content IDs depend on.
 //
-// build_mpe: field batch of element sets -> aligned size-prefixed $MPE stream
-// build_cat: field batch of catalog rows -> aligned size-prefixed $CAT stream
+// build_mpe: $MPE record stream -> $MPE stream in archive encoding v1
+// build_cat: $CAT record stream -> $CAT stream in archive encoding v1
 //
 // A content ID is sha256 over the record bytes, so the archive's ~101M element
 // sets are identified by this exact layout. FlatBuffers leaves the layout to the
@@ -24,19 +24,23 @@
 // Field names and vtable slots come only from the generated SDS headers: each
 // record's fields are listed once in an X-macro that both stringizes the name
 // (matched against the input's field names) and calls the generated
-// add_<FIELD> (which carries the slot). A name that is not a generated field
-// does not compile.
+// add_<FIELD> / accessor / VT_<FIELD> (which carry the slot). A name that is
+// not a generated field does not compile.
 //
-// INPUT: one "field batch" frame on port "records" (all integers little-endian):
-//   "GPAF" | u16 version = 1 | u16 field_count
-//   field_count x { u8 name_length | name }   SDS field names, any order
-//   u32 record_count
-//   record_count x, per field in header order:
-//     string field: u32 byte_length | bytes   (bytes kept exactly)
-//     double field: 8 bytes, IEEE-754 binary64 (exact, negative zero included)
-//     uint32 field: 4 bytes
-// The header must name every field of the record exactly once. Values travel
-// as their bits, so nothing is re-parsed or rounded on the way in.
+// INPUT: one size-prefixed record stream on port "records": build_mpe takes
+// $MPE, build_cat takes $CAT (concatenated [u32le length][buffer] frames;
+// zero-length prefixes are padding, so 8-aligned streams and unpadded ones both
+// read). Each input record is verified (identifier included) and its values
+// are read in place through the generated accessors, then re-built in archive
+// encoding v1. Values travel as FlatBuffers stores them (strings as bytes,
+// doubles as IEEE-754 bits), so nothing is formatted or rounded on the way.
+//   $MPE in: ENTITY_ID..BSTAR must all be PRESENT in the record (write it
+//            with force-defaults: an omitted 0.0 cannot be told from -0.0);
+//            MEAN_ELEMENT_THEORY, if present, must be SGP4; any other field
+//            (TARGETER) is refused, since archive v1 cannot carry it.
+//   $CAT in: OBJECT_ID and OBJECT_NAME must be present; NORAD_CAT_ID may be
+//            absent (= 0, which v1 omits anyway); any other field is refused.
+// A malformed stream or record refuses the whole batch.
 //
 // Output bytes depend only on the input bytes.
 
@@ -47,6 +51,8 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+
+#include "SDS_ARCHIVE_HEADERS.h"  // replaced by build.mjs with the SDS MET/MPE/IDM/PLD/LCC/CAT headers
 
 namespace {
 
@@ -67,13 +73,6 @@ namespace {
     UINT32(NORAD_CAT_ID)                                 \
     STRING(OBJECT_NAME)
 
-enum FieldKind : uint8_t { kString, kDouble, kUint32 };
-
-struct FieldSpec {
-    const char* name;
-    FieldKind kind;
-};
-
 struct Value {
     const char* str = nullptr;
     uint32_t len = 0;
@@ -88,110 +87,78 @@ enum MpeField { GP_ARCHIVE_V1_MPE_FIELDS(GP_ARCHIVE_ENUM, GP_ARCHIVE_ENUM, GP_AR
 enum CatField { GP_ARCHIVE_V1_CAT_FIELDS(GP_ARCHIVE_ENUM, GP_ARCHIVE_ENUM, GP_ARCHIVE_ENUM) kCatFieldCount };
 #undef GP_ARCHIVE_ENUM
 
-// &MPE::FIELD / &CAT::FIELD bind each name to a generated accessor.
-#define GP_ARCHIVE_MPE_STRING(FIELD) {(static_cast<void>(&MPE::FIELD), #FIELD), kString},
-#define GP_ARCHIVE_MPE_DOUBLE(FIELD) {(static_cast<void>(&MPE::FIELD), #FIELD), kDouble},
-#define GP_ARCHIVE_MPE_UINT32(FIELD) {(static_cast<void>(&MPE::FIELD), #FIELD), kUint32},
-const FieldSpec kMpeFields[] = {GP_ARCHIVE_V1_MPE_FIELDS(GP_ARCHIVE_MPE_STRING, GP_ARCHIVE_MPE_DOUBLE, GP_ARCHIVE_MPE_UINT32)};
-#define GP_ARCHIVE_CAT_STRING(FIELD) {(static_cast<void>(&CAT::FIELD), #FIELD), kString},
-#define GP_ARCHIVE_CAT_DOUBLE(FIELD) {(static_cast<void>(&CAT::FIELD), #FIELD), kDouble},
-#define GP_ARCHIVE_CAT_UINT32(FIELD) {(static_cast<void>(&CAT::FIELD), #FIELD), kUint32},
-const FieldSpec kCatFields[] = {GP_ARCHIVE_V1_CAT_FIELDS(GP_ARCHIVE_CAT_STRING, GP_ARCHIVE_CAT_DOUBLE, GP_ARCHIVE_CAT_UINT32)};
-
 // ---------------------------------------------------------------------------
-// Field batch reader.
+// Input record readers (generated accessors, read in place).
 // ---------------------------------------------------------------------------
 
-struct Cursor {
-    const uint8_t* p = nullptr;
-    const uint8_t* end = nullptr;
+bool present(const ::flatbuffers::Table* t, ::flatbuffers::voffset_t slot) {
+    return t->GetOptionalFieldOffset(slot) != 0;
+}
 
-    bool take(size_t n, const uint8_t** out) {
-        if (static_cast<size_t>(end - p) < n) return false;
-        *out = p;
-        p += n;
-        return true;
+// Every vtable slot the record sets must be in `allowed`; returns the first
+// other slot's index, or -1.
+int unexpected_slot(const ::flatbuffers::Table* t, const ::flatbuffers::voffset_t* allowed, size_t allowed_count) {
+    const uint8_t* vtable = t->GetVTable();
+    const uint16_t vsize = ::flatbuffers::ReadScalar<uint16_t>(vtable);
+    for (uint16_t at = 4; at + 2 <= vsize; at = static_cast<uint16_t>(at + 2)) {
+        if (::flatbuffers::ReadScalar<uint16_t>(vtable + at) == 0) continue;
+        bool ok = false;
+        for (size_t i = 0; i < allowed_count; i++) ok = ok || allowed[i] == at;
+        if (!ok) return (at - 4) / 2;
     }
-    bool u8(uint8_t* v) {
-        const uint8_t* b;
-        if (!take(1, &b)) return false;
-        *v = b[0];
-        return true;
-    }
-    bool u16(uint16_t* v) {
-        const uint8_t* b;
-        if (!take(2, &b)) return false;
-        *v = static_cast<uint16_t>(b[0] | (b[1] << 8));
-        return true;
-    }
-    bool u32(uint32_t* v) {
-        const uint8_t* b;
-        if (!take(4, &b)) return false;
-        *v = static_cast<uint32_t>(b[0]) | (static_cast<uint32_t>(b[1]) << 8) |
-             (static_cast<uint32_t>(b[2]) << 16) | (static_cast<uint32_t>(b[3]) << 24);
-        return true;
-    }
-    bool f64(double* v) {
-        const uint8_t* b;
-        if (!take(8, &b)) return false;
-        std::memcpy(v, b, 8);  // wasm is little-endian
-        return true;
-    }
-};
+    return -1;
+}
 
-// Header columns mapped to record fields; returns an error or empty.
-std::string read_header(Cursor* c, const FieldSpec* fields, int field_count, std::vector<int>* columns,
-                        uint32_t* record_count) {
-    const uint8_t* magic;
-    if (!c->take(4, &magic) || std::memcmp(magic, "GPAF", 4) != 0) return "not a GPAF field batch";
-    uint16_t version = 0, count = 0;
-    if (!c->u16(&version) || version != 1) return "unsupported field batch version";
-    if (!c->u16(&count)) return "truncated header";
-    std::vector<bool> seen(static_cast<size_t>(field_count), false);
-    columns->clear();
-    for (uint16_t i = 0; i < count; i++) {
-        uint8_t len = 0;
-        const uint8_t* name;
-        if (!c->u8(&len) || !c->take(len, &name)) return "truncated header";
-        int match = -1;
-        for (int f = 0; f < field_count; f++) {
-            if (std::strlen(fields[f].name) == len && std::memcmp(fields[f].name, name, len) == 0) {
-                match = f;
-                break;
-            }
-        }
-        const std::string field(reinterpret_cast<const char*>(name), len);
-        if (match < 0) return "unknown field " + field;
-        if (seen[static_cast<size_t>(match)]) return "duplicate field " + field;
-        seen[static_cast<size_t>(match)] = true;
-        columns->push_back(match);
-    }
-    for (int f = 0; f < field_count; f++) {
-        if (!seen[static_cast<size_t>(f)]) return std::string("missing field ") + fields[f].name;
-    }
-    if (!c->u32(record_count)) return "truncated header";
+std::string read_mpe(const uint8_t* frame, size_t size, Value* v) {
+    ::flatbuffers::Verifier verifier(frame, size, 64, 1000000, false);
+    if (!VerifySizePrefixedMPEBuffer(verifier)) return "is not a verifiable size-prefixed $MPE buffer";
+    const MPE* mpe = GetSizePrefixedMPE(frame);
+    const auto* t = reinterpret_cast<const ::flatbuffers::Table*>(mpe);
+#define GP_ARCHIVE_REQUIRE(FIELD) \
+    if (!present(t, MPE::VT_##FIELD)) return "lacks " #FIELD " (archive v1 needs every field written)";
+    GP_ARCHIVE_V1_MPE_FIELDS(GP_ARCHIVE_REQUIRE, GP_ARCHIVE_REQUIRE, GP_ARCHIVE_REQUIRE)
+#undef GP_ARCHIVE_REQUIRE
+#define GP_ARCHIVE_SLOT(FIELD) MPE::VT_##FIELD,
+    const ::flatbuffers::voffset_t allowed[] = {
+        GP_ARCHIVE_V1_MPE_FIELDS(GP_ARCHIVE_SLOT, GP_ARCHIVE_SLOT, GP_ARCHIVE_SLOT) MPE::VT_MEAN_ELEMENT_THEORY};
+#undef GP_ARCHIVE_SLOT
+    const int extra = unexpected_slot(t, allowed, sizeof(allowed) / sizeof(allowed[0]));
+    if (extra >= 0) return "sets field slot " + std::to_string(extra) + ", which archive v1 does not carry";
+    if (mpe->MEAN_ELEMENT_THEORY() != meanElementSource_SGP4) return "has MEAN_ELEMENT_THEORY other than SGP4";
+#define GP_ARCHIVE_GET_STRING(FIELD) \
+    v[kMpe_##FIELD].str = mpe->FIELD()->c_str();     \
+    v[kMpe_##FIELD].len = mpe->FIELD()->size();
+#define GP_ARCHIVE_GET_DOUBLE(FIELD) v[kMpe_##FIELD].d = mpe->FIELD();
+#define GP_ARCHIVE_GET_UINT32(FIELD) v[kMpe_##FIELD].u = mpe->FIELD();
+    GP_ARCHIVE_V1_MPE_FIELDS(GP_ARCHIVE_GET_STRING, GP_ARCHIVE_GET_DOUBLE, GP_ARCHIVE_GET_UINT32)
+#undef GP_ARCHIVE_GET_STRING
+#undef GP_ARCHIVE_GET_DOUBLE
+#undef GP_ARCHIVE_GET_UINT32
     return {};
 }
 
-bool read_record(Cursor* c, const FieldSpec* fields, const std::vector<int>& columns, Value* values) {
-    for (const int f : columns) {
-        Value& v = values[f];
-        switch (fields[f].kind) {
-            case kString: {
-                const uint8_t* bytes;
-                if (!c->u32(&v.len) || !c->take(v.len, &bytes)) return false;
-                v.str = reinterpret_cast<const char*>(bytes);
-                break;
-            }
-            case kDouble:
-                if (!c->f64(&v.d)) return false;
-                break;
-            case kUint32:
-                if (!c->u32(&v.u)) return false;
-                break;
-        }
-    }
-    return true;
+std::string read_cat(const uint8_t* frame, size_t size, Value* v) {
+    ::flatbuffers::Verifier verifier(frame, size, 64, 1000000, false);
+    if (!VerifySizePrefixedCATBuffer(verifier)) return "is not a verifiable size-prefixed $CAT buffer";
+    const CAT* cat = GetSizePrefixedCAT(frame);
+    const auto* t = reinterpret_cast<const ::flatbuffers::Table*>(cat);
+    if (!present(t, CAT::VT_OBJECT_ID)) return "lacks OBJECT_ID";
+    if (!present(t, CAT::VT_OBJECT_NAME)) return "lacks OBJECT_NAME";
+#define GP_ARCHIVE_SLOT(FIELD) CAT::VT_##FIELD,
+    const ::flatbuffers::voffset_t allowed[] = {GP_ARCHIVE_V1_CAT_FIELDS(GP_ARCHIVE_SLOT, GP_ARCHIVE_SLOT, GP_ARCHIVE_SLOT)};
+#undef GP_ARCHIVE_SLOT
+    const int extra = unexpected_slot(t, allowed, sizeof(allowed) / sizeof(allowed[0]));
+    if (extra >= 0) return "sets field slot " + std::to_string(extra) + ", which archive v1 does not carry";
+#define GP_ARCHIVE_GET_STRING(FIELD) \
+    v[kCat_##FIELD].str = cat->FIELD()->c_str();     \
+    v[kCat_##FIELD].len = cat->FIELD()->size();
+#define GP_ARCHIVE_GET_DOUBLE(FIELD) v[kCat_##FIELD].d = cat->FIELD();
+#define GP_ARCHIVE_GET_UINT32(FIELD) v[kCat_##FIELD].u = cat->FIELD();
+    GP_ARCHIVE_V1_CAT_FIELDS(GP_ARCHIVE_GET_STRING, GP_ARCHIVE_GET_DOUBLE, GP_ARCHIVE_GET_UINT32)
+#undef GP_ARCHIVE_GET_STRING
+#undef GP_ARCHIVE_GET_DOUBLE
+#undef GP_ARCHIVE_GET_UINT32
+    return {};
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +180,7 @@ void build_mpe_v1(::flatbuffers::FlatBufferBuilder* b, const Value* v) {
 #undef GP_ARCHIVE_ADD_OFFSET
 #undef GP_ARCHIVE_ADD_DOUBLE
 #undef GP_ARCHIVE_ADD_UINT32
-    mpe.add_MEAN_ELEMENT_THEORY(meanElementSource::SGP4);
+    mpe.add_MEAN_ELEMENT_THEORY(meanElementSource_SGP4);
     FinishSizePrefixedMPEBuffer(*b, mpe.Finish());
 }
 
@@ -263,10 +230,11 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+using ReadFn = std::string (*)(const uint8_t*, size_t, Value*);
 using BuildFn = void (*)(::flatbuffers::FlatBufferBuilder*, const Value*);
 
-int build(const char* method, const FieldSpec* fields, int field_count, BuildFn build_record,
-          const char* schema, const char* identifier, const char* root) {
+int build(const char* method, int field_count, ReadFn read_record, BuildFn build_record, const char* schema,
+          const char* identifier, const char* root) {
     char message[256];
     if (find_batched_input_port(message, sizeof(message))) {
         plugin_set_error("batched-input-frames", message);
@@ -276,41 +244,49 @@ int build(const char* method, const FieldSpec* fields, int field_count, BuildFn 
     const plugin_input_frame_t* frame =
         input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
     if (!frame) {
-        std::snprintf(message, sizeof(message), "%s requires a field batch frame on port \"records\".",
-                      method);
+        std::snprintf(message, sizeof(message), "%s requires a %s record stream on port \"records\".", method,
+                      identifier);
         plugin_set_error("missing-records-frame", message);
         return 400;
     }
-    Cursor c;
-    c.p = frame->payload;
-    c.end = c.p + (frame->payload ? frame->payload_length : 0u);
-
-    std::vector<int> columns;
-    uint32_t record_count = 0;
-    const std::string header_error = read_header(&c, fields, field_count, &columns, &record_count);
-    if (!header_error.empty()) {
-        plugin_set_error("invalid-field-batch", header_error.c_str());
-        return 400;
-    }
+    const uint8_t* p = frame->payload;
+    const size_t n = frame->payload ? frame->payload_length : 0u;
     std::vector<Value> values(static_cast<size_t>(field_count));
     std::vector<uint8_t> stream;
     ::flatbuffers::FlatBufferBuilder builder(256);
-    for (uint32_t i = 0; i < record_count; i++) {
-        if (!read_record(&c, fields, columns, values.data())) {
-            std::snprintf(message, sizeof(message), "%s record %u is truncated.", schema,
-                          static_cast<unsigned>(i));
-            plugin_set_error("invalid-field-batch", message);
+    size_t at = 0;
+    for (uint32_t i = 0; at < n;) {
+        if (n - at < 4) {
+            std::snprintf(message, sizeof(message), "%s stream ends in a truncated size prefix.", identifier);
+            plugin_set_error("invalid-records", message);
+            return 400;
+        }
+        uint32_t size = 0;
+        std::memcpy(&size, p + at, 4);  // wasm is little-endian
+        if (size == 0) {  // padding
+            at += 4;
+            continue;
+        }
+        if (n - at - 4 < size) {
+            std::snprintf(message, sizeof(message), "%s record %u is truncated.", identifier, static_cast<unsigned>(i));
+            plugin_set_error("invalid-records", message);
+            return 400;
+        }
+        const std::string error = read_record(p + at, size + 4u, values.data());
+        if (!error.empty()) {
+            std::snprintf(message, sizeof(message), "%s record %u %s.", identifier, static_cast<unsigned>(i),
+                          error.c_str());
+            plugin_set_error("invalid-records", message);
             return 400;
         }
         build_record(&builder, values.data());
         append_frame(&stream, builder);
+        at += 4u + size;
+        i++;
     }
-    if (c.p != c.end) {
-        plugin_set_error("invalid-field-batch", "Trailing bytes after the last record.");
-        return 400;
-    }
-    if (plugin_push_output_ex("records", schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-                              root, 0, 8, stream.data(), static_cast<uint32_t>(stream.size())) < 0) {
+    if (plugin_push_output_ex("records", schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
+                              stream.data(), static_cast<uint32_t>(stream.size())) < 0) {
+        plugin_set_error("output-push-failed", "The records output could not be pushed.");
         return 500;
     }
     return 0;
@@ -321,11 +297,11 @@ int build(const char* method, const FieldSpec* fields, int field_count, BuildFn 
 extern "C" {
 
 int build_mpe(void) {
-    return build("build_mpe", kMpeFields, kMpeFieldCount, build_mpe_v1, "MPE.fbs", "$MPE", "MPE");
+    return build("build_mpe", kMpeFieldCount, read_mpe, build_mpe_v1, "MPE.fbs", "$MPE", "MPE");
 }
 
 int build_cat(void) {
-    return build("build_cat", kCatFields, kCatFieldCount, build_cat_v1, "CAT.fbs", "$CAT", "CAT");
+    return build("build_cat", kCatFieldCount, read_cat, build_cat_v1, "CAT.fbs", "$CAT", "CAT");
 }
 
 }  // extern "C"

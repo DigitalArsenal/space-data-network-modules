@@ -7,12 +7,14 @@ import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { ARM_OF, decode, frame } from './erm-codec.mjs';
 
-const sdsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
+const sdsRoot = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const flatbuffers = createRequire(path.join(sdsRoot, 'package.json'))('flatbuffers');
 const OMM = await import(pathToFileURL(path.join(sdsRoot, 'lib/js/OMM/main.js')));
 
-export const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+// A port's value in its readable form (docs/*.json); `call` sends it as the method's $ERM record (scripts/erm-codec.mjs).
+export const json = (portId, value) => ({ portId, value, pending: true });
 const oemType = { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' };
 
 export async function moduleHarness() {
@@ -20,10 +22,12 @@ export async function moduleHarness() {
   const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
   const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
   return {
+    // The method's first output ($ERM) in its readable form.
     async call(methodId, inputs) {
-      const r = await h.invoke({ methodId, inputs });
+      const frames = inputs.map((f) => (f.pending ? frame(f.portId, ARM_OF[methodId][f.portId], f.value) : f));
+      const r = await h.invoke({ methodId, inputs: frames });
       if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorMessage}`);
-      return JSON.parse(Buffer.from(r.outputs[0].payload).toString());
+      return decode(r.outputs[0].payload);
     },
     destroy: () => h.destroy(),
   };

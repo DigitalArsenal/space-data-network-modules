@@ -26,39 +26,31 @@ struct SelectionPolicy {
   }
 };
 
-bool parse_selection_policy(const Json& s, SelectionPolicy* out, std::string* error) {
-  if (s.is_null()) return true;
-  if (!s.is_object()) { *error = "The selection policy must be an object."; return false; }
-  if (!field(s, "horizonDays").is_null()) {
-    out->horizon = number(field(s, "horizonDays"));
-    if (!std::isfinite(out->horizon) || out->horizon < 0) { *error = "horizonDays must be nonnegative and finite."; return false; }
+bool parse_selection_policy(const XMTSelectionPolicy* s, SelectionPolicy* out, std::string* error) {
+  if (!s) return true;
+  if (!std::isnan(s->HORIZON_DAYS())) {
+    out->horizon = s->HORIZON_DAYS();
+    if (!std::isfinite(out->horizon) || out->horizon < 0) { *error = "HORIZON_DAYS must be nonnegative and finite."; return false; }
   }
-  if (!field(s, "minSamples").is_null()) {
-    out->min_samples = number(field(s, "minSamples"));
-    if (!std::isfinite(out->min_samples) || out->min_samples < 1) { *error = "minSamples must be at least 1."; return false; }
-  }
-  if (!field(s, "maxAgeDays").is_null()) {
-    out->max_age_days = number(field(s, "maxAgeDays"));
-    if (!(out->max_age_days >= 0)) { *error = "maxAgeDays must be nonnegative."; return false; }
-  }
-  const auto& order = field(s, "sourceOrder");
-  if (!order.is_null()) {
-    if (!order.is_array()) { *error = "sourceOrder must be an array of source IDs."; return false; }
+  out->min_samples = s->MIN_SAMPLES();
+  if (out->min_samples < 1) { *error = "MIN_SAMPLES must be at least 1."; return false; }
+  out->max_age_days = s->MAX_AGE_DAYS();
+  if (!(out->max_age_days >= 0)) { *error = "MAX_AGE_DAYS must be nonnegative."; return false; }
+  if (s->SOURCE_ORDER()) {
     std::set<std::string> seen;
-    for (const auto& id : order) {
-      if (text(id).empty() || !seen.insert(text(id)).second) { *error = "sourceOrder holds distinct source IDs."; return false; }
-      out->source_order.push_back(text(id));
+    for (const auto* id : *s->SOURCE_ORDER()) {
+      if (str_of(id).empty() || !seen.insert(str_of(id)).second) { *error = "SOURCE_ORDER holds distinct source IDs."; return false; }
+      out->source_order.push_back(str_of(id));
     }
   }
-  const auto& table = field(s, "table");
-  if (!table.is_null()) {
-    if (!table.is_array() || table.size() > 100000) { *error = "The measured table must be an array of at most 100000 rows."; return false; }
-    if (!table.empty() && !std::isfinite(out->horizon)) { *error = "A measured table needs selection.horizonDays."; return false; }
-    for (const auto& row : table) {
-      const std::string source = text(field(row, "source")), product = text(field(row, "product")), regime = text(field(row, "regime"));
-      const double horizon = number(field(row, "horizonDays")), median = number(field(row, "median3dKm")), samples = number(field(row, "samples"));
-      if (source.empty() || product.empty() || regime.empty() || !std::isfinite(horizon) || horizon < 0 || !std::isfinite(median) || median < 0 || !std::isfinite(samples) || samples < 0) {
-        *error = "A measured row needs a source, product, regime, horizonDays, a nonnegative median3dKm and a sample count.";
+  if (const auto* table = s->MEASURED()) {
+    if (table->size() > 100000) { *error = "The measured table holds at most 100000 rows."; return false; }
+    if (table->size() && !std::isfinite(out->horizon)) { *error = "A measured table needs SELECTION.HORIZON_DAYS."; return false; }
+    for (const auto* row : *table) {
+      const std::string source = str_of(row->SOURCE_ID()), product = str_of(row->PRODUCT()), regime = str_of(row->REGIME());
+      const double horizon = row->HORIZON_DAYS(), median = row->MEDIAN_3D_KM(), samples = row->SAMPLES();
+      if (source.empty() || product.empty() || regime.empty() || !std::isfinite(horizon) || horizon < 0 || !std::isfinite(median) || median < 0) {
+        *error = "A measured row needs a source, product, regime, HORIZON_DAYS, a nonnegative MEDIAN_3D_KM and a sample count.";
         return false;
       }
       if (!out->table.emplace(Cell{source, product, regime, horizon}, Measure{median, samples}).second) { *error = "The measured table repeats a source, product, regime and horizon."; return false; }
@@ -66,14 +58,19 @@ bool parse_selection_policy(const Json& s, SelectionPolicy* out, std::string* er
   }
   return true;
 }
-Json selection_policy_json(const SelectionPolicy& p) {
-  return {{"horizonDays", std::isfinite(p.horizon) ? Json(p.horizon) : Json()}, {"minSamples", p.min_samples},
-          {"maxAgeDays", std::isfinite(p.max_age_days) ? Json(p.max_age_days) : Json()}, {"sourceOrder", p.source_order}, {"measuredRows", p.table.size()}};
+std::unique_ptr<XMTSelectionPolicyT> selection_policy_table(const SelectionPolicy& p) {
+  auto out = std::make_unique<XMTSelectionPolicyT>();
+  out->HORIZON_DAYS = p.horizon;
+  out->MIN_SAMPLES = static_cast<uint32_t>(p.min_samples);
+  out->MAX_AGE_DAYS = p.max_age_days;
+  out->SOURCE_ORDER = p.source_order;
+  out->MEASURED_ROWS = static_cast<uint32_t>(p.table.size());
+  return out;
 }
 
 struct Candidate {
   const Omm* omm;
-  const char* status;  // eligible, future, retired or too-old
+  xmtCandidateStanding status;  // NotSelected (eligible), Future, Retired or TooOld
   double age_days;
   bool measured;
   double median, samples;
@@ -92,10 +89,10 @@ std::vector<Candidate> candidates_of(const std::vector<const Omm*>& products, co
   for (const auto& [source, omm] : future) if (!newest.count(source)) newest[source] = omm;
   std::vector<Candidate> out;
   for (const auto& [source, omm] : newest) {
-    Candidate c{omm, "eligible", static_cast<double>(as_of - omm->epoch) / 86400e6, false, NAN, 0};
-    if (omm->epoch > as_of) c.status = "future";
-    else if (retiring && omm->epoch < began(*retiring)) c.status = "retired";
-    else if (c.age_days > p.max_age_days) c.status = "too-old";
+    Candidate c{omm, xmtCandidateStanding::NotSelected, static_cast<double>(as_of - omm->epoch) / 86400e6, false, NAN, 0};
+    if (omm->epoch > as_of) c.status = xmtCandidateStanding::Future;
+    else if (retiring && omm->epoch < began(*retiring)) c.status = xmtCandidateStanding::Retired;
+    else if (c.age_days > p.max_age_days) c.status = xmtCandidateStanding::TooOld;
     const auto cell = p.table.find(Cell{source, omm->product, regime, p.horizon});
     if (!regime.empty() && std::isfinite(p.horizon) && cell != p.table.end()) {
       c.median = cell->second.median;
@@ -114,12 +111,12 @@ std::vector<Candidate> candidates_of(const std::vector<const Omm*>& products, co
 
 struct Choice {
   const Candidate* winner = nullptr;
-  const char* reason = "";
+  xmtSelectionReason reason = xmtSelectionReason::Unspecified;
   bool tie = false;
 };
 Choice choose(const std::vector<Candidate>& candidates, const SelectionPolicy& p) {
   std::vector<const Candidate*> eligible, measured;
-  for (const auto& c : candidates) if (std::strcmp(c.status, "eligible") == 0) eligible.push_back(&c);
+  for (const auto& c : candidates) if (c.status == xmtCandidateStanding::NotSelected) eligible.push_back(&c);
   for (const Candidate* c : eligible) if (c->measured) measured.push_back(c);
   Choice choice;
   if (eligible.empty()) return choice;
@@ -132,7 +129,7 @@ Choice choose(const std::vector<Candidate>& candidates, const SelectionPolicy& p
   };
   if (eligible.size() == 1) {
     choice.winner = eligible.front();
-    choice.reason = "only-candidate";
+    choice.reason = xmtSelectionReason::OnlyCandidate;
     return choice;
   }
   if (!measured.empty()) {
@@ -141,13 +138,13 @@ Choice choose(const std::vector<Candidate>& candidates, const SelectionPolicy& p
       return by_order(a, b);
     });
     choice.winner = measured.front();
-    choice.reason = "lowest-measured-median";
+    choice.reason = xmtSelectionReason::LowestMeasuredMedian;
     choice.tie = measured.size() > 1 && measured[1]->median == measured[0]->median;
     return choice;
   }
   std::stable_sort(eligible.begin(), eligible.end(), by_order);
   choice.winner = eligible.front();
-  choice.reason = "unmeasured-fallback-order";
+  choice.reason = xmtSelectionReason::UnmeasuredFallbackOrder;
   return choice;
 }
 

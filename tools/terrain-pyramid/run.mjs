@@ -40,6 +40,17 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { BoundedGranuleCache } from "./build-support.mjs";
+import {
+  DTT_LIB,
+  createTypedHarness,
+  moduleConfigOf,
+  decodeTileReport,
+  flatbuffers,
+  granuleFrame,
+  STANDARDS_ROOT,
+  storeAnswer,
+  typedInput,
+} from "../../data-source/terrain-source/typed-frames.mjs";
 import { MAX_TERRAIN_RECORD_BYTES } from "./dtt-reader.mjs";
 import {
   cellAttemptAppendBound,
@@ -62,6 +73,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 const RUNTIME_WASM = path.join(REPO, "flows", "terrain-ingest", "dist", "runtime.wasm");
 const SDK_DIR = path.join(REPO, "flows", "terrain-ingest", "node_modules", "space-data-module-sdk");
+const { decodeHostCall, decodeHttpRequest, decodeModuleConfig, decodeSqlValues, encodeHostCallResult, encodeModuleConfig, encodeTimerTick } = await import(
+  path.join(SDK_DIR, "src/standards/runtimeContracts.js")
+);
 const FLOW_DIR = path.join(REPO, "flows", "terrain-ingest");
 const FLOW_ARTIFACT = path.join(FLOW_DIR, "dist", "artifact.json");
 const FLOW_DEPS = path.join(FLOW_DIR, "deps.json");
@@ -591,41 +605,66 @@ async function createWasmEdgeVerifier(repo) {
   };
 }
 
-// ── the hostcall envelope (Go-host dialect; the compiled flow speaks it) ─────
-function encodeEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4 + segments.reduce((n, s) => n + 4 + s.length, 0);
-  const out = new Uint8Array(total);
-  const view = new DataView(out.buffer);
-  view.setUint32(0, metaBytes.length, true);
-  out.set(metaBytes, 4);
-  let offset = 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    out.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return out;
+// ── typed contracts 1.0: the frames and the host answers ────────────────────
+//
+// The compiled flow's hostcalls are SDS $PIV invocations (decodeHostCall / encodeHostCallResult): plugin.getConfig
+// answers one ModuleConfig (MCFG) on raw "config", storage.flatsql_query_stream (SQL values on raw "params") a
+// StreamResult and the raw "stream", http.request an HttpResult and the raw "body", storage.ingest_with_source a
+// StorageIngestResult, storage.write a StorageWriteResult. Every frame between the nodes is a FlatBuffer.
+const IRM_LIB = await import(new URL(`file://${path.join(STANDARDS_ROOT, "lib", "js", "IRM", "main.js")}`).href);
+const irmHex = (bytes) => Buffer.from(bytes).toString("hex");
+
+// granule_plan's $IRM job/mark, read into the fields this runner reports (NOTES name region, level, cell, tiles).
+function decodeIrmRecord(bytes) {
+  const r = IRM_LIB.IRM.getRootAsIRM(new flatbuffers.ByteBuffer(Uint8Array.from(bytes))).unpack();
+  const notes = r.NOTES ?? "";
+  const cell = notes.match(/^region (.*), level (\d+), cell (-?\d+),(-?\d+), (\d+) tiles of (\d+) cells$/);
+  return {
+    job_id: r.JOB_ID,
+    cell_index: r.LAST_CHUNK?.CHUNK_INDEX ?? 0,
+    next_tile_index: r.NEXT_CHUNK_INDEX,
+    stored_tiles_total: Number(r.RECORDS_COMMITTED),
+    retrieved_at: r.UPDATED_AT,
+    state: r.STATE,
+    etag: r.SOURCE?.ENTITY_TAG ?? "",
+    last_modified: r.SOURCE?.LAST_MODIFIED ?? "",
+    batch_id: r.LAST_CHUNK?.BATCH_ID ?? "",
+    ...(cell ? { region: cell[1], level: Number(cell[2]), cell_lon: Number(cell[3]), cell_lat: Number(cell[4]),
+      cell_tiles: Number(cell[5]), total_cells: Number(cell[6]) } : {}),
+  };
 }
 
-function decodeEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  const segments = [];
-  let offset = 4 + metaLen;
-  if (offset + 4 <= bytes.length) {
-    const count = view.getUint32(offset, true);
-    offset += 4;
-    for (let i = 0; i < count && offset + 4 <= bytes.length; i += 1) {
-      const length = view.getUint32(offset, true);
-      segments.push(bytes.subarray(offset + 4, offset + 4 + length));
-      offset += 4 + length;
-    }
+// granule_plan's plan ($DTT header stream) + options (ModuleConfig) as the plan view this runner compares and reports.
+function decodePlanView(planBytes, options) {
+  const buf = Buffer.from(planBytes);
+  const headers = [];
+  for (let at = 0; at + 4 <= buf.length;) {
+    const len = buf.readUInt32LE(at);
+    at += 4;
+    if (len === 0) continue;
+    headers.push(DTT_LIB.DTT.getRootAsDTT(new flatbuffers.ByteBuffer(Uint8Array.from(buf.subarray(at, at + len)))).unpack());
+    at += len;
   }
-  return { meta, segments };
+  assert.ok(headers.length > 0, "granule_plan emitted an empty plan");
+  const h = headers[0];
+  const p = h.PROVENANCE;
+  return {
+    tilesetId: h.TILESET_ID,
+    scheme: DTT_LIB.dttTilingScheme[h.TILING_SCHEME],
+    rowOriginNorth: h.ROW_ORIGIN_NORTH,
+    level: h.LEVEL,
+    gridSize: h.GRID_WIDTH,
+    maxGridSize: options.maxGridSize,
+    maxLevel: h.MAX_LEVEL,
+    skipOceanTiles: options.skipOceanTiles,
+    sourceClass: DTT_LIB.dttSourceClass[h.SOURCE_CLASS],
+    verticalDatumName: h.VERTICAL_DATUM_NAME,
+    provenance: {
+      datasetId: p.DATASET_ID, datasetName: p.DATASET_NAME, datasetEpoch: p.DATASET_EPOCH, retrievedAt: p.RETRIEVED_AT,
+      license: p.LICENSE, licenseUrl: p.LICENSE_URL, attribution: p.ATTRIBUTION, sourceUrl: p.SOURCE_URL,
+    },
+    tiles: headers.map((t) => ({ x: t.X, y: t.Y, childAvailability: t.CHILD_AVAILABILITY })),
+  };
 }
 
 // ── the local store ─────────────────────────────────────────────────────────
@@ -1009,14 +1048,12 @@ async function main() {
       call(opPtr, opLen, payloadPtr, payloadLen) {
         const heap = new Uint8Array(memoryRef.memory.buffer);
         const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta, segments } = decodeEnvelope(payload);
-        const handler = pending.find((p) => p.operation === operation && p.matches(meta));
-        if (!handler) {
-          response = encodeEnvelope({ ok: false, message: `unexpected op ${operation}` });
-          return 1;
-        }
-        response = handler.respond(meta, segments);
+        const call = decodeHostCall(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
+        const handler = pending.find((p) => p.operation === operation && p.matches(call));
+        const answer = handler
+          ? handler.respond(call)
+          : { ok: false, error: { code: "unsupported", message: `unexpected op ${operation}` } };
+        response = encodeHostCallResult({ op: operation, ...answer });
         return 0;
       },
       response_len() {
@@ -1145,82 +1182,75 @@ async function main() {
   pending.push({
     operation: "plugin.getConfig",
     matches: () => true,
-    respond: () => encodeEnvelope(flowConfigForCurrentCell()),
+    respond: () => ({ ok: true, raw: { config: encodeModuleConfig(moduleConfigOf(flowConfigForCurrentCell())) } }),
   });
   pending.push({
     operation: "storage.flatsql_query_stream",
     matches: () => true,
-    respond: (meta) => {
+    respond: (call) => {
       // The flow asks for `SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?`.
       // This host is not an engine, but it answers the SAME question over the
       // same relation, in the same framing, newest first — so the read side
       // under test here is the read side that runs on a node.
-      const limit = Number(meta?.params?.[0]?.v ?? meta?.params?.[0] ?? 32) || 32;
+      const limit = Number(decodeSqlValues(call.raw?.params ?? new Uint8Array(0))[0]?.v ?? 32) || 32;
       const stream = store.readRecords("IRM", limit);
-      return encodeEnvelope({ ok: true }, stream.length ? [new Uint8Array(stream)] : []);
+      return { ok: true, result: { ROWS: stream.length ? 1n : 0n, COLUMNS: 1 }, raw: { stream: new Uint8Array(stream) } };
     },
   });
   pending.push({
     operation: "storage.write",
     matches: () => true,
-    respond: (meta) => {
-      // The hostcall contract is {schema, source?, data:base64} — `schema`, not
-      // `type`; a host that reads the wrong key refuses every write and the
-      // durable mark is never persisted even once.
-      const schema = String(meta?.schema ?? "");
-      if (!schema) return encodeEnvelope({ ok: false, message: "missing schema" });
-      const bytes = Buffer.from(String(meta?.data ?? ""), "base64");
-      if (bytes.length === 0) return encodeEnvelope({ ok: false, message: "empty record" });
+    respond: (call) => {
+      // StorageWriteParams SCHEMA + the raw "data" record (typed: no base64).
+      const schema = String(call.params?.SCHEMA ?? "").replace(/\.fbs$/, "").replace(/^\$/, "");
+      if (!schema) return { ok: false, error: { code: "invalid-params", message: "missing schema" } };
+      const bytes = Buffer.from(call.raw?.data ?? new Uint8Array(0));
+      if (bytes.length === 0) return { ok: false, error: { code: "invalid-params", message: "empty record" } };
       assert.ok(cellStage, "durable storage.write occurred outside a staged cell");
       assert.equal(schema, "IRM", "terrain runner stages only the durable $IRM resume mark");
       assert.equal(cellStage.markBytes, null, "cell wrote more than one durable $IRM mark");
       cellStage.markBytes = bytes;
-      return encodeEnvelope({ ok: true, result: { ok: true, schema, bytes: bytes.length } });
+      return { ok: true, result: { CID: `local-${createHash("sha256").update(bytes).digest("hex").slice(0, 32)}` } };
     },
   });
   pending.push({
     operation: "http.request",
     matches: () => true,
-    respond: (meta) => {
-      const cached = granuleCache.read(meta.url);
+    respond: (call) => {
+      const url = decoder.decode(call.raw?.url ?? new Uint8Array(0));
+      const cached = granuleCache.read(url);
       if (!cached) {
         // A cache miss means the URL the flow asked for is not the URL the
         // planner derived, which would mean the enumeration is not the pure
         // function of config-and-mark this runner rests on. Fail loudly.
-        return encodeEnvelope({ ok: false, message: `not prefetched: ${meta.url}` });
+        return { ok: false, error: { code: "failed", message: `not prefetched: ${url}` } };
       }
-      const status = cached.status;
-      const body = new Uint8Array(cached.body);
-      return encodeEnvelope({ ok: true, status, result: { status, headers: {} } }, [body]);
+      return {
+        ok: true,
+        result: { STATUS: cached.status, RETRIEVED_MS: BigInt(Date.now()) },
+        raw: { url: "", headers: "", body: new Uint8Array(cached.body) },
+      };
     },
   });
   pending.push({
     operation: "storage.ingest_with_source",
     matches: () => true,
-    respond: (meta, segments) => {
+    respond: (call) => {
       // Kept verbatim so the WasmEdge cross-check compares the bytes the flow
       // ACTUALLY stored, not a re-encode of them.
       assert.ok(cellStage, "storage.ingest_with_source occurred outside a staged cell");
       assert.equal(cellStage.recordStream, null, "cell emitted more than one terrain record stream");
-      lastCellRecords = Buffer.from(segments[0] ?? new Uint8Array(0));
-      const prepared = store.prepareAppend(segments[0] ?? new Uint8Array(0));
+      const records = call.raw?.records ?? new Uint8Array(0);
+      lastCellRecords = Buffer.from(records);
+      const prepared = store.prepareAppend(records);
       cellStage.recordStream = prepared.bytes;
       cellStage.records = prepared.records;
-      // `inserted`, NOT `records` — the connector's own key. hostcap/storage-
-      // ingest documents its host result as {"schema","inserted","batch_id",…}
-      // and publish_request reads `inserted` for two things: the silent-nop
-      // guard (ok:true with inserted=0 for a batch that carried tiles must NOT
-      // advance the mark) and the mark's cumulative RECORDS_COMMITTED. Under
-      // the wrong key both were dead: `inserted` parsed as absent (-1), so the
-      // guard could never fire in the only host that drives this flow, and
-      // every $IRM mark this runner wrote claimed 0 records committed no
-      // matter how many tiles it stored. Found by
-      // flows/terrain-ingest/tests/flow.test.mjs, which is why that package
-      // now has tests.
-      return encodeEnvelope({
+      // INSERTED is what publish_request reads for two things: the silent-nop guard (inserted 0 for a batch that
+      // carried tiles must NOT advance the mark) and the mark's cumulative RECORDS_COMMITTED.
+      return {
         ok: true,
-        result: { ok: true, schema: meta?.schema, batch_id: meta?.batch_id, inserted: prepared.records.length },
-      });
+        result: { SCHEMA: call.params?.SCHEMA ?? "", BATCH_ID: call.params?.BATCH_ID ?? "", INSERTED: BigInt(prepared.records.length) },
+      };
     },
   });
 
@@ -1242,15 +1272,6 @@ async function main() {
   const INGEST_MANIFEST = JSON.parse(
     fs.readFileSync(path.join(REPO, "data-source", "terrain-ingest", "plugin-manifest.json"), "utf8"),
   );
-
-  const alignedFrame = (portId, value) => {
-    const bytes = encoder.encode(JSON.stringify(value));
-    return {
-      portId,
-      typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-      payload: bytes,
-    };
-  };
 
   // THE FLOW AND THE PLANNER MUST BE THE SAME BUILD.
   //
@@ -1276,42 +1297,61 @@ async function main() {
     validateLinkedFlowDescriptor({ linkedDescriptors });
   }
 
+  // The sidecar resume mark (resume-mark.json) carries the $IRM it renders as `irm` (hex); recovery plans from it.
+  const markRecordsFromSidecar = (bytes) => {
+    if (!bytes || bytes.length === 0) return new Uint8Array(0);
+    const sidecar = JSON.parse(decoder.decode(bytes));
+    if (typeof sidecar?.irm !== "string" || sidecar.irm.length === 0) return new Uint8Array(0);
+    const irm = Buffer.from(sidecar.irm, "hex");
+    const framed = Buffer.alloc(4 + irm.length);
+    framed.writeUInt32LE(irm.length, 0);
+    irm.copy(framed, 4);
+    return new Uint8Array(framed);
+  };
+
   async function planCell({ markBytes = undefined } = {}) {
-    const harness = await createBrowserModuleHarness({
+    const harness = await createTypedHarness({
+      createBrowserModuleHarness,
       wasmSource: fs.readFileSync(INGEST_WASM),
       manifest: INGEST_MANIFEST,
-      surface: "direct",
-      hostcallDispatch: (operation) => {
-        if (operation === "plugin.getConfig") return flowConfigForCurrentCell();
-        throw new Error(`unexpected hostcall operation: ${operation}`);
-      },
+      config: () => flowConfigForCurrentCell(),
     });
     try {
-      const inputs = [alignedFrame("tick", { firedAt: new Date().toISOString() })];
+      const inputs = [{
+        portId: "tick",
+        typeRef: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" },
+        payload: encodeTimerTick({ triggerId: "timer-terrain-ingest", firedMs: Date.now() }),
+      }];
       // The SAME durable mark the flow will read on its own pass — the $IRM
-      // record out of the store, in the stream framing the query connector
+      // record out of the store, in the $FSB chunks the query connector
       // delivers. Pass 1 and pass 2 must see one mark or the enumeration stops
       // being the pure function of config-and-mark this runner rests on.
-      const mark = markBytes ?? store.readRecords("IRM", 32);
+      const mark = markBytes === undefined ? store.readRecords("IRM", 32) : markRecordsFromSidecar(markBytes);
       if (mark.length) {
-        inputs.push({
-          portId: "mark",
-          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: mark.length },
-          payload: new Uint8Array(mark),
-        });
+        inputs.push(...storeAnswer(new Uint8Array(mark)).filter((f) => f.portId === "records").map((f) => ({ ...f, portId: "mark" })));
       }
       const result = await harness.invoke({ methodId: "granule_plan", inputs });
       if (result.statusCode !== 0) {
         throw new Error(`granule_plan refused: ${result.errorCode}: ${result.errorMessage}`);
       }
       const byPort = new Map();
-      for (const out of result.outputs) byPort.set(out.portId, JSON.parse(decoder.decode(out.payload)));
+      for (const out of result.outputs) byPort.set(out.portId, new Uint8Array(out.payload));
       if (!byPort.has("plan")) return null; // drained
       const urls = [];
       for (let slot = 0; slot < 4; slot += 1) {
-        urls.push(byPort.get(`dem_${slot}`).url, byPort.get(`wbm_${slot}`).url);
+        urls.push(decodeHttpRequest(byPort.get(`dem_${slot}`)).url, decodeHttpRequest(byPort.get(`wbm_${slot}`)).url);
       }
-      return { job: byPort.get("job"), plan: byPort.get("plan"), urls, backlog: result.backlogRemaining ?? 0 };
+      const options = decodeModuleConfig(byPort.get("options"));
+      const planned = {
+        job: decodeIrmRecord(byPort.get("job")),
+        plan: decodePlanView(byPort.get("plan"), options),
+        urls,
+        backlog: result.backlogRemaining ?? 0,
+      };
+      // The wire bytes ride beside the view, NOT enumerable: the view is what refreshSourceExecutionPlan compares,
+      // and the bytes are what the WasmEdge cross-check hands the encoder.
+      Object.defineProperty(planned, "wire", { value: { plan: byPort.get("plan"), options: byPort.get("options") }, enumerable: false });
+      return planned;
     } finally {
       harness.destroy();
     }
@@ -1328,12 +1368,12 @@ async function main() {
     const observed = [];
     host.enqueueTriggerFrame(0, {
       portId: "tick",
-      bytes: encoder.encode(JSON.stringify({ firedAt: new Date().toISOString() })),
+      bytes: encodeTimerTick({ triggerId: "timer-terrain-ingest", firedMs: Date.now() }),
     });
     await host.drain(
       {
         "sdn.flow.egress:emit": ({ frames }) => {
-          for (const frame of frames) observed.push(decoder.decode(frame.bytes));
+          for (const frame of frames) observed.push(Uint8Array.from(frame.bytes));
           return { statusCode: 0 };
         },
       },
@@ -1341,13 +1381,18 @@ async function main() {
     );
     let stored = 0;
     let markJson = null;
-    for (const text of observed) {
-      let value;
-      try {
-        value = JSON.parse(text);
-      } catch {
+    // Egress is typed: the tile report is a FlowNotice (read back into its name=value facts), the advanced mark the
+    // $IRM the flow also wrote through storage.write.
+    for (const bytes of observed) {
+      const id = Buffer.from(bytes.subarray(4, 8)).toString("latin1");
+      if (id === "$IRM") {
+        // The operator-readable mark (resume-mark.json): the $IRM's fields, and the record itself (hex) so a
+        // recovery can plan against exactly the mark it renders.
+        markJson = { ...decodeIrmRecord(bytes), irm: irmHex(bytes) };
         continue;
       }
+      if (id !== "FNTC") continue;
+      const value = decodeTileReport(bytes);
       if (value.tilesEmitted !== undefined) {
         stored += value.tilesEmitted;
         stats.edgeClampedPosts += value.edgeClampedPosts ?? 0;
@@ -1390,11 +1435,7 @@ async function main() {
           }
         }
       }
-      // The operator-readable JSON mark, which the flow still lands on egress.
-      // It is NOT the durable one and it is not what advances the walk: the
-      // durable mark is the $IRM record the flow wrote through storage.write,
-      // and `marksWritten` below is the only evidence that happened.
-      if (value.next_tile_index !== undefined) markJson = value;
+
     }
     return { stored, markJson, stage: cellStage };
   }
@@ -1402,34 +1443,14 @@ async function main() {
   // The same `tile` invocation the flow performs, reassembled from the plan
   // and the granule cache — the flow's own inputs, not a paraphrase of them.
   function tileInputsFor(planned) {
-    const inputs = [
-      {
-        portId: "plan",
-        typeRef: {
-          wireFormat: "aligned-binary",
-          requiredAlignment: 1,
-          byteLength: encoder.encode(JSON.stringify(planned.plan)).length,
-        },
-        payload: encoder.encode(JSON.stringify(planned.plan)),
-      },
-    ];
+    // The plan and the options exactly as granule_plan emitted them, and each granule as the HttpResponse the flow's
+    // http node hands the encoder (typed contracts 1.0: BODY verbatim, a 404 is open ocean).
+    const inputs = [typedInput("plan", planned.wire.plan), typedInput("options", planned.wire.options)];
     for (let slot = 0; slot < 4; slot += 1) {
       for (const [port, url] of [["dem", planned.urls[slot * 2]], ["water", planned.urls[slot * 2 + 1]]]) {
         const cached = granuleCache.read(url);
         if (!cached) continue;
-        const status = cached.status;
-        const body = cached.body;
-        // hostcap/http-request responseWire "raw-body-v1": "$HRB", LE status,
-        // body verbatim — the frame the flow's http node hands the encoder.
-        const hrb = Buffer.alloc(8 + body.length);
-        hrb.write("$HRB", 0, "latin1");
-        hrb.writeUInt32LE(status, 4);
-        body.copy(hrb, 8);
-        inputs.push({
-          portId: port,
-          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: hrb.length },
-          payload: new Uint8Array(hrb),
-        });
+        inputs.push(granuleFrame(port, cached.body, cached.status, { url }));
       }
     }
     return inputs;

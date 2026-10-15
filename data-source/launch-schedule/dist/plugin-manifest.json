@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.launch-schedule",
   "name": "Upcoming launch notices",
-  "version": "0.1.0",
-  "description": "Fetch-plan and normalization nodes for upcoming-launch notices from a public launch registry. Emits binary LDM with each launch window; generic host HTTP, scheduling, storage and publication supply network transport.",
+  "version": "0.2.0",
+  "description": "Fetch-plan and normalization nodes for upcoming-launch notices from a public launch registry (Launch Library 2) (typed contracts 1.0: FlatBuffers only, no JSON between modules). plan_launches turns a TimerTick into ONE HttpRequest whose CONTEXT is the plan, a size-prefixed IngestRequest skeleton (schema LDM.fbs, provider launch-schedule, source upcoming, the canonical URL naming the page size, the producer peer id, terms and citation, reconcile Current), reading node CONFIG launch_schedule_source.access / .limit and launch_schedule_producer_peer_id through the builtin plugin.getConfig hostcall (SDS $PIV). parse_launches takes the HttpResponse, requires the echoed plan to be canonical, validates the whole page and emits binary $LDM with each launch window, the IngestRequest for hostcap/storage-ingest and a FlowNotice report; it makes no host call. Generic host HTTP, scheduling, storage and publication supply network transport.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Bounded deterministic request planning and binary normalization of one registry page. No host calls, threads or network access."
+    "detail": "Bounded deterministic request planning (one plugin.getConfig hostcall) and binary normalization of one registry page. No threads or network access."
   },
   "methods": [
     {
@@ -24,26 +24,25 @@
       "displayName": "Plan launch registry request",
       "inputPorts": [
         {
-          "portId": "config",
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "config-v1",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Explicit access tier (anonymous) and page size (1-100 upcoming launches)."
-              }
+              "description": "TimerTick (TICK) from the scheduling adapter (fields not read); the plan comes from node CONFIG launch_schedule_source.* (access anonymous, limit 1-100)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Explicit access tier (anonymous) and page size (1-100 upcoming launches)."
+          "description": "TimerTick (TICK) from the scheduling adapter (fields not read); the plan comes from node CONFIG launch_schedule_source.* (access anonymous, limit 1-100)."
         }
       ],
       "outputPorts": [
@@ -51,45 +50,22 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "request-v1",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "GET descriptor for the generic HTTP host."
-              }
+              "description": "HttpRequest (HREQ) GET of the registry's upcoming page, TIMEOUT_MS 30000, MAX_BYTES 4 MiB; CONTEXT the plan: one size-prefixed IngestRequest (SCHEMA LDM.fbs, TAGS PROVIDER_ID launch-schedule, SOURCE_NAME upcoming, SOURCE_URL the canonical URL, SOURCE_PEER the producer peer id, LICENSE_URL the registry terms, CITATION; RECONCILE Current)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "GET descriptor for the generic HTTP host."
-        },
-        {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Canonical request attribution and page size used to bind parsing to the request."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Canonical request attribution and page size used to bind parsing to the request."
+          "description": "HttpRequest (HREQ) GET of the registry's upcoming page, TIMEOUT_MS 30000, MAX_BYTES 4 MiB; CONTEXT the plan: one size-prefixed IngestRequest (SCHEMA LDM.fbs, TAGS PROVIDER_ID launch-schedule, SOURCE_NAME upcoming, SOURCE_URL the canonical URL, SOURCE_PEER the producer peer id, LICENSE_URL the registry terms, CITATION; RECONCILE Current)."
         }
       ],
       "maxBatch": 1,
@@ -100,70 +76,25 @@
       "displayName": "Normalize launch notices",
       "inputPorts": [
         {
-          "portId": "job",
-          "acceptedTypeSets": [
-            {
-              "setId": "job-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The unmodified launch plan emitted by plan_launches; parsing refuses a response whose job differs from its canonical plan."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The unmodified launch plan emitted by plan_launches; parsing refuses a response whose job differs from its canonical plan."
-        },
-        {
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-              }
+              "description": "HttpResponse (HRSP): STATUS (200 required), BODY the registry JSON, CONTEXT the unmodified plan (parsing refuses a plan that differs from the canonical plan of its URL or carries no producer peer id), RETRIEVED_MS the host's retrieval time."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
-        },
-        {
-          "portId": "receipt",
-          "acceptedTypeSets": [
-            {
-              "setId": "receipt-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+          "description": "HttpResponse (HRSP): STATUS (200 required), BODY the registry JSON, CONTEXT the unmodified plan (parsing refuses a plan that differs from the canonical plan of its URL or carries no producer peer id), RETRIEVED_MS the host's retrieval time."
         }
       ],
       "outputPorts": [
@@ -176,9 +107,11 @@
                 {
                   "schemaName": "LDM.fbs",
                   "fileIdentifier": "$LDM",
-                  "rootTypeName": "LDM"
+                  "rootTypeName": "LDM",
+                  "wireFormat": "flatbuffer"
                 }
-              ]
+              ],
+              "description": "Size-prefixed binary LDM stream, one per upcoming launch with its NET and window."
             }
           ],
           "minStreams": 1,
@@ -190,45 +123,43 @@
           "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "meta-v1",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Attribution metadata for generic storage.ingest_with_source. The host adds a cryptographic batch ID."
-              }
+              "description": "IngestRequest (INGQ) for hostcap/storage-ingest: the plan's tags with BATCH_ID = SHA-256 of the response body, RECONCILE Current, PROVENANCE (status, validators, retrieval time, parser, source SHA-256, record count)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Attribution metadata for generic storage.ingest_with_source. The host adds a cryptographic batch ID."
+          "description": "IngestRequest (INGQ) for hostcap/storage-ingest: the plan's tags with BATCH_ID = SHA-256 of the response body, RECONCILE Current, PROVENANCE (status, validators, retrieval time, parser, source SHA-256, record count)."
         },
         {
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Record counts, launches skipped for unsupported NET precision and retrieval time; never a dataset record."
-              }
+              "description": "FlowNotice (FNTC) Info, REASON normalized: COUNT the records, AT_MS the retrieval time, ITEMS registry-count:<n> and skipped-imprecise:<launch id> for each launch skipped for an unsupported NET precision; never a dataset record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Record counts, launches skipped for unsupported NET precision and retrieval time; never a dataset record."
+          "description": "FlowNotice (FNTC) Info, REASON normalized: COUNT the records, AT_MS the retrieval time, ITEMS registry-count:<n> and skipped-imprecise:<launch id> for each launch skipped for an unsupported NET precision; never a dataset record."
         }
       ],
       "maxBatch": 1,

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.gp-archive-records",
   "name": "SDN GP Archive Records",
-  "version": "0.1.0",
-  "description": "Builds the GP history archive's $MPE element sets and $CAT catalog rows in archive encoding v1: the exact byte layout the archive's content IDs (sha256 over the record bytes) depend on. Records are built with the schema-generated SDS C++ builders; field names and vtable slots come only from the generated headers, and the field order and default handling are a compatibility contract gated by fixture bytes from the importer's original builder. Pure compute; output bytes depend only on input bytes.",
+  "version": "0.2.0",
+  "description": "Re-builds the GP history archive's $MPE element sets and $CAT catalog rows in archive encoding v1: the exact byte layout the archive's content IDs (sha256 over the record bytes) depend on. Takes a size-prefixed $MPE or $CAT record stream in any builder layout, reads each record's values in place through the generated SDS accessors, and builds it again with the schema-generated SDS C++ builders; the field order and default handling are a compatibility contract gated by fixture bytes from the importer's original builder. Pure compute; output bytes depend only on the input values.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -27,24 +27,22 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "gp-archive-field-batch-v1",
+              "setId": "sds-mpe-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GPAF field batch (little-endian): \"GPAF\", u16 version 1, u16 field count, then each field name (u8 length + bytes), u32 record count, then each record's values in header order. Fields: ENTITY_ID (string: u32 length + bytes, kept exactly) and EPOCH (Unix seconds, UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR (IEEE-754 binary64). Every field exactly once, in any order; unknown fields are refused.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.spacedatanetwork.gp-archive-field-batch",
-                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, named by the SDS field names of the record being built and carried as their exact bytes and IEEE-754 bits. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
-              }
+              "description": "Size-prefixed $MPE record stream ([u32le length][$MPE] frames; zero-length prefixes are padding). Each record must carry ENTITY_ID, EPOCH, MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY and BSTAR written (force-defaults, so 0.0 and -0.0 stay distinct; EPOCH in Unix seconds, UTC); MEAN_ELEMENT_THEORY, if written, must be SGP4; any other field (TARGETER) is refused, as archive v1 cannot carry it."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One field batch frame holding the records to build."
+          "description": "One $MPE record stream holding the records to re-build."
         }
       ],
       "outputPorts": [
@@ -52,22 +50,16 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-mpe-aligned-stream",
+              "setId": "sds-mpe-stream",
               "allowedTypes": [
                 {
                   "schemaName": "MPE.fbs",
                   "fileIdentifier": "$MPE",
-                  "rootTypeName": "MPE"
-                },
-                {
-                  "schemaName": "MPE.fbs",
-                  "fileIdentifier": "$MPE",
                   "rootTypeName": "MPE",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: every field written, defaults included, MEAN_ELEMENT_THEORY = SGP4."
+              "description": "Size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: every field written, defaults included, MEAN_ELEMENT_THEORY = SGP4."
             }
           ],
           "minStreams": 1,
@@ -78,7 +70,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds one $MPE per input element set in archive encoding v1. A malformed batch is refused whole."
+      "description": "Builds one $MPE per input $MPE record in archive encoding v1. A malformed stream or record is refused whole."
     },
     {
       "methodId": "build_cat",
@@ -88,24 +80,22 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "gp-archive-field-batch-v1",
+              "setId": "sds-cat-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GPAF field batch (little-endian): \"GPAF\", u16 version 1, u16 field count, then each field name (u8 length + bytes), u32 record count, then each record's values in header order. Fields: OBJECT_ID and OBJECT_NAME (string: u32 length + bytes, kept exactly) and NORAD_CAT_ID (u32). Every field exactly once, in any order; unknown fields are refused.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/vnd.spacedatanetwork.gp-archive-field-batch",
-                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, named by the SDS field names of the record being built and carried as their exact bytes and IEEE-754 bits. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
-              }
+              "description": "Size-prefixed $CAT record stream ([u32le length][$CAT] frames; zero-length prefixes are padding). Each record must carry OBJECT_ID and OBJECT_NAME (bytes kept exactly); NORAD_CAT_ID may be absent (0); any other field is refused, as archive v1 cannot carry it."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One field batch frame holding the records to build."
+          "description": "One $CAT record stream holding the records to re-build."
         }
       ],
       "outputPorts": [
@@ -113,22 +103,16 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-cat-aligned-stream",
+              "setId": "sds-cat-stream",
               "allowedTypes": [
                 {
                   "schemaName": "CAT.fbs",
                   "fileIdentifier": "$CAT",
-                  "rootTypeName": "CAT"
-                },
-                {
-                  "schemaName": "CAT.fbs",
-                  "fileIdentifier": "$CAT",
                   "rootTypeName": "CAT",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $CAT stream: concatenated [u32le length][$CAT buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: OBJECT_ID, NORAD_CAT_ID and OBJECT_NAME, defaults omitted."
+              "description": "Size-prefixed $CAT stream: concatenated [u32le length][$CAT buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: OBJECT_ID, NORAD_CAT_ID and OBJECT_NAME, defaults omitted."
             }
           ],
           "minStreams": 1,
@@ -139,7 +123,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds one $CAT per input catalog row in archive encoding v1. A malformed batch is refused whole."
+      "description": "Builds one $CAT per input $CAT record in archive encoding v1. A malformed stream or record is refused whole."
     }
   ],
   "schemasUsed": [

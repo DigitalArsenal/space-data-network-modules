@@ -12,7 +12,11 @@ byte-identical in the browser, WasmEdge and Docker WasmEdge.
 | --- | --- | --- |
 | `detect_maneuvers` | element sets (`$OMM`) and their trajectories, or per-set trajectories (`$OEM`) | `$MNV` DETECTED |
 | `compare_ephemerides` | ephemeris versions (`$OEM`), planned maneuvers (`$MNV`) | `$MNV` EXECUTED / CANCELLED / UNKNOWN, version changes |
-| `score_detections` | detected and truth `$MNV` | recall, time error, delta-V ratio, false alarms (JSON) |
+| `score_detections` | detected and truth `$MNV` | recall, time error, delta-V ratio, false alarms (`$MDE`) |
+
+Every method also writes one `$MDE` (maneuver detection evidence) on `report`:
+the detect, compare or score report arm. Nothing between modules is JSON;
+`study/lib/mde.mjs` renders `$MDE` and `$PRW` records for reading on the host.
 
 ## `detect_maneuvers`
 
@@ -21,36 +25,39 @@ byte-identical in the browser, WasmEdge and Docker WasmEdge.
 | `element_sets` | in | `$OMM` | Element sets, plain or a stream of size-prefixed records. Grouped by `NORAD_CAT_ID` (else `OBJECT_ID`, else `OBJECT_NAME`); one set per `EPOCH`, a later record replacing an earlier one |
 | `propagation` | in | `$OEM` | Answers to `propagation_requests`: one data block per query, in query order |
 | `ephemerides` | in | `$OEM` | Per-set trajectories supplied by the caller instead: one block per element set spanning its neighbouring sets' epochs, grouped by object and ordered by the middle of their span |
-| `options` | in | JSON | Below; every field optional |
-| `propagation_requests` | out | JSON | The trajectories the detector needs |
+| (config) | node config | `ModuleConfig` (MCFG) | The options below, as the node's configuration (`plugin.getConfig`, read with `sdm_piv::get_config`) under the `detect` table (keys `detect.*`); every key optional. Keys outside `detect.*` belong to other modules sharing a flow's config and are not read; an unknown key inside `detect.*` is refused. Not an input frame |
+| `propagation_requests` | out | `$PRW` (`WINDOW_REQUEST`) | The trajectories the detector needs |
 | `maneuvers` | out | `$MNV` | One record per detected maneuver |
-| `report` | out | JSON | Per object: the pairs, the levels (with `report_levels`), each detector's events and their evidence |
+| `report` | out | `$MDE` (`DETECT_REPORT`) | Run status, duplicate epochs, refused sets, the options used, and per object: the crossing pairs, the levels (with `report_levels`), every event each detector raised with its evidence, and the emitted events (`MNV_ID` names each `$MNV`) |
 
 ### The propagator query port
 
 The pattern is `analysis/estimation`'s inverted port: the request is
 stateless and replayed.
 
-1. Call with `element_sets` (and `options`, which may name the
+1. Call with `element_sets` (the node configuration may name the
    `propagator_port_id` the host routes to). The module answers on
-   `propagation_requests`, `{status: "needs-propagation", propagator_port_id,
-   neighbour_sets, queries: [...]}`. There is one query per element set:
-   `{sequence, object, norad, object_id, set, epoch, start, stop, step_s}`.
-   `set` indexes the `$OMM` record in input order. The span runs from the
-   epoch `neighbour_sets` sets earlier to the epoch `neighbour_sets` sets
-   later, clamped at the ends.
+   `propagation_requests` with one `$PRW` whose `WINDOW_REQUEST` holds
+   `PROPAGATOR_PORT_ID`, `NEIGHBOUR_SETS`, `INSTRUCTIONS` and one
+   `PRWWindowQuery` per element set: `SEQUENCE`, `SET_INDEX`, `OBJECT_KEY`,
+   `NORAD_CAT_ID`, `OBJECT_ID`, `SOURCE_EPOCH`, `START`, `STOP` (`TIMInstant`,
+   UTC, ISO 8601 to the millisecond) and `STEP_SECONDS`. `SET_INDEX` indexes
+   the `$OMM` record in input order. The span runs from the epoch
+   `neighbour_sets` sets earlier to the epoch `neighbour_sets` sets later,
+   clamped at the ends. The `$MDE` report says `NeedsPropagation` with the
+   query count.
 2. The host routes every query to the plugged propagator. Each answer is one
    `$OEM` data block with these properties:
    - it is the trajectory of that set alone;
-   - it covers `start` to `stop`;
-   - samples are no more than `step_s` apart;
+   - it covers `START` to `STOP`;
+   - samples are no more than `STEP_SECONDS` apart;
    - UTC, km, km/s;
    - Earth-centred axes, inertial (GCRF, ICRF, J2000, EME2000, TEME, CIRS,
      MOD, TOD, TOE, B1950) or Earth-fixed (ITRF, ECEF, EFG, WGS84, GTOD).
 
    A set the propagator refuses is answered by an empty block whose `COMMENT`
    begins `REFUSED`.
-3. Call again with the same `element_sets` and `options`, plus the answers on
+3. Call again with the same `element_sets` and configuration, plus the answers on
    `propagation`. The module rebuilds the queries from the element sets and
    checks each answer against its query: same object, span covered, step
    respected. An answer out of order, or short of its span, is refused, so it
@@ -138,7 +145,7 @@ The method checks operator files against each other. Its inputs:
 - `planned`: `$MNV` records, with `EVENT_START_TIME` the TIG, `DELTA_VEL` the
   planned size, `DELTA_VEL_W` (cross-track, UVW) when the plan leaves the
   orbit plane, and `PROVENANCE`, which the check carries;
-- `options`: `margin_s` (600), `post_start_after_s` (3600),
+- configuration (`ModuleConfig`): `margin_s` (600), `post_start_after_s` (3600),
   `executed_fraction` (0.5), `cancelled_fraction` (0.25),
   `unplanned_threshold_km` (off), `within_version` (false).
 
@@ -167,20 +174,25 @@ whole revolutions.
   nodal-regression correction, which leaves a few tenths of a m/s of
   cross-track error in LEO.
 
+The report (`$MDE` `COMPARE_REPORT`) gives, per object, every version change
+(mode, window, semi-major axis change, in-track and cross-track delta-V, gap)
+and every planned check (pre and post versions, modelled and executed change,
+status), with the executed, cancelled, undecided and unplanned counts.
+
 ## `score_detections`
 
-The inputs are `detected` and `truth` (`$MNV`) and `options`:
+The inputs are `detected` and `truth` (`$MNV`); the configuration (`ModuleConfig`) holds:
 - `before_s`, `after_s`: the match window [truth start − before, truth end +
   after];
 - `bins_mps`;
-- `explained`, `assessed` and `spans`: lists of `{object, from, to}`.
+- `explained`, `assessed` and `spans`: lists of `{object, from, to}` (TableList).
 
 Matching:
 - pairs are one-to-one, nearest first;
 - truth delta-V is `DELTA_VEL`, or the integral of `MNVR_ACCEL_TIMES` /
   `MNVR_ACCELS` (each value held until the next time).
 
-The report gives:
+The report (`$MDE` `SCORE_REPORT`) gives:
 - recall with its Wilson 95 % interval, overall and by delta-V bin;
 - burn-time error and delta-V ratio distributions;
 - false alarms: unmatched events that are assessed and not explained, per

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 import { minizSourceFragments } from "./miniz-source.mjs";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -25,32 +26,33 @@ process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
 // flatc emits every SDS header with the same include guard
 // (FLATBUFFERS_GENERATED_MAIN_H_) and a self-named `#include
-// "main_generated.h"`; inlining a standard into the translation unit requires
-// stripping both (same pattern as data-source/satnogs-source).
-function inlineGeneratedHeader(source) {
-  return source
-    .replace(
-      /#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/,
-      "",
-    )
-    .replace(/#include "main_generated\.h"\s*\n/g, "")
-    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
+// "main_generated.h"`; inlining several standards into one translation unit
+// renames each guard per code and relaxes the flatc version static_assert,
+// exactly as foundation/http-route and hostcap/clock do.
+async function sdsHeader(code) {
+  const header = await generateSdsHeader(code, import.meta.url);
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
 }
+
+// SDK-owned HTTP envelope ABI header (schemas/HttpRequestAbi.fbs -> $HTQ), resolved through the SDK package itself.
+const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve("space-data-module-sdk/compiler"))), "..", "..");
+const sdkHttpCppRoot = path.join(sdkRoot, "src", "generated", "http", "cpp");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 
-// $TBS is self-contained: its two nested tables and both enums live in the same
-// schema, so unlike the RFB build there is no include graph to topologically
-// order here.
-const inlineStandards = ["TBS"];
-const headers = await Promise.all(
-  inlineStandards.map((standard) =>
-    fs.readFile(
-      path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"),
-      "utf8",
-    ),
-  ),
-);
+// Typed contracts: $TBS (records and the intra-flow reports), $APR (the run
+// contract + refusals + answers), $DAV (the dataset availability beside the
+// records), $QRP (the provider catalog projection page) and $IRM (the bulk
+// resume mark). The runtime types (HttpRequest/HttpResponse) are staged by the
+// SDK compiler.
+const inlineStandards = ["TBS", "APR", "DAV", "QRP", "IRM"];
+const headers = [
+  await fs.readFile(path.join(sdkHttpCppRoot, "HttpRequestAbi_generated.h"), "utf8"),
+  ...(await Promise.all(inlineStandards.map(sdsHeader))),
+];
 const implementationSource = await fs.readFile(sourcePath, "utf8");
 
 // ZIP INFLATE for the national bulk archives (ACMA/ISED/ANFR ship one ZIP
@@ -73,7 +75,7 @@ const implementationSource = await fs.readFile(sourcePath, "utf8");
 const minizFragments = await minizSourceFragments();
 
 const sourceCode = [
-  ...headers.map(inlineGeneratedHeader),
+  ...headers,
   ...minizFragments,
   implementationSource,
 ].join("\n\n");

@@ -91,17 +91,6 @@ std::vector<Query> queriesFor(const SetsByObject& objects, int neighbours, doubl
   return out;
 }
 
-Json queriesJson(const std::vector<Query>& queries, const std::string& portId, int neighbours) {
-  Json list = Json::array();
-  for (const Query& q : queries)
-    list.push_back({{"sequence", q.sequence}, {"object", q.key}, {"norad", q.norad}, {"object_id", q.objectId},
-                    {"set", q.set}, {"epoch", isoMs(q.epoch)}, {"start", isoMs(q.start)}, {"stop", isoMs(q.stop)}, {"step_s", q.step}});
-  return {{"status", "needs-propagation"}, {"propagator_port_id", portId}, {"neighbour_sets", neighbours},
-          {"answer", "One $OEM data block per query, in sequence order: the set's trajectory from start to stop, sampled at least every step_s, "
-                     "UTC, km and km/s, Earth-centred inertial or Earth-fixed axes. A set the propagator refuses: an empty block whose COMMENT begins REFUSED."},
-          {"queries", list}};
-}
-
 // The answer blocks against their queries: same object, the query's span
 // covered, no sample gap wider than the step (1 ms and 1 % slack).
 bool takeAnswers(const std::vector<Query>& queries, const std::vector<const ephemerisDataBlock*>& answers,

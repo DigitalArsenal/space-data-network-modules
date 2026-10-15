@@ -1,11 +1,15 @@
 // data-source/vimpel-source: JSC Vimpel's public orbit data as SDS records.
 //
-//   normalize_orbits  the osculating-element table (15 columns)  -> $OEM, one J2000 state per object
-//   read_ephemeris    one rectangular ephemeris file (index, x, y, z) -> $OEM, position-only, 600 s apart
-//   read_datefirst    the datefirst crosswalk (Nvym, t_det_v, Nnor, t_det_n) -> candidate links (JSON)
+//   normalize_orbits  HttpResponse (HRSP) of the osculating-element table (15 columns) -> $OEM, one J2000 state per object,
+//                     and the batch's IngestRequest (INGQ) on report
+//   read_ephemeris    HRSP of one rectangular ephemeris file (index, x, y, z), the file name the last segment of its URL
+//                     -> $OEM, position-only, 600 s apart, and the INGQ on report
+//   read_datefirst    HRSP of the datefirst crosswalk (Nvym, t_det_v, Nnor, t_det_n) -> $OIL, candidate links
+//   any method        HTTP 304 -> one FlowNotice (FNTC) Unchanged on unchanged, and nothing else
 //
-// Pure bytes in, pure bytes out: the login, retrieval and the archive (the ephemeris files come in a RAR) belong
-// to the SDN host flow. Errors are flags (an invoke error code and message), never exceptions.
+// Typed contracts 1.0: every port is one FlatBuffers type; the provider's text is only inside the response BODY.
+// The login, retrieval and the archive (the ephemeris files come in a RAR) belong to the SDN host flow. Errors are
+// flags (an invoke error code and message), never exceptions.
 //
 // The table and file layouts are read by files/orbit-products/src/vimpel.hpp, the one reader of the public
 // format; the conversion of the printed elements to a state is foundation/orbits' cartesianFromKeplerian, the
@@ -27,7 +31,11 @@
 #include <string>
 #include <vector>
 
-using Json = nlohmann::json;
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "FlowNotice_generated.h"
+
+namespace R = sdn::runtime;
 
 namespace {
 
@@ -43,20 +51,80 @@ int fail(const char* code, const std::string& message) {
   return 1;
 }
 
-const plugin_input_frame_t* frame_of(const char* port, size_t max_bytes) {
-  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
-    const auto* f = plugin_get_input_frame(i);
-    if (f && f->port_id && !std::strcmp(f->port_id, port)) {
-      return f->payload && f->payload_length && f->payload_length <= max_bytes ? f : nullptr;
-    }
-  }
-  return nullptr;
+int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
+  return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data, static_cast<uint32_t>(size));
 }
 
-int push_json(const char* port, const Json& value) {
-  const std::string text = value.dump();
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(text.data()),
-                               static_cast<uint32_t>(text.size()));
+// The one input of every method: the HttpResponse hostcap/http-request answers, BODY the provider's file verbatim.
+struct Response {
+  const uint8_t* body = nullptr;
+  size_t size = 0;
+  std::string url;
+  int32_t status = 0;
+  uint64_t retrieved_ms = 0;
+  bool unchanged = false;
+};
+
+// 0: a bounded 200 body in `out`, or a 304 (out.unchanged, the FlowNotice already pushed). Otherwise the error is set.
+int read_response(const char* code, const char* schema, size_t max_bytes, Response& out) {
+  if (plugin_get_input_count() != 1) return fail(code, "Exactly one HttpResponse (HRSP) on response is required.");
+  const auto* f = plugin_get_input_frame(0);
+  if (!f || !f->port_id || std::strcmp(f->port_id, "response") || !f->payload) return fail(code, "The input must be one HttpResponse (HRSP) on response.");
+  flatbuffers::Verifier verifier(f->payload, f->payload_length);
+  if (!R::VerifyHttpResponseBuffer(verifier)) return fail("invalid-response-frame", "The input on response is not an HttpResponse (HRSP).");
+  const R::HttpResponse& http = *R::GetHttpResponse(f->payload);
+  out.url = http.URL() ? http.URL()->str() : std::string();
+  out.status = http.STATUS();
+  out.retrieved_ms = http.RETRIEVED_MS();
+  if (http.STATUS() == 304) {
+    out.unchanged = true;
+    R::FlowNoticeT n;
+    n.KIND = R::flowNoticeKind_Unchanged;
+    n.SCHEMA = schema;
+    n.SOURCE_NAME = "vimpel";
+    n.REASON = "not-modified";
+    n.COUNT = 1;
+    if (!out.url.empty()) n.ITEMS.push_back(out.url);
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &n));
+    return push("unchanged", "FlowNotice.fbs", R::FlowNoticeIdentifier(), "FlowNotice", b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
+  }
+  if (http.STATUS() != 200 || (http.ERROR() && http.ERROR()->size())) return fail("fetch-failed", "The response is not HTTP 200: " + std::to_string(http.STATUS()) + (http.ERROR() ? " " + http.ERROR()->str() : std::string()));
+  const auto* body = http.BODY();
+  if (!body || !body->size() || body->size() > max_bytes) return fail(code, "The response body is empty or exceeds the bound.");
+  out.body = body->data();
+  out.size = body->size();
+  return 0;
+}
+
+// The batch's IngestRequest: what was read, the provider's columns as ATTRIBUTES in the order given.
+int push_meta(const Response& in, const std::string& sha, const char* parser_version, uint64_t count, const std::vector<std::pair<std::string, std::string>>& attributes) {
+  R::IngestRequestT meta;
+  meta.SCHEMA = "OEM.fbs";
+  meta.TAGS = std::make_unique<R::SourceTagsT>();
+  meta.TAGS->SOURCE_NAME = "vimpel";
+  meta.TAGS->SOURCE_URL = in.url;
+  meta.TAGS->BATCH_ID = sha;
+  meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  auto& p = *meta.PROVENANCE;
+  p.SOURCE_URL = in.url;
+  p.HTTP_STATUS = in.status;
+  p.RETRIEVED_MS = in.retrieved_ms;
+  p.PARSER = "vimpel-source";
+  p.PARSER_VERSION = parser_version;
+  p.SOURCE_SHA256 = sha;
+  p.NORMALIZED_COUNT = count;
+  p.SCHEMAS = {"OEM.fbs"};
+  p.SCHEMA_COUNTS = {count};
+  for (const auto& entry : attributes) {
+    auto h = std::make_unique<R::HeaderT>();
+    h->NAME = entry.first;
+    h->VALUE = entry.second;
+    p.ATTRIBUTES.push_back(std::move(h));
+  }
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishIngestRequestBuffer(b, R::IngestRequest::Pack(b, &meta));
+  return push("report", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", b.GetBufferPointer(), b.GetSize());
 }
 
 // "YYYY-MM-DDTHH:MM:SSZ" as vimpel.hpp writes it -> "YYYY-MM-DDTHH:MM:SS.000000" (the scale is TIME_SYSTEM's).
@@ -123,18 +191,18 @@ std::vector<std::array<std::string, 6>> extra_columns(const std::string& text) {
 }  // namespace
 
 extern "C" int normalize_orbits(void) {
-  const auto* input = frame_of("source", kMaxTableBytes);
-  if (!input) return fail("invalid-vimpel-orbits", "The source must be one bounded Vimpel orbit table.");
+  Response in;
+  if (read_response("invalid-vimpel-orbits", "OEM.fbs", kMaxTableBytes, in) || in.unchanged) return in.unchanged ? 0 : 1;
   std::vector<sdn::vimpel::Elements> records;
-  if (!sdn::vimpel::elements(input->payload, input->payload_length, records)) {
+  if (!sdn::vimpel::elements(in.body, in.size, records)) {
     return fail("invalid-vimpel-orbits", "Malformed, duplicate or unsupported Vimpel orbit row; no output was published.");
   }
-  const std::string text(reinterpret_cast<const char*>(input->payload), input->payload_length);
+  const std::string text(reinterpret_cast<const char*>(in.body), in.size);
   const auto extras = extra_columns(text);
   if (extras.size() != records.size()) return fail("invalid-vimpel-orbits", "The table's rows and its states disagree.");
   const double rad = sdn::orbits::kPi / 180.0;
   std::vector<OEMT> states(records.size());
-  Json objects = Json::array();
+  std::vector<std::pair<std::string, std::string>> objects;
   for (size_t k = 0; k < records.size(); ++k) {
     const auto& r = records[k];
     const auto& v = r.values;  // a (km), i, raan (deg), e, u, omega (deg)
@@ -161,13 +229,16 @@ extern "C" int normalize_orbits(void) {
     line->Z_DOT = state.velocity.z / 1000.0;
     block->EPHEMERIS_DATA_LINES.push_back(std::move(line));
     oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
-    objects.push_back({r.canonicalId, r.epoch, extras[k][0], extras[k][1], extras[k][2], extras[k][3], extras[k][4], extras[k][5]});
+    // One attribute per object, in table order: its columns as printed, joined by commas as the table writes them.
+    std::string columns = r.canonicalId + "," + r.epoch;
+    for (const auto& c : extras[k]) columns += "," + c;
+    objects.emplace_back("object." + std::to_string(k + 1), columns);
   }
-  const Json report = {{"version", 1}, {"source", "vimpel"}, {"kind", "orbits"}, {"records", records.size()}, {"sha256", ephem::sha256_hex(input->payload, input->payload_length)},
-                       {"bytes", input->payload_length}, {"muKm3PerS2", kMuKm3S2}, {"frame", "J2000"}, {"timeSystem", "UTC"},
-                       {"columns", {"nativeId", "epoch", "firstObservation", "daysSinceUpdate", "areaToMassM2PerKg", "magnitude", "alongTrackTimingMinutes50", "transversePositionKm50"}},
-                       {"objects", objects}};
-  if (push_json("report", report) < 0) return 1;
+  std::vector<std::pair<std::string, std::string>> attributes = {
+      {"kind", "orbits"}, {"records", std::to_string(records.size())}, {"bytes", std::to_string(in.size)}, {"muKm3PerS2", "398600.4418"}, {"frame", "J2000"}, {"timeSystem", "UTC"},
+      {"columns", "nativeId,epoch,firstObservation,daysSinceUpdate,areaToMassM2PerKg,magnitude,alongTrackTimingMinutes50,transversePositionKm50"}};
+  attributes.insert(attributes.end(), objects.begin(), objects.end());
+  if (push_meta(in, ephem::sha256_hex(in.body, in.size), "vimpel-orbits-1", records.size(), attributes) < 0) return 1;
   for (const OEMT& oem : states) {
     if (push_oem("states", oem) < 0) return 1;
   }
@@ -177,12 +248,14 @@ extern "C" int normalize_orbits(void) {
 // ── a rectangular ephemeris file ──────────────────────────────────────────────────────────────────────
 
 extern "C" int read_ephemeris(void) {
-  const auto* name = frame_of("name", 256);
-  const auto* input = frame_of("source", kMaxEphemerisBytes);
-  if (!name || !input) return fail("invalid-vimpel-ephemeris", "A Vimpel ephemeris is its file name (<id>_<YYYYMMDD>_<HHMMSS>) and its rows.");
+  Response in;
+  if (read_response("invalid-vimpel-ephemeris", "OEM.fbs", kMaxEphemerisBytes, in) || in.unchanged) return in.unchanged ? 0 : 1;
+  // The file name (<id>_<YYYYMMDD>_<HHMMSS>) is the last segment of the response URL, query and fragment dropped.
+  std::string file = in.url.substr(0, in.url.find_first_of("?#"));
+  file = file.substr(file.find_last_of('/') == std::string::npos ? 0 : file.find_last_of('/') + 1);
+  if (file.empty() || file.size() > 256) return fail("invalid-vimpel-ephemeris", "A Vimpel ephemeris is its file name (<id>_<YYYYMMDD>_<HHMMSS>, the URL's last segment) and its rows.");
   sdn::vimpel::Positions positions;
-  const std::string file(reinterpret_cast<const char*>(name->payload), name->payload_length);
-  if (!sdn::vimpel::positions(input->payload, input->payload_length, file, positions)) {
+  if (!sdn::vimpel::positions(in.body, in.size, file, positions)) {
     return fail("invalid-vimpel-ephemeris", "Malformed Vimpel ephemeris: the file name, an index that is not the row number, a position inside the Earth, or fewer than five rows.");
   }
   double start = 0;
@@ -198,9 +271,10 @@ extern "C" int read_ephemeris(void) {
   block->EPHEMERIS_DATA.reserve(positions.rows.size() * 3);
   for (const auto& row : positions.rows) block->EPHEMERIS_DATA.insert(block->EPHEMERIS_DATA.end(), row.begin(), row.end());
   oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
-  const Json report = {{"version", 1}, {"source", "vimpel"}, {"kind", "ephemeris"}, {"nativeId", positions.nativeId}, {"epoch", positions.epoch}, {"samples", positions.rows.size()},
-                       {"stepSeconds", kEphemerisStepSeconds}, {"sha256", ephem::sha256_hex(input->payload, input->payload_length)}, {"frame", "J2000"}, {"timeSystem", "UTC"}};
-  if (push_json("report", report) < 0) return 1;
+  const std::vector<std::pair<std::string, std::string>> attributes = {
+      {"kind", "ephemeris"}, {"fileName", file}, {"nativeId", positions.nativeId}, {"epoch", positions.epoch}, {"samples", std::to_string(positions.rows.size())},
+      {"stepSeconds", "600"}, {"bytes", std::to_string(in.size)}, {"frame", "J2000"}, {"timeSystem", "UTC"}};
+  if (push_meta(in, ephem::sha256_hex(in.body, in.size), "vimpel-ephemeris-1", 1, attributes) < 0) return 1;
   return push_oem("ephemeris", oem) < 0 ? 1 : 0;
 }
 
@@ -224,6 +298,7 @@ struct Edge {
   std::string t_vimpel, t_norad;          // ISO dates, "" when the printed digits are not a date
   std::string raw_vimpel, raw_norad;      // the digits as printed
   size_t declarations = 1;
+  uint32_t line = 0;                      // 1-based line of the first declaration in the file
   bool dates_differ = false;
   size_t component = 0;
 };
@@ -239,9 +314,9 @@ struct Components {
 }  // namespace
 
 extern "C" int read_datefirst(void) {
-  const auto* input = frame_of("source", kMaxTableBytes);
-  if (!input) return fail("invalid-vimpel-datefirst", "The source must be one bounded datefirst file.");
-  const std::string text(reinterpret_cast<const char*>(input->payload), input->payload_length);
+  Response in;
+  if (read_response("invalid-vimpel-datefirst", "OIL.fbs", kMaxTableBytes, in) || in.unchanged) return in.unchanged ? 0 : 1;
+  const std::string text(reinterpret_cast<const char*>(in.body), in.size);
   if (text.find('\0') != std::string::npos) return fail("invalid-vimpel-datefirst", "The datefirst file contains an embedded NUL.");
   std::istringstream stream(text);
   std::string line;
@@ -249,7 +324,9 @@ extern "C" int read_datefirst(void) {
   size_t rows = 0, duplicate_lines = 0;
   std::vector<Edge> edges;
   std::map<std::string, size_t> by_pair;
+  uint32_t line_number = 0;
   while (std::getline(stream, line)) {
+    ++line_number;
     std::istringstream cells(line);
     std::vector<std::string> f;
     for (std::string cell; cells >> cell;) f.push_back(cell);
@@ -288,6 +365,7 @@ extern "C" int read_datefirst(void) {
     e.t_norad = tn;
     e.raw_vimpel = f[1];
     e.raw_norad = f[3];
+    e.line = line_number;
     edges.push_back(e);
   }
   if (!header || edges.empty()) return fail("invalid-vimpel-datefirst", "No datefirst row was supplied.");
@@ -307,41 +385,73 @@ extern "C" int read_datefirst(void) {
     members[e.component].first.insert(e.canonical);
     members[e.component].second.insert(e.norad);
   }
-  const std::string recordId = ephem::sha256_hex(input->payload, input->payload_length);
-  Json links = Json::array(), conflicts = Json::array();
+  const std::string recordId = ephem::sha256_hex(in.body, in.size);
+  OILT oil;
+  oil.PROVIDER = "vimpel";
+  oil.KIND = "datefirst";
+  oil.LEFT_NAMESPACE = "vimpel";
+  oil.RIGHT_NAMESPACE = "NORAD";
+  oil.HEADER = "Nvym t_det_v Nnor t_det_n";
+  oil.SHA256 = recordId;
+  oil.BYTES = in.size;
+  oil.ROWS = static_cast<uint32_t>(rows);
+  oil.DUPLICATE_LINES = static_cast<uint32_t>(duplicate_lines);
   size_t clean = 0, ambiguous = 0, dated = 0, unreadable = 0;
   std::set<std::string> vimpel_ids;
   std::set<uint32_t> noradNumbers;
+  auto identifier = [](const char* ns, const std::string& id, const std::string& printed, const std::string& date, const std::string& raw_date) {
+    auto i = std::make_unique<OILIdentifierT>();
+    i->NAMESPACE = ns;
+    i->ID = id;
+    if (printed != id) i->ID_AS_PRINTED = printed;
+    i->FIRST_DETECTED = date;
+    if (date.empty()) i->FIRST_DETECTED_AS_PRINTED = raw_date;
+    return i;
+  };
   for (const Edge& e : edges) {
     const auto& m = members[e.component];
     const bool one_to_one = m.first.size() == 1 && m.second.size() == 1;
     (one_to_one ? clean : ambiguous) += 1;
     if (e.dates_differ) ++dated;
+    if (e.t_vimpel.empty() || e.t_norad.empty()) ++unreadable;
     vimpel_ids.insert(e.canonical);
     noradNumbers.insert(e.norad);
-    Json link = {{"native", "vimpel:" + e.canonical}, {"nativeId", e.native_printed}, {"object", {{"norad", e.norad}}},
-                 {"firstDetectedVimpel", e.t_vimpel.empty() ? Json(nullptr) : Json(e.t_vimpel)}, {"firstDetectedNorad", e.t_norad.empty() ? Json(nullptr) : Json(e.t_norad)},
-                 {"declarations", e.declarations}, {"status", "candidate"}, {"ambiguous", !one_to_one}, {"evidence", {{"source", "datefirst"}, {"recordId", recordId}}}};
-    if (e.t_vimpel.empty() || e.t_norad.empty()) {
-      ++unreadable;
-      link["datesAsPrinted"] = {e.raw_vimpel, e.raw_norad};
-    }
-    if (e.dates_differ) link["datesDiffer"] = true;
-    links.push_back(std::move(link));
+    auto link = std::make_unique<OILLinkT>();
+    link->LEFT = identifier("vimpel", e.canonical, e.native_printed, e.t_vimpel, e.raw_vimpel);
+    const std::string norad = std::to_string(e.norad);
+    link->RIGHT = identifier("NORAD", norad, norad, e.t_norad, e.raw_norad);
+    link->RIGHT->NORAD_CAT_ID = e.norad;
+    // A datefirst row proposes a link; it does not prove one. Ambiguity is the flag, the status stays Candidate.
+    link->STATUS = oilLinkStatus::Candidate;
+    link->AMBIGUOUS = !one_to_one;
+    link->EVIDENCE = std::make_unique<OILEvidenceT>();
+    link->EVIDENCE->SOURCE = "datefirst";
+    link->EVIDENCE->RECORD_ID = recordId;
+    link->EVIDENCE->LINE = e.line;
+    link->EVIDENCE->DECLARATIONS = static_cast<uint32_t>(e.declarations);
+    link->EVIDENCE->DATES_DIFFER = e.dates_differ;
+    oil.LINKS.push_back(std::move(link));
   }
   for (const auto& entry : members) {
-    if (entry.second.first.size() == 1 && entry.second.second.size() == 1) continue;
-    Json vimpel_list = Json::array(), norad_list = Json::array();
-    for (const auto& id : entry.second.first) vimpel_list.push_back("vimpel:" + id);
-    for (uint32_t n : entry.second.second) norad_list.push_back(n);
-    conflicts.push_back({{"vimpel", vimpel_list}, {"norad", norad_list},
-                         {"reason", entry.second.first.size() > 1 && entry.second.second.size() > 1 ? "several Vimpel numbers and several NORAD numbers are declared against each other"
-                                    : entry.second.first.size() > 1 ? "one NORAD number is declared against several Vimpel numbers"
-                                                                     : "one Vimpel number is declared against several NORAD numbers"}});
+    const size_t nv = entry.second.first.size(), nn = entry.second.second.size();
+    if (nv == 1 && nn == 1) continue;
+    auto c = std::make_unique<OILConflictT>();
+    for (const auto& id : entry.second.first) c->LEFT_IDS.push_back("vimpel:" + id);
+    for (uint32_t n : entry.second.second) c->RIGHT_IDS.push_back("NORAD:" + std::to_string(n));
+    c->SHAPE = nv > 1 && nn > 1 ? oilConflictShape::ManyLeftManyRight : nv > 1 ? oilConflictShape::ManyLeftOneRight : oilConflictShape::OneLeftManyRight;
+    c->REASON = nv > 1 && nn > 1 ? "several Vimpel numbers and several NORAD numbers are declared against each other"
+                : nv > 1     ? "one NORAD number is declared against several Vimpel numbers"
+                             : "one Vimpel number is declared against several NORAD numbers";
+    oil.CONFLICTS.push_back(std::move(c));
   }
-  const Json crosswalk = {{"version", 1}, {"source", "vimpel"}, {"kind", "datefirst"}, {"status", "candidate"}, {"header", "Nvym t_det_v Nnor t_det_n"}, {"sha256", recordId},
-                          {"bytes", input->payload_length}, {"rows", rows}, {"duplicateLines", duplicate_lines},
-                          {"counts", {{"links", edges.size()}, {"clean", clean}, {"ambiguous", ambiguous}, {"vimpelNumbers", vimpel_ids.size()}, {"noradNumbers", noradNumbers.size()}, {"datesDiffer", dated}, {"unreadableDates", unreadable}}},
-                          {"links", links}, {"conflicts", conflicts}};
-  return push_json("crosswalk", crosswalk) < 0 ? 1 : 0;
+  oil.LINK_COUNT = static_cast<uint32_t>(edges.size());
+  oil.CLEAN_COUNT = static_cast<uint32_t>(clean);
+  oil.AMBIGUOUS_COUNT = static_cast<uint32_t>(ambiguous);
+  oil.LEFT_ID_COUNT = static_cast<uint32_t>(vimpel_ids.size());
+  oil.RIGHT_ID_COUNT = static_cast<uint32_t>(noradNumbers.size());
+  oil.DATES_DIFFER_COUNT = static_cast<uint32_t>(dated);
+  oil.UNREADABLE_DATE_COUNT = static_cast<uint32_t>(unreadable);
+  flatbuffers::FlatBufferBuilder b(4096);
+  FinishOILBuffer(b, OIL::Pack(b, &oil));
+  return push("crosswalk", "OIL.fbs", "$OIL", "OIL", b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
 }

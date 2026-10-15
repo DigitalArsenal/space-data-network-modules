@@ -1,10 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.http-request",
   "name": "SDN Host HTTP Request Node",
-  "version": "0.1.0",
-  "description": "Capability node wrapping the host http.request hostcall. Method \"request\": input \"request\" JSON {\"method\":\"GET|POST|...\",\"url\":\"https://...\",\"headers\":{...},\"bodyB64\":\"<base64 request body>\",\"timeoutMs\":N,\"maxBytes\":N,\"responseWire\":\"raw-body-v1\"} -> one \"response\" frame per request. maxBytes is a per-request response byte budget forwarded to the Go host as max_bytes: the host lowers its read limit to it and answers with an error when the body exceeds it, never with a truncated body (a partial document must never be ingested as if it were complete); the SDK JS hosts ignore it. The default response is UTF-8 JSON {\"status\":N,\"headers\":{...},\"bodyB64\":\"<base64 response body>\"}; responseWire=raw-body-v1 instead emits an aligned binary $HRB frame containing status plus the response body verbatim, avoiding base64 expansion for large intra-flow documents. The node decodes request bodyB64 and forwards the raw bytes as the hostcall binary segment; the request meta carries both host dialects (timeout_ms/timeoutMs, max_bytes, body_encoding=base64, responseType=binary) so one payload serves every host. Response handling is host-agnostic: the SDK NodeHost/BrowserHost return the body as raw bytes (binary segment; response limited only by host policy), while the Go server host returns body as a JSON string with body_encoding utf8|base64. Capability \"http\" is required on all hosts.",
+  "version": "0.2.0",
+  "description": "Host http.request connector (typed contracts 1.0). Method \"request\": each \"request\" frame is an HttpRequest (HREQ, module-sdk runtime type: METHOD, URL, HEADERS, BODY, TIMEOUT_MS, MAX_BYTES, CONTEXT) and becomes one http.request hostcall, sent as an SDS $PIV invocation (HttpParams aligned record + raw url / headers / body frames). Each answers with one \"response\" frame, an HttpResponse (HRSP: URL, STATUS, HEADERS, BODY verbatim, the request's CONTEXT, RETRIEVED_MS), in input order. MAX_BYTES is a response budget: the host errors past it, never truncates. A request the host refuses or fails still answers, with STATUS 0 and ERROR saying why. No JSON and no base64. Capability \"http\" is required on every host.",
   "pluginFamily": "infrastructure",
-  "capabilities": ["http"],
+  "capabilities": [
+    "http"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "host-http",
@@ -12,14 +14,22 @@
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 100 MiB response ceiling lowered per request by max_bytes (exceeding the effective bound is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
-        "hostOps": ["http.request"]
+        "hostOps": [
+          "http.request"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "request",
@@ -29,19 +39,22 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-request-json",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"method\":\"GET\",\"url\":\"https://...\" (required),\"headers\":{\"Name\":\"Value\"},\"bodyB64\":\"<base64>\",\"timeoutMs\":30000,\"maxBytes\":4194304,\"responseWire\":\"raw-body-v1\"}. Only url is required; method defaults to GET. maxBytes is optional: the Go host clamps its response read limit to it and errors past it (never truncates). responseWire is optional and defaults to the JSON/bodyB64 response."
+              "description": "HttpRequest (module-sdk runtime type HREQ): URL required; METHOD empty = GET; HEADERS sorted by lower-case NAME; BODY verbatim; TIMEOUT_MS / MAX_BYTES 0 = the host's defaults; CONTEXT (one size-prefixed FlatBuffer of the caller's) is echoed in the response."
             }
           ],
           "minStreams": 1,
           "maxStreams": 100000,
           "required": true,
-          "description": "The HTTP request descriptions. THIS IS A FAN-IN PORT: the compiled flow runtime does not enforce maxStreams or maxBatch when it fills an invocation (space_data_module_runtime_begin_node_invocation pops the node's whole queue up to the drain budget), so an upstream node that fans out N descriptors delivers all N here in ONE invocation. The method drains every frame and emits one response per request, in input order. It was declared maxStreams 1 while the entry read only frame 0, and the N-1 frames the runtime had already dequeued were destroyed silently — live P1 cellular-multiprovider-returns-only-first-provider, where a two-provider request performed exactly one outbound fetch."
+          "description": "The HTTP requests. THIS IS A FAN-IN PORT: the compiled flow runtime does not enforce maxStreams or maxBatch when it fills an invocation, so an upstream node that fans out N requests delivers all N here in ONE invocation; every frame is answered, in input order."
         }
       ],
       "outputPorts": [
@@ -49,24 +62,27 @@
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-runtime-http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Default lane: UTF-8 JSON bytes (aligned-binary wire format) {\"status\":<HTTP status>,\"headers\":{...verbatim from the host...},\"bodyB64\":\"<base64 response body>\"}. raw-body-v1 lane: aligned binary bytes '$HRB' + signed little-endian int32 status + the response body verbatim."
+              "description": "HttpResponse (module-sdk runtime type HRSP): URL answered, STATUS (0 when the request failed, ERROR says why), HEADERS sorted by lower-case NAME, BODY verbatim, the request's CONTEXT, RETRIEVED_MS."
             }
           ],
           "minStreams": 1,
           "maxStreams": 100000,
           "required": true,
-          "description": "The HTTP responses: EXACTLY ONE frame per request frame consumed, pushed in input order, so response k answers request k. A request that could not be performed still emits its frame: the default JSON lane carries status 0 plus error/errorMessage and empty bodyB64, while raw-body-v1 carries status 0 and an empty body. Status 0 is outside 2xx, so a consumer drops it exactly as it would drop a 500 while the positional slot stays aligned."
+          "description": "EXACTLY ONE HttpResponse per request frame, pushed in input order, so response k answers request k. A request that could not be performed still answers, with STATUS 0 and ERROR; a consumer drops it as it would a 500 while the positional slot stays aligned."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "drain-until-yield",
-      "description": "Performs one outbound HTTP request per input frame through the host http.request hostcall and emits the normalized responses in input order. Fetches within an invocation are SEQUENTIAL — the hostcall is synchronous — so a batch costs the sum of its members' latencies plus whatever the host's own per-destination egress pacing adds. A frame that fails is skipped and the batch continues; a non-zero status is returned only when no request in the batch succeeded."
+      "description": "Performs one outbound HTTP request per input frame through the host http.request hostcall (typed: SDS $PIV) and emits the responses in input order. Fetches within an invocation are sequential; the hostcall is synchronous."
     }
   ],
   "buildArtifacts": [

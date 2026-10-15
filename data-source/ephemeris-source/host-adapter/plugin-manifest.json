@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
   "name": "Ephemeris Scheduled Publication Adapter",
-  "version": "0.1.5",
-  "description": "Bounded raw source acquisition into immutable IPFS files and attributed canonical NCD records; durable IRM continuation. Existing SDN source publisher independently signs and distributes NCD datasets.",
+  "version": "0.2.0",
+  "description": "Bounded raw source acquisition into immutable IPFS files and attributed canonical NCD records; durable IRM continuation (typed contracts 1.0: FlatBuffers only). Settings and status are $SRG records; hostcalls go through sdm_piv ($PIV): plugin.getConfig, http.request, ipfs.add, ipfs.cat, storage.write, storage.flatsql_query_stream and storage.ingest_with_source with typed provenance. The archive ledger is an $SRG retrieval status in the IRM decode context. Existing SDN source publisher independently signs and distributes NCD datasets.",
   "pluginFamily": "data_source",
   "capabilities": [
     "http",
@@ -120,25 +120,26 @@
     {
       "methodId": "configure",
       "displayName": "Configure source retrieval",
+      "description": "Safe retrieval settings ($SRG SETTINGS: ENABLED, SOURCE_ID, MAX_RESOURCES, MAX_BYTES, TIMEOUT_MS, MAX_RUNTIME_MS, REFRESH_INTERVAL_S, ARCHIVE_MAX_BYTES, CREDENTIAL_REFERENCE, PATHS); runtime input persistence reapplies this method after restart. Never fetches; credentials never travel here.",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "settings",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG with SETTINGS; a zero or empty field takes the default.",
           "acceptedTypeSets": [
             {
-              "setId": "timer-tick",
+              "setId": "srg-settings",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Safe ephemeris configuration only; runtime input persistence reapplies this method after restart. Secret values are forbidden."
-              }
+              "description": "One size-prefixed $SRG with SETTINGS; a zero or empty field takes the default."
             }
           ]
         }
@@ -149,19 +150,19 @@
           "required": false,
           "minStreams": 0,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG with STATUS: STATE (Configured, Disabled, CredentialUnavailable, WaitingRefresh, InProgress, Complete, ArchiveBudgetReached, ProviderPageOnly), the counts, QUEUE_CID, ARCHIVE_RESERVED_BYTES / ARCHIVE_MAX_BYTES, RESOURCE_URL/BYTE_LENGTH/SHA256 and NOTE where they apply.",
           "acceptedTypeSets": [
             {
-              "setId": "retrieval-status",
+              "setId": "srg-status",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded retrieval progress only; never a normalized data record."
-              }
+              "description": "One size-prefixed $SRG with STATUS: STATE (Configured, Disabled, CredentialUnavailable, WaitingRefresh, InProgress, Complete, ArchiveBudgetReached, ProviderPageOnly), the counts, QUEUE_CID, ARCHIVE_RESERVED_BYTES / ARCHIVE_MAX_BYTES, RESOURCE_URL/BYTE_LENGTH/SHA256 and NOTE where they apply."
             }
           ]
         }
@@ -171,26 +172,27 @@
     },
     {
       "methodId": "pull",
-      "displayName": "Retrieve and publish raw source files",
+      "displayName": "Pull",
+      "description": "One bounded acquisition pass: restores the durable position, discovers or reloads the pinned queue, pins and attributes each resource, and reports progress.",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "tick",
           "required": false,
           "minStreams": 0,
           "maxStreams": 1,
+          "description": "The timer firing (TimerTick); its fields are not read.",
           "acceptedTypeSets": [
             {
               "setId": "timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Optional direct invocation control frame; standalone cron invokes with no payload."
-              }
+              "description": "The timer firing (TimerTick); its fields are not read."
             }
           ]
         }
@@ -201,6 +203,7 @@
           "required": false,
           "minStreams": 0,
           "maxStreams": 64,
+          "description": "Canonical size-prefixed $NCD per resource archived in this pass.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd",
@@ -208,9 +211,11 @@
                 {
                   "schemaName": "NCD.fbs",
                   "fileIdentifier": "$NCD",
-                  "rootTypeName": "NCD"
+                  "rootTypeName": "NCD",
+                  "wireFormat": "flatbuffer"
                 }
-              ]
+              ],
+              "description": "Canonical size-prefixed $NCD per resource archived in this pass."
             }
           ]
         },
@@ -219,19 +224,19 @@
           "required": false,
           "minStreams": 0,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG with STATUS: STATE (Configured, Disabled, CredentialUnavailable, WaitingRefresh, InProgress, Complete, ArchiveBudgetReached, ProviderPageOnly), the counts, QUEUE_CID, ARCHIVE_RESERVED_BYTES / ARCHIVE_MAX_BYTES, RESOURCE_URL/BYTE_LENGTH/SHA256 and NOTE where they apply.",
           "acceptedTypeSets": [
             {
-              "setId": "retrieval-status",
+              "setId": "srg-status",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded retrieval progress only; never a normalized data record."
-              }
+              "description": "One size-prefixed $SRG with STATUS: STATE (Configured, Disabled, CredentialUnavailable, WaitingRefresh, InProgress, Complete, ArchiveBudgetReached, ProviderPageOnly), the counts, QUEUE_CID, ARCHIVE_RESERVED_BYTES / ARCHIVE_MAX_BYTES, RESOURCE_URL/BYTE_LENGTH/SHA256 and NOTE where they apply."
             }
           ]
         }
@@ -241,26 +246,27 @@
     },
     {
       "methodId": "backfill_coverage",
-      "displayName": "Publish coverage from archived source files",
+      "displayName": "Backfill Coverage",
+      "description": "Rebuild object coverage from archived descriptors without fetching the provider: each file is read back by CID and must match its descriptor's SHA-256 and length.",
       "inputPorts": [
         {
-          "portId": "request",
+          "portId": "page",
           "required": false,
           "minStreams": 0,
           "maxStreams": 1,
+          "description": "Optional size-prefixed $SRG: SETTINGS.SOURCE_ID (else the configured one), SETTINGS.MAX_RESOURCES the page size (1-4, default 4), STATUS.NEXT_OFFSET the offset the page starts at.",
           "acceptedTypeSets": [
             {
-              "setId": "timer-tick",
+              "setId": "srg-page",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded archive page offset and limit only; no data records or credentials."
-              }
+              "description": "Optional size-prefixed $SRG: SETTINGS.SOURCE_ID (else the configured one), SETTINGS.MAX_RESOURCES the page size (1-4, default 4), STATUS.NEXT_OFFSET the offset the page starts at."
             }
           ]
         },
@@ -269,16 +275,19 @@
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
+          "description": "A bounded page (<= 256 KiB) of size-prefixed $NCD descriptors from a source-filtered archive query.",
           "acceptedTypeSets": [
             {
-              "setId": "archived-descriptors",
+              "setId": "sds-ncd",
               "allowedTypes": [
                 {
                   "schemaName": "NCD.fbs",
                   "fileIdentifier": "$NCD",
-                  "rootTypeName": "NCD"
+                  "rootTypeName": "NCD",
+                  "wireFormat": "flatbuffer"
                 }
-              ]
+              ],
+              "description": "A bounded page (<= 256 KiB) of size-prefixed $NCD descriptors from a source-filtered archive query."
             }
           ]
         }
@@ -289,19 +298,19 @@
           "required": false,
           "minStreams": 0,
           "maxStreams": 1,
+          "description": "One size-prefixed $SRG with STATUS: SCANNED_COUNT, SUPPORTED_COUNT, NEXT_OFFSET, STATE Complete on the last page.",
           "acceptedTypeSets": [
             {
-              "setId": "retrieval-status",
+              "setId": "srg-status",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "SRG.fbs",
+                  "fileIdentifier": "$SRG",
+                  "rootTypeName": "SRG",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Bounded retrieval progress only; never a normalized data record."
-              }
+              "description": "One size-prefixed $SRG with STATUS: SCANNED_COUNT, SUPPORTED_COUNT, NEXT_OFFSET, STATE Complete on the last page."
             }
           ]
         }
@@ -312,19 +321,34 @@
   ],
   "schemasUsed": [
     {
-      "schemaName": "NCD.fbs",
-      "fileIdentifier": "$NCD",
-      "rootTypeName": "NCD"
+      "schemaName": "SRG.fbs",
+      "fileIdentifier": "$SRG",
+      "rootTypeName": "SRG",
+      "wireFormat": "flatbuffer"
     },
     {
-      "schemaName": "IRM.fbs",
-      "fileIdentifier": "$IRM",
-      "rootTypeName": "IRM"
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD",
+      "wireFormat": "flatbuffer"
     },
     {
       "schemaName": "CAT.fbs",
       "fileIdentifier": "$CAT",
-      "rootTypeName": "CAT"
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
     }
   ],
   "timers": [

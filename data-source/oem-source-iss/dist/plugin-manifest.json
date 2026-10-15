@@ -1,13 +1,19 @@
 {
   "pluginId": "com.digitalarsenal.data-source.oem-source-iss",
   "name": "ISS $OEM Source Node",
-  "version": "0.1.0",
-  "description": "Single-source flow node (SDN OD-Flow Phase 1b): on a timer 'tick' it emits the ISS operator ephemeris as an SDS $OEM FlatBuffer (aligned-binary, typed $OEM) on the 'oem' output port. The $OEM is built in-module from the checked-in NASA ISS OEM fixture (EME2000, TIME_SYSTEM UTC, CENTER Earth) via the inverse of analysis/od's oem_fb_reader — the SAME state series the sacred RMS-parity gate uses. It STORES NOTHING: ephemeris exists only as the emitted frame, held in memory for the duration of the OD fit downstream. This ISS slice is the vertical-slice source; the real per-provider fetch chain (ephem-request/http/oem-parse) is a later increment. No capabilities.",
+  "version": "0.2.0",
+  "description": "Single-source flow node (SDN OD-Flow Phase 1b; typed contracts 1.0: FlatBuffers only): a TimerTick (TICK) on 'tick' makes it emit the ISS operator ephemeris as one SDS $OEM FlatBuffer on the 'oem' output port. The $OEM is built in-module from the checked-in NASA ISS OEM fixture (EME2000, TIME_SYSTEM UTC, CENTER Earth) via the inverse of analysis/od's oem_fb_reader - the SAME state series the RMS-parity gate uses. It STORES NOTHING: ephemeris exists only as the emitted frame, held in memory for the duration of the OD fit downstream. No capabilities.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "emit",
@@ -17,15 +23,22 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Timer tick frame (content ignored)."
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick that drives one $OEM emission."
+          "description": "The TimerTick (TICK) that drives one $OEM emission."
         }
       ],
       "outputPorts": [
@@ -35,10 +48,14 @@
             {
               "setId": "sds-oem",
               "allowedTypes": [
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
               ],
-              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Consumed in-memory by analysis/od.fit; never stored."
+              "description": "SDS $OEM ephemeris (FlatBuffer). Consumed in-memory by analysis/od.fit; never stored."
             }
           ],
           "minStreams": 1,
@@ -59,15 +76,22 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-timer-tick",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "Timer tick frame (content ignored)."
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Cron timer tick that drives one compact $OEM emission."
+          "description": "The TimerTick (TICK) that drives one $OEM emission."
         }
       ],
       "outputPorts": [
@@ -77,8 +101,12 @@
             {
               "setId": "sds-oem",
               "allowedTypes": [
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
               ],
               "description": "SDS $OEM ephemeris (compact form: EPHEMERIS_DATA + START_TIME + STEP_SIZE). Consumed in-memory by analysis/od.fit; never stored."
             }
@@ -95,7 +123,18 @@
     }
   ],
   "schemasUsed": [
-    { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" }
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    }
   ],
   "buildArtifacts": [
     {

@@ -104,7 +104,7 @@ BiEllipticResult computeBiEllipticTransfer(double r1, double r2, double rInt,
     // Signed scalars, magnitude budget — see computeHohmannTransfer.
     return {dv1, dv2, dv3,
             std::abs(dv1) + std::abs(dv2) + std::abs(dv3),
-            tof, aTransfer1, aTransfer2, dv1_ric, dv2_ric, dv3_ric};
+            tof, aTransfer1, aTransfer2, dv1_ric, dv2_ric, dv3_ric, tof1, tof2};
 }
 
 // ===========================================================================

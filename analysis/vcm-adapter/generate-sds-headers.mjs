@@ -12,12 +12,17 @@ import { fileURLToPath } from 'node:url';
 import createFlatc from 'flatc-wasm/module';
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
-export const standardsRoot = path.join(packageRoot, 'node_modules', 'spacedatastandards.org');
-export const ROOTS = ['PRW', 'OCM'];
+// SPACE_DATA_STANDARDS_ROOT wins (a per-task standards worktree), else the package's own spacedatastandards.org.
+export const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.join(packageRoot, 'node_modules', 'spacedatastandards.org');
+// $FIL carries the VCM text in and out (the message ports).
+export const ROOTS = ['PRW', 'OCM', 'FIL'];
 
 export async function generateSdsHeaders() {
   const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'), 'utf8')).version;
-  if (version !== '1.244.0') throw new Error(`Expected spacedatastandards.org 1.244.0 (OCM COV_SIZE, COV_PARAMETERS, OD_DYNAMIC_PARAMETERS; PRW DYNAMIC_PARAMETERS, EARTH_ORIENTATION); installed ${version}.`);
+  const has = (family, field) => fs.readFileSync(path.join(standardsRoot, 'schema', family, 'main.fbs'), 'utf8').includes(field);
+  for (const [family, field] of [['OCM', 'COV_PARAMETERS'], ['OCM', 'OD_DYNAMIC_PARAMETERS'], ['PRW', 'DYNAMIC_PARAMETERS'], ['PRW', 'EARTH_ORIENTATION'], ['FIL', 'CONTENT']]) {
+    if (!has(family, field)) throw new Error(`spacedatastandards.org ${version} at ${standardsRoot} lacks ${family}.${field}.`);
+  }
   const flatc = await createFlatc();
   const mkdir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
   for (const p of ['/schemas', '/out']) mkdir(p);

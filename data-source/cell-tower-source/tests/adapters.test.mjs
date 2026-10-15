@@ -14,24 +14,10 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const sdkTestingEntry = fileURLToPath(
-  new URL(import.meta.resolve("space-data-module-sdk/testing")),
-);
-const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
-const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = sdkRequire("flatbuffers");
-const { HttpRequest } = sdkRequire(
-  path.join(sdkRoot, "src", "generated", "http", "sdn", "http", "http-request.js"),
-);
+import { drainParse, failedFetch, harnessFor, reportsOf, responseFor, routeFor as route, skippedOf } from "./helpers.mjs";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const OVERPASS = fs.readFileSync(
   new URL("./fixtures/overpass-berlin.sample.json", import.meta.url),
 );
@@ -40,130 +26,30 @@ const FCC = fs.readFileSync(
 );
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-async function harnessFor(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(WASM_PATH),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-function htqRequest(body) {
-  const builder = new flatbuffers.Builder(1024);
-  const method = builder.createString("POST");
-  const requestPath = builder.createString("/api/v1/cellular/aggregate");
-  const query = builder.createString("");
-  const bodyVector = HttpRequest.createBodyVector(builder, encoder.encode(body));
-  HttpRequest.startHttpRequest(builder);
-  HttpRequest.addMethod(builder, method);
-  HttpRequest.addPath(builder, requestPath);
-  HttpRequest.addQuery(builder, query);
-  HttpRequest.addBody(builder, bodyVector);
-  HttpRequest.finishHttpRequestBuffer(builder, HttpRequest.endHttpRequest(builder));
-  return { portId: "request", typeRef: { wireFormat: "flatbuffer" }, payload: builder.asUint8Array() };
-}
-
-const jsonInput = (portId, value) => ({
-  portId,
-  typeRef: { wireFormat: "flatbuffer" },
-  payload: encoder.encode(JSON.stringify(value)),
-});
-const byPort = (response) => {
-  const map = new Map();
-  for (const frame of response.outputs) map.set(frame.portId, frame);
-  return map;
-};
-const framesFor = (response, portId) => response.outputs.filter((f) => f.portId === portId);
-const jsonFrame = (map, portId) => {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
-};
-
-// EXACTLY what hostcap/http-request emits on "response":
-// {"status","headers","bodyB64"}. There is deliberately NO provider_id —
-// no host has ever produced one, and synthesising it here is what let a
-// dead pipeline pass every local run (see live-probe.mjs). `providerId`
-// survives as documentation of which descriptor slot a frame answers;
-// parse correlates by POSITION, so callers must pass frames in
-// descriptor order.
-const httpResponse = (providerId, body) => ({
-  status: 200,
-  headers: { "content-type": "application/json" },
-  bodyB64: Buffer.from(body).toString("base64"),
-});
-
-const rawHttpResponse = (status, body = new Uint8Array()) => {
-  const bytes = Buffer.from(body);
-  const frame = Buffer.alloc(8 + bytes.byteLength);
-  frame.write("$HRB", 0, "ascii");
-  frame.writeInt32LE(status, 4);
-  bytes.copy(frame, 8);
-  return new Uint8Array(frame);
-};
-
-const responseInput = (response) => {
-  if (response instanceof Uint8Array) {
-    return {
-      portId: "responses",
-      typeRef: {
-        wireFormat: "aligned-binary",
-        requiredAlignment: 1,
-        byteLength: response.byteLength,
-      },
-      payload: response,
-    };
-  }
-  return jsonInput("responses", response);
-};
 
 async function routeFor(t, body) {
   const harness = await harnessFor(t);
-  const response = await harness.invoke({ methodId: "route", inputs: [htqRequest(JSON.stringify(body))] });
-  const ports = byPort(response);
-  // When NOTHING is fetchable, route answers on `reply` and emits no `job` —
-  // the run is over before it starts, and stalling the chain instead would be a
-  // silent 502. Both frames carry the same `skipped` ledger, so a caller that
-  // only wants to know what was refused reads whichever arrived.
-  const jobFrame = ports.get("job");
-  const replyFrame = ports.get("reply");
+  const routed = await route(harness, body);
+  // When NOTHING is fetchable, route answers on `decision` (with an empty
+  // dataset) and emits no HttpRequest — the run is over before it starts. The
+  // skipped ledger rides the contract either way (x-sdn-providers-skipped).
   return {
     harness,
-    job: jobFrame ? jsonFrame(ports, "job") : undefined,
-    reply: replyFrame ? jsonFrame(ports, "reply") : undefined,
-    outcome: jobFrame ? jsonFrame(ports, "job") : jsonFrame(ports, "reply"),
-    descriptors: framesFor(response, "requests").map((f) => JSON.parse(decoder.decode(f.payload))),
+    descriptors: routed.descriptors,
+    contract: routed.contract,
+    outcome: { skipped: skippedOf(routed.contract) },
   };
 }
 
-// parse is a FAN-IN node: it accumulates across invocations and emits once, on
-// the quiet tick after the last response (it asks for that tick with
-// plugin_set_yielded/backlog_remaining). Invoking it ONCE and reading the output
-// would test a node the runtime does not have — so drive it the way the
-// scheduler does, and let the emission arrive when it actually arrives.
-async function drainParse(harness, inputs, maxTicks = 8) {
-  let outputs = await harness.invoke({ methodId: "parse", inputs });
-  for (let tick = 0; tick < maxTicks; tick += 1) {
-    const map = byPort(outputs);
-    if (map.get("reports")) return map;
-    outputs = await harness.invoke({ methodId: "parse", inputs: [] });
-  }
-  throw new Error("parse never emitted reports");
-}
-
-// A provider with mirrors emits SEVERAL descriptors, and the host answers each
-// one — so a test that supplies fewer frames than descriptors is describing a
-// run where the rest failed. Say that explicitly with empty frames rather than
-// leaving the fan-in short by accident, which is the difference between testing
-// the failed-fetch path and hanging on it.
-const FAILED_FETCH = { status: 0, headers: {}, bodyB64: "" };
-
-async function parseWith(t, providers, responses, body = {}) {
-  const { harness, job, descriptors } = await routeFor(t, {
+/**
+ * Route `providers`, answer the FIRST HttpRequest of each provider with its
+ * entry in `answers` ({status?, body}) and every other one (mirrors, providers
+ * with no entry) as a fetch the host could not perform — STATUS 0, its CONTEXT
+ * still echoed — then drain parse. `order` may reorder the answers to prove
+ * attribution does not depend on arrival order.
+ */
+async function parseWith(t, providers, answers, body = {}, { order = (frames) => frames, contextFor } = {}) {
+  const { harness, descriptors } = await routeFor(t, {
     PROVIDERS: providers,
     METHOD: "CENTROID",
     LIMIT: 400,
@@ -171,20 +57,22 @@ async function parseWith(t, providers, responses, body = {}) {
     BBOX: { south: 29.6, west: -95.7, north: 30.1, east: -95.2 },
     ...body,
   });
-  const padded = [...responses];
-  while (padded.length < descriptors.length) padded.push(FAILED_FETCH);
-  const parsed = await drainParse(harness, [
-    jsonInput("job", job),
-    ...padded.map(responseInput),
-  ]);
-  return jsonFrame(parsed, "reports");
+  const answered = new Set();
+  const frames = descriptors.map((d) => {
+    const answer = answers[d.provider_id];
+    if (!answer || answered.has(d.provider_id)) return failedFetch(d);
+    answered.add(d.provider_id);
+    return responseFor(d, { status: answer.status ?? 200, body: answer.body, context: contextFor?.(d, descriptors) });
+  });
+  const parsed = await drainParse(harness, order(frames));
+  return reportsOf(parsed.get("reports").payload);
 }
 
 test("osm-json: EVERY element decodes, not just the first", async (t) => {
   const captured = JSON.parse(OVERPASS.toString("utf8"));
-  const reports = await parseWith(t, ["openstreetmap-overpass"], [
-    httpResponse("openstreetmap-overpass", OVERPASS),
-  ]);
+  const reports = await parseWith(t, ["openstreetmap-overpass"], {
+    "openstreetmap-overpass": { body: OVERPASS },
+  });
   // The decoder used to split the DOCUMENT rather than the elements ARRAY. An
   // Overpass response is one top-level object, so it yielded exactly one
   // "element" — the whole body — and 14 of these 15 masts silently vanished.
@@ -197,9 +85,9 @@ test("osm-json: EVERY element decodes, not just the first", async (t) => {
 
 test("osm-json: each mast carries ITS OWN tags, not a neighbour's", async (t) => {
   const captured = JSON.parse(OVERPASS.toString("utf8"));
-  const reports = await parseWith(t, ["openstreetmap-overpass"], [
-    httpResponse("openstreetmap-overpass", OVERPASS),
-  ]);
+  const reports = await parseWith(t, ["openstreetmap-overpass"], {
+    "openstreetmap-overpass": { body: OVERPASS },
+  });
   // The same document-scoped split made every field lookup return the FIRST
   // match anywhere in the response, so the surviving site wore an operator that
   // belonged to a different mast. That is worse than dropping it: an
@@ -223,7 +111,7 @@ test("osm-json: each mast carries ITS OWN tags, not a neighbour's", async (t) =>
 
 test("soql-json: rows decode with position, site and operator", async (t) => {
   const captured = JSON.parse(FCC.toString("utf8"));
-  const reports = await parseWith(t, ["fcc-uls-3650"], [httpResponse("fcc-uls-3650", FCC)]);
+  const reports = await parseWith(t, ["fcc-uls-3650"], { "fcc-uls-3650": { body: FCC } });
   assert.equal(reports.length, captured.length);
   for (const row of captured) {
     const report = reports.find((r) => r.native_id === row.u_location_id);
@@ -237,7 +125,7 @@ test("soql-json: rows decode with position, site and operator", async (t) => {
 });
 
 test("soql-json: a licensed site is never given a guessed radio generation", async (t) => {
-  const reports = await parseWith(t, ["fcc-uls-3650"], [httpResponse("fcc-uls-3650", FCC)]);
+  const reports = await parseWith(t, ["fcc-uls-3650"], { "fcc-uls-3650": { body: FCC } });
   // The register publishes no MCC/MNC/cell id and no generation. These sites are
   // the AUTHORITATIVE half of the merge, so a guessed LTE here would WIN
   // deconfliction against the crowd-sourced provider and be exported as though a
@@ -311,41 +199,64 @@ test("a malformed BBOX is refused rather than silently inverted", async (t) => {
 
 // --- correlation: how parse knows WHICH provider a response body came from ---
 //
-// These pin the defect that shipped to host-01 on 2026-08-09: parse read
-// `provider_id` off the response frame, but hostcap/http-request emits only
-// {"status","headers","bodyB64"}. Every live frame therefore resolved to no
-// provider and was skipped — the node fetched all four URLs for real and
-// answered 200 with zero records and no error line, while every local test and
-// the live probe reported 1451 reports, because they all synthesised the field.
+// These pin the defect that shipped to host-01 on 2026-08-09: parse read a
+// provider off the response frame that the connector never wrote, so every live
+// frame resolved to no provider and was skipped — the node fetched all four URLs
+// for real and answered 200 with zero records. The typed connector ECHOES the
+// request's CONTEXT on every answer (failures included), and the run contract
+// in it names the fetch's provider: attribution is what the frame says, never
+// the slot it arrived in.
 
-test("attribution survives the host's real response shape (no provider_id)", async (t) => {
+test("attribution comes from the CONTEXT the connector echoes", async (t) => {
   const overpass = JSON.parse(OVERPASS.toString("utf8"));
   const fcc = JSON.parse(FCC.toString("utf8"));
-
-  // Frames exactly as the hostcap emits them, in descriptor order. Nothing in
-  // these objects names a provider; the correlation must come from the job.
-  const frames = [
-    { status: 200, headers: {}, bodyB64: Buffer.from(FCC).toString("base64") },
-    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
-  ];
-  for (const f of frames) {
-    assert.ok(!("provider_id" in f), "the host does not send provider_id — do not add it");
-  }
-
-  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], {
+    "fcc-uls-3650": { body: FCC },
+    "openstreetmap-overpass": { body: OVERPASS },
+  });
   const byProvider = {};
   for (const r of reports) byProvider[r.provider_id] = (byProvider[r.provider_id] || 0) + 1;
-
   assert.equal(byProvider["fcc-uls-3650"], fcc.length);
   assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
 });
 
-test("raw-body-v1 parses the provider body without a base64 copy", async (t) => {
+test("attribution does not depend on the order responses arrive in", async (t) => {
+  // Overpass ships three endpoints precisely because they fail and run seconds
+  // behind a row query, so completion order is not request order. Reversed
+  // arrival must attribute exactly as in-order arrival does.
+  const overpass = JSON.parse(OVERPASS.toString("utf8"));
+  const fcc = JSON.parse(FCC.toString("utf8"));
+  const reports = await parseWith(
+    t,
+    ["fcc-uls-3650", "openstreetmap-overpass"],
+    { "fcc-uls-3650": { body: FCC }, "openstreetmap-overpass": { body: OVERPASS } },
+    {},
+    { order: (frames) => [...frames].reverse() },
+  );
+  const byProvider = {};
+  for (const r of reports) byProvider[r.provider_id] = (byProvider[r.provider_id] || 0) + 1;
+  assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
+  assert.equal(byProvider["fcc-uls-3650"], fcc.length);
+});
+
+test("a body that contradicts the provider its CONTEXT names is dropped, not decoded against a guess", async (t) => {
+  // FAIL CLOSED ON A CONTRADICTED ATTRIBUTION: an Overpass document answering
+  // the FCC fetch (and vice versa) is decoded under NEITHER name. Exporting a
+  // mast under a regulator's name that never asserted it is the one outcome
+  // worth losing data to avoid.
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], {
+    "fcc-uls-3650": { body: OVERPASS },
+    "openstreetmap-overpass": { body: FCC },
+  });
+  assert.deepEqual(reports, []);
+});
+
+test("a 27 MB-class body is read verbatim off the HttpResponse, no base64 copy", async (t) => {
   const captured = JSON.parse(BAKOM.toString("utf8"));
   const reports = await parseWith(
     t,
     ["bakom-mobile-sites"],
-    [rawHttpResponse(200, BAKOM)],
+    { "bakom-mobile-sites": { body: BAKOM } },
     { BBOX: undefined },
   );
   assert.equal(reports.length, captured.features.length);
@@ -364,62 +275,40 @@ test("the national GeoJSON decoder stops at the declared per-provider row cap", 
   const reports = await parseWith(
     t,
     ["bakom-mobile-sites"],
-    [rawHttpResponse(200, encoder.encode(document))],
+    { "bakom-mobile-sites": { body: encoder.encode(document) } },
     { BBOX: undefined, LIMIT: 3 },
   );
   assert.equal(reports.length, 3, "the decoder scanned past the caller's bounded work cap");
   assert.deepEqual(reports.map((report) => report.site_name), ["bounded-0", "bounded-1", "bounded-2"]);
 });
 
-test("attribution follows the BODY, not the slot it arrived in", async (t) => {
-  // Same two descriptors, responses SWAPPED — the shape a missing frame
-  // produces, and it is the ordinary case here rather than an exotic one:
-  // hostcap/http-request pushes NO frame for a failed fetch, and Overpass ships
-  // three endpoints precisely because they fail (one answered a five-node query
-  // in 30.7s from host-01, so it times out on real ones).
-  //
-  // Position therefore cannot be the primary key. Among the providers a run
-  // consulted, a body whose format only ONE of them uses can only be that
-  // one's, whatever slot it landed in — so this must decode BOTH, correctly
-  // attributed, rather than lose them.
-  const overpass = JSON.parse(OVERPASS.toString("utf8"));
-  const fcc = JSON.parse(FCC.toString("utf8"));
-  const frames = [
-    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
-    { status: 200, headers: {}, bodyB64: Buffer.from(FCC).toString("base64") },
-  ];
-  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
-  const byProvider = {};
-  for (const r of reports) byProvider[r.provider_id] = (byProvider[r.provider_id] || 0) + 1;
-  assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
-  assert.equal(byProvider["fcc-uls-3650"], fcc.length);
-});
-
-test("a body no consulted provider could have produced is dropped, not guessed", async (t) => {
+test("a body no consulted provider could have produced decodes to nothing", async (t) => {
   // Neither an Overpass document nor a row array. Nothing may be invented from
   // it: a deconflicted site that cannot be re-serialized with its true source
   // is worse than a site that is simply absent.
-  const frames = [
-    { status: 200, headers: {}, bodyB64: Buffer.from('"not-a-provider-document"').toString("base64") },
-  ];
-  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], {
+    "fcc-uls-3650": { body: Buffer.from('"not-a-provider-document"') },
+  });
   assert.deepEqual(reports, []);
 });
 
-test("a failed fetch does not shift every provider after it onto the wrong body", async (t) => {
-  // The host emits a frame per request whatever happens, so slot 0 staying
-  // present-but-empty is what keeps slot 1 pointing at its own provider.
+test("a failed fetch contributes nothing and shifts nobody onto the wrong body", async (t) => {
   const overpass = JSON.parse(OVERPASS.toString("utf8"));
-  const frames = [
-    { status: 504, headers: {}, bodyB64: "" },
-    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
-  ];
-  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], {
+    "fcc-uls-3650": { status: 504, body: new Uint8Array() },
+    "openstreetmap-overpass": { body: OVERPASS },
+  });
   assert.equal(reports.length, overpass.elements.length);
   assert.ok(
     reports.every((r) => r.provider_id === "openstreetmap-overpass"),
     "the surviving body was attributed to the provider that failed",
   );
+});
+
+test("each report carries the retrieval time the connector stamped", async (t) => {
+  const reports = await parseWith(t, ["fcc-uls-3650"], { "fcc-uls-3650": { body: FCC } });
+  assert.ok(reports.length > 0);
+  for (const r of reports) assert.equal(r.retrieved_at, "2026-10-13T00:00:00.000Z");
 });
 
 // --- the 2026-08-10 endpoint sweep -----------------------------------------
@@ -435,9 +324,9 @@ const BAKOM = fs.readFileSync(
 
 test("swiss-geojson: LV95 easting/northing become real WGS84 degrees", async (t) => {
   const captured = JSON.parse(BAKOM.toString("utf8"));
-  const reports = await parseWith(t, ["bakom-mobile-sites"], [
-    httpResponse("bakom-mobile-sites", BAKOM),
-  ]);
+  const reports = await parseWith(t, ["bakom-mobile-sites"], {
+    "bakom-mobile-sites": { body: BAKOM },
+  });
   assert.equal(
     reports.length,
     captured.features.length,
@@ -471,9 +360,9 @@ test("swiss-geojson: LV95 easting/northing become real WGS84 degrees", async (t)
 });
 
 test("swiss-geojson: the highest generation present wins the radio class", async (t) => {
-  const reports = await parseWith(t, ["bakom-mobile-sites"], [
-    httpResponse("bakom-mobile-sites", BAKOM),
-  ]);
+  const reports = await parseWith(t, ["bakom-mobile-sites"], {
+    "bakom-mobile-sites": { body: BAKOM },
+  });
   const captured = JSON.parse(BAKOM.toString("utf8"));
   for (const feature of captured.features) {
     const techno = feature.properties.techno_en ?? "";
@@ -491,7 +380,7 @@ test("a WORLDWIDE request skips bounded providers instead of substituting a regi
   // The compiled-in default used to be a small box around Houston, so a caller
   // who named no region silently received one US metro drawn on a world globe.
   // That is the defect the owner reported as "a square in Texas / Louisiana".
-  const { descriptors, job } = await routeFor(t, {
+  const { descriptors, outcome } = await routeFor(t, {
     PROVIDERS: ["openstreetmap-overpass", "fcc-uls-3650"],
     METHOD: "CENTROID",
     LIMIT: 400,
@@ -499,10 +388,9 @@ test("a WORLDWIDE request skips bounded providers instead of substituting a regi
   const asked = descriptors.map((d) => d.provider_id);
   assert.ok(!asked.includes("openstreetmap-overpass"), "a bounded provider was fetched worldwide");
   assert.ok(asked.includes("fcc-uls-3650"), "the bulk provider was not fetched worldwide");
-  const skip = job.skipped.find((s) => s.provider_id === "openstreetmap-overpass");
+  const skip = outcome.skipped.find((s) => s.provider_id === "openstreetmap-overpass");
   assert.ok(skip, "the bounded provider vanished instead of being reported");
-  assert.equal(skip.needsRegion, true);
-  assert.match(skip.reason, /BOUNDED region/u);
+  assert.equal(skip.code, "needs-region");
   // And the query it DID send must carry the whole planet, not a substitute.
   const fcc = descriptors.find((d) => d.provider_id === "fcc-uls-3650");
   assert.match(fcc.url, /-90\.000000%20and%2090\.000000/u);
@@ -516,7 +404,6 @@ test("the bounded BAKOM row contract fetches only the sufficient GeoJSON prefix"
   });
   assert.equal(descriptors.length, 1);
   assert.equal(descriptors[0].headers.range, "bytes=0-2097151");
-  assert.equal(descriptors[0].responseWire, "raw-body-v1");
 });
 
 test("the four national bulk archives are fetched, not skipped", async (t) => {
@@ -584,6 +471,6 @@ test("the providers that could not be reached at all are GONE, not carried dead"
   for (const id of gone) {
     const skip = outcome.skipped.find((s) => s.provider_id === id);
     assert.ok(skip, `${id} vanished silently`);
-    assert.equal(skip.reason, "unknown provider", `${id} is still in the registry`);
+    assert.equal(skip.code, "unknown-provider", `${id} is still in the registry`);
   }
 });

@@ -10,6 +10,8 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { WASI } from 'node:wasi';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { ORBPRO_OMM_RECORD, ORBPRO_STATE_VECTOR } from 'space-data-module-sdk/generated/propagator-abi';
+import { reportOf, queriesOf } from './mde.mjs';
+export { reportOf, queriesOf };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const MODULE_DIR = path.resolve(here, '../..');
@@ -25,7 +27,8 @@ export const TYPES = {
   OEM: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' },
   MNV: { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' },
 };
-export const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+// The node's configuration for one call (served by the host as a ModuleConfig, never a frame).
+export const config = (value) => ({ config: value });
 export const iso = (s) => new Date(Math.round(s * 1000)).toISOString();
 export const seconds = (text) => {
   const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z?$/.exec(String(text).trim());
@@ -38,19 +41,31 @@ export async function loadModule(relative, root = MODULES) {
   const dir = path.join(root, relative);
   const wasm = fs.readFileSync(path.join(dir, 'dist/isomorphic/module.wasm'));
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin-manifest.json'), 'utf8'));
-  const harness = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+  // One harness per configuration: the node's configuration is the host's
+  // (plugin.getConfig answers a ModuleConfig), so a call that carries
+  // config(...) runs on a harness serving it.
+  const harnesses = new Map();
+  const harnessFor = async (value) => {
+    const key = JSON.stringify(value ?? {});
+    if (!harnesses.has(key)) harnesses.set(key, await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct', hostOptions: { config: value ? { detect: value } : {} } }));
+    return harnesses.get(key);
+  };
   return {
     manifest,
     async invoke(methodId, inputs) {
-      const response = await harness.invoke({ methodId, inputs });
+      const given = inputs.find((i) => i.config !== undefined);
+      const harness = await harnessFor(given?.config);
+      const response = await harness.invoke({ methodId, inputs: inputs.filter((i) => i.config === undefined) });
       if (response.statusCode !== 0) throw new Error(`${relative} ${methodId}: ${response.errorCode ?? response.statusCode}: ${response.errorMessage}`);
       return response;
     },
-    destroy: () => harness.destroy(),
+    destroy: async () => { for (const h of harnesses.values()) await h.destroy(); },
   };
 }
 export const outputsOf = (response, port) => response.outputs.filter((f) => f.portId === port).map((f) => new Uint8Array(f.payload));
-export const jsonOf = (response, port) => JSON.parse(Buffer.from(outputsOf(response, port)[0]).toString('utf8'));
+// The detector's report ($MDE) and propagation queries ($PRW WINDOW_REQUEST), rendered for reading.
+export const reportFrom = (response) => reportOf(outputsOf(response, 'report')[0]);
+export const queriesFrom = (response) => queriesOf(outputsOf(response, 'propagation_requests')[0]);
 
 // ── element sets ──────────────────────────────────────────────────────────────
 // One GP JSON row (Space-Track field names) as a size-prefixed $OMM; the
@@ -253,14 +268,14 @@ export async function keplerianProvider() {
 export async function detectWith(detector, provider, rows, variants) {
   const stream = ommStream(rows);
   const base = [{ portId: 'element_sets', payload: stream, typeRef: TYPES.OMM }];
-  const first = await detector.invoke('detect_maneuvers', [...base, json('options', variants[0])]);
-  const requests = jsonOf(first, 'propagation_requests');
+  const first = await detector.invoke('detect_maneuvers', [...base, config(variants[0])]);
+  const requests = await queriesFrom(first);
   const answers = await provider.answer(requests, rows);
   const results = [];
   for (const options of variants) {
-    const r = await detector.invoke('detect_maneuvers', [...base, json('options', options),
+    const r = await detector.invoke('detect_maneuvers', [...base, config(options),
       ...answers.map((a) => ({ portId: 'propagation', payload: a, typeRef: TYPES.OEM }))]);
-    results.push({ report: jsonOf(r, 'report'), maneuvers: outputsOf(r, 'maneuvers') });
+    results.push({ report: await reportFrom(r), maneuvers: outputsOf(r, 'maneuvers') });
   }
   return { queries: requests.queries.length, results };
 }

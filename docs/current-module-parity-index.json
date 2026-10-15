@@ -1,13 +1,12 @@
 {
-  "generatedAt": "2026-10-12T05:49:18.923Z",
-  "moduleCount": 124,
-  "parityScopeModuleCount": 50,
-  "isomorphicWasmCount": 122,
+  "generatedAt": "2026-10-15T02:29:14.439Z",
+  "moduleCount": 115,
+  "parityScopeModuleCount": 47,
+  "isomorphicWasmCount": 114,
   "missingIsomorphicWasm": [
-    "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 117,
+  "browserWasmEdgeTargetCount": 109,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -43,14 +42,11 @@
     "files/ccsds-messages",
     "files/orbit-products",
     "foundation/attitude-math",
-    "foundation/decision-gate",
-    "foundation/discovery-shape",
     "foundation/frames",
     "foundation/http-respond",
     "foundation/http-route",
     "foundation/math-bspline",
     "foundation/numerics",
-    "foundation/omm-json",
     "foundation/orbits",
     "foundation/time",
     "propagator/atmosphere",
@@ -116,7 +112,7 @@
       "pluginId": "com.digitalarsenal.analysis.association",
       "name": "Observation association",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "associate_observations",
         "solve_assignment"
@@ -156,7 +152,7 @@
       "pluginId": "com.digitalarsenal.analysis.catalog-composer",
       "name": "Catalog Editor",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "compose",
         "fit_epoch_step",
@@ -176,7 +172,7 @@
       ],
       "cxxSourceFileCount": 8,
       "cSourceFileCount": 0,
-      "testFileCount": 20,
+      "testFileCount": 21,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -209,6 +205,7 @@
         "tests/review.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/vimpel-live.mjs",
+        "tests/xmt-recipes.mjs",
         "tools/test_vimpel_epoch.py"
       ]
     },
@@ -217,7 +214,7 @@
       "pluginId": "com.orbpro.catalog-synthesis",
       "name": "Supplemental Catalog Synthesis",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "synthesize_catalog"
       ],
@@ -251,7 +248,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -489,7 +486,7 @@
       "pluginId": "covariance-analysis",
       "name": "Covariance Analysis",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "compute_covariance"
       ],
@@ -505,15 +502,18 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "src/cpp/module.cpp"
       ],
       "testFiles": [
-        "tests/behavior.test.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/covariance.test.mjs",
+        "tests/legacy-cases.json",
+        "tests/legacy-reference.json",
+        "tests/sdk_compat.test.mjs",
+        "tests/sds.mjs"
       ]
     },
     {
@@ -521,7 +521,7 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration (JB2008 temperature corrections)",
       "pluginFamily": "analysis",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "methodIds": [
         "calibrate",
         "calibrate_decay",
@@ -542,13 +542,15 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 7,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/density_calibration.cpp"
       ],
       "testFiles": [
+        "tests/cases.mjs",
+        "tests/dcl.mjs",
         "tests/decay.test.mjs",
         "tests/density_calibration.test.mjs",
         "tests/energy.test.mjs",
@@ -592,7 +594,7 @@
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
       "name": "SDN Epoch State",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "answer_propagation_requests",
         "derive",
@@ -719,7 +721,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -750,14 +752,15 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 6,
+      "cxxSourceFileCount": 7,
       "cSourceFileCount": 0,
-      "testFileCount": 11,
+      "testFileCount": 12,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/common_epoch.cpp",
         "src/covariance_realism.cpp",
+        "src/erm_bridge.cpp",
         "src/fit_elements.cpp",
         "src/gp_error_model.cpp",
         "src/source_products.cpp",
@@ -766,6 +769,7 @@
       "testFiles": [
         "tests/covariance_mapping.test.mjs",
         "tests/covariance_realism.test.mjs",
+        "tests/erm-harness.mjs",
         "tests/fit-reference.json",
         "tests/fit-reference.py",
         "tests/fit_elements.test.mjs",
@@ -867,7 +871,7 @@
       "pluginId": "com.digitalarsenal.analysis.launch-cola",
       "name": "Launch collision avoidance screening",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "screen_launch_window"
       ],
@@ -898,7 +902,7 @@
       "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
       "name": "Launch trajectory tracking and projected insertion",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "project_insertion",
         "track_ascent"
@@ -936,7 +940,7 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.5.0",
+      "version": "0.7.0",
       "methodIds": [
         "compare_ephemerides",
         "detect_maneuvers",
@@ -952,7 +956,7 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 10,
+      "cxxSourceFileCount": 11,
       "cSourceFileCount": 0,
       "testFileCount": 3,
       "parityScope": true,
@@ -963,6 +967,7 @@
         "src/crossing.cpp",
         "src/glr.cpp",
         "src/maneuver_detection.cpp",
+        "src/mde.cpp",
         "src/mnv.cpp",
         "src/provenance.cpp",
         "src/queries.cpp",
@@ -980,9 +985,9 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.6.2",
+      "version": "0.7.0",
       "methodIds": [
-        "invoke"
+        "plan"
       ],
       "runtimeTargets": [
         "browser",
@@ -997,7 +1002,7 @@
       ],
       "cxxSourceFileCount": 21,
       "cSourceFileCount": 0,
-      "testFileCount": 20,
+      "testFileCount": 22,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -1007,8 +1012,8 @@
         "src/cpp/src/json_lite.cpp",
         "src/cpp/src/maneuver_plugin.cpp",
         "src/cpp/src/math.cpp",
+        "src/cpp/src/mpl_bridge.cpp",
         "src/cpp/src/orbit_geometry.cpp",
-        "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/propagation.cpp",
         "src/cpp/src/rendezvous.cpp",
@@ -1036,10 +1041,12 @@
         "tests/evidence/orbit-geometry-tri-runtime-20261009.json",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/orbit_geometry.parity.json",
-        "tests/fixtures/request.hohmann.json",
-        "tests/fixtures/request.rendezvous.json",
+        "tests/fixtures/request.hohmann.mpl",
+        "tests/fixtures/request.rendezvous.mpl",
         "tests/frame_and_sign.test.mjs",
         "tests/lambert_izzo_crosscheck.test.mjs",
+        "tests/mpl_client.mjs",
+        "tests/mpl_fields.test.mjs",
         "tests/orbit_geometry.test.mjs",
         "tests/ratchet.test.mjs",
         "tests/sdk_compat.test.mjs",
@@ -1084,7 +1091,7 @@
       "pluginId": "com.orbpro.od-fit-pipeline",
       "name": "OD Fit Pipeline",
       "pluginFamily": "orbit_determination",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "fit_pipeline"
       ],
@@ -1115,7 +1122,7 @@
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
       "pluginFamily": "orbit_determination",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "methodIds": [
         "fit"
       ],
@@ -1130,9 +1137,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 29,
+      "cxxSourceFileCount": 28,
       "cSourceFileCount": 0,
-      "testFileCount": 60,
+      "testFileCount": 64,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -1155,7 +1162,6 @@
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/sgp4_fitter.cpp",
-        "src/cpp/src/wasm_api.cpp",
         "src/cpp/tests/analyze_outliers.cpp",
         "src/cpp/tests/bench_supgp.cpp",
         "src/cpp/tests/test_covariance_publication.cpp",
@@ -1177,6 +1183,7 @@
         "src/cpp/tests/test_od.cpp",
         "src/cpp/tests/test_oem_fb_parity.cpp",
         "src/cpp/tests/test_supgp.cpp",
+        "tests/alpha5_tle.test.mjs",
         "tests/covariance_publication.test.mjs",
         "tests/data/glonass/synthetic_glonass.sp3.glo",
         "tests/data/manifest.txt",
@@ -1218,11 +1225,14 @@
         "tests/data/supgp-reference/starlink/meme/MEME_67857_STARLINK-36828_1340150_Operational_1463017860_UNCLASSIFIED.txt",
         "tests/data/supgp-reference/starlink/meme/MEME_67858_STARLINK-36837_1340140_Operational_1463017260_UNCLASSIFIED.txt",
         "tests/data/supgp-reference/starlink/meme/MEME_67859_STARLINK-36393_1340146_Operational_1463017620_UNCLASSIFIED.txt",
+        "tests/fit_harness.mjs",
         "tests/fixtures/hosted-runtime/od.single-plugin.flow.json",
         "tests/fixtures/request.fit.meme",
         "tests/gen_oem_fixtures.cpp",
         "tests/ocm_emission.test.mjs",
+        "tests/parity_alpha5.mjs",
         "tests/sdk_compat.test.mjs",
+        "tests/sds_bindings.mjs",
         "tests/test_wasm.mjs",
         "tests/wasi_release.test.mjs",
         "tests/wasi_threads_flow_harness.mjs",
@@ -1270,7 +1280,7 @@
       "pluginId": "com.digitalarsenal.analysis.private-screening",
       "name": "Private screening decoys",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "decoys",
         "distinguish",
@@ -1288,14 +1298,15 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/private_screening.cpp"
       ],
       "testFiles": [
-        "tests/private_screening.test.mjs"
+        "tests/private_screening.test.mjs",
+        "tests/sds.mjs"
       ]
     },
     {
@@ -1335,8 +1346,9 @@
       "pluginId": "com.digitalarsenal.analysis.reference-states",
       "name": "Reference states",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "methodIds": [
+        "compare_to_reference",
         "reference_states"
       ],
       "runtimeTargets": [
@@ -1351,13 +1363,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/reference_states.cpp"
       ],
       "testFiles": [
+        "tests/parity.mjs",
         "tests/reference_states.test.mjs"
       ]
     },
@@ -1466,7 +1479,7 @@
       "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
       "name": "SDN VCM Adapter",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "ocm",
         "read",
@@ -1501,7 +1514,7 @@
       "pluginId": "com.digitalarsenal.basilisk.runtime",
       "name": "Basilisk Runtime Module",
       "pluginFamily": "basilisk",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "methodIds": [
         "echo_xtc_dictionary",
         "run_pointing_power_scenario"
@@ -1515,17 +1528,19 @@
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
-        "c"
+        "c++"
       ],
-      "cxxSourceFileCount": 0,
-      "cSourceFileCount": 1,
-      "testFileCount": 3,
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        "src/module.c"
+        "src/module.cpp"
       ],
       "testFiles": [
+        "tests/fixtures/legacy-json-telemetry.json",
+        "tests/lib-pps.mjs",
         "tests/manifest.test.mjs",
         "tests/pointing_power.test.mjs",
         "tests/sdk_compat.test.mjs"
@@ -1536,14 +1551,15 @@
       "pluginId": "org.spacedatanetwork.bond-attestation",
       "name": "Security Bond Attestation",
       "pluginFamily": "data_source",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "methodIds": [
         "attest"
       ],
       "runtimeTargets": [
+        "browser",
         "wasmedge"
       ],
-      "hasBrowserWasmEdgeTargets": false,
+      "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
@@ -1551,14 +1567,16 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/bond_attestation.cpp"
       ],
       "testFiles": [
-        "tests/bond.test.mjs"
+        "tests/bond.test.mjs",
+        "tests/fixtures/providers.mjs",
+        "tests/sds_bindings.mjs"
       ]
     },
     {
@@ -1566,7 +1584,7 @@
       "pluginId": "com.digitalarsenal.data-source.catalog-source",
       "name": "Catalog Source",
       "pluginFamily": "data_source",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "parse_gcat",
         "parse_mccants_tle_catalog"
@@ -1583,13 +1601,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 4,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/catalog_source.cpp"
       ],
       "testFiles": [
+        "tests/frames.mjs",
         "tests/mccants.test.mjs",
         "tests/parity.test.mjs",
         "tests/sdk_compat.test.mjs"
@@ -1600,7 +1619,7 @@
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
       "name": "CelesTrak Provider Parser Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_eop",
         "parse_gp",
@@ -1620,7 +1639,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 9,
+      "testFileCount": 10,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1634,6 +1653,7 @@
         "tests/fixtures/celestrak-satcat.txt",
         "tests/fixtures/celestrak-socrates-minrange.csv",
         "tests/fixtures/celestrak-sw-all.csv",
+        "tests/frames.mjs",
         "tests/parity.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
@@ -1643,7 +1663,7 @@
       "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
       "name": "CelesTrak Reference Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "gp_groups",
         "parse_gp_groups",
@@ -1682,7 +1702,7 @@
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "name": "CelesTrak Request Builder Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "cache_warm",
         "eop",
@@ -1704,7 +1724,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1712,6 +1732,7 @@
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
+        "tests/harness.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1720,9 +1741,10 @@
       "pluginId": "com.orbpro.celestrak-supgp",
       "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
-        "pull"
+        "parse",
+        "request"
       ],
       "runtimeTargets": [
         "browser",
@@ -1761,7 +1783,7 @@
       "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
       "name": "Cellular Provider Credential Mediator",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "mediate"
       ],
@@ -1776,20 +1798,22 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/cell_tower_credentials_module.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/mediate.test.mjs"
+      ]
     },
     {
       "modulePath": "data-source/cell-tower-ingest",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
       "name": "Cellular Base-Station Ingest Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "cache_freshness",
         "cache_plan",
@@ -1813,14 +1837,16 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/cell_tower_ingest_module.cpp"
       ],
       "testFiles": [
-        "tests/built_artifact.test.mjs"
+        "tests/built_artifact.test.mjs",
+        "tests/helpers.mjs",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -1828,7 +1854,7 @@
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "name": "Cellular Base-Station Aggregation Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "deconflict",
         "parse",
@@ -1847,7 +1873,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 20,
+      "testFileCount": 23,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1871,10 +1897,13 @@
         "tests/fixtures/opencellid-bulk.slice.csv.gz",
         "tests/fixtures/opencellid.sample.csv",
         "tests/fixtures/overpass-berlin.sample.json",
+        "tests/helpers.mjs",
+        "tests/ingest_context.test.mjs",
         "tests/live-probe.mjs",
         "tests/mls-bulk-provider.test.mjs",
         "tests/opencellid-bulk.test.mjs",
-        "tests/parity.test.mjs"
+        "tests/parity.test.mjs",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -1882,10 +1911,11 @@
       "pluginId": "com.orbpro.cpf-source",
       "name": "CPF (ILRS predictions) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "emit",
-        "pull"
+        "request",
+        "select_file"
       ],
       "runtimeTargets": [
         "browser",
@@ -1897,19 +1927,19 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 2,
+      "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 7,
+      "testFileCount": 8,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "guest-link/emit_entry.cpp",
         "src/cpf_source.cpp"
       ],
       "testFiles": [
         "test/fixtures/PROVENANCE.md",
         "test/fixtures/lageos1_cpf_260713_19402.4h.dgf",
         "test/fixtures/lageos1_cpf_260713_19402.sample.dgf",
+        "test/fixtures/legacy/oem-stream.bin",
         "test/fixtures/listing.sample.html",
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
@@ -1921,7 +1951,7 @@
       "pluginId": "com.digitalarsenal.data-source.eop-parser",
       "name": "eop-parser",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_c04",
         "parse_finals2000a",
@@ -1962,7 +1992,7 @@
       "pluginId": "com.digitalarsenal.data-source.eop-request",
       "name": "eop-request",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "c04",
         "finals2000a",
@@ -1997,7 +2027,7 @@
       "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
       "name": "Ephemeris Scheduled Publication Adapter",
       "pluginFamily": "data_source",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "methodIds": [
         "backfill_coverage",
         "configure",
@@ -2023,7 +2053,7 @@
       "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
       "name": "Ephemeris Source Retriever",
       "pluginFamily": "data_source",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "methodIds": [
         "describe_artifact",
         "describe_coverage",
@@ -2067,7 +2097,7 @@
       "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
       "name": "Gazetteer Named Place Ingest Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "ingest_meta",
         "ingest_plan",
@@ -2086,7 +2116,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 4,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2095,6 +2125,7 @@
       "testFiles": [
         "tests/batched_inputs.test.mjs",
         "tests/built_artifact.test.mjs",
+        "tests/helpers.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -2103,11 +2134,10 @@
       "pluginId": "com.digitalarsenal.data-source.geonames-source",
       "name": "Gazetteer Named Place Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "inflate",
         "parse_deletes",
-        "parse_lookups",
         "parse_places"
       ],
       "runtimeTargets": [
@@ -2123,7 +2153,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 10,
+      "testFileCount": 11,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2139,19 +2169,53 @@
         "tests/fixtures/countryInfo.slice.txt",
         "tests/fixtures/geonames-deletes.slice.txt",
         "tests/fixtures/geonames-modifications.slice.txt",
+        "tests/helpers.mjs",
         "tests/parse.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
     {
-      "modulePath": "data-source/glonass-source",
-      "pluginId": "com.orbpro.glonass-source",
-      "name": "GLONASS Precise Ephemeris (IAC SP3) Data Source",
+      "modulePath": "data-source/gibs/host-adapter",
+      "pluginId": "com.digitalarsenal.data-source.gibs-host",
+      "name": "GIBS catalog host adapter",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "methodIds": [
-        "emit",
-        "pull"
+        "prepare_scheduled",
+        "publish_files",
+        "receipt_scheduled"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/adapter.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/gibs",
+      "pluginId": "com.digitalarsenal.data-source.gibs",
+      "name": "NASA GIBS layer catalog",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "advance",
+        "announce_catalog",
+        "build_catalog",
+        "plan_capabilities",
+        "plan_details"
       ],
       "runtimeTargets": [
         "browser",
@@ -2165,15 +2229,63 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 16,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "guest-link/emit_entry.cpp",
+        "host-adapter/src/adapter.cpp",
+        "src/gibs.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/capabilities-epsg3031.xml",
+        "tests/fixtures/capabilities-epsg3413.xml",
+        "tests/fixtures/capabilities-epsg3857.xml",
+        "tests/fixtures/domains-GOES-East_ABI_Band2_Red_Visible_1km.xml",
+        "tests/fixtures/domains-VIIRS_SNPP_L3_NDVI_16Day.xml",
+        "tests/fixtures/layer-metadata/AIRS_L2_Cloud_Top_Height_Polar.json",
+        "tests/fixtures/layer-metadata/Coastlines_15m.json",
+        "tests/fixtures/layer-metadata/GOES-East_ABI_Band2_Red_Visible_1km.json",
+        "tests/fixtures/layer-metadata/MERRA2_2m_Air_Temperature_Monthly.json",
+        "tests/fixtures/layer-metadata/MODIS_Terra_CorrectedReflectance_TrueColor.json",
+        "tests/fixtures/layer-metadata/OPERA_L3_DIST-ALERT-HLS_Color_Index.json",
+        "tests/fixtures/layer-metadata/Reference_Labels_15m.json",
+        "tests/fixtures/layer-metadata/TEMPO_L2_NO2_Vertical_Column_Troposphere_Granule.json",
+        "tests/fixtures/layer-metadata/VIIRS_NOAA20_Thermal_Anomalies_375m_All.json",
+        "tests/fixtures/layer-metadata/VIIRS_SNPP_L3_NDVI_16Day.json",
+        "tests/gibs.e2e.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/glonass-source",
+      "pluginId": "com.orbpro.glonass-source",
+      "name": "GLONASS Precise Ephemeris (IAC SP3) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.1.0",
+      "methodIds": [
+        "emit",
+        "request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
         "src/glonass_source.cpp"
       ],
       "testFiles": [
         "test/fixtures/PROVENANCE.md",
+        "test/fixtures/legacy/oem-stream.bin",
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/fixtures/synthetic_glonass.sp3.glo",
@@ -2185,7 +2297,7 @@
       "pluginId": "com.digitalarsenal.data-source.gp-archive-records",
       "name": "SDN GP Archive Records",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "build_cat",
         "build_mpe"
@@ -2210,9 +2322,9 @@
       ],
       "testFiles": [
         "tests/archive-v1-vectors.json",
-        "tests/field-batch.mjs",
         "tests/gp_archive_records.test.mjs",
-        "tests/parity.test.mjs"
+        "tests/parity.test.mjs",
+        "tests/records.mjs"
       ]
     },
     {
@@ -2256,7 +2368,7 @@
       "pluginId": "com.digitalarsenal.data-source.ilrs-crd-source",
       "name": "ILRS CRD Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "read_crd"
       ],
@@ -2292,7 +2404,7 @@
       "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
       "name": "Geostationary Imager Observation Parser Node",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse"
       ],
@@ -2348,7 +2460,7 @@
       "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
       "name": "Geostationary Imager Observation Request Builder Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "plan",
         "publish_request",
@@ -2383,10 +2495,11 @@
       "pluginId": "com.orbpro.intelsat-source",
       "name": "Intelsat (public ephemeris) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "emit",
-        "pull"
+        "request",
+        "select_file"
       ],
       "runtimeTargets": [
         "browser",
@@ -2398,19 +2511,19 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 2,
+      "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 7,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "guest-link/emit_entry.cpp",
         "src/intelsat_source.cpp"
       ],
       "testFiles": [
         "test/fixtures/PROVENANCE.md",
         "test/fixtures/ephemeris_public.sample.html",
         "test/fixtures/i_aor_e_302.00_is-21_20260710_235300.sample.txt",
+        "test/fixtures/legacy/oem-stream.bin",
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/module.test.mjs"
@@ -2421,10 +2534,10 @@
       "pluginId": "com.orbpro.iss-source",
       "name": "ISS (NASA public OEM) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "emit",
-        "pull"
+        "request"
       ],
       "runtimeTargets": [
         "browser",
@@ -2436,18 +2549,18 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 2,
+      "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "guest-link/emit_entry.cpp",
         "src/iss_source.cpp"
       ],
       "testFiles": [
         "test/fixtures/ISS.OEM_J2K_EPH.sample.txt",
         "test/fixtures/PROVENANCE.md",
+        "test/fixtures/legacy/oem-stream.bin",
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/module.test.mjs"
@@ -2458,7 +2571,7 @@
       "pluginId": "com.digitalarsenal.data-source.launch-schedule-host",
       "name": "Launch notices scheduled source adapter",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "prepare_scheduled",
         "receipt_scheduled"
@@ -2488,7 +2601,7 @@
       "pluginId": "com.digitalarsenal.data-source.launch-schedule",
       "name": "Upcoming launch notices",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_launches",
         "plan_launches"
@@ -2505,7 +2618,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 4,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2514,6 +2627,7 @@
       ],
       "testFiles": [
         "tests/fixtures/ll2-upcoming-2026-09-28.json",
+        "tests/harness.mjs",
         "tests/launch_schedule.test.mjs",
         "tests/scheduled.test.mjs"
       ]
@@ -2523,7 +2637,7 @@
       "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
       "name": "M-Lab Starlink Connectivity Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse",
         "request"
@@ -2559,7 +2673,7 @@
       "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
       "name": "Numerical Weather Prediction Field Request Builder Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "methodIds": [
         "plan",
         "publish_request",
@@ -2596,7 +2710,7 @@
       "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
       "name": "Numerical Weather Prediction GRIB2 Parser Node",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "methodIds": [
         "parse"
       ],
@@ -2612,7 +2726,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 10,
+      "testFileCount": 11,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2624,6 +2738,7 @@
         "tests/fixtures/jobs.json",
         "tests/fixtures/noaa-2026100600-f024/expected.json",
         "tests/fixtures/noaa-2026100600-f024/gefs-0p50-spread.grib2",
+        "tests/fixtures/noaa-2026100600-f024/gfs-0p25-air.grib2",
         "tests/fixtures/noaa-2026100600-f024/gfs-0p25-surface.grib2",
         "tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
         "tests/fixtures/noaa-2026100600-f024/gfs-1p00-motion.grib2",
@@ -2636,7 +2751,7 @@
       "pluginId": "com.digitalarsenal.data-source.oem-source-iss",
       "name": "ISS $OEM Source Node",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "emit",
         "emit_compact"
@@ -2653,13 +2768,17 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/oem_source_iss_module.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/emit.test.mjs",
+        "tests/fixtures/legacy-oem-compact.bin",
+        "tests/fixtures/legacy-oem-verbose.bin"
+      ]
     },
     {
       "modulePath": "data-source/oneweb-source",
@@ -2701,7 +2820,7 @@
       "pluginId": "com.digitalarsenal.data-source.open-meteo-host",
       "name": "Open-Meteo scheduled source adapter",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "prepare_scheduled",
         "receipt_scheduled"
@@ -2731,7 +2850,7 @@
       "pluginId": "com.digitalarsenal.data-source.open-meteo",
       "name": "Open-Meteo weather forecasts",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_forecast",
         "plan_forecast"
@@ -2767,7 +2886,7 @@
       "pluginId": "com.digitalarsenal.data-source.osm-source",
       "name": "OSM Context Epoch Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "route"
       ],
@@ -2796,11 +2915,41 @@
       ]
     },
     {
+      "modulePath": "data-source/record-retention",
+      "pluginId": "com.digitalarsenal.data-source.record-retention",
+      "name": "SDN Record Retention",
+      "pluginFamily": "data_source",
+      "version": "0.2.0",
+      "methodIds": [
+        "expire"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/record_retention_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/retrieval",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "name": "SDN Data Retrieval",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "data_query",
         "omm_bulk"
@@ -2832,7 +2981,7 @@
       "pluginId": "com.digitalarsenal.data-source.satnogs-source",
       "name": "SatNOGS DB RF Transmitter Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse",
         "request"
@@ -2867,7 +3016,7 @@
       "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
       "name": "SigMF Raw-IQ Capture Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse",
         "request"
@@ -2884,7 +3033,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 7,
+      "testFileCount": 8,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2897,7 +3046,8 @@
         "tests/fixtures/make-synthetic.mjs",
         "tests/live_smoke.test.mjs",
         "tests/record_cap.test.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/sdk_compat.test.mjs",
+        "tests/typed.mjs"
       ]
     },
     {
@@ -2905,7 +3055,7 @@
       "pluginId": "com.digitalarsenal.data-source.sp3-precise-source",
       "name": "SP3 Precise Orbit Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "read_sp3"
       ],
@@ -2938,7 +3088,7 @@
       "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
       "name": "SpaceMapper AOE Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_aoe"
       ],
@@ -2971,7 +3121,7 @@
       "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
       "name": "Space-Track Source",
       "pluginFamily": "data_source",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "parse_gp",
         "parse_satcat"
@@ -3005,10 +3155,11 @@
       "pluginId": "com.orbpro.spacex-starlink-source",
       "name": "SpaceX Starlink Data Source",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "emit",
-        "pull"
+        "plan",
+        "select_objects"
       ],
       "runtimeTargets": [
         "browser",
@@ -3020,23 +3171,44 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 28,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "guest-link/emit_entry.cpp",
         "src/spacex_starlink_source.cpp",
-        "test/meme_oem_test.cpp"
+        "tests/meme_oem_test.cpp"
       ],
       "testFiles": [
-        "test/fixtures/MANIFEST.sample.txt",
-        "test/fixtures/PROVENANCE.md",
-        "test/fixtures/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
-        "test/fixtures/meme/MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt",
-        "test/meme_oem_test.cpp",
-        "test/module.test.mjs"
+        "tests/fixtures/MANIFEST.sample.txt",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/legacy-oem/fixtures/oem-0.bin",
+        "tests/fixtures/legacy-oem/fixtures/oem-1.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-0.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-1.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-2.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-3.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-4.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-5.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-6.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-7.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-8.bin",
+        "tests/fixtures/legacy-oem/synth-full/oem-9.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-0.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-1.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-2.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-3.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-4.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-5.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-6.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-7.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-8.bin",
+        "tests/fixtures/legacy-oem/synth-range/oem-9.bin",
+        "tests/fixtures/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+        "tests/fixtures/meme/MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt",
+        "tests/meme_oem_test.cpp",
+        "tests/module.test.mjs"
       ]
     },
     {
@@ -3086,7 +3258,7 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
       "name": "Terrain Tile Ingest Scheduler Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "granule_plan",
         "ingest_meta",
@@ -3106,7 +3278,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3117,7 +3289,8 @@
         "tests/built_artifact.test.mjs",
         "tests/granule_plan.test.mjs",
         "tests/irm_mark.test.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/sdk_compat.test.mjs",
+        "tests/typed.mjs"
       ]
     },
     {
@@ -3125,7 +3298,7 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "name": "Terrain Tile Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "methodIds": [
         "layer_json",
         "reduce_parent",
@@ -3146,7 +3319,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 51,
+      "testFileCount": 55,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3167,30 +3340,34 @@
         "tests/fixtures/parent-lod/missing-child.dttstream",
         "tests/fixtures/parent-lod/ocean.dttstream",
         "tests/fixtures/parent-lod/parity.json",
-        "tests/fixtures/parity/config-catalogue-no-cid.json",
-        "tests/fixtures/parity/config-catalogue-no-lineage.json",
-        "tests/fixtures/parity/config-catalogue.json",
-        "tests/fixtures/parity/context-conditional.json",
-        "tests/fixtures/parity/context-identity.json",
-        "tests/fixtures/parity/context-miss.json",
-        "tests/fixtures/parity/context-stored.json",
-        "tests/fixtures/parity/context-synth.json",
-        "tests/fixtures/parity/dem-granule.hrb",
-        "tests/fixtures/parity/oversized-granule.hrb",
-        "tests/fixtures/parity/plan-block.json",
-        "tests/fixtures/parity/plan-layer.json",
-        "tests/fixtures/parity/plan-oversized.json",
-        "tests/fixtures/parity/plan-single.json",
-        "tests/fixtures/parity/plan-water.json",
+        "tests/fixtures/parity/config-catalogue-no-cid.mcfg",
+        "tests/fixtures/parity/config-catalogue-no-lineage.mcfg",
+        "tests/fixtures/parity/config-catalogue.mcfg",
+        "tests/fixtures/parity/config-layer.mcfg",
+        "tests/fixtures/parity/config-synth.mcfg",
+        "tests/fixtures/parity/context-conditional.htq",
+        "tests/fixtures/parity/context-identity.htq",
+        "tests/fixtures/parity/context-miss.htq",
+        "tests/fixtures/parity/context-stored.htq",
+        "tests/fixtures/parity/context-synth.htq",
+        "tests/fixtures/parity/dem-granule.hrsp",
+        "tests/fixtures/parity/oversized-granule.hrsp",
+        "tests/fixtures/parity/plan-block.dtt",
+        "tests/fixtures/parity/plan-oversized.dtt",
+        "tests/fixtures/parity/plan-single.dtt",
+        "tests/fixtures/parity/plan-water.dtt",
         "tests/fixtures/parity/request-layer.htq",
         "tests/fixtures/parity/request-query.htq",
         "tests/fixtures/parity/request-tile.htq",
         "tests/fixtures/parity/request-tileset.htq",
         "tests/fixtures/parity/request-versioned.htq",
-        "tests/fixtures/parity/stored-record.dttstream",
-        "tests/fixtures/parity/stream-empty.bin",
-        "tests/fixtures/parity/stream-malformed.bin",
-        "tests/fixtures/parity/water-granule.hrb",
+        "tests/fixtures/parity/stored-record.0.fsb",
+        "tests/fixtures/parity/stored-record.1.fso",
+        "tests/fixtures/parity/stream-empty.0.fsb",
+        "tests/fixtures/parity/stream-empty.1.fso",
+        "tests/fixtures/parity/stream-malformed.0.fsb",
+        "tests/fixtures/parity/stream-malformed.1.fso",
+        "tests/fixtures/parity/water-granule.hrsp",
         "tests/fixtures/terrain-parity.json",
         "tests/granule-seams.test.mjs",
         "tests/helpers.mjs",
@@ -3212,7 +3389,7 @@
       "pluginId": "com.digitalarsenal.data-source.vimpel-source",
       "name": "Vimpel Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "normalize_orbits",
         "read_datefirst",
@@ -3230,13 +3407,16 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/vimpel_source.cpp"
       ],
       "testFiles": [
+        "tests/fixtures/legacy/ephemeris.bin",
+        "tests/fixtures/legacy/orbits-states.bin",
+        "tests/fixtures/oil.mjs",
         "tests/fixtures/vimpel-format.mjs",
         "tests/module.test.mjs",
         "tests/parity.test.mjs"
@@ -3247,7 +3427,7 @@
       "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
       "name": "Global Ensemble Forecast Parser Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_cloud_chunks",
         "parse_cyclone_tracks"
@@ -3300,7 +3480,7 @@
       "pluginId": "com.digitalarsenal.data-source.weathernext-source",
       "name": "Global Ensemble Forecast Request Builder Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "cyclone_request",
         "plan",
@@ -3333,7 +3513,7 @@
       "pluginId": "com.digitalarsenal.exporter.vcard-projection",
       "name": "vCard Projection",
       "pluginFamily": "exporter",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "card_compact",
         "card_full",
@@ -3351,7 +3531,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 7,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3361,7 +3541,10 @@
         "tests/fixtures/epm-literal-key.bin",
         "tests/fixtures/expected-compact.vcf",
         "tests/fixtures/expected-full.vcf",
-        "tests/parity/vcard.json"
+        "tests/fixtures/legacy-card-compact.vcf",
+        "tests/fixtures/legacy-card-full.vcf",
+        "tests/parity/vcard.json",
+        "tests/vcard_projection.test.mjs"
       ]
     },
     {
@@ -3440,7 +3623,7 @@
       "pluginId": "com.digitalarsenal.files.orbit-products",
       "name": "Orbit Products Reader",
       "pluginFamily": "parser",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "methodIds": [
         "describe_container",
         "normalize_ses_i11",
@@ -3519,225 +3702,14 @@
       ]
     },
     {
-      "modulePath": "flows/supplemental-omm/nodes/flatsql",
-      "pluginId": "com.digitalarsenal.flatsql.store",
-      "name": "FlatSQL Store",
-      "pluginFamily": "infrastructure",
-      "version": "2.0.2",
-      "methodIds": [
-        "append_records",
-        "compact",
-        "configure_index",
-        "configure_retention",
-        "query_records",
-        "reload",
-        "snapshot",
-        "upsert_view"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/sdn_node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
       "modulePath": "flows/supplemental-omm/nodes/od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
-      "name": "Supplemental OMM Native Orbit Determination",
+      "name": "Supplemental OMM Orbit Determination",
       "pluginFamily": "orbit_determination",
-      "version": "1.0.1",
+      "version": "2.0.0",
       "methodIds": [
-        "fit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/cpf",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
-      "name": "CPF Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/glonass",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
-      "name": "GLONASS Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/intelsat",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
-      "name": "Intelsat Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/iss",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
-      "name": "ISS Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/providers/starlink",
-      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
-      "name": "Starlink Complete Ephemeris Provider",
-      "pluginFamily": "data_source",
-      "version": "1.0.0",
-      "methodIds": [
-        "emit"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c",
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 1,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/node.cpp",
-        "vendor/miniz-3.1.2/miniz.c"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/publication",
-      "pluginId": "org.sdn.flows.supplemental-omm.publication",
-      "name": "Supplemental OMM Publication",
-      "pluginFamily": "publisher",
-      "version": "1.0.0",
-      "methodIds": [
-        "publish_records"
+        "fit",
+        "publish_request"
       ],
       "runtimeTargets": [
         "browser",
@@ -3763,8 +3735,8 @@
       "modulePath": "flows/supplemental-omm/nodes/status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "name": "Supplemental OMM Status",
-      "pluginFamily": "flow",
-      "version": "1.0.0",
+      "pluginFamily": "infrastructure",
+      "version": "2.0.0",
       "methodIds": [
         "record_event"
       ],
@@ -3785,35 +3757,6 @@
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node.cpp"
-      ],
-      "testFiles": []
-    },
-    {
-      "modulePath": "flows/supplemental-omm/nodes/timer",
-      "pluginId": "org.sdn.flows.supplemental-omm.timer",
-      "name": "Supplemental OMM Hourly Timer Policy",
-      "pluginFamily": "infrastructure",
-      "version": "1.0.0",
-      "methodIds": [
-        "on_wakeup"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 0,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/timer_node.cpp"
       ],
       "testFiles": []
     },
@@ -3846,74 +3789,6 @@
       ],
       "testFiles": [
         "tests/rigid_body_kinematics.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "foundation/decision-gate",
-      "pluginId": "com.digitalarsenal.foundation.decision-gate",
-      "name": "SDN Decision Gate",
-      "pluginFamily": "foundation",
-      "version": "0.1.0",
-      "methodIds": [
-        "branch",
-        "dispatch"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/decision_gate_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "foundation/discovery-shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "name": "SDN Discovery Response Shaper",
-      "pluginFamily": "foundation",
-      "version": "0.3.2",
-      "methodIds": [
-        "shape_latest",
-        "shape_peers",
-        "shape_pnm",
-        "shape_standards"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/discovery_shape_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -3976,9 +3851,10 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "name": "SDN HTTP Respond",
       "pluginFamily": "foundation",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "methodIds": [
-        "respond"
+        "respond",
+        "respond_query"
       ],
       "runtimeTargets": [
         "browser",
@@ -3992,14 +3868,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/http_respond_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4008,7 +3883,7 @@
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "name": "SDN HTTP Route",
       "pluginFamily": "foundation",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "methodIds": [
         "discover",
         "route",
@@ -4028,7 +3903,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -4036,7 +3911,6 @@
         "tests/bulk_route_test.cc"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/bulk_route.test.mjs",
         "tests/bulk_route_test.cc",
         "tests/sdk_compat.test.mjs"
@@ -4107,38 +3981,6 @@
       ],
       "testFiles": [
         "tests/numerics.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "foundation/omm-json",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "name": "SDN OMM JSON Encoder",
-      "pluginFamily": "foundation",
-      "version": "0.1.1",
-      "methodIds": [
-        "encode"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/omm_json_module.cpp"
-      ],
-      "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4241,7 +4083,7 @@
       "pluginId": "com.digitalarsenal.hostcap.clock",
       "name": "SDN Host Clock Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "now"
       ],
@@ -4272,7 +4114,7 @@
       "pluginId": "com.digitalarsenal.hostcap.file",
       "name": "SDN Host File Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "read_file",
         "write_file"
@@ -4289,7 +4131,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4297,7 +4139,8 @@
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/sdk_compat.test.mjs",
+        "tests/sds_bindings.mjs"
       ]
     },
     {
@@ -4305,7 +4148,7 @@
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "name": "SDN Host FlatSQL Query Node",
       "pluginFamily": "infrastructure",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "query",
         "sandbox_query"
@@ -4322,14 +4165,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/flatsql_query_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4338,7 +4180,7 @@
       "pluginId": "com.digitalarsenal.hostcap.flatsql-store",
       "name": "FlatSQL Store (in-wasm OD-flow write lane)",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "store"
       ],
@@ -4348,26 +4190,35 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 8,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/flatsql_store_module.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/fixtures/celestrak-gp.omm-stream.bin",
+        "tests/fixtures/iss.obd.bin",
+        "tests/fixtures/iss.ocm.bin",
+        "tests/fixtures/iss.omm.bin",
+        "tests/fixtures/legacy-fire.wrappers.bin",
+        "tests/fixtures/legacy-notrigger.wrappers.bin",
+        "tests/flatsql-host.mjs",
+        "tests/flatsql_store.test.mjs"
+      ]
     },
     {
       "modulePath": "hostcap/http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "name": "SDN Host HTTP Request Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "request"
       ],
@@ -4383,14 +4234,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/http_request_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4399,7 +4249,7 @@
       "pluginId": "com.digitalarsenal.hostcap.node-activity",
       "name": "SDN Host Node Activity",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "activity"
       ],
@@ -4415,14 +4265,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node_activity_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4431,7 +4280,7 @@
       "pluginId": "com.digitalarsenal.hostcap.node-status",
       "name": "SDN Host Node Status",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "status"
       ],
@@ -4447,14 +4296,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node_status_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4463,7 +4311,7 @@
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "name": "SDN Host P2P Discovery",
       "pluginFamily": "infrastructure",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "latest_dataset",
         "peers_snapshot",
@@ -4482,14 +4330,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/p2p_discovery_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4498,9 +4345,41 @@
       "pluginId": "com.digitalarsenal.hostcap.random",
       "name": "SDN Host Random Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "bytes"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/random_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs",
+        "tests/sds_bindings.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "name": "SDN Host Storage Ingest Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.3.0",
+      "methodIds": [
+        "ingest"
       ],
       "runtimeTargets": [
         "browser",
@@ -4518,41 +4397,9 @@
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "src/random_module.cpp"
-      ],
-      "testFiles": [
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "hostcap/storage-ingest",
-      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "name": "SDN Host Storage Ingest Node",
-      "pluginFamily": "infrastructure",
-      "version": "0.1.0",
-      "methodIds": [
-        "ingest"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
         "src/storage_ingest_module.cpp"
       ],
       "testFiles": [
-        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4561,7 +4408,7 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-write",
       "name": "SDN Host Schema-Typed Record Write Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "write_record"
       ],
@@ -4576,20 +4423,57 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/storage_write_module.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "licensing/client-decrypt",
+      "pluginId": "client-decrypt",
+      "name": "Client Decrypt",
+      "pluginFamily": "infrastructure",
+      "version": "0.2.0",
+      "methodIds": [
+        "decrypt_artifact"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/client_decrypt.cpp"
+      ],
+      "testFiles": [
+        "test/api.test.mjs",
+        "test/decrypt.test.mjs",
+        "test/e2e-roundtrip.test.mjs",
+        "test/lib/sdkBrowserShimHarness.mjs",
+        "test/protected-publication-trailer.test.mjs"
+      ]
     },
     {
       "modulePath": "licensing/core",
       "pluginId": "licensing",
       "name": "Licensing",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "client_fetch_and_decrypt",
         "client_request_grant",
@@ -4608,101 +4492,25 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 5,
+      "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
       "testFileCount": 5,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
+        "src/cpp/generated/typed/plugin_invoke_glue.cpp",
         "src/cpp/src/grant_quota.cpp",
         "src/cpp/src/key_server.cpp",
         "src/cpp/src/license_client.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
+        "src/cpp/src/licensing_hostcalls.cpp",
         "src/cpp/wasm_api.cpp"
       ],
       "testFiles": [
-        "tests/debug-challenge-probe.mjs",
         "tests/lib/sdkBrowserShimHarness.mjs",
+        "tests/lib/sds_bindings.mjs",
         "tests/role-entrypoints.test.mjs",
         "tests/sdk-compat.test.mjs",
         "tests/sds-generated-headers.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "licensing/protection-key-server",
-      "pluginId": "protection-key-server",
-      "name": "Protection Key Server",
-      "pluginFamily": "infrastructure",
-      "version": "0.1.1",
-      "methodIds": [
-        "check_key_rotation",
-        "configure_runtime",
-        "get_public_key",
-        "handle_key_request",
-        "request_challenge"
-      ],
-      "runtimeTargets": [
-        "wasi",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 6,
-      "cSourceFileCount": 0,
-      "testFileCount": 3,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/cpp/src/fips_init.cpp",
-        "src/cpp/src/key_server.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/xpub_auth.cpp",
-        "src/cpp/wasm_api.cpp",
-        "tests/xpub_auth_test.cpp"
-      ],
-      "testFiles": [
-        "tests/run-native.sh",
-        "tests/sdk_compat.test.mjs",
-        "tests/xpub_auth_test.cpp"
-      ]
-    },
-    {
-      "modulePath": "licensing/protection-license-client",
-      "pluginId": "protection-license-client",
-      "name": "Protection License Client",
-      "pluginFamily": "infrastructure",
-      "version": "0.1.1",
-      "methodIds": [
-        "decrypt",
-        "decrypt_and_verify",
-        "get_dek",
-        "verify"
-      ],
-      "runtimeTargets": [
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 3,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/cpp/src/license_client.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/wasm_api.cpp"
-      ],
-      "testFiles": [
-        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -4774,7 +4582,7 @@
       "pluginId": "com.digitalarsenal.network.cloudflare-registrar",
       "name": "Cloudflare peer routing",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "plan"
       ],
@@ -4790,14 +4598,13 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/registrar.cpp"
       ],
       "testFiles": [
-        "tests/parity.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4806,9 +4613,8 @@
       "pluginId": "atmosphere-model",
       "name": "Atmosphere Plugin",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
-        "invoke",
         "ocm_state_to_drag_acceleration_oem",
         "query_atmosphere_state_batch",
         "query_wind_field"
@@ -4824,9 +4630,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 13,
+      "cxxSourceFileCount": 12,
       "cSourceFileCount": 0,
-      "testFileCount": 8,
+      "testFileCount": 7,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -4834,7 +4640,6 @@
         "src/cpp/src/nrlmsise00.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/space_weather.cpp",
         "src/cpp/src/us76.cpp",
         "src/cpp/src/winds.cpp",
@@ -4851,7 +4656,6 @@
         "src/cpp/tests/test_space_weather.cpp",
         "tests/behavior.test.mjs",
         "tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
-        "tests/fixtures/request.altitude.json",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4860,7 +4664,7 @@
       "pluginId": "cislunar-propagator",
       "name": "Cislunar Propagation & Maneuver Plugin",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "invoke"
       ],
@@ -4875,27 +4679,25 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 8,
+      "cxxSourceFileCount": 4,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 8,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "src/cpp/src/cr3bp.cpp",
-        "src/cpp/src/direct_initialize.cpp",
-        "src/cpp/src/plugin_entrypoints.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/plugin_runtime.cpp",
+        "src/cpp/src/tbp_module.cpp",
         "src/cpp/tests/test_cr3bp.cpp",
-        "src/cpp/tests/test_sixdof.cpp",
-        "src/cpp/wasm_api.cpp"
+        "src/cpp/tests/test_sixdof.cpp"
       ],
       "testFiles": [
         "src/cpp/tests/test_cr3bp.cpp",
         "src/cpp/tests/test_sixdof.cpp",
         "tests/behavior.test.mjs",
         "tests/fixtures/hosted-runtime/cislunar.single-plugin.flow.json",
-        "tests/fixtures/request.lagrange.json",
+        "tests/fixtures/legacy-json-outputs.json",
+        "tests/legacy_parity.test.mjs",
+        "tests/lib/tbp.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -4966,7 +4768,7 @@
       ],
       "cxxSourceFileCount": 37,
       "cSourceFileCount": 0,
-      "testFileCount": 297,
+      "testFileCount": 303,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -5098,6 +4900,7 @@
         "tests/force_partials_native.cpp",
         "tests/generated/sds/Band.js",
         "tests/generated/sds/CAT.js",
+        "tests/generated/sds/CATProduct.js",
         "tests/generated/sds/CelestialFrame.js",
         "tests/generated/sds/CelestialFrameWrapper.js",
         "tests/generated/sds/CustomFrame.js",
@@ -5181,6 +4984,10 @@
         "tests/generated/sds/PRWTleLines.js",
         "tests/generated/sds/PRWTrajectorySource.js",
         "tests/generated/sds/PRWVersionResult.js",
+        "tests/generated/sds/PRWWindowQuery.js",
+        "tests/generated/sds/PRWWindowRefusal.js",
+        "tests/generated/sds/PRWWindowReport.js",
+        "tests/generated/sds/PRWWindowRequest.js",
         "tests/generated/sds/PolarizationType.js",
         "tests/generated/sds/RFM.js",
         "tests/generated/sds/RFMCoordinateSystem.js",
@@ -5200,6 +5007,7 @@
         "tests/generated/sds/TIMConversionRequest.js",
         "tests/generated/sds/TIMConversionResult.js",
         "tests/generated/sds/TIMInstant.js",
+        "tests/generated/sds/catalogProductKind.js",
         "tests/generated/sds/dataAvailability.js",
         "tests/generated/sds/eopSeries.js",
         "tests/generated/sds/frmOperationCode.js",
@@ -5381,7 +5189,7 @@
       "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
       "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "fit",
         "ingest_omm",

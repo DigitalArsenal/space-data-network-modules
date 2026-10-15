@@ -4,8 +4,10 @@
  * JS flow runtime host (browser parity): a $HTQ HttpRequest enters route, the
  * route -> flatsql-query -> respond (or route -> layer_json) chain runs
  * linked-direct inside the artifact's linear memory, and the ONLY host
- * crossings are storage.flatsql_query_stream and plugin.getConfig — stubbed
- * with the Go-host response dialect.
+ * crossings are storage.flatsql_query_stream and plugin.getConfig — SDS $PIV
+ * invocations, answered here as the Go node answers them (one ModuleConfig on
+ * raw "config"; StreamResult + the raw "stream"). Every frame between the
+ * nodes is a FlatBuffer: $HTQ, $FSO, $FSB, $HTR (typed contracts 1.0).
  *
  * The stored $DTT fixture is produced by the terrain-source MODULE's own
  * `tile` encoder, so the serve path is tested against exactly the bytes the
@@ -22,6 +24,9 @@ import zlib from "node:zlib";
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest } from "space-data-module-sdk/http";
+import { decodeHostCall, decodeSqlValues, encodeHostCallResult, encodeModuleConfig } from "space-data-module-sdk/runtime-contracts";
+
+import { granuleFrame, invokeTyped, moduleConfigOf, planInputs } from "../../../data-source/terrain-source/typed-frames.mjs";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -42,36 +47,6 @@ const CONFIG = {
   terrain_available: [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]],
   terrain_attribution: "test attribution",
 };
-
-// ---------------------------------------------------------------------------
-// Hostcall wire helpers (Go-host dialect; keys alphabetical like json.Marshal).
-// ---------------------------------------------------------------------------
-
-function encodeHostcallEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4 + segments.reduce((sum, seg) => sum + 4 + seg.length, 0);
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  envelope.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    envelope.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return envelope;
-}
-
-function decodeHostcallEnvelope(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  return { meta };
-}
 
 // ---------------------------------------------------------------------------
 // The stored record fixture: one $DTT produced by the module's own encoder,
@@ -137,28 +112,18 @@ async function storedRecordStream() {
     surface: "direct",
   });
   try {
-    const frame = (portId, value) => {
-      const bytes = encoder.encode(JSON.stringify(value));
-      return {
-        portId,
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-        payload: bytes,
-      };
-    };
-    const response = await harness.invoke({
+    // Typed contracts 1.0: the plan is the $DTT header stream (+ ModuleConfig options), the granule an HttpResponse.
+    const response = await invokeTyped(harness, {
       methodId: "tile",
       inputs: [
-        frame("plan", {
+        planInputs({
           tilesetId: "spaceaware-terrain",
           level: 8,
           x: 271,
           y: 192,
           gridSize: 33,
-          // PINNED, because this test asserts the served bytes against a
-          // stated lattice. Density otherwise adapts to relief inside the
-          // 32 KiB cap (coordinator 2026-08-27 (a)) and this fixture is a
-          // plane, so the coarsest candidate is exact — correct, and not what
-          // the assertion below is about.
+          // PINNED, because this test asserts the served bytes against a stated lattice (density otherwise adapts
+          // to relief inside the 32 KiB cap and this fixture is a plane, so the coarsest candidate is exact).
           minGridSize: 33,
           maxLevel: 8,
           childAvailability: 0,
@@ -169,11 +134,7 @@ async function storedRecordStream() {
             license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
           },
         }),
-        frame("dem", {
-          status: 200,
-          headers: {},
-          bodyB64: buildDemGeoTiff().toString("base64"),
-        }),
+        granuleFrame("dem", buildDemGeoTiff(), 200),
       ],
     });
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
@@ -192,27 +153,30 @@ function createStub({ stream, config = CONFIG } = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
+  // SQL values on raw "params" (FlatSQL's tagged encoding); an i64 read back as a Number for the assertions.
+  const sqlValue = ({ t, v }) => ({ t, v: t === "i64" ? Number(v) : v });
   const imports = {
     space_data_module_host: {
       call(opPtr, opLen, payloadPtr, payloadLen) {
         const heap = new Uint8Array(memoryRef.memory.buffer);
         const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta } = decodeHostcallEnvelope(payload);
+        const call = decodeHostCall(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
+        assert.equal(call.op, operation);
+        const meta = operation === "storage.flatsql_query_stream"
+          ? { sql: decoder.decode(call.raw.sql), params: decodeSqlValues(call.raw.params ?? new Uint8Array(0)).map(sqlValue), deliver: call.params?.DELIVER }
+          : {};
         calls.push({ operation, meta });
         if (operation === "plugin.getConfig") {
-          response = encodeHostcallEnvelope(config);
+          response = encodeHostCallResult({ ok: true, op: operation, raw: { config: encodeModuleConfig(moduleConfigOf(config)) } });
           return 0;
         }
         if (operation === "storage.flatsql_query_stream") {
-          response = encodeHostcallEnvelope({ ok: true }, stream ? [stream] : []);
+          const bytes = stream ?? new Uint8Array(0);
+          response = encodeHostCallResult({ ok: true, op: operation, result: { ROWS: bytes.length ? 1n : 0n, COLUMNS: 1 }, raw: { stream: bytes } });
           return 0;
         }
-        response = encodeHostcallEnvelope({
-          error: { message: `unexpected op ${operation}` },
-          ok: false,
-        });
-        return 1;
+        response = encodeHostCallResult({ ok: false, error: { code: "unsupported", message: `unexpected op ${operation}` } });
+        return 0;
       },
       response_len() {
         return response.length;

@@ -228,7 +228,7 @@ void default_options(Options* o) {
 
 std::string parse_options(const nlohmann::json& j, Options* o) {
   default_options(o);
-  if (j.is_discarded() || !j.is_object()) return "options must be a JSON object.";
+  if (j.is_discarded() || !j.is_object()) return "options must be an $ERM options record.";
   if (j.contains("regimes")) {
     const auto& r = j["regimes"];
     if (!r.is_array() || r.empty()) return "regimes must be a non-empty array.";
@@ -652,7 +652,7 @@ std::string reference_errors(Accumulator& acc, std::vector<ElementSet>& sets) {
   });
 }
 
-// ── accumulator JSON ──
+// ── accumulator working values (the $ERM ACCUMULATOR at the ports) ──
 nlohmann::json counts_json(const Counts& c) {
   return {{"elementSets", c.records}, {"refused", c.refused}, {"duplicateEpochs", c.duplicates},
           {"unclassified", c.unclassified}, {"objects", c.objects}, {"samples", c.samples},
@@ -776,15 +776,20 @@ const plugin_input_frame_t* input(const char* port) {
   const int32_t index = plugin_find_input_index(port, 0);
   return index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
 }
+// A port's $ERM record as the method's working values (src/erm_bridge.cpp); discarded when the frame is not a
+// verifiable $ERM with an arm this module reads.
 nlohmann::json json_input(const char* port) {
   const plugin_input_frame_t* f = input(port);
   if (!f || !f->payload) return nlohmann::json(nlohmann::json::value_t::discarded);
-  return nlohmann::json::parse(f->payload, f->payload + f->payload_length, nullptr, false);
+  const std::unique_ptr<ERMT> e = ermb::read_erm(f->payload, f->payload_length);
+  if (!e) return nlohmann::json(nlohmann::json::value_t::discarded);
+  return ermb::erm_to_work(*e);
 }
+// A method's result as one size-prefixed $ERM record on `port`.
 int emit(const char* port, const nlohmann::json& j) {
-  const std::string text = j.dump();
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0
+  const std::vector<uint8_t> bytes = ermb::pack(*ermb::work_to_erm(j));
+  return plugin_push_output_ex(port, "ERM.fbs", "$ERM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "ERM", 0, 0, bytes.data(),
+                               static_cast<uint32_t>(bytes.size())) < 0
              ? 1
              : 0;
 }
@@ -834,7 +839,7 @@ extern "C" int accumulate() {
 extern "C" int finalize() {
   const nlohmann::json j = json_input("accumulator");
   if (j.is_discarded() || !j.is_object() || j.value("kind", std::string()) != "gp-error-accumulator")
-    return fail("invalid-accumulator", "accumulator must be gp-error-accumulator JSON.");
+    return fail("invalid-accumulator", "accumulator must be an $ERM ACCUMULATOR record.");
   Accumulator acc;
   std::string e = parse_options(j, &acc.options);
   if (!e.empty()) return fail("invalid-accumulator", e);
@@ -927,10 +932,10 @@ extern "C" int scale_model() {
   nlohmann::json model = json_input("model");
   const nlohmann::json truth = json_input("truth");
   if (!model.is_object() || model.value("kind", std::string()) != "gp-error-model" || !model.contains("strata"))
-    return fail("invalid-model", "model must be gp-error-model JSON.");
+    return fail("invalid-model", "model must be an $ERM MODEL record of form StratifiedStatistics.");
   if (!truth.is_object() || truth.value("kind", std::string()) != "gp-error-model" ||
       truth.value("mode", std::string()) != "reference" || !truth.contains("strata"))
-    return fail("invalid-truth", "truth must be gp-error-model JSON in reference mode.");
+    return fail("invalid-truth", "truth must be an $ERM MODEL record of form StratifiedStatistics against reference states.");
   if (options_signature(model) != options_signature(truth))
     return fail("invalid-truth", "truth regimes or age bins differ from the model's.");
   double min_samples = 30;
@@ -1200,7 +1205,7 @@ extern "C" int screening_evaluation() {
   using namespace screening;
   const nlohmann::json model = json_input("model");
   if (!model.is_object() || model.value("kind", std::string()) != "gp-error-model" || !model.contains("strata"))
-    return fail("invalid-model", "model must be gp-error-model JSON.");
+    return fail("invalid-model", "model must be an $ERM MODEL record of form StratifiedStatistics.");
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
   Accumulator acc;
   std::string e = parse_options(opt, &acc.options);
@@ -1298,7 +1303,7 @@ extern "C" int screening_cases() {
   using namespace screening;
   const nlohmann::json cases = json_input("cases");
   if (!cases.is_object() || !cases.contains("pairs") || !cases["pairs"].is_array())
-    return fail("invalid-cases", "cases must be JSON with a pairs array.");
+    return fail("invalid-cases", "cases must be an $ERM SCREENING_CASES record.");
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
   Settings st;
   const std::string e = read_settings(opt, &st);
@@ -1467,7 +1472,7 @@ struct Model {
 std::string read_model(const nlohmann::json& j, const Options& options, Model* m) {
   if (!j.is_object() || j.value("kind", std::string()) != "hpop-covariance-model" || !j.contains("regimes") ||
       !j["regimes"].is_array())
-    return "model must be hpop-covariance-model JSON.";
+    return "model must be an $ERM MODEL record of form PropagatorCovariance.";
   m->json = j;
   for (const auto& r : j["regimes"]) {
     if (!r.is_object() || !r.contains("regimeIndex") || !r["regimeIndex"].is_number_integer()) return "each model regime needs regimeIndex.";
@@ -1535,7 +1540,7 @@ struct Sample {
 extern "C" int hpop_arcs() {
   using namespace hpopcal;
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
-  if (!opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  if (!opt.is_object()) return fail("invalid-options", "options must be an $ERM options record.");
   Accumulator acc;
   std::string e = parse_options(opt, &acc.options);
   if (!e.empty()) return fail("invalid-options", e);
@@ -1625,11 +1630,11 @@ extern "C" int hpop_coverage() {
   using namespace hpopcal;
   const nlohmann::json plan = json_input("plan"), predictions = json_input("predictions");
   if (!plan.is_object() || plan.value("kind", std::string()) != "hpop-arc-plan" || !plan.contains("arcs"))
-    return fail("invalid-plan", "plan must be hpop-arc-plan JSON.");
+    return fail("invalid-plan", "plan must be an $ERM ARC_PLAN record.");
   if (!predictions.is_object() || !predictions.contains("arcs") || !predictions["arcs"].is_array())
-    return fail("invalid-predictions", "predictions need arcs [{arc, samples}].");
+    return fail("invalid-predictions", "predictions must be an $ERM ARC_PREDICTIONS record.");
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
-  if (!opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  if (!opt.is_object()) return fail("invalid-options", "options must be an $ERM options record.");
   const std::string mode = opt.value("mode", std::string());
   if (mode != "epoch" && mode != "fit" && mode != "test") return fail("invalid-options", "mode is epoch, fit or test.");
   Options options;

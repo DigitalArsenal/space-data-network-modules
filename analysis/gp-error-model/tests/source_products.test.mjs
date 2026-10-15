@@ -9,11 +9,14 @@
 //   COMMENT or TAGS; the covariance's label: one CVR per covariance epoch (COV_REALISM), its verdict by the CVR's own rule.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import test from 'node:test';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { fileURLToPath } from 'node:url';
+import { standardsRoot } from '../scripts/erm-codec.mjs';
+import { decode, ermFrame, json as json2 } from './erm-harness.mjs';
 import {
-  OCM, OEM, OMM, MNV, PVN_LICENCES, alignedOem, assertSourceNamed, call, cellOf, deriveStates, encodeMnv, encodeOmm, expectedCovariance, expectedProvenance, fitOcm, json, kc, leoH,
+  OCM, OEM, OMM, MNV, PVN_LICENCES, assertSourceNamed, call, cellOf, deriveStates, encodeMnv, encodeOmm, expectedCovariance, expectedProvenance, fitOcm, json, kc, leoH,
   manifest, mnvFrame, beyond, ommFrame, ocmFrame, oemFrame, operatorOem, output, provenanceOf, recipeFor, records, reportOf, unpackMnv, unpackOcm, unpackOmm, valladoOmm, vallado,
 } from './products-fixtures.mjs';
 
@@ -24,7 +27,7 @@ const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex'
 async function attach(sets, { ages = [0], recipe = recipeFor(), operator, fit, overrides } = {}) {
   const stream = Buffer.concat(sets.map((s, i) => encodeOmm(s, overrides?.(s, i) ?? {})));
   const states = await deriveStates(stream, ages);
-  const inputs = [ommFrame('elements', stream), alignedOem('states', states), json('recipe', recipe)];
+  const inputs = [ommFrame('elements', stream), oemFrame('states', states), json('recipe', recipe)];
   if (operator) inputs.push(oemFrame('operator', operator));
   if (fit) inputs.push(ocmFrame('fit', fit));
   const response = await call('attach_covariance', inputs);
@@ -44,7 +47,7 @@ const lowerOf = (ocm, k) => ocm.COVARIANCE_DATA.slice(21 * k, 21 * k + 21);
 
 test('the artifact passes SDK compliance', async () => {
   const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)),
-    standardsRoot: fileURLToPath(new URL('../node_modules/spacedatastandards.org/', import.meta.url)) });
+    standardsRoot });
   assert.equal(report.ok, true, JSON.stringify(report.issues.filter((i) => i.severity === 'error'), null, 2));
 });
 
@@ -344,7 +347,7 @@ test('a recipe that does not name the source is refused', async () => {
   delete bad.source.provider;
   const stream = encodeOmm(leoH);
   const states = await deriveStates(stream);
-  const response = await call('attach_covariance', [ommFrame('elements', stream), alignedOem('states', states), json('recipe', bad)]);
+  const response = await call('attach_covariance', [ommFrame('elements', stream), oemFrame('states', states), json('recipe', bad)]);
   assert.notEqual(response.statusCode, 0);
   assert.match(response.errorMessage, /recipe\.source\.provider is required/);
   // The licence class is one of the four the SDS PVN names.
@@ -356,4 +359,19 @@ test('a recipe that does not name the source is refused', async () => {
   const unknown = await call('attribute_maneuvers', [mnvFrame('maneuvers', encodeMnv()), json('recipe', recipeFor({ licence: 'public-domain' }))]);
   assert.notEqual(unknown.statusCode, 0);
   assert.match(unknown.errorMessage, /licence\.class is reproducible, cite-only, share-alike or non-commercial/);
+});
+
+test('data/e14-s3-kc.erm is E14\'s frozen model as one $ERM MODEL record: the JSON\'s numbers, and calibrate_covariance applies it as stored', async () => {
+  const bytes = fs.readFileSync(new URL('../data/e14-s3-kc.erm', import.meta.url));
+  const model = decode(bytes);
+  assert.equal(model.calibrationVersion, kc.calibrationVersion);
+  assert.deepEqual(model.regimes, kc.regimes);
+  assert.deepEqual(model.ageBinsDays, kc.ageBinsDays);
+  assert.deepEqual(model.strata.map((s) => s.covariance), kc.strata.map((s) => s.covariance));
+  assert.deepEqual(model.cells.map(({ meanD2Over3, coverage95, samples, objects, decision, calibration }) => ({ meanD2Over3, coverage95, samples, objects, decision, calibration })),
+    kc.cells.map(({ meanD2Over3, coverage95, samples, objects, decision, calibration }) => ({ meanD2Over3, coverage95, samples, objects, decision, calibration })));
+  const response = await call('calibrate_covariance', [ermFrame('model', bytes), json2('objects', { objects: [{ id: 'h', regime: 'LEO-H', ageDays: 0 }] })]);
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const [h] = decode(output(response, 'covariance')).objects;
+  closeAll(h.covarianceRtn, expectedCovariance('LEO-H', 0).map((x) => x * 1e6), 'the stratum covariance in SI', 0);
 });

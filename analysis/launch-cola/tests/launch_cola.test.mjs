@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { decodeFlowNotice } from 'space-data-module-sdk/runtime-contracts';
 
 // Every expected value below is closed-form geometry, derived in the comment
 // beside it. Inputs are straight-line or stationary Earth-fixed tracks, which
@@ -106,8 +107,13 @@ async function screen(t, bytes) {
   if (result.statusCode !== 0) return { error: result.errorMessage };
   const out = result.outputs.find((f) => f.portId === 'result').payload;
   const launch = CQR.CQR.getRootAsCQR(new flatbuffers.ByteBuffer(new Uint8Array(out))).unpack().LAUNCH_RESULT;
-  const report = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
-  return { launch, report };
+  const notice = result.outputs.find((f) => f.portId === 'report');
+  const n = decodeFlowNotice(notice.payload);
+  assert.equal(n.kind, 'info');
+  assert.equal(n.schema, '$CQR');
+  assert.equal(n.reason, 'launch-window-screened');
+  assert.equal(n.count, launch.APPROACHES.filter((a) => a.VIOLATES && !a.RENDEZVOUS_COORDINATED).length);
+  return { launch, report: { closures: n.items } };
 }
 
 // Crossing geometry (radius R0 ~ 400 km altitude on the x axis):

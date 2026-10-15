@@ -12,16 +12,16 @@ import {
   PLG,
   SymmetricAlgo,
   licensingGrantMessageType,
-} from "../../../../spacedatastandards.org/lib/js/LGR/main.js";
+} from "spacedatastandards.org/lib/js/LGR/main.js";
 import {
   keyMaterialAlgorithm,
   keyMaterialEncoding,
   keyMaterialRole,
-} from "../../../../spacedatastandards.org/lib/js/KMF/main.js";
-import { KMF as RecordKMF } from "../../../../spacedatastandards.org/lib/js/REC/KMF.js";
-import { REC } from "../../../../spacedatastandards.org/lib/js/REC/REC.js";
-import { Record } from "../../../../spacedatastandards.org/lib/js/REC/Record.js";
-import { RecordType } from "../../../../spacedatastandards.org/lib/js/REC/RecordType.js";
+} from "spacedatastandards.org/lib/js/KMF/main.js";
+import { KMF as RecordKMF } from "spacedatastandards.org/lib/js/REC/KMF.js";
+import { REC } from "spacedatastandards.org/lib/js/REC/REC.js";
+import { Record } from "spacedatastandards.org/lib/js/REC/Record.js";
+import { RecordType } from "spacedatastandards.org/lib/js/REC/RecordType.js";
 
 export const GRANT_RESPONSE_FILE_IDENTIFIER = "$LGR";
 export const GRANT_PAYLOAD_CONTEXT = "space-data-network/module-delivery/grant/v1";
@@ -416,12 +416,13 @@ export async function buildRecWrappedKmfContentKeyFrame(
     BigInt(Number(options.expiresAtMs ?? 0)),
   );
   const standardOffset = builder.createString("KMF");
-  const recordOffset = Record.createRecord(
-    builder,
-    RecordType.KMF,
-    kmfOffset,
-    standardOffset,
-  );
+  // Field by field: newer SDS Record tables carry EXTENDED_TYPE / EXTENDED_VALUE, which a positional
+  // createRecord would write as undefined.
+  Record.startRecord(builder);
+  Record.addValueType(builder, RecordType.KMF);
+  Record.addValue(builder, kmfOffset);
+  Record.addStandard(builder, standardOffset);
+  const recordOffset = Record.endRecord(builder);
   const recordsOffset = REC.createRecordsVector(builder, [recordOffset]);
   const recOffset = REC.createREC(builder, versionOffset, recordsOffset);
   REC.finishRECBuffer(builder, recOffset);

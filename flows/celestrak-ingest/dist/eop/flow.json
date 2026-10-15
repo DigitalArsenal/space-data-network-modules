@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-eop-ingest",
   "name": "CelesTrak Earth Orientation Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow, Earth orientation: a module cron TIMER tick enters at celestrak-request:eop (URL, byte budget and usage terms from node CONFIG / the origin registry), hostcap/http-request fetches EOP-All.csv with the recorded ETag / Last-Modified validators, celestrak-parser:parse_eop normalizes it into an EOP record stream (arcsecond columns to radians in the double-precision _HP fields with float32 copies, DAT to TAI_MINUS_UTC_SECONDS, DATA_TYPE O/P, series FINALS2000A, IAU_2000A; batch = sha256 of the payload; the 7-day stale gate on the newest OBSERVED row fails the batch in-wasm; HTTP 304 emits one unchanged notice to the egress sink and stores nothing), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op with reconcile \"current\" (each whole-history snapshot supersedes the previous one). Results land on the egress sink. After the store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow, Earth orientation. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:eop emits the EOP-All.csv HttpRequest (4 MiB budget; the host presents its recorded ETag / Last-Modified validators); celestrak-parser:parse_eop normalizes it into an $EOP record stream (arcsecond columns to radians in the double-precision _HP fields with float32 copies, DAT to TAI_MINUS_UTC_SECONDS, DATA_TYPE O/P, series FINALS2000A, IAU_2000A; batch = sha256 of the payload; the 7-day stale gate on the newest OBSERVED row fails the batch in-wasm) with its IngestRequest (reconcile Current: each whole-history snapshot supersedes the previous one; archived as celestrak/EOP-All.csv), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source hostcall. After the store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponse). All decisions live in-wasm.",
   "nodes": [
     {
       "nodeId": "req",
@@ -63,18 +63,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse",
@@ -83,8 +72,7 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-eop-meta",
@@ -93,18 +81,16 @@
       "toNodeId": "ingest_eop",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-eop-records",
       "fromNodeId": "parse",
       "fromPortId": "eop_records",
       "toNodeId": "ingest_eop",
-      "toPortId": "records",
+      "toPortId": "eop_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-eop-raw",
@@ -113,8 +99,7 @@
       "toNodeId": "ingest_eop",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-eop-egress",
@@ -123,8 +108,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-eop-publish",
@@ -133,8 +117,7 @@
       "toNodeId": "publish_eop",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-eop-meta-publish",
@@ -143,8 +126,7 @@
       "toNodeId": "publish_eop",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-eop-http",
@@ -153,28 +135,25 @@
       "toNodeId": "publish_http_eop",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-eop-egress",
       "fromNodeId": "publish_http_eop",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-unchanged-egress",
       "fromNodeId": "parse",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     }
   ],
   "triggers": [

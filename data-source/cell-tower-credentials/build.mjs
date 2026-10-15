@@ -3,18 +3,34 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "cell_tower_credentials_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
+// The sibling spacedatastandards.org checkout; SPACE_DATA_STANDARDS_ROOT wins when set.
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
-// No SDS header is inlined: this node carries no record. Its frames are the
-// flow's own control JSON, and its outputs are an HTTP decision plus a JSON
-// body — the same shape foundation/http-respond already takes from `route`.
+// Typed contracts: the task arrives as an SDS $APR (put/clear) or a $QRP projection page (catalog), the answer leaves
+// as a $QRP decision + page for foundation/http-respond respond_query. Both standards' generated C++ headers are inlined
+// with their include guards renamed (every SDS header is "main_generated.h") and the flatc version assert relaxed, as
+// foundation/http-route does. The runtime headers (HttpRequest, FlowNotice) and typedHostcall.hpp are staged by the
+// SDK compiler.
+async function sdsHeader(code) {
+  const header = await generateSdsHeader(code, import.meta.url);
+  return header
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+    .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+    .replace(/#include "main_generated\.h"\n/g, "");
+}
+
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+const sourceCode = [await sdsHeader("APR"), await sdsHeader("QRP"), await fs.readFile(sourcePath, "utf8")].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -24,11 +40,9 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // Same single-thread STANDALONE_WASM lane as every other node in this flow.
-  // One hostcall at a time, no shared state, provably no thread.
+  // Same single-thread STANDALONE_WASM lane as every other node in this flow: one hostcall at a time, no shared state.
   threadModel: "single-thread",
-  // Imports the sync space_data_module_host bridge; symbols resolve at
-  // instantiation.
+  // Imports the sync space_data_module_host bridge (typedHostcall.hpp, sdm_piv); symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
 

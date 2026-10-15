@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-ingest",
   "name": "Cellular Network Ingest Flow",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "engineLinkage": "bridge",
-  "description": "The INGEST counterpart to cellular-network-aggregate, which is a per-request HTTP aggregate: route -> http -> parse -> merge -> respond, no storage node, no publication node, nothing persisted. That is the correct shape for the browser demo and the wrong shape for ingest, and the two cannot be the same flow - the aggregate is capabilities [] on route BY DESIGN so it stays browser-shaped. Here a cron TIMER tick enters at cell-tower-ingest:mark_query, which builds the flatsql-query that reads this provider's durable resume mark; hostcap/flatsql-query returns it to cell-tower-ingest:ingest_plan, which emits ONE hostcap/http-request descriptor carrying a Range header for the next chunk plus the cell-tower-source run contract. The chunk is bounded by the Go server host's 4 MiB response-body cap (hostcap/http-request manifest), so a 40M-row bulk export is fetched as a sequence of ranged chunks instead of one truncated GET; cellular-worldwide-ingest-exceeds-host01 measured a 4.75 MB CSV already forcing 8192 linear-memory pages. cell-tower-source's parse and deconflict are REUSED UNCHANGED - decoding a provider body and merging sites are the same operations whether the answer is served or stored - and cell-tower-ingest:ingest_meta authors the storage attribution ($TBS + $TBS.SOURCES provenance, reconcile=append because each batch is one CHUNK of the provider's set, not the set) before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. cell-tower-ingest:publish_request then advances the resume mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one chunk instead of skipping rows invisibly - and emits the dataset-publication POST only when a publish URL is configured. The host owns no schedule, no provider list, no chunking policy and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required. DURABLE RESUME MARK (2026-08-24, upstream-modules-2): the mark no longer stops at egress. publish_request authors it as an $IRM (Ingest Resume Mark) record - Themis minted and ratified the standard in spacedatastandards.org 1.196.0, which was the single thing blocking this lane - and hostcap/storage-write persists it through the schema-typed storage.write hostcall under the storage_write grant. mark_read_q now reads $IRM records back out of the store instead of a bespoke bookkeeping table, so the loop is closed with ZERO Go host changes. The mark carries the version-stamped opaque decode context (cell-tower-source's own bulk_resume_next frame, verbatim, restarted rather than resumed if its stamp is unrecognised) and the CSV header row from chunk 0, which is what makes a chunk N>0 decode to rows at all instead of eating its own first data row as a column contract and reporting a clean empty tail. The flow's runtimeTargets narrow to [wasmedge] and that is the truthful declaration, not a convenience: storage_write is browser-incompatible because a browser has no node store, and this is a timer-driven server ingest lane by construction. HTTP 304 NOT MODIFIED (2026-09-15): the host presents the ETag / Last-Modified it recorded from the last 2xx for the chunk URL, so an unchanged export answers 304 with no body. parse skips the non-2xx response, deconflict emits an empty record stream, and ingest_meta used to refuse that with status 400 - the daily failure of this lane on host-02 while archive.org was healthy. ingest_meta now mirrors the celestrak parser: one notice on its 'unchanged' port straight to the egress sink and nothing on meta/records, so storage-ingest never fires, no batch is stored or announced, and the resume mark stays put because nothing new was read.",
+  "description": "The INGEST counterpart to cellular-network-aggregate (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between nodes). A cron timer delivers a TimerTick (TICK) to cell-tower-ingest:mark_query, which emits the $FSO FlatSQL query reading the ingest resume marks; hostcap/flatsql-query answers the stored $IRM rows as $FSB chunks to cell-tower-ingest:ingest_plan, which emits ONE ranged HttpRequest (HREQ) for the next chunk. The run travels IN the request: HttpRequest.CONTEXT is a size-prefixed stream of the $APR run contract (ROUTE ingest, PROVIDERS, METHOD, LIMIT, FULL_POPULATION, the per-fetch provider and fetches=1) and the $IRM job the chunk continues (offset, chunk budget, decode context: CSV header row, version-stamped inflate state). hostcap/http-request echoes it on the HttpResponse (HRSP). The chunk is bounded by the Go host's 4 MiB response-body cap, so a 40M-row bulk export is fetched as a sequence of ranged chunks instead of one truncated GET. cell-tower-source's parse and deconflict are REUSED UNCHANGED - parse decodes the body into single-source $TBS reports (and, for a gzip export, the next $IRM decoder resume), deconflict merges them into the $TBS record stream - and cell-tower-ingest:ingest_meta authors the IngestRequest (INGQ: TBS.fbs, source tags, reconcile None because each batch is one CHUNK of the provider's set, provenance) and the candidate next $IRM from the HttpResponse (Content-Range total, row-boundary correction, the header row at chunk 0, the decoder's own next byte when one ran). hostcap/storage-ingest persists the batch through storage.ingest_with_source and answers an IngestResult (INGR). cell-tower-ingest:publish_request advances the mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one chunk instead of skipping rows invisibly; inserted=0 for a chunk that carried records, or a REFUSED batch, stops the run without a mark - and emits the $IRM to hostcap/storage-write (storage.write, storage_write grant) and to egress, plus the dataset-publication POST (its body an IngestResult) only when a publish URL is configured. HTTP 304 NOT MODIFIED: the host presents the validators it recorded, an unchanged export answers 304 with no body, parse and deconflict pass an empty stream and ingest_meta emits one FlowNotice (FNTC Unchanged) to egress and nothing on meta/records, so nothing is stored or announced and the mark stays put. The flow's runtimeTargets are wasmedge: storage_write is browser-incompatible and this is a timer-driven server ingest lane by construction. The host owns no schedule, no provider list, no chunking policy and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL rows that hold the mark.",
   "nodes": [
     {
       "nodeId": "mark_read_q",
@@ -101,18 +101,16 @@
       "toNodeId": "mark_read",
       "toPortId": "query",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "fq-plan",
       "fromNodeId": "mark_read",
-      "fromPortId": "stream",
+      "fromPortId": "records",
       "toNodeId": "plan",
       "toPortId": "mark",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "plan-http",
@@ -121,18 +119,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-parse-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse",
@@ -141,58 +128,7 @@
       "toNodeId": "parse",
       "toPortId": "responses",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "parse-job-merge",
-      "fromNodeId": "parse",
-      "fromPortId": "job",
-      "toNodeId": "merge",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "parse-reports",
-      "fromNodeId": "parse",
-      "fromPortId": "reports",
-      "toNodeId": "merge",
-      "toPortId": "reports",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "merge-records-meta",
-      "fromNodeId": "merge",
-      "fromPortId": "records",
-      "toNodeId": "meta",
-      "toPortId": "records",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
-    },
-    {
-      "edgeId": "merge-decision-meta",
-      "fromNodeId": "merge",
-      "fromPortId": "decision",
-      "toNodeId": "meta",
-      "toPortId": "decision",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "plan-meta-job",
-      "fromNodeId": "plan",
-      "fromPortId": "job",
-      "toNodeId": "meta",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-meta-response",
@@ -201,8 +137,43 @@
       "toNodeId": "meta",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-job-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "job",
+      "toNodeId": "merge",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-reports",
+      "fromNodeId": "parse",
+      "fromPortId": "reports",
+      "toNodeId": "merge",
+      "toPortId": "reports",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-resume-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "resume",
+      "toNodeId": "meta",
+      "toPortId": "resume",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "merge-records-meta",
+      "fromNodeId": "merge",
+      "fromPortId": "records",
+      "toNodeId": "meta",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-ingest-meta",
@@ -211,18 +182,16 @@
       "toNodeId": "ingest",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-ingest-records",
       "fromNodeId": "meta",
       "fromPortId": "records",
       "toNodeId": "ingest",
-      "toPortId": "records",
+      "toPortId": "tbs_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-publish-result",
@@ -231,8 +200,7 @@
       "toNodeId": "publish",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-publish-meta",
@@ -241,8 +209,16 @@
       "toNodeId": "publish",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "meta-publish-mark",
+      "fromNodeId": "meta",
+      "fromPortId": "mark",
+      "toNodeId": "publish",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-http",
@@ -251,8 +227,7 @@
       "toNodeId": "publish_http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-egress",
@@ -261,8 +236,7 @@
       "toNodeId": "egress",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-http-egress",
@@ -271,18 +245,7 @@
       "toNodeId": "egress",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "publish-mark-egress",
-      "fromNodeId": "publish",
-      "fromPortId": "mark",
-      "toNodeId": "egress",
-      "toPortId": "response",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-markrecord-write",
@@ -294,14 +257,13 @@
       "queueDepth": 4
     },
     {
-      "edgeId": "publish-markmeta-write",
+      "edgeId": "publish-markrecord-egress",
       "fromNodeId": "publish",
-      "fromPortId": "mark_meta",
-      "toNodeId": "mark_write",
-      "toPortId": "meta",
+      "fromPortId": "mark_record",
+      "toNodeId": "egress",
+      "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "markwrite-egress",
@@ -310,8 +272,7 @@
       "toNodeId": "egress",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "meta-unchanged-egress",
@@ -320,8 +281,7 @@
       "toNodeId": "egress",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     }
   ],
   "triggers": [
@@ -330,7 +290,7 @@
       "kind": "timer",
       "source": "host-cron",
       "defaultIntervalMs": 300000,
-      "description": "Chunk tick. One tick fetches and stores ONE ranged chunk and advances the mark, so the interval sets ingest pace and a restart resumes from the mark, not from zero."
+      "description": "Chunk tick (TimerTick). One tick fetches and stores ONE ranged chunk and advances the mark, so the interval sets ingest pace and a restart resumes from the durable $IRM mark, not from zero."
     }
   ],
   "triggerBindings": [

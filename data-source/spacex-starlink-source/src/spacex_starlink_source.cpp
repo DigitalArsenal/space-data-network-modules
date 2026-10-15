@@ -1,225 +1,297 @@
 /*
- * SpaceX Starlink data-source module (WS5, finished A2.2b).
+ * data-source/spacex-starlink-source (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
  *
- * The `pull` method (TIMERS-driven, provider-agnostic scheduler) fetches the
- * SpaceX/Starlink public ephemeris MANIFEST, plans a capped + polite per-object
- * fetch, then for each object:
- *   1. GETs the raw MEME ephemeris file (SpaceX's internal operator-ephemeris
- *      text format),
- *   2. parses it into a canonical CCSDS OEM record (compact row-major format,
- *      schema-exact keys) — the honest SDS type for operator state-vector
- *      ephemeris; the RAW MEME text is NOT stored under a mislabeled schema
- *      (the A2.1-flagged placeholder), it is bound into signed provenance by
- *      SHA-256 (DPM `SOURCE_SHA256` convention),
- *   3. stores the OEM record (storage.write), signs its content id via the
- *      keyslot.sign host-side crypto oracle, and publishes a schema-exact
- *      Publish Notification Message (PNM) pointer on the pubsub topic.
+ * SpaceX Starlink operator ephemeris (the public MEME files at api.starlink.com) as SDS $OEM, in memory only, for the
+ * OD flow. No credentials and no capabilities beyond the node config: the http connector (hostcap/http-request) does
+ * the fetching.
  *
- * The fetch/hash/store/sign/publish skeleton lives in provider_source.hpp so
- * the A2.2c Tier-1 adapters (OneWeb LTEF, ISS OEM, ...) reuse it; only the
- * MEME-specific parse + OEM mapping stays here.
+ *   plan           : TimerTick (TICK) -> one HttpRequest (HREQ): GET the ephemeris MANIFEST.txt.
+ *   select_objects : the manifest's HttpResponse (HRSP) -> one HttpRequest per MEME file in the window
+ *                    [offset, offset + count) of the first objectCap entries (default: the whole manifest), each a
+ *                    leading byte range (rangeBytes, default 128 KiB: the fit window, ~2-3 orbits; 0 = the whole
+ *                    file), 16 per invocation, the rest yielded as backlog. probe = true: a FlowNotice Info
+ *                    ("object-count", COUNT the objects the pull would cover) and no requests.
+ *   emit           : the MEME files' HttpResponses -> one SDS $OEM per object on "oem" (compact row-major states,
+ *                    CelestialFrame EME2000, UTC). An object answered other than 200/206, empty, or without a state is
+ *                    a FlowNotice Missing; nothing is stored, signed or published (the OD-flow invariant).
  *
- * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
+ * JOB STATE TRAVELS AS HttpRequest.CONTEXT: one size-prefixed $OEM HEADER RECORD per object (one ephemeris data block
+ * whose OBJECT names it - OBJECT_NAME and NORAD_CAT_ID from the MEME filename - and no states), built by
+ * select_objects, echoed by the http connector, read by emit as the object's identity. Pairing is by CONTEXT, never by
+ * position or URL.
+ *
+ * Node CONFIG through plugin.getConfig (SDS $PIV: one ModuleConfig on raw "config", read through
+ * sdm_piv::get_config()): manifestUrl, objectCap (<= 0: unlimited), offset, count, rangeBytes, probe, timeoutMs.
  */
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "provider_source.hpp"
+#include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "FlowNotice_generated.h"
+
+#define MEME_OEM_TYPES_INLINED 1
+#define MEME_OEM_FRAME CelestialFrame_EME2000
+#define MEME_OEM_TIME_SYSTEM timingStandard_UTC
 #include "meme_oem.hpp"
-
-namespace ps = provider_source;
-
-// ── Provider constants ──────────────────────────────────────────────────────
-
-// SpaceX Starlink public ephemeris listing (discover endpoint): MANIFEST.txt
-// lists one MEME ephemeris filename per line (the bare directory URL 404s).
-static const char* kBaseURL = "https://api.starlink.com/public-files/ephemerides/";
-static const char* kDefaultManifestURL =
-    "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
-
-
-// Fetch policy (see README "Fetch politeness"): the DEFAULT object cap is
-// UNLIMITED — the WASM-only OD flow has no host pager, so a default run (the tick
-// the composed flow sends carries NO objectCap) must emit the ENTIRE Starlink
-// constellation (~11k MEME entries) itself. `objectCap` stays an OPTIONAL invoke
-// override for tests/ops: a positive value caps; <=0 means the whole catalog.
-// Starlink is UNTHROTTLED — the >=2.5s/3h spacing policy is CelesTrak/Space-Track
-// ONLY (hosts this provider never touches). The per-object spacing default is 0 so
-// the full-catalog fetch is bounded by bandwidth, not an artificial delay.
-// `fetchIntervalMs` is advisory only (the guest has no clock; the streaming path
-// never busy-waits) and stays an optional override.
-static const long kDefaultObjectCap = 0;        // 0 => unlimited (whole constellation)
-static const long kDefaultFetchIntervalMs = 0;  // 0 => no artificial inter-object spacing
-
-extern "C" {
-// Guest allocator used by the host to pass request/response buffers.
-__attribute__((visibility("default")))
-uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-__attribute__((visibility("default")))
-void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-}  // extern "C"
 
 namespace {
 
-// ── MEME parsing (SpaceX-specific) ───────────────────────────────────────────
+namespace R = sdn::runtime;
+using Bytes = std::vector<uint8_t>;
 
-using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp)
+constexpr const char* kBaseURL = "https://api.starlink.com/public-files/ephemerides/";
+constexpr const char* kDefaultManifestURL = "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
+constexpr const char* kProviderID = "spacex-starlink";
+constexpr double kDefaultRangeBytes = 131072;   // ~270 states, ~2.8 orbits of a Starlink MEME file
+constexpr uint32_t kRequestBatch = 16;          // object requests handed out per select_objects invocation
 
-// Build the canonical CCSDS OEM record (compact row-major format) as a
-// schema-exact JSON document. Keys mirror the SDS OEM schema
-// (OEM.EPHEMERIS_DATA_BLOCK[].{ CENTER_NAME, REFERENCE_FRAME, TIME_SYSTEM,
-// START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA } plus
-// ── Config (optional, from the invoke request payload) ───────────────────────
+// ---- frames -------------------------------------------------------------------------------------------------------
 
-// Per-object range-fetch cap: only the first ~2-3 orbits of the multi-day MEME
-// file are needed (the OD fit windows to ~2 orbits internally and the accuracy is
-// lossless — see analysis/od test_downsample_accuracy). 128 KiB of a Starlink MEME
-// (~118 B/line, 4 lines/state) is ~270 states ≈ ~4.5 h ≈ ~2.8 orbits. api.starlink.com
-// honors byte ranges (HTTP 206), cutting per-object download ~16x (2 MB -> 128 KB).
-static const long kDefaultRangeBytes = 131072;
+std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
+    std::vector<const plugin_input_frame_t*> out;
+    for (uint32_t ordinal = 0;; ordinal++) {
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
+    }
+    return out;
+}
+
+const R::HttpResponse* response_of(const plugin_input_frame_t* frame) {
+    if (!frame || !frame->payload || frame->payload_length == 0) return nullptr;
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    return R::VerifyHttpResponseBuffer(verifier) ? R::GetHttpResponse(frame->payload) : nullptr;
+}
+
+Bytes http_get(const std::string& url, long range_bytes, uint32_t timeout_ms, const Bytes* context) {
+    flatbuffers::FlatBufferBuilder b(512 + (context ? context->size() : 0));
+    std::vector<flatbuffers::Offset<R::Header>> headers;
+    if (range_bytes > 0)
+        headers.push_back(R::CreateHeaderDirect(b, "range", ("bytes=0-" + std::to_string(range_bytes - 1)).c_str()));
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), &headers, nullptr, timeout_ms, 0, context));
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+int push_request(const Bytes& request) {
+    return plugin_push_output_ex("requests", "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, request.data(), static_cast<uint32_t>(request.size()));
+}
+
+int push_notice(R::flowNoticeKind kind, const std::string& reason, uint64_t count = 0, std::vector<std::string> items = {}) {
+    R::FlowNoticeT notice;
+    notice.KIND = kind;
+    notice.SCHEMA = "OEM.fbs";
+    notice.PROVIDER_ID = kProviderID;
+    notice.REASON = reason;
+    notice.COUNT = count;
+    notice.ITEMS = std::move(items);
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return plugin_push_output_ex("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "FlowNotice", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+bool refuse_batched(const char* port) {
+    const std::vector<const plugin_input_frame_t*> frames = frames_on(port);
+    if (frames.size() <= 1) return false;
+    char message[320];
+    std::snprintf(message, sizeof(message),
+                  "This invocation carries %u frames on single-stream input port \"%s\" (the compiled flow runtime drains a "
+                  "node's whole queue port-blind; maxStreams is declarative only). The surplus frames are refused rather "
+                  "than silently discarded.",
+                  static_cast<unsigned>(frames.size()), port);
+    plugin_set_error("batched-input-frames", message);
+    return true;
+}
+
+// ---- config -------------------------------------------------------------------------------------------------------
 
 struct PullConfig {
-    long object_cap = kDefaultObjectCap;   // <=0 => unlimited (emit the whole catalog)
-    long fetch_interval_ms = kDefaultFetchIntervalMs;
     std::string manifest_url = kDefaultManifestURL;
-    // Batch window into the manifest (host-driven concurrent batches). offset<0 or
-    // count<0 => the whole [0, object_cap) span (legacy single-shot behavior).
-    long offset = -1;
-    long count = -1;
-    long range_bytes = kDefaultRangeBytes; // 0 => full file (no Range header)
-    bool probe = false;                    // true => return only the total object count (u32le)
+    long object_cap = 0;     // <= 0: unlimited (the whole constellation)
+    long offset = -1;        // < 0: from the first entry
+    long count = -1;         // < 0: to the end of [0, total)
+    long range_bytes = static_cast<long>(kDefaultRangeBytes);   // 0: the whole file, no range header
+    bool probe = false;
+    uint32_t timeout_ms = 0; // 0: the connector's default
 };
 
-PullConfig parse_config(const uint8_t* req, uint32_t len) {
-    PullConfig c;
-    if (req == nullptr || len == 0) return c;
-    // Only interpret a JSON object; a binary PIV request leaves defaults intact.
-    size_t i = 0;
-    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
-    if (i >= len || req[i] != '{') return c;
-    std::string json(reinterpret_cast<const char*>(req), len);
-    long cap = ps::json_number_field(json, "objectCap", -1);
-    if (cap > 0) c.object_cap = cap;
-    long iv = ps::json_number_field(json, "fetchIntervalMs", -1);
-    if (iv >= 0) c.fetch_interval_ms = iv;
-    std::string url;
-    if (ps::json_string_field(json, "manifestUrl", &url) && !url.empty()) c.manifest_url = url;
-    long off = ps::json_number_field(json, "offset", -1);
-    if (off >= 0) c.offset = off;
-    long cnt = ps::json_number_field(json, "count", -1);
-    if (cnt >= 0) c.count = cnt;
-    long rb = ps::json_number_field(json, "rangeBytes", -1);
-    if (rb >= 0) c.range_bytes = rb;
-    if (json.find("\"probe\":true") != std::string::npos) c.probe = true;
-    return c;
+PullConfig load_config() {
+    const sdm_piv::Config c = sdm_piv::get_config();
+    PullConfig p;
+    const std::string url(c.string("manifestUrl", ""));
+    if (!url.empty()) p.manifest_url = url;
+    const double cap = c.number("objectCap", -1);
+    if (cap > 0) p.object_cap = static_cast<long>(cap);
+    const double off = c.number("offset", -1);
+    if (off >= 0) p.offset = static_cast<long>(off);
+    const double cnt = c.number("count", -1);
+    if (cnt >= 0) p.count = static_cast<long>(cnt);
+    const double rb = c.number("rangeBytes", -1);
+    if (rb >= 0) p.range_bytes = static_cast<long>(rb);
+    p.probe = c.boolean("probe", false);
+    const double timeout = c.number("timeoutMs", 0);
+    if (timeout > 0) p.timeout_ms = static_cast<uint32_t>(timeout);
+    return p;
 }
 
-// put_u32le appends a little-endian u32 at byte offset `at` in `s`.
-static inline void put_u32le(std::string& s, size_t at, uint32_t v) {
-    s[at + 0] = static_cast<char>(v & 0xFF);
-    s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-    s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-    s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+// ---- the manifest -------------------------------------------------------------------------------------------------
+
+// One trimmed MEME filename per non-empty line that names one.
+std::vector<std::string> manifest_entries(const R::HttpResponse& r) {
+    std::vector<std::string> lines;
+    if (!r.BODY()) return lines;
+    const std::string s(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size());
+    size_t start = 0;
+    while (start <= s.size()) {
+        const size_t nl = s.find('\n', start);
+        const std::string line = s.substr(start, (nl == std::string::npos ? s.size() : nl) - start);
+        const size_t a = line.find_first_not_of(" \t\r");
+        const size_t b = line.find_last_not_of(" \t\r");
+        if (a != std::string::npos) {
+            const std::string t = line.substr(a, b - a + 1);
+            if (t.find("MEME_") != std::string::npos) lines.push_back(t);
+        }
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    return lines;
 }
 
-// ── The pull method ──────────────────────────────────────────────────────────
+// The job: a size-prefixed $OEM with one ephemeris data block naming the object, no states.
+Bytes object_header(const meme_oem::MemeMeta& m) {
+    flatbuffers::FlatBufferBuilder b(256);
+    const auto name = b.CreateString(m.object_name);
+    CATBuilder cat(b);
+    cat.add_OBJECT_NAME(name);
+    cat.add_NORAD_CAT_ID(static_cast<uint32_t>(m.norad_cat_id));
+    const auto object = cat.Finish();
+    ephemerisDataBlockBuilder block(b);
+    block.add_OBJECT(object);
+    const std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block.Finish()};
+    const auto blocks_vec = b.CreateVector(blocks);
+    OEMBuilder oem(b);
+    oem.add_EPHEMERIS_DATA_BLOCK(blocks_vec);
+    FinishSizePrefixedOEMBuffer(b, oem.Finish());
+    return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
 
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
+const CAT* job_of(const R::HttpResponse& r) {
+    const auto* context = r.CONTEXT();
+    if (!context || context->size() < 8) return nullptr;
+    flatbuffers::Verifier verifier(context->data(), context->size());
+    if (!VerifySizePrefixedOEMBuffer(verifier)) return nullptr;
+    const OEM* header = GetSizePrefixedOEM(context->data());
+    if (!header->EPHEMERIS_DATA_BLOCK() || header->EPHEMERIS_DATA_BLOCK()->size() != 1) return nullptr;
+    const CAT* object = header->EPHEMERIS_DATA_BLOCK()->Get(0)->OBJECT();
+    return object && object->OBJECT_NAME() ? object : nullptr;
+}
 
-    ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
-    std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
+// ---- backlog ------------------------------------------------------------------------------------------------------
 
-    // Total objects this pull will cover. DEFAULT = the WHOLE manifest (no host
-    // pager in the WASM-only flow); a positive objectCap override bounds it.
-    long total = static_cast<long>(entries.size());
-    if (cfg.object_cap > 0 && total > cfg.object_cap) total = cfg.object_cap;
-    if (total < 0) total = 0;
+std::vector<Bytes> g_backlog;
+size_t g_next = 0;
 
-    // Probe mode: the host learns how many objects exist so it can schedule
-    // concurrent [offset,count) batches. Return the total as a bare u32le.
-    if (cfg.probe) {
-        std::string out(4, '\0');
-        put_u32le(out, 0, static_cast<uint32_t>(total));
-        return out;
+int emit_backlog() {
+    uint32_t emitted = 0;
+    while (g_next < g_backlog.size() && emitted < kRequestBatch) {
+        if (push_request(g_backlog[g_next++]) < 0) return 500;
+        emitted++;
     }
-
-    // Batch window into the manifest. Default (offset<0 / count<0) = the whole
-    // [0,total) span (legacy single-shot). Host-driven batches pass explicit
-    // offset+count so many small pulls run concurrently with bounded memory.
-    long start = (cfg.offset >= 0) ? cfg.offset : 0;
-    long end = (cfg.count >= 0) ? (start + cfg.count) : total;
-    if (start > total) start = total;
-    if (end > total) end = total;
-
-    // Emit an $OEM STREAM, never a store: fetch + parse + build one aligned-binary
-    // SDS $OEM per object and frame it into a length-prefixed stream the OD runner
-    // splits into the transient per-object set fed to the FlowPool. Ephemeris is
-    // in-memory only (SDN OD-flow invariant) — no storage.write / sign / publish;
-    // provenance rides on the RESULT $OMM/$OCM/$OBD the OD flow's store node writes.
-    // Stream layout: [u32le count]  then count x ( [u32le len][non-size-prefixed $OEM] ).
-    std::string stream(4, '\0');  // reserve the count header
-    // Bound peak memory for the full-catalog emit: pre-reserve an estimate (~14 KiB
-    // per range-fetched $OEM = ~264 states * 48 B + FlatBuffer overhead) so the
-    // accumulating stream never reallocates by doubling. Without this the final
-    // ~150 MB (~11k Starlink) would transiently need ~2x during the last grow.
-    // Negligible for the small-fixture test path (a few objects).
-    {
-        const size_t est_per_oem = 14336;
-        const size_t span = (end > start) ? static_cast<size_t>(end - start) : 0;
-        stream.reserve(4 + span * est_per_oem);
-    }
-    uint32_t count = 0;
-
-    for (long i = start; i < end; ++i) {
-        const std::string& filename = entries[static_cast<size_t>(i)];
-        std::string url = std::string(kBaseURL) + filename;
-        // Range-fetch only the fit window (first ~2-3 orbits) unless rangeBytes==0.
-        ps::HttpResult obj = (cfg.range_bytes > 0)
-                                 ? ps::http_get_range(url, cfg.range_bytes)
-                                 : ps::http_get(url);
-        // Range servers reply 206 (partial); non-range servers reply 200 (full).
-        if ((obj.status != 200 && obj.status != 206) || obj.body.empty()) continue;
-
-        MemeMeta m;
-        parse_meme_filename(filename, &m);
-        std::vector<double> states;
-        std::string content(obj.body.begin(), obj.body.end());
-        parse_meme(content, &m, &states);  // drops the truncated trailing record
-        if (states.empty()) continue;
-
-        std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (EME2000)
-        if (oem.empty()) continue;
-
-        const size_t hdr = stream.size();
-        stream.append(4, '\0');
-        put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-        stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-        count++;
-    }
-
-    put_u32le(stream, 0, count);
-    return stream;
+    const uint32_t remaining = static_cast<uint32_t>(g_backlog.size() - g_next);
+    if (remaining == 0) { g_backlog.clear(); g_next = 0; }
+    plugin_set_backlog_remaining(remaining);
+    plugin_set_yielded(remaining > 0 ? 1 : 0);
+    return 0;
 }
 
 }  // namespace
 
 extern "C" {
 
-// Canonical streaming invoke entrypoint. The TIMERS `pull` entry (and any manual
-// invoke) triggers a capped, polite discover+fetch+store+sign+publish cycle.
-__attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
-    std::string result = run_pull(req_ptr, req_len);
-    uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
-    if (out != nullptr) {
-        for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
+int plan(void) {
+    if (refuse_batched("tick")) return 500;
+    if (frames_on("tick").empty()) { plugin_set_error("missing-tick", "plan requires a TimerTick on \"tick\"."); return 400; }
+    const PullConfig cfg = load_config();
+    return push_request(http_get(cfg.manifest_url, 0, cfg.timeout_ms, nullptr)) < 0 ? 500 : 0;
+}
+
+int select_objects(void) {
+    if (plugin_get_input_count() == 0) return emit_backlog();
+    if (refuse_batched("manifest")) return 500;
+    const R::HttpResponse* r = response_of(frames_on("manifest").empty() ? nullptr : frames_on("manifest")[0]);
+    if (!r) { plugin_set_error("invalid-response-frame", "the manifest frame is not an HttpResponse (HRSP)."); return 400; }
+    const PullConfig cfg = load_config();
+    if (r->STATUS() != 200) {
+        const std::string url = r->URL() ? r->URL()->str() : cfg.manifest_url;
+        return push_notice(R::flowNoticeKind_Missing, "manifest-unavailable", 1,
+                           {url + ": HTTP " + std::to_string(r->STATUS()) +
+                            (r->ERROR() && r->ERROR()->size() ? " (" + r->ERROR()->str() + ")" : std::string())}) < 0 ? 500 : 0;
     }
-    if (out_len_ptr != nullptr) *out_len_ptr = static_cast<uint32_t>(result.size());
-    return out;
+    const std::vector<std::string> entries = manifest_entries(*r);
+    long total = static_cast<long>(entries.size());
+    if (cfg.object_cap > 0 && total > cfg.object_cap) total = cfg.object_cap;
+    if (cfg.probe) return push_notice(R::flowNoticeKind_Info, "object-count", static_cast<uint64_t>(total)) < 0 ? 500 : 0;
+    long start = cfg.offset >= 0 ? cfg.offset : 0;
+    long end = cfg.count >= 0 ? start + cfg.count : total;
+    if (start > total) start = total;
+    if (end > total) end = total;
+    for (long i = start; i < end; ++i) {
+        const std::string& filename = entries[static_cast<size_t>(i)];
+        meme_oem::MemeMeta m;
+        meme_oem::parse_meme_filename(filename, &m);
+        const Bytes header = object_header(m);
+        g_backlog.push_back(http_get(std::string(kBaseURL) + filename, cfg.range_bytes, cfg.timeout_ms, &header));
+    }
+    if (g_backlog.size() == g_next) return push_notice(R::flowNoticeKind_Skipped, "nothing-to-fetch") < 0 ? 500 : 0;
+    return emit_backlog();
+}
+
+int emit(void) {
+    const std::vector<const plugin_input_frame_t*> frames = frames_on("ephemerides");
+    std::vector<std::string> missing;
+    for (size_t k = 0; k < frames.size(); k++) {
+        const R::HttpResponse* r = response_of(frames[k]);
+        if (!r) {
+            plugin_set_error("invalid-response-frame", ("ephemeris " + std::to_string(k) + " is not an HttpResponse (HRSP)").c_str());
+            return 400;
+        }
+        const CAT* job = job_of(*r);
+        const std::string url = r->URL() ? r->URL()->str() : std::string();
+        if (!job) {
+            plugin_set_error("missing-context", ("ephemeris " + std::to_string(k) + " (" + url +
+                                                 ") carries no $OEM object header in CONTEXT; it cannot be attributed and is refused.").c_str());
+            return 400;
+        }
+        const std::string label = job->OBJECT_NAME()->str() + " (" + std::to_string(job->NORAD_CAT_ID()) + ")";
+        // Range servers answer 206 (the prefix), others 200 (the whole file).
+        if ((r->STATUS() != 200 && r->STATUS() != 206) || !r->BODY() || r->BODY()->size() == 0) {
+            missing.push_back(label + ": HTTP " + std::to_string(r->STATUS()) +
+                              (r->ERROR() && r->ERROR()->size() ? " (" + r->ERROR()->str() + ")" : std::string()));
+            continue;
+        }
+        meme_oem::MemeMeta m;
+        m.norad_cat_id = job->NORAD_CAT_ID();
+        m.object_name = job->OBJECT_NAME()->str();
+        std::vector<double> states;
+        const std::string content(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
+        meme_oem::parse_meme(content, &m, &states);   // drops the truncated trailing record of a range
+        const Bytes oem = states.empty() ? Bytes() : meme_oem::build_oem_fb(m, states);
+        if (oem.empty()) { missing.push_back(label + ": no state vectors"); continue; }
+        if (plugin_push_output_ex("oem", "OEM.fbs", OEMIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
+                                  static_cast<uint32_t>(oem.size())) < 0)
+            return 500;
+    }
+    if (!missing.empty() && push_notice(R::flowNoticeKind_Missing, "objects-unavailable", missing.size(), missing) < 0) return 500;
+    return 0;
 }
 
 }  // extern "C"

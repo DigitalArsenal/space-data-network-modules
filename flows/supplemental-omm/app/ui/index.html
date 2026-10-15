@@ -138,7 +138,7 @@
     </section>
 
     <div class="notice" id="notice" role="status">
-      Waiting for this artifact's canonical <code>$FSB</code> runtime envelopes containing <code>$DSS</code> status records. The board does not fetch provider ephemerides or start runs.
+      Waiting for this artifact's <code>$DSS</code> status records. The board does not fetch provider ephemerides or start runs.
     </div>
   </main>
 
@@ -229,47 +229,9 @@
         );
       }
 
-      function byteVector(record, index) {
-        const at = field(record, index);
-        if (!at || at + 4 > record.view.byteLength) {
-          throw new Error("FlatBuffer byte vector is missing or out of bounds");
-        }
-        const start = at + record.view.getUint32(at, true);
-        if (start + 4 > record.view.byteLength) {
-          throw new Error("FlatBuffer byte vector is out of bounds");
-        }
-        const length = record.view.getUint32(start, true);
-        if (start + 4 + length > record.view.byteLength) {
-          throw new Error("FlatBuffer byte vector length is out of bounds");
-        }
-        return new Uint8Array(
-          record.view.buffer,
-          record.view.byteOffset + start + 4,
-          length,
-        );
-      }
-
-      function unwrapDSS(bytes) {
-        const stream = flatbuffer(bytes, "$FSB");
-        if (string(stream, 7) !== "DSS.fbs" || string(stream, 8) !== "$DSS") {
-          throw new Error("$FSB route does not declare a DSS.fbs/$DSS payload");
-        }
-        const data = byteVector(stream, 9);
-        if (uint64(stream, 4) !== data.byteLength) {
-          throw new Error("$FSB TOTAL_BYTES does not match its DATA payload");
-        }
-        if (uint64(stream, 5) !== 1) {
-          throw new Error("$FSB status route must contain exactly one DSS record");
-        }
-        const finalAt = field(stream, 3);
-        if (!finalAt || stream.view.getUint8(finalAt) !== 1) {
-          throw new Error("$FSB status route must be a final frame");
-        }
-        return data;
-      }
-
+      // A route carries one canonical (not size-prefixed) $DSS record, the status node's snapshot of its lane.
       function parseDSS(bytes) {
-        const record = flatbuffer(bytes, "$DSS", true);
+        const record = flatbuffer(bytes, "$DSS");
         const statusAt = field(record, 0);
         return {
           status: statusAt ? record.view.getInt8(statusAt) : 0,
@@ -282,11 +244,11 @@
 
       async function getStatusRoute(url) {
         const response = await fetch(url, {
-          headers: { Accept: "application/vnd.sds.fsb+flatbuffer" },
+          headers: { Accept: "application/x-flatbuffers" },
           credentials: "same-origin",
           cache: "no-store",
         });
-        if (!response.ok) throw new Error(`$FSB status endpoint returned ${response.status}`);
+        if (!response.ok) throw new Error(`$DSS status endpoint returned ${response.status}`);
         return new Uint8Array(await response.arrayBuffer());
       }
 
@@ -294,7 +256,7 @@
         const statusBytes = await getStatusRoute(
           `${artifactBase}/runtime/nodes/${encodeURIComponent(spec.nodeId)}.dss`,
         );
-        return { key, status: parseDSS(unwrapDSS(statusBytes)) };
+        return { key, status: parseDSS(statusBytes) };
       }
 
       function renderLane(lane) {
@@ -330,9 +292,7 @@
         const active = loaded.filter((lane) => lane.status.status === 1).length;
         document.querySelector("#active-count").textContent = loaded.length ? number.format(active) : "—";
         try {
-          const store = parseDSS(
-            unwrapDSS(await getStatusRoute(`${artifactBase}/runtime/nodes/store.dss`)),
-          );
+          const store = parseDSS(await getStatusRoute(`${artifactBase}/runtime/nodes/store.dss`));
           document.querySelector("#record-count").textContent = number.format(store.syncedRows);
         } catch {
           document.querySelector("#record-count").textContent = "—";
@@ -341,8 +301,8 @@
           ? `updated ${new Date().toLocaleTimeString()}`
           : "artifact status unavailable";
         notice.textContent = failed.length
-          ? `Loaded ${loaded.length} of ${Object.keys(providers).length} signed-node $FSB/$DSS provider records; ${failed.length} unavailable.`
-          : `Loaded ${loaded.length} signed-node $FSB/$DSS provider records from this artifact's runtime surface.`;
+          ? `Loaded ${loaded.length} of ${Object.keys(providers).length} signed-node $DSS provider records; ${failed.length} unavailable.`
+          : `Loaded ${loaded.length} signed-node $DSS provider records from this artifact's runtime surface.`;
       }
 
       document.querySelector("#refresh").addEventListener("click", refresh);

@@ -5,9 +5,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
+import { encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { gpRecord, satcatRecord, synthetic } from './fixtures/spacetrack-format.mjs';
 
-const request = (methodId, text) => ({ methodId, inputs: [{ portId: 'source', payloadUtf8: text, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: new TextEncoder().encode(text).length } }] });
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const request = (methodId, text) => ({ methodId, inputs: [{ portId: 'response', typeRef: HRSP,
+  payload: encodeHttpResponse({ url: 'https://www.space-track.org/', status: 200, body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 10, 18) }) }] });
 
 test('the same parser artifact agrees in Chromium, native WasmEdge and Docker WasmEdge', { skip: process.env.SDN_RUN_SPACETRACK_PARITY !== '1' }, async () => {
   const a = synthetic();

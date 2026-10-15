@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-hostcap-http-request",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -18,6 +18,9 @@
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

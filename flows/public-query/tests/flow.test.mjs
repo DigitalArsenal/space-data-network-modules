@@ -1,482 +1,238 @@
 /*
- * Flow-level tests for the compiled public-query flow (gateway loop G.5) —
- * BRIDGE mode. The SAME artifact the Go host mounts at /api/v1/query is
- * instantiated in the JS flow runtime host (browser parity): a $HTQ
- * HttpRequest enters the route_public_query node, the route ->
- * flatsql-query sandbox_query -> (omm-json) -> http-respond chain runs
- * linked-direct inside the artifact's linear memory, and the ONLY host
- * crossings are the declared storage_query hostcalls
- * (storage.query_sandboxed / storage.query_surface) plus clock.now for
- * default profile epochs — stubbed with the Go-host response dialect.
+ * Flow-level tests for the compiled public-query flow (gateway loop G.5, typed contracts 1.0). The SAME artifact the
+ * host mounts at /api/v1/query runs in the JS flow runtime host: a $HTQ enters route_public_query, the $QRP decision and
+ * the $QRP page travel route -> flatsql-query sandbox_query -> http-respond respond_query linked-direct inside the
+ * artifact, and the only host crossings are the typed $PIV hostcalls (storage.query_sandboxed, storage.query_surface,
+ * clock.now), answered here on the wire the way a typed host answers them.
  */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 import { decodeHttpResponse, encodeHttpRequest, fnv1a64Hex } from "space-data-module-sdk/http";
+import { decodeHostCall, decodeSqlValues, encodeHostCallResult, encodeSqlValues } from "space-data-module-sdk/runtime-contracts";
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
-import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/main.js";
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-const QUERY_WASM = new URL("../dist/query/runtime.wasm", import.meta.url);
-
-// ---------------------------------------------------------------------------
-// Hostcall wire helpers (Go-host dialect).
-// ---------------------------------------------------------------------------
-
-function encodeHostcallEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total = 4 + metaBytes.length + 4 + segments.reduce((sum, seg) => sum + 4 + seg.length, 0);
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  envelope.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    envelope.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return envelope;
+async function loadStandard(code) {
+  const esbuild = await import(pathToFileURL(path.join(STANDARDS_ROOT, "node_modules", "esbuild", "lib", "main.js")).href);
+  const flatbuffersEntry = fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"));
+  const out = await esbuild.build({ entryPoints: [path.join(STANDARDS_ROOT, "lib", "ts", code, "main.ts")], bundle: true, format: "esm", write: false, platform: "neutral", alias: { flatbuffers: flatbuffersEntry }, logLevel: "silent" });
+  return import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
 }
+const flatbuffers = await import(pathToFileURL(fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"))).href);
+const { QRP } = await loadStandard("QRP");
+const { OMM, OMMT } = await loadStandard("OMM");
 
-function decodeHostcallEnvelope(bytes) {
+const concat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0; for (const p of parts) { out.set(p, at); at += p.length; } return out; };
+// $OMM records as the store delivers them: size-prefixed, concatenated.
+function ommStream(records) {
+  return concat(...records.map((fields) => {
+    const b = new flatbuffers.Builder(256);
+    b.finishSizePrefixed(Object.assign(new OMMT(), fields).pack(b), "$OMM");
+    return b.asUint8Array().slice();
+  }));
+}
+// A page stream -> { header (unpacked QRP), records (the bytes after the header and its padding) }.
+function splitPage(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const metaLen = view.getUint32(0, true);
-  const meta = JSON.parse(decoder.decode(bytes.subarray(4, 4 + metaLen)));
-  return { meta };
+  const size = view.getUint32(0, true);
+  const header = QRP.getSizePrefixedRootAsQRP(new flatbuffers.ByteBuffer(bytes.slice(0, 4 + size))).unpack();
+  let at = 4 + size;
+  while (at + 4 <= bytes.length && view.getUint32(at, true) === 0) at += 4;
+  return { header, records: bytes.slice(at) };
 }
 
-// Go json.Marshal emits map keys ALPHABETICALLY at every level — fixtures
-// must mirror that byte layout (the G.3 key-vs-value collision lesson).
-function deepSortKeys(value) {
-  if (Array.isArray(value)) return value.map(deepSortKeys);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([k, v]) => [k, deepSortKeys(v)]),
-    );
-  }
-  return value;
-}
-
-// ---------------------------------------------------------------------------
-// Fixtures: the engine's raw stream form — concatenated SIZE-PREFIXED $OMM
-// records (flatsqlrt A.1: raw stream bytes == ingested stream bytes).
-// ---------------------------------------------------------------------------
-
-function encodeOmm(record) {
-  const builder = new flatbuffers.Builder(512);
-  const objectName = builder.createString(record.object_name);
-  OMM.startOMM(builder);
-  OMM.addObjectName(builder, objectName);
-  OMM.addMeanMotion(builder, record.mean_motion);
-  OMM.addNoradCatId(builder, record.norad_cat_id);
-  OMM.addUserDefinedEpochTimestamp(builder, record.epoch_ts);
-  OMM.finishSizePrefixedOMMBuffer(builder, OMM.endOMM(builder));
-  return builder.asUint8Array().slice();
-}
-
-function concatFrames(frames) {
-  const total = frames.reduce((sum, frame) => sum + frame.length, 0);
-  const stream = new Uint8Array(total);
-  let offset = 0;
-  for (const frame of frames) {
-    stream.set(frame, offset);
-    offset += frame.length;
-  }
-  return stream;
-}
-
-const OMM_RECORDS = [
-  encodeOmm({ object_name: "ISS (ZARYA)", norad_cat_id: 25544, mean_motion: 15.49, epoch_ts: 1783300000 }),
-  encodeOmm({ object_name: "NOAA 19", norad_cat_id: 33591, mean_motion: 14.12, epoch_ts: 1783300100 }),
-];
-const OMM_STREAM = concatFrames(OMM_RECORDS);
-
-const SURFACE_RESULT = deepSortKeys({
-  tables: [
-    { name: "OMM", kind: "view", columns: ["CCSDS_OMM_VERS", "NORAD_CAT_ID", "_data", "_source"], records: 2 },
-    { name: "OMM@celestrak-gp", kind: "table", source: "celestrak-gp", columns: ["CCSDS_OMM_VERS", "NORAD_CAT_ID", "_data"], records: 2 },
-  ],
-  caps: { timeout_ms: 5000, max_rows: 200000, max_bytes: 134217728 },
-});
-
-// ---------------------------------------------------------------------------
-// Hostcall stub.
-// ---------------------------------------------------------------------------
-
-function createQueryStub({ sandboxed, surface } = {}) {
+// A typed host on the wire: each $PIV call is decoded and answered with a $PIV response by `answer(call)`.
+function typedHost(answer) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-
   const imports = {
     space_data_module_host: {
-      call(opPtr, opLen, payloadPtr, payloadLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        const payload = Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen));
-        const { meta } = decodeHostcallEnvelope(payload);
-        calls.push({ operation, meta });
-
-        if (operation === "clock.now") {
-          response = encodeHostcallEnvelope({ ok: true, result: 1783300000000 });
-          return 0;
-        }
-        if (operation === "storage.query_sandboxed" && sandboxed) {
-          const { meta: outMeta, segments = [] } =
-            typeof sandboxed === "function" ? sandboxed(meta) : sandboxed;
-          response = encodeHostcallEnvelope(deepSortKeys(outMeta), segments);
-          return outMeta.ok ? 0 : 1;
-        }
-        if (operation === "storage.query_surface") {
-          const result = surface ?? SURFACE_RESULT;
-          response = encodeHostcallEnvelope({ ok: true, result: deepSortKeys(result) });
-          return 0;
-        }
-        response = encodeHostcallEnvelope({ ok: false, error: { message: `unexpected op ${operation}` } });
-        return 1;
+      call(opPtr, opLen, ptr, len) {
+        const call = decodeHostCall(new Uint8Array(memoryRef.memory.buffer).slice(ptr, ptr + len));
+        calls.push(call);
+        let out;
+        try { out = { ok: true, op: call.op, ...(answer(call) ?? {}) }; } catch (error) { out = { ok: false, error: { code: error.code ?? "failed", message: error.message } }; }
+        response = encodeHostCallResult(out);
+        return 0;
       },
-      response_len() {
-        return response.length;
-      },
-      read_response(dstPtr, dstLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const length = Math.min(dstLen, response.length);
-        heap.set(response.subarray(0, length), dstPtr);
-        return length;
+      response_len: () => response.length,
+      read_response(dst, len) {
+        const n = Math.min(len, response.length);
+        new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, n), dst);
+        return n;
       },
     },
   };
   return { calls, imports, memoryRef };
 }
+const hostError = (code, message) => Object.assign(new Error(message), { code });
 
-async function pumpRequest(stub, request) {
-  const host = await createFlowRuntimeHost({
-    wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(QUERY_WASM))),
-    extraImports: stub.imports,
-    // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
-    // when the caller states it. Without this the artifact's declared
-    // runtimeTargets are never checked here at all.
-    runtimeTarget: "wasmedge",
-  });
-  stub.memoryRef.memory = host.memory;
-
+async function serve(wasmUrl, host, request) {
+  const runtime = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(wasmUrl))), extraImports: host.imports, runtimeTarget: "wasmedge" });
+  host.memoryRef.memory = runtime.memory;
   const responses = [];
-  host.enqueueTriggerFrame(0, {
-    portId: "request",
-    bytes: encodeHttpRequest(request),
-  });
-  await host.drain(
-    {
-      "sdn.flow.egress:emit": ({ frames }) => {
-        for (const frame of frames) {
-          responses.push(decodeHttpResponse(frame.bytes));
-        }
-        return { statusCode: 0 };
-      },
-    },
-    { maxIterations: 100 },
-  );
-  assert.equal(responses.length, 1, "expected exactly one $HTR frame");
-  return responses[0];
+  runtime.enqueueTriggerFrame(0, { portId: "request", bytes: encodeHttpRequest(request) });
+  await runtime.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) responses.push(decodeHttpResponse(f.bytes)); return { statusCode: 0 }; } }, { maxIterations: 100 });
+  assert.equal(responses.length, 1, "exactly one $HTR");
+  const [http] = responses;
+  http.header = (name) => http.headers.find((h) => h.name === name)?.value;
+  http.json = () => JSON.parse(new TextDecoder().decode(http.body));
+  return http;
 }
 
-function header(http, name) {
-  for (const entry of http.headers ?? []) {
-    if (entry.name === name) return entry.value;
-  }
-  return undefined;
+const FLOW_WASM = new URL("../dist/query/runtime.wasm", import.meta.url);
+const NOW_MS = 1791900000123n;
+const RECORDS = ommStream([
+  { NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)", EPOCH: "2026-10-13T06:00:00.000Z", MEAN_MOTION: 15.5, BSTAR: 0.00012 },
+  { NORAD_CAT_ID: 20580, OBJECT_NAME: "HST", MEAN_MOTION: 15.1 },
+]);
+const ETAG = `W/"fnv1a64-${fnv1a64Hex(RECORDS)}"`;
+
+// The store as storage.query_sandboxed / storage.query_surface / clock.now answer it.
+function store({ rows = null, fail = null, ref = null } = {}) {
+  return typedHost((call) => {
+    if (call.op === "clock.now") return { result: { UNIX_MS: NOW_MS } };
+    if (call.op === "storage.query_surface") {
+      return { result: { TIMEOUT_MS: 5000, MAX_ROWS: 50000n, MAX_BYTES: 16777216n },
+        lists: { tables: [{ NAME: "OMM", KIND: "standard", SOURCE: "OMM", RECORDS: 4213n }], columns: [{ TABLE: "OMM", NAME: "NORAD_CAT_ID" }, { TABLE: "OMM", NAME: "OBJECT_NAME" }] } };
+    }
+    if (call.op === "storage.query_sandboxed") {
+      if (fail) throw fail;
+      if (ref && call.params.DELIVER === 1) return { result: { KIND: 0, ROWS: 2n, COLUMNS: 1, REF: ref } };
+      if (rows) return { result: { KIND: 1, ROWS: BigInt(rows.cells.length / rows.columns.length), COLUMNS: rows.columns.length }, lists: { columns: rows.columns.map((VALUE) => ({ VALUE })) }, raw: { cells: encodeSqlValues(rows.cells) } };
+      return { result: { KIND: 0, ROWS: 2n, COLUMNS: 1 }, raw: { stream: RECORDS } };
+    }
+    throw hostError("unsupported", `unexpected op ${call.op}`);
+  });
 }
+const sqlOf = (call) => new TextDecoder().decode(call.raw.sql);
+// The tagged SQL values on a call's raw "params" (i64 as a Number).
+const sqlParams = (call) => decodeSqlValues(call.raw.params).map(({ t, v }) => (t === "i64" ? Number(v) : v));
+const post = (body, query = "", headers = {}) => ({ method: "POST", path: "/api/v1/query", query, headers, body: typeof body === "string" ? body : JSON.stringify(body) });
 
-function streamOk(rows) {
-  return {
-    meta: { ok: true, result: { columns: 1, rows, stream: { $bin: 0 } } },
-    segments: [OMM_STREAM],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Tests.
-// ---------------------------------------------------------------------------
-
-test("public query: POST fb SELECT streams aligned frames verbatim", async () => {
-  const stub = createQueryStub({
-    sandboxed: (meta) => {
-      assert.equal(meta.sql, "SELECT _data FROM OMM");
-      assert.equal(meta.want, "stream");
-      assert.equal(meta.deliver, "ref");
-      return streamOk(2);
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT _data FROM OMM" })),
-  });
+test("POST raw SQL: sort and limit compose the effective SQL; the page stream answers verbatim as FlatBuffers", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, post({ sql: "SELECT _data FROM OMM", sort: "NORAD_CAT_ID desc", limit: 2 }));
   assert.equal(http.status, 200);
-  assert.equal(header(http, "content-type"), "application/vnd.sdn.flatbuffers.stream");
-  assert.equal(header(http, "x-sdn-record-count"), "2");
-  assert.equal(header(http, "etag"), `W/"fnv1a64-${fnv1a64Hex(OMM_STREAM)}"`);
-  assert.deepEqual(Array.from(http.body), Array.from(OMM_STREAM), "stream verbatim");
+  assert.equal(http.header("content-type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(http.header("x-sdn-record-count"), "2");
+  assert.equal(http.header("etag"), ETAG);
+  const { header, records } = splitPage(http.body);
+  assert.deepEqual([header.RECORD_COUNT, header.FILE_IDENTIFIER, header.SCHEMA_NAME, header.ETAG], [2, "$OMM", "OMM", ETAG]);
+  assert.deepEqual(records, RECORDS, "the records verbatim after the page header");
+  const [call] = host.calls;
+  assert.equal(call.op, "storage.query_sandboxed");
+  assert.equal(sqlOf(call), "SELECT * FROM (SELECT _data FROM OMM) ORDER BY \"NORAD_CAT_ID\" DESC LIMIT 2");
+  assert.deepEqual([call.params.WANT, call.params.DELIVER], [0, 1], "WANT Stream, DELIVER Ref (a host that answers inline is served inline)");
 });
 
-test("public query: host body reference rides the $HTR BODY_REF fields", async () => {
-  const etag = fnv1a64Hex(OMM_STREAM);
-  const stub = createQueryStub({
-    sandboxed: {
-      meta: {
-        ok: true,
-        result: { columns: 1, rows: 2, ref: { fnv1a64: etag, frames: 2, size: OMM_STREAM.length, token: 7 } },
-      },
-      segments: [],
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT _data FROM OMM" })),
-  });
+test("?format=json: WANT Auto; a record stream renders as an OMM array, a projection as {COLUMN: value} rows", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, post({ sql: "SELECT _data FROM OMM", params: [{ t: "i64", v: 25544 }] }, "format=json"));
   assert.equal(http.status, 200);
-  assert.equal(Number(http.bodyRefToken), 7);
-  assert.equal(Number(http.bodyRefSize), OMM_STREAM.length);
-  assert.equal(header(http, "x-sdn-record-count"), "2");
-  assert.equal(header(http, "etag"), `W/"fnv1a64-${etag}"`);
-  assert.equal(http.body?.length ?? 0, 0, "no inline body with a BODY_REF");
+  assert.equal(http.header("content-type"), "application/json");
+  assert.deepEqual(http.json().map((r) => [r.NORAD_CAT_ID, r.OBJECT_NAME]), [[25544, "ISS (ZARYA)"], [20580, "HST"]]);
+  assert.deepEqual([host.calls[0].params.WANT, host.calls[0].params.DELIVER], [2, 0], "WANT Auto, DELIVER Inline: the responder renders the bytes");
+  assert.equal(sqlOf(host.calls[0]), "SELECT _data FROM OMM");
+  assert.deepEqual(decodeSqlValues(host.calls[0].raw.params), [{ t: "i64", v: 25544n }]);
+
+  const rows = store({ rows: { columns: ["NORAD_CAT_ID", "OBJECT_NAME"], cells: [{ t: "i64", v: 25544n }, { t: "str", v: "ISS" }, { t: "i64", v: 20580n }, { t: "null" }] } });
+  const projection = await serve(FLOW_WASM, rows, post({ sql: "SELECT NORAD_CAT_ID, OBJECT_NAME FROM OMM", format: "json" }));
+  assert.equal(projection.status, 200);
+  assert.deepEqual(projection.json(), [{ NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS" }, { NORAD_CAT_ID: 20580, OBJECT_NAME: null }]);
+  assert.equal(projection.header("x-sdn-record-count"), "2");
 });
 
-test("public query: format=json full-record result is the bare-array OMM presentation (schema-exact keys)", async () => {
-  const stub = createQueryStub({
-    sandboxed: (meta) => {
-      assert.equal(meta.want, "auto", "json path asks stream-with-rows-fallback");
-      assert.equal(meta.deliver, undefined, "json path needs inline bytes");
-      return streamOk(2);
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "format=json",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT _data FROM OMM" })),
-  });
+test("a profile request runs the engine-native profile SQL; no epoch defaults through clock.now", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, post({ profile: "nearest", source: "celestrak", limit: 10 }));
   assert.equal(http.status, 200);
-  assert.equal(header(http, "content-type"), "application/json");
-  assert.equal(header(http, "x-sdn-record-count"), "2");
-  assert.equal(header(http, "etag"), `W/"fnv1a64-${fnv1a64Hex(OMM_STREAM)}"`, "shared etag across encodings");
-  const records = JSON.parse(decoder.decode(http.body));
-  assert.ok(Array.isArray(records), "bare top-level array");
-  assert.equal(records.length, 2);
-  assert.equal(records[0].OBJECT_NAME, "ISS (ZARYA)");
-  assert.equal(records[0].NORAD_CAT_ID, 25544);
-  assert.equal(records[1].MEAN_MOTION, 14.12);
+  const sandboxed = host.calls.find((c) => c.op === "storage.query_sandboxed");
+  assert.ok(host.calls.some((c) => c.op === "clock.now"), "clock.now defaults the epoch");
+  assert.match(sqlOf(sandboxed), /^SELECT _data FROM \(SELECT _data, ROW_NUMBER\(\) OVER \(PARTITION BY NORAD_CAT_ID ORDER BY ABS\(USER_DEFINED_EPOCH_TIMESTAMP - \?2\)\)/);
+  assert.deepEqual(sqlParams(sandboxed), ["OMM@celestrak", Number(NOW_MS) / 1000, 10]);
+
+  const stated = store();
+  await serve(FLOW_WASM, stated, post({ profile: "as_of", epoch: "2026-10-13T00:00:00Z" }));
+  assert.equal(stated.calls.some((c) => c.op === "clock.now"), false, "a stated epoch needs no clock");
+  assert.deepEqual(sqlParams(stated.calls[0]).slice(1), [Date.UTC(2026, 9, 13) / 1000, 50000]);
 });
 
-test("public query: projection results are engine-assembled rows JSON with verbatim column keys", async () => {
-  const rowsJson = encoder.encode('[{"NORAD_CAT_ID":25544,"MEAN_MOTION":15.49},{"NORAD_CAT_ID":33591,"MEAN_MOTION":14.12}]');
-  const stub = createQueryStub({
-    sandboxed: {
-      meta: { ok: true, result: { columns: 2, json: { $bin: 0 }, kind: "rows", rows: 2 } },
-      segments: [rowsJson],
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "format=json",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT NORAD_CAT_ID, MEAN_MOTION FROM OMM" })),
-  });
+test("a host BodyRef answers the $HTR by reference (no inline body), 304 on its etag", async () => {
+  const REF = { TOKEN: 9001n, SIZE: BigInt(RECORDS.length), FRAMES: 2n, FNV1A64: fnv1a64Hex(RECORDS) };
+  const host = store({ ref: REF });
+  const http = await serve(FLOW_WASM, host, post({ sql: "SELECT _data FROM OMM" }));
+  assert.deepEqual([http.status, http.body.length, Number(http.bodyRefToken), http.bodyRefSize], [200, 0, 9001, RECORDS.length]);
+  assert.deepEqual([http.header("content-type"), http.header("x-sdn-record-count"), http.header("etag")], ["application/vnd.sdn.flatbuffers.stream", "2", ETAG]);
+  assert.equal(host.calls[0].params.DELIVER, 1);
+  const notModified = await serve(FLOW_WASM, store({ ref: REF }), post({ sql: "SELECT _data FROM OMM" }, "", { "If-None-Match": ETAG }));
+  assert.deepEqual([notModified.status, notModified.body.length, Number(notModified.bodyRefToken)], [304, 0, 0]);
+  const json = await serve(FLOW_WASM, store({ ref: REF }), post({ sql: "SELECT _data FROM OMM" }, "format=json"));
+  assert.deepEqual([json.status, Number(json.bodyRefToken), json.json().length], [200, 0, 2], "JSON asks Inline and renders");
+});
+
+test("profile all: every unified-OMM-view record of the source; Unspecified with no SQL is refused", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, post({ profile: "all", source: "celestrak" }));
   assert.equal(http.status, 200);
-  assert.equal(header(http, "content-type"), "application/json");
-  assert.equal(header(http, "x-sdn-record-count"), "2");
-  const rows = JSON.parse(decoder.decode(http.body));
-  assert.deepEqual(rows, [
-    { NORAD_CAT_ID: 25544, MEAN_MOTION: 15.49 },
-    { NORAD_CAT_ID: 33591, MEAN_MOTION: 14.12 },
-  ]);
+  const call = host.calls.find((c) => c.op === "storage.query_sandboxed");
+  assert.match(sqlOf(call), /^SELECT _data FROM OMM WHERE \(\?1 = '' OR _source = \?1\)/);
+  assert.equal(sqlParams(call)[0], "OMM@celestrak");
+  assert.equal(host.calls.some((c) => c.op === "clock.now"), false, "All needs no reference instant");
+  const both = await serve(FLOW_WASM, store(), post({ profile: "all", sql: "SELECT 1" }, "format=json"));
+  assert.deepEqual([both.status, both.json().code], [400, "ambiguous-query"]);
 });
 
-test("public query: sort/limit wrap the SQL in-wasm; invalid sort answers 400", async () => {
-  const stub = createQueryStub({
-    sandboxed: (meta) => {
-      assert.equal(
-        meta.sql,
-        'SELECT * FROM (SELECT _data FROM OMM) ORDER BY "NORAD_CAT_ID" DESC LIMIT 5',
-      );
-      return streamOk(2);
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(
-      JSON.stringify({ sql: "SELECT _data FROM OMM", sort: "NORAD_CAT_ID DESC", limit: 5 }),
-    ),
-  });
+test("GET lists the queryable surface (JSON on request)", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, { method: "GET", path: "/api/v1/query", query: "format=json" });
   assert.equal(http.status, 200);
-
-  const badStub = createQueryStub({});
-  const bad = await pumpRequest(badStub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT _data FROM OMM", sort: "x; DROP TABLE" })),
+  assert.deepEqual(http.json(), {
+    TABLES: [{ NAME: "OMM", KIND: "standard", SOURCE: "OMM", RECORDS: 4213, COLUMNS: [{ NAME: "NORAD_CAT_ID", TYPE: null, UNIT: null, SORTABLE: false, INDEXED: false }, { NAME: "OBJECT_NAME", TYPE: null, UNIT: null, SORTABLE: false, INDEXED: false }] }],
+    MAX_ELAPSED_MS: 5000, MAX_ROWS: 50000, MAX_BYTES: 16777216,
   });
-  assert.equal(bad.status, 400);
-  assert.equal(JSON.parse(decoder.decode(bad.body)).code, "invalid-sort");
-  assert.equal(badStub.calls.length, 0, "invalid sort never reaches the host");
+  assert.deepEqual(host.calls.map((c) => c.op), ["storage.query_surface"]);
+  const fb = await serve(FLOW_WASM, store(), { method: "GET", path: "/api/v1/query" });
+  assert.deepEqual([fb.status, fb.header("x-sdn-record-count")], [200, "1"]);
+  assert.equal(splitPage(fb.body).header.TABLES[0].NAME, "OMM");
 });
 
-test("public query: profile composes the engine epoch SQL with default epoch=now", async () => {
-  const stub = createQueryStub({
-    sandboxed: (meta) => {
-      assert.match(meta.sql, /ROW_NUMBER\(\) OVER \(PARTITION BY NORAD_CAT_ID ORDER BY ABS/);
-      assert.equal(meta.params.length, 3);
-      assert.deepEqual(meta.params[0], { t: "str", v: "OMM@celestrak-gp" }, "source param is the SHADOW-TABLE name");
-      assert.equal(meta.params[1].t, "f64");
-      assert.ok(Math.abs(meta.params[1].v - 1783300000) < 1, "epoch defaulted from clock.now");
-      assert.deepEqual(meta.params[2], { t: "i64", v: 50000 });
-      return streamOk(2);
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(JSON.stringify({ profile: "nearest", source: "celestrak-gp" })),
-  });
-  assert.equal(http.status, 200);
-  assert.equal(stub.calls.map((c) => c.operation).join(","), "clock.now,storage.query_sandboxed");
+test("refusals: PUT 405 and an empty POST 400 never reach the host", async () => {
+  const host = store();
+  const put = await serve(FLOW_WASM, host, { method: "PUT", path: "/api/v1/query", query: "format=json", body: "SELECT 1" });
+  assert.deepEqual([put.status, put.json().code], [405, "method-not-allowed"]);
+  const empty = await serve(FLOW_WASM, host, post({}, "format=json"));
+  assert.deepEqual([empty.status, empty.json().code], [400, "missing-sql"]);
+  assert.equal(host.calls.length, 0);
 });
 
-test("public query: sandbox rejections map to honest statuses with machine-readable codes", async () => {
-  const cases = [
-    ["row-cap", "sandbox: row-cap: result exceeds 200000 rows", 422],
-    ["timeout", "sandbox: timeout: statement exceeded 5000 ms", 422],
-    ["byte-cap", "sandbox: byte-cap: result exceeds 134217728 bytes", 422],
-    ["not-authorized", "sandbox: not-authorized: PRAGMA is not permitted (read-only SELECT sandbox)", 400],
-    ["multi-statement", "sandbox: multi-statement: exactly one SELECT statement is allowed", 400],
-    ["not-a-record-stream", "sandbox: not-a-record-stream: raw response stream queries must return only BLOB cells", 406],
-  ];
-  for (const [code, message, expectedStatus] of cases) {
-    const stub = createQueryStub({
-      sandboxed: { meta: { ok: false, error: { message, sandbox: code } }, segments: [] },
-    });
-    const http = await pumpRequest(stub, {
-      method: "POST",
-      path: "/api/v1/query",
-      query: "",
-      body: encoder.encode(JSON.stringify({ sql: "PRAGMA anything" })),
-    });
-    assert.equal(http.status, expectedStatus, `${code} -> ${expectedStatus}`);
-    const body = JSON.parse(decoder.decode(http.body));
-    assert.equal(body.code, code);
-    assert.ok(body.error.includes(code), "error message carries the engine text");
-  }
+test("host failures map to honest statuses: timeout 422, not-a-record-stream 406, other 502", async () => {
+  const timeout = await serve(FLOW_WASM, store({ fail: hostError("timeout", "statement timeout after 5000 ms") }), post({ sql: "SELECT 1" }, "format=json"));
+  assert.deepEqual([timeout.status, timeout.json().code], [422, "timeout"]);
+  const projection = await serve(FLOW_WASM, store({ fail: hostError("sandbox", "not-a-record-stream: the query projects columns") }), post({ sql: "SELECT NORAD_CAT_ID FROM OMM" }, "format=json"));
+  assert.deepEqual([projection.status, projection.json().code], [406, "not-acceptable"]);
+  assert.match(projection.json().error, /request format=json for projection results/);
+  const failed = await serve(FLOW_WASM, store({ fail: hostError("failed", "engine crashed") }), post({ sql: "SELECT 1" }, "format=json"));
+  assert.deepEqual([failed.status, failed.json().code], [502, "host-failed"]);
 });
 
-test("public query: plain SQL errors answer 400; POST without sql answers 400 before any hostcall", async () => {
-  const stub = createQueryStub({
-    sandboxed: {
-      meta: { ok: false, error: { message: "sandboxed query failed: flatsqlrt: query_sandboxed: SQL error: no such column: nope" } },
-      segments: [],
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode(JSON.stringify({ sql: "SELECT nope FROM OMM" })),
-  });
-  assert.equal(http.status, 400);
-
-  const emptyStub = createQueryStub({});
-  const empty = await pumpRequest(emptyStub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: new Uint8Array(0),
-  });
-  assert.equal(empty.status, 400);
-  assert.equal(JSON.parse(decoder.decode(empty.body)).code, "missing-sql");
-  assert.equal(emptyStub.calls.length, 0);
+test("If-None-Match equal to the page ETAG answers 304", async () => {
+  const http = await serve(FLOW_WASM, store(), post({ sql: "SELECT _data FROM OMM" }, "", { "If-None-Match": ETAG }));
+  assert.deepEqual([http.status, http.header("etag"), http.body.length], [304, ETAG, 0]);
+  const stale = await serve(FLOW_WASM, store(), post({ sql: "SELECT _data FROM OMM" }, "", { "If-None-Match": "W/\"fnv1a64-0000000000000000\"" }));
+  assert.equal(stale.status, 200);
 });
 
-test("public query: raw SQL text body works; DELETE answers 404", async () => {
-  const stub = createQueryStub({
-    sandboxed: (meta) => {
-      assert.equal(meta.sql, "SELECT _data FROM OMM LIMIT 1");
-      return streamOk(1);
-    },
-  });
-  const http = await pumpRequest(stub, {
-    method: "POST",
-    path: "/api/v1/query",
-    query: "",
-    body: encoder.encode("SELECT _data FROM OMM LIMIT 1"),
-  });
-  assert.equal(http.status, 200);
-
-  const rejected = await pumpRequest(createQueryStub({}), {
-    method: "DELETE",
-    path: "/api/v1/query",
-    query: "",
-  });
-  assert.equal(rejected.status, 404);
-});
-
-test("public query: GET serves the queryable-surface listing with caps; If-None-Match answers 304", async () => {
-  const stub = createQueryStub({});
-  const http = await pumpRequest(stub, {
-    method: "GET",
-    path: "/api/v1/query",
-    query: "",
-  });
-  assert.equal(http.status, 200);
-  assert.equal(header(http, "content-type"), "application/json");
-  const surface = JSON.parse(decoder.decode(http.body));
-  assert.equal(surface.tables[0].name, "OMM");
-  assert.equal(surface.tables[1].name, "OMM@celestrak-gp");
-  assert.ok(surface.tables[0].columns.includes("_source"));
-  assert.equal(surface.caps.timeout_ms, 5000);
-  const etag = header(http, "etag");
-  assert.match(etag, /^W\/"fnv1a64-[0-9a-f]{16}"$/);
-
-  const cached = await pumpRequest(createQueryStub({}), {
-    method: "GET",
-    path: "/api/v1/query",
-    query: "",
-    headers: [{ name: "if-none-match", value: etag }],
-  });
-  assert.equal(cached.status, 304);
-  assert.equal(cached.body?.length ?? 0, 0);
-});
-
-test("public query bundle carries the api block for the OpenAPI generator", () => {
-  const flow = JSON.parse(
-    fs.readFileSync(fileURLToPath(new URL("../dist/query/flow.json", import.meta.url)), "utf8"),
-  );
+test("the bundle carries the api block for the OpenAPI generator", () => {
+  const flow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/query/flow.json", import.meta.url)), "utf8"));
   assert.equal(flow.api.basePath, "/api/v1/query");
-  assert.deepEqual(
-    flow.api.routes.map((route) => [route.method, route.path, route.anonymous]),
-    [
-      ["GET", "", true],
-      ["POST", "", true],
-    ],
-  );
-  assert.ok(flow.api.routes[1].responses["422"], "resource-cap rejections documented");
-  assert.ok(flow.api.routes[1].responses["406"], "projection-as-fb documented");
+  assert.deepEqual(flow.api.routes.map((r) => [r.method, r.path, r.anonymous]), [["GET", "", true], ["POST", "", true]]);
+  assert.deepEqual(Object.keys(flow.api.routes[1].responses).sort(), ["200", "304", "400", "405", "406", "422", "502"]);
+  assert.deepEqual(Object.keys(flow.api.routes[1].responses["200"].content).sort(), ["application/json", "application/vnd.sdn.flatbuffers.stream"]);
 });

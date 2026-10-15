@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.vimpel-source",
   "name": "Vimpel Source",
-  "version": "0.1.0",
-  "description": "Read JSC Vimpel's public orbit data: osculating J2000 elements as attributed epoch states, rectangular ephemerides, and the datefirst crosswalk of Vimpel and NORAD numbers as candidate links. Retrieval, the login and storage belong to the SDN host flow.",
+  "version": "0.2.0",
+  "description": "Read JSC Vimpel's public orbit data from HttpResponses: osculating J2000 elements as attributed epoch states ($OEM), rectangular ephemerides ($OEM), and the datefirst crosswalk of Vimpel and NORAD numbers as candidate links ($OIL); each batch's IngestRequest says what was read. Retrieval, the login and storage belong to the SDN host flow.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -20,27 +20,25 @@
       "displayName": "Convert Vimpel osculating elements to epoch states",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/csv",
-                "detail": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB."
-              }
+              "description": "The HttpResponse hostcap/http-request answers: BODY one JSC Vimpel orbit table of osculating elements as the public site serves it (comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB). HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB."
+          "description": "The HttpResponse hostcap/http-request answers: BODY one JSC Vimpel orbit table of osculating elements as the public site serves it (comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB). HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
         }
       ],
       "outputPorts": [
@@ -53,15 +51,16 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One canonical $OEM per object: a single J2000 state at the table's reference epoch (UTC), named vimpel:<id>, with Vimpel's catalog namespace and exact id."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 20000,
-          "required": true,
+          "required": false,
           "description": "One canonical $OEM per object: a single J2000 state at the table's reference epoch (UTC), named vimpel:<id>, with Vimpel's catalog namespace and exact id."
         },
         {
@@ -71,21 +70,40 @@
               "setId": "report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
-              }
+              "description": "The batch's IngestRequest: SCHEMA OEM.fbs, SOURCE_NAME vimpel, BATCH_ID and SOURCE_SHA256 the SHA-256 of the body, the response's URL, status and time; PROVENANCE.ATTRIBUTES kind, records, bytes, muKm3PerS2, frame, timeSystem, columns (the column names), then object.<n> per object in table order: its eight columns as printed (nativeId, epoch, first observation, days since update, area/mass, magnitude, the two 50 % scalars), comma-joined."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+          "required": false,
+          "description": "The batch's IngestRequest: SCHEMA OEM.fbs, SOURCE_NAME vimpel, BATCH_ID and SOURCE_SHA256 the SHA-256 of the body, the response's URL, status and time; PROVENANCE.ATTRIBUTES kind, records, bytes, muKm3PerS2, frame, timeSystem, columns (the column names), then object.<n> per object in table order: its eight columns as printed (nativeId, epoch, first observation, days since update, area/mass, magnitude, the two 50 % scalars), comma-joined."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "unchanged",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice (kind Unchanged, SCHEMA OEM.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One FlowNotice (kind Unchanged, SCHEMA OEM.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
         }
       ],
       "maxBatch": 1,
@@ -96,50 +114,25 @@
       "displayName": "Read one Vimpel rectangular ephemeris",
       "inputPorts": [
         {
-          "portId": "name",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "name",
+              "setId": "response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/plain",
-                "detail": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row."
-              }
+              "description": "The HttpResponse hostcap/http-request answers: BODY one Vimpel rectangular ephemeris (rows of an index, x, y, z in km, J2000, 600 s apart, 5 to 4,096 rows, bounded to 4 MiB); the URL's last segment (query dropped) is the file name <native id>_<YYYYMMDD>_<HHMMSS>, the native object and the UTC epoch of the first row. HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row."
-        },
-        {
-          "portId": "source",
-          "acceptedTypeSets": [
-            {
-              "setId": "source",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/csv",
-                "detail": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB."
+          "description": "The HttpResponse hostcap/http-request answers: BODY one Vimpel rectangular ephemeris (rows of an index, x, y, z in km, J2000, 600 s apart, 5 to 4,096 rows, bounded to 4 MiB); the URL's last segment (query dropped) is the file name <native id>_<YYYYMMDD>_<HHMMSS>, the native object and the UTC epoch of the first row. HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
         }
       ],
       "outputPorts": [
@@ -152,15 +145,16 @@
                 {
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "One canonical $OEM: position-only J2000 samples 600 s apart from the epoch in the file name (UTC), STATE_VECTOR_SIZE 3."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "One canonical $OEM: position-only J2000 samples 600 s apart from the epoch in the file name (UTC), STATE_VECTOR_SIZE 3."
         },
         {
@@ -170,21 +164,40 @@
               "setId": "report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
-              }
+              "description": "The batch's IngestRequest: SCHEMA OEM.fbs, SOURCE_NAME vimpel, BATCH_ID and SOURCE_SHA256 the SHA-256 of the body, the response's URL, status and time; PROVENANCE.ATTRIBUTES kind, fileName, nativeId, epoch, samples, stepSeconds, bytes, frame, timeSystem."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+          "required": false,
+          "description": "The batch's IngestRequest: SCHEMA OEM.fbs, SOURCE_NAME vimpel, BATCH_ID and SOURCE_SHA256 the SHA-256 of the body, the response's URL, status and time; PROVENANCE.ATTRIBUTES kind, fileName, nativeId, epoch, samples, stepSeconds, bytes, frame, timeSystem."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "unchanged",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice (kind Unchanged, SCHEMA OEM.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One FlowNotice (kind Unchanged, SCHEMA OEM.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
         }
       ],
       "maxBatch": 1,
@@ -195,27 +208,25 @@
       "displayName": "Read the Vimpel datefirst crosswalk as candidate links",
       "inputPorts": [
         {
-          "portId": "source",
+          "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "source",
+              "setId": "response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/plain",
-                "detail": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row."
-              }
+              "description": "The HttpResponse hostcap/http-request answers: BODY the datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row. HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row."
+          "description": "The HttpResponse hostcap/http-request answers: BODY the datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row. HTTP 200 parses; 304 gives the FlowNotice on unchanged and nothing else; any other status or a transport error refuses the call."
         }
       ],
       "outputPorts": [
@@ -226,21 +237,40 @@
               "setId": "crosswalk",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "OIL.fbs",
+                  "fileIdentifier": "$OIL",
+                  "rootTypeName": "OIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion."
-              }
+              "description": "One $OIL: candidate links (STATUS Candidate) from Vimpel numbers (LEFT, namespace vimpel) to NORAD numbers (RIGHT, namespace NORAD), each with its evidence (SOURCE datefirst, RECORD_ID the edition's SHA-256, the line of its first declaration, the declarations and whether their dates differ), the ambiguous ones marked and the conflicts listed with their shape; identity evidence for the $CAT integrator, never an assertion."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion."
+          "required": false,
+          "description": "One $OIL: candidate links (STATUS Candidate) from Vimpel numbers (LEFT, namespace vimpel) to NORAD numbers (RIGHT, namespace NORAD), each with its evidence (SOURCE datefirst, RECORD_ID the edition's SHA-256, the line of its first declaration, the declarations and whether their dates differ), the ambiguous ones marked and the conflicts listed with their shape; identity evidence for the $CAT integrator, never an assertion."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "unchanged",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice (kind Unchanged, SCHEMA OIL.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One FlowNotice (kind Unchanged, SCHEMA OIL.fbs, REASON not-modified, ITEMS the URL) when the response is HTTP 304; nothing else is emitted then."
         }
       ],
       "maxBatch": 1,
@@ -252,6 +282,26 @@
       "schemaName": "OEM.fbs",
       "fileIdentifier": "$OEM",
       "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OIL.fbs",
+      "fileIdentifier": "$OIL",
+      "rootTypeName": "OIL"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
     }
   ],
   "buildArtifacts": [

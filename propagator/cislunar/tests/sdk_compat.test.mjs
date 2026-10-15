@@ -3,148 +3,63 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { validatePluginArtifact } from "space-data-module-sdk/compliance";
+import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
-import {
-  createBrowserModuleHarness,
-  generateManifestHarnessPlan,
-  materializeHarnessScenario,
-} from "space-data-module-sdk/testing";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
-const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
-const REQUEST_FIXTURE_PATH = new URL(
-  "../tests/fixtures/request.lagrange.json",
-  import.meta.url,
-);
-const FLOW_EXAMPLE_PATH = new URL(
-  "../tests/fixtures/hosted-runtime/cislunar.single-plugin.flow.json",
-  import.meta.url,
-);
+import { MANIFEST_PATH, STANDARDS_ROOT, WASM_PATH, decodeTBP, readManifest, readWasm, requestFrame, sds } from "./lib/tbp.mjs";
 
-function readFixtureBytes() {
-  return fs.readFileSync(REQUEST_FIXTURE_PATH);
-}
+const FLOW_EXAMPLE_PATH = new URL("./fixtures/hosted-runtime/cislunar.single-plugin.flow.json", import.meta.url);
+const lagrangeRequest = () => ({ methodId: "invoke", inputs: [requestFrame({ PROBLEM: sds.tbpProblem.LibrationPoints, SYSTEM: Object.assign(new sds.tbpSystemT(), { MASS_RATIO: 0.0121505856 }) })] });
 
-function createHarnessScenario(surface) {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  const plan = generateManifestHarnessPlan({
-    manifest,
-    payloadForPort({ portId }) {
-      if (portId !== "request") {
-        return null;
-      }
-      return readFixtureBytes();
-    },
-  });
-  const scenario = plan.generatedCases.find((entry) => entry.surface === surface);
-  assert.ok(scenario, `missing ${surface} harness scenario`);
-  return materializeHarnessScenario(scenario);
-}
-
-function createInvokeRequest() {
-  const scenario = createHarnessScenario("command");
-  return {
-    methodId: scenario.methodId,
-    inputs: scenario.inputs,
-  };
-}
-
-function assertSuccessfulResponse(response) {
-  assert.equal(response.statusCode, 0);
-  assert.ok(response.errorCode === "" || response.errorCode === null);
-  assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "response");
-
-  const payload = JSON.parse(new TextDecoder().decode(response.outputs[0].payload));
-  assert.equal(Array.isArray(payload), true);
-  assert.equal(payload.length, 5);
-  assert.equal(payload[0].point, "L1");
-}
-
-test("build publishes canonical browser and isomorphic artifact paths", () => {
-  assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
-});
-
-test("built artifact passes SDK compliance checks", async () => {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  const report = await validatePluginArtifact({
-    manifest,
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-  });
+test("the manifest names $TBP on both ports and the artifact passes SDK compliance with the standards", async () => {
+  const manifest = readManifest();
+  const [method] = manifest.methods;
+  assert.equal(manifest.methods.length, 1);
+  for (const port of [...method.inputPorts, ...method.outputPorts]) {
+    const types = port.acceptedTypeSets.flatMap((set) => set.allowedTypes);
+    assert.deepEqual(types, [{ schemaName: "TBP.fbs", fileIdentifier: "$TBP", rootTypeName: "TBP", wireFormat: "flatbuffer" }]);
+  }
+  const report = await validateArtifactWithStandards({ manifest, wasmPath: fileURLToPath(WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  assert.deepEqual(JSON.parse(fs.readFileSync(new URL("../dist/plugin-manifest.json", import.meta.url), "utf8")), JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")));
 });
 
-test("built artifact exposes the standalone isomorphic surface", async () => {
-  const inspection = await inspectModule(
-    fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-  );
-  const importedModuleNames = Array.from(
-    new Set(inspection.imports.map((entry) => entry.module)),
-  ).sort();
-
-  assert.equal(inspection.profile, "standalone");
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
-  assert.ok(inspection.exports.includes("_start"));
-  assert.ok(inspection.exports.includes("plugin_alloc"));
-  assert.ok(inspection.exports.includes("plugin_free"));
-  assert.ok(inspection.exports.includes("plugin_invoke_stream"));
-  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer"));
-  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer_size"));
+test("the artifact imports only WASI (no hostcalls) and exports the invoke ABI", async () => {
+  const inspection = await inspectModule(readWasm());
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort(), ["wasi_snapshot_preview1"]);
+  for (const name of ["plugin_alloc", "plugin_free", "plugin_invoke_stream", "plugin_get_manifest_flatbuffer", "plugin_get_manifest_flatbuffer_size"]) {
+    assert.ok(inspection.exports.includes(name), name);
+  }
 });
 
-test("built artifact loads through the SDK browser harness", async (t) => {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "command",
-  });
-  t.after(() => {
-    harness.destroy();
-  });
-
-  const response = await harness.invoke(createInvokeRequest());
-  assertSuccessfulResponse(response);
-});
-
-test("built artifact loads through the WasmEdge server path", async (t) => {
-  let harness;
+test("the artifact answers through the WasmEdge server path", async (t) => {
   const isUnavailable = (error) => {
-    let current = error;
-    while (current) {
-      if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(current))) {
-        return true;
-      }
-      current = current.cause;
+    for (let current = error; current; current = current.cause) {
+      if (/spawn wasmedge ENOENT|command not found|Failed to launch|wasmedge.*not found/i.test(String(current))) return true;
     }
     return false;
   };
+  let harness;
+  let response;
   try {
-    harness = await loadModule({
-      wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-      runtimeKind: "wasmedge",
-      enableThreads: false,
-    });
-    const response = await harness.invoke(createInvokeRequest());
-    assertSuccessfulResponse(response);
+    harness = await loadModule({ wasmSource: fileURLToPath(WASM_PATH), runtimeKind: "wasmedge", enableThreads: false });
+    response = await harness.invoke(lagrangeRequest());
   } catch (error) {
     if (isUnavailable(error)) {
-      t.skip("Install wasmedge to verify the server-path harness.");
+      t.skip("WasmEdge is not installed; install it to verify the server path.");
       return;
     }
     throw error;
+  } finally {
+    await harness?.destroy();
   }
-  t.after(async () => {
-    await harness.destroy();
-  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const answer = decodeTBP(response.outputs[0].payload);
+  assert.equal(answer.LIBRATION_POINTS.length, 5);
 });
 
-test("hosted-runtime example is wired to the canonical invoke contract", () => {
+test("the hosted-runtime example is wired to invoke/request", () => {
   const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
-  assert.equal(flow.nodes.length, 1);
   assert.equal(flow.nodes[0].pluginId, "cislunar-propagator");
   assert.equal(flow.nodes[0].methodId, "invoke");
   assert.equal(flow.triggerBindings[0].targetPortId, "request");

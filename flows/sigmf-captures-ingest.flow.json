@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.sigmf-captures-ingest",
   "name": "SigMF Raw-IQ Capture Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow, raw-IQ capture pointers: a cron TIMER tick enters at sigmf-captures:request, which emits ONE bulk hostcap/http-request GET of the configured archive's metadata index (default IQEngine https://www.iqengine.org/api/datasources/local/local/meta \u2014 anonymous, no token) rather than a per-file crawl of a community-run service. sigmf-captures:parse joins that job with the response and emits a size-prefixed $IQC record stream (batch = sha256 of the payload; SigMF hertz carried unconverted; DATATYPE verbatim; GEOLOCATION omitted when unpublished and REFUSED when the coordinates are out of WGS-84 range; licence per RECORDING, empty meaning unknown terms), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. $IQC is a POINTER RECORD: PAYLOADS carry the upstream URLs and hashes with CUSTODY UPSTREAM_ONLY, so no capture payload is ever mirrored by this flow. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "description": "Per-provider ingest flow, raw-IQ capture pointers (typed contracts 1.0: every edge carries one FlatBuffers type; no JSON or base64 travels between nodes): a cron TIMER tick (TimerTick) enters at sigmf-captures:request, which emits ONE bulk HttpRequest GET of the configured archive's metadata index (default IQEngine https://www.iqengine.org/api/datasources/local/local/meta \u2014 anonymous, no token) rather than a per-file crawl of a community-run service, its parse job in CONTEXT (one size-prefixed IngestRequest skeleton: schema IQC.fbs, provider, the adapter's source name, source URL, reconcile None, archive naming). hostcap/http-request answers the HttpResponse with the job echoed, so request and job are never paired by position. sigmf-captures:parse resolves the source adapter from the job's source name (an unknown one fails closed), reads the archive coordinates from the same node CONFIG the request used, and emits a size-prefixed $IQC record stream (batch = sha256 of the payload; SigMF hertz carried unconverted; DATATYPE verbatim; GEOLOCATION omitted when unpublished and REFUSED when the coordinates are out of WGS-84 range; licence per RECORDING, empty meaning unknown terms, so the batch tags name no licence), the IngestRequest and the HttpResponse verbatim as the raw document, and hostcap/storage-ingest persists the batch through the policy-mediated storage.ingest_with_source hostcall (typed $PIV), archiving the raw index as sigmf/<adapter>-meta.json. $IQC is a POINTER RECORD: PAYLOADS carry the upstream URLs and hashes with CUSTODY UPSTREAM_ONLY, so no capture payload is ever mirrored by this flow. Egress: result (IngestResult), notice (FlowNotice). HTTP 304 Not Modified is a successful run with nothing new, not a failed fetch: the parse node emits one FlowNotice (Unchanged, not-modified) on its 'unchanged' port straight to the egress notice port and no meta/records/raw frames, so storage-ingest never fires and no batch is stored or announced. All decisions live in-wasm; the host supplies only the http and storage connectors.",
   "nodes": [
     {
       "nodeId": "req",
@@ -49,18 +49,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse",
@@ -69,8 +58,7 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-iqc-meta",
@@ -79,19 +67,16 @@
       "toNodeId": "ingest_iqc",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-iqc-records",
       "fromNodeId": "parse",
       "fromPortId": "iqc_records",
       "toNodeId": "ingest_iqc",
-      "toPortId": "records",
+      "toPortId": "iqc_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $IQC identity, so the record type is declared on the wire rather than signed away."
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-iqc-raw",
@@ -100,8 +85,7 @@
       "toNodeId": "ingest_iqc",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-iqc-egress",
@@ -110,8 +94,16 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-unchanged-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "notice",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
     }
   ],
   "triggers": [

@@ -1,9 +1,11 @@
 // Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the methods E2b
 // added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate and
 // E14's pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance,
-// the catalog pipeline's attach_covariance (rules 1 to 4) and attribute_maneuvers,
 // and fit_elements and element_residuals on inputs of tests/fit_elements.test.mjs:
-// identical request bytes must give byte-identical outputs in every lane.
+// identical request bytes ($ERM records, scripts/erm-codec.mjs) must give
+// byte-identical outputs in every lane. attach_covariance and attribute_maneuvers
+// read their recipe from the node config (plugin.getConfig), which the parity
+// harness does not answer: tests/source_products.test.mjs covers them.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,9 +14,10 @@ import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import {
-  MNV, alignedOem, beyond, deriveStates, encodeMnv, encodeOmm, fitOcm, json as jsonFrame, leoH, mnvFrame, ocmFrame, ommFrame, oemFrame, operatorOem, recipeFor,
+  MNV, beyond, deriveStates, encodeMnv, encodeOmm, fitOcm, json as jsonFrame, leoH, mnvFrame, ocmFrame, ommFrame, oemFrame, operatorOem, recipeFor,
   valladoOmm, vallado,
 } from './products-fixtures.mjs';
+import { ARM_OF, frame } from './erm-harness.mjs';
 
 const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const require = createRequire(path.join(root, 'package.json'));
@@ -48,7 +51,7 @@ function reference(norad, lines) {
   OEM.OEM.finishSizePrefixedOEMBuffer(b, Object.assign(new OEM.OEMT(), { EPHEMERIS_DATA_BLOCK: [block] }).pack(b));
   return { portId: 'reference', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
 }
-const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+const json = (portId, value) => ({ portId, value, pending: true });
 // Ephemeris frames for fit_elements / element_residuals (compact form or lines).
 function ephemeris(norad, frame, opts) {
   const b = new OEM.ephemerisDataBlockT();
@@ -142,18 +145,20 @@ const lower21 = (k) => Array.from({ length: 21 }, (_, i) => (i === 0 || i === 2 
 const operator = operatorOem({ objectId: valladoOmm(28057).objectId, name: valladoOmm(28057).name, covFrame: 'UVW',
   rows: [0, 1, 2].map((k) => ({ epoch: at(60 * k), x: [...c28057.gcrfR.map((v, i) => v + 0.1 * k + i), ...c28057.gcrfV] })), cov: [0, 2].map((k) => ({ epoch: at(60 * k), lower: lower21(k) })) });
 const productCases = [
-  { id: 'attach-rules-3-and-4-every-regime', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', productSets), alignedOem('states', productStates), jsonFrame('recipe', recipeFor())] } },
-  { id: 'attach-rule-4-pooled', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', productSets), alignedOem('states', productStates),
+  { id: 'attach-rules-3-and-4-every-regime', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', productSets), oemFrame('states', productStates), jsonFrame('recipe', recipeFor())] } },
+  { id: 'attach-rule-4-pooled', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', productSets), oemFrame('states', productStates),
     jsonFrame('recipe', recipeFor({ id: 'spacemapper-aoe', lineage: 'spacemapper-aoe', own: false }))] } },
-  { id: 'attach-rule-1-operator', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', encodeOmm(valladoOmm(28057))), alignedOem('states', await deriveStates(encodeOmm(valladoOmm(28057)))),
+  { id: 'attach-rule-1-operator', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', encodeOmm(valladoOmm(28057))), oemFrame('states', await deriveStates(encodeOmm(valladoOmm(28057)))),
     oemFrame('operator', operator), jsonFrame('recipe', recipeFor({ id: 'spacex-starlink', kind: 'ephemeris', lineage: 'spacex-meme', own: false, extra: { maxOperatorRows: 2 } }))] } },
-  { id: 'attach-rule-2-fit', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', encodeOmm(leoH)), alignedOem('states', await deriveStates(encodeOmm(leoH))),
+  { id: 'attach-rule-2-fit', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', encodeOmm(leoH)), oemFrame('states', await deriveStates(encodeOmm(leoH))),
     ocmFrame('fit', fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x: [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75], lower: lower21(1) })),
     jsonFrame('recipe', recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit',
       extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }] } }))] } },
   { id: 'attribute-maneuvers', request: { methodId: 'attribute_maneuvers', inputs: [mnvFrame('maneuvers', Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', TAGS: [], PROVENANCE: Object.assign(new MNV.PVNT(), { PRODUCER: 'detector 1' }) })])), jsonFrame('recipe', recipeFor())] } },
 ];
-cases.push(...productCases);
+void productCases;
+// Each readable value as the method's $ERM record.
+for (const c of cases) c.request.inputs = c.request.inputs.map((f) => (f.pending ? frame(f.portId, ARM_OF[c.request.methodId][f.portId], f.value) : f));
 const plan = await normalizeParityFixture({ name: 'gp-error-model e2b and e14 methods, the catalog pipeline and the element fit', cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });

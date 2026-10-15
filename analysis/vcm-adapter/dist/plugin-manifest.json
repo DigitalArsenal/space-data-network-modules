@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
   "name": "SDN VCM Adapter",
-  "version": "0.2.0",
-  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Pure compute; output bytes depend only on input bytes.",
+  "version": "0.3.0",
+  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -27,47 +27,22 @@
           "portId": "message",
           "acceptedTypeSets": [
             {
-              "setId": "vcm-text",
+              "setId": "sds-fil-vcm-text",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One VCM as text: the JANAP-128 narrative lines prefixed \"<>\" (spacedatastandards.org survey/legacy-messages/vcm). Other lines are ignored.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/x-sp-vcm",
-                "detail": "The legacy fixed-format ASCII message this module exists to translate into SDS records."
-              }
+              "description": "$FIL whose CONTENT is one VCM as text: the JANAP-128 narrative lines prefixed \"<>\" (spacedatastandards.org survey/legacy-messages/vcm); other lines are ignored. Other $FIL fields are not read."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
           "description": "The VCM."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "vcm-read-options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"fractional\"|\"absolute\"}; every key optional, the first value of each the default.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Interpretation options for the legacy message; never persisted."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Read options."
         }
       ],
       "outputPorts": [
@@ -80,7 +55,8 @@
                 {
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
-                  "rootTypeName": "PRW"
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/hpop's request port."
@@ -100,7 +76,8 @@
                 {
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
-                  "rootTypeName": "PRW"
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $PRW EARTH_ORIENTATION with daily $EOP rows from the VCM's single point: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held."
@@ -120,7 +97,8 @@
                 {
                   "schemaName": "EOP.fbs",
                   "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP"
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $EOP records, one per day from the day before the VCM's epoch to the day after the arc: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held. The earth orientation the $OCM's legacy text needs besides its own TAI-UTC and UT1-UTC."
@@ -140,7 +118,8 @@
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OCM: identity, the J2K state as EME2000 (km, km/s), the Cartesian covariance (COV_TYPE CARTPV, LTM, COV_SIZE 6 plus the parameter rows COV_PARAMETERS names, units in COV_UNITS, scaled by the weighted RMS as SP prints its sigmas), the force model, the values of B, BDOT, AGOM and the thrust acceleration (OD_DYNAMIC_PARAMETERS), the weighted RMS and energy dissipation rate, and the integrator settings, the covariance's derivation and the message's other settings as USER_DEFINED_PARAMETERS."
@@ -155,18 +134,16 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "vcm-read-report-v1",
+              "setId": "runtime-flow-notice-vcm-read",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: every field read, the equinoctial elements and their round trip, the dynamic parameters carried, the Cartesian covariance, the stated UVW sigmas and the ones recomputed from the transformed covariance, and notes on what could not be carried.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Translation accounting; diagnostic metadata."
-              }
+              "description": "FlowNotice Info: SCHEMA OCM.fbs, SOURCE_NAME the satellite number, COUNT the covariance size, REASON the notes joined by \"; \", ITEMS \"key=value\" lines: every field read, the equinoctial elements and their round trip, the dynamic parameters carried, one parameterSigma line per parameter row (name unit value sigma), the Cartesian covariance, the stated and recomputed UVW sigmas (numbers %.17g, lists space-separated) and one note line per note."
             }
           ],
           "minStreams": 1,
@@ -177,7 +154,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Translates one VCM. A message that is not a VCM, has no epoch or J2K state, or has a malformed covariance is refused."
+      "description": "Translates one VCM. A message that is not a VCM, has no epoch or J2K state, or has a malformed covariance is refused. Options are node config table \"read\": meanMotionUnit (\"fraction\" default, \"rad/ks\", \"rad/s\", \"rad/min\", \"rev/day\"), scaleCovarianceByWeightedRms (true), arcSeconds (86400), ephemerisSource (\"JPL_SPK\"), parameterRows (\"fractional\" or \"absolute\"); unknown keys are refused."
     },
     {
       "methodId": "ocm",
@@ -192,7 +169,8 @@
                 {
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
-                  "rootTypeName": "PRW"
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/hpop; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written."
@@ -202,29 +180,6 @@
           "maxStreams": 1,
           "required": true,
           "description": "The state to write."
-        },
-        {
-          "portId": "header",
-          "acceptedTypeSets": [
-            {
-              "setId": "vcm-write-header-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev, indicator), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust), the parameters' values (ballisticCoefficient, bdot, agom, thrustAcceleration, centerOfMassOffset, edr), space weather (f10, averageF10, averageAp), taiMinusUtcS, ut1MinusUtcS, leapSecondTime, nutationTerms, integrator lines (integratorMode, partials, stepMode, fixedStep, stepSizeSelection, initialStepSize, errorControl), weightedRms and covarianceScale, meanMotionUnit and parameterRows (as read took them).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Message metadata the propagation result does not carry."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Message header."
         }
       ],
       "outputPorts": [
@@ -237,7 +192,8 @@
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OCM of the final state: as read writes it, from a result."
@@ -251,7 +207,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes one propagation result as an $OCM: the final state in EME2000 (km, km/s), its covariance over the state and DYNAMIC_PARAMETERS with the parameter rows named, and the header's model lines."
+      "description": "Writes one propagation result as an $OCM: the final state in EME2000 (km, km/s), its covariance over the state and DYNAMIC_PARAMETERS with the parameter rows named, and the header's model lines. The header is node config table \"header\": identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev, indicator), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust), the parameters values (ballisticCoefficient, bdot, agom, thrustAcceleration, centerOfMassOffset, edr), space weather (f10, averageF10, averageAp), taiMinusUtcS, ut1MinusUtcS, leapSecondTime, nutationTerms, integrator lines (integratorMode, partials, stepMode, fixedStep, stepSizeSelection, initialStepSize, errorControl), weightedRms and covarianceScale, meanMotionUnit and parameterRows."
     },
     {
       "methodId": "write",
@@ -266,7 +222,8 @@
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OCM: TRAJ_TYPE CARTESIAN_PV in EME2000 (km, km/s); a covariance of COV_TYPE CARTPV in any COV_ORDERING with the parameter rows COV_PARAMETERS names (DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION), when one is to be written."
@@ -286,7 +243,8 @@
                 {
                   "schemaName": "EOP.fbs",
                   "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP"
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $EOP records; the one of the OCM's epoch day gives the UT1 rate (from LOD) and the polar motion the text states."
@@ -296,29 +254,6 @@
           "maxStreams": 1,
           "required": false,
           "description": "The Earth orientation of the epoch day."
-        },
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "vcm-write-options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"parameterRows\": \"fractional\"|\"absolute\", \"covarianceScale\": number}; every key optional, overriding what the OCM records of how its covariance was made.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Interpretation options for the legacy message; never persisted."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Write options."
         }
       ],
       "outputPorts": [
@@ -326,18 +261,16 @@
           "portId": "message",
           "acceptedTypeSets": [
             {
-              "setId": "vcm-text",
+              "setId": "sds-fil-vcm-text",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The VCM text, \"<>\"-prefixed lines.",
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "text/x-sp-vcm",
-                "detail": "The legacy fixed-format ASCII message."
-              }
+              "description": "$FIL: NAME <satellite>.vcm, KIND File, MEDIA_TYPE text/plain, SIZE, CONTENT the VCM text (\"<>\"-prefixed lines)."
             }
           ],
           "minStreams": 1,
@@ -348,7 +281,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes one VCM from an $OCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, the force model, parameter values and integrator lines the OCM records, the UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots."
+      "description": "Writes one VCM from an $OCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, the force model, parameter values and integrator lines the OCM records, the UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots. Options are node config table \"write\": meanMotionUnit, parameterRows, covarianceScale, each overriding what the OCM records of how its covariance was made."
     }
   ],
   "schemasUsed": [
@@ -366,6 +299,16 @@
       "schemaName": "EOP.fbs",
       "fileIdentifier": "$EOP",
       "rootTypeName": "EOP"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
     }
   ],
   "buildArtifacts": [

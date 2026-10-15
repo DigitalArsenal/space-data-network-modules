@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decode, invoke, recipeInputs } from './erm-harness.mjs';
 
 const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const require = createRequire(path.join(root, 'package.json'));
@@ -21,13 +22,13 @@ export const epochManifest = JSON.parse(fs.readFileSync(here('../../epoch-state/
 // E14's frozen S3-KC model with the held-out verdict of every cell (scripts/export-recipe-model.mjs).
 export const kc = JSON.parse(fs.readFileSync(here('../data/e14-s3-kc.json')));
 
-export const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+// The recipe of attach_covariance / attribute_maneuvers: `call` gives it as node config and its models on the models port.
+export const json = (portId, value) => ({ portId, value, pending: true });
 const ref = (schemaName, fileIdentifier, rootTypeName, wireFormat = 'flatbuffer') => ({ schemaName, fileIdentifier, rootTypeName, wireFormat });
 export const ommFrame = (portId, payload) => ({ portId, payload, typeRef: ref('OMM.fbs', '$OMM', 'OMM') });
 export const oemFrame = (portId, payload) => ({ portId, payload, typeRef: ref('OEM.fbs', '$OEM', 'OEM') });
 export const ocmFrame = (portId, payload) => ({ portId, payload, typeRef: ref('OCM.fbs', '$OCM', 'OCM') });
 export const mnvFrame = (portId, payload) => ({ portId, payload, typeRef: ref('MNV.fbs', '$MNV', 'MNV') });
-export const alignedOem = (portId, payload) => ({ portId, payload, typeRef: { ...ref('OEM.fbs', '$OEM', 'OEM', 'aligned-binary'), requiredAlignment: 8, byteLength: payload.byteLength } });
 
 // ── element sets ──
 // Vallado's SGP4-VER sets (analysis/epoch-state/tests): 6251 is 398 km (LEO-L), 28057 is 773 km (LEO-M), 5 is 2254 km
@@ -55,9 +56,10 @@ export function encodeOmm(s, overrides = {}) {
 
 // The states of element sets at their epochs plus `ages` days: analysis/epoch-state derive_omm.
 export async function deriveStates(ommStream, ages = [0]) {
-  const h = await createBrowserModuleHarness({ wasmSource: epochWasm, manifest: epochManifest, surface: 'direct' });
+  // analysis/epoch-state reads its ages from the node config.
+  const h = await createBrowserModuleHarness({ wasmSource: epochWasm, manifest: epochManifest, surface: 'direct', hostOptions: { config: { ages } } });
   try {
-    const r = await h.invoke({ methodId: 'derive_omm', inputs: [ommFrame('omm', ommStream), json('options', { ages })] });
+    const r = await h.invoke({ methodId: 'derive_omm', inputs: [ommFrame('omm', ommStream)] });
     if (r.statusCode !== 0) throw new Error(r.errorMessage);
     const frame = r.outputs.find((f) => f.portId === 'states');
     return frame ? Buffer.from(frame.payload) : Buffer.alloc(0);
@@ -168,19 +170,17 @@ export function assertSourceNamed(record, recipe, producer) {
 }
 
 export async function call(methodId, inputs) {
-  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  try {
-    const r = await h.invoke({ methodId, inputs });
-    return r;
-  } finally {
-    h.destroy();
-  }
+  const recipe = inputs.find((f) => f.pending && f.portId === 'recipe');
+  if (!recipe) return invoke(methodId, inputs);
+  const r = recipeInputs(recipe.value, methodId === 'attach_covariance' ? 'attach' : 'attribute');
+  const others = inputs.filter((f) => f !== recipe);
+  return invoke(methodId, [...others, ...r.inputs], { config: r.config, legacyInputs: [...others, r.legacy] });
 }
 export function output(response, portId) {
   const frames = response.outputs.filter((f) => f.portId === portId);
   return frames.length ? Buffer.concat(frames.map((f) => Buffer.from(f.payload))) : Buffer.alloc(0);
 }
-export const reportOf = (response) => JSON.parse(output(response, 'report').toString());
+export const reportOf = (response) => decode(output(response, 'report'));
 
 // What the module must give, computed here from the model file: the covariance of regime `regime` at `age` days, linear
 // in age between bin centres and held at the first and last (km, km/s; lower triangle of the 6x6, RTN).

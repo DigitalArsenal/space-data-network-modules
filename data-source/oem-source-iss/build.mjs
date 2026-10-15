@@ -3,13 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "oem_source_iss_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 // The checked-in NASA ISS OEM fixture (the SAME fixture the OD RMS-parity gate
 // uses). The $OEM the node emits is built FROM this, so the fixture stays the
 // single source of truth.
@@ -17,7 +20,7 @@ const fixturePath = fileURLToPath(
   new URL("../../analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", import.meta.url),
 );
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
 // flatc emits every SDS header with the same include guard
 // (FLATBUFFERS_GENERATED_MAIN_H_) and schema includes as a self-named `#include
@@ -131,7 +134,7 @@ static const int kIssStateCount = ${states.length};
 
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");

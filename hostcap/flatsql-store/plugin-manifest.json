@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.flatsql-store",
   "name": "FlatSQL Store (in-wasm OD-flow write lane)",
-  "version": "0.1.0",
-  "description": "In-wasm FlatSQL store terminal for the supplemental-OMM OD flow. Reads fitted $OMM/$OCM/$OBD record frames, derives the per-SDS-type route from each record's FlatBuffer file_identifier in C++, computes the CIDv1 content id, and (in C++) builds a wrapper FlatBuffer { cid:string(key); provider:string; source_name:string; batch_id:string; data:[ubyte] } stamped with a store-local file_identifier SOMM/SOCM/SOBD, then INGESTS it into the FlatSQL arena via import_module('flatsql')/import_name('ingest_record') — the only persistable substrate (arena -> ExportData snapshots through the host filesystem connector). Content-addressed dedup is in-wasm: a read-only SELECT COUNT(*) WHERE cid=? over the arena vtab via import_module('flatsql')/import_name('exec_envelope') skips records already stored (INSERT-OR-IGNORE semantics). Replaces the repudiated Go storage sink: no Go orchestration, no SDS-aware Go decode, no per-record Go loop — both host trampolines are pure byte-movers over this module's memory; all record/type/route/wrapper/CID semantics stay in wasm. $OEM is structurally unstorable (the input port carries only $OMM/$OCM/$OBD; route_for_record skips anything else; and the store-local wrapper ids SOMM/SOCM/SOBD are distinct from the raw SDS ids so a raw record can never masquerade as a wrapper). FlatBuffers/aligned-binary only, no JSON, no caps.",
+  "version": "0.2.0",
+  "description": "In-wasm FlatSQL store terminal for the supplemental-OMM OD flow, on FlatBuffers-only typed contracts. Takes size-prefixed $OMM/$OCM/$OBD records on per-standard ports (omm_records/ocm_records/obd_records, one record per frame), computes each record's CIDv1, skips records already stored (read-only SELECT COUNT(*) WHERE cid=? via import_module('flatsql')/import_name('exec_envelope')), and ingests the rest as a wrapper FlatBuffer { cid; provider; source_name; batch_id; data; pulled_at } with store-local file_identifier SOMM/SOCM/SOBD into the FlatSQL arena (flatsql.ingest_record). Per-record provider/source_name come from an IngestRequest (INGQ) on 'provenance' keyed by PROVENANCE.NORMALIZED_SHA256 (hex SHA-256 of the record bytes), else from the node config (ModuleConfig via plugin.getConfig: provider, source_name, batch_id, retain_k). batch_id and pulled_at are fire-scoped from the optional TimerTick (TICK) trigger's FIRED_MS. Keeps the latest retain_k runs per table (default 4; flatsql.query_rows / mark_deleted_bulk / compact). Answers one IngestResult (INGR). $OEM is never stored.",
   "pluginFamily": "infrastructure",
   "capabilities": [],
   "externalInterfaces": [],
@@ -17,95 +17,112 @@
     {
       "methodId": "store",
       "displayName": "Store $OMM/$OCM/$OBD records into FlatSQL (in-wasm)",
-      "description": "Per-record: derive the per-SDS-type route from file_identifier, compute the CIDv1 content id, skip when already stored (read-only SELECT COUNT(*) dedup), else build a wrapper FlatBuffer (cid/provider/source_name/batch_id/data) and INGEST it into the FlatSQL arena (flatsql.ingest_record). Provenance from node CONFIG.",
+      "description": "Per record: CIDv1, skip when already stored, else ingest a wrapper FlatBuffer (cid/provider/source_name/batch_id/data/pulled_at) into the FlatSQL arena; then keep the latest retain_k runs per table. Provenance per record from INGQ frames, fallback node config. One IngestResult out.",
       "inputPorts": [
         {
-          "portId": "records",
+          "portId": "omm_records",
           "acceptedTypeSets": [
             {
-              "setId": "sds-fitted-results",
+              "setId": "sds-record-omm",
               "allowedTypes": [
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
-                },
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One size-prefixed $OMM FlatBuffer record per frame (the fitted OD result)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Fitted $OMM records to store in sds_omm. Frames across omm/ocm/obd_records are stored in arrival order."
+        },
+        {
+          "portId": "ocm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-record-ocm",
+              "allowedTypes": [
                 {
                   "schemaName": "OCM.fbs",
                   "fileIdentifier": "$OCM",
                   "rootTypeName": "OCM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
-                },
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One size-prefixed $OCM FlatBuffer record per frame (the fitted OD result)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Fitted $OCM records to store in sds_ocm. Frames across omm/ocm/obd_records are stored in arrival order."
+        },
+        {
+          "portId": "obd_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-record-obd",
+              "allowedTypes": [
                 {
                   "schemaName": "OBD.fbs",
                   "fileIdentifier": "$OBD",
                   "rootTypeName": "OBD",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "1..N fitted OD result records. ONLY $OMM/$OCM/$OBD — $OEM is NOT an accepted type (ephemeris is transient and never stored)."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 100000,
-          "required": true
-        },
-        {
-          "portId": "config",
-          "acceptedTypeSets": [
-            {
-              "setId": "store-provenance",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Optional node CONFIG provenance (aligned binary, no JSON): [u32le provider_len][provider][u32le source_name_len][source_name][u32le batch_id_len][batch_id]."
+              "description": "One size-prefixed $OBD FlatBuffer record per frame (the fitted OD result)."
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
-          "required": false
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Fitted $OBD records to store in sds_obd. Frames across omm/ocm/obd_records are stored in arrival order."
         },
         {
           "portId": "provenance",
           "acceptedTypeSets": [
             {
-              "setId": "cid-provenance",
+              "setId": "sdn-runtime-ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "CID-keyed provenance frames from analysis/od: [u32 cid_len][cid][u32 provider_len][provider][u32 source_name_len][source_name]."
+              "description": "IngestRequest (module-sdk runtime type INGQ), one per record: PROVENANCE.NORMALIZED_SHA256 = lowercase hex SHA-256 of the record's size-prefixed bytes; TAGS.PROVIDER_ID and TAGS.SOURCE_NAME are the record's attribution. SCHEMA names the record's standard."
             }
           ],
           "minStreams": 0,
           "maxStreams": 100000,
           "required": false,
-          "description": "Per-record provider/source_name attribution (cid-keyed); falls back to config."
+          "description": "Per-record provider/source_name attribution (keyed by record digest); empty or absent falls back to the node config."
         },
         {
           "portId": "trigger",
           "acceptedTypeSets": [
             {
-              "setId": "fire-timestamp",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Optional host trigger metadata: [u64le unix_ms] fire timestamp (a capability read, not orchestration) -> the pulled_at column."
+              "description": "TimerTick (module-sdk runtime type TICK): FIRED_MS is the fire's wall-clock time."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional fire wall-clock timestamp for the pulled_at column."
+          "description": "Optional fire tick: batch_id = 'F' + 16 hex digits of FIRED_MS and pulled_at = FIRED_MS for every store() of the fire."
         }
       ],
       "outputPorts": [
@@ -113,18 +130,22 @@
           "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "inserted-count",
+              "setId": "sdn-runtime-ingest-result",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "4-byte little-endian inserted-record count (aligned-binary)."
+              "description": "IngestResult (module-sdk runtime type INGR): PROVIDER_ID / SOURCE_NAME (node config), BATCH_ID (the fire's), INSERTED, RECONCILED_DUPLICATES (records whose cid was already stored), RECONCILED_OLD_BATCHES (records tombstoned by retention). SCHEMA is empty: one invocation spans $OMM/$OCM/$OBD."
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false
+          "required": true,
+          "description": "EXACTLY ONE IngestResult per successful invocation."
         }
       ],
       "maxBatch": 1,
@@ -146,6 +167,21 @@
       "schemaName": "OBD.fbs",
       "fileIdentifier": "$OBD",
       "rootTypeName": "OBD"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick"
+    },
+    {
+      "schemaName": "IngestResult.fbs",
+      "fileIdentifier": "INGR",
+      "rootTypeName": "IngestResult"
     }
   ]
 }

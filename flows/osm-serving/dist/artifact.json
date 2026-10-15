@@ -1,11 +1,11 @@
 {
   "programId": "com.digitalarsenal.flows.osm-serving",
   "name": "OSM Context Epoch Serving Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "artifact": {
     "file": "runtime.wasm",
-    "sha256": "4369af26d6fea3e5322c9c174917d670302899e06f4e533dbeaaabe3bec2df71",
-    "bytes": 83921
+    "sha256": "35837e14f3f4352dc73db24bf29cfe5750be861cd8b5d460977ba16fa0b8db53",
+    "bytes": 122463
   },
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
@@ -35,8 +35,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.osm-source",
       "pluginId": "com.digitalarsenal.data-source.osm-source",
-      "version": "0.1.0",
-      "sha256": "27e22ecb09e241a3189c69fb1d8cff495cf096f2ebf42315c0b9763e2022c8d7",
+      "version": "0.2.0",
+      "sha256": "d9fe115aaf5cba4cca13cb89286eda27c58b4efda44c050fb5821f2e7807872b",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

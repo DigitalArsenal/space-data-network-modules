@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.weathernext-cyclones-ingest",
   "name": "Global Ensemble Forecast Cyclone Track Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast: a module cron TIMER tick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the hostcap/http-request GET for the track CSV plus its parse job; hostcap/http-request fetches it; weathernext-parser:parse_cyclone_tracks groups the rows by (storm, member) into size-prefixed $TCT records with exact unit conversions and points in valid-time order (batch = sha256 of the CSV), emitting the ingest meta with archive naming and the raw CSV; hostcap/storage-ingest persists the batch and archives the payload through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast (typed contracts 1.0): the host cron TimerTick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the track CSV HttpRequest GET carrying its parse job in CONTEXT as a size-prefixed $TCT header record (model, ensemble size, wind averaging period, origin, dataset, source URL, licence); hostcap/http-request fetches it and echoes the CONTEXT; weathernext-parser:parse_cyclone_tracks emits one $TCT per (storm, member), the batch's IngestRequest (batch = sha256 of the CSV bytes, ARCHIVE weathernext / cyclone-tracks.csv) and the HttpResponse itself on raw; hostcap/storage-ingest persists the batch (IngestRequest on meta, the stream on tct_records, the HttpResponse on raw, whose BODY it archives) through the policy-mediated storage.ingest_with_source hostcall. IngestResults and Skipped FlowNotices land on the egress sink. After each store, weathernext-source:publish_request joins the IngestResult with the IngestRequest and (only when node CONFIG carries weathernext_publish_url, and not for a REFUSED batch) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its HttpResponse also lands on egress. Every edge carries one concrete FlatBuffer type; no JSON frames between nodes.",
   "nodes": [
     {
       "nodeId": "req",
@@ -64,17 +64,7 @@
       "toPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "http-parse",
@@ -84,7 +74,7 @@
       "toPortId": "response",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-tct-meta",
@@ -94,18 +84,17 @@
       "toPortId": "meta",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-tct-records",
       "fromNodeId": "parse",
       "fromPortId": "tct_records",
       "toNodeId": "ingest_tct",
-      "toPortId": "records",
+      "toPortId": "tct_records",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $TCT identity, so the record type is declared on the wire rather than signed away."
+      "opaque": false
     },
     {
       "edgeId": "parse-tct-raw",
@@ -115,7 +104,7 @@
       "toPortId": "raw",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "ingest-tct-egress",
@@ -125,7 +114,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "ingest-tct-publish",
@@ -135,7 +124,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "parse-tct-meta-publish",
@@ -145,7 +134,7 @@
       "toPortId": "meta",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "publish-tct-http",
@@ -155,7 +144,7 @@
       "toPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "publish-tct-egress",
@@ -165,7 +154,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     },
     {
       "edgeId": "req-status-egress",
@@ -175,7 +164,7 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
-      "opaque": true
+      "opaque": false
     }
   ],
   "triggers": [

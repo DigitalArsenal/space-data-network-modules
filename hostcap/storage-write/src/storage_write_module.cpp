@@ -1,224 +1,48 @@
 /*
- * hostcap/storage-write (graph tasks mod-cell-tower-ingest-flow /
- * upstream-modules-2).
+ * hostcap/storage-write — the host storage.write connector (typed contracts 1.0; graph tasks
+ * mod-cell-tower-ingest-flow / upstream-modules-2).
  *
- * Capability node wrapping the host `storage.write` hostcall — the
- * SCHEMA-TYPED single-record write lane. One method:
+ * Capability node wrapping the host `storage.write` hostcall — the SCHEMA-TYPED single-record write lane. One method:
  *
- *   write — inputs:
- *     "record" the FlatBuffer bytes of ONE SDS record.
- *     "meta"   OPTIONAL UTF-8 JSON {"source":"...","type":"IRM"}. `source` is
- *              the record's attribution string; absent, the host falls back to
- *              the module's own attribution. `type` is the SDS type code;
- *              absent, it is DERIVED from the record's own file identifier.
+ *   write_record — input:
+ *     "record" ONE SDS record (a FlatBuffer root buffer carrying its own file identifier). The port is typed, so it
+ *              names the standard it takes: $IRM (Ingest Resume Mark), the record every in-repo flow writes here.
  *   output:
- *     "result" the host's verbatim result object {"cid","source","type"}.
+ *     "result" ONE $PNM (Publish Notification Message, an existing SDS standard): CID = the content id the host
+ *              assigned, FILE_NAME = the standard the record was filed under (e.g. "IRM.fbs").
  *
- * WHY THIS NODE HAD TO EXIST.
+ * The hostcall is an SDS $PIV invocation of storage.write: the StorageWriteParams aligned record (SCHEMA) + raw "data"
+ * (the record verbatim), answered with the StorageWriteResult aligned record (CID). No JSON and no base64.
  *
- * `mod-cell-tower-ingest-flow` shipped a chunked bulk-ingest flow whose resume
- * mark had NOWHERE DURABLE TO GO, and the three candidate lanes were each ruled
- * out by measurement rather than by preference:
+ * WHY THIS NODE HAD TO EXIST. `mod-cell-tower-ingest-flow` shipped a chunked bulk-ingest flow whose resume mark had
+ * NOWHERE DURABLE TO GO: hostcap/flatsql-store is wasi-threads (the flow compiler refuses to link it into a
+ * single-thread flow) and admits only $OMM/$OCM/$OBD; hostcap/file has no Go host handler; storage.write was exactly
+ * right but schema-typed. Themis minted $IRM (spacedatastandards.org 1.196.0), so the lane was built — generically:
+ * nothing here knows what $IRM is.
  *
- *   * `hostcap/flatsql-store` is built wasi-threads, so the flow compiler
- *     refuses to link it into a single-thread flow at all
- *     (`mixed-guest-thread-models`), and its `records` port admits only
- *     $OMM/$OCM/$OBD. It is not a generic row writer.
- *   * `hostcap/file` is single-thread and would fit, but the Go server host has
- *     no filesystem capability handler, so it fails closed on the very box the
- *     cellular lane targets.
- *   * `storage.write` exists on the host and is exactly right — but it is
- *     SCHEMA-TYPED, and using it meant inventing an SDS record for a
- *     bookkeeping row, which is Themis's call and not a flow's to make.
+ * THE TYPE AND THE BYTES MUST AGREE, AND THAT IS CHECKED. `storage.write` files the bytes under whatever schema it is
+ * told, and a record in the wrong type's table is indistinguishable from one never written. The JSON lane took a
+ * declared type on an optional meta frame; on the typed lane the declared type is the frame's own type reference (its
+ * file identifier), and the intrinsic type is the record's file identifier (bytes 4..7). When both are present and
+ * DISAGREE, the write is REFUSED — neither is preferred, neither is coerced. A record with neither is refused too.
  *
- * Themis ruled: $IRM (Ingest Resume Mark) was minted and ratified in
- * spacedatastandards.org 1.196.0. The record now exists, so the lane can be
- * built, and it is built GENERICALLY — nothing here knows what $IRM is. Any
- * flow with a schema-typed row to persist gets a durable write lane out of this
- * node and the existing `storage_write` grant, with ZERO Go host changes.
- *
- * THE TYPE AND THE BYTES MUST AGREE, AND THAT IS CHECKED.
- *
- * `storage.write` files the bytes under whatever `type` it is told. A meta that
- * says "OMM" over a buffer whose file identifier is "$IRM" writes a mark into
- * the orbit table, where it is indistinguishable from a corrupt element set and
- * where nothing will ever look for it again. So when the record carries a file
- * identifier (bytes 4..7 of a FlatBuffer root buffer) and the meta also declares
- * a type, DISAGREEMENT IS REFUSED. Neither value is preferred over the other and
- * neither is coerced: the write does not happen.
- *
- * POLICY IS THE HOST'S. This node makes no decision about what may be written;
- * `storage.write` is gated by the dedicated `storage_write` capability grant,
- * which `storage_query` explicitly does NOT imply (kubo/sdn/sdnservices/
- * storage_cap.go). This node moves bytes and refuses contradictions.
+ * POLICY IS THE HOST'S. `storage.write` is gated by the dedicated `storage_write` capability grant, which
+ * `storage_query` explicitly does NOT imply. This node moves bytes and refuses contradictions.
  */
 
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
 
 namespace {
 
-void write_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
-
-uint32_t read_u32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
-    return out;
-}
-
-std::string json_escape(const std::string& in) {
-    std::string out;
-    out.reserve(in.size() + 8);
-    for (const char c : in) {
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    char buf[8];
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-                    out += buf;
-                } else {
-                    out.push_back(c);
-                }
-        }
-    }
-    return out;
-}
-
-std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json) {
-    const size_t total = 4 + payload_json.size() + 4;
-    std::vector<uint8_t> req(total, 0);
-    write_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    write_u32le(req.data() + 4 + payload_json.size(), 0);  // zero binary segments
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) sdm_host_read_response(buf.data(), len);
-    return buf;
-}
-
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    const uint32_t meta_len = read_u32le(env.data());
-    if (env.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
-
-std::string json_string_field(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '"') return std::string();
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            value.push_back(json[i + 1]);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    return value;
-}
-
-std::string json_object_slice(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string();
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string();
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    if (i >= json.size() || json[i] != '{') return std::string();
-    const size_t start = i;
-    int depth = 0;
-    bool in_string = false;
-    for (; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '{') depth++;
-        else if (c == '}') {
-            depth--;
-            if (depth == 0) return json.substr(start, i - start + 1);
-        }
-    }
-    return std::string();
-}
+namespace A = sdn::runtime::Aligned;
 
 const plugin_input_frame_t* frame_for(const char* port) {
     const int32_t idx = plugin_find_input_index(port, 0);
@@ -226,14 +50,11 @@ const plugin_input_frame_t* frame_for(const char* port) {
     return plugin_get_input_frame(static_cast<uint32_t>(idx));
 }
 
-// SURPLUS-FRAME REFUSAL. The compiled flow runtime drains a node's queue
-// PORT-BLIND up to a budget of 64; maxStreams/maxBatch/drainPolicy are purely
-// declarative there. A guest that reads ordinal 0 and returns destroys every
-// other frame it was handed, with nothing re-delivering and nothing logging the
-// loss (live P1 `cellular-multiprovider-returns-only-first-provider`). `write`
-// persists ONE record and answers with ONE cid, so a surplus cannot be merged
-// into a correct answer — a second record silently dropped is a mark that was
-// never durable, which is precisely the failure this whole lane exists to fix.
+// SURPLUS-FRAME REFUSAL. The compiled flow runtime drains a node's queue PORT-BLIND up to a budget of 64;
+// maxStreams/maxBatch/drainPolicy are purely declarative there. A guest that reads ordinal 0 and returns destroys every
+// other frame it was handed (live P1 `cellular-multiprovider-returns-only-first-provider`). `write_record` persists ONE
+// record and answers with ONE cid, so a surplus cannot be merged into a correct answer — a second record silently
+// dropped is a mark that was never durable, which is precisely the failure this lane exists to fix.
 bool find_batched_input_port(char* message, size_t message_len) {
     const uint32_t count = plugin_get_input_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -260,26 +81,46 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
-// The SDS type a FlatBuffer declares about ITSELF: bytes 4..7 of a root buffer
-// are the file identifier, "$XXX". Returns "" when the buffer is too short or
-// the identifier is not in that shape — absent, never guessed.
-std::string type_from_file_identifier(const uint8_t* data, uint32_t length) {
-    if (!data || length < 8) return std::string();
-    if (data[4] != '$') return std::string();
-    for (uint32_t i = 5; i < 8; i++) {
-        const char c = static_cast<char>(data[i]);
-        const bool printable = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-        if (!printable) return std::string();
+bool is_code(std::string_view code) {
+    if (code.size() != 3) return false;
+    for (const char c : code) {
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) return false;
     }
-    return std::string(reinterpret_cast<const char*>(data + 5), 3);
+    return true;
 }
 
-std::string upper_ascii(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+// The SDS type a FlatBuffer declares about ITSELF: bytes 4..7 of a root buffer are "$XXX". "" when absent — never
+// guessed.
+std::string type_from_file_identifier(const uint8_t* data, uint32_t length) {
+    if (!data || length < 8 || data[4] != '$') return std::string();
+    const std::string_view code(reinterpret_cast<const char*>(data + 5), 3);
+    return is_code(code) ? std::string(code) : std::string();
+}
+
+// The type the frame was handed in as: its type reference's file identifier ("$IRM"), or its schema name ("IRM.fbs").
+std::string type_from_frame(const plugin_input_frame_t& frame) {
+    if (frame.file_identifier && frame.file_identifier[0] == '$' && is_code(frame.file_identifier + 1)) {
+        return std::string(frame.file_identifier + 1);
     }
-    return out;
+    if (frame.schema_name) {
+        const std::string_view name(frame.schema_name);
+        if (name.size() == 7 && name.substr(3) == ".fbs" && is_code(name.substr(0, 3))) return std::string(name.substr(0, 3));
+    }
+    return std::string();
+}
+
+// A $PNM (spacedatastandards.org PNM/main.fbs) carrying CID (field 2) and FILE_NAME (field 3). Built directly: the
+// table has only string fields, and the SDK stages no generated header for SDS standards beyond PIV/TAB.
+std::vector<uint8_t> publish_notice(const std::string& cid, const std::string& file_name) {
+    flatbuffers::FlatBufferBuilder b(256);
+    const auto cid_offset = b.CreateString(cid);
+    const auto name_offset = b.CreateString(file_name);
+    const auto start = b.StartTable();
+    b.AddOffset(8, cid_offset);    // CID
+    b.AddOffset(10, name_offset);  // FILE_NAME
+    const flatbuffers::Offset<void> root(b.EndTable(start));
+    b.Finish(root, "$PNM");
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 }  // namespace
@@ -299,23 +140,15 @@ int write_record(void) {
         return 400;
     }
 
-    std::string meta;
-    const plugin_input_frame_t* meta_frame = frame_for("meta");
-    if (meta_frame && meta_frame->payload && meta_frame->payload_length > 0) {
-        meta.assign(reinterpret_cast<const char*>(meta_frame->payload), meta_frame->payload_length);
-    }
-
-    const std::string declared = upper_ascii(json_string_field(meta, "type"));
+    const std::string declared = type_from_frame(*record);
     const std::string intrinsic = type_from_file_identifier(record->payload, record->payload_length);
 
-    // THE CONTRADICTION IS REFUSED, NOT RESOLVED. Preferring either value would
-    // file the bytes under a type the other half of the system will not look
-    // for, and a record in the wrong table is indistinguishable from a record
-    // that was never written.
+    // THE CONTRADICTION IS REFUSED, NOT RESOLVED. Preferring either value would file the bytes under a type the other
+    // half of the system will not look for.
     if (!declared.empty() && !intrinsic.empty() && declared != intrinsic) {
-        char message[256];
+        char message[320];
         std::snprintf(message, sizeof(message),
-                      "the meta declares type \"%s\" but the record's own file identifier is "
+                      "the record frame is typed \"$%s\" but the record's own file identifier is "
                       "\"$%s\". The write is refused rather than filed under either: a record "
                       "written to the wrong type's table is indistinguishable from one that was "
                       "never written.",
@@ -323,46 +156,36 @@ int write_record(void) {
         plugin_set_error("record-type-disagreement", message);
         return 400;
     }
-
     const std::string type = declared.empty() ? intrinsic : declared;
     if (type.empty()) {
         plugin_set_error("missing-record-type",
-                         "write needs an SDS type: declare it on the meta frame, or hand a record "
-                         "that carries its own file identifier.");
+                         "write needs an SDS type: a record frame typed with its standard, or a record that carries "
+                         "its own file identifier.");
         return 400;
     }
 
-    const std::string source = json_string_field(meta, "source");
-    // THE HOSTCALL KEY IS `schema`, NOT `type`.
-    //
-    // `storage.write {schema, data:base64}` is the contract every host
-    // implements — the Go node (sdn-server internal/modulert/caps/storage.go,
-    // which reads str("schema")) and the SDK hosts, which mirror it by name.
-    // This module sent `type`, so the host saw an EMPTY schema and refused with
-    // "missing schema" on every call: the durable $IRM resume mark this node
-    // exists to persist was never written even once, on either runtime, and the
-    // cellular ingest lane refetched chunk 0 forever (graph:
-    // sdn-cellular-ingest-lands-no-batch). `type` remains the META frame's key,
-    // which is where the module reads the declared type FROM; it was never the
-    // hostcall's.
-    std::string payload = std::string("{\"schema\":\"") + json_escape(type) + "\"";
-    if (!source.empty()) payload += ",\"source\":\"" + json_escape(source) + "\"";
-    payload += ",\"data\":\"" + base64_encode(record->payload, record->payload_length) + "\"}";
-
-    const std::vector<uint8_t> env = hostcall("storage.write", payload);
-    const std::string response = envelope_meta_json(env);
-    if (response.find("\"ok\":true") == std::string::npos) {
-        std::string message = json_string_field(response, "message");
+    const std::string schema = type + ".fbs";
+    A::StorageWriteParams params{};
+    sdm_piv::put(params.SCHEMA, schema);  // "XXX.fbs" always fits the 64-byte field
+    params.set_has_SCHEMA(true);
+    const auto response = sdm_piv::call("storage.write", "StorageWriteParams", params,
+                                        {sdm_piv::raw("data", record->payload, record->payload_length)});
+    if (!response.ok()) {
+        std::string message = response.error_message();
         if (message.empty()) message = "storage.write hostcall failed.";
+        message = response.error_code() + ": " + message;
         plugin_set_error("write-failed", message.c_str());
         return 502;
     }
-    std::string result = json_object_slice(response, "result");
-    if (result.empty()) result = "{}";
+    const auto* written = response.result<A::StorageWriteResult>("StorageWriteResult");
+    if (!written || written->CID.length == 0) {
+        plugin_set_error("write-failed", "storage.write answered without a CID.");
+        return 502;
+    }
 
-    const int32_t pushed = plugin_push_output_ex(
-        "result", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-        reinterpret_cast<const uint8_t*>(result.data()), static_cast<uint32_t>(result.size()));
+    const std::vector<uint8_t> notice = publish_notice(written->CID.str(), schema);
+    const int32_t pushed = plugin_push_output_ex("result", "PNM.fbs", "$PNM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                                 "PNM", 0, 0, notice.data(), static_cast<uint32_t>(notice.size()));
     return pushed < 0 ? 500 : 0;
 }
 

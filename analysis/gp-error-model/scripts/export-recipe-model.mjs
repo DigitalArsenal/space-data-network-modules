@@ -8,9 +8,11 @@
 //     --selection results/e14/selection.json --commit <experiments commit> --out data/e14-s3-kc.json
 //
 // The inputs are files of orbit-accuracy-experiments at the commit named. Re-run when the experiments freeze a new model.
+// Beside the readable JSON it writes the model as the module takes it: one $ERM MODEL record (<out without .json>.erm).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { encode } from './erm-codec.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, i, all) => (value.startsWith('--') ? [...pairs, [value.slice(2), all[i + 1]]] : pairs), []));
 for (const key of ['model', 'calibration', 'realism', 'selection', 'commit', 'out']) {
@@ -73,4 +75,5 @@ const out = {
 };
 fs.mkdirSync(path.dirname(args.out), { recursive: true });
 fs.writeFileSync(args.out, `${JSON.stringify(out, null, 1)}\n`);
+fs.writeFileSync(args.out.replace(/\.json$/, '') + '.erm', encode('model', out));
 console.log(`wrote ${args.out}: ${out.strata.length} strata, ${cells.filter((c) => c.calibration === 'CALIBRATED').length} calibrated cells`);

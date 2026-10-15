@@ -27,29 +27,12 @@
 // real body, not a shape this test invented.
 
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const sdkTestingEntry = fileURLToPath(
-  new URL(import.meta.resolve("space-data-module-sdk/testing")),
-);
-const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
-const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
-const flatbuffers = sdkRequire("flatbuffers");
-const { HttpRequest } = sdkRequire(
-  path.join(sdkRoot, "src/generated/http/sdn/http/http-request.js"),
-);
-
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+import { deconflict, drainParse, failedFetch, harnessFor, reportsOf, responseFor, routeFor } from "./helpers.mjs";
 
 // The captured slice: gzipped only to keep 1.48 MB of verbatim upstream JSON
 // out of the tree. The bytes inside are byte-identical to the live asset's
@@ -67,115 +50,19 @@ const SLICE_DOC = JSON.parse(SLICE.toString("utf8"));
 // from an unlifted one.
 const SLICE_FEATURES = SLICE_DOC.features.length;
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
-}
-
-function htqRequest(body) {
-  const b = new flatbuffers.Builder(1024);
-  const methodOff = b.createString("POST");
-  const pathOff = b.createString("/api/v1/cellular/aggregate");
-  const queryOff = b.createString("");
-  const bodyOff = HttpRequest.createBodyVector(b, encoder.encode(JSON.stringify(body)));
-  HttpRequest.startHttpRequest(b);
-  HttpRequest.addMethod(b, methodOff);
-  HttpRequest.addPath(b, pathOff);
-  HttpRequest.addQuery(b, queryOff);
-  HttpRequest.addBody(b, bodyOff);
-  HttpRequest.finishHttpRequestBuffer(b, HttpRequest.endHttpRequest(b));
-  return { portId: "request", typeRef: { wireFormat: "flatbuffer" }, payload: b.asUint8Array() };
-}
-
-async function harnessFor(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
-    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-const byPort = (response) => {
-  const map = new Map();
-  for (const frame of response.outputs) map.set(frame.portId, frame);
-  return map;
-};
-const framesFor = (response, portId) => response.outputs.filter((f) => f.portId === portId);
-const jsonFrame = (map, portId) => {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
-};
-
-function splitStream(payload) {
-  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  let off = 0;
-  let count = 0;
-  while (off < payload.byteLength) {
-    assert.ok(off + 4 <= payload.byteLength, "truncated size prefix");
-    const len = view.getUint32(off, true);
-    off += 4;
-    assert.ok(len > 0 && off + len <= payload.byteLength, "invalid record length");
-    off += len;
-    count += 1;
-  }
-  return count;
-}
-
 /** Drive route -> parse -> deconflict the way the scheduler does. */
 async function runBakom(t, requestBody) {
   const harness = await harnessFor(t);
-  const routedRaw = await harness.invoke({
-    methodId: "route",
-    inputs: [htqRequest({ PROVIDERS: ["bakom-mobile-sites"], METHOD: "CENTROID", ...requestBody })],
-  });
-  const routed = byPort(routedRaw);
-  const job = jsonFrame(routed, "job");
-  const descriptors = framesFor(routedRaw, "requests").map((f) =>
-    JSON.parse(decoder.decode(f.payload)),
-  );
-
-  const responses = [jsonInput("responses", {
-    status: 200,
-    headers: {},
-    bodyB64: Buffer.from(SLICE).toString("base64"),
-  })];
-  while (responses.length < descriptors.length) {
-    responses.push(jsonInput("responses", { status: 0, headers: {}, bodyB64: "" }));
-  }
-
-  // parse accumulates across invocations and emits on the quiet tick.
-  let parsed = byPort(
-    await harness.invoke({ methodId: "parse", inputs: [jsonInput("job", job), ...responses] }),
-  );
-  for (let tick = 0; tick < 8 && !parsed.get("reports"); tick += 1) {
-    parsed = byPort(await harness.invoke({ methodId: "parse", inputs: [] }));
-  }
-  const reports = jsonFrame(parsed, "reports");
-  // Deconflict is fed the job PARSE forwards, not the one route built — parse
-  // annotates it with `row_capped`, and feeding route's copy here would test a
+  const { descriptors } = await routeFor(harness, { PROVIDERS: ["bakom-mobile-sites"], METHOD: "CENTROID", ...requestBody });
+  const responses = descriptors.map((d, i) => (i === 0 ? responseFor(d, { body: SLICE }) : failedFetch(d)));
+  // parse accumulates across invocations and emits once the fan-in is in.
+  const parsed = await drainParse(harness, responses);
+  const reports = reportsOf(parsed.get("reports").payload);
+  // Deconflict is fed the contract PARSE passes on, not the one route built —
+  // parse adds x-sdn-row-capped, and feeding route's copy here would test a
   // wiring the flow does not have.
-  const parsedJob = jsonFrame(parsed, "job");
-
-  const merged = byPort(
-    await harness.invoke({
-      methodId: "deconflict",
-      inputs: [jsonInput("job", parsedJob), jsonInput("reports", reports)],
-    }),
-  );
-  const recordsFrame = merged.get("records");
-  assert.ok(recordsFrame, "missing records frame");
-  return {
-    descriptors,
-    reports,
-    summary: jsonFrame(merged, "decision"),
-    recordCount: splitStream(recordsFrame.payload),
-  };
+  const merged = await deconflict(harness, parsed);
+  return { descriptors, reports, summary: merged.summary, recordCount: merged.records.length };
 }
 
 test("FULL_POPULATION decodes EVERY feature in the captured slice — exact count", async (t) => {

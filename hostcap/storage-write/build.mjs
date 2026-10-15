@@ -39,8 +39,8 @@ const compilation = await compileModuleFromSource({
   // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
   // form of this note lives.
   threadModel: "single-thread",
-  // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // Imports the sync space_data_module_host hostcall bridge (the typed $PIV
+  // hostcall); symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
 

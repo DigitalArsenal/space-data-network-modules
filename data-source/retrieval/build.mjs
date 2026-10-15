@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -13,31 +14,15 @@ const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", 
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
-// flatc emits every SDS header with the same include guard
-// (FLATBUFFERS_GENERATED_MAIN_H_) and schema includes as a self-named
-// `#include "main_generated.h"`. Inlining more than one generated header into
-// a single translation unit therefore requires stripping the guard and the
-// schema-include line (the flatbuffers runtime include and version
-// static_assert are idempotent and stay).
-function inlineGeneratedHeader(source) {
-  return source
-    .replace(/#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/, "")
-    .replace(/#include "main_generated\.h"\s*\n/g, "")
-    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
-}
-
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const [etmHeader, caqHeader, implementationSource] = await Promise.all([
-  fs.readFile(path.join(standardsRoot, "lib", "cpp", "ETM", "main_generated.h"), "utf8"),
-  fs.readFile(path.join(standardsRoot, "lib", "cpp", "CAQ", "main_generated.h"), "utf8"),
-  fs.readFile(sourcePath, "utf8"),
-]);
-// CAQ includes ETM (CAQResult rows), so ETM types must precede the CAQ header.
-const sourceCode = [
-  inlineGeneratedHeader(etmHeader),
-  inlineGeneratedHeader(caqHeader),
-  implementationSource,
-].join("\n\n");
+// The "request" / "query" / "decision" / "page" ports carry the SDS standard QRP ($QRP). The SDK compiler stages only its
+// runtime headers, so the standard's own generated C++ header (scripts/lib/sds-cpp-headers.mjs, with the object API) is
+// inlined in place of `#include "QRP_generated.h"`: its include guard is renamed (the SDK's sds/PIV header is also
+// "main_generated.h") and its flatc version static_assert relaxed, as the SDK does for its runtime headers.
+const qrpHeader = (await generateSdsHeader("QRP", import.meta.url))
+  .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", "FLATBUFFERS_GENERATED_SDS_QRP_MAIN_H_")
+  .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "");
+const sourceCode = (await fs.readFile(sourcePath, "utf8")).replace(/^#include "QRP_generated\.h".*$/m, () => qrpHeader);
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -89,25 +74,6 @@ async function persistGuestLink(dirName, guestLink) {
   );
 }
 await persistGuestLink("guest-link", compilation.guestLink);
-
-// Engine-linked variant (loop C.7): the same source compiled
-// -DSDN_FLATSQL_LINKED=1 — query submission goes through the flow runtime's
-// direct engine-linkage helpers (resolved at flow link time) instead of the
-// storage.flatsql_* hostcall bridge. Only its guest-link object ships; the
-// standalone module.wasm stays the bridge build (loadable everywhere).
-await fs.mkdir(path.join(distRoot, "linked-build"), { recursive: true });
-const linkedCompilation = await compileModuleFromSource({
-  manifest,
-  sourceCode,
-  language: "c++",
-  outputPath: path.join(distRoot, "linked-build", "module.wasm"),
-  // Same declared lane as the primary artifact above — see scripts/lib/thread-model.mjs.
-  threadModel: "single-thread",
-  allowUndefinedImports: true,
-  defines: ["SDN_FLATSQL_LINKED=1"],
-});
-await persistGuestLink("guest-link-linked", linkedCompilation.guestLink);
-await fs.rm(path.join(distRoot, "linked-build"), { recursive: true, force: true });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 

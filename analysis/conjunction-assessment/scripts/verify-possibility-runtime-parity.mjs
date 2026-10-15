@@ -14,19 +14,9 @@ import { runThreadedBrowserLane } from './cqr-browser-parity-lane.mjs';
 import { wasmedgeParityLane } from './cqr-wasmedge-parity-lane.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const typeRef = { wireFormat: 'flatbuffer', mediaType: 'application/vnd.sdn.ca-possibility-request' };
-function frame({ radius, window = 600, mode, a, b, alpha = [] }) {
-  const doubles = mode === 0 ? [...a.flat(), ...b.flat()] : [...a.center, ...a.shape, ...b.center, ...b.shape];
-  const bytes = new ArrayBuffer(4 + 16 + 16 + 8 * alpha.length + 8 * doubles.length);
-  const v = new DataView(bytes);
-  new Uint8Array(bytes, 0, 4).set([0x43, 0x50, 0x51, 0x31]);
-  let at = 4;
-  const f64 = (x) => { v.setFloat64(at, x, true); at += 8; };
-  const u32 = (x) => { v.setUint32(at, x, true); at += 4; };
-  f64(radius); f64(window); u32(mode); u32(mode === 0 ? a.length : 1); u32(mode === 0 ? b.length : 1); u32(alpha.length);
-  alpha.forEach(f64); doubles.forEach(f64);
-  return new Uint8Array(bytes);
-}
+import { possibilityRequest as frame, possibilityResult } from './lib/possibility.mjs';
+
+const typeRef = { schemaName: 'SCR.fbs', fileIdentifier: '$SCR', rootTypeName: 'SCR', wireFormat: 'flatbuffer' };
 const iso = (s) => [s * s, 0, 0, 0, 0, 0, 0, s * s, 0, 0, 0, 0, 0, 0, s * s, 0, 0, 0, 0, 0, 0, 1e-12, 0, 0, 0, 0, 0, 0, 1e-12, 0, 0, 0, 0, 0, 0, 1e-12];
 const requests = {
   'support-four-pairs': frame({ radius: 20, mode: 0, alpha: [0.5, 0.35],
@@ -50,8 +40,8 @@ for (const run of observed) {
   if (run.exitClass !== 'ok') continue;
   const response = decodePluginInvokeResponse(run.stdout);
   if (run.caseId === 'invalid-radius') { if (response.statusCode === 0) report.failures.push({ kind: 'acceptance', message: `${run.lane}: invalid request accepted` }); continue; }
-  const out = response.outputs[0].payload, v = new DataView(out.buffer, out.byteOffset, out.byteLength);
-  values.push({ lane: run.lane, workers: run.threadCount, caseId: run.caseId, possibility: v.getFloat64(4, true), necessity: v.getFloat64(12, true), sha256: createHash('sha256').update(run.stdout).digest('hex') });
+  const result = possibilityResult(response.outputs[0].payload);
+  values.push({ lane: run.lane, workers: run.threadCount, caseId: run.caseId, possibility: result.possibility, necessity: result.necessity, sha256: createHash('sha256').update(run.stdout).digest('hex') });
 }
 for (const id of ['support-four-pairs', 'kernel-isotropic-outside', 'kernel-isotropic-inside']) {
   const rows = values.filter((r) => r.caseId === id);

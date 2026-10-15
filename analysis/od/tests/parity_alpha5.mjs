@@ -6,15 +6,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
+import { FIL_TYPE, filFrame } from './fit_harness.mjs';
 
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const fixture = fs.readFileSync(new URL('./fixtures/request.fit.meme', import.meta.url));
+// The text ephemeris goes in as an SDS $FIL; the options are node CONFIG (plugin.getConfig), carried per case as
+// `config` - each lane's host must answer plugin.getConfig with it.
 const fit = (noradCatId) => ({
   methodId: 'fit',
-  inputs: [
-    { portId: 'meme', payloadHex: fixture.toString('hex') },
-    { portId: 'options', payloadUtf8: JSON.stringify({ dataSource: 'SpaceX-E', noradCatId, objectId: '2026-034A', emitTle: true }) },
-  ],
+  inputs: [{ portId: 'meme', typeRef: FIL_TYPE, payloadHex: Buffer.from(filFrame(fixture).payload).toString('hex') }],
+  config: { dataSource: 'SpaceX-E', noradCatId, objectId: '2026-034A', emitTle: true },
 });
 const cases = [99999, 100000, 123456, 339999, 340000].map((norad) => ({ id: `fit-tle-${norad}`, request: fit(norad), expect: 'ok' }));
 const plan = await normalizeParityFixture({ name: 'analysis/od fit emitTle, Alpha-5 catalog numbers', cases });

@@ -1,19 +1,18 @@
 {
-  "spacedatastandards": "1.245.0",
+  "spacedatastandards": "1.249.0",
+  "standardsRoot": "/private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/work/sds-root/node_modules/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",
     "MET",
-    "OMM"
-  ],
-  "commonHeaders": [
-    "alpha5.hpp",
-    "civil_time.hpp",
-    "flat_json_records.hpp"
-  ],
-  "sources": [
-    "src/spacemapper_aoe_source.cpp"
+    "CVR",
+    "PVN",
+    "OMM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "5cd5a2d582763679d28820a62e0fb62e945e01aafec36b102188c72e4d8022b4"
+  "wasmSha256": "6aa6b40a2e7baa55275b9624bc91217718f2d52d20a082c1982c78c2c437089d"
 }

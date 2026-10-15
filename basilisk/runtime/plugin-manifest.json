@@ -1,13 +1,19 @@
 {
   "pluginId": "com.digitalarsenal.basilisk.runtime",
   "name": "Basilisk Runtime Module",
-  "version": "0.1.0",
-  "description": "Seed SDN module for Basilisk runtime scenario execution, message dictionaries, and deterministic replay.",
+  "version": "0.3.0",
+  "description": "Seed SDN module for Basilisk runtime: echoes an SDS $XTC telemetry/command dictionary on typed FlatBuffer ports, and runs a simplified deterministic pointing and power scenario: one SDS $PPS scenario in, one $PPS out with the resolved scenario, status and column-major telemetry.",
   "pluginFamily": "basilisk",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "echo_xtc_dictionary",
@@ -22,7 +28,8 @@
                 {
                   "schemaName": "XTC.fbs",
                   "fileIdentifier": "$XTC",
-                  "rootTypeName": "XTC"
+                  "rootTypeName": "XTC",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -42,7 +49,8 @@
                 {
                   "schemaName": "XTC.fbs",
                   "fileIdentifier": "$XTC",
-                  "rootTypeName": "XTC"
+                  "rootTypeName": "XTC",
+                  "wireFormat": "flatbuffer"
                 }
               ]
             }
@@ -63,8 +71,15 @@
           "portId": "scenario",
           "acceptedTypeSets": [
             {
-              "setId": "basilisk-scenario-request",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "pps-scenario",
+              "allowedTypes": [
+                {
+                  "schemaName": "PPS.fbs",
+                  "fileIdentifier": "$PPS",
+                  "rootTypeName": "PPS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
             }
           ],
           "minStreams": 1,
@@ -77,13 +92,20 @@
           "portId": "telemetry",
           "acceptedTypeSets": [
             {
-              "setId": "basilisk-telemetry",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "pps-telemetry",
+              "allowedTypes": [
+                {
+                  "schemaName": "PPS.fbs",
+                  "fileIdentifier": "$PPS",
+                  "rootTypeName": "PPS",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
             }
           ],
-          "minStreams": 0,
+          "minStreams": 1,
           "maxStreams": 1,
-          "required": false
+          "required": true
         }
       ],
       "maxBatch": 1,

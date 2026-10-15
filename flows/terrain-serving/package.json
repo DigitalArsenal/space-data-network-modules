@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-flow-terrain-serving",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,10 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "^1.196.0"
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "^1.249.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

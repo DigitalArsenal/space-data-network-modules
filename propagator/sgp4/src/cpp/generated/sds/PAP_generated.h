@@ -176,6 +176,8 @@ struct PAPElementT : public ::flatbuffers::NativeTable {
   std::string ELEMENT_PATTERN_ID{};
   uint32_t FAILURE_FLAGS = 0;
   bool FAILED = false;
+  double PHASE_ERROR_SIGMA_DEG = 0.0;
+  double POSITION_ERROR_SIGMA_M = 0.0;
 };
 
 /// One array element and its applied complex weight.
@@ -194,7 +196,9 @@ struct PAPElement FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PHASE_DEG = 18,
     VT_ELEMENT_PATTERN_ID = 20,
     VT_FAILURE_FLAGS = 22,
-    VT_FAILED = 24
+    VT_FAILED = 24,
+    VT_PHASE_ERROR_SIGMA_DEG = 26,
+    VT_POSITION_ERROR_SIGMA_M = 28
   };
   const ::flatbuffers::String *ELEMENT_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ELEMENT_ID);
@@ -229,6 +233,17 @@ struct PAPElement FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool FAILED() const {
     return GetField<uint8_t>(VT_FAILED, 0) != 0;
   }
+  /// 1-sigma of the element's zero-mean Gaussian phase error, degrees.
+  /// Errors are independent between elements. 0 = ideal (no phase error).
+  double PHASE_ERROR_SIGMA_DEG() const {
+    return GetField<double>(VT_PHASE_ERROR_SIGMA_DEG, 0.0);
+  }
+  /// 1-sigma of the element's zero-mean Gaussian position error per axis
+  /// (isotropic), metres. Its line-of-sight component adds a phase error of
+  /// 2*pi*POSITION_ERROR_SIGMA_M/lambda radians (1-sigma). 0 = ideal.
+  double POSITION_ERROR_SIGMA_M() const {
+    return GetField<double>(VT_POSITION_ERROR_SIGMA_M, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -245,6 +260,8 @@ struct PAPElement FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(ELEMENT_PATTERN_ID()) &&
            VerifyField<uint32_t>(verifier, VT_FAILURE_FLAGS, 4) &&
            VerifyField<uint8_t>(verifier, VT_FAILED, 1) &&
+           VerifyField<double>(verifier, VT_PHASE_ERROR_SIGMA_DEG, 8) &&
+           VerifyField<double>(verifier, VT_POSITION_ERROR_SIGMA_M, 8) &&
            verifier.EndTable();
   }
   PAPElementT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -289,6 +306,12 @@ struct PAPElementBuilder {
   void add_FAILED(bool FAILED) {
     fbb_.AddElement<uint8_t>(PAPElement::VT_FAILED, static_cast<uint8_t>(FAILED), 0);
   }
+  void add_PHASE_ERROR_SIGMA_DEG(double PHASE_ERROR_SIGMA_DEG) {
+    fbb_.AddElement<double>(PAPElement::VT_PHASE_ERROR_SIGMA_DEG, PHASE_ERROR_SIGMA_DEG, 0.0);
+  }
+  void add_POSITION_ERROR_SIGMA_M(double POSITION_ERROR_SIGMA_M) {
+    fbb_.AddElement<double>(PAPElement::VT_POSITION_ERROR_SIGMA_M, POSITION_ERROR_SIGMA_M, 0.0);
+  }
   explicit PAPElementBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -313,8 +336,12 @@ inline ::flatbuffers::Offset<PAPElement> CreatePAPElement(
     double PHASE_DEG = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> ELEMENT_PATTERN_ID = 0,
     uint32_t FAILURE_FLAGS = 0,
-    bool FAILED = false) {
+    bool FAILED = false,
+    double PHASE_ERROR_SIGMA_DEG = 0.0,
+    double POSITION_ERROR_SIGMA_M = 0.0) {
   PAPElementBuilder builder_(_fbb);
+  builder_.add_POSITION_ERROR_SIGMA_M(POSITION_ERROR_SIGMA_M);
+  builder_.add_PHASE_ERROR_SIGMA_DEG(PHASE_ERROR_SIGMA_DEG);
   builder_.add_PHASE_DEG(PHASE_DEG);
   builder_.add_AMPLITUDE(AMPLITUDE);
   builder_.add_WEIGHT_IMAGINARY(WEIGHT_IMAGINARY);
@@ -346,7 +373,9 @@ inline ::flatbuffers::Offset<PAPElement> CreatePAPElementDirect(
     double PHASE_DEG = 0.0,
     const char *ELEMENT_PATTERN_ID = nullptr,
     uint32_t FAILURE_FLAGS = 0,
-    bool FAILED = false) {
+    bool FAILED = false,
+    double PHASE_ERROR_SIGMA_DEG = 0.0,
+    double POSITION_ERROR_SIGMA_M = 0.0) {
   auto ELEMENT_ID__ = ELEMENT_ID ? _fbb.CreateString(ELEMENT_ID) : 0;
   auto ELEMENT_PATTERN_ID__ = ELEMENT_PATTERN_ID ? _fbb.CreateString(ELEMENT_PATTERN_ID) : 0;
   return CreatePAPElement(
@@ -361,7 +390,9 @@ inline ::flatbuffers::Offset<PAPElement> CreatePAPElementDirect(
       PHASE_DEG,
       ELEMENT_PATTERN_ID__,
       FAILURE_FLAGS,
-      FAILED);
+      FAILED,
+      PHASE_ERROR_SIGMA_DEG,
+      POSITION_ERROR_SIGMA_M);
 }
 
 ::flatbuffers::Offset<PAPElement> CreatePAPElement(::flatbuffers::FlatBufferBuilder &_fbb, const PAPElementT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -678,6 +709,8 @@ struct PAPT : public ::flatbuffers::NativeTable {
   std::string PRODUCER_ID{};
   std::vector<uint8_t> SIGNATURE{};
   std::vector<uint8_t> CANONICAL_JSON_SIGNATURE{};
+  double EXPECTED_PEAK_GAIN_DBI = 0.0;
+  double COHERENT_GAIN_LOSS_DB = 0.0;
   PAPT() = default;
   PAPT(const PAPT &o);
   PAPT(PAPT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -719,7 +752,9 @@ struct PAP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_COMPUTED_AT = 56,
     VT_PRODUCER_ID = 58,
     VT_SIGNATURE = 60,
-    VT_CANONICAL_JSON_SIGNATURE = 62
+    VT_CANONICAL_JSON_SIGNATURE = 62,
+    VT_EXPECTED_PEAK_GAIN_DBI = 64,
+    VT_COHERENT_GAIN_LOSS_DB = 66
   };
   const ::flatbuffers::String *PAP_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PAP_ID);
@@ -817,6 +852,23 @@ struct PAP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *CANONICAL_JSON_SIGNATURE() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_CANONICAL_JSON_SIGNATURE);
   }
+  /// Expected gain toward the steering direction with the element errors of
+  /// PAPElement.PHASE_ERROR_SIGMA_DEG and POSITION_ERROR_SIGMA_M, dBi.
+  /// Element errors are independent; element n's total phase variance is
+  /// s_n^2 = sigma_phi^2 + (2*pi*sigma_d/lambda)^2 (radians^2). The expected
+  /// power gain of the array factor is the coherent part plus the incoherent
+  /// floor, with w_n the steered complex weights:
+  /// E|AF|^2 = |sum w_n e^(-s_n^2/2)|^2 + sum |w_n|^2 (1 - e^(-s_n^2)),
+  /// which for equal s is e^(-s^2) |sum w_n|^2 + (1 - e^(-s^2)) sum |w_n|^2.
+  /// Equals PEAK_GAIN_DBI when every element is ideal.
+  double EXPECTED_PEAK_GAIN_DBI() const {
+    return GetField<double>(VT_EXPECTED_PEAK_GAIN_DBI, 0.0);
+  }
+  /// PEAK_GAIN_DBI - EXPECTED_PEAK_GAIN_DBI, dB; positive when element
+  /// errors reduce the steering gain, 0 when every element is ideal.
+  double COHERENT_GAIN_LOSS_DB() const {
+    return GetField<double>(VT_COHERENT_GAIN_LOSS_DB, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -869,6 +921,8 @@ struct PAP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(SIGNATURE()) &&
            VerifyOffsetRequired(verifier, VT_CANONICAL_JSON_SIGNATURE) &&
            verifier.VerifyVector(CANONICAL_JSON_SIGNATURE()) &&
+           VerifyField<double>(verifier, VT_EXPECTED_PEAK_GAIN_DBI, 8) &&
+           VerifyField<double>(verifier, VT_COHERENT_GAIN_LOSS_DB, 8) &&
            verifier.EndTable();
   }
   PAPT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -970,6 +1024,12 @@ struct PAPBuilder {
   void add_CANONICAL_JSON_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE) {
     fbb_.AddOffset(PAP::VT_CANONICAL_JSON_SIGNATURE, CANONICAL_JSON_SIGNATURE);
   }
+  void add_EXPECTED_PEAK_GAIN_DBI(double EXPECTED_PEAK_GAIN_DBI) {
+    fbb_.AddElement<double>(PAP::VT_EXPECTED_PEAK_GAIN_DBI, EXPECTED_PEAK_GAIN_DBI, 0.0);
+  }
+  void add_COHERENT_GAIN_LOSS_DB(double COHERENT_GAIN_LOSS_DB) {
+    fbb_.AddElement<double>(PAP::VT_COHERENT_GAIN_LOSS_DB, COHERENT_GAIN_LOSS_DB, 0.0);
+  }
   explicit PAPBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1019,8 +1079,12 @@ inline ::flatbuffers::Offset<PAP> CreatePAP(
     uint64_t COMPUTED_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE = 0,
+    double EXPECTED_PEAK_GAIN_DBI = 0.0,
+    double COHERENT_GAIN_LOSS_DB = 0.0) {
   PAPBuilder builder_(_fbb);
+  builder_.add_COHERENT_GAIN_LOSS_DB(COHERENT_GAIN_LOSS_DB);
+  builder_.add_EXPECTED_PEAK_GAIN_DBI(EXPECTED_PEAK_GAIN_DBI);
   builder_.add_COMPUTED_AT(COMPUTED_AT);
   builder_.add_PEAK_SIDELOBE_LEVEL_DB(PEAK_SIDELOBE_LEVEL_DB);
   builder_.add_FIRST_SIDELOBE_LEVEL_DB(FIRST_SIDELOBE_LEVEL_DB);
@@ -1090,7 +1154,9 @@ inline ::flatbuffers::Offset<PAP> CreatePAPDirect(
     uint64_t COMPUTED_AT = 0,
     const char *PRODUCER_ID = nullptr,
     const std::vector<uint8_t> *SIGNATURE = nullptr,
-    const std::vector<uint8_t> *CANONICAL_JSON_SIGNATURE = nullptr) {
+    const std::vector<uint8_t> *CANONICAL_JSON_SIGNATURE = nullptr,
+    double EXPECTED_PEAK_GAIN_DBI = 0.0,
+    double COHERENT_GAIN_LOSS_DB = 0.0) {
   auto PAP_ID__ = PAP_ID ? _fbb.CreateString(PAP_ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto SCENARIO_ID__ = SCENARIO_ID ? _fbb.CreateString(SCENARIO_ID) : 0;
@@ -1137,7 +1203,9 @@ inline ::flatbuffers::Offset<PAP> CreatePAPDirect(
       COMPUTED_AT,
       PRODUCER_ID__,
       SIGNATURE__,
-      CANONICAL_JSON_SIGNATURE__);
+      CANONICAL_JSON_SIGNATURE__,
+      EXPECTED_PEAK_GAIN_DBI,
+      COHERENT_GAIN_LOSS_DB);
 }
 
 ::flatbuffers::Offset<PAP> CreatePAP(::flatbuffers::FlatBufferBuilder &_fbb, const PAPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1162,6 +1230,8 @@ inline void PAPElement::UnPackTo(PAPElementT *_o, const ::flatbuffers::resolver_
   { auto _e = ELEMENT_PATTERN_ID(); if (_e) _o->ELEMENT_PATTERN_ID = _e->str(); }
   { auto _e = FAILURE_FLAGS(); _o->FAILURE_FLAGS = _e; }
   { auto _e = FAILED(); _o->FAILED = _e; }
+  { auto _e = PHASE_ERROR_SIGMA_DEG(); _o->PHASE_ERROR_SIGMA_DEG = _e; }
+  { auto _e = POSITION_ERROR_SIGMA_M(); _o->POSITION_ERROR_SIGMA_M = _e; }
 }
 
 inline ::flatbuffers::Offset<PAPElement> CreatePAPElement(::flatbuffers::FlatBufferBuilder &_fbb, const PAPElementT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1183,6 +1253,8 @@ inline ::flatbuffers::Offset<PAPElement> PAPElement::Pack(::flatbuffers::FlatBuf
   auto _ELEMENT_PATTERN_ID = _o->ELEMENT_PATTERN_ID.empty() ? 0 : _fbb.CreateString(_o->ELEMENT_PATTERN_ID);
   auto _FAILURE_FLAGS = _o->FAILURE_FLAGS;
   auto _FAILED = _o->FAILED;
+  auto _PHASE_ERROR_SIGMA_DEG = _o->PHASE_ERROR_SIGMA_DEG;
+  auto _POSITION_ERROR_SIGMA_M = _o->POSITION_ERROR_SIGMA_M;
   return CreatePAPElement(
       _fbb,
       _ELEMENT_ID,
@@ -1195,7 +1267,9 @@ inline ::flatbuffers::Offset<PAPElement> PAPElement::Pack(::flatbuffers::FlatBuf
       _PHASE_DEG,
       _ELEMENT_PATTERN_ID,
       _FAILURE_FLAGS,
-      _FAILED);
+      _FAILED,
+      _PHASE_ERROR_SIGMA_DEG,
+      _POSITION_ERROR_SIGMA_M);
 }
 
 inline PAPGainCutT *PAPGainCut::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -1307,7 +1381,9 @@ inline PAPT::PAPT(const PAPT &o)
         COMPUTED_AT(o.COMPUTED_AT),
         PRODUCER_ID(o.PRODUCER_ID),
         SIGNATURE(o.SIGNATURE),
-        CANONICAL_JSON_SIGNATURE(o.CANONICAL_JSON_SIGNATURE) {
+        CANONICAL_JSON_SIGNATURE(o.CANONICAL_JSON_SIGNATURE),
+        EXPECTED_PEAK_GAIN_DBI(o.EXPECTED_PEAK_GAIN_DBI),
+        COHERENT_GAIN_LOSS_DB(o.COHERENT_GAIN_LOSS_DB) {
   ELEMENTS.reserve(o.ELEMENTS.size());
   for (const auto &ELEMENTS_ : o.ELEMENTS) { ELEMENTS.emplace_back((ELEMENTS_) ? new PAPElementT(*ELEMENTS_) : nullptr); }
   GAIN_CUTS.reserve(o.GAIN_CUTS.size());
@@ -1347,6 +1423,8 @@ inline PAPT &PAPT::operator=(PAPT o) FLATBUFFERS_NOEXCEPT {
   std::swap(PRODUCER_ID, o.PRODUCER_ID);
   std::swap(SIGNATURE, o.SIGNATURE);
   std::swap(CANONICAL_JSON_SIGNATURE, o.CANONICAL_JSON_SIGNATURE);
+  std::swap(EXPECTED_PEAK_GAIN_DBI, o.EXPECTED_PEAK_GAIN_DBI);
+  std::swap(COHERENT_GAIN_LOSS_DB, o.COHERENT_GAIN_LOSS_DB);
   return *this;
 }
 
@@ -1389,6 +1467,8 @@ inline void PAP::UnPackTo(PAPT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PRODUCER_ID(); if (_e) _o->PRODUCER_ID = _e->str(); }
   { auto _e = SIGNATURE(); if (_e) { _o->SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->SIGNATURE.begin()); } }
   { auto _e = CANONICAL_JSON_SIGNATURE(); if (_e) { _o->CANONICAL_JSON_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CANONICAL_JSON_SIGNATURE.begin()); } }
+  { auto _e = EXPECTED_PEAK_GAIN_DBI(); _o->EXPECTED_PEAK_GAIN_DBI = _e; }
+  { auto _e = COHERENT_GAIN_LOSS_DB(); _o->COHERENT_GAIN_LOSS_DB = _e; }
 }
 
 inline ::flatbuffers::Offset<PAP> CreatePAP(::flatbuffers::FlatBufferBuilder &_fbb, const PAPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1429,6 +1509,8 @@ inline ::flatbuffers::Offset<PAP> PAP::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PRODUCER_ID = _fbb.CreateString(_o->PRODUCER_ID);
   auto _SIGNATURE = _fbb.CreateVector(_o->SIGNATURE);
   auto _CANONICAL_JSON_SIGNATURE = _fbb.CreateVector(_o->CANONICAL_JSON_SIGNATURE);
+  auto _EXPECTED_PEAK_GAIN_DBI = _o->EXPECTED_PEAK_GAIN_DBI;
+  auto _COHERENT_GAIN_LOSS_DB = _o->COHERENT_GAIN_LOSS_DB;
   return CreatePAP(
       _fbb,
       _PAP_ID,
@@ -1460,7 +1542,9 @@ inline ::flatbuffers::Offset<PAP> PAP::Pack(::flatbuffers::FlatBufferBuilder &_f
       _COMPUTED_AT,
       _PRODUCER_ID,
       _SIGNATURE,
-      _CANONICAL_JSON_SIGNATURE);
+      _CANONICAL_JSON_SIGNATURE,
+      _EXPECTED_PEAK_GAIN_DBI,
+      _COHERENT_GAIN_LOSS_DB);
 }
 
 inline const PAP *GetPAP(const void *buf) {

@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
   "name": "CelesTrak GP Ingest Flow",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. The optional host-query cache-warming branch is removed; native reads materialize query responses on demand. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "description": "Per-provider ingest flow, GP catalog. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:gp emits the full-catalog CSV HttpRequest (64 MiB response budget); hostcap/http-request fetches it; celestrak-parser:parse_gp normalizes it into $OMM and $MPE record streams, each with an IngestRequest (SourceTags attribution, batch = sha256 of the payload, reconcile Duplicates, wasm-authored Provenance; the payload archived once, with the OMM batch, as celestrak/catalog.csv from the raw HttpResponse); two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source hostcall and answer IngestResults. After each store celestrak-request:publish_request joins that IngestResult with the parser's IngestRequest and, only when node CONFIG carries celestrak_publish_url, emits the loopback dataset-publication POST (its body the IngestResult naming the batch) that a second hostcap/http-request node drives. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponse). The optional host-query cache-warming branch is not wired; native reads materialize query responses on demand. All decisions live in-wasm; the host contributes timers, HTTP egress and guarded persistence only.",
   "nodes": [
     {
       "nodeId": "req",
@@ -84,18 +84,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "http-parse",
@@ -104,8 +93,7 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-meta",
@@ -114,18 +102,16 @@
       "toNodeId": "ingest_omm",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-records",
       "fromNodeId": "parse",
       "fromPortId": "omm_records",
       "toNodeId": "ingest_omm",
-      "toPortId": "records",
+      "toPortId": "omm_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-raw",
@@ -134,8 +120,7 @@
       "toNodeId": "ingest_omm",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-mpe-meta",
@@ -144,18 +129,16 @@
       "toNodeId": "ingest_mpe",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-mpe-records",
       "fromNodeId": "parse",
       "fromPortId": "mpe_records",
       "toNodeId": "ingest_mpe",
-      "toPortId": "records",
+      "toPortId": "mpe_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-omm-egress",
@@ -164,8 +147,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-mpe-egress",
@@ -174,8 +156,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-omm-publish",
@@ -184,8 +165,7 @@
       "toNodeId": "publish_omm",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-meta-publish",
@@ -194,8 +174,7 @@
       "toNodeId": "publish_omm",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-mpe-publish",
@@ -204,8 +183,7 @@
       "toNodeId": "publish_mpe",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-mpe-meta-publish",
@@ -214,8 +192,7 @@
       "toNodeId": "publish_mpe",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-omm-http",
@@ -224,8 +201,7 @@
       "toNodeId": "publish_http_omm",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-mpe-http",
@@ -234,38 +210,34 @@
       "toNodeId": "publish_http_mpe",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-omm-egress",
       "fromNodeId": "publish_http_omm",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "publish-mpe-egress",
       "fromNodeId": "publish_http_mpe",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "publication",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-unchanged-egress",
       "fromNodeId": "parse",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 1,
-      "opaque": true
+      "queueDepth": 1
     }
   ],
   "triggers": [

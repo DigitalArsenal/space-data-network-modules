@@ -1,15 +1,15 @@
 {
   "id": "supplemental-omm",
   "name": "Supplemental OMM",
-  "version": "1.0.1",
-  "description": "Five independent ephemeris providers fitted into supplemental OMM, OCM, and OBD records by one composed isomorphic module.",
+  "version": "2.0.0",
+  "description": "Five source modules' ephemerides fitted into supplemental OMM, OCM and OBD records by one composed isomorphic module (typed contracts 1.0).",
   "modules": [
     {
       "id": "supplemental-omm",
       "pluginId": "org.sdn.flows.od-supplemental-omm",
-      "version": "1.0.1",
+      "version": "2.0.0",
       "role": "primary",
-      "description": "The complete five-provider, full-arc orbit-determination, FlatSQL, publication, and status composition.",
+      "description": "The five source modules, their hostcap/http-request fetches, the full-arc and SGP4-XP orbit determination, hostcap/storage-ingest storing and publication, and status, as one signed bundle of isomorphic children.",
       "maxMemoryPages": 16384,
       "runtimeTarget": "node"
     }
@@ -26,7 +26,7 @@
       "sdsType": "DSS",
       "direction": "produces",
       "moduleId": "supplemental-omm",
-      "description": "Generic per-node runtime counters emitted as canonical DSS records inside signed-node FSB transport envelopes."
+      "description": "Generic per-node runtime counters: one canonical $DSS record per status route."
     },
     {
       "id": "fitted-ocm",
@@ -71,7 +71,7 @@
   "pages": [
     {
       "id": "provider-status-board",
-      "title": "Supplemental OMM — Provider Status Board",
+      "title": "Supplemental OMM \u2014 Provider Status Board",
       "description": "Live progress for five provider lanes plus the orbit-determination lane.",
       "mediaType": "text/html",
       "entry": true,
@@ -80,12 +80,12 @@
     }
   ],
   "createdAt": "2026-07-21T00:00:00.000Z",
-  "updatedAt": "2026-07-21T00:00:00.000Z",
+  "updatedAt": "2026-10-14T00:00:00.000Z",
   "dataflow": [
     {
       "name": "starlink-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-starlink.dss",
       "contentEncoding": "utf8"
@@ -93,7 +93,7 @@
     {
       "name": "glonass-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-glonass.dss",
       "contentEncoding": "utf8"
@@ -101,7 +101,7 @@
     {
       "name": "intelsat-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-intelsat.dss",
       "contentEncoding": "utf8"
@@ -109,7 +109,7 @@
     {
       "name": "cpf-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-cpf.dss",
       "contentEncoding": "utf8"
@@ -117,7 +117,7 @@
     {
       "name": "iss-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-iss.dss",
       "contentEncoding": "utf8"
@@ -125,7 +125,7 @@
     {
       "name": "od-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/od.dss",
       "contentEncoding": "utf8"
@@ -133,7 +133,7 @@
     {
       "name": "store-runtime-status",
       "direction": "to_page",
-      "sdsSchema": "FSB",
+      "sdsSchema": "DSS",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/store.dss",
       "contentEncoding": "utf8"

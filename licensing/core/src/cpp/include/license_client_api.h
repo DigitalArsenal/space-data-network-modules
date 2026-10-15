@@ -30,13 +30,6 @@ int32_t license_client_decrypt(
     uint32_t key_len,
     std::vector<uint8_t>& plaintext_out);
 
-int32_t license_client_verify(
-    const uint8_t* signed_content,
-    uint32_t signed_content_len,
-    const uint8_t* public_key,
-    uint32_t public_key_len,
-    std::vector<uint8_t>& result_json_out);
-
 int32_t license_client_decrypt_and_verify(
     const uint8_t* protected_content,
     uint32_t protected_content_len,

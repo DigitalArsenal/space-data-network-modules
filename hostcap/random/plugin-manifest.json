@@ -1,10 +1,13 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.random",
   "name": "SDN Host Random Node",
-  "version": "0.1.0",
-  "description": "Capability node wrapping the host random.bytes hostcall. Method \"bytes\" takes an optional \"request\" frame of UTF-8 JSON bytes {\"length\":N} (default 32, maximum 65536) and emits one \"bytes\" frame of raw host-generated random bytes, passed through VERBATIM from the hostcall binary segment. Host notes: the Go node (sdn-server modulert) serves random.bytes as an ungated built-in but silently clamps length to 8192; the SDK NodeHost/BrowserHost honor the requested length but are default-deny and require the \"random\" capability grant, which this node declares. Downstream nodes must use the emitted frame's actual byte length, not the requested length.",
+  "version": "0.2.0",
+  "description": "Host CSPRNG connector (typed contracts 1.0). Method \"bytes\" takes an optional \"request\" frame, a $RND (SDS standard RND) stating LENGTH (0 = 32; 1..8192, larger refused with invalid-length), samples random.bytes (SDS $PIV hostcall: RandomBytesParams LENGTH, the bytes on raw \"data\") and clock.now, and emits one \"bytes\" frame, a $RND: LENGTH, BYTES verbatim from the host, SOURCE SystemCsprng, GENERATED_AT_MS. No JSON. Host gating: the Go node serves random.* and clock.* as ungated built-ins (and refuses LENGTH > 8192); the SDK NodeHost/BrowserHost are default-deny and need the \"random\" and \"clock\" capability grants, which this node declares.",
   "pluginFamily": "infrastructure",
-  "capabilities": ["random"],
+  "capabilities": [
+    "random",
+    "clock"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "host-random",
@@ -12,14 +15,23 @@
       "direction": "input",
       "capability": "random",
       "resource": "host://random",
-      "description": "Host CSPRNG hostcall (random.bytes). Available on the Go server host (built-in, clamps at 8192 bytes) and SDK NodeHost/BrowserHost (capability-gated).",
+      "description": "Host CSPRNG and clock hostcalls as SDS $PIV invocations (random.bytes -> raw \"data\"; clock.now -> TimeValue UNIX_MS). Go server host: built-in; SDK NodeHost/BrowserHost: capability-gated.",
       "properties": {
-        "hostOps": ["random.bytes"]
+        "hostOps": [
+          "random.bytes",
+          "clock.now"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "bytes",
@@ -29,19 +41,22 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-random-request-json",
+              "setId": "sds-rnd-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "RND.fbs",
+                  "fileIdentifier": "$RND",
+                  "rootTypeName": "RND",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Optional UTF-8 JSON bytes (aligned-binary wire format): {\"length\":N}. Default 32 when absent; 1 <= N <= 65536."
+              "description": "Optional $RND request: LENGTH bytes wanted (0 = 32, max 8192); SOURCE Unspecified or SystemCsprng; BYTES empty."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional byte-count request."
+          "description": "Optional $RND request (LENGTH)."
         }
       ],
       "outputPorts": [
@@ -49,24 +64,27 @@
           "portId": "bytes",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-random-bytes",
+              "setId": "sds-rnd-bytes",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "RND.fbs",
+                  "fileIdentifier": "$RND",
+                  "rootTypeName": "RND",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Raw random bytes (aligned-binary wire format), passed through verbatim from the random.bytes hostcall binary segment."
+              "description": "$RND: LENGTH, BYTES (exactly LENGTH bytes from random.bytes, verbatim), SOURCE SystemCsprng, GENERATED_AT_MS (clock.now)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The generated random bytes."
+          "description": "The generated random bytes as one $RND frame."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Requests length random bytes from the host CSPRNG through the sync hostcall bridge and emits them verbatim."
+      "description": "Requests LENGTH random bytes from the host CSPRNG through the sync typed hostcall bridge (SDS $PIV) and emits them in one $RND frame."
     }
   ],
   "buildArtifacts": [

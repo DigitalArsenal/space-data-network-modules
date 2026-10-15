@@ -8,21 +8,28 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ByteBuffer } from 'flatbuffers';
-import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
+import { fileURLToPath as toPath, pathToFileURL } from 'node:url';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { decodeFlowNotice, decodeIngestRequest, encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
 import { synthetic } from '../../spacetrack-source/tests/fixtures/spacetrack-format.mjs';
 import { aoeRecord } from './fixtures/aoe-format.mjs';
 
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url), 'utf8'));
-const standardsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
-
-const request = (text) => {
-  const payload = new TextEncoder().encode(text);
-  return { methodId: 'parse_aoe', inputs: [{ portId: 'source', payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } }] };
-};
+// SDS JS (and its flatbuffers) from the spacedatastandards checkout the module is built against.
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT ?? toPath(new URL('../../../../spacedatastandards.org/', import.meta.url));
+const lib = (code) => pathToFileURL(path.join(standardsRoot, `lib/js/${code}/main.js`));
+const { ByteBuffer } = createRequire(lib('OMM'))('flatbuffers');
+const { OMM } = await import(lib('OMM').href);
+const { CAT } = await import(lib('CAT').href);
+const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' };
+const URL_AOE = 'https://www.spacemapper.cn/aoe/records';
+// The records travel verbatim as the BODY of the HttpResponse hostcap/http-request (or the host's page decoder) gives.
+const request = (text, { status = 200 } = {}) => ({
+  methodId: 'parse_aoe',
+  inputs: [{ portId: 'response', typeRef: HRSP, payload: encodeHttpResponse({ url: URL_AOE, status, body: new TextEncoder().encode(text), retrievedMs: 1760000000000 }) }],
+});
 async function harness(t) {
   const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
   t.after(() => host.destroy());
@@ -39,11 +46,19 @@ const frame = (result, port) => {
   assert.equal(result.statusCode, 0, result.errorMessage);
   return result.outputs.find((f) => f.portId === port).payload;
 };
-const omms = (result) => [...sizePrefixed(frame(result, 'omm'))].map((rec) => {
-  assert.equal(Buffer.from(rec.subarray(8, 12)).toString(), '$OMM');
-  return OMM.getSizePrefixedRootAsOMM(new ByteBuffer(rec)).unpack();
+const records = (result, port, id, T) => [...sizePrefixed(frame(result, port))].map((rec) => {
+  assert.equal(Buffer.from(rec.subarray(8, 12)).toString(), id);
+  return T[`getSizePrefixedRootAs${T.name}`](new ByteBuffer(rec)).unpack();
 });
-const json = (result, port) => JSON.parse(new TextDecoder().decode(frame(result, port)));
+const omms = (result) => records(result, 'omm', '$OMM', OMM);
+const cats = (result) => records(result, 'crosswalk', '$CAT', CAT);
+const meta = (result) => decodeIngestRequest(frame(result, 'meta'));
+// The report's counts, from the IngestRequest's PROVENANCE.ATTRIBUTES.
+const counts = (result) => {
+  const attrs = meta(result).provenance.attributes;
+  assert.deepEqual(attrs.map((h) => h.name), attrs.map((h) => h.name).sort(), 'ATTRIBUTES sorted by their key');
+  return Object.fromEntries(attrs.map((h) => [h.name, Number(h.value)]));
+};
 const params = (omm) => Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 // whole-second epochs, as AOE's are
@@ -96,16 +111,20 @@ test('parse_aoe: the two-line set becomes the OMM, the NORAD number AOE gives is
   assert.equal(c.USER_DEFINED_OBJECT_DESIGNATOR, 'aoe:777001');
   assert.equal(params(c).AOE_CAT_ID, '777001');
   assert.equal(params(c).AOE_SAT_ID, undefined);
-  const report = json(result, 'report');
-  assert.deepEqual({ records: report.records, emitted: report.emitted, duplicates: report.duplicateRecordIds, rejected: report.rejected, alpha5: report.alpha5CatalogNumbers,
-    checksums: report.checksumMismatches, withoutNorad: report.withoutNoradNumber, objects: report.objects }, { records: 4, emitted: 3, duplicates: 1, rejected: 0, alpha5: 1, checksums: 3, withoutNorad: 1, objects: 3 });
-  const crosswalk = json(result, 'crosswalk');
-  assert.equal(crosswalk.status, 'candidate');
-  assert.deepEqual(crosswalk.columns, ['native', 'catId', 'noradId', 'satId', 'cospar', 'name', 'objectType', 'channel']);
-  assert.deepEqual(crosswalk.objects, [
-    ['aoe:99001', 99001, 99001, 99001, '2026-901A', 'SYNTH 1', 'PAYLOAD', 'KY'],
-    ['aoe:100123', 100123, 100123, 100123, '2026-902A', 'SYNTH 2', 'PAYLOAD', 'KY'],
-    ['aoe:777001', 777001, null, null, '2026-903A', 'SYNTH 3', 'PAYLOAD', 'KY'],
+  assert.deepEqual(counts(result), { records: 4, emitted: 3, duplicateRecordIds: 1, rejected: 0, alpha5CatalogNumbers: 1, checksumMismatches: 3, withoutNoradNumber: 1, objects: 3 });
+  const m = meta(result);
+  assert.equal(m.schema, 'OMM.fbs');
+  assert.equal(m.tags.sourceName, 'spacemapper-aoe');
+  assert.equal(m.tags.sourceUrl, URL_AOE);
+  assert.match(m.tags.batchId, /^[0-9a-f]{64}$/);
+  assert.equal(m.provenance.sourceSha256, m.tags.batchId);
+  assert.equal(Number(m.provenance.normalizedCount), 3);
+  assert.deepEqual(m.provenance.schemaCounts, { 'OMM.fbs': 3, 'CAT.fbs': 3 });
+  // The crosswalk: one $CAT candidate per AOE object, in AOE id order, in AOE's own namespace.
+  assert.deepEqual(cats(result).map((c) => [c.CATALOG_URI, c.CATALOG_OBJECT_ID, c.NORAD_CAT_ID, c.OBJECT_ID, c.OBJECT_NAME, c.OBJECT_TYPE]), [
+    ['urn:sdn:spacemapper-aoe', 'aoe:99001', 99001, '2026-901A', 'SYNTH 1', 0],
+    ['urn:sdn:spacemapper-aoe', 'aoe:100123', 100123, '2026-902A', 'SYNTH 2', 0],
+    ['urn:sdn:spacemapper-aoe', 'aoe:777001', 0, '2026-903A', 'SYNTH 3', 0],
   ]);
 });
 
@@ -122,9 +141,9 @@ test('parse_aoe drops what its own fields contradict, and counts it', async (t) 
   ];
   const result = await host.invoke(request(JSON.stringify(rows)));
   assert.equal(omms(result).length, 1);
-  const report = json(result, 'report');
-  assert.equal(report.rejected, 6);
-  assert.deepEqual(report.rejections, {
+  const c = counts(result);
+  assert.equal(c.rejected, 6);
+  assert.deepEqual(Object.fromEntries(Object.entries(c).filter(([k]) => k.startsWith('rejection:')).map(([k, v]) => [k.slice(10), v])), {
     'inclination disagrees with the two-line set': 1,
     'the epoch disagrees with the two-line set': 1,
     'the NORAD number disagrees with the two-line set': 1,
@@ -132,9 +151,32 @@ test('parse_aoe drops what its own fields contradict, and counts it', async (t) 
     'the two-line set is not two lines of 69 columns': 1,
     'the record names no object: no noradId, catId or satId': 1,
   });
+  assert.deepEqual(meta(result).provenance.warnings, [
+    'record 1: inclination disagrees with the two-line set',
+    'record 2: the epoch disagrees with the two-line set',
+    'record 3: the NORAD number disagrees with the two-line set',
+    'record 4: the two-line set is not an SGP4 set (ephemeris type 4)',
+    'record 5: the two-line set is not two lines of 69 columns',
+    'record 6: the record names no object: no noradId, catId or satId',
+  ]);
   for (const [name, text] of [['truncated JSON', JSON.stringify(rows).slice(0, -2)], ['not records', '[1,2]'], ['empty', ' '], ['nothing readable', JSON.stringify([rows[1]])]]) {
     const refused = await host.invoke(request(text));
     assert.notEqual(refused.statusCode, 0, name);
     assert.equal(refused.outputs?.length ?? 0, 0, `${name}: partial output`);
   }
+  // A non-200 response fails whole.
+  const failed = await host.invoke(request(JSON.stringify(rows), { status: 500 }));
+  assert.notEqual(failed.statusCode, 0);
+  assert.equal(failed.outputs?.length ?? 0, 0);
+});
+
+test('parse_aoe: a 304 is one FlowNotice Unchanged and nothing else', async (t) => {
+  const host = await harness(t);
+  const result = await host.invoke(request('', { status: 304 }));
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  assert.deepEqual(result.outputs.map((o) => o.portId), ['unchanged']);
+  const n = decodeFlowNotice(result.outputs[0].payload);
+  assert.equal(n.schema, 'OMM.fbs');
+  assert.equal(n.reason, 'not-modified');
+  assert.deepEqual(n.items, [URL_AOE]);
 });

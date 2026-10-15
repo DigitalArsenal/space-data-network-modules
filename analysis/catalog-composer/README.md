@@ -19,19 +19,25 @@ does not fetch, propagate or certify an orbit.
 
 ## Inputs
 
-- `recipe`: one explicit JSON control frame, version 1. `layers` contains `id`,
-  `node`, `provider`, `source`, snapshot `head`, and optional
-  `nativeKeys` in record order. Layer order is precedence.
-- `catalogs`: one canonical size-prefixed CAT stream per layer, in the same order.
-- Recipe settings: `asOf` (Unix seconds), `maxAgeSeconds`, ordered `stateSources`,
-  optional `stateCandidates` (`objectKey`, `sourceId`, `recordId`, `epoch`), and
-  `overrides` keyed by object identity with `catalogLayer`, `stateSources` or
-  `maxAgeSeconds`.
+Every recipe, request and report of this module is one size-prefixed SDS `$XMT`
+(Catalog Cross-Match) with one arm set: `COMPOSE_RECIPE` / `COMPOSE_REPORT`,
+`MATCH_REQUEST` / `MATCH_REPORT`, `INTEGRATE_RECIPE` / `INTEGRATE_REPORT`,
+`EPOCH_FIT_POLICY` / `EPOCH_FIT_REPORT`. Times are Unix milliseconds.
 
-Outputs are a canonical `catalog` stream and a JSON `report` control frame with
-the chosen source, original frame/record provenance and state selection. The
-recipe/report are configuration and UI diagnostics; they are not SDS observations.
-Source citations and licenses belong to the referenced publication snapshots and
+- `recipe`: `$XMT` `COMPOSE_RECIPE`. `IDENTITY_RULE` `NoradFirst` (NORAD number, then
+  international designator, then the source's native key) or `InternationalDesignator`;
+  `LAYERS` (`ID`, `NODE`, `PROVIDER`, `SOURCE`, snapshot `HEAD`, optional `NATIVE_KEYS`
+  in record order), layer order is precedence.
+- `catalogs`: one canonical size-prefixed CAT stream per layer, in the same order.
+- Recipe settings: `AS_OF_MS`, `MAX_AGE_S` (required finite under `NoradFirst`), ordered
+  `STATE_SOURCES`, optional `STATE_CANDIDATES` (`OBJECT_KEY`, `SOURCE_ID`, `RECORD_ID`,
+  `EPOCH_MS`), `COVERAGE` (the designators each state source declares) and `OVERRIDES`
+  (`OBJECT_KEY` with `CATALOG_LAYER`, `STATE_SOURCES` or `MAX_AGE_S`; empty or NaN keeps
+  the recipe's).
+
+Outputs are a canonical `catalog` stream and an `$XMT` `COMPOSE_REPORT` with, per
+object, every layer's record, the chosen layer, the identity status and the state
+selection. Source citations and licenses belong to the referenced publication snapshots and
 must accompany any derived publication.
 
 Limits: 16 layers, 250,000 input records, 128 MiB of CAT input, 32 MiB of recipe
@@ -103,22 +109,13 @@ STEP_SIZE and sample count. Unsupported layouts fail explicitly. The editor host
 uses its selected propagator and frame module to create this common grid;
 the matcher neither hardwires SGP4 nor interprets raw Vimpel elements.
 
-Control recipe (`recipe` port, JSON configuration, never observational data):
-
-```json
-{
-  "version": 1,
-  "candidates": [
-    {"id":"a","provider":"vimpel","nativeId":"example-a","recordId":"immutable-reference-a"},
-    {"id":"b","provider":"other","nativeId":"example-b","recordId":"immutable-reference-b"}
-  ],
-  "pairs": [{"left":"a","right":"b","evidence":{"source":"datefirst","recordId":"crosswalk-edition"}}],
-  "positionToleranceKm": 10,
-  "velocityToleranceKmS": 0.01,
-  "finiteDifferenceToleranceKmS": 0.001,
-  "minimumSpanSeconds": 3600
-}
-```
+The request (`recipe` port) is an `$XMT` `MATCH_REQUEST`: `POLICY` (`POSITION_TOLERANCE_KM`,
+`VELOCITY_TOLERANCE_KM_S`, `FINITE_DIFFERENCE_TOLERANCE_KM_S`, `MINIMUM_SPAN_S`), `TRAJECTORIES`
+(`ID`, `PROVIDER`, `NATIVE_ID`, `RECORD_ID`, one per `ephemerides` frame in order) and `PAIRS`, `$OIL`
+links whose `LEFT.TRAJECTORY_ID` and `RIGHT.TRAJECTORY_ID` name the trajectories and whose `EVIDENCE`
+is the declaration's (e.g. `SOURCE` "datefirst", `RECORD_ID` the crosswalk edition). The `MATCH_REPORT`
+gives, per pair, the link as requested, the verdict and its reason, the residuals (NaN when not compared),
+the samples and the span.
 
 These example thresholds require calibration for the sources and orbital regime;
 they are not validated identity probabilities. For each pair the matcher measures
@@ -157,7 +154,7 @@ except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
 
 | Port | | Content |
 | --- | --- | --- |
-| `recipe` | in | JSON, version 1: `asOf` (Unix seconds), `identity`, `selection`, `maneuvers` (below) |
+| `recipe` | in | `$XMT` `INTEGRATE_RECIPE`: `AS_OF_MS`, `IDENTITY`, `SELECTION`, `MANEUVERS` (below) |
 | `catalog` | in | The composed `$CAT`: canonical size-prefixed records, each object once |
 | `ephemerides` | in | Up to 64 normalized `$OEM` trajectories, one per identity candidate in the recipe's order |
 | `omm_products`, `ocm_products`, `mnv_products` | in | Every source's `$OMM`, `$OCM` and `$MNV`, as `flows/source-products` writes them: each names its source in `PROVENANCE` (`$PVN` `SOURCE_ID`), and an `$OMM`'s or `$OCM`'s covariance states its realism in `COV_REALISM` (`$CVR`). A record that names no source or no object is refused and counted |
@@ -165,7 +162,7 @@ except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
 | `omm` | out | Per object and product kind (`sgp4`, `sgp4xp`) the element set of the selected source, byte for byte |
 | `ocm` | out | The selected set's state and covariance with its realism, byte for byte |
 | `mnv` | out | The maneuvers of every source, merged |
-| `report` | out | JSON: the policy, the counts, every identity link with its verdict, per object every candidate and why one was chosen or none, the label of the chosen covariance, the SHA-256 and CID (CIDv1, raw, sha2-256) of every record written, the records refused or unlinked |
+| `report` | out | `$XMT` `INTEGRATE_REPORT`: the policy, the counts, every identity link with its verdict, per object every candidate and why one was chosen or none, the chosen covariance's `$CVR`, the SHA-256 and CID (CIDv1, raw, sha2-256) of every record written, the records refused or unlinked |
 
 The steps, in order:
 
@@ -204,17 +201,13 @@ The steps, in order:
    with it, and the report carries its realism: rule, model, regime, the held-out test's numbers and verdict. A set
    with no `$OCM` goes out alone and the report reads its realism from the set.
 
-```json
-{
-  "version": 1, "asOf": 1791590400,
-  "identity": {"version": 1, "positionToleranceKm": 1, "velocityToleranceKmS": 0.01, "finiteDifferenceToleranceKmS": 1e-8, "minimumSpanSeconds": 3600,
-    "candidates": [{"id": "v", "provider": "vimpel", "nativeId": "V-100", "recordId": "edition-hash"}, {"id": "r", "provider": "space-track", "nativeId": "90001", "recordId": "set-hash"}],
-    "pairs": [{"native": "v", "reference": "r", "object": {"norad": 90001}, "evidence": {"source": "datefirst", "recordId": "crosswalk-edition"}}]},
-  "selection": {"horizonDays": 1, "minSamples": 30, "maxAgeDays": 3, "sourceOrder": ["space-track-gp", "celestrak-gp"],
-    "table": [{"source": "celestrak-gp", "product": "sgp4", "regime": "LEO-L", "horizonDays": 1, "median3dKm": 0.5, "samples": 100}]},
-  "maneuvers": {"timeToleranceSeconds": 3600, "deltaVToleranceKmS": 0.0005, "maneuverableStatuses": ["DETECTED", "CONFIRMED", "EXECUTED"], "retiringStatuses": ["DETECTED", "CONFIRMED", "EXECUTED"]}
-}
-```
+The recipe's fields: `IDENTITY` is a `MATCH_REQUEST` whose `$OIL` links name the native trajectory
+(`LEFT.TRAJECTORY_ID`), the reference trajectory (`RIGHT.TRAJECTORY_ID`) and the catalog object
+(`RIGHT.NORAD_CAT_ID` or `RIGHT.INTERNATIONAL_DESIGNATOR`). `SELECTION`: `HORIZON_DAYS`, `MIN_SAMPLES`
+(default 30), `MAX_AGE_DAYS` (default no limit), `SOURCE_ORDER`, and the measured table `MEASURED`
+(`SOURCE_ID`, `PRODUCT`, `REGIME`, `HORIZON_DAYS`, `MEDIAN_3D_KM`, `SAMPLES`). `MANEUVERS`:
+`TIME_TOLERANCE_S` (default 3600), `DELTA_V_TOLERANCE_KM_S`, `DELTA_V_RELATIVE_TOLERANCE` (NaN: not
+compared), `MANEUVERABLE_STATUSES` and `RETIRING_STATUSES` (empty: DETECTED, CONFIRMED, EXECUTED).
 
 The measured table is an input the experiments refresh. Its regimes are the ones `analysis/gp-error-model`
 labels (E14's: LEO-L, LEO-M, LEO-H, MEO, GEO); E3's results are keyed by its own test strata, so a table for this recipe

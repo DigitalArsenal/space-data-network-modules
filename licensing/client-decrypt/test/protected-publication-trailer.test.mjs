@@ -19,6 +19,7 @@
 // publishes — payload || REC(MBL+ENC+PNM) || uint32le(len) || "$REC" — so a
 // stale-vs-schema binary fails the build instead of the browser.
 
+import { decodeFileContent, decryptArtifactInputs } from "../index.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -189,7 +190,7 @@ for (const [label, records] of [
     );
     const result = await harness.invoke({
       methodId: "decrypt_artifact",
-      inputs: [{ payload: grant }, { payload: privateKey }, { payload: bundle }],
+      inputs: decryptArtifactInputs({ grantResponseBytes: grant, privateKey: privateKey, encryptedBundle: bundle }),
     });
     assert.equal(
       result.errorMessage ?? "",
@@ -200,7 +201,7 @@ for (const [label, records] of [
         `the SDK publishes with; regenerate licensing/core headers and rebuild`,
     );
     assert.equal(result.statusCode, 0);
-    assert.deepEqual(result.outputs[0].payload, plaintext);
+    assert.deepEqual(decodeFileContent(result.outputs[0].payload), plaintext);
   });
 }
 

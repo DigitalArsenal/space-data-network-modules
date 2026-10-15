@@ -17,6 +17,30 @@ struct APM;
 struct APMBuilder;
 struct APMT;
 
+struct APMQuaternionState;
+struct APMQuaternionStateBuilder;
+struct APMQuaternionStateT;
+
+struct APMEulerAngleState;
+struct APMEulerAngleStateBuilder;
+struct APMEulerAngleStateT;
+
+struct APMAngularVelocity;
+struct APMAngularVelocityBuilder;
+struct APMAngularVelocityT;
+
+struct APMSpinState;
+struct APMSpinStateBuilder;
+struct APMSpinStateT;
+
+struct APMInertia;
+struct APMInertiaBuilder;
+struct APMInertiaT;
+
+struct APMManeuver;
+struct APMManeuverBuilder;
+struct APMManeuverT;
+
 struct APMT : public ::flatbuffers::NativeTable {
   typedef APM TableType;
   std::string CCSDS_APM_VERS{};
@@ -29,6 +53,21 @@ struct APMT : public ::flatbuffers::NativeTable {
   double Q2 = 0.0;
   double Q3 = 0.0;
   double QC = 0.0;
+  std::string COMMENT{};
+  std::string CLASSIFICATION{};
+  std::string MESSAGE_ID{};
+  std::string CENTER_NAME{};
+  std::string TIME_SYSTEM{};
+  std::vector<std::unique_ptr<APMQuaternionStateT>> QUATERNION_STATES{};
+  std::vector<std::unique_ptr<APMEulerAngleStateT>> EULER_ANGLE_STATES{};
+  std::vector<std::unique_ptr<APMAngularVelocityT>> ANGULAR_VELOCITIES{};
+  std::vector<std::unique_ptr<APMSpinStateT>> SPIN_STATES{};
+  std::vector<std::unique_ptr<APMInertiaT>> INERTIAS{};
+  std::vector<std::unique_ptr<APMManeuverT>> MANEUVERS{};
+  APMT() = default;
+  APMT(const APMT &o);
+  APMT(APMT&&) FLATBUFFERS_NOEXCEPT = default;
+  APMT &operator=(APMT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// Attitude Parameter Message
@@ -46,7 +85,18 @@ struct APM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_Q1 = 16,
     VT_Q2 = 18,
     VT_Q3 = 20,
-    VT_QC = 22
+    VT_QC = 22,
+    VT_COMMENT = 24,
+    VT_CLASSIFICATION = 26,
+    VT_MESSAGE_ID = 28,
+    VT_CENTER_NAME = 30,
+    VT_TIME_SYSTEM = 32,
+    VT_QUATERNION_STATES = 34,
+    VT_EULER_ANGLE_STATES = 36,
+    VT_ANGULAR_VELOCITIES = 38,
+    VT_SPIN_STATES = 40,
+    VT_INERTIAS = 42,
+    VT_MANEUVERS = 44
   };
   const ::flatbuffers::String *CCSDS_APM_VERS() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CCSDS_APM_VERS);
@@ -78,6 +128,56 @@ struct APM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double QC() const {
     return GetField<double>(VT_QC, 0.0);
   }
+  /// COMMENT lines of the message (CCSDS 504.0-B-2) from its header, metadata and
+  /// data groups, in message order, joined by a line feed. A state group's own
+  /// comments stay with it.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// CLASSIFICATION of the message: the optional header keyword stating its
+  /// security classification or handling caveat.
+  const ::flatbuffers::String *CLASSIFICATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CLASSIFICATION);
+  }
+  /// MESSAGE_ID: the optional header keyword, an identifier the originator makes
+  /// unique for this message.
+  const ::flatbuffers::String *MESSAGE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MESSAGE_ID);
+  }
+  /// CENTER_NAME: the orbit center, when the message states one.
+  const ::flatbuffers::String *CENTER_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CENTER_NAME);
+  }
+  /// TIME_SYSTEM: the time system EPOCH and the maneuver epochs are in.
+  const ::flatbuffers::String *TIME_SYSTEM() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TIME_SYSTEM);
+  }
+  /// Quaternion states (QUAT_START block), in message order. Q1..QC above are the
+  /// single frameless quaternion of the earlier form of this record; a message is
+  /// read into and written from these lists.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMQuaternionState>> *QUATERNION_STATES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMQuaternionState>> *>(VT_QUATERNION_STATES);
+  }
+  /// Euler angle states (EULER_START block), in message order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMEulerAngleState>> *EULER_ANGLE_STATES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMEulerAngleState>> *>(VT_EULER_ANGLE_STATES);
+  }
+  /// Angular velocities (ANGVEL_START block), in message order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMAngularVelocity>> *ANGULAR_VELOCITIES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMAngularVelocity>> *>(VT_ANGULAR_VELOCITIES);
+  }
+  /// Spin states (SPIN_START block), in message order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMSpinState>> *SPIN_STATES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMSpinState>> *>(VT_SPIN_STATES);
+  }
+  /// Inertia tensors (INERTIA_START block), in message order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMInertia>> *INERTIAS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMInertia>> *>(VT_INERTIAS);
+  }
+  /// Attitude maneuvers (MAN_START block), in message order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<APMManeuver>> *MANEUVERS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APMManeuver>> *>(VT_MANEUVERS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -97,6 +197,34 @@ struct APM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_Q2, 8) &&
            VerifyField<double>(verifier, VT_Q3, 8) &&
            VerifyField<double>(verifier, VT_QC, 8) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_CLASSIFICATION) &&
+           verifier.VerifyString(CLASSIFICATION()) &&
+           VerifyOffset(verifier, VT_MESSAGE_ID) &&
+           verifier.VerifyString(MESSAGE_ID()) &&
+           VerifyOffset(verifier, VT_CENTER_NAME) &&
+           verifier.VerifyString(CENTER_NAME()) &&
+           VerifyOffset(verifier, VT_TIME_SYSTEM) &&
+           verifier.VerifyString(TIME_SYSTEM()) &&
+           VerifyOffset(verifier, VT_QUATERNION_STATES) &&
+           verifier.VerifyVector(QUATERNION_STATES()) &&
+           verifier.VerifyVectorOfTables(QUATERNION_STATES()) &&
+           VerifyOffset(verifier, VT_EULER_ANGLE_STATES) &&
+           verifier.VerifyVector(EULER_ANGLE_STATES()) &&
+           verifier.VerifyVectorOfTables(EULER_ANGLE_STATES()) &&
+           VerifyOffset(verifier, VT_ANGULAR_VELOCITIES) &&
+           verifier.VerifyVector(ANGULAR_VELOCITIES()) &&
+           verifier.VerifyVectorOfTables(ANGULAR_VELOCITIES()) &&
+           VerifyOffset(verifier, VT_SPIN_STATES) &&
+           verifier.VerifyVector(SPIN_STATES()) &&
+           verifier.VerifyVectorOfTables(SPIN_STATES()) &&
+           VerifyOffset(verifier, VT_INERTIAS) &&
+           verifier.VerifyVector(INERTIAS()) &&
+           verifier.VerifyVectorOfTables(INERTIAS()) &&
+           VerifyOffset(verifier, VT_MANEUVERS) &&
+           verifier.VerifyVector(MANEUVERS()) &&
+           verifier.VerifyVectorOfTables(MANEUVERS()) &&
            verifier.EndTable();
   }
   APMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -138,6 +266,39 @@ struct APMBuilder {
   void add_QC(double QC) {
     fbb_.AddElement<double>(APM::VT_QC, QC, 0.0);
   }
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APM::VT_COMMENT, COMMENT);
+  }
+  void add_CLASSIFICATION(::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION) {
+    fbb_.AddOffset(APM::VT_CLASSIFICATION, CLASSIFICATION);
+  }
+  void add_MESSAGE_ID(::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID) {
+    fbb_.AddOffset(APM::VT_MESSAGE_ID, MESSAGE_ID);
+  }
+  void add_CENTER_NAME(::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME) {
+    fbb_.AddOffset(APM::VT_CENTER_NAME, CENTER_NAME);
+  }
+  void add_TIME_SYSTEM(::flatbuffers::Offset<::flatbuffers::String> TIME_SYSTEM) {
+    fbb_.AddOffset(APM::VT_TIME_SYSTEM, TIME_SYSTEM);
+  }
+  void add_QUATERNION_STATES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMQuaternionState>>> QUATERNION_STATES) {
+    fbb_.AddOffset(APM::VT_QUATERNION_STATES, QUATERNION_STATES);
+  }
+  void add_EULER_ANGLE_STATES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMEulerAngleState>>> EULER_ANGLE_STATES) {
+    fbb_.AddOffset(APM::VT_EULER_ANGLE_STATES, EULER_ANGLE_STATES);
+  }
+  void add_ANGULAR_VELOCITIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMAngularVelocity>>> ANGULAR_VELOCITIES) {
+    fbb_.AddOffset(APM::VT_ANGULAR_VELOCITIES, ANGULAR_VELOCITIES);
+  }
+  void add_SPIN_STATES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMSpinState>>> SPIN_STATES) {
+    fbb_.AddOffset(APM::VT_SPIN_STATES, SPIN_STATES);
+  }
+  void add_INERTIAS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMInertia>>> INERTIAS) {
+    fbb_.AddOffset(APM::VT_INERTIAS, INERTIAS);
+  }
+  void add_MANEUVERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMManeuver>>> MANEUVERS) {
+    fbb_.AddOffset(APM::VT_MANEUVERS, MANEUVERS);
+  }
   explicit APMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -160,12 +321,34 @@ inline ::flatbuffers::Offset<APM> CreateAPM(
     double Q1 = 0.0,
     double Q2 = 0.0,
     double Q3 = 0.0,
-    double QC = 0.0) {
+    double QC = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TIME_SYSTEM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMQuaternionState>>> QUATERNION_STATES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMEulerAngleState>>> EULER_ANGLE_STATES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMAngularVelocity>>> ANGULAR_VELOCITIES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMSpinState>>> SPIN_STATES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMInertia>>> INERTIAS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APMManeuver>>> MANEUVERS = 0) {
   APMBuilder builder_(_fbb);
   builder_.add_QC(QC);
   builder_.add_Q3(Q3);
   builder_.add_Q2(Q2);
   builder_.add_Q1(Q1);
+  builder_.add_MANEUVERS(MANEUVERS);
+  builder_.add_INERTIAS(INERTIAS);
+  builder_.add_SPIN_STATES(SPIN_STATES);
+  builder_.add_ANGULAR_VELOCITIES(ANGULAR_VELOCITIES);
+  builder_.add_EULER_ANGLE_STATES(EULER_ANGLE_STATES);
+  builder_.add_QUATERNION_STATES(QUATERNION_STATES);
+  builder_.add_TIME_SYSTEM(TIME_SYSTEM);
+  builder_.add_CENTER_NAME(CENTER_NAME);
+  builder_.add_MESSAGE_ID(MESSAGE_ID);
+  builder_.add_CLASSIFICATION(CLASSIFICATION);
+  builder_.add_COMMENT(COMMENT);
   builder_.add_EPOCH(EPOCH);
   builder_.add_OBJECT_ID(OBJECT_ID);
   builder_.add_OBJECT_NAME(OBJECT_NAME);
@@ -191,13 +374,35 @@ inline ::flatbuffers::Offset<APM> CreateAPMDirect(
     double Q1 = 0.0,
     double Q2 = 0.0,
     double Q3 = 0.0,
-    double QC = 0.0) {
+    double QC = 0.0,
+    const char *COMMENT = nullptr,
+    const char *CLASSIFICATION = nullptr,
+    const char *MESSAGE_ID = nullptr,
+    const char *CENTER_NAME = nullptr,
+    const char *TIME_SYSTEM = nullptr,
+    const std::vector<::flatbuffers::Offset<APMQuaternionState>> *QUATERNION_STATES = nullptr,
+    const std::vector<::flatbuffers::Offset<APMEulerAngleState>> *EULER_ANGLE_STATES = nullptr,
+    const std::vector<::flatbuffers::Offset<APMAngularVelocity>> *ANGULAR_VELOCITIES = nullptr,
+    const std::vector<::flatbuffers::Offset<APMSpinState>> *SPIN_STATES = nullptr,
+    const std::vector<::flatbuffers::Offset<APMInertia>> *INERTIAS = nullptr,
+    const std::vector<::flatbuffers::Offset<APMManeuver>> *MANEUVERS = nullptr) {
   auto CCSDS_APM_VERS__ = CCSDS_APM_VERS ? _fbb.CreateString(CCSDS_APM_VERS) : 0;
   auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto CLASSIFICATION__ = CLASSIFICATION ? _fbb.CreateString(CLASSIFICATION) : 0;
+  auto MESSAGE_ID__ = MESSAGE_ID ? _fbb.CreateString(MESSAGE_ID) : 0;
+  auto CENTER_NAME__ = CENTER_NAME ? _fbb.CreateString(CENTER_NAME) : 0;
+  auto TIME_SYSTEM__ = TIME_SYSTEM ? _fbb.CreateString(TIME_SYSTEM) : 0;
+  auto QUATERNION_STATES__ = QUATERNION_STATES ? _fbb.CreateVector<::flatbuffers::Offset<APMQuaternionState>>(*QUATERNION_STATES) : 0;
+  auto EULER_ANGLE_STATES__ = EULER_ANGLE_STATES ? _fbb.CreateVector<::flatbuffers::Offset<APMEulerAngleState>>(*EULER_ANGLE_STATES) : 0;
+  auto ANGULAR_VELOCITIES__ = ANGULAR_VELOCITIES ? _fbb.CreateVector<::flatbuffers::Offset<APMAngularVelocity>>(*ANGULAR_VELOCITIES) : 0;
+  auto SPIN_STATES__ = SPIN_STATES ? _fbb.CreateVector<::flatbuffers::Offset<APMSpinState>>(*SPIN_STATES) : 0;
+  auto INERTIAS__ = INERTIAS ? _fbb.CreateVector<::flatbuffers::Offset<APMInertia>>(*INERTIAS) : 0;
+  auto MANEUVERS__ = MANEUVERS ? _fbb.CreateVector<::flatbuffers::Offset<APMManeuver>>(*MANEUVERS) : 0;
   return CreateAPM(
       _fbb,
       CCSDS_APM_VERS__,
@@ -209,10 +414,1249 @@ inline ::flatbuffers::Offset<APM> CreateAPMDirect(
       Q1,
       Q2,
       Q3,
-      QC);
+      QC,
+      COMMENT__,
+      CLASSIFICATION__,
+      MESSAGE_ID__,
+      CENTER_NAME__,
+      TIME_SYSTEM__,
+      QUATERNION_STATES__,
+      EULER_ANGLE_STATES__,
+      ANGULAR_VELOCITIES__,
+      SPIN_STATES__,
+      INERTIAS__,
+      MANEUVERS__);
 }
 
 ::flatbuffers::Offset<APM> CreateAPM(::flatbuffers::FlatBufferBuilder &_fbb, const APMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMQuaternionStateT : public ::flatbuffers::NativeTable {
+  typedef APMQuaternionState TableType;
+  std::string COMMENT{};
+  std::string REF_FRAME_A{};
+  std::string REF_FRAME_B{};
+  double Q1 = 0.0;
+  double Q2 = 0.0;
+  double Q3 = 0.0;
+  double QC = 0.0;
+  double Q1_DOT = std::numeric_limits<double>::quiet_NaN();
+  double Q2_DOT = std::numeric_limits<double>::quiet_NaN();
+  double Q3_DOT = std::numeric_limits<double>::quiet_NaN();
+  double QC_DOT = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// A quaternion state of an APM (CCSDS 504.0-B-2 Table 3-3): rotation from
+/// REF_FRAME_A to REF_FRAME_B. The derivative is NaN when the message states none.
+struct APMQuaternionState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMQuaternionStateT NativeTableType;
+  typedef APMQuaternionStateBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_REF_FRAME_A = 6,
+    VT_REF_FRAME_B = 8,
+    VT_Q1 = 10,
+    VT_Q2 = 12,
+    VT_Q3 = 14,
+    VT_QC = 16,
+    VT_Q1_DOT = 18,
+    VT_Q2_DOT = 20,
+    VT_Q3_DOT = 22,
+    VT_QC_DOT = 24
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// REF_FRAME_A: the frame the rotation starts from.
+  const ::flatbuffers::String *REF_FRAME_A() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_A);
+  }
+  /// REF_FRAME_B: the frame the rotation ends in.
+  const ::flatbuffers::String *REF_FRAME_B() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_B);
+  }
+  /// Q1 (vector part, x).
+  double Q1() const {
+    return GetField<double>(VT_Q1, 0.0);
+  }
+  /// Q2 (vector part, y).
+  double Q2() const {
+    return GetField<double>(VT_Q2, 0.0);
+  }
+  /// Q3 (vector part, z).
+  double Q3() const {
+    return GetField<double>(VT_Q3, 0.0);
+  }
+  /// QC (scalar part).
+  double QC() const {
+    return GetField<double>(VT_QC, 0.0);
+  }
+  /// Q1_DOT in 1/s, NaN when not stated.
+  double Q1_DOT() const {
+    return GetField<double>(VT_Q1_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Q2_DOT in 1/s, NaN when not stated.
+  double Q2_DOT() const {
+    return GetField<double>(VT_Q2_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Q3_DOT in 1/s, NaN when not stated.
+  double Q3_DOT() const {
+    return GetField<double>(VT_Q3_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// QC_DOT in 1/s, NaN when not stated.
+  double QC_DOT() const {
+    return GetField<double>(VT_QC_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_A) &&
+           verifier.VerifyString(REF_FRAME_A()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_B) &&
+           verifier.VerifyString(REF_FRAME_B()) &&
+           VerifyField<double>(verifier, VT_Q1, 8) &&
+           VerifyField<double>(verifier, VT_Q2, 8) &&
+           VerifyField<double>(verifier, VT_Q3, 8) &&
+           VerifyField<double>(verifier, VT_QC, 8) &&
+           VerifyField<double>(verifier, VT_Q1_DOT, 8) &&
+           VerifyField<double>(verifier, VT_Q2_DOT, 8) &&
+           VerifyField<double>(verifier, VT_Q3_DOT, 8) &&
+           VerifyField<double>(verifier, VT_QC_DOT, 8) &&
+           verifier.EndTable();
+  }
+  APMQuaternionStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMQuaternionStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMQuaternionState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMQuaternionStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMQuaternionStateBuilder {
+  typedef APMQuaternionState Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMQuaternionState::VT_COMMENT, COMMENT);
+  }
+  void add_REF_FRAME_A(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A) {
+    fbb_.AddOffset(APMQuaternionState::VT_REF_FRAME_A, REF_FRAME_A);
+  }
+  void add_REF_FRAME_B(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B) {
+    fbb_.AddOffset(APMQuaternionState::VT_REF_FRAME_B, REF_FRAME_B);
+  }
+  void add_Q1(double Q1) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q1, Q1, 0.0);
+  }
+  void add_Q2(double Q2) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q2, Q2, 0.0);
+  }
+  void add_Q3(double Q3) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q3, Q3, 0.0);
+  }
+  void add_QC(double QC) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_QC, QC, 0.0);
+  }
+  void add_Q1_DOT(double Q1_DOT) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q1_DOT, Q1_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_Q2_DOT(double Q2_DOT) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q2_DOT, Q2_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_Q3_DOT(double Q3_DOT) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_Q3_DOT, Q3_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_QC_DOT(double QC_DOT) {
+    fbb_.AddElement<double>(APMQuaternionState::VT_QC_DOT, QC_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit APMQuaternionStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMQuaternionState> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMQuaternionState>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMQuaternionState> CreateAPMQuaternionState(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B = 0,
+    double Q1 = 0.0,
+    double Q2 = 0.0,
+    double Q3 = 0.0,
+    double QC = 0.0,
+    double Q1_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double Q2_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double Q3_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double QC_DOT = std::numeric_limits<double>::quiet_NaN()) {
+  APMQuaternionStateBuilder builder_(_fbb);
+  builder_.add_QC_DOT(QC_DOT);
+  builder_.add_Q3_DOT(Q3_DOT);
+  builder_.add_Q2_DOT(Q2_DOT);
+  builder_.add_Q1_DOT(Q1_DOT);
+  builder_.add_QC(QC);
+  builder_.add_Q3(Q3);
+  builder_.add_Q2(Q2);
+  builder_.add_Q1(Q1);
+  builder_.add_REF_FRAME_B(REF_FRAME_B);
+  builder_.add_REF_FRAME_A(REF_FRAME_A);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMQuaternionState::Traits {
+  using type = APMQuaternionState;
+  static auto constexpr Create = CreateAPMQuaternionState;
+};
+
+inline ::flatbuffers::Offset<APMQuaternionState> CreateAPMQuaternionStateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *REF_FRAME_A = nullptr,
+    const char *REF_FRAME_B = nullptr,
+    double Q1 = 0.0,
+    double Q2 = 0.0,
+    double Q3 = 0.0,
+    double QC = 0.0,
+    double Q1_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double Q2_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double Q3_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double QC_DOT = std::numeric_limits<double>::quiet_NaN()) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto REF_FRAME_A__ = REF_FRAME_A ? _fbb.CreateString(REF_FRAME_A) : 0;
+  auto REF_FRAME_B__ = REF_FRAME_B ? _fbb.CreateString(REF_FRAME_B) : 0;
+  return CreateAPMQuaternionState(
+      _fbb,
+      COMMENT__,
+      REF_FRAME_A__,
+      REF_FRAME_B__,
+      Q1,
+      Q2,
+      Q3,
+      QC,
+      Q1_DOT,
+      Q2_DOT,
+      Q3_DOT,
+      QC_DOT);
+}
+
+::flatbuffers::Offset<APMQuaternionState> CreateAPMQuaternionState(::flatbuffers::FlatBufferBuilder &_fbb, const APMQuaternionStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMEulerAngleStateT : public ::flatbuffers::NativeTable {
+  typedef APMEulerAngleState TableType;
+  std::string COMMENT{};
+  std::string REF_FRAME_A{};
+  std::string REF_FRAME_B{};
+  std::string EULER_ROT_SEQ{};
+  double ANGLE_1 = 0.0;
+  double ANGLE_2 = 0.0;
+  double ANGLE_3 = 0.0;
+  double ANGLE_1_DOT = std::numeric_limits<double>::quiet_NaN();
+  double ANGLE_2_DOT = std::numeric_limits<double>::quiet_NaN();
+  double ANGLE_3_DOT = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// An Euler angle state of an APM (EULER_START block). Angles in degrees; a rate
+/// is NaN when the message states none.
+struct APMEulerAngleState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMEulerAngleStateT NativeTableType;
+  typedef APMEulerAngleStateBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_REF_FRAME_A = 6,
+    VT_REF_FRAME_B = 8,
+    VT_EULER_ROT_SEQ = 10,
+    VT_ANGLE_1 = 12,
+    VT_ANGLE_2 = 14,
+    VT_ANGLE_3 = 16,
+    VT_ANGLE_1_DOT = 18,
+    VT_ANGLE_2_DOT = 20,
+    VT_ANGLE_3_DOT = 22
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// REF_FRAME_A: the frame the rotation starts from.
+  const ::flatbuffers::String *REF_FRAME_A() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_A);
+  }
+  /// REF_FRAME_B: the frame the rotation ends in.
+  const ::flatbuffers::String *REF_FRAME_B() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_B);
+  }
+  /// EULER_ROT_SEQ: the rotation sequence, for example ZXZ.
+  const ::flatbuffers::String *EULER_ROT_SEQ() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EULER_ROT_SEQ);
+  }
+  /// ANGLE_1 in degrees.
+  double ANGLE_1() const {
+    return GetField<double>(VT_ANGLE_1, 0.0);
+  }
+  /// ANGLE_2 in degrees.
+  double ANGLE_2() const {
+    return GetField<double>(VT_ANGLE_2, 0.0);
+  }
+  /// ANGLE_3 in degrees.
+  double ANGLE_3() const {
+    return GetField<double>(VT_ANGLE_3, 0.0);
+  }
+  /// ANGLE_1_DOT in deg/s, NaN when not stated.
+  double ANGLE_1_DOT() const {
+    return GetField<double>(VT_ANGLE_1_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ANGLE_2_DOT in deg/s, NaN when not stated.
+  double ANGLE_2_DOT() const {
+    return GetField<double>(VT_ANGLE_2_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ANGLE_3_DOT in deg/s, NaN when not stated.
+  double ANGLE_3_DOT() const {
+    return GetField<double>(VT_ANGLE_3_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_A) &&
+           verifier.VerifyString(REF_FRAME_A()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_B) &&
+           verifier.VerifyString(REF_FRAME_B()) &&
+           VerifyOffset(verifier, VT_EULER_ROT_SEQ) &&
+           verifier.VerifyString(EULER_ROT_SEQ()) &&
+           VerifyField<double>(verifier, VT_ANGLE_1, 8) &&
+           VerifyField<double>(verifier, VT_ANGLE_2, 8) &&
+           VerifyField<double>(verifier, VT_ANGLE_3, 8) &&
+           VerifyField<double>(verifier, VT_ANGLE_1_DOT, 8) &&
+           VerifyField<double>(verifier, VT_ANGLE_2_DOT, 8) &&
+           VerifyField<double>(verifier, VT_ANGLE_3_DOT, 8) &&
+           verifier.EndTable();
+  }
+  APMEulerAngleStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMEulerAngleStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMEulerAngleState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMEulerAngleStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMEulerAngleStateBuilder {
+  typedef APMEulerAngleState Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMEulerAngleState::VT_COMMENT, COMMENT);
+  }
+  void add_REF_FRAME_A(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A) {
+    fbb_.AddOffset(APMEulerAngleState::VT_REF_FRAME_A, REF_FRAME_A);
+  }
+  void add_REF_FRAME_B(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B) {
+    fbb_.AddOffset(APMEulerAngleState::VT_REF_FRAME_B, REF_FRAME_B);
+  }
+  void add_EULER_ROT_SEQ(::flatbuffers::Offset<::flatbuffers::String> EULER_ROT_SEQ) {
+    fbb_.AddOffset(APMEulerAngleState::VT_EULER_ROT_SEQ, EULER_ROT_SEQ);
+  }
+  void add_ANGLE_1(double ANGLE_1) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_1, ANGLE_1, 0.0);
+  }
+  void add_ANGLE_2(double ANGLE_2) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_2, ANGLE_2, 0.0);
+  }
+  void add_ANGLE_3(double ANGLE_3) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_3, ANGLE_3, 0.0);
+  }
+  void add_ANGLE_1_DOT(double ANGLE_1_DOT) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_1_DOT, ANGLE_1_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ANGLE_2_DOT(double ANGLE_2_DOT) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_2_DOT, ANGLE_2_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ANGLE_3_DOT(double ANGLE_3_DOT) {
+    fbb_.AddElement<double>(APMEulerAngleState::VT_ANGLE_3_DOT, ANGLE_3_DOT, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit APMEulerAngleStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMEulerAngleState> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMEulerAngleState>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMEulerAngleState> CreateAPMEulerAngleState(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EULER_ROT_SEQ = 0,
+    double ANGLE_1 = 0.0,
+    double ANGLE_2 = 0.0,
+    double ANGLE_3 = 0.0,
+    double ANGLE_1_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double ANGLE_2_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double ANGLE_3_DOT = std::numeric_limits<double>::quiet_NaN()) {
+  APMEulerAngleStateBuilder builder_(_fbb);
+  builder_.add_ANGLE_3_DOT(ANGLE_3_DOT);
+  builder_.add_ANGLE_2_DOT(ANGLE_2_DOT);
+  builder_.add_ANGLE_1_DOT(ANGLE_1_DOT);
+  builder_.add_ANGLE_3(ANGLE_3);
+  builder_.add_ANGLE_2(ANGLE_2);
+  builder_.add_ANGLE_1(ANGLE_1);
+  builder_.add_EULER_ROT_SEQ(EULER_ROT_SEQ);
+  builder_.add_REF_FRAME_B(REF_FRAME_B);
+  builder_.add_REF_FRAME_A(REF_FRAME_A);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMEulerAngleState::Traits {
+  using type = APMEulerAngleState;
+  static auto constexpr Create = CreateAPMEulerAngleState;
+};
+
+inline ::flatbuffers::Offset<APMEulerAngleState> CreateAPMEulerAngleStateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *REF_FRAME_A = nullptr,
+    const char *REF_FRAME_B = nullptr,
+    const char *EULER_ROT_SEQ = nullptr,
+    double ANGLE_1 = 0.0,
+    double ANGLE_2 = 0.0,
+    double ANGLE_3 = 0.0,
+    double ANGLE_1_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double ANGLE_2_DOT = std::numeric_limits<double>::quiet_NaN(),
+    double ANGLE_3_DOT = std::numeric_limits<double>::quiet_NaN()) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto REF_FRAME_A__ = REF_FRAME_A ? _fbb.CreateString(REF_FRAME_A) : 0;
+  auto REF_FRAME_B__ = REF_FRAME_B ? _fbb.CreateString(REF_FRAME_B) : 0;
+  auto EULER_ROT_SEQ__ = EULER_ROT_SEQ ? _fbb.CreateString(EULER_ROT_SEQ) : 0;
+  return CreateAPMEulerAngleState(
+      _fbb,
+      COMMENT__,
+      REF_FRAME_A__,
+      REF_FRAME_B__,
+      EULER_ROT_SEQ__,
+      ANGLE_1,
+      ANGLE_2,
+      ANGLE_3,
+      ANGLE_1_DOT,
+      ANGLE_2_DOT,
+      ANGLE_3_DOT);
+}
+
+::flatbuffers::Offset<APMEulerAngleState> CreateAPMEulerAngleState(::flatbuffers::FlatBufferBuilder &_fbb, const APMEulerAngleStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMAngularVelocityT : public ::flatbuffers::NativeTable {
+  typedef APMAngularVelocity TableType;
+  std::string COMMENT{};
+  std::string REF_FRAME_A{};
+  std::string REF_FRAME_B{};
+  std::string ANGVEL_FRAME{};
+  double ANGVEL_X = 0.0;
+  double ANGVEL_Y = 0.0;
+  double ANGVEL_Z = 0.0;
+};
+
+/// An angular velocity of an APM (ANGVEL_START block), in deg/s.
+struct APMAngularVelocity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMAngularVelocityT NativeTableType;
+  typedef APMAngularVelocityBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_REF_FRAME_A = 6,
+    VT_REF_FRAME_B = 8,
+    VT_ANGVEL_FRAME = 10,
+    VT_ANGVEL_X = 12,
+    VT_ANGVEL_Y = 14,
+    VT_ANGVEL_Z = 16
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// REF_FRAME_A: the frame the rotation starts from.
+  const ::flatbuffers::String *REF_FRAME_A() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_A);
+  }
+  /// REF_FRAME_B: the frame the rotation ends in.
+  const ::flatbuffers::String *REF_FRAME_B() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_B);
+  }
+  /// ANGVEL_FRAME: the frame the components are in.
+  const ::flatbuffers::String *ANGVEL_FRAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ANGVEL_FRAME);
+  }
+  /// ANGVEL_X in deg/s.
+  double ANGVEL_X() const {
+    return GetField<double>(VT_ANGVEL_X, 0.0);
+  }
+  /// ANGVEL_Y in deg/s.
+  double ANGVEL_Y() const {
+    return GetField<double>(VT_ANGVEL_Y, 0.0);
+  }
+  /// ANGVEL_Z in deg/s.
+  double ANGVEL_Z() const {
+    return GetField<double>(VT_ANGVEL_Z, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_A) &&
+           verifier.VerifyString(REF_FRAME_A()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_B) &&
+           verifier.VerifyString(REF_FRAME_B()) &&
+           VerifyOffset(verifier, VT_ANGVEL_FRAME) &&
+           verifier.VerifyString(ANGVEL_FRAME()) &&
+           VerifyField<double>(verifier, VT_ANGVEL_X, 8) &&
+           VerifyField<double>(verifier, VT_ANGVEL_Y, 8) &&
+           VerifyField<double>(verifier, VT_ANGVEL_Z, 8) &&
+           verifier.EndTable();
+  }
+  APMAngularVelocityT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMAngularVelocityT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMAngularVelocity> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMAngularVelocityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMAngularVelocityBuilder {
+  typedef APMAngularVelocity Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMAngularVelocity::VT_COMMENT, COMMENT);
+  }
+  void add_REF_FRAME_A(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A) {
+    fbb_.AddOffset(APMAngularVelocity::VT_REF_FRAME_A, REF_FRAME_A);
+  }
+  void add_REF_FRAME_B(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B) {
+    fbb_.AddOffset(APMAngularVelocity::VT_REF_FRAME_B, REF_FRAME_B);
+  }
+  void add_ANGVEL_FRAME(::flatbuffers::Offset<::flatbuffers::String> ANGVEL_FRAME) {
+    fbb_.AddOffset(APMAngularVelocity::VT_ANGVEL_FRAME, ANGVEL_FRAME);
+  }
+  void add_ANGVEL_X(double ANGVEL_X) {
+    fbb_.AddElement<double>(APMAngularVelocity::VT_ANGVEL_X, ANGVEL_X, 0.0);
+  }
+  void add_ANGVEL_Y(double ANGVEL_Y) {
+    fbb_.AddElement<double>(APMAngularVelocity::VT_ANGVEL_Y, ANGVEL_Y, 0.0);
+  }
+  void add_ANGVEL_Z(double ANGVEL_Z) {
+    fbb_.AddElement<double>(APMAngularVelocity::VT_ANGVEL_Z, ANGVEL_Z, 0.0);
+  }
+  explicit APMAngularVelocityBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMAngularVelocity> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMAngularVelocity>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMAngularVelocity> CreateAPMAngularVelocity(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ANGVEL_FRAME = 0,
+    double ANGVEL_X = 0.0,
+    double ANGVEL_Y = 0.0,
+    double ANGVEL_Z = 0.0) {
+  APMAngularVelocityBuilder builder_(_fbb);
+  builder_.add_ANGVEL_Z(ANGVEL_Z);
+  builder_.add_ANGVEL_Y(ANGVEL_Y);
+  builder_.add_ANGVEL_X(ANGVEL_X);
+  builder_.add_ANGVEL_FRAME(ANGVEL_FRAME);
+  builder_.add_REF_FRAME_B(REF_FRAME_B);
+  builder_.add_REF_FRAME_A(REF_FRAME_A);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMAngularVelocity::Traits {
+  using type = APMAngularVelocity;
+  static auto constexpr Create = CreateAPMAngularVelocity;
+};
+
+inline ::flatbuffers::Offset<APMAngularVelocity> CreateAPMAngularVelocityDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *REF_FRAME_A = nullptr,
+    const char *REF_FRAME_B = nullptr,
+    const char *ANGVEL_FRAME = nullptr,
+    double ANGVEL_X = 0.0,
+    double ANGVEL_Y = 0.0,
+    double ANGVEL_Z = 0.0) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto REF_FRAME_A__ = REF_FRAME_A ? _fbb.CreateString(REF_FRAME_A) : 0;
+  auto REF_FRAME_B__ = REF_FRAME_B ? _fbb.CreateString(REF_FRAME_B) : 0;
+  auto ANGVEL_FRAME__ = ANGVEL_FRAME ? _fbb.CreateString(ANGVEL_FRAME) : 0;
+  return CreateAPMAngularVelocity(
+      _fbb,
+      COMMENT__,
+      REF_FRAME_A__,
+      REF_FRAME_B__,
+      ANGVEL_FRAME__,
+      ANGVEL_X,
+      ANGVEL_Y,
+      ANGVEL_Z);
+}
+
+::flatbuffers::Offset<APMAngularVelocity> CreateAPMAngularVelocity(::flatbuffers::FlatBufferBuilder &_fbb, const APMAngularVelocityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMSpinStateT : public ::flatbuffers::NativeTable {
+  typedef APMSpinState TableType;
+  std::string COMMENT{};
+  std::string REF_FRAME_A{};
+  std::string REF_FRAME_B{};
+  double SPIN_ALPHA = 0.0;
+  double SPIN_DELTA = 0.0;
+  double SPIN_ANGLE = 0.0;
+  double SPIN_ANGLE_VEL = 0.0;
+  double NUTATION = std::numeric_limits<double>::quiet_NaN();
+  double NUTATION_PER = std::numeric_limits<double>::quiet_NaN();
+  double NUTATION_PHASE = std::numeric_limits<double>::quiet_NaN();
+  double MOMENTUM_ALPHA = std::numeric_limits<double>::quiet_NaN();
+  double MOMENTUM_DELTA = std::numeric_limits<double>::quiet_NaN();
+  double NUTATION_VEL = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// A spin state of an APM (SPIN_START block). The nutation terms come as either of
+/// two groups, nutation angle, period and phase or the momentum direction and the
+/// velocity around it; those not stated are NaN.
+struct APMSpinState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMSpinStateT NativeTableType;
+  typedef APMSpinStateBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_REF_FRAME_A = 6,
+    VT_REF_FRAME_B = 8,
+    VT_SPIN_ALPHA = 10,
+    VT_SPIN_DELTA = 12,
+    VT_SPIN_ANGLE = 14,
+    VT_SPIN_ANGLE_VEL = 16,
+    VT_NUTATION = 18,
+    VT_NUTATION_PER = 20,
+    VT_NUTATION_PHASE = 22,
+    VT_MOMENTUM_ALPHA = 24,
+    VT_MOMENTUM_DELTA = 26,
+    VT_NUTATION_VEL = 28
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// REF_FRAME_A: the frame the rotation starts from.
+  const ::flatbuffers::String *REF_FRAME_A() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_A);
+  }
+  /// REF_FRAME_B: the frame the rotation ends in.
+  const ::flatbuffers::String *REF_FRAME_B() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REF_FRAME_B);
+  }
+  /// SPIN_ALPHA: right ascension of the spin axis in degrees.
+  double SPIN_ALPHA() const {
+    return GetField<double>(VT_SPIN_ALPHA, 0.0);
+  }
+  /// SPIN_DELTA: declination of the spin axis in degrees.
+  double SPIN_DELTA() const {
+    return GetField<double>(VT_SPIN_DELTA, 0.0);
+  }
+  /// SPIN_ANGLE: phase in degrees.
+  double SPIN_ANGLE() const {
+    return GetField<double>(VT_SPIN_ANGLE, 0.0);
+  }
+  /// SPIN_ANGLE_VEL: angular velocity in deg/s.
+  double SPIN_ANGLE_VEL() const {
+    return GetField<double>(VT_SPIN_ANGLE_VEL, 0.0);
+  }
+  /// NUTATION: nutation angle in degrees, NaN when not stated.
+  double NUTATION() const {
+    return GetField<double>(VT_NUTATION, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// NUTATION_PER: nutation period in seconds, NaN when not stated.
+  double NUTATION_PER() const {
+    return GetField<double>(VT_NUTATION_PER, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// NUTATION_PHASE: nutation phase in degrees, NaN when not stated.
+  double NUTATION_PHASE() const {
+    return GetField<double>(VT_NUTATION_PHASE, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// MOMENTUM_ALPHA: right ascension of the angular momentum vector in degrees,
+  /// NaN when not stated.
+  double MOMENTUM_ALPHA() const {
+    return GetField<double>(VT_MOMENTUM_ALPHA, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// MOMENTUM_DELTA: declination of the angular momentum vector in degrees, NaN
+  /// when not stated.
+  double MOMENTUM_DELTA() const {
+    return GetField<double>(VT_MOMENTUM_DELTA, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// NUTATION_VEL: angular velocity around the momentum vector in deg/s, NaN when
+  /// not stated.
+  double NUTATION_VEL() const {
+    return GetField<double>(VT_NUTATION_VEL, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_A) &&
+           verifier.VerifyString(REF_FRAME_A()) &&
+           VerifyOffset(verifier, VT_REF_FRAME_B) &&
+           verifier.VerifyString(REF_FRAME_B()) &&
+           VerifyField<double>(verifier, VT_SPIN_ALPHA, 8) &&
+           VerifyField<double>(verifier, VT_SPIN_DELTA, 8) &&
+           VerifyField<double>(verifier, VT_SPIN_ANGLE, 8) &&
+           VerifyField<double>(verifier, VT_SPIN_ANGLE_VEL, 8) &&
+           VerifyField<double>(verifier, VT_NUTATION, 8) &&
+           VerifyField<double>(verifier, VT_NUTATION_PER, 8) &&
+           VerifyField<double>(verifier, VT_NUTATION_PHASE, 8) &&
+           VerifyField<double>(verifier, VT_MOMENTUM_ALPHA, 8) &&
+           VerifyField<double>(verifier, VT_MOMENTUM_DELTA, 8) &&
+           VerifyField<double>(verifier, VT_NUTATION_VEL, 8) &&
+           verifier.EndTable();
+  }
+  APMSpinStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMSpinStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMSpinState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMSpinStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMSpinStateBuilder {
+  typedef APMSpinState Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMSpinState::VT_COMMENT, COMMENT);
+  }
+  void add_REF_FRAME_A(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A) {
+    fbb_.AddOffset(APMSpinState::VT_REF_FRAME_A, REF_FRAME_A);
+  }
+  void add_REF_FRAME_B(::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B) {
+    fbb_.AddOffset(APMSpinState::VT_REF_FRAME_B, REF_FRAME_B);
+  }
+  void add_SPIN_ALPHA(double SPIN_ALPHA) {
+    fbb_.AddElement<double>(APMSpinState::VT_SPIN_ALPHA, SPIN_ALPHA, 0.0);
+  }
+  void add_SPIN_DELTA(double SPIN_DELTA) {
+    fbb_.AddElement<double>(APMSpinState::VT_SPIN_DELTA, SPIN_DELTA, 0.0);
+  }
+  void add_SPIN_ANGLE(double SPIN_ANGLE) {
+    fbb_.AddElement<double>(APMSpinState::VT_SPIN_ANGLE, SPIN_ANGLE, 0.0);
+  }
+  void add_SPIN_ANGLE_VEL(double SPIN_ANGLE_VEL) {
+    fbb_.AddElement<double>(APMSpinState::VT_SPIN_ANGLE_VEL, SPIN_ANGLE_VEL, 0.0);
+  }
+  void add_NUTATION(double NUTATION) {
+    fbb_.AddElement<double>(APMSpinState::VT_NUTATION, NUTATION, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_NUTATION_PER(double NUTATION_PER) {
+    fbb_.AddElement<double>(APMSpinState::VT_NUTATION_PER, NUTATION_PER, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_NUTATION_PHASE(double NUTATION_PHASE) {
+    fbb_.AddElement<double>(APMSpinState::VT_NUTATION_PHASE, NUTATION_PHASE, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_MOMENTUM_ALPHA(double MOMENTUM_ALPHA) {
+    fbb_.AddElement<double>(APMSpinState::VT_MOMENTUM_ALPHA, MOMENTUM_ALPHA, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_MOMENTUM_DELTA(double MOMENTUM_DELTA) {
+    fbb_.AddElement<double>(APMSpinState::VT_MOMENTUM_DELTA, MOMENTUM_DELTA, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_NUTATION_VEL(double NUTATION_VEL) {
+    fbb_.AddElement<double>(APMSpinState::VT_NUTATION_VEL, NUTATION_VEL, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit APMSpinStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMSpinState> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMSpinState>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMSpinState> CreateAPMSpinState(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_A = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REF_FRAME_B = 0,
+    double SPIN_ALPHA = 0.0,
+    double SPIN_DELTA = 0.0,
+    double SPIN_ANGLE = 0.0,
+    double SPIN_ANGLE_VEL = 0.0,
+    double NUTATION = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_PER = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_PHASE = std::numeric_limits<double>::quiet_NaN(),
+    double MOMENTUM_ALPHA = std::numeric_limits<double>::quiet_NaN(),
+    double MOMENTUM_DELTA = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_VEL = std::numeric_limits<double>::quiet_NaN()) {
+  APMSpinStateBuilder builder_(_fbb);
+  builder_.add_NUTATION_VEL(NUTATION_VEL);
+  builder_.add_MOMENTUM_DELTA(MOMENTUM_DELTA);
+  builder_.add_MOMENTUM_ALPHA(MOMENTUM_ALPHA);
+  builder_.add_NUTATION_PHASE(NUTATION_PHASE);
+  builder_.add_NUTATION_PER(NUTATION_PER);
+  builder_.add_NUTATION(NUTATION);
+  builder_.add_SPIN_ANGLE_VEL(SPIN_ANGLE_VEL);
+  builder_.add_SPIN_ANGLE(SPIN_ANGLE);
+  builder_.add_SPIN_DELTA(SPIN_DELTA);
+  builder_.add_SPIN_ALPHA(SPIN_ALPHA);
+  builder_.add_REF_FRAME_B(REF_FRAME_B);
+  builder_.add_REF_FRAME_A(REF_FRAME_A);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMSpinState::Traits {
+  using type = APMSpinState;
+  static auto constexpr Create = CreateAPMSpinState;
+};
+
+inline ::flatbuffers::Offset<APMSpinState> CreateAPMSpinStateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *REF_FRAME_A = nullptr,
+    const char *REF_FRAME_B = nullptr,
+    double SPIN_ALPHA = 0.0,
+    double SPIN_DELTA = 0.0,
+    double SPIN_ANGLE = 0.0,
+    double SPIN_ANGLE_VEL = 0.0,
+    double NUTATION = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_PER = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_PHASE = std::numeric_limits<double>::quiet_NaN(),
+    double MOMENTUM_ALPHA = std::numeric_limits<double>::quiet_NaN(),
+    double MOMENTUM_DELTA = std::numeric_limits<double>::quiet_NaN(),
+    double NUTATION_VEL = std::numeric_limits<double>::quiet_NaN()) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto REF_FRAME_A__ = REF_FRAME_A ? _fbb.CreateString(REF_FRAME_A) : 0;
+  auto REF_FRAME_B__ = REF_FRAME_B ? _fbb.CreateString(REF_FRAME_B) : 0;
+  return CreateAPMSpinState(
+      _fbb,
+      COMMENT__,
+      REF_FRAME_A__,
+      REF_FRAME_B__,
+      SPIN_ALPHA,
+      SPIN_DELTA,
+      SPIN_ANGLE,
+      SPIN_ANGLE_VEL,
+      NUTATION,
+      NUTATION_PER,
+      NUTATION_PHASE,
+      MOMENTUM_ALPHA,
+      MOMENTUM_DELTA,
+      NUTATION_VEL);
+}
+
+::flatbuffers::Offset<APMSpinState> CreateAPMSpinState(::flatbuffers::FlatBufferBuilder &_fbb, const APMSpinStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMInertiaT : public ::flatbuffers::NativeTable {
+  typedef APMInertia TableType;
+  std::string COMMENT{};
+  std::string INERTIA_REF_FRAME{};
+  double IXX = 0.0;
+  double IYY = 0.0;
+  double IZZ = 0.0;
+  double IXY = 0.0;
+  double IXZ = 0.0;
+  double IYZ = 0.0;
+};
+
+/// An inertia tensor of an APM (INERTIA_START block), in kg*m**2.
+struct APMInertia FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMInertiaT NativeTableType;
+  typedef APMInertiaBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_INERTIA_REF_FRAME = 6,
+    VT_IXX = 8,
+    VT_IYY = 10,
+    VT_IZZ = 12,
+    VT_IXY = 14,
+    VT_IXZ = 16,
+    VT_IYZ = 18
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// INERTIA_REF_FRAME: the frame the tensor is in.
+  const ::flatbuffers::String *INERTIA_REF_FRAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_INERTIA_REF_FRAME);
+  }
+  /// IXX: moment about X.
+  double IXX() const {
+    return GetField<double>(VT_IXX, 0.0);
+  }
+  /// IYY: moment about Y.
+  double IYY() const {
+    return GetField<double>(VT_IYY, 0.0);
+  }
+  /// IZZ: moment about Z.
+  double IZZ() const {
+    return GetField<double>(VT_IZZ, 0.0);
+  }
+  /// IXY: cross product X-Y.
+  double IXY() const {
+    return GetField<double>(VT_IXY, 0.0);
+  }
+  /// IXZ: cross product X-Z.
+  double IXZ() const {
+    return GetField<double>(VT_IXZ, 0.0);
+  }
+  /// IYZ: cross product Y-Z.
+  double IYZ() const {
+    return GetField<double>(VT_IYZ, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_INERTIA_REF_FRAME) &&
+           verifier.VerifyString(INERTIA_REF_FRAME()) &&
+           VerifyField<double>(verifier, VT_IXX, 8) &&
+           VerifyField<double>(verifier, VT_IYY, 8) &&
+           VerifyField<double>(verifier, VT_IZZ, 8) &&
+           VerifyField<double>(verifier, VT_IXY, 8) &&
+           VerifyField<double>(verifier, VT_IXZ, 8) &&
+           VerifyField<double>(verifier, VT_IYZ, 8) &&
+           verifier.EndTable();
+  }
+  APMInertiaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMInertiaT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMInertia> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMInertiaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMInertiaBuilder {
+  typedef APMInertia Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMInertia::VT_COMMENT, COMMENT);
+  }
+  void add_INERTIA_REF_FRAME(::flatbuffers::Offset<::flatbuffers::String> INERTIA_REF_FRAME) {
+    fbb_.AddOffset(APMInertia::VT_INERTIA_REF_FRAME, INERTIA_REF_FRAME);
+  }
+  void add_IXX(double IXX) {
+    fbb_.AddElement<double>(APMInertia::VT_IXX, IXX, 0.0);
+  }
+  void add_IYY(double IYY) {
+    fbb_.AddElement<double>(APMInertia::VT_IYY, IYY, 0.0);
+  }
+  void add_IZZ(double IZZ) {
+    fbb_.AddElement<double>(APMInertia::VT_IZZ, IZZ, 0.0);
+  }
+  void add_IXY(double IXY) {
+    fbb_.AddElement<double>(APMInertia::VT_IXY, IXY, 0.0);
+  }
+  void add_IXZ(double IXZ) {
+    fbb_.AddElement<double>(APMInertia::VT_IXZ, IXZ, 0.0);
+  }
+  void add_IYZ(double IYZ) {
+    fbb_.AddElement<double>(APMInertia::VT_IYZ, IYZ, 0.0);
+  }
+  explicit APMInertiaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMInertia> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMInertia>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMInertia> CreateAPMInertia(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> INERTIA_REF_FRAME = 0,
+    double IXX = 0.0,
+    double IYY = 0.0,
+    double IZZ = 0.0,
+    double IXY = 0.0,
+    double IXZ = 0.0,
+    double IYZ = 0.0) {
+  APMInertiaBuilder builder_(_fbb);
+  builder_.add_IYZ(IYZ);
+  builder_.add_IXZ(IXZ);
+  builder_.add_IXY(IXY);
+  builder_.add_IZZ(IZZ);
+  builder_.add_IYY(IYY);
+  builder_.add_IXX(IXX);
+  builder_.add_INERTIA_REF_FRAME(INERTIA_REF_FRAME);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMInertia::Traits {
+  using type = APMInertia;
+  static auto constexpr Create = CreateAPMInertia;
+};
+
+inline ::flatbuffers::Offset<APMInertia> CreateAPMInertiaDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *INERTIA_REF_FRAME = nullptr,
+    double IXX = 0.0,
+    double IYY = 0.0,
+    double IZZ = 0.0,
+    double IXY = 0.0,
+    double IXZ = 0.0,
+    double IYZ = 0.0) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto INERTIA_REF_FRAME__ = INERTIA_REF_FRAME ? _fbb.CreateString(INERTIA_REF_FRAME) : 0;
+  return CreateAPMInertia(
+      _fbb,
+      COMMENT__,
+      INERTIA_REF_FRAME__,
+      IXX,
+      IYY,
+      IZZ,
+      IXY,
+      IXZ,
+      IYZ);
+}
+
+::flatbuffers::Offset<APMInertia> CreateAPMInertia(::flatbuffers::FlatBufferBuilder &_fbb, const APMInertiaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct APMManeuverT : public ::flatbuffers::NativeTable {
+  typedef APMManeuver TableType;
+  std::string COMMENT{};
+  std::string MAN_EPOCH_START{};
+  double MAN_DURATION = 0.0;
+  std::string MAN_REF_FRAME{};
+  double MAN_TOR_X = 0.0;
+  double MAN_TOR_Y = 0.0;
+  double MAN_TOR_Z = 0.0;
+  double MAN_DELTA_MASS = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// An attitude maneuver of an APM (MAN_START block).
+struct APMManeuver FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef APMManeuverT NativeTableType;
+  typedef APMManeuverBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMENT = 4,
+    VT_MAN_EPOCH_START = 6,
+    VT_MAN_DURATION = 8,
+    VT_MAN_REF_FRAME = 10,
+    VT_MAN_TOR_X = 12,
+    VT_MAN_TOR_Y = 14,
+    VT_MAN_TOR_Z = 16,
+    VT_MAN_DELTA_MASS = 18
+  };
+  /// COMMENT lines of this block, joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// MAN_EPOCH_START: epoch of the start of the maneuver.
+  const ::flatbuffers::String *MAN_EPOCH_START() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MAN_EPOCH_START);
+  }
+  /// MAN_DURATION in seconds.
+  double MAN_DURATION() const {
+    return GetField<double>(VT_MAN_DURATION, 0.0);
+  }
+  /// MAN_REF_FRAME: the frame the torque is in.
+  const ::flatbuffers::String *MAN_REF_FRAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MAN_REF_FRAME);
+  }
+  /// MAN_TOR_X in N*m.
+  double MAN_TOR_X() const {
+    return GetField<double>(VT_MAN_TOR_X, 0.0);
+  }
+  /// MAN_TOR_Y in N*m.
+  double MAN_TOR_Y() const {
+    return GetField<double>(VT_MAN_TOR_Y, 0.0);
+  }
+  /// MAN_TOR_Z in N*m.
+  double MAN_TOR_Z() const {
+    return GetField<double>(VT_MAN_TOR_Z, 0.0);
+  }
+  /// MAN_DELTA_MASS in kg (negative or zero), NaN when not stated.
+  double MAN_DELTA_MASS() const {
+    return GetField<double>(VT_MAN_DELTA_MASS, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_MAN_EPOCH_START) &&
+           verifier.VerifyString(MAN_EPOCH_START()) &&
+           VerifyField<double>(verifier, VT_MAN_DURATION, 8) &&
+           VerifyOffset(verifier, VT_MAN_REF_FRAME) &&
+           verifier.VerifyString(MAN_REF_FRAME()) &&
+           VerifyField<double>(verifier, VT_MAN_TOR_X, 8) &&
+           VerifyField<double>(verifier, VT_MAN_TOR_Y, 8) &&
+           VerifyField<double>(verifier, VT_MAN_TOR_Z, 8) &&
+           VerifyField<double>(verifier, VT_MAN_DELTA_MASS, 8) &&
+           verifier.EndTable();
+  }
+  APMManeuverT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(APMManeuverT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<APMManeuver> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMManeuverT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct APMManeuverBuilder {
+  typedef APMManeuver Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(APMManeuver::VT_COMMENT, COMMENT);
+  }
+  void add_MAN_EPOCH_START(::flatbuffers::Offset<::flatbuffers::String> MAN_EPOCH_START) {
+    fbb_.AddOffset(APMManeuver::VT_MAN_EPOCH_START, MAN_EPOCH_START);
+  }
+  void add_MAN_DURATION(double MAN_DURATION) {
+    fbb_.AddElement<double>(APMManeuver::VT_MAN_DURATION, MAN_DURATION, 0.0);
+  }
+  void add_MAN_REF_FRAME(::flatbuffers::Offset<::flatbuffers::String> MAN_REF_FRAME) {
+    fbb_.AddOffset(APMManeuver::VT_MAN_REF_FRAME, MAN_REF_FRAME);
+  }
+  void add_MAN_TOR_X(double MAN_TOR_X) {
+    fbb_.AddElement<double>(APMManeuver::VT_MAN_TOR_X, MAN_TOR_X, 0.0);
+  }
+  void add_MAN_TOR_Y(double MAN_TOR_Y) {
+    fbb_.AddElement<double>(APMManeuver::VT_MAN_TOR_Y, MAN_TOR_Y, 0.0);
+  }
+  void add_MAN_TOR_Z(double MAN_TOR_Z) {
+    fbb_.AddElement<double>(APMManeuver::VT_MAN_TOR_Z, MAN_TOR_Z, 0.0);
+  }
+  void add_MAN_DELTA_MASS(double MAN_DELTA_MASS) {
+    fbb_.AddElement<double>(APMManeuver::VT_MAN_DELTA_MASS, MAN_DELTA_MASS, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit APMManeuverBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<APMManeuver> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<APMManeuver>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<APMManeuver> CreateAPMManeuver(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MAN_EPOCH_START = 0,
+    double MAN_DURATION = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> MAN_REF_FRAME = 0,
+    double MAN_TOR_X = 0.0,
+    double MAN_TOR_Y = 0.0,
+    double MAN_TOR_Z = 0.0,
+    double MAN_DELTA_MASS = std::numeric_limits<double>::quiet_NaN()) {
+  APMManeuverBuilder builder_(_fbb);
+  builder_.add_MAN_DELTA_MASS(MAN_DELTA_MASS);
+  builder_.add_MAN_TOR_Z(MAN_TOR_Z);
+  builder_.add_MAN_TOR_Y(MAN_TOR_Y);
+  builder_.add_MAN_TOR_X(MAN_TOR_X);
+  builder_.add_MAN_DURATION(MAN_DURATION);
+  builder_.add_MAN_REF_FRAME(MAN_REF_FRAME);
+  builder_.add_MAN_EPOCH_START(MAN_EPOCH_START);
+  builder_.add_COMMENT(COMMENT);
+  return builder_.Finish();
+}
+
+struct APMManeuver::Traits {
+  using type = APMManeuver;
+  static auto constexpr Create = CreateAPMManeuver;
+};
+
+inline ::flatbuffers::Offset<APMManeuver> CreateAPMManeuverDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *COMMENT = nullptr,
+    const char *MAN_EPOCH_START = nullptr,
+    double MAN_DURATION = 0.0,
+    const char *MAN_REF_FRAME = nullptr,
+    double MAN_TOR_X = 0.0,
+    double MAN_TOR_Y = 0.0,
+    double MAN_TOR_Z = 0.0,
+    double MAN_DELTA_MASS = std::numeric_limits<double>::quiet_NaN()) {
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto MAN_EPOCH_START__ = MAN_EPOCH_START ? _fbb.CreateString(MAN_EPOCH_START) : 0;
+  auto MAN_REF_FRAME__ = MAN_REF_FRAME ? _fbb.CreateString(MAN_REF_FRAME) : 0;
+  return CreateAPMManeuver(
+      _fbb,
+      COMMENT__,
+      MAN_EPOCH_START__,
+      MAN_DURATION,
+      MAN_REF_FRAME__,
+      MAN_TOR_X,
+      MAN_TOR_Y,
+      MAN_TOR_Z,
+      MAN_DELTA_MASS);
+}
+
+::flatbuffers::Offset<APMManeuver> CreateAPMManeuver(::flatbuffers::FlatBufferBuilder &_fbb, const APMManeuverT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline APMT::APMT(const APMT &o)
+      : CCSDS_APM_VERS(o.CCSDS_APM_VERS),
+        CREATION_DATE(o.CREATION_DATE),
+        ORIGINATOR(o.ORIGINATOR),
+        OBJECT_NAME(o.OBJECT_NAME),
+        OBJECT_ID(o.OBJECT_ID),
+        EPOCH(o.EPOCH),
+        Q1(o.Q1),
+        Q2(o.Q2),
+        Q3(o.Q3),
+        QC(o.QC),
+        COMMENT(o.COMMENT),
+        CLASSIFICATION(o.CLASSIFICATION),
+        MESSAGE_ID(o.MESSAGE_ID),
+        CENTER_NAME(o.CENTER_NAME),
+        TIME_SYSTEM(o.TIME_SYSTEM) {
+  QUATERNION_STATES.reserve(o.QUATERNION_STATES.size());
+  for (const auto &QUATERNION_STATES_ : o.QUATERNION_STATES) { QUATERNION_STATES.emplace_back((QUATERNION_STATES_) ? new APMQuaternionStateT(*QUATERNION_STATES_) : nullptr); }
+  EULER_ANGLE_STATES.reserve(o.EULER_ANGLE_STATES.size());
+  for (const auto &EULER_ANGLE_STATES_ : o.EULER_ANGLE_STATES) { EULER_ANGLE_STATES.emplace_back((EULER_ANGLE_STATES_) ? new APMEulerAngleStateT(*EULER_ANGLE_STATES_) : nullptr); }
+  ANGULAR_VELOCITIES.reserve(o.ANGULAR_VELOCITIES.size());
+  for (const auto &ANGULAR_VELOCITIES_ : o.ANGULAR_VELOCITIES) { ANGULAR_VELOCITIES.emplace_back((ANGULAR_VELOCITIES_) ? new APMAngularVelocityT(*ANGULAR_VELOCITIES_) : nullptr); }
+  SPIN_STATES.reserve(o.SPIN_STATES.size());
+  for (const auto &SPIN_STATES_ : o.SPIN_STATES) { SPIN_STATES.emplace_back((SPIN_STATES_) ? new APMSpinStateT(*SPIN_STATES_) : nullptr); }
+  INERTIAS.reserve(o.INERTIAS.size());
+  for (const auto &INERTIAS_ : o.INERTIAS) { INERTIAS.emplace_back((INERTIAS_) ? new APMInertiaT(*INERTIAS_) : nullptr); }
+  MANEUVERS.reserve(o.MANEUVERS.size());
+  for (const auto &MANEUVERS_ : o.MANEUVERS) { MANEUVERS.emplace_back((MANEUVERS_) ? new APMManeuverT(*MANEUVERS_) : nullptr); }
+}
+
+inline APMT &APMT::operator=(APMT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(CCSDS_APM_VERS, o.CCSDS_APM_VERS);
+  std::swap(CREATION_DATE, o.CREATION_DATE);
+  std::swap(ORIGINATOR, o.ORIGINATOR);
+  std::swap(OBJECT_NAME, o.OBJECT_NAME);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(Q1, o.Q1);
+  std::swap(Q2, o.Q2);
+  std::swap(Q3, o.Q3);
+  std::swap(QC, o.QC);
+  std::swap(COMMENT, o.COMMENT);
+  std::swap(CLASSIFICATION, o.CLASSIFICATION);
+  std::swap(MESSAGE_ID, o.MESSAGE_ID);
+  std::swap(CENTER_NAME, o.CENTER_NAME);
+  std::swap(TIME_SYSTEM, o.TIME_SYSTEM);
+  std::swap(QUATERNION_STATES, o.QUATERNION_STATES);
+  std::swap(EULER_ANGLE_STATES, o.EULER_ANGLE_STATES);
+  std::swap(ANGULAR_VELOCITIES, o.ANGULAR_VELOCITIES);
+  std::swap(SPIN_STATES, o.SPIN_STATES);
+  std::swap(INERTIAS, o.INERTIAS);
+  std::swap(MANEUVERS, o.MANEUVERS);
+  return *this;
+}
 
 inline APMT *APM::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<APMT>();
@@ -233,6 +1677,17 @@ inline void APM::UnPackTo(APMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = Q2(); _o->Q2 = _e; }
   { auto _e = Q3(); _o->Q3 = _e; }
   { auto _e = QC(); _o->QC = _e; }
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = CLASSIFICATION(); if (_e) _o->CLASSIFICATION = _e->str(); }
+  { auto _e = MESSAGE_ID(); if (_e) _o->MESSAGE_ID = _e->str(); }
+  { auto _e = CENTER_NAME(); if (_e) _o->CENTER_NAME = _e->str(); }
+  { auto _e = TIME_SYSTEM(); if (_e) _o->TIME_SYSTEM = _e->str(); }
+  { auto _e = QUATERNION_STATES(); if (_e) { _o->QUATERNION_STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->QUATERNION_STATES[_i]) { _e->Get(_i)->UnPackTo(_o->QUATERNION_STATES[_i].get(), _resolver); } else { _o->QUATERNION_STATES[_i] = std::unique_ptr<APMQuaternionStateT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->QUATERNION_STATES.resize(0); } }
+  { auto _e = EULER_ANGLE_STATES(); if (_e) { _o->EULER_ANGLE_STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EULER_ANGLE_STATES[_i]) { _e->Get(_i)->UnPackTo(_o->EULER_ANGLE_STATES[_i].get(), _resolver); } else { _o->EULER_ANGLE_STATES[_i] = std::unique_ptr<APMEulerAngleStateT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EULER_ANGLE_STATES.resize(0); } }
+  { auto _e = ANGULAR_VELOCITIES(); if (_e) { _o->ANGULAR_VELOCITIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ANGULAR_VELOCITIES[_i]) { _e->Get(_i)->UnPackTo(_o->ANGULAR_VELOCITIES[_i].get(), _resolver); } else { _o->ANGULAR_VELOCITIES[_i] = std::unique_ptr<APMAngularVelocityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ANGULAR_VELOCITIES.resize(0); } }
+  { auto _e = SPIN_STATES(); if (_e) { _o->SPIN_STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SPIN_STATES[_i]) { _e->Get(_i)->UnPackTo(_o->SPIN_STATES[_i].get(), _resolver); } else { _o->SPIN_STATES[_i] = std::unique_ptr<APMSpinStateT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SPIN_STATES.resize(0); } }
+  { auto _e = INERTIAS(); if (_e) { _o->INERTIAS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->INERTIAS[_i]) { _e->Get(_i)->UnPackTo(_o->INERTIAS[_i].get(), _resolver); } else { _o->INERTIAS[_i] = std::unique_ptr<APMInertiaT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->INERTIAS.resize(0); } }
+  { auto _e = MANEUVERS(); if (_e) { _o->MANEUVERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->MANEUVERS[_i]) { _e->Get(_i)->UnPackTo(_o->MANEUVERS[_i].get(), _resolver); } else { _o->MANEUVERS[_i] = std::unique_ptr<APMManeuverT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->MANEUVERS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<APM> CreateAPM(::flatbuffers::FlatBufferBuilder &_fbb, const APMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -253,6 +1708,17 @@ inline ::flatbuffers::Offset<APM> APM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _Q2 = _o->Q2;
   auto _Q3 = _o->Q3;
   auto _QC = _o->QC;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _CLASSIFICATION = _o->CLASSIFICATION.empty() ? 0 : _fbb.CreateString(_o->CLASSIFICATION);
+  auto _MESSAGE_ID = _o->MESSAGE_ID.empty() ? 0 : _fbb.CreateString(_o->MESSAGE_ID);
+  auto _CENTER_NAME = _o->CENTER_NAME.empty() ? 0 : _fbb.CreateString(_o->CENTER_NAME);
+  auto _TIME_SYSTEM = _o->TIME_SYSTEM.empty() ? 0 : _fbb.CreateString(_o->TIME_SYSTEM);
+  auto _QUATERNION_STATES = _o->QUATERNION_STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMQuaternionState>> (_o->QUATERNION_STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMQuaternionState(*__va->__fbb, __va->__o->QUATERNION_STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _EULER_ANGLE_STATES = _o->EULER_ANGLE_STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMEulerAngleState>> (_o->EULER_ANGLE_STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMEulerAngleState(*__va->__fbb, __va->__o->EULER_ANGLE_STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ANGULAR_VELOCITIES = _o->ANGULAR_VELOCITIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMAngularVelocity>> (_o->ANGULAR_VELOCITIES.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMAngularVelocity(*__va->__fbb, __va->__o->ANGULAR_VELOCITIES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _SPIN_STATES = _o->SPIN_STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMSpinState>> (_o->SPIN_STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMSpinState(*__va->__fbb, __va->__o->SPIN_STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _INERTIAS = _o->INERTIAS.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMInertia>> (_o->INERTIAS.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMInertia(*__va->__fbb, __va->__o->INERTIAS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _MANEUVERS = _o->MANEUVERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<APMManeuver>> (_o->MANEUVERS.size(), [](size_t i, _VectorArgs *__va) { return CreateAPMManeuver(*__va->__fbb, __va->__o->MANEUVERS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreateAPM(
       _fbb,
       _CCSDS_APM_VERS,
@@ -264,7 +1730,327 @@ inline ::flatbuffers::Offset<APM> APM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _Q1,
       _Q2,
       _Q3,
-      _QC);
+      _QC,
+      _COMMENT,
+      _CLASSIFICATION,
+      _MESSAGE_ID,
+      _CENTER_NAME,
+      _TIME_SYSTEM,
+      _QUATERNION_STATES,
+      _EULER_ANGLE_STATES,
+      _ANGULAR_VELOCITIES,
+      _SPIN_STATES,
+      _INERTIAS,
+      _MANEUVERS);
+}
+
+inline APMQuaternionStateT *APMQuaternionState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMQuaternionStateT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMQuaternionState::UnPackTo(APMQuaternionStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = REF_FRAME_A(); if (_e) _o->REF_FRAME_A = _e->str(); }
+  { auto _e = REF_FRAME_B(); if (_e) _o->REF_FRAME_B = _e->str(); }
+  { auto _e = Q1(); _o->Q1 = _e; }
+  { auto _e = Q2(); _o->Q2 = _e; }
+  { auto _e = Q3(); _o->Q3 = _e; }
+  { auto _e = QC(); _o->QC = _e; }
+  { auto _e = Q1_DOT(); _o->Q1_DOT = _e; }
+  { auto _e = Q2_DOT(); _o->Q2_DOT = _e; }
+  { auto _e = Q3_DOT(); _o->Q3_DOT = _e; }
+  { auto _e = QC_DOT(); _o->QC_DOT = _e; }
+}
+
+inline ::flatbuffers::Offset<APMQuaternionState> CreateAPMQuaternionState(::flatbuffers::FlatBufferBuilder &_fbb, const APMQuaternionStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMQuaternionState::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMQuaternionState> APMQuaternionState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMQuaternionStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMQuaternionStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _REF_FRAME_A = _o->REF_FRAME_A.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_A);
+  auto _REF_FRAME_B = _o->REF_FRAME_B.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_B);
+  auto _Q1 = _o->Q1;
+  auto _Q2 = _o->Q2;
+  auto _Q3 = _o->Q3;
+  auto _QC = _o->QC;
+  auto _Q1_DOT = _o->Q1_DOT;
+  auto _Q2_DOT = _o->Q2_DOT;
+  auto _Q3_DOT = _o->Q3_DOT;
+  auto _QC_DOT = _o->QC_DOT;
+  return CreateAPMQuaternionState(
+      _fbb,
+      _COMMENT,
+      _REF_FRAME_A,
+      _REF_FRAME_B,
+      _Q1,
+      _Q2,
+      _Q3,
+      _QC,
+      _Q1_DOT,
+      _Q2_DOT,
+      _Q3_DOT,
+      _QC_DOT);
+}
+
+inline APMEulerAngleStateT *APMEulerAngleState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMEulerAngleStateT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMEulerAngleState::UnPackTo(APMEulerAngleStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = REF_FRAME_A(); if (_e) _o->REF_FRAME_A = _e->str(); }
+  { auto _e = REF_FRAME_B(); if (_e) _o->REF_FRAME_B = _e->str(); }
+  { auto _e = EULER_ROT_SEQ(); if (_e) _o->EULER_ROT_SEQ = _e->str(); }
+  { auto _e = ANGLE_1(); _o->ANGLE_1 = _e; }
+  { auto _e = ANGLE_2(); _o->ANGLE_2 = _e; }
+  { auto _e = ANGLE_3(); _o->ANGLE_3 = _e; }
+  { auto _e = ANGLE_1_DOT(); _o->ANGLE_1_DOT = _e; }
+  { auto _e = ANGLE_2_DOT(); _o->ANGLE_2_DOT = _e; }
+  { auto _e = ANGLE_3_DOT(); _o->ANGLE_3_DOT = _e; }
+}
+
+inline ::flatbuffers::Offset<APMEulerAngleState> CreateAPMEulerAngleState(::flatbuffers::FlatBufferBuilder &_fbb, const APMEulerAngleStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMEulerAngleState::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMEulerAngleState> APMEulerAngleState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMEulerAngleStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMEulerAngleStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _REF_FRAME_A = _o->REF_FRAME_A.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_A);
+  auto _REF_FRAME_B = _o->REF_FRAME_B.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_B);
+  auto _EULER_ROT_SEQ = _o->EULER_ROT_SEQ.empty() ? 0 : _fbb.CreateString(_o->EULER_ROT_SEQ);
+  auto _ANGLE_1 = _o->ANGLE_1;
+  auto _ANGLE_2 = _o->ANGLE_2;
+  auto _ANGLE_3 = _o->ANGLE_3;
+  auto _ANGLE_1_DOT = _o->ANGLE_1_DOT;
+  auto _ANGLE_2_DOT = _o->ANGLE_2_DOT;
+  auto _ANGLE_3_DOT = _o->ANGLE_3_DOT;
+  return CreateAPMEulerAngleState(
+      _fbb,
+      _COMMENT,
+      _REF_FRAME_A,
+      _REF_FRAME_B,
+      _EULER_ROT_SEQ,
+      _ANGLE_1,
+      _ANGLE_2,
+      _ANGLE_3,
+      _ANGLE_1_DOT,
+      _ANGLE_2_DOT,
+      _ANGLE_3_DOT);
+}
+
+inline APMAngularVelocityT *APMAngularVelocity::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMAngularVelocityT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMAngularVelocity::UnPackTo(APMAngularVelocityT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = REF_FRAME_A(); if (_e) _o->REF_FRAME_A = _e->str(); }
+  { auto _e = REF_FRAME_B(); if (_e) _o->REF_FRAME_B = _e->str(); }
+  { auto _e = ANGVEL_FRAME(); if (_e) _o->ANGVEL_FRAME = _e->str(); }
+  { auto _e = ANGVEL_X(); _o->ANGVEL_X = _e; }
+  { auto _e = ANGVEL_Y(); _o->ANGVEL_Y = _e; }
+  { auto _e = ANGVEL_Z(); _o->ANGVEL_Z = _e; }
+}
+
+inline ::flatbuffers::Offset<APMAngularVelocity> CreateAPMAngularVelocity(::flatbuffers::FlatBufferBuilder &_fbb, const APMAngularVelocityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMAngularVelocity::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMAngularVelocity> APMAngularVelocity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMAngularVelocityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMAngularVelocityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _REF_FRAME_A = _o->REF_FRAME_A.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_A);
+  auto _REF_FRAME_B = _o->REF_FRAME_B.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_B);
+  auto _ANGVEL_FRAME = _o->ANGVEL_FRAME.empty() ? 0 : _fbb.CreateString(_o->ANGVEL_FRAME);
+  auto _ANGVEL_X = _o->ANGVEL_X;
+  auto _ANGVEL_Y = _o->ANGVEL_Y;
+  auto _ANGVEL_Z = _o->ANGVEL_Z;
+  return CreateAPMAngularVelocity(
+      _fbb,
+      _COMMENT,
+      _REF_FRAME_A,
+      _REF_FRAME_B,
+      _ANGVEL_FRAME,
+      _ANGVEL_X,
+      _ANGVEL_Y,
+      _ANGVEL_Z);
+}
+
+inline APMSpinStateT *APMSpinState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMSpinStateT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMSpinState::UnPackTo(APMSpinStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = REF_FRAME_A(); if (_e) _o->REF_FRAME_A = _e->str(); }
+  { auto _e = REF_FRAME_B(); if (_e) _o->REF_FRAME_B = _e->str(); }
+  { auto _e = SPIN_ALPHA(); _o->SPIN_ALPHA = _e; }
+  { auto _e = SPIN_DELTA(); _o->SPIN_DELTA = _e; }
+  { auto _e = SPIN_ANGLE(); _o->SPIN_ANGLE = _e; }
+  { auto _e = SPIN_ANGLE_VEL(); _o->SPIN_ANGLE_VEL = _e; }
+  { auto _e = NUTATION(); _o->NUTATION = _e; }
+  { auto _e = NUTATION_PER(); _o->NUTATION_PER = _e; }
+  { auto _e = NUTATION_PHASE(); _o->NUTATION_PHASE = _e; }
+  { auto _e = MOMENTUM_ALPHA(); _o->MOMENTUM_ALPHA = _e; }
+  { auto _e = MOMENTUM_DELTA(); _o->MOMENTUM_DELTA = _e; }
+  { auto _e = NUTATION_VEL(); _o->NUTATION_VEL = _e; }
+}
+
+inline ::flatbuffers::Offset<APMSpinState> CreateAPMSpinState(::flatbuffers::FlatBufferBuilder &_fbb, const APMSpinStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMSpinState::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMSpinState> APMSpinState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMSpinStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMSpinStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _REF_FRAME_A = _o->REF_FRAME_A.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_A);
+  auto _REF_FRAME_B = _o->REF_FRAME_B.empty() ? 0 : _fbb.CreateString(_o->REF_FRAME_B);
+  auto _SPIN_ALPHA = _o->SPIN_ALPHA;
+  auto _SPIN_DELTA = _o->SPIN_DELTA;
+  auto _SPIN_ANGLE = _o->SPIN_ANGLE;
+  auto _SPIN_ANGLE_VEL = _o->SPIN_ANGLE_VEL;
+  auto _NUTATION = _o->NUTATION;
+  auto _NUTATION_PER = _o->NUTATION_PER;
+  auto _NUTATION_PHASE = _o->NUTATION_PHASE;
+  auto _MOMENTUM_ALPHA = _o->MOMENTUM_ALPHA;
+  auto _MOMENTUM_DELTA = _o->MOMENTUM_DELTA;
+  auto _NUTATION_VEL = _o->NUTATION_VEL;
+  return CreateAPMSpinState(
+      _fbb,
+      _COMMENT,
+      _REF_FRAME_A,
+      _REF_FRAME_B,
+      _SPIN_ALPHA,
+      _SPIN_DELTA,
+      _SPIN_ANGLE,
+      _SPIN_ANGLE_VEL,
+      _NUTATION,
+      _NUTATION_PER,
+      _NUTATION_PHASE,
+      _MOMENTUM_ALPHA,
+      _MOMENTUM_DELTA,
+      _NUTATION_VEL);
+}
+
+inline APMInertiaT *APMInertia::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMInertiaT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMInertia::UnPackTo(APMInertiaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = INERTIA_REF_FRAME(); if (_e) _o->INERTIA_REF_FRAME = _e->str(); }
+  { auto _e = IXX(); _o->IXX = _e; }
+  { auto _e = IYY(); _o->IYY = _e; }
+  { auto _e = IZZ(); _o->IZZ = _e; }
+  { auto _e = IXY(); _o->IXY = _e; }
+  { auto _e = IXZ(); _o->IXZ = _e; }
+  { auto _e = IYZ(); _o->IYZ = _e; }
+}
+
+inline ::flatbuffers::Offset<APMInertia> CreateAPMInertia(::flatbuffers::FlatBufferBuilder &_fbb, const APMInertiaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMInertia::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMInertia> APMInertia::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMInertiaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMInertiaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _INERTIA_REF_FRAME = _o->INERTIA_REF_FRAME.empty() ? 0 : _fbb.CreateString(_o->INERTIA_REF_FRAME);
+  auto _IXX = _o->IXX;
+  auto _IYY = _o->IYY;
+  auto _IZZ = _o->IZZ;
+  auto _IXY = _o->IXY;
+  auto _IXZ = _o->IXZ;
+  auto _IYZ = _o->IYZ;
+  return CreateAPMInertia(
+      _fbb,
+      _COMMENT,
+      _INERTIA_REF_FRAME,
+      _IXX,
+      _IYY,
+      _IZZ,
+      _IXY,
+      _IXZ,
+      _IYZ);
+}
+
+inline APMManeuverT *APMManeuver::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<APMManeuverT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void APMManeuver::UnPackTo(APMManeuverT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = MAN_EPOCH_START(); if (_e) _o->MAN_EPOCH_START = _e->str(); }
+  { auto _e = MAN_DURATION(); _o->MAN_DURATION = _e; }
+  { auto _e = MAN_REF_FRAME(); if (_e) _o->MAN_REF_FRAME = _e->str(); }
+  { auto _e = MAN_TOR_X(); _o->MAN_TOR_X = _e; }
+  { auto _e = MAN_TOR_Y(); _o->MAN_TOR_Y = _e; }
+  { auto _e = MAN_TOR_Z(); _o->MAN_TOR_Z = _e; }
+  { auto _e = MAN_DELTA_MASS(); _o->MAN_DELTA_MASS = _e; }
+}
+
+inline ::flatbuffers::Offset<APMManeuver> CreateAPMManeuver(::flatbuffers::FlatBufferBuilder &_fbb, const APMManeuverT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return APMManeuver::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<APMManeuver> APMManeuver::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const APMManeuverT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const APMManeuverT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _MAN_EPOCH_START = _o->MAN_EPOCH_START.empty() ? 0 : _fbb.CreateString(_o->MAN_EPOCH_START);
+  auto _MAN_DURATION = _o->MAN_DURATION;
+  auto _MAN_REF_FRAME = _o->MAN_REF_FRAME.empty() ? 0 : _fbb.CreateString(_o->MAN_REF_FRAME);
+  auto _MAN_TOR_X = _o->MAN_TOR_X;
+  auto _MAN_TOR_Y = _o->MAN_TOR_Y;
+  auto _MAN_TOR_Z = _o->MAN_TOR_Z;
+  auto _MAN_DELTA_MASS = _o->MAN_DELTA_MASS;
+  return CreateAPMManeuver(
+      _fbb,
+      _COMMENT,
+      _MAN_EPOCH_START,
+      _MAN_DURATION,
+      _MAN_REF_FRAME,
+      _MAN_TOR_X,
+      _MAN_TOR_Y,
+      _MAN_TOR_Z,
+      _MAN_DELTA_MASS);
 }
 
 inline const APM *GetAPM(const void *buf) {

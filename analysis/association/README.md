@@ -15,13 +15,11 @@ fits, whether that is ambiguous, and which observations fit nothing
 | `rf_observations` | in | `$RFO` | RANGE, RANGE_RATE or Doppler (FREQUENCY, NOMINAL_FREQUENCY), AZIMUTH, ELEVATION |
 | `predictions` | in | `$OEM` | One block per catalog object span, with COVARIANCE_MATRIX_LINES |
 | `earth_orientation` | in, optional | `$EOP` | Rows bracketing the observations; required for Earth-fixed sensors or predictions |
-| `options` | in, optional | JSON | Below |
 | `radar_associated`, `optical_associated`, `rf_associated` | out | `$RDO`, `$EOO`, `$RFO` | The associated records, identity set, `UCT` false |
 | `radar_ucts`, `optical_ucts`, `rf_ucts` | out | `$RDO`, `$EOO`, `$RFO` | The uncorrelated records, `UCT` true |
-| `report` | out | JSON | Every candidate's d², p-value, posterior, residuals and geometry |
+| `report` | out | `$ASG` (`ASSOCIATION_REPORT`) | The options used, the gates, the counts and, per observation, its measurements, every listed candidate's d², p-value, posterior, residuals and geometry, the outcome and the UCT reason |
 
-Every SDS port also accepts the aligned-binary peer of its type (the same
-FlatBuffer bytes on an 8-byte boundary). Plain and size-prefixed frames are
+Every port carries one SDS FlatBuffer type; plain and size-prefixed frames are
 both read.
 
 ### Observations
@@ -63,8 +61,8 @@ not a candidate for it.
    rotation (a ±1 s central difference of the same chain, UT1 advancing
    at 1 − LOD/86400): r_g = Mᵀ r, v_g = Mᵀ v + Ṁᵀ r, so polar motion and
    precession-nutation enter as well as the Earth rotation angle. The
-   report gives each observation's `sensor_gcrf_km` and
-   `sensor_velocity_gcrf_km_s` (null for an inertial sensor, which carries
+   report gives each observation's `SENSOR_POSITION_GCRF_KM` and
+   `SENSOR_VELOCITY_GCRF_KM_S` (empty for an inertial sensor, which carries
    no velocity). The predicted state is taken at the emission time t − tau,
    tau = |r(t − tau) − s(t)| / c. Range rate is the derivative of that range,
    u·(v − v_s) / (1 + u·v / c).
@@ -95,7 +93,11 @@ not a candidate for it.
 
 ### Options
 
-| Field | Default | |
+The node config (`plugin.getConfig`, one ModuleConfig, read through
+`sdm_piv::get_config`). An absent key keeps its default; a key of the wrong
+kind or out of range is refused; keys of other modules are ignored.
+
+| Key | Default | |
 | --- | --- | --- |
 | `gate_probability` | 0.9973 | Gate as a chi-square probability |
 | `light_time` | true | Light-time correction |
@@ -107,10 +109,13 @@ not a candidate for it.
 
 ## Method `solve_assignment`
 
-The same Hungarian solver on any problem: `{cost: [[...]]}` (null =
-forbidden) or `{rows, columns, entries: [[i, j, c]]}`, optional
-`unassigned_cost` (one number or one per row). Returns the column per row
-(−1 = unassigned) and the total cost.
+The same Hungarian solver on any problem, one `$ASG` in and one out. The
+`problem` port's `PROBLEM` is `DENSE_COST` (row-major, NaN or +Infinity =
+forbidden) or sparse `ENTRIES` (absent pairs forbidden, the lowest of
+repeated pairs stands), optional `UNASSIGNED_COST` (one value or one per row)
+and `OBJECTIVE` (Maximize solves the negated costs). The `solution` port's
+`SOLUTION` gives the column per row (−1 = unassigned), the total cost (in the
+problem's sign), the counts and the method.
 
 ## Records
 
@@ -118,7 +123,7 @@ The association statistics are SDS fields (spacedatastandards.org 1.241.0):
 `CORR_MAHALANOBIS_SQ`, `CORR_DOF`, `CORR_GATE`, `CORR_P_VALUE` and
 `CORR_AMBIGUOUS` on `$RDO`, `$EOO` and `$RFO`, `$RDO` `CORR_QUALITY`, and
 the Doppler inputs `$RFO` `FREQUENCY_UNC` and `$RDO` `DOPPLER_FREQUENCY`.
-The JSON report adds every candidate's residuals, posterior and geometry.
+The `$ASG` report adds every candidate's residuals, posterior and geometry.
 
 ## Verification
 

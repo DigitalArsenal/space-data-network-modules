@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { request as typed } from './frames.mjs';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 
 test('the same parser artifact agrees in Chromium and native/container WasmEdge', {skip:process.env.SDN_RUN_CATALOG_PARITY !== '1'}, async () => {
   const source = '#JCAT\tSatcat\tName\tPiece\tType\tLDate\tPrimary\tPerigee\tPF\tApogee\tAF\tInc\tIF\nS40899\tNNA\tLuliang-1\t2015-049A\tP\t2015 Sep 19\tEarth\t500\t\t508\t\t97.46\t\n';
-  const request = payloadUtf8 => ({methodId:'parse_gcat',inputs:[{portId:'source',payloadUtf8,typeRef:{wireFormat:'aligned-binary',requiredAlignment:1,byteLength:new TextEncoder().encode(payloadUtf8).length}}]});
+  const request = text => typed('parse_gcat', text);
   const mccants = 'Synthetic Beta\n1 90011U 91097E   21305.13119867 0.00000000  00000-0  00000-0 0    07\n2 90011  14.7421 350.9137 0040735 245.2740 114.3135  1.00206833    04\n';
-  const mccantsRequest = value => ({...request(value),methodId:'parse_mccants_tle_catalog'});
+  const mccantsRequest = text => typed('parse_mccants_tle_catalog', text);
   const plan = await normalizeParityFixture({name:'catalog-source',threadCounts:[1],cases:[
     {id:'native-key-with-no-norad',request:request(source),expect:'ok'},
     {id:'damaged-edition',request:request(source+'bad\trow\n'),expect:'ok'},

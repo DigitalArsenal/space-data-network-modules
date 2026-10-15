@@ -2,28 +2,30 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { x, reportOf } from './xmt-recipes.mjs';
+const F=x.xmtFitVerdict;
 import { request,truth,policy,perturbed,reference,affine,oemStates,unpackOpm } from './epoch-fixture.mjs';
 const wasm=fs.readFileSync(new URL('../dist/isomorphic/module.wasm',import.meta.url)),manifest=JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json',import.meta.url)));
 async function invoke(t,r){const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});t.after(()=>h.destroy());return h.invoke(r);}
-const report=out=>JSON.parse(new TextDecoder().decode(out.outputs.find(o=>o.portId==='report').payload));
+const report=out=>reportOf(out).EPOCH_FIT_REPORT;
 const candidate=out=>out.outputs.find(o=>o.portId==='candidate').payload;
-test('direct epoch seed validates against positions without fabricated velocities',async t=>{const out=await invoke(t,request('validate_epoch',truth,[oemStates(affine(truth))]));assert.equal(out.statusCode,0,out.errorMessage);const r=report(out);assert.equal(r.status,'validated');assert.equal(r.holdoutSamples,4);assert.equal(r.covarianceAvailable,false);});
+test('direct epoch seed validates against positions without fabricated velocities',async t=>{const out=await invoke(t,request('validate_epoch',truth,[oemStates(affine(truth))]));assert.equal(out.statusCode,0,out.errorMessage);const r=report(out);assert.equal(r.VERDICT,F.Validated);assert.equal(r.HOLDOUT_SAMPLES,4);assert.equal(r.TRAINING_SAMPLES,13);assert.equal(r.COVARIANCE_AVAILABLE,false);assert.deepEqual([r.SAMPLE_COUNT,r.SPAN_S,r.NATIVE_ID,r.EPOCH],[17,9600,'10201','2026-09-21T00:00:00Z']);assert.equal(r.POLICY.HOLDOUT_STRIDE,4);assert.equal(r.POLICY.PROPAGATOR_ID,'test-affine');assert.deepEqual(r.POSITION_CORRECTION_KM,[]);});
 test('fitting recovers independent affine epoch state then requires held-out validation',async t=>{
- const seed=truth.map((x,j)=>x+([5,-3,2,.0005,-.0003,.0002][j]));const out=await invoke(t,request('fit_epoch_step',seed,perturbed(seed)));assert.equal(out.statusCode,0,out.errorMessage);assert.equal(report(out).status,'candidate-needs-propagation');
+ const seed=truth.map((x,j)=>x+([5,-3,2,.0005,-.0003,.0002][j]));const out=await invoke(t,request('fit_epoch_step',seed,perturbed(seed)));assert.equal(out.statusCode,0,out.errorMessage);assert.equal(report(out).VERDICT,F.CandidateNeedsPropagation);assert.equal(report(out).POSITION_CORRECTION_KM.length,3);assert.equal(report(out).VELOCITY_CORRECTION_KM_S.length,3);
  const fitted=unpackOpm(candidate(out));fitted.forEach((x,j)=>assert.ok(Math.abs(x-truth[j])<(j<3?1e-5:1e-8),`${j}: ${x-truth[j]}`));
- const check=await invoke(t,request('validate_epoch',fitted,[oemStates(affine(fitted))]));assert.equal(check.statusCode,0,check.errorMessage);assert.equal(report(check).status,'validated');
+ const check=await invoke(t,request('validate_epoch',fitted,[oemStates(affine(fitted))]));assert.equal(check.statusCode,0,check.errorMessage);assert.equal(report(check).VERDICT,F.Validated);
 });
 test('withheld outlier cannot train the fit and prevents acceptance',async t=>{
  const seed=truth.map((x,j)=>x+(j===0?5:0));const arcs=perturbed(seed);
  const a=await invoke(t,request('fit_epoch_step',seed,arcs));const b=await invoke(t,request('fit_epoch_step',seed,arcs,reference({heldoutError:100})));
  assert.equal(a.statusCode,0,a.errorMessage);assert.equal(b.statusCode,0,b.errorMessage);assert.deepEqual(candidate(a),candidate(b));
- const fitted=unpackOpm(candidate(b));const check=await invoke(t,request('validate_epoch',fitted,[oemStates(affine(fitted))],reference({heldoutError:100})));assert.equal(report(check).status,'requires-refinement');assert.ok(report(check).maximumHoldoutResidualKm>99);
+ const fitted=unpackOpm(candidate(b));const check=await invoke(t,request('validate_epoch',fitted,[oemStates(affine(fitted))],reference({heldoutError:100})));assert.equal(report(check).VERDICT,F.RequiresRefinement);assert.ok(report(check).MAXIMUM_HOLDOUT_RESIDUAL_KM>99);
 });
 test('wrong native identity, stale sensitivity seeds, absent model provenance and altered bytes fail',async t=>{
  const wrong=request('validate_epoch',truth,[oemStates(affine(truth))],reference({filename:'999_20260921_000000'}));
  const stale=perturbed(truth);stale[1]=stale[0];
  const corrupted=request('validate_epoch',truth,[oemStates(affine(truth))]);corrupted.inputs[2].payload=corrupted.inputs[2].payload.slice();corrupted.inputs[2].payload[corrupted.inputs[2].payload.length-1]^=1;
- for(const req of [wrong,request('fit_epoch_step',truth,stale),request('validate_epoch',truth,[oemStates(affine(truth))],reference(),{...policy,forceModel:{}}),corrupted])assert.notEqual((await invoke(t,req)).statusCode,0);
+ for(const req of [wrong,request('fit_epoch_step',truth,stale),request('validate_epoch',truth,[oemStates(affine(truth))],reference(),{...policy,forceModel:null}),corrupted])assert.notEqual((await invoke(t,req)).statusCode,0);
 });
 
 test('rank-deficient trajectory sensitivities cannot generate a fitted state',async t=>{
@@ -33,5 +35,5 @@ test('rank-deficient trajectory sensitivities cannot generate a fitted state',as
 });
 
 test('a fitted candidate that regresses held-out RMS is rejected even inside absolute tolerance',async t=>{
- const out=await invoke(t,request('validate_epoch',truth,[oemStates(affine(truth))],reference({heldoutError:.001}),{...policy,positionToleranceKm:1,maximumHoldoutRmsKm:0}));assert.equal(out.statusCode,0,out.errorMessage);assert.equal(report(out).status,'rejected-holdout-regression');
+ const out=await invoke(t,request('validate_epoch',truth,[oemStates(affine(truth))],reference({heldoutError:.001}),{...policy,positionToleranceKm:1,maximumHoldoutRmsKm:0}));assert.equal(out.statusCode,0,out.errorMessage);assert.equal(report(out).VERDICT,F.RejectedHoldoutRegression);
 });

@@ -1,6 +1,15 @@
 // data-source/ilrs-crd-source: ILRS Consolidated Laser Ranging Data (CRD, version 2) normal points as SDS tracking data.
 //
-//   read_crd   a CRD v2 file of normal points -> one $TDM per pass (LASER_RANGE observations), and a report
+//   read_crd   the HttpResponse (HRSP) holding a CRD v2 file of normal points -> one $TDM per pass (LASER_RANGE
+//              observations), and a FlowNotice (FNTC) report
+//
+// Typed contracts 1.0 (FlatBuffers only): the input is the HttpResponse hostcap/http-request answers, BODY the CRD text
+// verbatim. The report is one FlowNotice (KIND Info, COUNT the $TDM emitted) whose ITEMS are "name=value": the counters
+// (format, sessions, passesRead, normalPointsInFile, normalPointsRead, meteorologicalRecords, speedOfLightMetresPerSecond,
+// sessionsSkipped.<reason>, unknownRecordType, one item per type), per pass pass.<k>.<field>, and per normal point
+// normalPoint.<k>.<column> (pass, epoch, timeOfFlightSeconds, rawRanges, binRmsPs, windowSeconds, configuration; a statistic
+// the record does not give has no item). HTTP 304 gives one FlowNotice (Unchanged) and no $TDM; another status or a
+// transport ERROR is refused. No hostcalls.
 //
 // The observation source of the catalog pipeline: the tracking data analysis/estimation takes on `tracking_data`
 // (run_estimation reads a segment's LASER_RANGE rows as laser ranges). Pure bytes in, pure bytes out: the download from
@@ -37,7 +46,11 @@
 #include <string>
 #include <vector>
 
+#include <HttpResponse_generated.h>
+#include <FlowNotice_generated.h>
+
 using Json = nlohmann::json;
+namespace R = sdn::runtime;
 
 namespace {
 
@@ -157,13 +170,44 @@ std::unique_ptr<TDMObservationT> observation(const char* keyword, const std::str
 
 }  // namespace
 
+namespace {
+
+// A report item: "name=value", a number or a boolean as JSON writes it, a string verbatim.
+std::string item(const std::string& name, const Json& value) { return name + "=" + (value.is_string() ? value.get<std::string>() : value.dump()); }
+
+int push_notice(R::flowNoticeKind kind, const char* reason, uint64_t count, std::vector<std::string> items) {
+  R::FlowNoticeT notice;
+  notice.KIND = kind;
+  notice.SCHEMA = "TDM";
+  notice.SOURCE_NAME = "ilrs-crd";
+  notice.REASON = reason;
+  notice.COUNT = count;
+  notice.ITEMS = std::move(items);
+  flatbuffers::FlatBufferBuilder b(1024);
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+  return plugin_push_output_ex("report", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+                               b.GetBufferPointer(), b.GetSize());
+}
+
+}  // namespace
+
 extern "C" int read_crd(void) {
-  if (plugin_get_input_count() != 1) return fail("invalid-crd", "Exactly one CRD file is required.");
+  if (plugin_get_input_count() != 1) return fail("invalid-crd", "Exactly one HttpResponse holding a CRD file is required.");
   const auto* input = plugin_get_input_frame(0);
-  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) {
-    return fail("invalid-crd", "The source must be one bounded CRD version 2 file.");
+  if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length) {
+    return fail("missing-response-frame", "The parser requires the HttpResponse frame on 'source'.");
   }
-  const std::string text(reinterpret_cast<const char*>(input->payload), input->payload_length);
+  flatbuffers::Verifier verifier(input->payload, input->payload_length, 64, 1000000, false);
+  if (!R::VerifyHttpResponseBuffer(verifier)) return fail("invalid-response-frame", "The source frame is not an HttpResponse (HRSP).");
+  const R::HttpResponse* response = R::GetHttpResponse(input->payload);
+  if (response->ERROR() && response->ERROR()->size()) return fail("fetch-failed", "The CRD request failed: " + response->ERROR()->str());
+  if (response->STATUS() == 304) {
+    return push_notice(R::flowNoticeKind_Unchanged, "not-modified", 1, {response->URL() ? response->URL()->str() : std::string()}) < 0 ? 1 : 0;
+  }
+  if (response->STATUS() != 200) return fail("fetch-failed", "The CRD source returned HTTP status " + std::to_string(response->STATUS()) + ".");
+  const auto* body = response->BODY();
+  if (!body || body->size() == 0 || body->size() > kMaxBytes) return fail("invalid-crd", "The source must be one bounded CRD version 2 file.");
+  const std::string text(reinterpret_cast<const char*>(body->data()), body->size());
   if (text.find('\0') != std::string::npos) return fail("invalid-crd", "The CRD file contains an embedded NUL.");
 
   std::vector<Pass> passes;
@@ -306,9 +350,9 @@ extern "C" int read_crd(void) {
 
   // One TDM per pass; a pass with several system configurations (wavelengths) has one segment each.
   std::vector<std::vector<uint8_t>> messages;
-  Json summary = Json::array();
+  std::vector<std::string> summary;
   size_t read_points = 0;
-  Json normal_points = Json::array();
+  std::vector<std::string> normal_points;
   for (const Pass& pass : passes) {
     if (pass.points.empty()) {
       ++skipped["no normal points"];
@@ -355,8 +399,14 @@ extern "C" int read_crd(void) {
         if (p.config != config) continue;
         segment->OBSERVATIONS.push_back(observation("LASER_RANGE", epoch_text(pass, p.sod), p.tof * kSpeedOfLight / 2.0));
         ++read_points;
-        normal_points.push_back({pass.station.name + "/" + pass.target.name + "/" + start_buf, epoch_text(pass, p.sod), p.tof_text, p.has_raw ? Json(p.raw) : Json(nullptr), p.has_rms ? Json(p.rms_ps) : Json(nullptr),
-                                 p.has_window ? Json(p.window) : Json(nullptr), config});
+        const std::string at = "normalPoint." + std::to_string(read_points - 1) + ".";
+        normal_points.push_back(item(at + "pass", pass.station.name + "/" + pass.target.name + "/" + start_buf));
+        normal_points.push_back(item(at + "epoch", epoch_text(pass, p.sod)));
+        normal_points.push_back(item(at + "timeOfFlightSeconds", p.tof_text));
+        if (p.has_raw) normal_points.push_back(item(at + "rawRanges", p.raw));
+        if (p.has_rms) normal_points.push_back(item(at + "binRmsPs", p.rms_ps));
+        if (p.has_window) normal_points.push_back(item(at + "windowSeconds", p.window));
+        normal_points.push_back(item(at + "configuration", config));
       }
       if (&config == &configs.front()) {
         for (const Meteo& m : pass.meteo) {
@@ -373,22 +423,21 @@ extern "C" int read_crd(void) {
     flatbuffers::FlatBufferBuilder fbb(4096);
     FinishTDMBuffer(fbb, CreateTDM(fbb, &tdm));
     messages.emplace_back(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
-    summary.push_back({{"station", pass.station.name}, {"sod", tdm.OBSERVER_ID}, {"target", pass.target.name}, {"norad", pass.target.norad}, {"start", start_buf},
-                       {"normalPoints", pass.points.size()}, {"configurations", configs.size()}, {"epochEvent", event}, {"meteorologicalRecords", pass.meteo.size()}});
+    const std::string at = "pass." + std::to_string(messages.size() - 1) + ".";
+    for (std::string entry : {item(at + "station", pass.station.name), item(at + "sod", tdm.OBSERVER_ID), item(at + "target", pass.target.name), item(at + "norad", pass.target.norad),
+                              item(at + "start", std::string(start_buf)), item(at + "normalPoints", pass.points.size()), item(at + "configurations", configs.size()),
+                              item(at + "epochEvent", event), item(at + "meteorologicalRecords", pass.meteo.size())}) {
+      summary.push_back(std::move(entry));
+    }
   }
   if (messages.empty()) return fail("invalid-crd", "The file has no normal point pass that can be read as laser ranges.");
-  Json reasons = Json::object();
-  for (const auto& entry : skipped) reasons[entry.first] = entry.second;
-  Json unknown = Json::array();
-  for (const auto& t : unknown_types) unknown.push_back(t);
-  const Json report = {{"version", 1}, {"source", "ilrs-crd"}, {"format", "CRD 2"}, {"sessions", sessions}, {"passesRead", messages.size()}, {"normalPointsInFile", points}, {"normalPointsRead", read_points},
-                       {"meteorologicalRecords", meteo_records}, {"sessionsSkipped", reasons}, {"unknownRecordTypes", unknown}, {"speedOfLightMetresPerSecond", kSpeedOfLight},
-                       {"passes", summary}, {"normalPointColumns", {"pass", "epoch", "timeOfFlightSeconds", "rawRanges", "binRmsPs", "windowSeconds", "configuration"}}, {"normalPoints", normal_points}};
-  const std::string report_text = report.dump();
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(report_text.data()),
-                            static_cast<uint32_t>(report_text.size())) < 0) {
-    return 1;
-  }
+  std::vector<std::string> items = {item("format", "CRD 2"), item("sessions", sessions), item("passesRead", messages.size()), item("normalPointsInFile", points),
+                                    item("normalPointsRead", read_points), item("meteorologicalRecords", meteo_records), item("speedOfLightMetresPerSecond", kSpeedOfLight)};
+  for (const auto& entry : skipped) items.push_back(item("sessionsSkipped." + entry.first, entry.second));
+  for (const auto& t : unknown_types) items.push_back(item("unknownRecordType", t));
+  items.insert(items.end(), summary.begin(), summary.end());
+  items.insert(items.end(), normal_points.begin(), normal_points.end());
+  if (push_notice(R::flowNoticeKind_Info, "ilrs-crd", messages.size(), std::move(items)) < 0) return 1;
   for (const auto& message : messages) {
     if (plugin_push_output_ex("observations", "TDM.fbs", "$TDM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "TDM", 0, 0, message.data(), static_cast<uint32_t>(message.size())) < 0) return 1;
   }

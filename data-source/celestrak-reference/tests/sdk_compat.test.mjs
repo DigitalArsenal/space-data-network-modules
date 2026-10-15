@@ -1,27 +1,32 @@
-// data-source/celestrak-reference SDK-compat tests (fbcs-06b): the GP group
-// and SATCAT reference nodes run in the SDK browser harness against fixture
-// payloads shaped after one polite live read of the CelesTrak pages, and their
-// outputs are asserted structurally: request URLs and byte budgets, job
-// attribution (origin, dataset, licence), $EGP / $SIT / $LCC record streams
-// with the right file identifiers and field values, batch ids, provenance
-// warnings, the count-mismatch refusal and the 304 path.
+// data-source/celestrak-reference SDK-compat tests on the typed contracts (1.0): the GP group and SATCAT reference
+// nodes run in the SDK browser harness - TimerTick / HttpResponse frames in, HttpRequest / IngestRequest / FlowNotice /
+// SDS record-stream frames out, the job a size-prefixed $ICN record in HttpRequest.CONTEXT, and the node config the SDS
+// $PIV plugin.getConfig answer (one ModuleConfig on raw "config") - against fixture payloads shaped after one
+// polite live read of the CelesTrak pages. Outputs are asserted structurally: request URLs and byte budgets, job
+// attribution (origin, dataset, licence), $EGP / $SIT / $LCC record streams with the right file identifiers and field
+// values, batch ids, provenance warnings, the pairing refusals and the 304 path.
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import * as flatbuffers from "flatbuffers";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
-import {
-  CelestialFrame,
-  CelestialFrameWrapper,
-  OMM,
-  RFMUnion,
-} from "spacedatastandards.org/lib/js/OMM/main.js";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import {
+  decodeFlowNotice,
+  decodeHostCall,
+  decodeHttpRequest,
+  decodeHttpResponse,
+  decodeIngestRequest,
+  encodeHttpResponse,
+  encodeTimerTick,
+  identifierOf,
+} from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -29,8 +34,11 @@ const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.me
 const STANDARDS_ROOT =
   process.env.SPACE_DATA_STANDARDS_ROOT ??
   fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const OMM_LIB = pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/OMM/main.js"));
+const flatbuffers = createRequire(OMM_LIB)("flatbuffers");
+const { CelestialFrame, CelestialFrameWrapper, OMM, RFMUnion } = await import(OMM_LIB.href);
+const icnLib = await import(pathToFileURL(path.join(STANDARDS_ROOT, "lib/js/ICN/main.js")).href);
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const STATIONS_CSV = fs.readFileSync(new URL("./fixtures/celestrak-gp-group-stations.csv", import.meta.url));
@@ -39,9 +47,17 @@ const LAUNCHSITES_HTML = fs.readFileSync(new URL("./fixtures/celestrak-launchsit
 const SOURCES_HTML = fs.readFileSync(new URL("./fixtures/celestrak-sources.html", import.meta.url));
 
 const GP_BASE = "https://celestrak.org/NORAD/elements/gp.php";
+const GP_INDEX = "https://celestrak.org/NORAD/elements/";
 const DATE_HEADER = "Thu, 04 Sep 2026 01:57:53 GMT";
 const DATE_RFC3339 = "2026-09-04T01:57:53Z";
 const DATE_RFC3339_MS = "2026-09-04T01:57:53.000Z";
+const DATE_MS = Date.parse(DATE_RFC3339);
+const LICENSE_REF = "LicenseRef-CelesTrak-Usage-Policy";
+
+const TYPE = {
+  TICK: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" },
+  HRSP: { schemaName: "HttpResponse.fbs", fileIdentifier: "HRSP", rootTypeName: "HttpResponse", wireFormat: "flatbuffer" },
+};
 
 // The 47 GROUP tokens and 2 SPECIAL tokens on the CelesTrak elements index,
 // in page order (enumerated once, 2026-09-04).
@@ -73,74 +89,111 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-// Aligned typeRefs REQUIRE requiredAlignment and byteLength (SDK invoke codec).
-function bytesInput(portId, payload) {
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
-  };
-}
-
-function jsonInput(portId, value) {
-  return bytesInput(portId, encoder.encode(JSON.stringify(value)));
-}
-
-function tickInput() {
-  return jsonInput("tick", { firedAt: "2026-09-04T00:00:00Z" });
-}
-
-function httpResponse(bodyBytes, { status = 200, headers = { date: DATE_HEADER }, extra = {} } = {}) {
-  return {
-    status,
-    headers,
-    bodyB64: bodyBytes ? Buffer.from(bodyBytes).toString("base64") : "",
-    ...extra,
-  };
-}
-
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function createConfigStub(config = {}) {
-  const calls = [];
-  const dispatch = (operation) => {
-    calls.push(operation);
-    if (operation === "plugin.getConfig") return config;
-    throw new Error(`unexpected hostcall operation: ${operation}`);
-  };
-  return { calls, dispatch };
+// ---- the job: one size-prefixed $ICN record ---------------------------------------------------------------------
+
+function readJob(context) {
+  assert.equal(identifierOf(context.subarray(4)), "$ICN", "CONTEXT is one size-prefixed $ICN record");
+  assert.equal(new DataView(context.buffer, context.byteOffset).getUint32(0, true), context.length - 4);
+  return icnLib.ICN.getRootAsICN(new flatbuffers.ByteBuffer(Uint8Array.from(context.subarray(4)))).unpack();
 }
 
-async function createHarness(t, stub = createConfigStub()) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-    hostcallDispatch: stub.dispatch,
-  });
+// A job as satcat_reference builds it - for parser inputs whose job is not the builder's own.
+function icnJob(j) {
+  const b = new flatbuffers.Builder(1024);
+  const s = (v) => b.createString(v);
+  const offsets = {
+    connectorId: s(j.connectorId ?? j.sourceName), targetSchema: s(j.targetSchema ?? "SIT.fbs"), endpoint: s(j.sourceUrl),
+    method: s("GET"), originId: s("celestrak.org"), originName: s("CelesTrak"), datasetId: s(j.datasetId),
+    providerId: s(j.providerId ?? "space-data-network-02"), sourceName: s(j.sourceName), license: s(j.license),
+    licenseUrl: s(j.licenseUrl), citation: s(j.citation),
+  };
+  const { ICN } = icnLib;
+  ICN.startICN(b);
+  ICN.addConnectorId(b, offsets.connectorId);
+  ICN.addKind(b, icnLib.icnConnectorKind.HttpsPull);
+  ICN.addTargetSchema(b, offsets.targetSchema);
+  ICN.addEndpointUrl(b, offsets.endpoint);
+  ICN.addHttpMethod(b, offsets.method);
+  ICN.addOriginId(b, offsets.originId);
+  ICN.addOriginName(b, offsets.originName);
+  ICN.addDatasetId(b, offsets.datasetId);
+  ICN.addProviderId(b, offsets.providerId);
+  ICN.addSourceName(b, offsets.sourceName);
+  ICN.addLicense(b, offsets.license);
+  ICN.addLicenseUrl(b, offsets.licenseUrl);
+  ICN.addCitation(b, offsets.citation);
+  b.finishSizePrefixed(ICN.endICN(b), "$ICN");
+  return b.asUint8Array().slice();
+}
+
+// ---- harness: the node config is the $PIV plugin.getConfig answer ------------------------------------------------
+
+// The SDK harness's BrowserHost answers plugin.getConfig from `config` (one ModuleConfig on raw "config", as the Go node
+// answers it). The hostcall import is wrapped only to record which operations the module calls.
+async function createHarness(t, config = {}) {
+  const calls = [];
+  const instantiate = WebAssembly.instantiate;
+  WebAssembly.instantiate = async (module, imports) => {
+    // only the module under test imports the hostcall bridge (the SDK's own helper wasm passes through)
+    if (!imports?.space_data_module_host) return instantiate(module, imports);
+    let memory;
+    const host = imports.space_data_module_host;
+    const wrapped = { ...imports, space_data_module_host: { ...host,
+      call: (opPtr, opLen, ptr, len) => {
+        calls.push(decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice()).op);
+        return host.call(opPtr, opLen, ptr, len);
+      },
+    } };
+    const instance = await instantiate(module, wrapped);
+    memory = instance.exports.memory;
+    return instance;
+  };
+  let harness;
+  try {
+    harness = await createBrowserModuleHarness({
+      wasmSource: readWasm(),
+      manifest: readManifest(),
+      surface: "direct",
+      hostOptions: { config },
+    });
+  } finally {
+    WebAssembly.instantiate = instantiate;
+  }
   t.after(() => harness.destroy());
+  harness.calls = calls;
   return harness;
+}
+
+const tickInput = () => ({ portId: "tick", typeRef: TYPE.TICK, payload: encodeTimerTick({ triggerId: "timer-gp-groups", firedMs: Date.UTC(2026, 8, 4) }) });
+
+// An HttpResponse as hostcap/http-request answers it: the request's CONTEXT echoed verbatim.
+function responseInput(body, context, { status = 200, headers = { date: DATE_HEADER }, url = "" } = {}) {
+  return {
+    portId: "response",
+    typeRef: TYPE.HRSP,
+    payload: encodeHttpResponse({ url, status, headers, body: body ?? new Uint8Array(0), context, retrievedMs: DATE_MS + 250 }),
+  };
 }
 
 function framesOnPort(response, portId) {
   return response.outputs.filter((frame) => frame.portId === portId);
 }
-
-function jsonFrames(response, portId) {
-  return framesOnPort(response, portId).map((frame) => JSON.parse(decoder.decode(frame.payload)));
+function ok(response) {
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  return response;
 }
-
-function onlyJson(response, portId) {
-  const frames = jsonFrames(response, portId);
+const requestsOn = (response, port) => framesOnPort(ok(response), port).map((f) => decodeHttpRequest(f.payload));
+function only(response, portId, decode) {
+  const frames = framesOnPort(response, portId);
   assert.equal(frames.length, 1, `expected exactly one frame on ${portId}`);
-  return frames[0];
+  return decode(frames[0].payload);
 }
-
-function provenanceOf(meta) {
-  return JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-}
+const onlyMeta = (response, portId) => only(response, portId, decodeIngestRequest);
+const onlyNotice = (response) => only(response, "unchanged", decodeFlowNotice);
 
 // Splits a size-prefixed record stream into unprefixed record buffers.
 function splitStream(payload) {
@@ -300,25 +353,50 @@ function decodeLcc(record) {
   };
 }
 
-// The gp_groups job for a two-group list, exactly as the builder emits it.
-async function twoGroupJob(t) {
-  const harness = await createHarness(t, createConfigStub({ celestrak_gp_groups: "stations,gpz" }));
-  const response = await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  return onlyJson(response, "job");
+// The flow service's config: every node of the flow reads the same one (gp_groups and parse_gp_groups resolve the same
+// group plan from it).
+const TWO_GROUPS = { celestrak_gp_groups: "stations,gpz" };
+
+// The gp_groups requests for a two-group list, exactly as the builder emits them (each with its job in CONTEXT).
+async function twoGroupRequests(t, config = TWO_GROUPS) {
+  const harness = await createHarness(t, config);
+  return requestsOn(await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] }), "request");
 }
 
 // ---------------------------------------------------------------------------
 // Artifact.
 // ---------------------------------------------------------------------------
 
-test("celestrak-reference artifact passes SDK compliance", async () => {
+test("celestrak-reference artifact passes SDK compliance with one concrete FlatBuffer type per port", async () => {
+  const manifest = readManifest();
   const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
+    manifest,
     wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
     standardsRoot: STANDARDS_ROOT,
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const ids = {};
+  for (const method of manifest.methods) {
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      assert.equal(port.acceptedTypeSets.length, 1, port.portId);
+      assert.equal(port.acceptedTypeSets[0].allowedTypes.length, 1, port.portId);
+      const [type] = port.acceptedTypeSets[0].allowedTypes;
+      assert.equal(type.acceptsAnyFlatbuffer, undefined);
+      assert.equal(type.wireFormat, "flatbuffer");
+      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
+    }
+  }
+  assert.deepEqual(ids, {
+    "gp_groups.tick": "TICK", "gp_groups.request": "HREQ",
+    "parse_gp_groups.response": "HRSP", "parse_gp_groups.egp_meta": "INGQ", "parse_gp_groups.egp_records": "$EGP",
+    "parse_gp_groups.raw": "HRSP", "parse_gp_groups.unchanged": "FNTC", "parse_gp_groups.omm_meta": "INGQ",
+    "parse_gp_groups.omm_records": "$OMM",
+    "satcat_reference.tick": "TICK", "satcat_reference.request_sites": "HREQ", "satcat_reference.request_owners": "HREQ",
+    "parse_satcat_reference.response": "HRSP", "parse_satcat_reference.sit_meta": "INGQ",
+    "parse_satcat_reference.sit_records": "$SIT", "parse_satcat_reference.lcc_meta": "INGQ",
+    "parse_satcat_reference.lcc_records": "$LCC", "parse_satcat_reference.raw": "HRSP",
+    "parse_satcat_reference.unchanged": "FNTC",
+  });
 });
 
 test("celestrak-reference artifact imports only WASI and the builtin hostcall bridge", async () => {
@@ -340,81 +418,71 @@ test("celestrak-reference artifact imports only WASI and the builtin hostcall br
 // gp_groups.
 // ---------------------------------------------------------------------------
 
-test("gp_groups emits the 47 GROUP + 2 SPECIAL requests in page order and one job listing them", async (t) => {
-  const stub = createConfigStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-
-  const requests = jsonFrames(response, "request");
+test("gp_groups emits the 47 GROUP + 2 SPECIAL requests in page order, each carrying its group's job", async (t) => {
+  const harness = await createHarness(t);
+  const requests = requestsOn(await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] }), "request");
   assert.equal(requests.length, 49, "47 GROUP + 2 SPECIAL");
   assert.deepEqual(
     requests.map((r) => r.url),
     DEFAULT_GROUPS.map(([kind, token]) => groupURL(kind, token)),
     "request URLs are exact and in page order",
   );
-  for (const request of requests) {
+  for (const [i, request] of requests.entries()) {
     assert.equal(request.method, "GET");
     assert.equal(request.timeoutMs, 90000, "runner HTTPTimeout default");
     assert.equal(request.maxBytes, 8388608, "8 MiB per group");
+    assert.deepEqual(request.headers, {}, "the host presents its recorded validators");
+    const job = readJob(request.context);
+    assert.equal(job.CONNECTOR_ID, `celestrak-gp-groups/${DEFAULT_GROUPS[i][1]}`, "the job names its group");
+    assert.equal(job.ENDPOINT_URL, request.url);
+    assert.equal(job.KIND, icnLib.icnConnectorKind.HttpsPull);
+    assert.equal(job.HTTP_METHOD, "GET");
+    assert.equal(job.TARGET_SCHEMA, "EGP.fbs");
+    assert.deepEqual(job.EMITS_SCHEMAS, ["EGP"]);
+    assert.equal(job.POST_INGEST_ACTION, icnLib.icnPostIngestAction.Archive);
+    assert.equal(job.SOURCE_NAME, "celestrak-gp-groups");
+    assert.equal(job.PROVIDER_ID, "space-data-network-02");
+    assert.equal(job.ORIGIN_ID, "celestrak.org");
+    assert.equal(job.ORIGIN_NAME, "CelesTrak");
+    assert.equal(job.DATASET_ID, "gp-groups");
+    assert.equal(job.LICENSE_URL, "https://celestrak.org/usage-policy.php");
+    assert.match(job.LICENSE, /Only download the data you need/);
+    assert.match(job.CITATION, /CelesTrak/);
   }
-
-  const job = onlyJson(response, "job");
-  assert.equal(job.source_name, "celestrak-gp-groups");
-  assert.equal(job.source_url, "https://celestrak.org/NORAD/elements/");
-  assert.equal(job.provider_id, "space-data-network-02");
-  assert.equal(job.archive_source, "celestrak");
-  assert.equal(job.archive_name, "gp-groups.csv");
-  assert.equal(job.origin_id, "celestrak.org");
-  assert.equal(job.origin_name, "CelesTrak");
-  assert.equal(job.dataset_id, "gp-groups");
-  assert.equal(job.license_url, "https://celestrak.org/usage-policy.php");
-  assert.match(job.license, /Only download the data you need/);
-  assert.match(job.citation, /CelesTrak/);
-  assert.equal(job.group_count, 49);
-  assert.deepEqual(
-    job.groups.map((g) => [g.kind, g.token]),
-    DEFAULT_GROUPS,
-    "the job lists the same groups in the same order",
-  );
-  assert.deepEqual(job.groups.map((g) => g.url), requests.map((r) => r.url));
-  assert.equal(job.groups.find((g) => g.token === "stations").label, "Space Stations");
-  assert.equal(job.groups.find((g) => g.token === "gpz").label, "GEO Protected Zone");
-  assert.deepEqual(stub.calls, ["plugin.getConfig"]);
+  assert.deepEqual(harness.calls, ["plugin.getConfig"]);
 });
 
-test("gp_groups: node CONFIG celestrak_gp_groups shrinks the list; provider/licence overrides reach the job", async (t) => {
-  const harness = await createHarness(
-    t,
-    createConfigStub({
-      celestrak_gp_groups: "stations, gpz ,stations",
-      celestrak_provider_id: "prov-test",
-      celestrak_license: "test terms",
-      celestrak_license_url: "https://fixtures.test/terms",
-      celestrak_citation: "Fixture citation",
-      celestrak_http_timeout_ms: 5000,
-    }),
-  );
-  const response = await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const requests = jsonFrames(response, "request");
+test("gp_groups: node CONFIG celestrak_gp_groups shrinks the list; provider/licence overrides reach the jobs", async (t) => {
+  const harness = await createHarness(t, {
+    celestrak_gp_groups: "stations, gpz ,stations",
+    celestrak_provider_id: "prov-test",
+    celestrak_license: "test terms",
+    celestrak_license_url: "https://fixtures.test/terms",
+    celestrak_citation: "Fixture citation",
+    celestrak_http_timeout_ms: 5000,
+    celestrak_gp_groups_emit_omm: true,
+  });
+  const requests = requestsOn(await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] }), "request");
   assert.deepEqual(
     requests.map((r) => r.url),
     [groupURL("GROUP", "stations"), groupURL("SPECIAL", "gpz")],
     "deduplicated, trimmed, SPECIAL kind resolved from the registry",
   );
   assert.equal(requests[0].timeoutMs, 5000);
-  const job = onlyJson(response, "job");
-  assert.equal(job.group_count, 2);
-  assert.equal(job.provider_id, "prov-test");
-  assert.equal(job.license, "test terms");
-  assert.equal(job.license_url, "https://fixtures.test/terms");
-  assert.equal(job.citation, "Fixture citation");
+  const jobs = requests.map((r) => readJob(r.context));
+  assert.deepEqual(jobs.map((j) => j.CONNECTOR_ID), ["celestrak-gp-groups/stations", "celestrak-gp-groups/gpz"]);
+  for (const job of jobs) {
+    assert.equal(job.PROVIDER_ID, "prov-test");
+    assert.equal(job.LICENSE, "test terms");
+    assert.equal(job.LICENSE_URL, "https://fixtures.test/terms");
+    assert.equal(job.CITATION, "Fixture citation");
+    assert.deepEqual(job.EMITS_SCHEMAS, ["EGP", "OMM"], "the OMM re-emission lane is declared");
+  }
 });
 
 test("gp_groups refuses a list longer than one flow invocation can carry", async (t) => {
-  const tokens = Array.from({ length: 64 }, (_, i) => `group-${i}`).join(",");
-  const harness = await createHarness(t, createConfigStub({ celestrak_gp_groups: tokens }));
+  const tokens = Array.from({ length: 64 }, (_, i) => `group-${i}`);
+  const harness = await createHarness(t, { celestrak_gp_groups: tokens });
   const response = await harness.invoke({ methodId: "gp_groups", inputs: [tickInput()] });
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "invalid-group-list");
@@ -426,51 +494,48 @@ test("gp_groups refuses a list longer than one flow invocation can carry", async
 // ---------------------------------------------------------------------------
 
 test("parse_gp_groups emits one $EGP per group with membership, tags, query and provenance", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
+  const [stationsReq, gpzReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
+  // answered in the opposite order: the pairing is by CONTEXT, the output order the plan's
+  const response = ok(await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(STATIONS_CSV)),
-      jsonInput("response", httpResponse(GPZ_CSV)),
-    ],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
+    inputs: [responseInput(GPZ_CSV, gpzReq.context), responseInput(STATIONS_CSV, stationsReq.context)],
+  }));
   assert.equal(framesOnPort(response, "unchanged").length, 0);
+  assert.deepEqual(harness.calls, ["plugin.getConfig"], "the plan from the node config");
 
   const concat = Buffer.concat([STATIONS_CSV, GPZ_CSV]);
-  const meta = onlyJson(response, "egp_meta");
+  const meta = onlyMeta(response, "egp_meta");
   assert.equal(meta.schema, "EGP.fbs");
-  assert.equal(meta.provider_id, "space-data-network-02");
-  assert.equal(meta.source_name, "celestrak-gp-groups");
-  assert.equal(meta.source_url, "https://celestrak.org/NORAD/elements/");
-  assert.equal(meta.batch_id, sha256Hex(concat), "batch id = sha256 of the concatenated payloads in list order");
-  assert.equal(meta.content_key_id, "public");
-  assert.equal(meta.source_peer, "source:celestrak");
+  assert.equal(meta.tags.providerId, "space-data-network-02");
+  assert.equal(meta.tags.sourceName, "celestrak-gp-groups");
+  assert.equal(meta.tags.sourceUrl, GP_INDEX);
+  assert.equal(meta.tags.batchId, sha256Hex(concat), "batch id = sha256 of the concatenated payloads in plan order");
+  assert.equal(meta.tags.contentKeyId, "public");
+  assert.equal(meta.tags.sourcePeer, "source:celestrak");
   assert.equal(meta.reconcile, "current", "a complete snapshot supersedes the lane");
-  assert.equal(meta.origin_id, "celestrak.org");
-  assert.equal(meta.origin_name, "CelesTrak");
-  assert.equal(meta.dataset_id, "gp-groups");
-  assert.equal(meta.license_url, "https://celestrak.org/usage-policy.php");
-  assert.match(meta.license, /Only download the data you need/);
+  assert.equal(meta.tags.licenseUrl, "https://celestrak.org/usage-policy.php");
+  assert.equal(meta.tags.license, LICENSE_REF, "the prose usage terms are named by an SPDX LicenseRef");
+  assert.match(meta.tags.citation, /CelesTrak/);
   assert.deepEqual(meta.archive, { source: "celestrak", name: "gp-groups.csv" });
-  assert.equal(meta.provenance.source, "celestrak-gp-groups");
-  const provenance = provenanceOf(meta);
-  assert.equal(provenance.parser_version, "celestrak-gp-groups-wasm/v1");
-  assert.equal(provenance.source_sha256, sha256Hex(concat));
-  assert.equal(provenance.retrieved_at, DATE_RFC3339);
-  assert.equal(provenance.schema_counts["EGP.fbs"], 2);
-  assert.equal(provenance.normalized_count, 2);
-  assert.deepEqual(provenance.groups, ["stations", "gpz"]);
-  assert.deepEqual(provenance.group_urls, [groupURL("GROUP", "stations"), groupURL("SPECIAL", "gpz")]);
+  const provenance = meta.provenance;
+  assert.equal(provenance.parser, "celestrak-gp-groups-wasm");
+  assert.equal(provenance.parserVersion, "v1");
+  assert.equal(provenance.sourceUrl, GP_INDEX);
+  assert.equal(provenance.httpStatus, 200);
+  assert.equal(provenance.sourceSha256, sha256Hex(concat));
+  assert.equal(provenance.retrievedMs, DATE_MS, "retrieved_at: the response Date header");
+  assert.deepEqual(provenance.schemaCounts, { "EGP.fbs": 2 });
+  assert.equal(provenance.normalizedCount, 2);
+  assert.match(provenance.normalizedSha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(provenance.warnings, []);
-  assert.equal(provenance.origin_id, "celestrak.org");
-  assert.equal(provenance.dataset_id, "gp-groups");
+  assert.equal(provenance.fromCache, false);
 
-  const raw = framesOnPort(response, "raw");
+  const raw = framesOnPort(response, "raw").map((f) => decodeHttpResponse(f.payload));
   assert.equal(raw.length, 1);
-  assert.deepEqual(Buffer.from(raw[0].payload), concat, "raw archive = the hashed concatenation");
+  assert.deepEqual(Buffer.from(raw[0].body), concat, "raw archive = the hashed concatenation");
+  assert.equal(raw[0].url, GP_INDEX);
+  assert.equal(raw[0].status, 200);
 
   const records = splitStream(framesOnPort(response, "egp_records")[0].payload);
   assert.equal(records.length, 2, "one $EGP per group");
@@ -498,7 +563,7 @@ test("parse_gp_groups emits one $EGP per group with membership, tags, query and 
   assert.equal(stations.provenance[0].sourceUrl, groupURL("GROUP", "stations"));
   assert.equal(stations.provenance[0].retrievedAt, stations.updatedAt, "UPDATED_AT == RETRIEVED_AT");
   assert.equal(stations.provenance[0].sourceSha256, sha256Hex(STATIONS_CSV), "per-group payload hash");
-  assert.match(stations.provenance[0].license, /Only download the data you need/);
+  assert.match(stations.provenance[0].license, /Only download the data you need/, "the verbatim terms on the record");
   assert.match(stations.provenance[0].attribution, /CelesTrak/);
   assert.equal(stations.datasetCid, null, "DATASET_CID empty");
 
@@ -517,94 +582,90 @@ test("parse_gp_groups emits one $EGP per group with membership, tags, query and 
   assert.equal(gpz.provenance[0].sourceSha256, sha256Hex(GPZ_CSV));
 });
 
-test("parse_gp_groups refuses a response count that differs from the job list (group-count-mismatch)", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
+test("parse_gp_groups refuses a response set that differs from the group plan (group-count-mismatch)", async (t) => {
+  const [stationsReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
+  const missing = await harness.invoke({ methodId: "parse_gp_groups", inputs: [responseInput(STATIONS_CSV, stationsReq.context)] });
+  assert.notEqual(missing.statusCode, 0);
+  assert.equal(missing.errorCode, "group-count-mismatch");
+  assert.equal(missing.outputs.length, 0, "nothing is published partially");
+  const twice = await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [jsonInput("job", job), jsonInput("response", httpResponse(STATIONS_CSV))],
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(STATIONS_CSV, stationsReq.context)],
   });
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "group-count-mismatch");
-  assert.equal(response.outputs.length, 0, "nothing is published partially");
+  assert.equal(twice.errorCode, "group-count-mismatch", "one group twice is not two groups");
+  assert.equal(twice.outputs.length, 0);
 });
 
-test("parse_gp_groups refuses a response that names a different request URL (group-url-mismatch)", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
+test("parse_gp_groups refuses a response for a group or URL the plan does not name (group-url-mismatch)", async (t) => {
+  const [stationsReq, gpzReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
+  // a group outside the plan
+  const [activeReq] = await twoGroupRequests(t, { celestrak_gp_groups: "active" });
+  const foreign = await harness.invoke({
+    methodId: "parse_gp_groups",
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(GPZ_CSV, activeReq.context)],
+  });
+  assert.notEqual(foreign.statusCode, 0);
+  assert.equal(foreign.errorCode, "group-url-mismatch");
+  // the planned group, but another URL
+  const other = await twoGroupRequests(t, { ...TWO_GROUPS, celestrak_gp_groups: "gpz" });
+  const job = readJob(other[0].context);
+  const moved = icnJob({ connectorId: job.CONNECTOR_ID, sourceName: job.SOURCE_NAME, sourceUrl: groupURL("GROUP", "gpz"), datasetId: "gp-groups", targetSchema: "EGP.fbs", license: "t", licenseUrl: "u", citation: "c" });
   const response = await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(STATIONS_CSV, { extra: { url: groupURL("GROUP", "stations") } })),
-      jsonInput("response", httpResponse(GPZ_CSV, { extra: { url: groupURL("GROUP", "active") } })),
-    ],
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(GPZ_CSV, moved)],
   });
-  assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "group-url-mismatch");
+  assert.match(response.errorMessage ?? "", /SPECIAL=gpz/);
+  assert.equal(response.outputs.length, 0);
+  // and a response that carries no job at all cannot be attributed
+  const lost = await harness.invoke({
+    methodId: "parse_gp_groups",
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(GPZ_CSV, new Uint8Array(0))],
+  });
+  assert.equal(lost.errorCode, "missing-context");
+  void gpzReq;
 });
 
-test("parse_gp_groups: every group 304 -> one unchanged frame, no records", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
+test("parse_gp_groups: every group 304 -> one unchanged notice, no records", async (t) => {
+  const [stationsReq, gpzReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
+  const response = ok(await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(null, { status: 304 })),
-      jsonInput("response", httpResponse(null, { status: 304 })),
-    ],
+    inputs: [responseInput(null, stationsReq.context, { status: 304 }), responseInput(null, gpzReq.context, { status: 304 })],
+  }));
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["unchanged"], "304 -> unchanged notice only");
+  assert.deepEqual(onlyNotice(response), {
+    kind: "unchanged", schema: "EGP.fbs", providerId: "space-data-network-02", sourceName: "celestrak-gp-groups",
+    batchId: "", count: 2, reason: "not-modified", items: ["stations", "gpz"], atMs: 0,
   });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.deepEqual(
-    response.outputs.map((f) => f.portId),
-    ["unchanged"],
-    "304 -> unchanged frame only",
-  );
-  const unchanged = onlyJson(response, "unchanged");
-  assert.equal(unchanged.status, 304);
-  assert.equal(unchanged.unchanged, true);
-  assert.equal(unchanged.source_name, "celestrak-gp-groups");
-  assert.equal(unchanged.dataset_id, "gp-groups");
-  assert.equal(unchanged.origin_id, "celestrak.org");
-  assert.deepEqual(unchanged.groups, ["stations", "gpz"]);
-  assert.equal(unchanged.changed_count, 0);
 });
 
 test("parse_gp_groups: a partial refresh appends the changed groups and reports the unchanged ones", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
-  const response = await harness.invoke({
+  const [stationsReq, gpzReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
+  const response = ok(await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(null, { status: 304 })),
-      jsonInput("response", httpResponse(GPZ_CSV)),
-    ],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const unchanged = onlyJson(response, "unchanged");
-  assert.deepEqual(unchanged.groups, ["stations"]);
-  assert.equal(unchanged.changed_count, 1);
-  const meta = onlyJson(response, "egp_meta");
+    inputs: [responseInput(null, stationsReq.context, { status: 304 }), responseInput(GPZ_CSV, gpzReq.context)],
+  }));
+  const unchanged = onlyNotice(response);
+  assert.deepEqual(unchanged.items, ["stations"]);
+  assert.equal(unchanged.count, 1);
+  const meta = onlyMeta(response, "egp_meta");
   assert.equal(meta.reconcile, "duplicates", "a partial refresh never supersedes the unchanged groups");
-  assert.equal(meta.batch_id, sha256Hex(GPZ_CSV), "batch id hashes the payloads received");
+  assert.equal(meta.tags.batchId, sha256Hex(GPZ_CSV), "batch id hashes the payloads received");
   const records = splitStream(framesOnPort(response, "egp_records")[0].payload);
   assert.equal(records.length, 1);
   assert.equal(decodeEgp(records[0]).groupId, "celestrak.org/gp/gpz");
-  assert.deepEqual(provenanceOf(meta).unchanged_groups, ["stations"]);
 });
 
 test("parse_gp_groups fails the batch on any other non-200 status (usage policy)", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t);
+  const [stationsReq, gpzReq] = await twoGroupRequests(t);
+  const harness = await createHarness(t, TWO_GROUPS);
   const response = await harness.invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(STATIONS_CSV)),
-      jsonInput("response", httpResponse(null, { status: 403 })),
-    ],
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(null, gpzReq.context, { status: 403 })],
   });
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "fetch-failed");
@@ -613,26 +674,28 @@ test("parse_gp_groups fails the batch on any other non-200 status (usage policy)
 });
 
 test("parse_gp_groups re-emits OMM rows only when celestrak_gp_groups_emit_omm is set", async (t) => {
-  const job = await twoGroupJob(t);
-  const harness = await createHarness(t, createConfigStub({ celestrak_gp_groups_emit_omm: true }));
-  const response = await harness.invoke({
+  const config = { ...TWO_GROUPS, celestrak_gp_groups_emit_omm: true };
+  const [stationsReq, gpzReq] = await twoGroupRequests(t, config);
+  const plain = ok(await (await createHarness(t, TWO_GROUPS)).invoke({
     methodId: "parse_gp_groups",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", httpResponse(STATIONS_CSV)),
-      jsonInput("response", httpResponse(GPZ_CSV)),
-    ],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const ommMeta = onlyJson(response, "omm_meta");
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(GPZ_CSV, gpzReq.context)],
+  }));
+  assert.equal(framesOnPort(plain, "omm_meta").length + framesOnPort(plain, "omm_records").length, 0);
+  const harness = await createHarness(t, config);
+  const response = ok(await harness.invoke({
+    methodId: "parse_gp_groups",
+    inputs: [responseInput(STATIONS_CSV, stationsReq.context), responseInput(GPZ_CSV, gpzReq.context)],
+  }));
+  const ommMeta = onlyMeta(response, "omm_meta");
   assert.equal(ommMeta.schema, "OMM.fbs");
   assert.equal(ommMeta.reconcile, "duplicates");
-  assert.equal(ommMeta.source_name, "celestrak-gp-groups");
-  assert.equal(ommMeta.archive, undefined, "payload archived once (EGP meta only)");
+  assert.equal(ommMeta.tags.sourceName, "celestrak-gp-groups");
+  assert.equal(ommMeta.archive, null, "payload archived once (EGP meta only)");
+  assert.equal(ommMeta.provenance, null, "provenance once (EGP meta only)");
   const omm = splitStream(framesOnPort(response, "omm_records")[0].payload);
   assert.equal(omm.length, 4, "two rows per fixture group");
   for (const record of omm) assert.equal(fileIdentifier(record), "$OMM");
-  assert.equal(provenanceOf(onlyJson(response, "egp_meta")).schema_counts["OMM.fbs"], 4);
+  assert.deepEqual(onlyMeta(response, "egp_meta").provenance.schemaCounts, { "EGP.fbs": 2, "OMM.fbs": 4 });
   // CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product
   // defines them that way and CelesTrak's own OMM KVN/XML for the same records
   // states REF_FRAME = TEME. Every re-emitted GP-group OMM therefore declares
@@ -664,48 +727,46 @@ test("parse_gp_groups re-emits OMM rows only when celestrak_gp_groups_emit_omm i
 // satcat_reference.
 // ---------------------------------------------------------------------------
 
-test("satcat_reference emits the launch-site and owner table fetches with their jobs", async (t) => {
-  const stub = createConfigStub();
-  const harness = await createHarness(t, stub);
+test("satcat_reference emits the launch-site and owner table fetches, each carrying its job", async (t) => {
+  const harness = await createHarness(t);
   const response = await harness.invoke({ methodId: "satcat_reference", inputs: [tickInput()] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-
-  const sites = onlyJson(response, "request_sites");
+  const [sites] = requestsOn(response, "request_sites");
   assert.equal(sites.url, "https://celestrak.org/satcat/launchsites.php");
   assert.equal(sites.method, "GET");
   assert.equal(sites.maxBytes, 2097152);
-  const owners = onlyJson(response, "request_owners");
+  assert.equal(sites.timeoutMs, 90000);
+  const [owners] = requestsOn(response, "request_owners");
   assert.equal(owners.url, "https://celestrak.org/satcat/sources.php");
   assert.equal(owners.maxBytes, 2097152);
+  assert.deepEqual(response.outputs.map((f) => f.portId).sort(), ["request_owners", "request_sites"]);
 
-  const jobSites = onlyJson(response, "job_sites");
-  assert.equal(jobSites.source_name, "celestrak-satcat-launch-sites");
-  assert.equal(jobSites.dataset_id, "satcat-launch-sites");
-  assert.equal(jobSites.source_url, sites.url);
-  assert.equal(jobSites.archive_name, "launchsites.html");
-  assert.equal(jobSites.origin_id, "celestrak.org");
-  const jobOwners = onlyJson(response, "job_owners");
-  assert.equal(jobOwners.source_name, "celestrak-satcat-owners");
-  assert.equal(jobOwners.dataset_id, "satcat-owners");
-  assert.equal(jobOwners.source_url, owners.url);
-  assert.equal(jobOwners.archive_name, "sources.html");
-  assert.equal(jobOwners.license_url, "https://celestrak.org/usage-policy.php");
-  assert.deepEqual(stub.calls, ["plugin.getConfig"]);
+  const jobSites = readJob(sites.context);
+  assert.equal(jobSites.CONNECTOR_ID, "celestrak-satcat-launch-sites");
+  assert.equal(jobSites.SOURCE_NAME, "celestrak-satcat-launch-sites");
+  assert.equal(jobSites.DATASET_ID, "satcat-launch-sites");
+  assert.equal(jobSites.ENDPOINT_URL, sites.url);
+  assert.equal(jobSites.TARGET_SCHEMA, "SIT.fbs");
+  assert.deepEqual(jobSites.EMITS_SCHEMAS, ["SIT"]);
+  assert.equal(jobSites.ORIGIN_ID, "celestrak.org");
+  const jobOwners = readJob(owners.context);
+  assert.equal(jobOwners.SOURCE_NAME, "celestrak-satcat-owners");
+  assert.equal(jobOwners.DATASET_ID, "satcat-owners");
+  assert.equal(jobOwners.ENDPOINT_URL, owners.url);
+  assert.equal(jobOwners.TARGET_SCHEMA, "LCC.fbs");
+  assert.equal(jobOwners.LICENSE_URL, "https://celestrak.org/usage-policy.php");
+  assert.deepEqual(harness.calls, ["plugin.getConfig"]);
 });
 
 test("satcat_reference honours node-CONFIG page URL overrides", async (t) => {
-  const harness = await createHarness(
-    t,
-    createConfigStub({
-      celestrak_satcat_launchsites_url: "https://fixtures.test/launchsites.html",
-      celestrak_satcat_sources_url: "https://fixtures.test/sources.html",
-    }),
-  );
+  const harness = await createHarness(t, {
+    celestrak_satcat_launchsites_url: "https://fixtures.test/launchsites.html",
+    celestrak_satcat_sources_url: "https://fixtures.test/sources.html",
+  });
   const response = await harness.invoke({ methodId: "satcat_reference", inputs: [tickInput()] });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(onlyJson(response, "request_sites").url, "https://fixtures.test/launchsites.html");
-  assert.equal(onlyJson(response, "request_owners").url, "https://fixtures.test/sources.html");
-  assert.equal(onlyJson(response, "job_owners").source_url, "https://fixtures.test/sources.html");
+  assert.equal(requestsOn(response, "request_sites")[0].url, "https://fixtures.test/launchsites.html");
+  const [owners] = requestsOn(response, "request_owners");
+  assert.equal(owners.url, "https://fixtures.test/sources.html");
+  assert.equal(readJob(owners.context).ENDPOINT_URL, "https://fixtures.test/sources.html");
 });
 
 // ---------------------------------------------------------------------------
@@ -713,54 +774,46 @@ test("satcat_reference honours node-CONFIG page URL overrides", async (t) => {
 // ---------------------------------------------------------------------------
 
 const SITES_JOB = {
-  source_url: "https://celestrak.org/satcat/launchsites.php",
-  source_name: "celestrak-satcat-launch-sites",
-  provider_id: "space-data-network-02",
-  archive_source: "celestrak",
-  archive_name: "launchsites.html",
-  origin_id: "celestrak.org",
-  origin_name: "CelesTrak",
-  dataset_id: "satcat-launch-sites",
+  sourceUrl: "https://celestrak.org/satcat/launchsites.php",
+  sourceName: "celestrak-satcat-launch-sites",
+  datasetId: "satcat-launch-sites",
+  targetSchema: "SIT.fbs",
   license: "test terms",
-  license_url: "https://fixtures.test/terms",
+  licenseUrl: "https://fixtures.test/terms",
   citation: "Fixture citation",
 };
-
 const OWNERS_JOB = {
   ...SITES_JOB,
-  source_url: "https://celestrak.org/satcat/sources.php",
-  source_name: "celestrak-satcat-owners",
-  archive_name: "sources.html",
-  dataset_id: "satcat-owners",
+  sourceUrl: "https://celestrak.org/satcat/sources.php",
+  sourceName: "celestrak-satcat-owners",
+  datasetId: "satcat-owners",
+  targetSchema: "LCC.fbs",
 };
 
 test("parse_satcat_reference turns the launch-site table into $SIT rows with entities decoded", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", SITES_JOB), jsonInput("response", httpResponse(LAUNCHSITES_HTML))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.deepEqual(
-    response.outputs.map((f) => f.portId).sort(),
-    ["raw", "sit_meta", "sit_records"],
-  );
+  const input = responseInput(LAUNCHSITES_HTML, icnJob(SITES_JOB));
+  const response = ok(await harness.invoke({ methodId: "parse_satcat_reference", inputs: [input] }));
+  assert.deepEqual(response.outputs.map((f) => f.portId).sort(), ["raw", "sit_meta", "sit_records"]);
+  assert.deepEqual(harness.calls, [], "the parser reads no config");
 
-  const meta = onlyJson(response, "sit_meta");
+  const meta = onlyMeta(response, "sit_meta");
   assert.equal(meta.schema, "SIT.fbs");
   assert.equal(meta.reconcile, "current");
-  assert.equal(meta.batch_id, sha256Hex(LAUNCHSITES_HTML));
-  assert.equal(meta.source_name, "celestrak-satcat-launch-sites");
-  assert.equal(meta.dataset_id, "satcat-launch-sites");
-  assert.equal(meta.origin_id, "celestrak.org");
-  assert.equal(meta.license, "test terms");
-  assert.equal(meta.citation, "Fixture citation");
+  assert.equal(meta.tags.batchId, sha256Hex(LAUNCHSITES_HTML));
+  assert.equal(meta.tags.sourceName, "celestrak-satcat-launch-sites");
+  assert.equal(meta.tags.sourceUrl, SITES_JOB.sourceUrl);
+  assert.equal(meta.tags.license, LICENSE_REF, "\"test terms\" is prose, not an identifier");
+  assert.equal(meta.tags.licenseUrl, "https://fixtures.test/terms");
+  assert.equal(meta.tags.citation, "Fixture citation");
   assert.deepEqual(meta.archive, { source: "celestrak", name: "launchsites.html" });
-  const provenance = provenanceOf(meta);
-  assert.equal(provenance.parser_version, "celestrak-satcat-reference-wasm/v1");
-  assert.equal(provenance.schema_counts["SIT.fbs"], 3);
+  const provenance = meta.provenance;
+  assert.equal(provenance.parser, "celestrak-satcat-reference-wasm");
+  assert.equal(provenance.parserVersion, "v1");
+  assert.deepEqual(provenance.schemaCounts, { "SIT.fbs": 3 });
   assert.deepEqual(provenance.warnings, []);
-  assert.equal(provenance.retrieved_at, DATE_RFC3339);
+  assert.equal(provenance.retrievedMs, DATE_MS);
+  assert.equal(provenance.sourceSha256, sha256Hex(LAUNCHSITES_HTML));
 
   const records = splitStream(framesOnPort(response, "sit_records")[0].payload);
   assert.equal(records.length, 3, "3 launch-site rows; header and footer note rows are not rows");
@@ -782,27 +835,26 @@ test("parse_satcat_reference turns the launch-site table into $SIT rows with ent
     assert.equal(site.source, "CelesTrak");
     assert.equal(site.description, site.name);
   }
-  assert.deepEqual(Buffer.from(framesOnPort(response, "raw")[0].payload), LAUNCHSITES_HTML);
+  const [raw] = framesOnPort(response, "raw");
+  assert.deepEqual(Buffer.from(raw.payload), Buffer.from(input.payload), "raw: the HttpResponse, verbatim");
+  assert.deepEqual(Buffer.from(decodeHttpResponse(raw.payload).body), LAUNCHSITES_HTML);
 });
 
 test("parse_satcat_reference turns the owner table into $LCC rows with exact enum codes", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
+  const response = ok(await harness.invoke({
     methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", OWNERS_JOB), jsonInput("response", httpResponse(SOURCES_HTML))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.deepEqual(
-    response.outputs.map((f) => f.portId).sort(),
-    ["lcc_meta", "lcc_records", "raw"],
-  );
-  const meta = onlyJson(response, "lcc_meta");
+    inputs: [responseInput(SOURCES_HTML, icnJob({ ...OWNERS_JOB, license: "CC-BY-4.0" }))],
+  }));
+  assert.deepEqual(response.outputs.map((f) => f.portId).sort(), ["lcc_meta", "lcc_records", "raw"]);
+  const meta = onlyMeta(response, "lcc_meta");
   assert.equal(meta.schema, "LCC.fbs");
   assert.equal(meta.reconcile, "current");
-  assert.equal(meta.source_name, "celestrak-satcat-owners");
-  assert.equal(meta.dataset_id, "satcat-owners");
-  assert.equal(meta.batch_id, sha256Hex(SOURCES_HTML));
-  assert.deepEqual(provenanceOf(meta).warnings, []);
+  assert.equal(meta.tags.sourceName, "celestrak-satcat-owners");
+  assert.equal(meta.tags.batchId, sha256Hex(SOURCES_HTML));
+  assert.equal(meta.tags.license, "CC-BY-4.0", "an identifier-shaped licence is used as configured");
+  assert.deepEqual(meta.archive, { source: "celestrak", name: "sources.html" });
+  assert.deepEqual(meta.provenance.warnings, []);
 
   const records = splitStream(framesOnPort(response, "lcc_records")[0].payload);
   assert.equal(records.length, 3);
@@ -814,7 +866,7 @@ test("parse_satcat_reference turns the owner table into $LCC rows with exact enu
   assert.equal(owners[2].name, "United States");
   for (const owner of owners) {
     assert.equal(owner.active, true);
-    assert.equal(owner.sourceUrl, OWNERS_JOB.source_url);
+    assert.equal(owner.sourceUrl, OWNERS_JOB.sourceUrl);
     assert.equal(owner.retrievedAt, DATE_RFC3339, "RETRIEVED_AT from the response Date header");
     assert.equal(owner.description, owner.name);
   }
@@ -831,63 +883,73 @@ test("parse_satcat_reference records an unknown owner code as a provenance warni
     ].join("\n"),
   );
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", OWNERS_JOB), jsonInput("response", httpResponse(html))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage ?? "an unknown code is a warning, not an error");
+  const response = ok(await harness.invoke({ methodId: "parse_satcat_reference", inputs: [responseInput(html, icnJob(OWNERS_JOB))] }));
   const records = splitStream(framesOnPort(response, "lcc_records")[0].payload);
   assert.equal(records.length, 1, "the unknown code is skipped, never remapped");
   assert.equal(decodeLcc(records[0]).owner, 120);
-  assert.deepEqual(provenanceOf(onlyJson(response, "lcc_meta")).warnings, ["unknown owner code XXXX"]);
+  assert.deepEqual(onlyMeta(response, "lcc_meta").provenance.warnings, ["unknown owner code XXXX"]);
 });
 
 test("parse_satcat_reference falls back to now for RETRIEVED_AT when the response carries no Date", async (t) => {
   const harness = await createHarness(t);
   const before = Math.floor(Date.now() / 1000);
-  const response = await harness.invoke({
+  const response = ok(await harness.invoke({
     methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", OWNERS_JOB), jsonInput("response", httpResponse(SOURCES_HTML, { headers: {} }))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
+    inputs: [responseInput(SOURCES_HTML, icnJob(OWNERS_JOB), { headers: {} })],
+  }));
   const retrieved = decodeLcc(splitStream(framesOnPort(response, "lcc_records")[0].payload)[0]).retrievedAt;
   const seconds = Math.floor(Date.parse(retrieved) / 1000);
   assert.ok(seconds >= before - 5 && seconds <= before + 120, `${retrieved} is not now`);
 });
 
-test("parse_satcat_reference: 304 -> one unchanged frame only", async (t) => {
+test("parse_satcat_reference: 304 -> one unchanged notice only", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
+  const response = ok(await harness.invoke({
     methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", SITES_JOB), jsonInput("response", httpResponse(null, { status: 304 }))],
-  });
-  assert.equal(response.statusCode, 0, response.errorMessage);
+    inputs: [responseInput(null, icnJob(SITES_JOB), { status: 304 })],
+  }));
   assert.deepEqual(response.outputs.map((f) => f.portId), ["unchanged"]);
-  const unchanged = onlyJson(response, "unchanged");
-  assert.equal(unchanged.status, 304);
-  assert.equal(unchanged.unchanged, true);
-  assert.equal(unchanged.source_name, "celestrak-satcat-launch-sites");
-  assert.equal(unchanged.dataset_id, "satcat-launch-sites");
+  assert.deepEqual(onlyNotice(response), {
+    kind: "unchanged", schema: "SIT.fbs", providerId: "space-data-network-02", sourceName: "celestrak-satcat-launch-sites",
+    batchId: "", count: 1, reason: "not-modified", items: [SITES_JOB.sourceUrl], atMs: 0,
+  });
 });
 
-test("parse_satcat_reference rejects non-200 fetches and unknown reference datasets", async (t) => {
+test("parse_satcat_reference rejects non-200 fetches, unknown reference datasets and responses without a job", async (t) => {
   const harness = await createHarness(t);
   const failed = await harness.invoke({
     methodId: "parse_satcat_reference",
-    inputs: [jsonInput("job", SITES_JOB), jsonInput("response", httpResponse(null, { status: 503 }))],
+    inputs: [responseInput(null, icnJob(SITES_JOB), { status: 503 })],
   });
   assert.notEqual(failed.statusCode, 0);
   assert.equal(failed.errorCode, "fetch-failed");
   assert.match(failed.errorMessage ?? "", /503/);
 
-  const harness2 = await createHarness(t);
-  const unknown = await harness2.invoke({
+  const unknown = await harness.invoke({
     methodId: "parse_satcat_reference",
-    inputs: [
-      jsonInput("job", { ...SITES_JOB, dataset_id: "satcat" }),
-      jsonInput("response", httpResponse(LAUNCHSITES_HTML)),
-    ],
+    inputs: [responseInput(LAUNCHSITES_HTML, icnJob({ ...SITES_JOB, datasetId: "satcat" }))],
   });
   assert.notEqual(unknown.statusCode, 0);
   assert.equal(unknown.errorCode, "unknown-reference-dataset");
+
+  const lost = await harness.invoke({ methodId: "parse_satcat_reference", inputs: [responseInput(LAUNCHSITES_HTML, encodeTimerTick({}))] });
+  assert.equal(lost.errorCode, "missing-context");
+  assert.equal(lost.outputs.length, 0);
+});
+
+// End to end through both nodes: the builder's own requests, answered with the fixture pages, parse into the lanes.
+test("satcat_reference -> parse_satcat_reference: each job routes its page to its standard", async (t) => {
+  const builder = await createHarness(t);
+  const built = await builder.invoke({ methodId: "satcat_reference", inputs: [tickInput()] });
+  const [sites] = requestsOn(built, "request_sites");
+  const [owners] = requestsOn(built, "request_owners");
+  const parser = await createHarness(t);
+  const sitOut = ok(await parser.invoke({ methodId: "parse_satcat_reference", inputs: [responseInput(LAUNCHSITES_HTML, sites.context)] }));
+  const lccOut = ok(await parser.invoke({ methodId: "parse_satcat_reference", inputs: [responseInput(SOURCES_HTML, owners.context)] }));
+  const sitMeta = onlyMeta(sitOut, "sit_meta");
+  const lccMeta = onlyMeta(lccOut, "lcc_meta");
+  assert.equal(sitMeta.tags.license, LICENSE_REF, "the default usage terms are prose");
+  assert.match(readJob(sites.context).LICENSE, /Only download the data you need/, "the verbatim terms stay in the job");
+  assert.deepEqual([sitMeta.tags.sourceUrl, lccMeta.tags.sourceUrl], [sites.url, owners.url]);
+  assert.deepEqual([sitMeta.archive.name, lccMeta.archive.name], ["launchsites.html", "sources.html"]);
 });

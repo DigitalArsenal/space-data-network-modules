@@ -1,14 +1,34 @@
 # Orbit Determination SupGP Module
 
-This module fits SGP4 mean elements to operator ephemeris samples and returns a
-SupGP/OMM-style record with the fit RMS preserved as a quality metric.
+This module fits SGP4 mean elements to operator ephemeris samples and returns
+SDS records only: `$OMM` (the elements), `$OCM` (epoch state, covariance or its
+explicit absence) and `$OBD` (the OD run, with the fit RMS as `WRMS` in km).
+
+## Contract (FlatBuffers only)
+
+| port | type | carries |
+|---|---|---|
+| in `oem` | `$OEM` | an operator ephemeris |
+| in `meme` | `$FIL` | a text ephemeris file (`CONTENT`): SpaceX MEME or CCSDS OEM KVN |
+| out `omm` | `$OMM` | the fitted mean elements (ORIGINATOR `SDN-OD`) |
+| out `ocm` | `$OCM` | epoch state + formal covariance, or `UNAVAILABLE` |
+| out `obd` | `$OBD` | the fit (`METHOD_SOURCE` `SDN-OD`: `WRMS`, `NUM_ITERATIONS`, `FIT_SPAN`, `SENSORS[0].SENSOR_ID` = `dataSource`); plus, when a reference element set is configured, that set scored on the same points (`METHOD_SOURCE` `reference`, `WRMS` = its RMS) |
+| out `tle` | `$FIL` | opt-in two-line set, `NAME` `<NORAD>.tle`, `text/plain` |
+
+Exactly one of `oem` / `meme` per invocation. Both fit the same core and emit the
+same records (byte-identical for the same states). The options are node CONFIG,
+read with `plugin.getConfig` (`sdm_piv::get_config`, a `ModuleConfig`):
+`dataSource`, `objectName`, `objectId`, `noradCatId`, `maxIterations`
+(or `max_iterations`, clamped 1..300), `inputFormat`, `emitTle`, and the
+reference set `refEpoch` + `refMeanMotion` (+ `refEccentricity`,
+`refInclination`, `refRaan`, `refArgPericenter`, `refMeanAnomaly`, `refBstar`,
+`refMeanMotionDot`, `refMeanMotionDdot`).
 
 ## Input formats
 
-The `fit` method accepts operator ephemeris on the `meme` port (the port id is
-kept for ABI stability, but it carries any supported format). The format is
-selected data-level via the optional `options` frame's `inputFormat` field, or
-auto-detected from the payload:
+The `meme` port's `$FIL` carries any supported text format (the port id is kept).
+The format is selected by the `inputFormat` CONFIG key, or auto-detected from the
+content:
 
 - **SpaceX MEME text** (`inputFormat: "meme"`) — the SpaceX/Starlink source
   format. Its state vectors are EME2000; the `UVW` header line names the
@@ -43,14 +63,14 @@ The fitter propagates in **TEME**, so every sample handed to it must be TEME.
 
 ### Output labeling
 
-`DATA_SOURCE` flows from the caller/manifest (`options.dataSource`) — it is
-**not** hardcoded to any operator. `OBJECT_NAME` / `OBJECT_ID` / `NORAD_CAT_ID`
-flow from the parsed ephemeris (OEM `META`) or from `options.objectName` /
-`options.objectId` / `options.noradCatId` overrides.
+The data source flows from node CONFIG (`dataSource`, written to the `$OBD`'s
+`SENSORS[0].SENSOR_ID`) — it is **not** hardcoded to any operator.
+`OBJECT_NAME` / `OBJECT_ID` / `NORAD_CAT_ID` flow from the parsed ephemeris (OEM
+`META`) or from the `objectName` / `objectId` / `noradCatId` CONFIG overrides.
 
 ### Two-line output
 
-`options.emitTle: true` adds `TLE_LINE1` and `TLE_LINE2` to the text path's JSON: the fitted element set as a legacy
+CONFIG `emitTle: true` adds a `$FIL` on `tle` whose CONTENT is `line1\nline2`: the fitted element set as a legacy
 two-line element set (69 columns, both check digits, the international designator of `OBJECT_ID`, the classification,
 element set number and revolution number of the record). A catalog number from 100000 to 339999 is written as Alpha-5,
 as Space-Track writes it: a letter for the ten-thousands (A to Z without I and O, 10 to 33) and four digits, so 100000
@@ -66,7 +86,7 @@ the browser, WasmEdge and Docker WasmEdge.
 3. Use the default near-term window of about two LEO orbital periods
    (`11520` seconds) so downstream maneuvers do not degrade conjunction
    screening quality.
-4. Return SupGP/OMM fields, including `RMS` in kilometers.
+4. Emit the `$OMM`, `$OCM` and `$OBD` (the RMS in kilometers as `WRMS`).
 
 ## Reference Suite (provider-manifest driven)
 

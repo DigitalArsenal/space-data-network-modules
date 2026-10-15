@@ -1,6 +1,10 @@
-// data-source/sigmf-captures SDK-compat tests.
+// data-source/sigmf-captures SDK-compat tests on the typed contracts (1.0).
 //
-// The two pure flow nodes run in the SDK browser harness against a fixture cut
+// The two pure flow nodes run in the SDK browser harness on typed frames
+// (TimerTick in; HttpRequest out with the parse job - a size-prefixed
+// IngestRequest - in CONTEXT; HttpResponse in; IngestRequest, $IQC stream,
+// HttpResponse and FlowNotice out), node CONFIG the SDS $PIV plugin.getConfig
+// answer, against a fixture cut
 // from the LIVE IQEngine bulk metadata index (see fixtures/PROVENANCE.md), and
 // their outputs are asserted against the Themis $IQC rulings:
 //
@@ -27,33 +31,32 @@ import { fileURLToPath } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import { decodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+import {
+  BASE_URL,
+  ISOMORPHIC_WASM_PATH,
+  JOB,
+  MANIFEST_PATH,
+  SOURCE_URL,
+  createHarness,
+  decodeJob,
+  metaOf,
+  noticeOf,
+  outputsByPort,
+  requestOf,
+  responseFrame,
+  tick,
+} from "./typed.mjs";
+
 const STANDARDS_ROOT =
   process.env.SPACE_DATA_STANDARDS_ROOT ??
   fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const META_JSON = fs.readFileSync(new URL("./fixtures/iqengine-meta.sample.json", import.meta.url));
 const META_DOCS = JSON.parse(META_JSON.toString("utf8"));
-
-const BASE_URL = "https://www.iqengine.org";
-const SOURCE_URL = `${BASE_URL}/api/datasources/local/local/meta`;
-
-const JOB = {
-  adapter: "iqengine-bulk-meta",
-  source_url: SOURCE_URL,
-  source_name: "IQEngine",
-  base_url: BASE_URL,
-  account: "local",
-  container: "local",
-  archive_source: "sigmf",
-  archive_name: "iqengine-bulk-meta-meta.json",
-};
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -63,39 +66,8 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-function jsonInput(portId, value) {
-  return {
-    portId,
-    typeRef: { wireFormat: "flatbuffer" },
-    payload: encoder.encode(JSON.stringify(value)),
-  };
-}
-
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-async function createHarness(t, config = null) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-    ...(config
-      ? { hostcallDispatch: (operation) => (operation === "plugin.getConfig" ? config : null) }
-      : {}),
-  });
-  t.after(() => harness.destroy());
-  return harness;
-}
-
-function outputsByPort(response) {
-  return new Map(response.outputs.map((frame) => [frame.portId, frame]));
-}
-
-function jsonFrame(map, portId) {
-  const frame = map.get(portId);
-  assert.ok(frame, `missing output frame ${portId}`);
-  return JSON.parse(decoder.decode(frame.payload));
 }
 
 function splitStream(payload) {
@@ -115,10 +87,6 @@ function splitStream(payload) {
 
 function fileIdentifier(record) {
   return decoder.decode(record.subarray(4, 8));
-}
-
-function httpResponse(bodyBytes, headers = {}) {
-  return { status: 200, headers, bodyB64: Buffer.from(bodyBytes).toString("base64") };
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +272,9 @@ function readIqc(record) {
   };
 }
 
-async function runParse(t, body = META_JSON, headers = {}, job = JOB) {
-  const harness = await createHarness(t);
-  return harness.invoke({
-    methodId: "parse",
-    inputs: [jsonInput("job", job), jsonInput("response", httpResponse(body, headers))],
-  });
+async function runParse(t, body = META_JSON, headers = {}, job = JOB, config = {}) {
+  const harness = await createHarness(t, config);
+  return harness.invoke({ methodId: "parse", inputs: [responseFrame({ body, headers, job })] });
 }
 
 async function parsedRecords(t, body = META_JSON, headers = {}) {
@@ -374,30 +339,45 @@ test("manifest declares zero host capabilities and the $IQC schema", () => {
   ]);
 });
 
-test("request: ONE bulk anonymous fetch of the archive metadata index", async (t) => {
+test("request: ONE bulk anonymous fetch of the archive metadata index, its job in CONTEXT", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({ methodId: "request", inputs: [jsonInput("tick", {})] });
+  const response = await harness.invoke({ methodId: "request", inputs: [tick()] });
   assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.deepEqual(response.outputs.map((f) => f.portId), ["request"], "one typed request, no job frame");
   const outputs = outputsByPort(response);
 
-  const request = jsonFrame(outputs, "request");
+  const request = requestOf(outputs);
   assert.equal(request.method, "GET");
   assert.equal(request.url, SOURCE_URL, "bulk /meta, never a per-file crawl");
   assert.ok(!/[?&](page|offset|skip)=/.test(request.url), "must not walk pages");
   assert.equal(request.headers.authorization, undefined, "the read surface is anonymous");
   assert.match(request.headers["user-agent"], /^SDN-CatalogEnrichmentBot\/0\.1 \(\+https:\/\//);
+  assert.equal(request.headers.accept, "application/json");
+  assert.equal(request.timeoutMs, 300000);
 
-  const job = jsonFrame(outputs, "job");
-  assert.equal(job.adapter, "iqengine-bulk-meta");
-  assert.equal(job.source_name, "IQEngine");
-  assert.equal(job.base_url, BASE_URL);
-  assert.equal(job.account, "local");
-  assert.equal(job.container, "local");
+  const job = decodeJob(request.context);
+  assert.equal(job.schema, "IQC.fbs");
+  assert.equal(job.tags.sourceName, "IQEngine");
+  assert.equal(job.tags.sourceUrl, SOURCE_URL);
+  assert.equal(job.tags.providerId, "space-data-network-02");
+  assert.equal(job.reconcile, "none");
+  assert.deepEqual(job.archive, { source: "sigmf", name: "iqengine-bulk-meta-meta.json" });
+  assert.equal(job.provenance, null);
+});
+
+test("request: conditional validators from CONFIG ride as headers", async (t) => {
+  const harness = await createHarness(t, { sigmf_if_none_match: 'W/"abc"', sigmf_if_modified_since: "Thu, 01 Oct 2026 00:00:00 GMT", sigmf_provider_id: "p-1" });
+  const response = await harness.invoke({ methodId: "request", inputs: [tick()] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const request = requestOf(outputsByPort(response));
+  assert.equal(request.headers["if-none-match"], 'W/"abc"');
+  assert.equal(request.headers["if-modified-since"], "Thu, 01 Oct 2026 00:00:00 GMT");
+  assert.equal(decodeJob(request.context).tags.providerId, "p-1");
 });
 
 test("request: an unregistered source adapter FAILS CLOSED, naming what is registered", async (t) => {
   const harness = await createHarness(t, { sigmf_adapter: "sigidwiki-scrape" });
-  const response = await harness.invoke({ methodId: "request", inputs: [jsonInput("tick", {})] });
+  const response = await harness.invoke({ methodId: "request", inputs: [tick()] });
   assert.notEqual(response.statusCode, 0, "a stub adapter must never silently produce a request");
   assert.equal(response.outputs.length, 0);
   assert.match(response.errorMessage ?? "", /sigidwiki-scrape/);
@@ -536,15 +516,9 @@ test("parse: a transposed lat/lon is REFUSED, not silently swapped", async (t) =
   const record = recordFor(records, "iridium_cf32");
   assert.equal(record.GEOLOCATION_PRESENT, false, "an impossible latitude must not be published");
 
-  // And the refusal is counted, not swallowed.
-  const provenance = JSON.parse(
-    Buffer.from(jsonFrame(outputs, "iqc_meta").provenance.json, "base64").toString("utf8"),
-  );
-  assert.ok(provenance.geolocation_refused_out_of_range >= 1);
-  assert.equal(
-    provenance.records_with_geolocation,
-    records.filter((r) => r.GEOLOCATION_PRESENT).length,
-  );
+  // And the refusal is counted in the batch provenance, not swallowed.
+  const warnings = metaOf(outputs).provenance.warnings;
+  assert.ok(warnings.some((w) => /^geolocation refused, outside WGS-84 range: [1-9]\d*$/.test(w)), warnings.join(" | "));
 });
 
 test("parse: an array-wrapped GeoJSON Point is accepted (the live corpus publishes both)", async (t) => {
@@ -725,28 +699,60 @@ test("parse: the occupied band is bounded by annotations, not by guesswork", asy
   }
 });
 
-test("parse: ingest meta + batch provenance name the adapter and the refusals", async (t) => {
+test("parse: the IngestRequest completes the job: batch id, tags, archive, provenance", async (t) => {
   const { outputs, records } = await parsedRecords(t, META_JSON, {
     "content-type": "application/json",
+    etag: '"v1"',
+    "last-modified": "Tue, 06 Oct 2026 00:00:00 GMT",
   });
-  const meta = jsonFrame(outputs, "iqc_meta");
+  const meta = metaOf(outputs);
   assert.equal(meta.schema, "IQC.fbs");
-  assert.equal(meta.source_name, "IQEngine");
-  assert.equal(meta.batch_id, sha256Hex(META_JSON));
+  assert.deepEqual(meta.tags, {
+    providerId: "space-data-network-02",
+    sourceName: "IQEngine",
+    batchId: sha256Hex(META_JSON),
+    sourceUrl: SOURCE_URL,
+    contentKeyId: "public",
+    sourcePeer: "source:sigmf",
+    // Licence is PER RECORDING: the batch names none (an absent one means
+    // unknown terms, so a batch licence would be invented).
+    license: "",
+    licenseUrl: "",
+    citation: "",
+    shareAlike: false,
+  });
   assert.equal(meta.reconcile, "none");
+  assert.deepEqual(meta.archive, { source: "sigmf", name: "iqengine-bulk-meta-meta.json" });
+  const p = meta.provenance;
+  assert.equal(p.sourceUrl, SOURCE_URL);
+  assert.equal(p.httpStatus, 200);
+  assert.equal(p.etag, '"v1"');
+  assert.equal(p.lastModified, "Tue, 06 Oct 2026 00:00:00 GMT");
+  assert.equal(p.contentType, "application/json");
+  // No Date header: the host's receive time (HttpResponse.RETRIEVED_MS), whole seconds.
+  assert.equal(p.retrievedMs, Date.UTC(2026, 9, 13, 6, 0, 5));
+  assert.equal(p.parser, "sigmf-captures");
+  assert.equal(p.parserVersion, "sigmf-iqc-wasm/v1");
+  assert.equal(p.sourceSha256, sha256Hex(META_JSON));
+  assert.match(p.normalizedSha256, /^[0-9a-f]{64}$/);
+  assert.equal(p.normalizedCount, records.length);
+  assert.deepEqual(p.schemaCounts, { "IQC.fbs": records.length });
+  assert.equal(p.fromCache, false);
+  // The fixture's one transposed position is the only thing not encoded.
+  assert.deepEqual(p.warnings, ["geolocation refused, outside WGS-84 range: 1"]);
+  for (const r of records) assert.equal(r.RETRIEVED_AT, "2026-10-13T06:00:05Z");
 
-  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
-  assert.equal(provenance.adapter, "iqengine-bulk-meta");
-  assert.equal(provenance.registered_adapters, "iqengine-bulk-meta");
-  assert.equal(provenance.parser_version, "sigmf-iqc-wasm/v1");
-  assert.equal(provenance.source_rows, META_DOCS.length);
-  assert.equal(provenance.normalized_count, records.length);
-  assert.equal(provenance.custody, "UPSTREAM_ONLY");
-  assert.equal(provenance.license_model, "per-recording");
-  assert.deepEqual(provenance.units, { frequency: "Hz", sample_rate: "Hz" });
-  assert.deepEqual(provenance.source_units, provenance.units);
+  // raw: the HttpResponse verbatim (its BODY is the document storage-ingest archives).
+  const raw = decodeHttpResponse(outputs.get("raw").payload);
+  assert.deepEqual(Buffer.from(raw.body), Buffer.from(META_JSON));
+  assert.equal(raw.status, 200);
+  assert.deepEqual(decodeJob(raw.context).tags.sourceName, "IQEngine");
+});
 
-  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(META_JSON));
+test("parse: a Date header is the records' retrieval time", async (t) => {
+  const { outputs, records } = await parsedRecords(t, META_JSON, { date: "Tue, 13 Oct 2026 05:59:00 GMT" });
+  assert.equal(metaOf(outputs).provenance.retrievedMs, Date.UTC(2026, 9, 13, 5, 59));
+  for (const r of records) assert.equal(r.RETRIEVED_AT, "2026-10-13T05:59:00Z");
 });
 
 test("parse: a document with no archive identity is skipped, never given a minted id", async (t) => {
@@ -761,48 +767,58 @@ test("parse: a document with no archive identity is skipped, never given a minte
   const outputs = outputsByPort(response);
   const records = splitStream(outputs.get("iqc_records").payload);
   assert.equal(records.length, 1);
-  const provenance = JSON.parse(
-    Buffer.from(jsonFrame(outputs, "iqc_meta").provenance.json, "base64").toString("utf8"),
-  );
-  assert.equal(provenance.skipped_no_identity, 1);
-  assert.equal(provenance.source_rows, 2);
+  assert.ok(metaOf(outputs).provenance.warnings.includes("capture documents skipped, no archive identity: 1 of 2"));
 });
 
-test("parse: an unregistered adapter in the job FAILS CLOSED", async (t) => {
-  const response = await runParse(t, META_JSON, {}, { ...JOB, adapter: "zenodo-records" });
+test("parse: the archive coordinates come from node CONFIG, as request used them", async (t) => {
+  const { records } = await (async () => {
+    const response = await runParse(t, META_JSON, {}, JOB, { iqengine_base_url: "https://mirror.example.org", iqengine_account: "acct" });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    return { records: splitStream(outputsByPort(response).get("iqc_records").payload).map(readIqc) };
+  })();
+  for (const r of records) {
+    assert.ok(r.SOURCE_URL.startsWith("https://mirror.example.org/view/"), r.SOURCE_URL);
+    for (const p of r.payloads) assert.ok(p.URL.startsWith("https://mirror.example.org/api/datasources/"), p.URL);
+  }
+});
+
+test("parse: a job naming no registered adapter FAILS CLOSED", async (t) => {
+  const response = await runParse(t, META_JSON, {}, { ...JOB, sourceName: "Zenodo" });
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.outputs.length, 0);
-  assert.match(response.errorMessage ?? "", /zenodo-records/);
+  assert.equal(response.errorCode, "unknown-adapter");
+  assert.match(response.errorMessage ?? "", /Zenodo/);
+  assert.match(response.errorMessage ?? "", /iqengine-bulk-meta/);
+});
+
+test("parse: a response without its job (CONTEXT) fails closed", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({ methodId: "parse", inputs: [responseFrame({ body: META_JSON, context: new Uint8Array(0) })] });
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "missing-job");
+  assert.equal(response.outputs.length, 0);
 });
 
 test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
   const harness = await createHarness(t);
-  const response = await harness.invoke({
-    methodId: "parse",
-    inputs: [
-      jsonInput("job", JOB),
-      jsonInput("response", { status: 503, headers: {}, bodyB64: "" }),
-    ],
-  });
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.outputs.length, 0);
+  for (const [status, error] of [[503, undefined], [0, "timeout"]]) {
+    const response = await harness.invoke({ methodId: "parse", inputs: [responseFrame({ status, error })] });
+    assert.notEqual(response.statusCode, 0);
+    assert.equal(response.errorCode, "fetch-failed");
+    assert.equal(response.outputs.length, 0);
+  }
 });
 
 // HTTP 304 Not Modified: the host presented the ETag / Last-Modified it
 // recorded from the last 2xx for this URL (sdn-server
 // internal/modulert/caps/http_validators.go) and the origin confirmed the
 // document is current. No batch exists, so no record port may fire — only the
-// single "unchanged" notice, and the invocation SUCCEEDS. Same contract as
-// data-source/celestrak-parser.
-test("parse answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
-  const job = { ...JOB, dataset_id: "iqengine-bulk-meta" };
+// single "unchanged" notice, and the invocation SUCCEEDS.
+test("parse answers HTTP 304 with one Unchanged FlowNotice and zero record frames", async (t) => {
   const harness = await createHarness(t);
   const response = await harness.invoke({
     methodId: "parse",
-    inputs: [
-      jsonInput("job", job),
-      jsonInput("response", { status: 304, headers: { Etag: 'W/"x"' }, bodyB64: "" }),
-    ],
+    inputs: [responseFrame({ status: 304, headers: { etag: 'W/"x"' } })],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1, "exactly one frame");
@@ -810,12 +826,16 @@ test("parse answers HTTP 304 with one unchanged notice and zero record frames", 
   for (const port of ["iqc_meta", "iqc_records", "raw"]) {
     assert.equal(outputs.has(port), false, `${port} must stay silent`);
   }
-  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
-    status: 304,
-    unchanged: true,
-    source_name: job.source_name,
-    source_url: job.source_url,
-    dataset_id: job.dataset_id,
+  assert.deepEqual(noticeOf(outputs), {
+    kind: "unchanged",
+    schema: "IQC.fbs",
+    providerId: "space-data-network-02",
+    sourceName: "IQEngine",
+    batchId: "",
+    count: 0,
+    reason: "not-modified",
+    items: [SOURCE_URL],
+    atMs: Date.UTC(2026, 9, 13, 6, 0, 5),
   });
 });
 

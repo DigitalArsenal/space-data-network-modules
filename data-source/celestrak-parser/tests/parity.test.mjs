@@ -11,7 +11,6 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "flatbuffers";
 import { decodePluginInvokeResponse } from "space-data-module-sdk/invoke";
 import {
   defaultParityLaneRunners,
@@ -19,36 +18,25 @@ import {
   normalizeParityFixture,
   runParityHarness,
 } from "space-data-module-sdk/testing";
-import {
-  CelestialFrame,
-  CelestialFrameWrapper,
-  OMM,
-  RFMUnion,
-} from "spacedatastandards.org/lib/js/OMM/main.js";
+
+import { flatbuffers, responseInput, sdsLib } from "./frames.mjs";
+
+const { CelestialFrame, CelestialFrameWrapper, OMM, RFMUnion } = await sdsLib("OMM");
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
 
-function jsonInput(portId, value) {
-  const payload = Buffer.from(JSON.stringify(value), "utf8");
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payloadBase64: payload.toString("base64"),
-  };
-}
+// The typed HttpResponse frame (its job a size-prefixed $ICN in CONTEXT) in the parity plan's base64 form.
+const asPlanInput = ({ payload, ...frame }) => ({ ...frame, payloadBase64: Buffer.from(payload).toString("base64") });
 
-// The response Date header pins retrieved_at in the provenance record, which
-// otherwise falls back to the guest wall clock (ambient state that differs
-// between lanes run seconds apart).
-const HEADERS = { Date: "Mon, 28 Sep 2026 12:00:00 GMT" };
-const response = (body) => ({ status: 200, headers: HEADERS, bodyB64: Buffer.from(body).toString("base64") });
+// The response Date header pins the retrieval time in the provenance record, which otherwise falls back to the guest
+// wall clock (ambient state that differs between lanes run seconds apart).
+const HEADERS = { date: "Mon, 28 Sep 2026 12:00:00 GMT" };
 
 const JOBS = {
   parse_gp: {
     source_url: "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv",
     source_name: "celestrak-gp",
-    archive_source: "celestrak",
-    archive_name: "catalog.csv",
+    dataset_id: "gp-full-catalog",
   },
   parse_satcat: {
     source_url: "https://celestrak.org/pub/satcat.csv",
@@ -62,7 +50,7 @@ const JOBS = {
 
 const invoke = (methodId, body) => ({
   methodId,
-  inputs: [jsonInput("job", JOBS[methodId]), jsonInput("response", response(body))],
+  inputs: [asPlanInput(responseInput(JOBS[methodId], body, HEADERS))],
 });
 
 test(
@@ -77,7 +65,7 @@ test(
         id: "gp-not-modified",
         request: {
           methodId: "parse_gp",
-          inputs: [jsonInput("job", JOBS.parse_gp), jsonInput("response", { status: 304, headers: HEADERS, bodyB64: "" })],
+          inputs: [asPlanInput(responseInput(JOBS.parse_gp, new Uint8Array(0), HEADERS, 304))],
         },
         expect: "ok",
       },

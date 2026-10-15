@@ -1,14 +1,17 @@
 {
   "name": "@digitalarsenal/sdn-flow-discovery",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../peers-discovery.flow.json --deps ../discovery.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../standards-discovery.flow.json --deps ../discovery.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../pnm-history.flow.json --deps ../discovery.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../latest-dataset.flow.json --deps ../latest-dataset.deps.json",
-    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../peers-discovery.flow.json --deps ../discovery.deps.json --out ./dist/peers && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../standards-discovery.flow.json --deps ../discovery.deps.json --out ./dist/standards && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../pnm-history.flow.json --deps ../discovery.deps.json --out ./dist/pnm && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../latest-dataset.flow.json --deps ../latest-dataset.deps.json --out ./dist/latest",
+    "check": "node node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../peers-discovery.flow.json --deps ../discovery.deps.json && node node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../standards-discovery.flow.json --deps ../discovery.deps.json && node node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../pnm-history.flow.json --deps ../discovery.deps.json && node node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../latest-dataset.flow.json --deps ../latest-dataset.deps.json",
+    "build": "node node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../peers-discovery.flow.json --deps ../discovery.deps.json --out ./dist/peers && node node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../standards-discovery.flow.json --deps ../discovery.deps.json --out ./dist/standards && node node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../pnm-history.flow.json --deps ../discovery.deps.json --out ./dist/pnm && node node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../latest-dataset.flow.json --deps ../latest-dataset.deps.json --out ./dist/latest",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

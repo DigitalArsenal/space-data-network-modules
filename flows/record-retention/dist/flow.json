@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.record-retention",
   "name": "SDN Record Retention Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Hourly rolling-window retention: the host-cron timer ticks data-source/record-retention expire, which asks the node (storage.expire) to delete each configured lane's records that arrived on the node more than window_hours ago (module config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. The pass's JSON report ends at the flow egress.",
+  "description": "Hourly rolling-window retention (typed contracts 1.0): the host-cron timer's TimerTick enters data-source/record-retention expire, which asks the node (storage.expire, an SDS $PIV hostcall) to delete each configured lane's records that arrived on the node more than window_hours ago (node config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. Each lane pass's FlowNotice (FNTC: Expired / Missing / Skipped) ends at the flow egress. No JSON.",
   "nodes": [
     {
       "nodeId": "expire",

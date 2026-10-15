@@ -10,8 +10,8 @@ propagated positions against the provider's independently supplied position arc.
 | Module / method | Inputs | Outputs |
 | --- | --- | --- |
 | `files.orbit-products / normalize_vimpel` | NCD descriptor followed by exact orbit-table bytes; format `vimpel-orbits-text` | One size-prefixed OPM per row, plus the unchanged NCD |
-| `catalog-composer / validate_epoch` | `recipe` control metadata, `seed` OPM, `reference` NCD+position-file bytes, one `ephemerides` OEM | Diagnostic report |
-| `catalog-composer / fit_epoch_step` | Same inputs, with seven OEMs: nominal then perturbations of x,y,z,vx,vy,vz | Unvalidated candidate OPM and diagnostic report |
+| `catalog-composer / validate_epoch` | `recipe` `$XMT` `EPOCH_FIT_POLICY`, `seed` OPM, `reference` NCD+position-file bytes, one `ephemerides` OEM | `$XMT` `EPOCH_FIT_REPORT` |
+| `catalog-composer / fit_epoch_step` | Same inputs, with seven OEMs: nominal then perturbations of x,y,z,vx,vy,vz | Unvalidated candidate OPM and `$XMT` `EPOCH_FIT_REPORT` (with the proposed position and velocity corrections, three components each) |
 
 The reference NCD must specify `vimpel-ephemeris-text`, its exact byte length and
 SHA-256, and the archive member filename containing native ID and epoch. A host
@@ -40,23 +40,19 @@ positions, 16 MiB per OEM and 128 MiB total invocation payload.
 
 Example **tuning**, not a provider covariance or calibrated collision threshold:
 
-```json
-{
-  "version": 1,
-  "propagatorId": "com.orbpro.hpop",
-  "propagatorArtifactSha256": "<64 lowercase hex characters>",
-  "forceModel": {"centralBody": true, "j2": true, "j3": true, "j4": true,
-                 "thirdBody": true, "drag": false, "srp": false},
-  "frameTransformationRef": "<immutable frame-module/configuration reference>",
-  "holdoutStride": 4,
-  "positionToleranceKm": 1,
-  "positionPerturbationKm": 0.01,
-  "velocityPerturbationKmS": 0.00001,
-  "positionWeightKm": 0.05,
-  "positionRegularizationKm": 200,
-  "velocityRegularizationKmS": 0.1
-}
-```
+The policy is an `$XMT` `EPOCH_FIT_POLICY`; the example values:
+
+| Field | Example |
+| --- | --- |
+| `PROPAGATOR_ID` | `com.orbpro.hpop` |
+| `PROPAGATOR_ARTIFACT_SHA256` | 64 lowercase hex characters |
+| `FORCE_MODEL` | `$PRW` `PRWForceConfiguration`: point mass, J2-J4, third bodies; no drag, no SRP (required) |
+| `FRAME_TRANSFORMATION_REF` | immutable frame-module/configuration reference |
+| `HOLDOUT_STRIDE` | 4 |
+| `POSITION_TOLERANCE_KM` | 1 |
+| `POSITION_PERTURBATION_KM`, `VELOCITY_PERTURBATION_KM_S` | 0.01, 0.00001 |
+| `POSITION_WEIGHT_KM` | 0.05 |
+| `POSITION_REGULARIZATION_KM`, `VELOCITY_REGULARIZATION_KM_S` | 200, 0.1 |
 
 The caller must route propagation through the artifact/model it records; a
 report preserves the supplied metadata, it does not independently attest host

@@ -14,6 +14,6 @@ try {
   const filename=sources[index].file.replace('.excerpt.txt','');const bytes=fs.readFileSync(path.join(directory,filename));
   const hash=createHash('sha256').update(bytes).digest('hex');assert.equal(hash,sources[index].full_source_sha256,'Download differs from fixture issue');
   const response=await h.invoke(parseRequest(source,bytes));assert.equal(response.statusCode,0,response.errorMessage);
-  const result=meta(response);assert.equal(result.sha256,hash);console.log(`PASS full source ${source}: ${result.record_count} records; ${result.empty_future_rows} blank future rows`);
+  const result=meta(response);assert.equal(result.tags.batchId,hash);console.log(`PASS full source ${source}: ${result.provenance.normalizedCount} records; ${result.provenance.warnings.join('; ')||'no blank future rows'}`);
  }
 } finally {await h.destroy();}

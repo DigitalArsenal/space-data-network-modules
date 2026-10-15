@@ -1,49 +1,156 @@
 {
   "pluginId": "com.orbpro.catalog-synthesis",
   "name": "Supplemental Catalog Synthesis",
-  "version": "0.1.0",
-  "description": "Executable pipeline (App 2, A2.7 — owner goal 3): on a timer, reads stored OMM records (storage_query) — our OD-fitted supplemental OMMs (JSON, USER_DEFINED_SDN_SOURCE_* provenance) and Space-Track GP OMM records ($OMM FlatBuffer, SourceName=spacetrack-gp) — and merges them into ONE canonical CelesTrak-replacement OMM catalog under the synthesis provider identity. Deterministic per-NORAD precedence: a provider's fitted OMM wins over Space-Track GP only when the provider is at A2.4 gate level hard-pass AND the fit is strictly fresher (epoch); otherwise Space-Track GP. An object present in either input is never dropped; objects with no NORAD are quarantined, never keyed as NORAD 0. Every catalog record carries full provenance (winning source, source CID, fit metadata, precedence rule applied). Output records are published via publish_record_with_source (SourceName=catalog-synthesis, topic sdn/data-source/catalog-synthesis, batch_id = deterministic hash of the input set) plus a synthesis summary. Gate status is data-driven (config/provider-gate-status.json compiled default > plugin.getConfig > request payload). Deterministic: two runs over the same stored inputs produce byte-identical outputs.",
+  "version": "0.2.0",
+  "description": "On a timer, reads the stored $OMM records (typed storage.query) - our OD-fitted supplemental OMMs (analysis/od/fit-pipeline, stored under the provider's SOURCE_NAME) and Space-Track GP (stored under a Space-Track source name) - and merges them into ONE canonical CelesTrak-replacement OMM catalog (typed contracts 1.0: FlatBuffers only). Deterministic per-NORAD precedence: a provider's fitted OMM wins over Space-Track GP only when the provider is at gate level hard-pass AND the fit is strictly fresher (epoch); otherwise Space-Track GP. An object present in either lane is never dropped; objects with no NORAD are quarantined, never keyed as NORAD 0. Each catalog record is the winning $OMM with every field kept and the synthesis provenance (winning source, its CID, precedence rule, gate status, batch) appended as USER_DEFINED_PARAMETERS; the batch goes out as an IngestRequest plus a size-prefixed $OMM record stream for hostcap/storage-ingest (storing and publishing are the flow's). Gate status is data: config/provider-gate-status.json compiled in, overridden by node config (plugin.getConfig). Deterministic: no wall clock, batch_id = sha256 of the sorted input CIDs, NORADs ascending.",
   "pluginFamily": "analysis",
   "capabilities": [
     "storage_query",
-    "storage_ingest",
-    "wallet_sign",
-    "pubsub"
+    "timers"
   ],
-  "protocols": [],
+  "externalInterfaces": [],
   "timers": [
     {
       "timerId": "catalog-synthesis-pull",
       "methodId": "synthesize_catalog",
       "defaultIntervalMs": 21600000,
-      "description": "Periodic catalog synthesis pass over stored OMM records (default every 6h, matching the Space-Track current-gp poll cadence — no value re-synthesizing faster than the newest inputs refresh)."
+      "description": "Periodic catalog synthesis pass over stored OMM records (default every 6h, matching the Space-Track current-gp poll cadence - no value re-synthesizing faster than the newest inputs refresh)."
     }
   ],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    }
+  ],
   "methods": [
     {
       "methodId": "synthesize_catalog",
       "displayName": "Synthesize the CelesTrak-replacement OMM catalog",
-      "description": "Reads stored OMM records (storage_query), merges our OD-fitted OMMs with Space-Track GP records under deterministic per-NORAD precedence, and stores + signs + publishes schema-exact canonical OMM catalog records with full provenance, plus a synthesis summary. Optional JSON config payload overrides the Space-Track source names, provider gate status, output identity, and query limit.",
-      "inputPorts": [],
-      "outputPorts": [
+      "description": "One pass: storage.query(querySchema, queryLimit) -> classify each stored $OMM by its SOURCE_NAME (a spacetrackSourceNames entry or untagged: Space-Track GP; any other: our fit of that provider) -> per NORAD the newest record of each lane, then precedence (ours-hardpass-fresher, spacetrack-ours-gate-<level>, spacetrack-ours-not-fresher, ours-sole-source-gate-<level>, spacetrack-sole-source) -> omm_meta + omm_records; counts, quarantine and unreadable records are FlowNotices. Node config (plugin.getConfig): querySchema, queryLimit, sourceName, fileIdPrefix, dataSource, spacetrackSourceNames, defaultLevelForUnlistedProvider, gateStatus {providers, spacetrackSourceNames, defaultLevelForUnlistedProvider}.",
+      "inputPorts": [
         {
-          "portId": "published",
-          "displayName": "Published catalog OMM PNMs + synthesis summary",
-          "description": "A signed PNM pointer for each canonical catalog OMM record published, plus a synthesis summary message (total, ours-won, spacetrack-won, quarantined, per-provider counts).",
-          "required": false,
+          "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "catalog-synthesis.pnm",
-              "description": "Signed PNM pointer for each published catalog OMM record.",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
-                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
-              ]
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK); FIRED_MS stamps the notices."
             }
-          ]
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The catalog-synthesis-pull timer tick; a direct invoke needs none."
         }
-      ]
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The catalog batch's IngestRequest for hostcap/storage-ingest: SCHEMA OMM.fbs, TAGS PROVIDER_ID and SOURCE_NAME the synthesis identity (config sourceName, default catalog-synthesis), BATCH_ID the batch_id, SOURCE_URL sdn://catalog-synthesis, RECONCILE None, PROVENANCE counts and attributes. Nothing when the catalog is empty."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The catalog batch's IngestRequest for hostcap/storage-ingest: SCHEMA OMM.fbs, TAGS PROVIDER_ID and SOURCE_NAME the synthesis identity (config sourceName, default catalog-synthesis), BATCH_ID the batch_id, SOURCE_URL sdn://catalog-synthesis, RECONCILE None, PROVENANCE counts and attributes. Nothing when the catalog is empty."
+        },
+        {
+          "portId": "omm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The catalog as ONE size-prefixed $OMM record stream, ascending NORAD: each the winning stored $OMM with USER_DEFINED_PARAMETERS SDN_CATALOG_SOURCE_KIND (ours-fit | spacetrack-gp), SDN_CATALOG_SOURCE_NAME, SDN_CATALOG_SOURCE_CID, SDN_CATALOG_PRECEDENCE, SDN_CATALOG_GATE_STATUS, SDN_CATALOG_BATCH, SDN_CATALOG_COMMENT appended. Nothing when the catalog is empty."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The catalog as ONE size-prefixed $OMM record stream, ascending NORAD: each the winning stored $OMM with USER_DEFINED_PARAMETERS SDN_CATALOG_SOURCE_KIND (ours-fit | spacetrack-gp), SDN_CATALOG_SOURCE_NAME, SDN_CATALOG_SOURCE_CID, SDN_CATALOG_PRECEDENCE, SDN_CATALOG_GATE_STATUS, SDN_CATALOG_BATCH, SDN_CATALOG_COMMENT appended. Nothing when the catalog is empty."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotices. Info: the summary (COUNT catalog records, REASON ours-won / spacetrack-won / quarantined / unreadable counts) and one per provider (SOURCE_NAME the provider, COUNT won). Skipped: the quarantined records (REASON no-norad-unmapped-object-id, ITEMS their CIDs) and the unreadable ones (REASON unreadable, ITEMS <reason>:<cid>, reason unknown-encoding, malformed-flatbuffer-omm or missing-epoch). Missing: storage.query failed (REASON storage-query-failed: <message>)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "FlowNotices. Info: the summary (COUNT catalog records, REASON ours-won / spacetrack-won / quarantined / unreadable counts) and one per provider (SOURCE_NAME the provider, COUNT won). Skipped: the quarantined records (REASON no-norad-unmapped-object-id, ITEMS their CIDs) and the unreadable ones (REASON unreadable, ITEMS <reason>:<cid>, reason unknown-encoding, malformed-flatbuffer-omm or missing-epoch). Missing: storage.query failed (REASON storage-query-failed: <message>)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One pass reads the stored records, merges them and emits the catalog on the calling thread; nothing is spawned and nothing is shared between passes."
+  }
 }

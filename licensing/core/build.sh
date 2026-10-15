@@ -34,8 +34,12 @@ ensure_emscripten() {
     export EM_CACHE="${EM_CACHE:-$SCRIPT_DIR/.emcache}"
     mkdir -p "$EM_CACHE"
 
+    if [ "$toolchain" = "system" ]; then
+        command -v emcc >/dev/null 2>&1 || { echo "SDN_WASM_TOOLCHAIN=system needs emcc on PATH" >&2; exit 1; }
+        return
+    fi
     if [ "$toolchain" != "local-emsdk" ]; then
-        echo "This repo requires repo-local deps/emsdk. Unsupported SDN_WASM_TOOLCHAIN=$toolchain" >&2
+        echo "Unsupported SDN_WASM_TOOLCHAIN=$toolchain (local-emsdk or system)" >&2
         exit 1
     fi
 
@@ -73,6 +77,7 @@ ensure_cryptopp
 
 node "$SCRIPT_DIR/generate-sds-headers.mjs"
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
+node "$SCRIPT_DIR/generate-typed-runtime.mjs"
 
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"

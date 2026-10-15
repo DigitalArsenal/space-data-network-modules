@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
   "name": "Launch trajectory tracking and projected insertion",
-  "version": "0.1.0",
-  "description": "Reconstructs a launch ascent from altitude and speed telemetry (ground track, downrange, flight-path angle, instantaneous impact point, each sample's osculating apsides, and the insertion orbit at engine cutoff), and projects the insertion orbit of a scheduled launch from its pad, liftoff time, target orbit and a comparable flight's profile, including the liftoff times that join a reference plane.",
+  "version": "0.2.0",
+  "description": "Reconstructs a launch ascent from altitude and speed telemetry (ground track, downrange, flight-path angle, instantaneous impact point, each sample's osculating apsides, and the insertion orbit at engine cutoff), and projects the insertion orbit of a scheduled launch from its pad, liftoff time, target orbit and a comparable flight's profile, including the liftoff times that join a reference plane. Results are $LAM only; no JSON report.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -71,28 +71,6 @@
           "maxStreams": 1,
           "required": true,
           "description": "$LAM (TELEMETRY): reconstructed samples, Earth-fixed TRAJECTORY_OEM, instantaneous impact points and apsides, and INSERTION with BURN_OUT_VECTORS once cutoff is reached."
-        },
-        {
-          "portId": "report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Phase, azimuth, cutoff, insertion elements and the latest sample as JSON; the result is the $LAM frame."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Phase, azimuth, cutoff, insertion elements and the latest sample as JSON; the result is the $LAM frame."
         }
       ],
       "maxBatch": 1,
@@ -143,28 +121,6 @@
           "maxStreams": 1,
           "required": true,
           "description": "$LAM (PROJECTED): nominal samples, Earth-fixed TRAJECTORY_OEM for launch screening, INSERTION with BURN_OUT_VECTORS, and IN_PLANE_LIFTOFF_EPOCHS for a reference plane."
-        },
-        {
-          "portId": "report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Azimuth, insertion elements and in-plane liftoff times as JSON; the result is the $LAM frame."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Azimuth, insertion elements and in-plane liftoff times as JSON; the result is the $LAM frame."
         }
       ],
       "maxBatch": 1,

@@ -12,8 +12,11 @@ files from EDC or CDDIS, the schedule, the archive, and the station coordinates 
 
 ## Method
 
-`read_crd`, input `source` (one CRD version 2 file as text, up to 64 MiB), outputs `observations` (one `$TDM` per pass, up to 4,096)
-and `report`.
+`read_crd` (typed contracts 1.0, FlatBuffers only): input `source`, the `HttpResponse` (HRSP) hostcap/http-request answers with BODY
+one CRD version 2 file as text (up to 64 MiB); outputs `observations` (one `$TDM` per pass, up to 4,096) and `report`, one `FlowNotice`
+(FNTC, KIND Info) whose ITEMS are the counters, the passes (`pass.<k>.<field>`) and each normal point's statistics
+(`normalPoint.<k>.<column>`) as `name=value`. A 304 gives one `FlowNotice` (Unchanged) and no `$TDM`; another status or a transport
+error is refused.
 
 The authority is the ILRS Consolidated Laser Ranging Data Format, version 2.01 (https://ilrs.gsfc.nasa.gov/docs/2022/crd_v2.01e3.pdf).
 Record types are read in either case (stations write `h1` and `H1`). A file is a stream of passes, each `H2` station, `H3` target and

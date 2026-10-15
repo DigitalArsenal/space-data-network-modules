@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 
 import { Builder } from "flatbuffers";
 
+import { sourceOems, statusNode } from "./lib/nodes.mjs";
+import { TYPE, decodeOem } from "./lib/sds.mjs";
+
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const uiPath = path.join(packageRoot, "app/ui/index.html");
 const uiSource = fs.readFileSync(uiPath, "utf8");
@@ -42,29 +45,7 @@ function makeDss({
   builder.addFieldOffset(32, lastSyncedAtOffset, 0);
   if (errorOffset) builder.addFieldOffset(33, errorOffset, 0);
   const root = builder.endObject();
-  builder.finishSizePrefixed(root, "$DSS");
-  return builder.asUint8Array();
-}
-
-function makeStatusRoute(dss) {
-  const builder = new Builder(512);
-  const schemaName = builder.createString("DSS.fbs");
-  const fileIdentifier = builder.createString("$DSS");
-  builder.startVector(1, dss.byteLength, 1);
-  for (let index = dss.byteLength - 1; index >= 0; index -= 1) {
-    builder.addInt8(dss[index]);
-  }
-  const data = builder.endVector();
-  builder.startObject(11);
-  builder.addFieldInt64(0, 1n, 0n);
-  builder.addFieldInt8(3, 1, 0);
-  builder.addFieldInt64(4, BigInt(dss.byteLength), 0n);
-  builder.addFieldInt64(5, 1n, 0n);
-  builder.addFieldOffset(7, schemaName, 0);
-  builder.addFieldOffset(8, fileIdentifier, 0);
-  builder.addFieldOffset(9, data, 0);
-  const root = builder.endObject();
-  builder.finish(root, "$FSB");
+  builder.finish(root, "$DSS");
   return builder.asUint8Array();
 }
 
@@ -133,9 +114,7 @@ async function executeUi(runtimePayload) {
   const dom = makeDom();
   const requests = [];
   const intervals = [];
-  const storePayload = makeStatusRoute(
-    makeDss({ syncedRows: 75n, totalRows: 75n }),
-  );
+  const storePayload = makeDss({ syncedRows: 75n, totalRows: 75n });
   const fetch = async (url, options) => {
     requests.push({ url, options });
     if (url.includes("/storage/records/")) return response(404);
@@ -185,11 +164,14 @@ test("the UI accepts only signed-node runtime routes, never host storage queries
   assert.doesNotMatch(uiSource, /data-provider=["']od["']|Orbit determination/i);
 });
 
-test("the UI unwraps a canonical FSB status route before parsing size-prefixed inner DSS", async () => {
-  const dss = makeDss();
-  const route = makeStatusRoute(dss);
-  assert.equal(new TextDecoder().decode(route.subarray(4, 8)), "$FSB");
-  assert.equal(new TextDecoder().decode(dss.subarray(8, 12)), "$DSS");
+test("the UI parses each route's canonical $DSS, the status node's own snapshot", async (t) => {
+  // The status node's snapshot of a provider lane after one $OEM (data-source/spacex-starlink-source's, from its fixture).
+  const oems = await sourceOems(t);
+  const node = await statusNode(t);
+  const snapshot = await node.invoke({ methodId: "record_event", inputs: [{ portId: "provider-starlink", typeRef: TYPE.OEM, payload: oems.starlink[0] }] });
+  assert.equal(snapshot.statusCode, 0, snapshot.errorMessage);
+  const route = new Uint8Array(snapshot.outputs.find((frame) => frame.portId === "provider-starlink.dss").payload);
+  assert.equal(new TextDecoder().decode(route.subarray(4, 8)), "$DSS");
 
   const result = await executeUi(route);
   assert.equal(result.requests.length, 6);
@@ -197,35 +179,30 @@ test("the UI unwraps a canonical FSB status route before parsing size-prefixed i
     result.requests.map(({ url }) => url.match(/\/runtime\/nodes\/([^/]+)\.dss$/)?.[1]),
     expectedStatusNodes,
   );
-  assert.ok(
-    result.requests.every(({ url }) => url.includes("/runtime/nodes/")),
-    JSON.stringify(result.requests.map(({ url }) => url)),
-  );
-  assert.ok(
-    result.requests.every(
-      ({ options }) =>
-        options.headers.Accept === "application/vnd.sds.fsb+flatbuffer",
-    ),
-  );
+  assert.ok(result.requests.every(({ options }) => options.headers.Accept === "application/x-flatbuffers"));
+  const states = decodeOem(oems.starlink[0]).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA.length / 6;
   assert.equal(result.rows[0].state.textContent, "syncing");
-  assert.equal(result.rows[0].cells[2].textContent, "11");
-  assert.equal(result.rows[0].cells[3].textContent, "20");
-  assert.equal(result.rows[0].cells[4].textContent, "4,096");
+  assert.equal(result.rows[0].cells[2].textContent, String(states));
+  assert.equal(result.rows[0].cells[3].textContent, String(states));
+  assert.equal(result.rows[0].cells[4].textContent, new Intl.NumberFormat().format(oems.starlink[0].byteLength));
   assert.equal(result.elements.get("#record-count").textContent, "75");
   assert.equal(result.intervals.length, 1);
   assert.equal(result.intervals[0].interval, 5_000);
 });
 
-test("the UI rejects a bare DSS payload that bypasses the signed FSB route contract", async () => {
-  const result = await executeUi(makeDss());
-  assert.equal(result.requests.length, 6);
-  assert.equal(result.rows[0].state.textContent, "unavailable");
-  assert.match(result.rows[0].state.title, /expected a canonical \$FSB/);
+test("the UI refuses a route that is not one canonical $DSS", async () => {
+  const builder = new Builder(64);
+  builder.startObject(1);
+  builder.finish(builder.endObject(), "$FSB");
+  for (const payload of [builder.asUint8Array(), (() => { const b = new Builder(64); b.startObject(1); b.finishSizePrefixed(b.endObject(), "$DSS"); return b.asUint8Array(); })()]) {
+    const result = await executeUi(payload);
+    assert.equal(result.rows[0].state.textContent, "unavailable");
+    assert.match(result.rows[0].state.title, /expected a canonical \$DSS/);
+  }
 });
 
 test("the five-provider UI keeps polling without requesting an OD status row", async () => {
-  const healthy = makeStatusRoute(makeDss());
-  const result = await executeUi(healthy);
+  const result = await executeUi(makeDss());
   assert.equal(result.intervals.length, 1);
   assert.equal(result.intervals[0].interval, 5_000);
   await result.intervals[0].callback();

@@ -9,13 +9,15 @@ const {header,version}=await generateSdsHeader('LDM',import.meta.url);
 if (!/add_ID\(/.test(header.slice(header.indexOf('struct LDMBuilder')))) {
   throw new Error(`spacedatastandards.org@${version} has no LDM.ID; launch notices need 1.227.0 or later.`);
 }
+// nlohmann/json parses the UPSTREAM registry body (a foreign wire format); nothing module-to-module is JSON. The
+// module-sdk runtime types and typedHostcall.hpp (plan_launches' plugin.getConfig) are staged by the SDK compiler.
 const json=await fs.readFile(path.resolve(root,'../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'),'utf8');
 const sha=await fs.readFile(path.resolve(root,'../../files/orbit-products/src/sha256.hpp'),'utf8');
 const source=await fs.readFile(path.join(root,'src/launch_schedule.cpp'),'utf8');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
 const outputPath=path.join(root,'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath),{recursive:true});
-const result=await compileModuleFromSource({manifest,sourceCode:`${header}\n${json}\n${sha}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential'});
+const result=await compileModuleFromSource({manifest,sourceCode:`${header}\n${json}\n${sha}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential',allowUndefinedImports:true});
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 const guest=path.join(root,'dist/guest-link');
 await fs.mkdir(guest,{recursive:true});

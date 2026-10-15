@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
   "name": "Cellular Provider Credential Mediator",
-  "version": "0.1.0",
-  "description": "The one node in the cellular-network-aggregate flow that holds a credential capability. It opens a browser-sealed provider credential with the host's keyslot oracle (keyslot.unwrap, gated by wallet_sign — the host has no separate keyslot capability name) and writes it to the node's machine-bound credential store (secrets.put), per lane, under a write grant that is SEPARATE from the read grant by Seal Council condition. It also finishes the provider catalog the router builds, appending the node's X25519 wrapping key slot and flipping the per-lane credentialConfigured flag it reads back with secrets.status. It exists as its own plugin so that cell-tower-source — which parses provider payloads and is instantiated by the SDK browser harness in its own tests — can stay capabilities:[] and browser-targeted: wallet_sign is browser-incompatible by SDK compliance and secrets.* has no browser host implementation. The blast radius of every credential grant an operator makes for this flow is therefore this one artifact. It carries NO plaintext branch, echoes NO value in any reply or log, invents NO key slot, and refuses any lane not prefixed cell_.",
+  "version": "0.2.0",
+  "description": "The one node in the cellular-network-aggregate flow that holds a credential capability (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between modules; every hostcall an SDS $PIV invocation through sdm_piv). It opens a browser-sealed provider credential with the host's keyslot oracle (keyslot.unwrap, gated by wallet_sign \u2014 the host has no separate keyslot capability name) and writes it to the node's machine-bound credential store (secrets.put, the secret on the raw \"secret\" frame), per lane, under a write grant that is SEPARATE from the read grant by Seal Council condition. It also finishes the provider catalog the router builds (a $QRP projection page): it fills the node's X25519 wrapping key slot (node.publicKey, the raw key bytes in a Bytes cell, rendered base64 only by http-respond's Json representation) and flips the per-lane credentialConfigured/defaultSelected cells it reads back with secrets.status. It exists as its own plugin so that cell-tower-source \u2014 which parses provider payloads and is instantiated by the SDK browser harness in its own tests \u2014 can stay capabilities:[] and browser-targeted: wallet_sign is browser-incompatible by SDK compliance and secrets.* has no browser host implementation. The blast radius of every credential grant an operator makes for this flow is therefore this one artifact. It carries NO plaintext branch, echoes NO value in any output frame, CONTEXT or log, invents NO key slot, and refuses any lane not prefixed cell_.",
   "pluginFamily": "data_source",
   "capabilities": [
     "wallet_sign",
@@ -19,7 +19,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "One method over one control frame: read the task, make at most a handful of synchronous hostcalls in a fixed order, emit one decision and one body. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "One method over one task: read the task, make at most a handful of synchronous typed hostcalls in a fixed order, emit one decision and one page (or the completed requests). No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [
@@ -28,30 +28,70 @@
       "displayName": "Mediate a cellular provider credential",
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Four operations, dispatched on the task frame the router emits. `catalog` finishes the provider catalog: it appends keySlot {slotId, publicKey, algorithm} from the ungated node.publicKey bridge operation (hex on the wire, published as base64 because that is what the browser's WebCrypto import takes) and flips credentialConfigured/defaultSelected for each lane secrets.status reports as held. `descriptors` is the credentialed FETCH: cell-tower-source holds no secrets capability, so a credentialed provider's request descriptor leaves the router with a literal {{credential}} placeholder and a credentialLane naming the lane that fills it; this op reads that lane with secrets.get, percent-encodes the value into the URL, drops the credentialLane marker, and returns the descriptor list together with its request_providers correlation list — rewritten in ONE pass so that dropping a descriptor whose lane is empty also drops its correlation entry, because parse attributes response frames to providers BY POSITION and a filtered descriptor list alone would misattribute every provider after the gap. `put` opens the browser's keyslot envelope with keyslot.unwrap and hands the result straight to secrets.put; the plaintext is never pushed to an output port, never logged and never returned, and there is no code path that accepts an unsealed credential. `clear` is secrets.clear, and answers identically whether or not a credential was there so a write grant does not become a presence oracle. Every lane is checked for the cell_ prefix before any host call, so a malformed frame cannot reach an operator lane belonging to some other subsystem.",
+      "description": "Exactly one task kind per invocation, by port. \"catalog\": the router's $QRP provider projection page -> finished page (key slot cells from node.publicKey; credentialConfigured/defaultSelected true for each cell_ lane secrets.status reports configured) + a $QRP Request decision carrying the page's REPRESENTATION. \"credential\": the router's $APR task. ROUTE credential-put: the sealed keyslot envelope is the APR BODY verbatim (the browser's JSON {slotId, ephemeralPublicKey, nonce, ciphertext}, base64 fields decoded at this edge) -> keyslot.unwrap (KeyslotParams SLOT_ID provider-wrapping, ALGORITHM X25519; raw ephemeral_public_key, nonce, ciphertext) -> the plaintext {username, secret} -> secrets.put (SecretParams ID lane, USERNAME; raw secret); the plaintext is never pushed, logged or returned and is wiped after use. ROUTE credential-clear: secrets.clear, answered identically whether or not a credential was there so a write grant does not become a presence oracle. Success is a one-row $QRP projection (providerId, credentialLane, credentialConfigured, stored|cleared); a refusal is a $QRP KIND Error decision with HTTP_STATUS, ERROR_CODE and MESSAGE (bad-lane 400, unsealed-credential 400, unknown-key-slot 400, unwrap-failed 400, empty-secret 400, username-too-long 400, store-refused 403, clear-refused 403) and no page. \"requests\": credentialed provider fetches (the former descriptors op). An HttpRequest whose URL carries {{credential}} / {{credential_user}} is filled from secrets.get on the cell_ lane its CONTEXT $APR names in the \"credentialLane\" parameter (percent-encoded) and re-emitted with its CONTEXT untouched; every other request passes verbatim; one that cannot be filled (foreign lane, nothing stored, an unfilled placeholder) is dropped and reported in ONE FlowNotice Skipped (ITEMS \"<provider>=<code>\"). Attribution downstream is by CONTEXT, so dropping a request cannot misattribute the others. Every lane is checked for the cell_ prefix before any host call. BATCHING: \"catalog\" and \"credential\" are single-stream and a surplus is refused with error code \"batched-input-frames\"; \"requests\" is a fan-in port, every frame answered.",
       "inputPorts": [
         {
-          "portId": "task",
+          "portId": "catalog",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-credential-task-json",
+              "setId": "sdn-query-page",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON task emitted by cell-tower-source `route`.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "One of {op:catalog, catalog:<the catalog the router built>}, {op:descriptors, descriptors:[...], request_providers:[...]}, {op:put, providerId, lane, envelope} or {op:clear, providerId, lane}. Request-scoped routing between two nodes of one flow, not observation data; no SDS record describes an instruction and inventing one would be worse than naming it what it is."
-              }
+              "description": "The provider catalog as a $QRP projection page stream: id, name, authority, license, attribution, credentialRequired, credentialConfigured, credentialLane, authoritative, defaultSelected, methods, keySlotId, keySlotPublicKey, keySlotAlgorithm."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "The credential task."
+          "required": false,
+          "description": "The catalog to finish (GET /providers)."
+        },
+        {
+          "portId": "credential",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR task from cell-tower-source route: ROUTE credential-put|credential-clear, PARAMETERS providerId + credentialLane, BODY the sealed envelope verbatim (put)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The credential store/clear task (PUT|DELETE /credentials/<providerId>)."
+        },
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (module-sdk runtime type HREQ); a credentialed one carries {{credential}} in URL and its run contract $APR (with credentialLane) in CONTEXT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Credentialed provider fetches to complete (fan-in)."
         }
       ],
       "outputPorts": [
@@ -59,52 +99,101 @@
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-route-decision-json",
+              "setId": "sdn-query-page",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status}).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. `route` is the string \"error\" for every non-200 because http-respond reads decision.status only in that branch."
-              }
+              "description": "$QRP decision for foundation/http-respond respond_query: a KIND Request carrying the representation, or a KIND Error with HTTP_STATUS, ERROR_CODE and MESSAGE."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Status and content type for the answer."
+          "required": false,
+          "description": "The decision for the catalog or credential answer."
         },
         {
-          "portId": "body",
+          "portId": "page",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-credential-body-json",
+              "setId": "sdn-query-page",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "UTF-8 JSON answer: the finished provider catalog, the completed request-descriptor list with its correlation list, or the credential lane's new state.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Source metadata, request descriptors and lane state (which provider, which lane, stored or cleared) handed to the flow's next node. Never a credential value: the `descriptors` op emits URLs that CONTAIN a substituted token, which travel only to the http node and are never logged, and no reply ever echoes a stored secret. No SDS record type describes node-local configuration state or an HTTP request descriptor."
-              }
+              "description": "$QRP projection page stream: the finished catalog, or the credential lane's new state (providerId, credentialLane, credentialConfigured, stored|cleared). Never a credential value."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "The JSON answer body."
+          "required": false,
+          "description": "The answer page (absent on a refusal)."
+        },
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (HREQ) for hostcap/http-request: the completed credentialed fetch (URL filled, CONTEXT verbatim) or an uncredentialed one verbatim. The URL travels only to the http node and is never logged."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Completed provider fetches."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (module-sdk runtime type FNTC): KIND Skipped, REASON credential-unavailable, ITEMS \"<provider>=<code>\" for each dropped fetch."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Which credentialed fetches were dropped and why."
         }
       ]
     }
   ],
-  "schemasUsed": [],
+  "schemasUsed": [
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    }
+  ],
   "buildArtifacts": [
     {
       "target": "wasmedge",

@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.latest-dataset",
   "name": "SDN Provider Latest Dataset Flow",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "HTTP provider-scoped latest-dataset flow (gateway loop G.4): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (latest_dataset with peerId + standard | not_found), hostcap/p2p-discovery latest_dataset issues the policy-mediated p2p.latest_dataset hostcall (the provider's newest signature-attributed publication batch when the host's OPT-IN gateway.pin covers the pair — or the peer is the node itself — AND the batch's shard content is fully materialized locally; stream delivery is a host body reference except on the json path), foundation/discovery-shape shape_latest turns the materials into the response decision (200 batch stream verbatim / body-reference descriptor; format=json routes the raw $OMM stream through foundation/omm-json for the bare-array presentation, non-OMM standards answer 406; unknown provider/standard answers an honest 404; known-but-unpinned or not-yet-materialized answers 503 with the newest signed-PNM pointer in the body — NO silent proxy fetch), and foundation/http-respond assembles the final $HTR envelope (200/304/404/406/503) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "description": "Gateway provider-latest-dataset flow (mount GET /api/v1/peers/{peerId}/{standard}/latest, loop G.4): foundation/http-route discover decides the request as an $APR (latest_dataset + peerId + standard); hostcap/p2p-discovery latest_dataset reads p2p.latest_dataset (typed $PIV, capability p2p_read; delivered out of band by host body reference - DAV BODY_REF_TOKEN -> $HTR BODY_REF - unless JSON is asked for, then inline) and answers a $DAV beside the $APR, with the batch's records on its standard's <code>_records port when the node serves it (STATUS 404 not-published / not-served, 503 dataset-unavailable with the $DAV); foundation/http-respond respond renders the $HTR: [$DAV][records] as one FlatBuffers stream by default, the records as JSON on request ($OMM), 304 on the $DAV ETAG. foundation/discovery-shape and foundation/omm-json are retired. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "nodes": [
     {
       "nodeId": "route",
@@ -16,20 +16,6 @@
       "nodeId": "disc",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "methodId": "latest_dataset",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "shape",
-      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_latest",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "tojson",
-      "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "methodId": "encode",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -50,35 +36,17 @@
   ],
   "edges": [
     {
-      "edgeId": "route-decision",
+      "edgeId": "route-decision-disc-decision",
       "fromNodeId": "route",
       "fromPortId": "decision",
       "toNodeId": "disc",
-      "toPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "disc-decision",
-      "fromNodeId": "disc",
-      "fromPortId": "decision",
-      "toNodeId": "shape",
       "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "disc-snapshot",
+      "edgeId": "disc-decision-respond-decision",
       "fromNodeId": "disc",
-      "fromPortId": "snapshot",
-      "toNodeId": "shape",
-      "toPortId": "snapshot",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "shape-decision",
-      "fromNodeId": "shape",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
@@ -86,52 +54,169 @@
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-body",
-      "fromNodeId": "shape",
-      "fromPortId": "body",
+      "edgeId": "disc-availability-respond-availability",
+      "fromNodeId": "disc",
+      "fromPortId": "availability",
       "toNodeId": "respond",
-      "toPortId": "pnm_body",
+      "toPortId": "availability",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-opaque-body",
-      "fromNodeId": "shape",
-      "fromPortId": "opaque_body",
+      "edgeId": "disc-omm-records-respond-omm-records",
+      "fromNodeId": "disc",
+      "fromPortId": "omm_records",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "omm_records",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-etag",
-      "fromNodeId": "shape",
-      "fromPortId": "etag",
+      "edgeId": "disc-mpe-records-respond-mpe-records",
+      "fromNodeId": "disc",
+      "fromPortId": "mpe_records",
       "toNodeId": "respond",
-      "toPortId": "etag",
+      "toPortId": "mpe_records",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "shape-stream",
-      "fromNodeId": "shape",
-      "fromPortId": "stream",
-      "toNodeId": "tojson",
-      "toPortId": "stream",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "tojson-body",
-      "fromNodeId": "tojson",
-      "fromPortId": "json",
+      "edgeId": "disc-cat-records-respond-cat-records",
+      "fromNodeId": "disc",
+      "fromPortId": "cat_records",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "cat_records",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
     {
-      "edgeId": "respond-egress",
+      "edgeId": "disc-spw-records-respond-spw-records",
+      "fromNodeId": "disc",
+      "fromPortId": "spw_records",
+      "toNodeId": "respond",
+      "toPortId": "spw_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-eop-records-respond-eop-records",
+      "fromNodeId": "disc",
+      "fromPortId": "eop_records",
+      "toNodeId": "respond",
+      "toPortId": "eop_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-csm-records-respond-csm-records",
+      "fromNodeId": "disc",
+      "fromPortId": "csm_records",
+      "toNodeId": "respond",
+      "toPortId": "csm_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-egp-records-respond-egp-records",
+      "fromNodeId": "disc",
+      "fromPortId": "egp_records",
+      "toNodeId": "respond",
+      "toPortId": "egp_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-sit-records-respond-sit-records",
+      "fromNodeId": "disc",
+      "fromPortId": "sit_records",
+      "toNodeId": "respond",
+      "toPortId": "sit_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-lcc-records-respond-lcc-records",
+      "fromNodeId": "disc",
+      "fromPortId": "lcc_records",
+      "toNodeId": "respond",
+      "toPortId": "lcc_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-tbs-records-respond-tbs-records",
+      "fromNodeId": "disc",
+      "fromPortId": "tbs_records",
+      "toNodeId": "respond",
+      "toPortId": "tbs_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-gnp-records-respond-gnp-records",
+      "fromNodeId": "disc",
+      "fromPortId": "gnp_records",
+      "toNodeId": "respond",
+      "toPortId": "gnp_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-wxf-records-respond-wxf-records",
+      "fromNodeId": "disc",
+      "fromPortId": "wxf_records",
+      "toNodeId": "respond",
+      "toPortId": "wxf_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-cnp-records-respond-cnp-records",
+      "fromNodeId": "disc",
+      "fromPortId": "cnp_records",
+      "toNodeId": "respond",
+      "toPortId": "cnp_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-rfb-records-respond-rfb-records",
+      "fromNodeId": "disc",
+      "fromPortId": "rfb_records",
+      "toNodeId": "respond",
+      "toPortId": "rfb_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-iqc-records-respond-iqc-records",
+      "fromNodeId": "disc",
+      "fromPortId": "iqc_records",
+      "toNodeId": "respond",
+      "toPortId": "iqc_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-tct-records-respond-tct-records",
+      "fromNodeId": "disc",
+      "fromPortId": "tct_records",
+      "toNodeId": "respond",
+      "toPortId": "tct_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-dtt-records-respond-dtt-records",
+      "fromNodeId": "disc",
+      "fromPortId": "dtt_records",
+      "toNodeId": "respond",
+      "toPortId": "dtt_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-response-egress-response",
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
@@ -160,8 +245,6 @@
   "requiredPlugins": [
     "com.digitalarsenal.foundation.http-route",
     "com.digitalarsenal.hostcap.p2p-discovery",
-    "com.digitalarsenal.foundation.discovery-shape",
-    "com.digitalarsenal.foundation.omm-json",
     "com.digitalarsenal.foundation.http-respond"
   ],
   "api": {
@@ -174,7 +257,7 @@
         "method": "GET",
         "operationId": "getPeerStandardLatest",
         "summary": "Provider's newest published dataset for a standard",
-        "description": "The newest dataset publication BATCH the provider peer published for the standard (e.g. celestrak.eth × OMM) — the exact shard content its signed PNM points to, served verbatim from this node's local materialization and re-verified against the recorded SHA-256 on every materialization. SERVING IS OPT-IN: the node answers 200 only when its gateway.pin config pins the (peer, standard) pair (or the peer is the node itself); each new publication SUPERSEDES the previous pin (the superseded batch's records are evicted, not accumulated). Publication batches are content deltas: a batch carries the records first seen in it, which for OMM full-catalog cycles is effectively the whole catalog. HONEST UNAVAILABILITY: an unknown provider/standard answers 404; a dataset known via signed PNM but not pinned here (pinning is never a default) or not yet materialized answers 503 with the newest PNM pointer object ({CID, FILE_ID, PUBLISH_TIMESTAMP, batch_id, standard, schema, signature_verified, attribution} — PNM schema fields schema-exact, synthesized fields lowercase) in the body so the client can fetch the publication itself over p2p — this gateway NEVER silently proxy-fetches. format=json is a presentation adapter available for OMM (bare top-level array via foundation/omm-json); other standards answer 406 and serve the flatbuffer stream only.",
+        "description": "The provider's newest published dataset of one standard, when this node serves it (pinned by the operator, or the node's own publication, and fully held): FlatBuffers by default as one size-prefixed stream - the $DAV (SDS Dataset Availability: batch, counts, publication notice and whether it verified, freshness, ETAG) followed by the dataset's records verbatim; ?format=json renders the records as a bare JSON array ($OMM only). A known but unservable dataset answers 503 with its $DAV (the newest notice's pointer: PNM_CID / PNM_FILE_ID / PNM_PUBLISHED_AT_MS) - never a silent proxy fetch; an unknown one 404 with its $DAV. If-None-Match equal to the $DAV ETAG answers 304.",
         "anonymous": true,
         "params": [
           {
@@ -212,34 +295,117 @@
         ],
         "responses": {
           "200": {
-            "description": "The newest fully-materialized publication batch, exactly as published. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag shared across encodings.",
-            "recordStream": true,
+            "description": "The dataset.",
             "content": {
               "application/vnd.sdn.flatbuffers.stream": {
-                "description": "Aligned size-prefixed FlatBuffer frames of the standard's record type — the published shard content spliced in window order, byte-verbatim."
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Size-prefixed stream: the $DAV, then the dataset's records of the requested standard (x-sdn-record-count)."
+                }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
-                },
-                "description": "Bare top-level JSON array of records (format=json, OMM only)."
+                  "type": "object",
+                  "description": "The dataset's records as a bare array ($OMM only)."
+                }
               }
             }
           },
           "304": {
-            "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated."
+            "description": "Not modified: If-None-Match equals the $DAV ETAG."
           },
           "404": {
-            "description": "Provider/standard unknown to this node: no signature-attributable publication exists here."
+            "description": "No publication of the lane is known (not-published, with the $DAV), no route, or a standard this flow does not serve (not-served).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$DAV (SDS DAV.fbs): the availability record (KNOWN false)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The $DAV, or {error, code}."
+                }
+              }
+            }
           },
           "406": {
-            "description": "format=json requested for a standard without a JSON presentation adapter (v1 ships OMM only); use the flatbuffer stream."
+            "description": "JSON requested for a standard other than $OMM.",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           },
           "503": {
-            "description": "Known via signed PNM but not served here: the (peer, standard) pair is not in this node's opt-in gateway.pin, or the pinned batch is not fully materialized yet. Body: {\"error\": …, \"pnm\": {CID, FILE_ID, PUBLISH_TIMESTAMP, batch_id, standard, schema, signature_verified, attribution}} (PNM schema fields schema-exact, synthesized fields lowercase — hard rule json-schema-capitalization-rule) — fetch the publication directly via the pointer; this gateway never silently proxies."
+            "description": "Known but not servable here (not pinned, not held, stale, unverified): dataset-unavailable.",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$DAV (SDS DAV.fbs): the availability record with UNAVAILABLE_REASON and the newest notice's pointer"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The $DAV as JSON."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The p2p.latest_dataset hostcall failed (host-failed).",
+            "content": {
+              "application/x-flatbuffers": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "$APR (SDS APR.fbs): the refusal record (STATUS / ERROR_CODE / ERROR_MESSAGE)"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }

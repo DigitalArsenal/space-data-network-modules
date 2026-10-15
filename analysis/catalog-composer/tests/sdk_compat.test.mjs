@@ -10,6 +10,8 @@ import { decodeAppManifest } from 'space-data-module-sdk/app';
 import { isPlgManifestBuffer } from 'space-data-module-sdk/manifest';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { x, composeRecipe, recipeFrame, reportOf } from './xmt-recipes.mjs';
+const CHOICE = x.xmtRecordChoice, STATE = x.xmtStateChoice;
 
 const wasm = fs.readFileSync(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
@@ -24,9 +26,8 @@ function cat(norad, name = 'Object', designator = '') {
 const layer = (id, nativeKeys) => ({ id, node: `peer-${id}`, provider: id, source: 'catalog', head: `immutable-${id}`, ...(nativeKeys ? { nativeKeys } : {}) });
 const recipe = (layers) => ({ version: 1, layers, asOf: 1000, maxAgeSeconds: 100, stateSources: ['preferred', 'fallback'], overrides: {} });
 function request(config, catalogs) {
-  const payload = encoder.encode(JSON.stringify(config));
   return { methodId: 'compose', inputs: [
-    { portId: 'recipe', typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length }, payload },
+    recipeFrame(composeRecipe(config, config.coverage)),
     ...catalogs.map((rows) => ({ portId: 'catalogs', typeRef: { schemaName: 'CAT.fbs', fileIdentifier: '$CAT', rootTypeName: 'CAT' }, payload: new Uint8Array(Buffer.concat(rows)) })),
   ] };
 }
@@ -37,7 +38,7 @@ async function harness(t) {
 async function compose(host, config, catalogs) {
   const result = await host.invoke(request(config, catalogs));
   assert.equal(result.statusCode, 0, result.errorMessage);
-  return { report: JSON.parse(decoder.decode(result.outputs.find(f => f.portId === 'report').payload)), catalog: result.outputs.find(f => f.portId === 'catalog')?.payload ?? new Uint8Array() };
+  return { report: reportOf(result).COMPOSE_REPORT, catalog: result.outputs.find(f => f.portId === 'catalog')?.payload ?? new Uint8Array() };
 }
 
 test('the executable and every SDK bundle record satisfy their own contracts', async () => {
@@ -68,9 +69,11 @@ test('combines exact identities in layer order, preserves bytes, and supports an
   const host = await harness(t), first = cat(1, 'First'), second = cat(1, 'Second'), third = cat(2, 'Third');
   const config = recipe([layer('a'), layer('b')]);
   let result = await compose(host, config, [[first], [second, third]]);
-  assert.equal(result.report.objectCount, 2);
+  assert.equal(result.report.OBJECT_COUNT, 2);
+  assert.equal(result.report.INPUT_RECORDS, 3);
   assert.deepEqual(result.catalog, new Uint8Array(Buffer.concat([first, third])));
-  assert.deepEqual(result.report.objects[0].candidates.map(c => c.layer), ['a', 'b']);
+  assert.deepEqual(result.report.OBJECTS[0].CANDIDATES.map(c => [c.LAYER, c.ORDINAL, c.NAME]), [['a', 0, 'First'], ['b', 0, 'Second']]);
+  assert.deepEqual([result.report.OBJECTS[0].KEY, result.report.OBJECTS[0].SELECTED_LAYER, result.report.OBJECTS[0].STATUS], ['norad:1', 'a', CHOICE.Selected]);
   config.overrides['norad:1'] = { catalogLayer: 'b' };
   result = await compose(host, config, [[first], [second, third]]);
   assert.deepEqual(result.catalog, new Uint8Array(Buffer.concat([second, third])));
@@ -78,14 +81,14 @@ test('combines exact identities in layer order, preserves bytes, and supports an
 test('does not merge objects by their names; retains namespaced native identities', async (t) => {
   const host = await harness(t), record = cat(0, 'Same name');
   const result = await compose(host, recipe([layer('gcat', ['S00001']), layer('vimpel', ['S00001'])]), [[record], [record]]);
-  assert.equal(result.report.objectCount, 2);
-  assert.notEqual(result.report.objects[0].key, result.report.objects[1].key);
-  assert.deepEqual(result.report.objects.map(r => r.candidates[0].nativeKey), ['S00001', 'S00001']);
+  assert.equal(result.report.OBJECT_COUNT, 2);
+  assert.deepEqual(result.report.OBJECTS.map(r => r.KEY), ['source:["gcat","catalog","S00001"]', 'source:["vimpel","catalog","S00001"]']);
+  assert.deepEqual(result.report.OBJECTS.map(r => r.CANDIDATES[0].NATIVE_KEY), ['S00001', 'S00001']);
 });
 test('uses a unique international designator to join a record without a NORAD ID', async (t) => {
   const host = await harness(t), first = cat(1, 'Numbered', '2020-001A');
   const result = await compose(host, recipe([layer('a'), layer('b')]), [[first], [cat(0, 'Native', '2020-001A')]]);
-  assert.equal(result.report.objectCount, 1);
+  assert.equal(result.report.OBJECT_COUNT, 1);
   assert.deepEqual(result.catalog, first);
 });
 test('excludes conflicting identifiers until the user selects the source', async (t) => {
@@ -93,7 +96,8 @@ test('excludes conflicting identifiers until the user selects the source', async
   const config = recipe([layer('a'), layer('b')]);
   let result = await compose(host, config, [[first], [other]]);
   assert.equal(result.catalog.length, 0);
-  assert.equal(result.report.objects[0].status, 'identity-conflict');
+  assert.equal(result.report.OBJECTS[0].STATUS, CHOICE.IdentityConflict);
+  assert.equal(result.report.IDENTITY_CONFLICTS, 1);
   config.overrides['norad:1'] = { catalogLayer: 'b' };
   result = await compose(host, config, [[first], [other]]);
   assert.deepEqual(result.catalog, other);
@@ -107,12 +111,13 @@ test('selects state sources in order with freshness, fallback and per-object ove
   ];
   config.overrides['norad:1'] = { stateSources: ['preferred', 'fallback'], maxAgeSeconds: 600 };
   let result = await compose(host, config, [[cat(1), cat(2), cat(3)]]);
-  assert.equal(result.report.objects[0].state.recordId, 'old');
-  assert.equal(result.report.objects[1].state.status, 'future');
-  assert.equal(result.report.objects[2].state.status, 'missing');
+  assert.deepEqual([result.report.OBJECTS[0].STATE.STATUS, result.report.OBJECTS[0].STATE.SOURCE_ID, result.report.OBJECTS[0].STATE.RECORD_ID, result.report.OBJECTS[0].STATE.EPOCH_MS], [STATE.Selected, 'preferred', 'old', 500000n]);
+  assert.equal(result.report.OBJECTS[1].STATE.STATUS, STATE.Future);
+  assert.deepEqual(result.report.OBJECTS[1].STATE.SOURCES, ['preferred', 'fallback']);
+  assert.equal(result.report.OBJECTS[2].STATE.STATUS, STATE.Missing);
   delete config.overrides['norad:1'];
   result = await compose(host, config, [[cat(1)]]);
-  assert.equal(result.report.objects[0].state.recordId, 'fresh');
+  assert.equal(result.report.OBJECTS[0].STATE.RECORD_ID, 'fresh');
 });
 test('rejects malformed, ambiguous and mismatched inputs without poisoning the instance', async (t) => {
   const host = await harness(t), valid = recipe([layer('a')]);
@@ -122,14 +127,15 @@ test('rejects malformed, ambiguous and mismatched inputs without poisoning the i
     request(valid, [[cat(0)]]),
     request(valid, [[cat(1).slice(0, -1)]]),
     request(recipe([layer('a', ['x', 'y'])]), [[cat(1)]]),
-    request({ ...valid, maxAgeSeconds: '100' }, [[cat(1)]]),
+    request({ ...valid, maxAgeSeconds: Infinity }, [[cat(1)]]),
+    request({ ...valid, stateSources: ['a', 'a'] }, [[cat(1)]]),
     request({ ...valid, overrides: { 'norad:1': { catalogLayer: 'missing' } } }, [[cat(1)]]),
   ];
   for (const input of cases) {
     const result = await host.invoke(input);
     assert.notEqual(result.statusCode, 0);
   }
-  assert.equal((await compose(host, valid, [[cat(1)]])).report.objectCount, 1);
+  assert.equal((await compose(host, valid, [[cat(1)]])).report.OBJECT_COUNT, 1);
 });
 
 // CAT.OBJECT_ID is the SDS international-designator identity. These are
@@ -138,19 +144,20 @@ test('international identity merges matching designators without using NORAD num
  const host=await harness(t);
  const config={...recipe([layer('a'),layer('b')]),version:2};delete config.maxAgeSeconds;
  const result=await compose(host,config,[[cat(1,'First','2020-001A')],[cat(99,'Second','2020-001A'),cat(1,'Distinct','2021-001A'),cat(1,'Unresolved')]]);
- assert.equal(result.report.objectCount,3);
- assert.equal(result.report.objects.find(row=>row.key==='cospar:2020-001A').candidates.length,2);
- assert.equal(result.report.objects.filter(row=>row.status==='missing-designator').length,1);
- assert(!result.report.objects.some(row=>row.key.startsWith('norad:')));
+ assert.equal(result.report.OBJECT_COUNT,3);
+ assert.equal(result.report.OBJECTS.find(row=>row.KEY==='cospar:2020-001A').CANDIDATES.length,2);
+ assert.deepEqual(result.report.OBJECTS.filter(row=>row.STATUS===CHOICE.MissingDesignator).map(row=>row.KEY),['unresolved:["peer-b","b",2]']);
+ assert(!result.report.OBJECTS.some(row=>row.KEY.startsWith('norad:')));
 });
 test('overlapping declared coverage requires an individual choice and rejects uncovered sources', async t => {
  const host=await harness(t), config={...recipe([layer('a')]),version:2,stateSources:['primary','other'],coverage:[{sourceId:'primary',head:'immutable-one',objects:['2020-001A']},{sourceId:'other',head:'immutable-two',objects:['2020-001A']}]};delete config.maxAgeSeconds;
  const catalogs=[[cat(1,'Object','2020-001A')]];
  let result=await compose(host,config,catalogs);
- assert.equal(result.report.objects[0].state.status,'overlap');
+ assert.equal(result.report.OBJECTS[0].STATE.STATUS,STATE.Overlap);
+ assert.deepEqual(result.report.OBJECTS[0].STATE.SOURCES,['primary','other']);
  config.overrides={'cospar:2020-001A':{stateSources:['other']}};
  result=await compose(host,config,catalogs);
- assert.equal(result.report.objects[0].state.sourceId,'other');
+ assert.deepEqual([result.report.OBJECTS[0].STATE.STATUS,result.report.OBJECTS[0].STATE.SOURCE_ID],[STATE.Covered,'other']);
  config.overrides['cospar:2020-001A'].stateSources=['uncovered'];
  assert.notEqual((await host.invoke(request(config,catalogs))).statusCode,0);
 });

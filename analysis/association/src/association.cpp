@@ -33,6 +33,8 @@
 #include "assignment.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <memory>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -42,7 +44,6 @@
 namespace {
 
 using namespace assoc;
-using Json = nlohmann::json;
 namespace ax = ::sdn::frames;
 
 constexpr double kC = 299792.458;                // km/s
@@ -467,21 +468,45 @@ struct Options {
   bool geometry = true;
 };
 
-bool readOptions(const Json& j, Options& o) {
-  NEED(j.is_object(), "options must be a JSON object.");
-  for (auto it = j.begin(); it != j.end(); ++it) {
-    const std::string& k = it.key();
-    const Json& v = it.value();
-    if (k == "gate_probability") { NEED(v.is_number() && v.get<double>() > 0 && v.get<double>() < 1, "gate_probability must be in (0, 1)."); o.gateProbability = v.get<double>(); }
-    else if (k == "light_time") { NEED(v.is_boolean(), "light_time must be true or false."); o.lightTime = v.get<bool>(); }
-    else if (k == "min_posterior") { NEED(v.is_number() && v.get<double>() > 0 && v.get<double>() <= 1, "min_posterior must be in (0, 1]."); o.minPosterior = v.get<double>(); }
-    else if (k == "clutter_density") { NEED(v.is_number() && v.get<double>() >= 0, "clutter_density must be a non-negative number."); o.clutterDensity = v.get<double>(); }
-    else if (k == "scan") { NEED(v.is_string() && (v == "sensor_time" || v == "track" || v == "observation"), "scan must be sensor_time, track or observation."); o.scan = v.get<std::string>(); }
-    else if (k == "max_candidates") { NEED(v.is_number_integer() && v.get<int>() >= 1 && v.get<int>() <= 50, "max_candidates must be an integer in [1, 50]."); o.maxCandidates = v.get<int>(); }
-    else if (k == "geometry") { NEED(v.is_boolean(), "geometry must be true or false."); o.geometry = v.get<bool>(); }
-    else { error = "Unknown option " + k + "."; return false; }
+// The options are the node's config (plugin.getConfig, one ModuleConfig): gate_probability, light_time,
+// min_posterior, clutter_density, scan, max_candidates, geometry. A key that is absent keeps its default; the
+// config is the node's, so keys of other modules are not refused.
+bool readOptions(Options& o) {
+  sdm_piv::Config cfg = sdm_piv::get_config();
+  if (!cfg.ok()) return true;  // no config: the defaults
+  using K = sdn::runtime::configValueKind;
+  auto number = [&](const char* key, double& out) -> bool {
+    if (!cfg.has(key)) return false;
+    NEED(cfg.kind(key) == K::configValueKind_Number && std::isfinite(cfg.number(key)), std::string(key) + " must be a number.");
+    out = cfg.number(key);
+    return true;
+  };
+  auto flag = [&](const char* key, bool& out) -> bool {
+    if (!cfg.has(key)) return true;
+    NEED(cfg.kind(key) == K::configValueKind_Bool, std::string(key) + " must be true or false.");
+    out = cfg.boolean(key);
+    return true;
+  };
+  double v;
+  if (number("gate_probability", v)) { NEED(v > 0 && v < 1, "gate_probability must be in (0, 1)."); o.gateProbability = v; }
+  if (!error.empty()) return false;
+  if (!flag("light_time", o.lightTime)) return false;
+  if (number("min_posterior", v)) { NEED(v > 0 && v <= 1, "min_posterior must be in (0, 1]."); o.minPosterior = v; }
+  if (!error.empty()) return false;
+  if (number("clutter_density", v)) { NEED(v >= 0, "clutter_density must be a non-negative number."); o.clutterDensity = v; }
+  if (!error.empty()) return false;
+  if (cfg.has("scan")) {
+    const std::string scan(cfg.string("scan"));
+    NEED(cfg.kind("scan") == K::configValueKind_String && (scan == "sensor_time" || scan == "track" || scan == "observation"),
+         "scan must be sensor_time, track or observation.");
+    o.scan = scan;
   }
-  return true;
+  if (number("max_candidates", v)) {
+    NEED(v == std::floor(v) && v >= 1 && v <= 50, "max_candidates must be an integer in [1, 50].");
+    o.maxCandidates = static_cast<int>(v);
+  }
+  if (!error.empty()) return false;
+  return flag("geometry", o.geometry);
 }
 
 void add(std::vector<Measurement>& z, Kind kind, double value, double sigma, const char* source, bool angle) {
@@ -756,10 +781,30 @@ std::vector<uint8_t> annotated(const Observation& o, const Block* b, const Candi
   return finish(fbb, RFO::Pack(fbb, t.get()), "$RFO");
 }
 
-Json vec(const Vec3& v) { return Json::array({v[0], v[1], v[2]}); }
+std::vector<double> vec(const Vec3& v) { return {v[0], v[1], v[2]}; }
 
-Json objectJson(const Block& b) {
-  return {{"key", b.key}, {"norad_cat_id", b.norad}, {"object_id", b.objectId}, {"object_name", b.name}};
+std::unique_ptr<ASGObjectRefT> objectRef(const Block& b) {
+  auto r = std::make_unique<ASGObjectRefT>();
+  r->KEY = b.key;
+  r->NORAD_CAT_ID = static_cast<uint32_t>(b.norad);
+  r->OBJECT_ID = b.objectId;
+  r->OBJECT_NAME = b.name;
+  return r;
+}
+
+asgMeasurementKind measurementKind(Kind k) {
+  switch (k) {
+    case Kind::RANGE: return asgMeasurementKind::Range;
+    case Kind::RANGE_RATE: return asgMeasurementKind::RangeRate;
+    case Kind::RA: return asgMeasurementKind::RightAscension;
+    case Kind::DEC: return asgMeasurementKind::Declination;
+    case Kind::AZ: return asgMeasurementKind::Azimuth;
+    default: return asgMeasurementKind::Elevation;
+  }
+}
+
+asgScanGrouping scanGrouping(const std::string& scan) {
+  return scan == "track" ? asgScanGrouping::Track : scan == "observation" ? asgScanGrouping::Observation : asgScanGrouping::SensorTime;
 }
 
 // Measured line of sight in GCRF, when the observation has angles.
@@ -798,26 +843,16 @@ flatbuffers::Verifier::Options verifierOptions() {
   return v;
 }
 
-bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>>& outputs) {
+bool run(ASGAssociationReportT& report, std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>>& outputs) {
   Options opt;
   std::vector<Observation> obs;
   std::vector<const plugin_input_frame_t*> observationFrames;
   const uint32_t count = plugin_get_input_count();
-  // Options first.
+  if (!readOptions(opt)) return false;
   for (uint32_t i = 0; i < count; ++i) {
     const auto* frame = plugin_get_input_frame(i);
     NEED(frame && frame->port_id, "An input frame has no port.");
-    if (std::strcmp(frame->port_id, "options") == 0) {
-      if (!frame->payload || frame->payload_length == 0) continue;
-      const Json j = Json::parse(std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length), nullptr, false);
-      NEED(!j.is_discarded(), "The options frame is not valid JSON.");
-      if (!readOptions(j, opt)) return false;
-    }
-  }
-  for (uint32_t i = 0; i < count; ++i) {
-    const auto* frame = plugin_get_input_frame(i);
     const std::string port = frame->port_id;
-    if (port == "options") continue;
     if (port == "earth_orientation") {
       const std::string e = ax::eop::addPayload(frame->payload, frame->payload_length, eopRows);
       NEED(e.empty(), "earth_orientation: " + e);
@@ -957,80 +992,91 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
   }
 
   // Report and records.
-  Json observationsJson = Json::array();
-  Json associations = Json::array();
-  Json ucts = Json::array();
+  size_t associatedCount = 0, uncorrelatedCount = 0;
   for (size_t i = 0; i < obs.size(); ++i) {
     const auto& o = obs[i];
-    Json measured = Json::object(), sigma = Json::object(), sources = Json::object();
+    auto oj = std::make_unique<ASGObservationT>();
+    oj->INDEX = static_cast<uint32_t>(i);
+    oj->RECORD_TYPE = typeName(o.type);
+    oj->ID = o.id;
+    oj->TIME = o.time.text;
+    oj->SENSOR = o.sensorKey;
+    oj->TRACK_ID = o.trackId;
     for (const auto& z : o.z) {
-      measured[kindName(z.kind)] = display(z.kind, z.value);
-      sigma[kindName(z.kind)] = display(z.kind, z.sigma);
-      sources[kindName(z.kind)] = z.source;
+      auto m = std::make_unique<ASGMeasurementT>();
+      m->KIND = measurementKind(z.kind);
+      m->VALUE = display(z.kind, z.value);
+      m->SIGMA = display(z.kind, z.sigma);
+      m->SOURCE_FIELD = z.source;
+      oj->MEASUREMENTS.push_back(std::move(m));
     }
-    Json candidates = Json::array();
+    oj->DEGREES_OF_FREEDOM = static_cast<uint8_t>(o.z.size());
+    oj->GATE = o.gate;
     for (size_t k = 0; k < o.candidates.size() && (k < static_cast<size_t>(opt.maxCandidates) || o.candidates[k].inGate); ++k) {
       const auto& c = o.candidates[k];
-      Json residual = Json::object(), predicted = Json::object();
+      auto cj = std::make_unique<ASGCandidateT>();
+      cj->OBJECT = objectRef(blocks[c.block]);
+      cj->D2 = c.d2;
+      cj->P_VALUE = c.pValue;
+      cj->POSTERIOR = c.posterior;
+      cj->IN_GATE = c.inGate;
+      cj->LOG_DET_S = c.logDetS;
       for (size_t q = 0; q < o.z.size(); ++q) {
-        residual[kindName(o.z[q].kind)] = display(o.z[q].kind, c.residual[q]);
-        predicted[kindName(o.z[q].kind)] = display(o.z[q].kind, c.predicted[q]);
+        cj->RESIDUAL.push_back(display(o.z[q].kind, c.residual[q]));
+        cj->PREDICTED.push_back(display(o.z[q].kind, c.predicted[q]));
       }
-      Json cj = {{"object", objectJson(blocks[c.block])}, {"d2", c.d2}, {"p_value", c.pValue}, {"posterior", c.posterior},
-                 {"in_gate", c.inGate}, {"log_det_s", c.logDetS}, {"residual", residual}, {"predicted", predicted},
-                 {"light_time_s", c.lightTime}};
+      cj->LIGHT_TIME_S = c.lightTime;
       if (opt.geometry) {
-        Json cov = Json::array();
-        for (int r = 0; r < 3; ++r) for (int q = 0; q < 3; ++q) cov.push_back(c.p[r][q]);
-        cj["position_gcrf_km"] = Json::array({c.state[0], c.state[1], c.state[2]});
-        cj["velocity_gcrf_km_s"] = Json::array({c.state[3], c.state[4], c.state[5]});
-        cj["position_covariance_km2"] = cov;
+        for (int r = 0; r < 3; ++r) for (int q = 0; q < 3; ++q) cj->POSITION_COVARIANCE_KM2.push_back(c.p[r][q]);
+        cj->POSITION_GCRF_KM = {c.state[0], c.state[1], c.state[2]};
+        cj->VELOCITY_GCRF_KM_S = {c.state[3], c.state[4], c.state[5]};
       }
-      candidates.push_back(cj);
+      oj->CANDIDATES.push_back(std::move(cj));
     }
-    Json oj = {{"index", i}, {"type", typeName(o.type)}, {"id", o.id}, {"time", o.time.text}, {"sensor", o.sensorKey},
-               {"measured", measured}, {"sigma", sigma}, {"source", sources}, {"dof", o.z.size()}, {"gate", o.gate},
-               {"status", o.status}, {"ambiguous", o.ambiguous}, {"assignment_conflict", o.conflict}, {"candidates", candidates}};
-    if (!o.reason.empty()) oj["reason"] = o.reason;
-    oj["sensor_gcrf_km"] = vec(o.sensorGcrf);
+    oj->OUTCOME = o.status == "associated" ? asgAssociationOutcome::Associated : asgAssociationOutcome::Uncorrelated;
+    oj->REASON = o.reason == "no-prediction" ? asgUncorrelatedReason::NoPrediction
+               : o.reason == "outside-gate" ? asgUncorrelatedReason::OutsideGate
+               : o.reason == "lost-assignment" ? asgUncorrelatedReason::LostAssignment : asgUncorrelatedReason::Unspecified;
+    oj->AMBIGUOUS = o.ambiguous;
+    oj->ASSIGNMENT_CONFLICT = o.conflict;
+    // The candidates listed are the best few plus every in-gate one, a prefix of the sorted list, so the
+    // assigned (in-gate) candidate keeps its index.
+    oj->ASSIGNED_CANDIDATE = static_cast<int32_t>(o.assigned);
+    oj->SENSOR_POSITION_GCRF_KM = vec(o.sensorGcrf);
     // omega x r rotated to GCRF for an Earth-fixed sensor; an inertial
     // sensor position carries no velocity.
-    oj["sensor_velocity_gcrf_km_s"] = o.haveEarth ? vec(o.sensorVelocityGcrf) : Json();
+    if (o.haveEarth) oj->SENSOR_VELOCITY_GCRF_KM_S = vec(o.sensorVelocityGcrf);
     Vec3 los;
-    if (lineOfSight(o, los)) oj["line_of_sight_gcrf"] = vec(los);
+    if (lineOfSight(o, los)) oj->LINE_OF_SIGHT_GCRF = vec(los);
     const Block* assigned = o.assigned >= 0 ? &blocks[o.candidates[static_cast<size_t>(o.assigned)].block] : nullptr;
     const Candidate* judged = assigned ? &o.candidates[static_cast<size_t>(o.assigned)] : o.candidates.empty() ? nullptr : &o.candidates.front();
-    if (assigned) {
-      const auto& c = o.candidates[static_cast<size_t>(o.assigned)];
-      oj["object"] = objectJson(*assigned);
-      oj["d2"] = c.d2;
-      oj["p_value"] = c.pValue;
-      oj["posterior"] = c.posterior;
-      associations.push_back({{"observation", i}, {"id", o.id}, {"object", assigned->key}, {"d2", c.d2}, {"dof", o.z.size()},
-                              {"p_value", c.pValue}, {"posterior", c.posterior}, {"ambiguous", o.ambiguous}});
-    } else {
-      ucts.push_back({{"observation", i}, {"id", o.id}, {"reason", o.reason},
-                      {"nearest", o.candidates.empty() ? Json() : Json(blocks[o.candidates.front().block].key)},
-                      {"nearest_d2", o.candidates.empty() ? Json() : Json(o.candidates.front().d2)}});
-    }
-    observationsJson.push_back(oj);
+    if (assigned) ++associatedCount; else ++uncorrelatedCount;
+    report.OBSERVATIONS.push_back(std::move(oj));
     const char* family = o.type == RecordType::RDO ? "radar" : o.type == RecordType::EOO ? "optical" : "rf";
     outputs.push_back({std::string(family) + (assigned ? "_associated" : "_ucts"), {o.type, annotated(o, assigned, judged)}});
   }
-  Json gatesJson = Json::object();
-  for (const auto& [m, g] : gates) gatesJson[std::to_string(m)] = g;
-  report = {
-    {"method", "chi-square gate on S = H P H^T + R, global nearest neighbour per scan (Hungarian), gate as the non-assignment cost"},
-    {"options", {{"gate_probability", opt.gateProbability}, {"light_time", opt.lightTime}, {"min_posterior", opt.minPosterior},
-                 {"clutter_density", opt.clutterDensity}, {"scan", opt.scan}}},
-    {"gate_thresholds", gatesJson},
-    {"earth_orientation_rows", eopRows.size()},
-    {"counts", {{"observations", obs.size()}, {"predictions", blocks.size()}, {"scans", scans.size()},
-                {"associated", associations.size()}, {"ucts", ucts.size()}, {"ambiguous", ambiguousCount}}},
-    {"associations", associations},
-    {"ucts", ucts},
-    {"observations", observationsJson},
-  };
+  report.METHOD = "chi-square gate on S = H P H^T + R, global nearest neighbour per scan (Hungarian), gate as the non-assignment cost";
+  report.OPTIONS = std::make_unique<ASGAssociationOptionsT>();
+  report.OPTIONS->GATE_PROBABILITY = opt.gateProbability;
+  report.OPTIONS->LIGHT_TIME = opt.lightTime;
+  report.OPTIONS->MIN_POSTERIOR = opt.minPosterior;
+  report.OPTIONS->CLUTTER_DENSITY = opt.clutterDensity;
+  report.OPTIONS->SCAN = scanGrouping(opt.scan);
+  report.OPTIONS->MAX_CANDIDATES = static_cast<uint8_t>(opt.maxCandidates);
+  report.OPTIONS->GEOMETRY = opt.geometry;
+  for (const auto& [m, g] : gates) {
+    auto t = std::make_unique<ASGGateThresholdT>();
+    t->DEGREES_OF_FREEDOM = static_cast<uint8_t>(m);
+    t->THRESHOLD = g;
+    report.GATE_THRESHOLDS.push_back(std::move(t));
+  }
+  report.EARTH_ORIENTATION_ROWS = static_cast<uint32_t>(eopRows.size());
+  report.OBSERVATION_COUNT = static_cast<uint32_t>(obs.size());
+  report.PREDICTION_COUNT = static_cast<uint32_t>(blocks.size());
+  report.SCAN_COUNT = static_cast<uint32_t>(scans.size());
+  report.ASSOCIATED_COUNT = static_cast<uint32_t>(associatedCount);
+  report.UNCORRELATED_COUNT = static_cast<uint32_t>(uncorrelatedCount);
+  report.AMBIGUOUS_COUNT = static_cast<uint32_t>(ambiguousCount);
   return true;
 }
 
@@ -1040,46 +1086,44 @@ void reset() {
   blocks.clear();
 }
 
-bool solve(const Json& j, Json& out) {
-  NEED(j.is_object(), "The problem must be a JSON object.");
-  size_t rows = 0, columns = 0;
-  std::vector<double> cost;
-  if (j.contains("cost")) {
-    const Json& c = j["cost"];
-    NEED(c.is_array() && !c.empty() && c[0].is_array(), "cost must be a non-empty array of rows.");
-    rows = c.size();
-    columns = c[0].size();
-    cost.assign(rows * columns, kForbidden);
-    for (size_t i = 0; i < rows; ++i) {
-      NEED(c[i].is_array() && c[i].size() == columns, "Every cost row must have the same length.");
-      for (size_t k = 0; k < columns; ++k) {
-        if (c[i][k].is_null()) continue;
-        NEED(c[i][k].is_number() && std::isfinite(c[i][k].get<double>()), "Costs must be finite numbers or null (forbidden).");
-        cost[i * columns + k] = c[i][k].get<double>();
-      }
+bool finite(double v) { return std::isfinite(v); }
+
+// One ASG problem: dense (NaN or +Infinity forbidden) or sparse (absent pairs forbidden, the lowest of repeated
+// pairs stands), with an optional cost of leaving a row unassigned (none, one for every row, or one per row).
+// A Maximize problem is solved as the minimum of the negated costs; TOTAL_COST is in the problem's own sign.
+bool solve(const ASGProblem* j, ASGSolutionT& out) {
+  NEED(j, "The problem frame carries no PROBLEM.");
+  const size_t rows = j->ROWS(), columns = j->COLUMNS();
+  const bool dense = j->DENSE_COST() && j->DENSE_COST()->size() > 0;
+  const bool sparse = j->ENTRIES() && j->ENTRIES()->size() > 0;
+  NEED(dense != sparse, "A problem gives DENSE_COST or ENTRIES, not both or neither.");
+  NEED(rows > 0 && columns > 0 && rows * columns <= 25000000, "The problem size is out of range.");
+  const double sign = j->OBJECTIVE() == asgObjective::Maximize ? -1.0 : 1.0;
+  std::vector<double> cost(rows * columns, kForbidden);
+  if (dense) {
+    NEED(j->DENSE_COST()->size() == rows * columns, "DENSE_COST holds ROWS * COLUMNS values.");
+    for (size_t i = 0; i < rows * columns; ++i) {
+      const double c = j->DENSE_COST()->Get(static_cast<flatbuffers::uoffset_t>(i));
+      if (std::isnan(c) || c == kForbidden) continue;
+      NEED(finite(c), "Costs must be finite, or NaN / +Infinity (forbidden).");
+      cost[i] = sign * c;
     }
   } else {
-    NEED(j.contains("rows") && j.contains("columns") && j.contains("entries") && j["rows"].is_number_unsigned() &&
-         j["columns"].is_number_unsigned() && j["entries"].is_array(), "A sparse problem needs rows, columns and entries.");
-    rows = j["rows"].get<size_t>();
-    columns = j["columns"].get<size_t>();
-    NEED(rows > 0 && columns > 0 && rows * columns <= 25000000, "The problem size is out of range.");
-    cost.assign(rows * columns, kForbidden);
-    for (const auto& e : j["entries"]) {
-      NEED(e.is_array() && e.size() == 3 && e[0].is_number_unsigned() && e[1].is_number_unsigned() && e[2].is_number(),
-           "Each entry is [row, column, cost].");
-      const size_t i = e[0].get<size_t>(), k = e[1].get<size_t>();
+    for (const auto* e : *j->ENTRIES()) {
+      const size_t i = e->ROW(), k = e->COLUMN();
       NEED(i < rows && k < columns, "An entry is outside the problem.");
-      cost[i * columns + k] = std::min(cost[i * columns + k], e[2].get<double>());
+      NEED(finite(e->COST()), "Entry costs must be finite.");
+      cost[i * columns + k] = std::min(cost[i * columns + k], sign * e->COST());
     }
   }
   std::vector<double> unassigned;
-  if (j.contains("unassigned_cost")) {
-    const Json& u = j["unassigned_cost"];
-    if (u.is_number()) unassigned.assign(rows, u.get<double>());
-    else {
-      NEED(u.is_array() && u.size() == rows, "unassigned_cost is a number or one number per row.");
-      for (const auto& x : u) { NEED(x.is_number(), "unassigned_cost entries must be numbers."); unassigned.push_back(x.get<double>()); }
+  if (j->UNASSIGNED_COST() && j->UNASSIGNED_COST()->size() > 0) {
+    const auto* u = j->UNASSIGNED_COST();
+    NEED(u->size() == 1 || u->size() == rows, "UNASSIGNED_COST is one number or one number per row.");
+    for (size_t i = 0; i < rows; ++i) {
+      const double x = u->Get(static_cast<flatbuffers::uoffset_t>(u->size() == 1 ? 0 : i));
+      NEED(finite(x), "UNASSIGNED_COST entries must be finite.");
+      unassigned.push_back(sign * x);
     }
   }
   size_t width = columns;
@@ -1092,32 +1136,44 @@ bool solve(const Json& j, Json& out) {
       problem[i * width + columns + i] = unassigned[i];
     }
   }
-  NEED(rows <= width, "There are more rows than columns and no unassigned_cost.");
+  NEED(rows <= width, "There are more rows than columns and no UNASSIGNED_COST.");
   std::vector<long> columnOf;
   double total;
   NEED(solveAssignment(problem, rows, width, columnOf, &total), "The assignment problem has no feasible solution.");
-  Json assignment = Json::array();
   size_t assigned = 0;
   for (size_t i = 0; i < rows; ++i) {
     const bool real = columnOf[i] >= 0 && static_cast<size_t>(columnOf[i]) < columns;
-    assignment.push_back(real ? columnOf[i] : -1);
+    out.ASSIGNMENT.push_back(real ? static_cast<int32_t>(columnOf[i]) : -1);
     assigned += real;
   }
-  out = {{"assignment", assignment}, {"total_cost", total}, {"rows", rows}, {"columns", columns}, {"assigned", assigned},
-         {"method", "Hungarian (shortest augmenting path with potentials)"}};
+  out.ROWS = static_cast<uint32_t>(rows);
+  out.COLUMNS = static_cast<uint32_t>(columns);
+  out.TOTAL_COST = sign * total;
+  out.ASSIGNED = static_cast<uint32_t>(assigned);
+  out.METHOD = "Hungarian (shortest augmenting path with potentials)";
   return true;
+}
+
+// One $ASG record with one arm set, as its own FlatBuffer.
+std::vector<uint8_t> asgBuffer(ASGT& asg) {
+  flatbuffers::FlatBufferBuilder fbb(1 << 16);
+  return finish(fbb, ASG::Pack(fbb, &asg), "$ASG");
+}
+
+int pushAsn(const char* port, const std::vector<uint8_t>& bytes) {
+  return plugin_push_output_ex(port, "ASG.fbs", "$ASG", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "ASG", 0, 0,
+                               bytes.data(), static_cast<uint32_t>(bytes.size())) < 0 ? 1 : 0;
 }
 
 }  // namespace
 
 extern "C" int associate_observations() {
   reset();
-  Json report;
+  ASGT report;
+  report.ASSOCIATION_REPORT = std::make_unique<ASGAssociationReportT>();
   std::vector<std::pair<std::string, std::pair<RecordType, std::vector<uint8_t>>>> outputs;
-  if (!run(report, outputs)) return fail(error);
-  const std::string text = report.dump();
-  if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-        reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0) return 1;
+  if (!run(*report.ASSOCIATION_REPORT, outputs)) return fail(error);
+  if (pushAsn("report", asgBuffer(report))) return 1;
   for (const auto& [port, record] : outputs) {
     const char* code = typeName(record.first);
     const std::string schema = std::string(code) + ".fbs", ident = std::string("$") + code;
@@ -1132,12 +1188,13 @@ extern "C" int solve_assignment() {
   const int32_t index = plugin_find_input_index("problem", 0);
   const auto* frame = index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
   if (!frame || !frame->payload || frame->payload_length == 0) return fail("A problem frame is required.");
-  const Json j = Json::parse(std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length), nullptr, false);
-  if (j.is_discarded()) return fail("The problem frame is not valid JSON.");
-  Json out;
-  if (!solve(j, out)) return fail(error);
-  const std::string text = out.dump();
-  if (plugin_push_output_ex("solution", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-        reinterpret_cast<const uint8_t*>(text.data()), static_cast<uint32_t>(text.size())) < 0) return 1;
-  return 0;
+  size_t length;
+  const uint8_t* bytes = rootOf(frame, length, "$ASG");
+  if (length < 8 || !ASGBufferHasIdentifier(bytes)) return fail("The problem port carries one $ASG FlatBuffer.");
+  flatbuffers::Verifier verifier(bytes, length, verifierOptions());
+  if (!VerifyASGBuffer(verifier)) return fail("The problem frame is not a valid $ASG FlatBuffer.");
+  ASGT out;
+  out.SOLUTION = std::make_unique<ASGSolutionT>();
+  if (!solve(GetASG(bytes)->PROBLEM(), *out.SOLUTION)) return fail(error);
+  return pushAsn("solution", asgBuffer(out));
 }

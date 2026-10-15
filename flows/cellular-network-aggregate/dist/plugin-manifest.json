@@ -1,10 +1,11 @@
 {
   "pluginId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "pluginFamily": "flow",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes. THE TILE LANE (2026-08-24, graph tasks sdn-cellular-density-tiles / upstream-modules-2; owner: all worldwide cell towers must reach the cellular sandcastle): a worldwide site set is millions of rows and cannot be one answer, so cache_plan now forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it, and the node serves bounded Web Mercator XYZ tiles - GET /api/v1/cellular/tiles/meta and /api/v1/cellular/tiles/{z}/{x}/{y} - out of the SAME FlatSQL read lane the cache gate uses. tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400, never a clamp, because a clamped index answers 200 with a different tile's contents under the requested key); tile_meta declares the layer's capability envelope from the resume mark alone, with no COUNT over the store; tile scans the bounded row stream, decides the mode by the tile's TRUE population (<=2048 raw points, <=4096 a deterministic stride sample, above that a 16x16 density grid) and answers an empty store as empty rather than fabricating anything. Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into respond. ZERO Go host changes and zero new capabilities: the tile lane is plugin.getConfig plus flatsql-query frames over the existing generic hooks.",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between nodes; JSON exists only as the client's own request body and, on request, the responder's rendering). The ONE http trigger delivers the $HTQ request to cell-tower-ingest:cache_plan, which picks exactly ONE lane. THE CACHE LANE (the default for an /aggregate read): $FSO FlatSQL queries for this dataset's DEFAULT query and for the ingest resume marks; hostcap/flatsql-query answers both as $FSB chunks, and cell-tower-ingest:cache_freshness reassembles the stored $TBS rows verbatim and answers them through foundation/http-respond respond as an $APR decision (with the x-sdn-cache, -freshness, -stale and -providers headers) plus the dataset's $DAV availability (KNOWN/AVAILABLE/FRESH, published-at from the $IRM mark) and the $TBS records - the answer says honestly whether the cache is empty, ingesting or complete. One SELECT and a byte forward; no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ goes byte-for-byte to cell-tower-source:route, which reads the caller's PROVIDERS and tbsMergeMethod and fans out one HttpRequest (HREQ) per provider URL, each carrying the $APR run contract in CONTEXT; hostcap/http-request answers each with an HttpResponse (HRSP) echoing it, so attribution is by CONTEXT, never by position; parse normalizes each body into single-source $TBS reports; deconflict merges them under the caller's method and answers $APR + $DAV + the $TBS stream. Refusals are the $APR with STATUS. THE CREDENTIAL LANE: /providers builds the catalog as a $QRP projection page and /credentials/<providerId> a PUT/DELETE $APR task, both finished by cell-tower-credentials, the ONE node holding a credential capability (secrets.* and keyslot.unwrap through typed $PIV hostcalls), which answers through foundation/http-respond respond_query. THE TILE LANE (graph tasks sdn-cellular-density-tiles / upstream-modules-2): cache_plan forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it; tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400 $APR, never a clamp) and emits the tile-scoped $FSO reads; tile_meta answers the layer's capability envelope and tile ONE bounded Web Mercator XYZ tile, both as $QRP projection pages through respond_query (points: LATITUDE/LONGITUDE rows; above the 4096 budget a 16x16 density grid of lon/lat/count rows; TOTAL_COUNT the tile's true population, TRUNCATED a deterministic sample, PARTIAL a capped or unscoped read, STORED/AS_OF_MS/STALE the store's honesty block from the resume mark). Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into a responder. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes; zero new capabilities.",
   "capabilities": [
+    "clock",
     "http",
     "secrets:cell_opencellid",
     "secrets:cell_opencellid:write",
@@ -16,33 +17,33 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
-    },
-    {
-      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "minVersion": "0.2.0",
       "maxVersion": "0.2.0"
     },
     {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
+    },
+    {
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.2.1",
-      "maxVersion": "0.2.1"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     }
   ],
   "externalInterfaces": [
@@ -52,7 +53,7 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface).",
       "properties": {
         "hostOps": [
           "storage.flatsql_query_stream",
@@ -62,12 +63,25 @@
       }
     },
     {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults a profile query's epoch to now (Go node built-in; capability-gated on the SDK hosts).",
+      "properties": {
+        "hostOps": [
+          "clock.now"
+        ]
+      }
+    },
+    {
       "interfaceId": "host-http",
       "kind": "host-service",
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
         "hostOps": [
           "http.request"
@@ -88,21 +102,19 @@
               "setId": "sdn-htq-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The $HTQ request envelope from the flow's ONE http trigger.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
-              }
+              "description": "The host's $HTQ HttpRequest envelope (module-sdk HTTP ABI)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The $HTQ request envelope from the flow's ONE http trigger."
+          "description": "The $HTQ request from the flow's ONE http trigger."
         }
       ],
       "outputPorts": [
@@ -115,7 +127,8 @@
                 {
                   "schemaName": "HttpResponseAbi.fbs",
                   "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
@@ -124,7 +137,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
+          "description": "Exactly one $HTR per HTTP exchange."
         }
       ],
       "maxBatch": 1,
@@ -133,14 +146,165 @@
   ],
   "schemasUsed": [
     {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    },
+    {
       "schemaName": "TBS.fbs",
       "fileIdentifier": "$TBS",
       "rootTypeName": "TBS"
     },
     {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM"
+    },
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "rootTypeName": "FSB"
+    },
+    {
       "schemaName": "HttpResponseAbi.fbs",
       "fileIdentifier": "$HTR",
-      "rootTypeName": "HttpResponse"
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NHS.fbs",
+      "fileIdentifier": "$NHS",
+      "rootTypeName": "NHS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NEV.fbs",
+      "fileIdentifier": "$NEV",
+      "rootTypeName": "NEV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CSM.fbs",
+      "fileIdentifier": "$CSM",
+      "rootTypeName": "CSM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     }
   ],
   "runtimeTargets": [
@@ -300,6 +464,15 @@
       "uiY": 0
     },
     {
+      "nodeId": "respond_query",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond_query",
+      "kind": "responder",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
@@ -317,11 +490,48 @@
       "toNodeId": "route",
       "toPortId": "request",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "HttpRequestAbi.fbs",
+          "fileIdentifier": "$HTQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheplan-tile",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "tile",
+      "toNodeId": "tile_plan",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequestAbi.fbs",
+          "fileIdentifier": "$HTQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -332,11 +542,22 @@
       "toNodeId": "cache_read",
       "toPortId": "query",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -347,11 +568,22 @@
       "toNodeId": "mark_read",
       "toPortId": "query",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -362,140 +594,135 @@
       "toNodeId": "cache_freshness",
       "toPortId": "job",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheread-freshness",
+      "fromNodeId": "cache_read",
+      "fromPortId": "records",
+      "toNodeId": "cache_freshness",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
       "edgeId": "markread-freshness",
       "fromNodeId": "mark_read",
-      "fromPortId": "stream",
+      "fromPortId": "records",
       "toNodeId": "cache_freshness",
       "toPortId": "mark",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "cacheread-respond",
-      "fromNodeId": "cache_read",
-      "fromPortId": "stream",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "freshness-respond",
+      "edgeId": "freshness-decision-respond",
       "fromNodeId": "cache_freshness",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "route-http",
-      "fromNodeId": "route",
-      "fromPortId": "requests",
-      "toNodeId": "http",
-      "toPortId": "request",
+      "edgeId": "freshness-availability-respond",
+      "fromNodeId": "cache_freshness",
+      "fromPortId": "availability",
+      "toNodeId": "respond",
+      "toPortId": "availability",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "DAV.fbs",
+          "fileIdentifier": "$DAV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DAV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "route-job-parse",
-      "fromNodeId": "route",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "http-parse",
-      "fromNodeId": "http",
-      "fromPortId": "response",
-      "toNodeId": "parse",
-      "toPortId": "responses",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "parse-job-merge",
-      "fromNodeId": "parse",
-      "fromPortId": "job",
-      "toNodeId": "merge",
-      "toPortId": "job",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "parse-reports-merge",
-      "fromNodeId": "parse",
-      "fromPortId": "reports",
-      "toNodeId": "merge",
-      "toPortId": "reports",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "merge-records-respond",
-      "fromNodeId": "merge",
+      "edgeId": "freshness-records-respond",
+      "fromNodeId": "cache_freshness",
       "fromPortId": "records",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "tbs_records",
       "contract": {
         "canonicalType": {
           "schemaName": "TBS.fbs",
@@ -517,32 +744,678 @@
       }
     },
     {
-      "edgeId": "merge-summary-respond",
+      "edgeId": "route-http",
+      "fromNodeId": "route",
+      "fromPortId": "requests",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-decision-respond",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-availability-respond",
+      "fromNodeId": "route",
+      "fromPortId": "availability",
+      "toNodeId": "respond",
+      "toPortId": "availability",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DAV.fbs",
+          "fileIdentifier": "$DAV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DAV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-job-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "job",
+      "toNodeId": "merge",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-reports-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "reports",
+      "toNodeId": "merge",
+      "toPortId": "reports",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "TBS.fbs",
+          "fileIdentifier": "$TBS",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "TBS",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "merge-records-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "records",
+      "toNodeId": "respond",
+      "toPortId": "tbs_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "TBS.fbs",
+          "fileIdentifier": "$TBS",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "TBS",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "merge-decision-respond",
       "fromNodeId": "merge",
       "fromPortId": "decision",
       "toNodeId": "respond",
       "toPortId": "decision",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "route-reply-respond",
-      "fromNodeId": "route",
-      "fromPortId": "reply",
+      "edgeId": "merge-availability-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "availability",
       "toNodeId": "respond",
-      "toPortId": "decision",
+      "toPortId": "availability",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "DAV.fbs",
+          "fileIdentifier": "$DAV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DAV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-catalog-mediator",
+      "fromNodeId": "route",
+      "fromPortId": "catalog",
+      "toNodeId": "credentials",
+      "toPortId": "catalog",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-credential-mediator",
+      "fromNodeId": "route",
+      "fromPortId": "credential",
+      "toNodeId": "credentials",
+      "toPortId": "credential",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "credentials-decision-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "credentials-page-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-refusal-respond",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "refusal",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-metamark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_mark_query",
+      "toNodeId": "tile_meta_mark",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "metamark-tilemeta",
+      "fromNodeId": "tile_meta_mark",
+      "fromPortId": "records",
+      "toNodeId": "tile_meta",
+      "toPortId": "mark",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-metajob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_job",
+      "toNodeId": "tile_meta",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tilemeta-decision-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tilemeta-page-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-rowsquery",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "rows_query",
+      "toNodeId": "tile_rows",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tilerows-tile",
+      "fromNodeId": "tile_rows",
+      "fromPortId": "records",
+      "toNodeId": "tile",
+      "toPortId": "rows",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-tilemark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_mark_query",
+      "toNodeId": "tile_mark",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tilemark-tile",
+      "fromNodeId": "tile_mark",
+      "fromPortId": "records",
+      "toNodeId": "tile",
+      "toPortId": "mark",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tileplan-tilejob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_job",
+      "toNodeId": "tile",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tile-decision-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "decision",
+      "toNodeId": "respond_query",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tile-page-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "page",
+      "toNodeId": "respond_query",
+      "toPortId": "page",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -573,185 +1446,20 @@
       }
     },
     {
-      "edgeId": "route-catalog-respond",
-      "fromNodeId": "route",
-      "fromPortId": "catalog",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "route-credential-mediator",
-      "fromNodeId": "route",
-      "fromPortId": "credential",
-      "toNodeId": "credentials",
-      "toPortId": "task",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "credentials-body-respond",
-      "fromNodeId": "credentials",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "credentials-decision-respond",
-      "fromNodeId": "credentials",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "cacheplan-tile",
-      "fromNodeId": "cache_plan",
-      "fromPortId": "tile",
-      "toNodeId": "tile_plan",
-      "toPortId": "request",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tileplan-metamark",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "meta_mark_query",
-      "toNodeId": "tile_meta_mark",
-      "toPortId": "query",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "metamark-tilemeta",
-      "fromNodeId": "tile_meta_mark",
-      "fromPortId": "stream",
-      "toNodeId": "tile_meta",
-      "toPortId": "mark",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tileplan-metajob",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "meta_job",
-      "toNodeId": "tile_meta",
-      "toPortId": "job",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tilemeta-body-respond",
-      "fromNodeId": "tile_meta",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tilemeta-decision-respond",
-      "fromNodeId": "tile_meta",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tileplan-rowsquery",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "rows_query",
-      "toNodeId": "tile_rows",
-      "toPortId": "query",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tilerows-tile",
-      "fromNodeId": "tile_rows",
-      "fromPortId": "stream",
-      "toNodeId": "tile",
-      "toPortId": "rows",
+      "edgeId": "respondquery-egress",
+      "fromNodeId": "respond_query",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
       "contract": {
         "canonicalType": {
-          "schemaName": "TBS.fbs",
-          "fileIdentifier": "$TBS",
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
           "schemaVersion": null,
           "schemaHash": [],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
-          "rootTypeName": "TBS",
+          "rootTypeName": "HttpResponse",
           "fixedStringLength": 0,
           "byteLength": 0,
           "requiredAlignment": 0
@@ -760,81 +1468,6 @@
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
         "opaque": false,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tileplan-tilemark",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "tile_mark_query",
-      "toNodeId": "tile_mark",
-      "toPortId": "query",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tilemark-tile",
-      "fromNodeId": "tile_mark",
-      "fromPortId": "stream",
-      "toNodeId": "tile",
-      "toPortId": "mark",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tileplan-tilejob",
-      "fromNodeId": "tile_plan",
-      "fromPortId": "tile_job",
-      "toNodeId": "tile",
-      "toPortId": "job",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tile-body-respond",
-      "fromNodeId": "tile",
-      "fromPortId": "body",
-      "toNodeId": "respond",
-      "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "tile-decision-respond",
-      "fromNodeId": "tile",
-      "fromPortId": "decision",
-      "toNodeId": "respond",
-      "toPortId": "decision",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
         "routePolicy": "canonical-only"
       }
     }

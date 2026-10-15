@@ -1,18 +1,33 @@
 /*
- * data-source/nwp-field-source.
+ * data-source/nwp-field-source (typed contracts 1.0: FlatBuffers only, no JSON and no base64).
  *
  * Request-builder flow nodes for numerical-weather-prediction model fields in NOAA Open Data Dissemination's anonymous
  * public buckets (NCEP GFS noaa-gfs-bdp-pds, GEFS noaa-gefs-pds), fetched message by message through each file's .idx
  * inventory. No credentials and no capabilities beyond the node config: the http connector does the fetching.
  *
- *   plan            : timer tick -> the run's inventory requests (product by product, lead by lead), 16 per invocation,
- *                     the rest yielded as backlog (or one status frame when skipped).
- *   select_messages : inventories + their jobs -> each lead-file's wanted messages as byte ranges (adjacent ones merged,
- *                     each under 64 MiB) with a GRIB job per range - ONE BATCH (a lead-file, or 16 of its ranges) PER
- *                     INVOCATION, the rest yielded as backlog, so the parser holds one batch's messages (never more than
- *                     32 frames a port) and storage-ingest gets one meta + one record stream at a time. A lead the run
- *                     lacks -> status.
- *   publish_request : storage-ingest result + parser meta -> the dataset-publication POST (nwp_publish_url).
+ *   plan            : TimerTick (TICK) -> the run's inventory HttpRequests (HREQ; product by product, lead by lead),
+ *                     16 per invocation, the rest yielded as backlog (or one FlowNotice when skipped / already planned).
+ *   select_messages : the inventories' HttpResponses (HRSP) -> each lead-file's wanted messages as byte-range
+ *                     HttpRequests (adjacent ones merged, each under 64 MiB) - ONE BATCH (a lead-file, or 16 of its
+ *                     ranges) PER INVOCATION, the rest yielded as backlog, so the parser holds one batch's messages
+ *                     (never more than 32 frames a port) and storage-ingest gets one meta + one record stream at a time.
+ *                     A lead the run lacks -> a FlowNotice Missing; inventories answered 304 -> a FlowNotice Unchanged.
+ *   publish_request : IngestResult (INGR) + the parser's IngestRequest (INGQ) -> the dataset-publication POST
+ *                     (nwp_publish_url): an HttpRequest whose BODY is the IngestResult naming the stored batch.
+ *
+ * JOB STATE TRAVELS AS HttpRequest.CONTEXT: one size-prefixed $WXF HEADER RECORD per (product, lead) - the field the
+ * job fetches, without values - built by plan, echoed by the http connector in the HttpResponse, copied verbatim by
+ * select_messages into every range request of the lead-file, and read by the parser (nwp-grib2-parser) as its job:
+ *   FIELD_ID       "<model_key>:<run YYYYMMDDTHH>:f<LLL>:<product>"   (the parser names records and tile batches from
+ *                                                                      its first two parts)
+ *   VARIABLE_NAME  the product id (gfs-1p00-motion, ..., gfs-0p25-sea): the ingest lane's SOURCE_NAME
+ *   MODEL_CLASS, MODEL_ID, TIME_BASIS Initialization, INIT_TIME_MS (the run), LEAD_HOURS, VALID_TIME_MS
+ *   MEMBER_KIND    StandardDeviation for the GEFS spread, else Unspecified; ENSEMBLE_SIZE (GEFS 31)
+ *   GRID           RegularLatLon; DLAT = DLON = the records' spacing in degrees (the native spacing times the stride:
+ *                  GEFS 0.5 deg spread at every other point = 1 deg); NLAT = rows per record (0 = the whole field)
+ *   TILE_COUNT     > 1: the field is cut into that many square tiles, 2n x n (gfs-0p25-sea: 512 = 11.25 deg tiles)
+ *   SOURCE_URL     the GRIB2 file; ORIGIN_ID, DATASET_ID (the bucket), LICENSE_CLASS, LICENSE_URL, CITATION
+ * Pairing is by CONTEXT, never by position: a response that carries no $WXF header cannot be attributed and is refused.
  *
  * Products (nwp_products; the world-clouds display's, as its reference fetchers choose them): gfs-1p00-motion (UGRD,
  * VGRD and, to nwp_motion_heights_to, HGT at 1000-200 hPa), gefs-0p50-spread (the ensemble's wind spread at those
@@ -21,9 +36,13 @@
  * CAPE, surface height, cloud layers, and temperature/height/wind/humidity/vertical velocity on 21 levels plus the
  * tropopause) at nwp_physics_leads; gfs-0p25-sea (10 m wind, 2 m temperature and dew point, boundary-layer height, surface
  * height, the instantaneous precipitation rate, visibility and the cloud ceiling's height) each lead, cut by the parser
- * into 11.25° tiles, one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>, x from 180 W, y from the north pole). Node CONFIG through plugin.getConfig: nwp_live_access (default true), nwp_run
- * (YYYYMMDDTHH; default the latest cycle nwp_lag_hours (5) old), nwp_products, nwp_max_lead (384), nwp_lead_step (3),
- * nwp_motion_heights_to (12), nwp_physics_leads ("0,3"), timeouts, nwp_publish_url (unset: no publication).
+ * into 11.25° tiles, one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>, x from 180 W, y from the north pole).
+ *
+ * Node CONFIG through plugin.getConfig (SDS $PIV: one ModuleConfig FlatBuffer on raw "config", read
+ * through sdm_piv::get_config()): nwp_live_access (default true), nwp_run (YYYYMMDDTHH / ISO / Unix ms; default the latest cycle
+ * nwp_lag_hours (5) old), nwp_products (a comma list or a list), nwp_max_lead (384), nwp_lead_step (3),
+ * nwp_motion_heights_to (12), nwp_physics_leads ("0,3" or a list), nwp_idx_timeout_ms, nwp_grib_timeout_ms,
+ * nwp_publish_url (unset: no publication).
  */
 #include <algorithm>
 #include <cctype>
@@ -33,32 +52,28 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <sys/time.h>
 
 #include "space_data_module_invoke.h"
-
-extern "C" {
-
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
-}  // extern "C"
+#include "typedHostcall.hpp"
+#include "HttpRequest_generated.h"
+#include "HttpResponse_generated.h"
+#include "IngestRequest_generated.h"
+#include "IngestResult_generated.h"
+#include "FlowNotice_generated.h"
+// $WXF (spacedatastandards.org lib/cpp/WXF/main_generated.h) is inlined ahead of this file by build.mjs.
 
 namespace {
 
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
+
 // ---------------------------------------------------------------------------
-// JSON / base64 / date helpers, the hostcall wire, node config and frame IO: the same code as
-// data-source/weathernext-source (control metadata only).
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// JSON helpers (control metadata only).
+// Small helpers.
 // ---------------------------------------------------------------------------
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -68,92 +83,6 @@ std::string trim(const std::string& s) {
     while (b < e && is_ws(s[b])) b++;
     while (e > b && is_ws(s[e - 1])) e--;
     return s.substr(b, e - b);
-}
-
-size_t json_value_start(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const size_t k = json.find(needle);
-    if (k == std::string::npos) return std::string::npos;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return std::string::npos;
-    size_t i = colon + 1;
-    while (i < json.size() && is_ws(json[i])) i++;
-    return i;
-}
-
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            const char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-bool json_number_field(const std::string& json, const std::string& key, double* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    const char c = json[i];
-    if (c == '"') {
-        // Tolerate a quoted number in operator config.
-        char* end = nullptr;
-        const double value = strtod(json.c_str() + i + 1, &end);
-        if (end == json.c_str() + i + 1) return false;
-        *out = value;
-        return true;
-    }
-    if (c != '-' && (c < '0' || c > '9')) return false;
-    char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
-    *out = value;
-    return true;
-}
-
-bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const size_t i = json_value_start(json, key);
-    if (i == std::string::npos || i >= json.size()) return false;
-    if (json.compare(i, 4, "true") == 0 || json.compare(i, 6, "\"true\"") == 0 ||
-        json.compare(i, 3, "\"1\"") == 0 || json[i] == '1') {
-        *out = true;
-        return true;
-    }
-    if (json.compare(i, 5, "false") == 0 || json.compare(i, 7, "\"false\"") == 0 ||
-        json.compare(i, 3, "\"0\"") == 0 || json[i] == '0') {
-        *out = false;
-        return true;
-    }
-    return false;
-}
-
-std::string json_escape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (const char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (static_cast<unsigned char>(c) < 0x20) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-            out += buf;
-        } else out.push_back(c);
-    }
-    return out;
 }
 
 std::string format_number(double v) {
@@ -182,62 +111,6 @@ std::vector<std::string> split(const std::string& text, char sep) {
     }
     const std::string t = trim(current);
     if (!t.empty()) out.push_back(t);
-    return out;
-}
-
-std::string json_string_array(const std::vector<std::string>& items) {
-    std::string out = "[";
-    for (size_t i = 0; i < items.size(); i++) {
-        if (i) out += ",";
-        out += "\"" + json_escape(items[i]) + "\"";
-    }
-    return out + "]";
-}
-
-std::string json_number_array(const std::vector<double>& items) {
-    std::string out = "[";
-    for (size_t i = 0; i < items.size(); i++) {
-        if (i) out += ",";
-        out += format_number(items[i]);
-    }
-    return out + "]";
-}
-
-// ---------------------------------------------------------------------------
-// Base64 (the http cap takes its body as bodyB64).
-// ---------------------------------------------------------------------------
-
-const char kB64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-std::string base64_encode(const uint8_t* data, size_t length) {
-    std::string out;
-    out.reserve(((length + 2) / 3) * 4);
-    size_t i = 0;
-    while (i + 3 <= length) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back(kB64Alphabet[v & 0x3f]);
-        i += 3;
-    }
-    const size_t remain = length - i;
-    if (remain == 1) {
-        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back('=');
-        out.push_back('=');
-    } else if (remain == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
-        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
-        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
-        out.push_back('=');
-    }
     return out;
 }
 
@@ -282,82 +155,65 @@ int64_t now_unix_ms() {
     return static_cast<int64_t>(tv.tv_sec) * 1000 + static_cast<int64_t>(tv.tv_usec / 1000);
 }
 
-// The previous synoptic cycle (00/06/12/18Z) at least one hour before now.
-
 // ---------------------------------------------------------------------------
-// Hostcall wire: u32 metaLen | meta JSON | u32 segCount | (u32 len | bytes)*.
-// Response: u32 metaLen | {"ok":bool,"result":...}. Mirrors
-// space-data-module-sdk/src/host/hostcallWire.js.
+// Node config: plugin.getConfig as an SDS $PIV hostcall - one ModuleConfig FlatBuffer (MCFG) on raw "config", read in
+// place through sdm_piv::get_config() (lookups by key or dotted path: "nwp_products.0"). No config (or a host that
+// provides none) reads as the defaults, as before.
 // ---------------------------------------------------------------------------
 
-void wire_u32le(uint8_t* dst, uint32_t value) {
-    dst[0] = static_cast<uint8_t>(value & 0xff);
-    dst[1] = static_cast<uint8_t>((value >> 8) & 0xff);
-    dst[2] = static_cast<uint8_t>((value >> 16) & 0xff);
-    dst[3] = static_cast<uint8_t>((value >> 24) & 0xff);
-}
+struct Config {
+    sdm_piv::Config config;
 
-uint32_t wire_rd32le(const uint8_t* src) {
-    return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
-}
-
-// ⛔ THE RETURN VALUE OF THIS FUNCTION CAN CARRY A SECRET (secrets.get). It is
-// never pushed to an output port other than inside the request headers it was
-// fetched for, never logged and never returned; callers extract one field and
-// let the rest go out of scope.
-std::string host_meta(const char* op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    wire_u32le(req.data(), static_cast<uint32_t>(payload_json.size()));
-    if (!payload_json.empty()) {
-        std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
+    static std::string text_of(const sdm_piv::ConfigTable& c, const std::string& key, const R::ConfigEntry& e) {
+        switch (e.KIND()) {
+            case R::configValueKind_String: return std::string(c.string(key));
+            case R::configValueKind_Number: return format_number(e.NUMBER_VALUE());
+            case R::configValueKind_Bool: return e.BOOL_VALUE() ? "true" : "false";
+            default: return {};
+        }
     }
-    wire_u32le(req.data() + 4 + payload_json.size(), 0u);
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 0) return std::string();
-    std::vector<uint8_t> buf(static_cast<size_t>(len), 0);
-    sdm_host_read_response(buf.data(), len);
-    if (buf.size() < 4) return std::string();
-    const uint32_t meta_len = wire_rd32le(buf.data());
-    if (buf.size() < 4u + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), meta_len);
-}
+    // A scalar, or a list joined with commas; `fallback` when absent or empty.
+    std::string string(const char* key, const char* fallback) const {
+        const R::ConfigEntry* e = config.entry(key);
+        std::string v;
+        if (e && e->KIND() == R::configValueKind_StringList) {
+            int i = 0;
+            for (std::string_view item : config.strings(key)) v += (i++ ? "," : "") + std::string(item);
+        } else if (e && e->KIND() == R::configValueKind_NumberList) {
+            int i = 0;
+            for (double item : config.numbers(key)) v += (i++ ? "," : "") + format_number(item);
+        } else if (e) {
+            v = text_of(config, key, *e);
+        }
+        return v.empty() ? fallback : v;
+    }
+    // A number (a numeric string is tolerated, as the operator config always allowed).
+    double number(const char* key, double fallback) const {
+        const R::ConfigEntry* e = config.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == R::configValueKind_Number) return e->NUMBER_VALUE();
+        if (e->KIND() == R::configValueKind_String) {
+            const std::string s(config.string(key));
+            char* end = nullptr;
+            const double v = strtod(s.c_str(), &end);
+            if (end != s.c_str()) return v;
+        }
+        return fallback;
+    }
+    bool boolean(const char* key, bool fallback) const {
+        const R::ConfigEntry* e = config.entry(key);
+        if (!e) return fallback;
+        if (e->KIND() == R::configValueKind_Bool) return e->BOOL_VALUE();
+        if (e->KIND() == R::configValueKind_Number) return e->NUMBER_VALUE() != 0;
+        if (e->KIND() != R::configValueKind_String) return fallback;
+        const std::string_view s = config.string(key);
+        if (s == "true" || s == "1") return true;
+        if (s == "false" || s == "0") return false;
+        return fallback;
+    }
+};
 
-bool host_meta_ok(const std::string& meta) {
-    return meta.find("\"ok\":true") != std::string::npos;
-}
-
-// plugin.getConfig builtin hostcall: the node-config JSON for this flow
-// service (inside {"ok":true,"result":{...}}), or "{}" when the host provides
-// none. Every key is read by name, so the wrapper is harmless.
-std::string load_config() {
-    const std::string meta = host_meta("plugin.getConfig", "{}");
-    return meta.empty() ? "{}" : meta;
-}
-
-// ---------------------------------------------------------------------------
-// Config accessors.
-// ---------------------------------------------------------------------------
-
-std::string config_string(const std::string& config, const char* key, const char* fallback) {
-    std::string value;
-    if (json_string_field(config, key, &value) && !value.empty()) return value;
-    return fallback;
-}
-
-double config_number(const std::string& config, const char* key, double fallback) {
-    double v = 0;
-    if (json_number_field(config, key, &v)) return v;
-    return fallback;
-}
-
-bool config_bool(const std::string& config, const char* key, bool fallback) {
-    bool v = false;
-    if (json_bool_field(config, key, &v)) return v;
-    return fallback;
-}
+Config load_config() { return Config{sdm_piv::get_config()}; }
 
 // ---------------------------------------------------------------------------
 // Frame IO.
@@ -369,15 +225,49 @@ const plugin_input_frame_t* frame_for(const char* port_id) {
     return plugin_get_input_frame(static_cast<uint32_t>(index));
 }
 
-int push_json(const char* port, const std::string& json) {
-    return plugin_push_output_ex(port, nullptr, nullptr,
-                                 PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                                 reinterpret_cast<const uint8_t*>(json.data()),
-                                 static_cast<uint32_t>(json.size()));
+std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
+    std::vector<const plugin_input_frame_t*> out;
+    for (uint32_t ordinal = 0;; ordinal++) {
+        const int32_t idx = plugin_find_input_index(port, ordinal);
+        if (idx < 0) break;
+        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
+    }
+    return out;
 }
 
-int push_status(const char* reason) {
-    return push_json("status", std::string("{\"skipped\":\"") + reason + "\"}") < 0 ? 500 : 0;
+using Bytes = std::vector<uint8_t>;
+
+Bytes finished(const flatbuffers::FlatBufferBuilder& b) { return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize()); }
+
+// An HttpRequest (HREQ). Headers are given lower-cased; the vector is written sorted by NAME (a FlatBuffers key).
+Bytes http_request(const char* method, const std::string& url, std::vector<std::pair<std::string, std::string>> headers,
+                   const Bytes* body, uint32_t timeout_ms, const Bytes* context) {
+    flatbuffers::FlatBufferBuilder b(512 + (body ? body->size() : 0) + (context ? context->size() : 0));
+    std::sort(headers.begin(), headers.end());
+    std::vector<flatbuffers::Offset<R::Header>> header_offsets;
+    for (const auto& [name, value] : headers) header_offsets.push_back(R::CreateHeaderDirect(b, name.c_str(), value.c_str()));
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, method, url.c_str(), &header_offsets, body, timeout_ms, 0, context));
+    return finished(b);
+}
+
+int push_request(const char* port, const Bytes& request) {
+    return plugin_push_output_ex(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, request.data(), static_cast<uint32_t>(request.size()));
+}
+
+// A FlowNotice (FNTC) on "status": what a pass did that is not a stored batch.
+int push_notice(R::flowNoticeKind kind, const std::string& reason, uint64_t count = 0, std::vector<std::string> items = {},
+                const char* provider = "") {
+    R::FlowNoticeT notice;
+    notice.KIND = kind;
+    notice.PROVIDER_ID = provider;
+    notice.REASON = reason;
+    notice.COUNT = count;
+    notice.ITEMS = std::move(items);
+    flatbuffers::FlatBufferBuilder b(256);
+    R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &notice));
+    return plugin_push_output_ex("status", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "FlowNotice", 0, 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
 }
 
 // ---------------------------------------------------------------------------
@@ -441,19 +331,20 @@ struct Product {
     const char* path;           // file path with {D} (YYYYMMDD), {H} (HH), {L} (LLL)
     const char* model_key;
     const char* model_id;
-    const char* model_class;
+    wxfModelClass model_class;
+    double native_deg;          // the file's grid spacing
     int stride, band_rows, ensemble_size;
     bool spread;
     double tile_deg;            // > 0: the parser cuts the fields into tiles of this size, one batch a tile
 };
 const Product kProducts[] = {
-    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
-    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", "NumericalGlobalEnsemble", 2, 0, 31, true, 0},
-    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", "NumericalGlobalDeterministic", 1, 0, 0, false, 0},
-    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 64, 0, false, 0},
+    {"gfs-1p00-motion", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.1p00.f{L}", "gfs", "NCEP GFS 1°", wxfModelClass_NumericalGlobalDeterministic, 1.0, 1, 0, 0, false, 0},
+    {"gefs-0p50-spread", "noaa-gefs-pds.s3.amazonaws.com", "gefs.{D}/{H}/atmos/pgrb2ap5/gespr.t{H}z.pgrb2a.0p50.f{L}", "gefs", "NCEP GEFS 0.5° (every other point)", wxfModelClass_NumericalGlobalEnsemble, 0.5, 2, 0, 31, true, 0},
+    {"gfs-0p50-clouds", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p50.f{L}", "gfs", "NCEP GFS 0.5°", wxfModelClass_NumericalGlobalDeterministic, 0.5, 1, 0, 0, false, 0},
+    {"gfs-0p25-physics", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", wxfModelClass_NumericalGlobalDeterministic, 0.25, 1, 64, 0, false, 0},
     // the weather at the surface the world-clouds display reads about its camera (sea state, fog, rain): 11.25° tiles,
     // one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>), so a client fetches only the tiles it stands in
-    {"gfs-0p25-sea", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", "NumericalGlobalDeterministic", 1, 0, 0, false, 11.25},
+    {"gfs-0p25-sea", "noaa-gfs-bdp-pds.s3.amazonaws.com", "gfs.{D}/{H}/atmos/gfs.t{H}z.pgrb2.0p25.f{L}", "gfs", "NCEP GFS 0.25°", wxfModelClass_NumericalGlobalDeterministic, 0.25, 1, 0, 0, false, 11.25},
 };
 const Product* product_named(const std::string& id) {
     for (const Product& p : kProducts) if (id == p.id) return &p;
@@ -495,27 +386,17 @@ constexpr const char* kDefaultPhysicsLeads = "0,3";
 constexpr double kDefaultIdxTimeoutMs = 60000, kDefaultGribTimeoutMs = 300000;
 constexpr double kMaxRangeBytes = 64.0 * 1024 * 1024;
 constexpr uint32_t kPlanBatch = 16;                // inventory requests handed out per plan invocation
-// A batch's ranges: the compiled runtime hands a node at most 64 frames an invocation, so the parser's jobs and
-// responses of one batch must stay at 32 each or fewer - a lead-file with more ranges is split into batches of 16.
+// A batch's ranges: the compiled runtime hands a node at most 64 frames an invocation, so the parser's responses of one
+// batch must stay at 32 or fewer - a lead-file with more ranges is split into batches of 16.
 constexpr size_t kMaxRangesPerBatch = 16;
 constexpr const char* kProviderID = "noaa-ncep";
 constexpr const char* kOriginID = "NOAA Open Data Dissemination (AWS)";
-constexpr const char* kLicenseID = "LicenseRef-NOAA-Open-Data";
 constexpr const char* kLicenseURL = "https://www.weather.gov/disclaimer";
 // (see imager-observation-source: the host's validators must never turn a repeat inventory or range into an empty 304)
-constexpr const char* kNoValidators = "\"If-Modified-Since\":\"Thu, 01 Jan 1970 00:00:00 GMT\"";
+constexpr const char* kNoValidatorsName = "if-modified-since";
+constexpr const char* kNoValidatorsValue = "Thu, 01 Jan 1970 00:00:00 GMT";
 
-std::string trim_copy(std::string s) {
-    while (!s.empty() && is_ws(s.back())) s.pop_back();
-    size_t at = 0;
-    while (at < s.size() && is_ws(s[at])) at++;
-    return s.substr(at);
-}
-std::vector<std::string> list_of(const std::string& text) {
-    std::vector<std::string> out;
-    for (const std::string& part : split(text, ',')) { const std::string t = trim_copy(part); if (!t.empty()) out.push_back(t); }
-    return out;
-}
+std::vector<std::string> list_of(const std::string& text) { return split(text, ','); }
 std::string pad(int v, int width) { std::string s = std::to_string(v); while (static_cast<int>(s.size()) < width) s = "0" + s; return s; }
 std::string replace_all(std::string s, const std::string& from, const std::string& to) {
     for (size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size())) s.replace(at, from.size(), to);
@@ -528,15 +409,66 @@ void civil_ymdh(int64_t ms, int* y, int* m, int* d, int* h) {
     const int64_t mp = (5 * doy + 2) / 153, dd = doy - (153 * mp + 2) / 5 + 1, mm = mp < 10 ? mp + 3 : mp - 9;
     *y = static_cast<int>(yoe + era * 400 + (mm <= 2)); *m = static_cast<int>(mm); *d = static_cast<int>(dd); *h = static_cast<int>((ms % 86400000) / 3600000);
 }
-std::string get_request(const std::string& url, const std::string& extra, long timeout_ms) {
-    return "{\"method\":\"GET\",\"url\":\"" + json_escape(url) + "\",\"headers\":{" + kNoValidators + extra + "}" +
-           ",\"timeoutMs\":" + std::to_string(timeout_ms) + ",\"responseWire\":\"raw-body-v1\"}";
+
+// The job of one (product, lead): a size-prefixed $WXF header record (no values) naming the field the job fetches and
+// how the parser is to cut it. It travels as HttpRequest.CONTEXT and comes back verbatim in the HttpResponse.
+Bytes job_header(const Product& p, int64_t run_ms, const std::string& run_id, int lead, const std::string& url) {
+    flatbuffers::FlatBufferBuilder b(1024);
+    const std::string host = url.substr(8, url.find('/', 8) - 8);
+    const auto field_id = b.CreateString(std::string(p.model_key) + ":" + run_id + ":f" + pad(lead, 3) + ":" + p.id);
+    const auto model_id = b.CreateString(p.model_id);
+    const auto variable_name = b.CreateString(p.id);
+    const auto origin = b.CreateString(kOriginID);
+    const auto dataset = b.CreateString(host.substr(0, host.find('.')));
+    const auto source_url = b.CreateString(url);
+    const auto license_url = b.CreateString(kLicenseURL);
+    const auto citation = b.CreateString(std::string("NOAA/NCEP ") +
+                                         (p.spread ? "Global Ensemble Forecast System ensemble standard deviation" : "Global Forecast System") +
+                                         " via NOAA Open Data Dissemination (AWS)");
+    WXFGridBuilder grid(b);
+    grid.add_KIND(wxfGridKind_RegularLatLon);
+    grid.add_DLAT(p.native_deg * p.stride);
+    grid.add_DLON(p.native_deg * p.stride);
+    grid.add_NLAT(static_cast<uint32_t>(p.band_rows));
+    const auto grid_off = grid.Finish();
+    WXFBuilder r(b);
+    r.add_FIELD_ID(field_id);
+    r.add_MODEL_CLASS(p.model_class);
+    r.add_MODEL_ID(model_id);
+    r.add_TIME_BASIS(wxfTimeBasis_Initialization);
+    r.add_INIT_TIME_MS(static_cast<uint64_t>(run_ms));
+    r.add_LEAD_HOURS(static_cast<float>(lead));
+    r.add_VALID_TIME_MS(static_cast<uint64_t>(run_ms + static_cast<int64_t>(lead) * 3600000));
+    r.add_MEMBER_KIND(p.spread ? wxfMemberKind_StandardDeviation : wxfMemberKind_Unspecified);
+    if (p.ensemble_size > 0) r.add_ENSEMBLE_SIZE(static_cast<uint16_t>(p.ensemble_size));
+    r.add_VARIABLE_NAME(variable_name);
+    r.add_TEMPORAL_KIND(wxfTemporalKind_Instantaneous);
+    r.add_GRID(grid_off);
+    if (p.tile_deg > 0) r.add_TILE_COUNT(static_cast<uint32_t>(std::lround(360.0 / p.tile_deg) * std::lround(180.0 / p.tile_deg)));
+    r.add_ORIGIN_ID(origin);
+    r.add_DATASET_ID(dataset);
+    r.add_SOURCE_URL(source_url);
+    r.add_LICENSE_CLASS(wxfLicenseClass_OpenAttribution);
+    r.add_LICENSE_URL(license_url);
+    r.add_CITATION(citation);
+    FinishSizePrefixedWXFBuffer(b, r.Finish());
+    return finished(b);
+}
+
+// The job header an HttpResponse carries back in CONTEXT, or nullptr when it carries none (or not a $WXF).
+const WXF* job_of(const R::HttpResponse& response) {
+    const auto* context = response.CONTEXT();
+    if (!context || context->size() < 8) return nullptr;
+    flatbuffers::Verifier verifier(context->data(), context->size());
+    if (!VerifySizePrefixedWXFBuffer(verifier)) return nullptr;
+    const WXF* job = GetSizePrefixedWXF(context->data());
+    return job->VARIABLE_NAME() && job->SOURCE_URL() ? job : nullptr;
 }
 
 // The run: nwp_run ("YYYYMMDDTHH" / ISO / Unix ms) when set, else the latest 6-hourly cycle nwp_lag_hours old.
-bool run_time_ms(const std::string& config, int64_t* out, std::string* err) {
-    std::string set;
-    if (json_string_field(config, "nwp_run", &set) && !set.empty()) {
+bool run_time_ms(const Config& config, int64_t* out, std::string* err) {
+    const std::string set = config.string("nwp_run", "");
+    if (!set.empty()) {
         int64_t ms = 0;
         if (set.size() == 11 && set[8] == 'T' && std::all_of(set.begin(), set.begin() + 8, ::isdigit) && ::isdigit(set[9]) && ::isdigit(set[10]))
             ms = (days_from_civil(std::atoi(set.substr(0, 4).c_str()), std::atoi(set.substr(4, 2).c_str()), std::atoi(set.substr(6, 2).c_str())) * 24 + std::atoi(set.substr(9, 2).c_str())) * 3600000LL;
@@ -548,30 +480,28 @@ bool run_time_ms(const std::string& config, int64_t* out, std::string* err) {
     }
     const int64_t now = now_unix_ms();
     if (now <= 0) { *err = "no clock"; return false; }
-    const int64_t t = now - static_cast<int64_t>(config_number(config, "nwp_lag_hours", kDefaultLagHours) * 3600000.0);
+    const int64_t t = now - static_cast<int64_t>(config.number("nwp_lag_hours", kDefaultLagHours) * 3600000.0);
     *out = t - ((t % 21600000) + 21600000) % 21600000;
     return true;
 }
 
 // ---------------------------------------------------------------------------
 // Backlogs: plan hands out kPlanBatch inventory requests per invocation; select_messages one lead-file (all its byte
-// ranges) per invocation, so the parser holds one file's messages and storage-ingest receives one meta and one record
-// stream at a time. The compiled runtime resumes a yielded node without input.
+// ranges, at most kMaxRangesPerBatch) per invocation, so the parser holds one file's messages and storage-ingest receives
+// one meta and one record stream at a time. The compiled runtime resumes a yielded node without input.
 // ---------------------------------------------------------------------------
 
-struct Pending { std::vector<std::string> requests, jobs; };
+struct Pending { std::vector<Bytes> requests; };
 std::vector<Pending> g_plan_backlog, g_select_backlog;
 std::string g_planned;   // the run (and products, leads) plan() last queued - plan_key
 size_t g_plan_next = 0, g_select_next = 0;
 
-int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocation, const char* request_port, const char* job_port) {
+int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocation, const char* request_port) {
     uint32_t emitted = 0;
     while (next < backlog.size() && emitted < per_invocation) {
         const Pending& p = backlog[next++];
-        for (size_t k = 0; k < p.requests.size(); k++) {
-            if (push_json(request_port, p.requests[k]) < 0) return 500;
-            if (push_json(job_port, p.jobs[k]) < 0) return 500;
-        }
+        for (const Bytes& request : p.requests)
+            if (push_request(request_port, request) < 0) return 500;
         emitted++;
     }
     const uint32_t remaining = static_cast<uint32_t>(backlog.size() - next);
@@ -581,62 +511,48 @@ int emit_from(std::vector<Pending>& backlog, size_t& next, uint32_t per_invocati
     return 0;
 }
 
-std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
-    std::vector<const plugin_input_frame_t*> out;
-    for (uint32_t ordinal = 0;; ordinal++) {
-        const int32_t idx = plugin_find_input_index(port, ordinal);
-        if (idx < 0) break;
-        out.push_back(plugin_get_input_frame(static_cast<uint32_t>(idx)));
-    }
-    return out;
-}
-std::string frame_string(const plugin_input_frame_t* f) {
-    return f && f->payload ? std::string(reinterpret_cast<const char*>(f->payload), f->payload_length) : std::string();
-}
-
 }  // namespace
 
 extern "C" {
 
-// plan: timer tick -> the run's inventory (.idx) requests, product by product and lead by lead, kPlanBatch per
-// invocation (the rest yielded as backlog); a resume without input hands out the next batch. One status frame when the
-// cycle is skipped.
+// plan: TimerTick -> the run's inventory (.idx) requests, product by product and lead by lead, kPlanBatch per
+// invocation (the rest yielded as backlog); a resume without input hands out the next batch. The tick's fields are not
+// read: any tick plans. One FlowNotice when the cycle is skipped or already planned.
 int plan(void) {
-    if (plugin_get_input_count() == 0) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
+    if (plugin_get_input_count() == 0) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests");
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
         plugin_set_error("batched-input-frames", batch_message);
         return 500;
     }
-    const std::string config = load_config();
-    if (!config_bool(config, "nwp_live_access", true)) return push_status("live-access-disabled");
+    const Config config = load_config();
+    if (!config.boolean("nwp_live_access", true)) return push_notice(R::flowNoticeKind_Skipped, "live-access-disabled") < 0 ? 500 : 0;
     int64_t run = 0;
     std::string err;
     if (!run_time_ms(config, &run, &err)) { plugin_set_error("invalid-run", err.c_str()); return 400; }
     int y = 0, mo = 0, d = 0, h = 0;
     civil_ymdh(run, &y, &mo, &d, &h);
     const std::string D = std::to_string(y) + pad(mo, 2) + pad(d, 2), H = pad(h, 2), run_id = D + "T" + H;
-    const int max_lead = static_cast<int>(config_number(config, "nwp_max_lead", kDefaultMaxLead));
-    const int step = std::max(1, static_cast<int>(config_number(config, "nwp_lead_step", kDefaultLeadStep)));
-    const int heights_to = static_cast<int>(config_number(config, "nwp_motion_heights_to", kDefaultHeightsTo));
+    const int max_lead = static_cast<int>(config.number("nwp_max_lead", kDefaultMaxLead));
+    const int step = std::max(1, static_cast<int>(config.number("nwp_lead_step", kDefaultLeadStep)));
     std::vector<int> physics_leads;
-    for (const std::string& l : list_of(config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads))) physics_leads.push_back(std::atoi(l.c_str()));
-    const long timeout = static_cast<long>(config_number(config, "nwp_idx_timeout_ms", kDefaultIdxTimeoutMs));
+    for (const std::string& l : list_of(config.string("nwp_physics_leads", kDefaultPhysicsLeads))) physics_leads.push_back(std::atoi(l.c_str()));
+    const uint32_t timeout = static_cast<uint32_t>(config.number("nwp_idx_timeout_ms", kDefaultIdxTimeoutMs));
     // A run already planned (the same run, products and leads): nothing planned again - the tick only lets the work it
     // queued go on. A node drains a bounded number of invocations a trigger (internal/flowrt cronmount: 1000); a run of
     // tiled leads (gfs-0p25-sea: 512 batches a lead) takes several triggers, and re-planning the same run on each would
     // fetch and store it again (each record carries its retrieval time: new bytes, new CIDs). A new cycle plans as before.
-    const std::string plan_key = run_id + "|" + config_string(config, "nwp_products", kDefaultProducts) + "|" + std::to_string(max_lead) + "|" +
-                                 std::to_string(step) + "|" + config_string(config, "nwp_physics_leads", kDefaultPhysicsLeads);
+    const std::string products = config.string("nwp_products", kDefaultProducts);
+    const std::string plan_key = run_id + "|" + products + "|" + std::to_string(max_lead) + "|" + std::to_string(step) + "|" +
+                                 config.string("nwp_physics_leads", kDefaultPhysicsLeads);
     if (plan_key == g_planned) {
-        if (g_plan_next < g_plan_backlog.size()) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
-        // Nothing new upstream (the next cycle is not out yet): the node's unchanged notice (internal/flowrt cronmount
-        // egressReportsUnchanged), so a quiet tick between cycles is a success without a batch, not a failure that
-        // widens the retrieval window and holds the next cycle back.
-        return push_json("status", "{\"skipped\":\"already-planned\",\"status\":304,\"unchanged\":true}") < 0 ? 500 : 0;
+        if (g_plan_next < g_plan_backlog.size()) return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests");
+        // Nothing new upstream (the next cycle is not out yet): the node's unchanged notice, so a quiet tick between
+        // cycles is a success without a batch, not a failure that widens the retrieval window and holds the next cycle back.
+        return push_notice(R::flowNoticeKind_Unchanged, "already-planned") < 0 ? 500 : 0;
     }
     g_planned = plan_key;
-    for (const std::string& id : list_of(config_string(config, "nwp_products", kDefaultProducts))) {
+    for (const std::string& id : list_of(products)) {
         const Product* p = product_named(id);
         if (!p) { plugin_set_error("unknown-product", ("nwp_products names an unknown product: " + id).c_str()); return 400; }
         std::vector<int> leads;
@@ -644,60 +560,56 @@ int plan(void) {
         else for (int lead = 0; lead <= max_lead; lead += step) leads.push_back(lead);
         for (int lead : leads) {
             const std::string url = std::string("https://") + p->host + "/" + replace_all(replace_all(replace_all(p->path, "{D}", D), "{H}", H), "{L}", pad(lead, 3));
+            const Bytes header = job_header(*p, run, run_id, lead, url);
             Pending pending;
-            pending.requests.push_back(get_request(url + ".idx", "", timeout));
-            pending.jobs.push_back(std::string("{\"product\":\"") + p->id + "\",\"url\":\"" + json_escape(url) + "\",\"run\":\"" + run_id +
-                                   "\",\"lead\":" + std::to_string(lead) + ",\"heights_to\":" + std::to_string(heights_to) + "}");
-            g_plan_backlog.push_back(pending);
+            pending.requests.push_back(http_request("GET", url + ".idx", {{kNoValidatorsName, kNoValidatorsValue}}, nullptr, timeout, &header));
+            g_plan_backlog.push_back(std::move(pending));
         }
     }
-    if (g_plan_backlog.empty()) return push_status("nothing-to-fetch");
-    return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests", "jobs");
+    if (g_plan_backlog.empty()) return push_notice(R::flowNoticeKind_Skipped, "nothing-to-fetch") < 0 ? 500 : 0;
+    return emit_from(g_plan_backlog, g_plan_next, kPlanBatch, "requests");
 }
 
-// select_messages: inventories + their jobs (paired by position) -> each lead-file's wanted messages as byte ranges
-// (adjacent messages merged, each range under kMaxRangeBytes) with a GRIB job per range; one lead-file per invocation,
-// the rest yielded as backlog. A missing inventory (a lead the run does not have) is reported on status.
+// select_messages: the inventories' HttpResponses, each carrying its job header in CONTEXT -> each lead-file's wanted
+// messages as byte-range HttpRequests (adjacent messages merged, each range under kMaxRangeBytes), the job header copied
+// into every one; one lead-file per invocation, the rest yielded as backlog. A missing inventory (a lead the run does
+// not have) is reported as a FlowNotice Missing; inventories answered 304 as a FlowNotice Unchanged.
 int select_messages(void) {
-    const std::vector<const plugin_input_frame_t*> jobs = frames_on("idx_jobs");
     const std::vector<const plugin_input_frame_t*> inventories = frames_on("inventories");
-    if (jobs.empty() && inventories.empty()) return emit_from(g_select_backlog, g_select_next, 1, "requests", "jobs");
-    if (jobs.size() != inventories.size()) {
-        const std::string msg = "select_messages received " + std::to_string(jobs.size()) + " inventory jobs but " + std::to_string(inventories.size()) +
-                                " inventory responses; they pair by position, so a mismatch cannot be attributed and is refused.";
-        plugin_set_error("job-response-count-mismatch", msg.c_str());
-        return 400;
-    }
-    const std::string config = load_config();
-    const long timeout = static_cast<long>(config_number(config, "nwp_grib_timeout_ms", kDefaultGribTimeoutMs));
-    std::string missing;
-    int unchanged = 0;
-    for (size_t k = 0; k < jobs.size(); k++) {
-        const std::string job = frame_string(jobs[k]);
-        std::string product_id, url, run;
-        double lead = 0, heights_to = kDefaultHeightsTo;
-        json_string_field(job, "product", &product_id);
-        json_string_field(job, "url", &url);
-        json_string_field(job, "run", &run);
-        json_number_field(job, "lead", &lead);
-        json_number_field(job, "heights_to", &heights_to);
-        const Product* p = product_named(product_id);
-        const plugin_input_frame_t* r = inventories[k];
-        long status = 0;
-        std::string body;
-        if (r && r->payload && r->payload_length >= 8 && memcmp(r->payload, "$HRB", 4) == 0) {
-            status = static_cast<int32_t>(static_cast<uint32_t>(r->payload[4]) | (static_cast<uint32_t>(r->payload[5]) << 8) |
-                                          (static_cast<uint32_t>(r->payload[6]) << 16) | (static_cast<uint32_t>(r->payload[7]) << 24));
-            body.assign(reinterpret_cast<const char*>(r->payload + 8), r->payload_length - 8);
+    if (inventories.empty()) return emit_from(g_select_backlog, g_select_next, 1, "requests");
+    const Config config = load_config();
+    const uint32_t timeout = static_cast<uint32_t>(config.number("nwp_grib_timeout_ms", kDefaultGribTimeoutMs));
+    const int heights_to = static_cast<int>(config.number("nwp_motion_heights_to", kDefaultHeightsTo));
+    std::vector<std::string> missing;
+    uint64_t unchanged = 0;
+    for (size_t k = 0; k < inventories.size(); k++) {
+        const plugin_input_frame_t* frame = inventories[k];
+        flatbuffers::Verifier verifier(frame && frame->payload ? frame->payload : reinterpret_cast<const uint8_t*>(""), frame ? frame->payload_length : 0);
+        if (!frame || !frame->payload || !R::VerifyHttpResponseBuffer(verifier)) {
+            plugin_set_error("invalid-response-frame", ("inventory " + std::to_string(k) + " is not an HttpResponse (HRSP)").c_str());
+            return 400;
         }
+        const R::HttpResponse& r = *R::GetHttpResponse(frame->payload);
+        const WXF* job = job_of(r);
+        if (!job) {
+            // pairing is by CONTEXT: a response that names no job cannot be attributed, so it is refused, not guessed
+            plugin_set_error("missing-context", ("inventory " + std::to_string(k) + " (" + (r.URL() ? r.URL()->str() : std::string()) +
+                                                 ") carries no $WXF job header in CONTEXT; it cannot be attributed and is refused.").c_str());
+            return 400;
+        }
+        const std::string product_id = job->VARIABLE_NAME()->str(), url = job->SOURCE_URL()->str();
+        const int lead = static_cast<int>(std::lround(job->LEAD_HOURS()));
+        const Product* p = product_named(product_id);
+        const long status = r.STATUS();
         // 304: the host presented the inventory's validators (the retrieval ledger keeps them across restarts) and the
         // publisher has nothing new - a lead already ingested, e.g. a run planned again after a node restart. Nothing to
         // fetch, and not a missing lead: counted, and said once below as the node's unchanged notice.
         if (p && status == 304) { unchanged++; continue; }
         if (!p || status != 200) {
-            missing += std::string(missing.empty() ? "" : ",") + "{\"inventory\":\"" + json_escape(url + ".idx") + "\",\"http_status\":" + std::to_string(status) + "}";
+            missing.push_back(url + ".idx: HTTP " + std::to_string(status) + (r.ERROR() && r.ERROR()->size() ? " (" + r.ERROR()->str() + ")" : std::string()));
             continue;
         }
+        const std::string body = r.BODY() ? std::string(reinterpret_cast<const char*>(r.BODY()->data()), r.BODY()->size()) : std::string();
         // "n:offset:d=YYYYMMDDHH:VAR:LEVEL:FCST:" per message; a message runs to the next line's offset
         struct Line { long long offset; std::string var, level, fcst; };
         std::vector<Line> lines;
@@ -708,42 +620,34 @@ int select_messages(void) {
         }
         std::vector<std::pair<long long, long long>> ranges;   // inclusive end; -1 = to the end of the file
         for (size_t i = 0; i < lines.size(); i++) {
-            if (!wanted(*p, lines[i].var, lines[i].level, lines[i].fcst, static_cast<int>(lead), static_cast<int>(heights_to))) continue;
+            if (!wanted(*p, lines[i].var, lines[i].level, lines[i].fcst, lead, heights_to)) continue;
             const long long a = lines[i].offset, b = i + 1 < lines.size() ? lines[i + 1].offset - 1 : -1;
             if (!ranges.empty() && ranges.back().second != -1 && ranges.back().second + 1 == a && (b == -1 || b - ranges.back().first + 1 <= kMaxRangeBytes)) ranges.back().second = b;
             else ranges.push_back({a, b});
         }
         if (ranges.empty()) {
-            missing += std::string(missing.empty() ? "" : ",") + "{\"product\":\"" + product_id + "\",\"lead\":" + format_number(lead) + ",\"messages\":0}";
+            missing.push_back(product_id + " f" + pad(lead, 3) + ": no wanted message in " + url + ".idx");
             continue;
         }
+        const Bytes header(r.CONTEXT()->data(), r.CONTEXT()->data() + r.CONTEXT()->size());
         Pending pending;
-        auto flush = [&]() { if (!pending.requests.empty()) { g_select_backlog.push_back(pending); pending = Pending(); } };
+        auto flush = [&]() { if (!pending.requests.empty()) { g_select_backlog.push_back(std::move(pending)); pending = Pending(); } };
         for (const auto& range : ranges) {
             if (pending.requests.size() == kMaxRangesPerBatch) flush();
-            pending.requests.push_back(get_request(url, ",\"Range\":\"bytes=" + std::to_string(range.first) + "-" + (range.second >= 0 ? std::to_string(range.second) : std::string()) + "\"", timeout));
-            const std::string host = url.substr(8, url.find('/', 8) - 8);
-            pending.jobs.push_back(std::string("{\"url\":\"") + json_escape(url) + "\",\"product\":\"" + p->id + "\",\"model_key\":\"" + p->model_key +
-                                   "\",\"model_id\":\"" + json_escape(p->model_id) + "\",\"model_class\":\"" + p->model_class + "\",\"run\":\"" + json_escape(run) +
-                                   "\",\"lead\":" + format_number(lead) + ",\"stride\":" + std::to_string(p->stride) + ",\"band_rows\":" + std::to_string(p->band_rows) + ",\"tile_deg\":" + format_number(p->tile_deg) +
-                                   (p->spread ? ",\"spread\":true" : "") + (p->ensemble_size ? ",\"ensemble_size\":" + std::to_string(p->ensemble_size) : std::string()) +
-                                   ",\"source_url\":\"" + json_escape(url) + "\",\"provider_id\":\"" + kProviderID + "\",\"source_name\":\"" + p->id +
-                                   "\",\"origin_id\":\"" + kOriginID + "\",\"dataset_id\":\"" + json_escape(host.substr(0, host.find('.'))) +
-                                   "\",\"license\":\"" + kLicenseID + "\",\"license_class\":\"OpenAttribution\",\"license_url\":\"" + kLicenseURL +
-                                   "\",\"citation\":\"NOAA/NCEP " + (p->spread ? "Global Ensemble Forecast System ensemble standard deviation" : "Global Forecast System") +
-                                   " via NOAA Open Data Dissemination (AWS)\"}");
+            const std::string bytes = "bytes=" + std::to_string(range.first) + "-" + (range.second >= 0 ? std::to_string(range.second) : std::string());
+            pending.requests.push_back(http_request("GET", url, {{kNoValidatorsName, kNoValidatorsValue}, {"range", bytes}}, nullptr, timeout, &header));
         }
         flush();
     }
-    if (!missing.empty() && push_json("status", "{\"missing\":[" + missing + "]}") < 0) return 500;
-    // (the node reads it only when the run landed nothing: then a success without a batch, not a failure - flowrt
-    // egressReportsUnchanged)
-    if (unchanged > 0 && push_json("status", "{\"inventories_unchanged\":" + std::to_string(unchanged) + ",\"status\":304,\"unchanged\":true}") < 0) return 500;
-    return emit_from(g_select_backlog, g_select_next, 1, "requests", "jobs");
+    if (!missing.empty() && push_notice(R::flowNoticeKind_Missing, "missing-leads", missing.size(), missing, kProviderID) < 0) return 500;
+    // (the node reads it only when the run landed nothing: then a success without a batch, not a failure)
+    if (unchanged > 0 && push_notice(R::flowNoticeKind_Unchanged, "inventory-304", unchanged, {}, kProviderID) < 0) return 500;
+    return emit_from(g_select_backlog, g_select_next, 1, "requests");
 }
 
-// publish_request: the storage-ingest result + the parser's ingest meta -> the dataset-publication POST
-// (nwp_publish_url); nothing when it is unset.
+// publish_request: the storage-ingest IngestResult + the parser's IngestRequest -> the dataset-publication POST
+// (nwp_publish_url), its BODY the IngestResult naming the stored batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID);
+// nothing when nwp_publish_url is unset, or when the batch was REFUSED (nothing was stored).
 int publish_request(void) {
     char batch_message[384];
     if (find_batched_input_port(batch_message, sizeof(batch_message))) {
@@ -754,22 +658,30 @@ int publish_request(void) {
     const plugin_input_frame_t* meta_frame = frame_for("meta");
     if (!result_frame || !result_frame->payload || result_frame->payload_length == 0) { plugin_set_error("missing-result-frame", "publish_request requires the storage-ingest result frame."); return 400; }
     if (!meta_frame || !meta_frame->payload || meta_frame->payload_length == 0) { plugin_set_error("missing-meta-frame", "publish_request requires the parser ingest meta frame."); return 400; }
-    const std::string config = load_config();
-    std::string url;
-    if (!json_string_field(config, "nwp_publish_url", &url) || url.empty()) return 0;
-    const std::string result = frame_string(result_frame), meta = frame_string(meta_frame);
-    std::string schema, batch_id, provider, source;
-    if (!json_string_field(result, "schema", &schema) || schema.empty()) json_string_field(meta, "schema", &schema);
-    if (!json_string_field(result, "batch_id", &batch_id) || batch_id.empty()) json_string_field(meta, "batch_id", &batch_id);
-    json_string_field(meta, "provider_id", &provider);
-    json_string_field(meta, "source_name", &source);
+    flatbuffers::Verifier result_verifier(result_frame->payload, result_frame->payload_length);
+    if (!R::VerifyIngestResultBuffer(result_verifier)) { plugin_set_error("invalid-result-frame", "the result frame is not an IngestResult (INGR)."); return 400; }
+    flatbuffers::Verifier meta_verifier(meta_frame->payload, meta_frame->payload_length);
+    if (!R::VerifyIngestRequestBuffer(meta_verifier)) { plugin_set_error("invalid-meta-frame", "the meta frame is not an IngestRequest (INGQ)."); return 400; }
+    const Config config = load_config();
+    const std::string url = config.string("nwp_publish_url", "");
+    if (url.empty()) return 0;
+    const R::IngestResult& result = *R::GetIngestResult(result_frame->payload);
+    const R::IngestRequest& meta = *R::GetIngestRequest(meta_frame->payload);
+    if (result.REFUSED() && result.REFUSED()->size()) return 0;   // nothing stored, nothing to publish
+    const auto text = [](const flatbuffers::String* s) { return s ? s->str() : std::string(); };
+    std::string schema = text(result.SCHEMA()), batch_id = text(result.BATCH_ID());
+    if (schema.empty()) schema = text(meta.SCHEMA());
+    if (batch_id.empty()) batch_id = text(meta.TAGS()->BATCH_ID());
+    const std::string provider = text(meta.TAGS()->PROVIDER_ID()), source = text(meta.TAGS()->SOURCE_NAME());
     if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) { plugin_set_error("incomplete-publication-identity", "publish_request needs schema, batchId, providerId and sourceName."); return 400; }
-    const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\",\"providerId\":\"" + json_escape(provider) +
-                             "\",\"sourceName\":\"" + json_escape(source) + "\",\"batchId\":\"" + json_escape(batch_id) + "\"}";
-    const std::string request = std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(url) + "\",\"headers\":{\"content-type\":\"application/json\"},\"bodyB64\":\"" +
-                                base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\",\"timeoutMs\":" +
-                                std::to_string(static_cast<long>(config_number(config, "nwp_idx_timeout_ms", kDefaultIdxTimeoutMs))) + "}";
-    return push_json("request", request) < 0 ? 500 : 0;
+    flatbuffers::FlatBufferBuilder b(512);
+    R::FinishIngestResultBuffer(b, R::CreateIngestResultDirect(b, schema.c_str(), provider.c_str(), source.c_str(), batch_id.c_str(), result.INSERTED(),
+                                                               result.RECONCILED_DUPLICATES(), result.RECONCILED_OLD_BATCHES(),
+                                                               result.ARCHIVED() && result.ARCHIVED()->size() ? result.ARCHIVED()->c_str() : nullptr, nullptr));
+    const Bytes body = finished(b);
+    const Bytes request = http_request("POST", url, {{"content-type", "application/octet-stream"}}, &body,
+                                       static_cast<uint32_t>(config.number("nwp_idx_timeout_ms", kDefaultIdxTimeoutMs)), nullptr);
+    return push_request("request", request) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

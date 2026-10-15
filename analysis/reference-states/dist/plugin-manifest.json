@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.reference-states",
   "name": "Reference states",
-  "version": "0.2.0",
-  "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance.",
+  "version": "0.3.0",
+  "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance; compare_to_reference scores an ephemeris and its covariance against them ($OEM residuals, $CVR realism). Typed contracts 1.0: FlatBuffers only. The SP3 satellite identities (product, source, satellites.<SP3 id>.{norad, objectId, name}, optional statedSigmaM with statedSigmaBasis) are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig). No credentials: capabilities none.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Deterministic transform of caller-supplied precise-orbit states and Earth orientation. No host calls, threads, propagation or network access."
+    "detail": "Deterministic transform of caller-supplied precise-orbit states and Earth orientation. One plugin.getConfig hostcall (the identities); no threads, propagation or network access."
   },
   "schemasUsed": [
     {
@@ -33,6 +33,11 @@
       "schemaName": "EOP.fbs",
       "fileIdentifier": "$EOP",
       "rootTypeName": "EOP"
+    },
+    {
+      "schemaName": "CVR.fbs",
+      "fileIdentifier": "$CVR",
+      "rootTypeName": "CVR"
     }
   ],
   "methods": [
@@ -99,28 +104,6 @@
           "maxStreams": 366,
           "required": true,
           "description": "$EOP rows bracketing the file's span (one row, several frames, or a size-prefixed stream), as foundation/frames reads them."
-        },
-        {
-          "portId": "identities",
-          "acceptedTypeSets": [
-            {
-              "setId": "identities-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Which catalogued object each SP3 satellite id is over the file's span, the product name and source, and an optional stated product accuracy."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON {\"product\": name, \"source\": url, \"statedSigmaM\": optional product accuracy (m) with \"statedSigmaBasis\", \"satellites\": {\"G01\": {\"norad\": 50, \"objectId\": \"1990-...\", \"name\": ...}}}: which catalogued object each SP3 satellite id is over this file's span."
         }
       ],
       "outputPorts": [
@@ -195,27 +178,44 @@
       ],
       "outputPorts": [
         {
-          "portId": "report",
+          "portId": "residuals",
           "acceptedTypeSets": [
             {
-              "setId": "compare-to-reference-report-v1",
+              "setId": "sds-oem",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per reference epoch inside the ephemeris span, the GCRF position error (reference minus ephemeris, km), and with covariance the Mahalanobis distance squared on the position block and the GCRF sigmas; meanD2Over3 and coverage95 over the epochs with covariance; the count outside the span.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Comparison statistics for covariance-realism studies. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Comparison report."
+          "description": "$OEM, one GCRF/UTC block: per reference epoch inside the ephemeris span, the position error (reference minus ephemeris, km) as the line's X/Y/Z, and with covariance the ephemeris's GCRF position covariance (km^2) as a covariance line at the same epoch; the Mahalanobis distance squared and the GCRF sigmas follow from the two. COMMENT states the frames, degree and counts."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cvr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CVR.fbs",
+                  "fileIdentifier": "$CVR",
+                  "rootTypeName": "CVR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$CVR covariance-realism summary: MEAN_D2_OVER_3 and COVERAGE_95 (d2 <= 7.8147, chi-square 3 dof at 0.95) over SAMPLES epochs with covariance (NaN and 0 without), TEST_WINDOW the compared span, MEASURED_LINEAGE the frames, EVIDENCE the degree and compared / outside-span counts."
         }
       ],
       "maxBatch": 1,

@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { ByteBuffer } from 'flatbuffers';
 import { CAT } from 'spacedatastandards.org/lib/js/CAT/CAT.js';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import { STANDALONE_RUNTIME_KINDS, assertSuccessfulResponse, createStandaloneHarnessOrSkip } from '../../../tests/lib/isomorphicHarness.mjs';
+import { encodeHttpResponse } from 'space-data-module-sdk/runtime-contracts';
+import { STANDALONE_RUNTIME_KINDS } from 'space-data-module-sdk/testing/isomorphic';
+import { createFitPoolOrSkip, createFitRequest, fitRecordFromResponse } from './fit_harness.mjs';
 
 const WASM_PATH = new URL('../dist/isomorphic/module.wasm', import.meta.url);
 const FIXTURE = fs.readFileSync(fileURLToPath(new URL('./fixtures/request.fit.meme', import.meta.url)));
@@ -23,13 +25,7 @@ const CASES = [[99999, '99999'], [100000, 'A0000'], [123456, 'C3456'], [270086, 
 const checkDigit = (line) => [...line.slice(0, 68)].reduce((sum, c) => sum + (/[0-9]/.test(c) ? Number(c) : c === '-' ? 1 : 0), 0) % 10;
 
 async function fit(harness, noradCatId) {
-  return harness.invoke({
-    methodId: 'fit',
-    inputs: [
-      { portId: 'meme', payload: FIXTURE },
-      { portId: 'options', payload: new TextEncoder().encode(JSON.stringify({ dataSource: 'SpaceX-E', noradCatId, objectId: '2026-034A', emitTle: true })) },
-    ],
-  });
+  return harness.invoke(createFitRequest(FIXTURE, { dataSource: 'SpaceX-E', noradCatId, objectId: '2026-034A', emitTle: true }));
 }
 
 async function catalogSource(t) {
@@ -44,7 +40,9 @@ async function catalogSource(t) {
 
 async function readBack(host, line1, line2) {
   const payload = new TextEncoder().encode(`${line1}\n${line2}\n`);
-  const result = await host.invoke({ methodId: 'parse_mccants_tle_catalog', inputs: [{ portId: 'source', payload, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: payload.length } }] });
+  // catalog-source reads an edition as the HttpResponse (HRSP) hostcap/http-request answers with.
+  const response = encodeHttpResponse({ url: 'https://example.invalid/od-fit.tle', status: 200, body: payload, retrievedMs: Date.UTC(2026, 9, 14) });
+  const result = await host.invoke({ methodId: 'parse_mccants_tle_catalog', inputs: [{ portId: 'response', payload: response, typeRef: { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' } }] });
   assert.equal(result.statusCode, 0, result.errorMessage);
   const bytes = result.outputs.find((frame) => frame.portId === 'catalog').payload;
   const length = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true) + 4;
@@ -53,14 +51,15 @@ async function readBack(host, line1, line2) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`the OD fit writes Alpha-5 two-line sets that catalog-source reads back, on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) return;
     t.after(() => harness.destroy());
     const reader = await catalogSource(t);
 
     for (const [norad, field] of CASES) {
-      const fitted = JSON.parse(new TextDecoder().decode(assertSuccessfulResponse(await fit(harness, norad), { outputPortId: 'result' })));
+      const fitted = fitRecordFromResponse(await fit(harness, norad));
       const { TLE_LINE1: line1, TLE_LINE2: line2 } = fitted;
+      assert.equal(fitted.TLE_NAME, `${norad}.tle`);
       assert.equal(line1.length, 69, `line 1 of ${norad}`);
       assert.equal(line2.length, 69, `line 2 of ${norad}`);
       assert.equal(line1.slice(0, 2), '1 ');
@@ -71,7 +70,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       assert.equal(Number(line2[68]), checkDigit(line2), `line 2 check digit of ${norad}`);
       assert.equal(line1.slice(9, 17), '26034A  ', 'international designator of 2026-034A');
 
-      // the lines carry the fitted elements at the precision a two-line set prints them
+      // the lines ($FIL on "tle") carry the fitted $OMM elements at the precision a two-line set prints them
       const columns = (a, b) => Number(line2.slice(a, b));
       assert.ok(Math.abs(columns(8, 16) - fitted.INCLINATION) < 5.1e-5);
       assert.ok(Math.abs(columns(17, 25) - fitted.RA_OF_ASC_NODE) < 5.1e-5);
@@ -87,7 +86,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`the OD fit refuses a catalog number no two-line set can hold, on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
+    const harness = await createFitPoolOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) return;
     t.after(() => harness.destroy());
     const result = await fit(harness, 340000);

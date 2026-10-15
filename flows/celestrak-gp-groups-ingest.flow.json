@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-gp-groups-ingest",
   "name": "CelesTrak GP Groups Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow for the CelesTrak GP group queries (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries): a module cron TIMER tick enters at celestrak-reference:gp_groups, which emits one hostcap/http-request frame per group and ONE job frame carrying the ordered group list; the http node answers one response per request in order; celestrak-reference:parse_gp_groups pairs them by ordinal and emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group, with batch = sha256 of the concatenated payloads and reconcile 'current' for a complete snapshot ('duplicates' when some groups answered 304); hostcap/storage-ingest persists through the policy-mediated storage.ingest_with_source cap op. Groups that answered Not Modified land on the egress sink as an 'unchanged' notice. The optional OMM re-emission lane (node CONFIG celestrak_gp_groups_emit_omm) stores the group rows as OMM when enabled. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow for the CelesTrak GP group queries (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries, overridable via node CONFIG celestrak_gp_groups). Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-reference:gp_groups emits one HttpRequest per group, each carrying its own $ICN (CONNECTOR_ID celestrak-gp-groups/<TOKEN>, the group URL); hostcap/http-request answers one HttpResponse per request; celestrak-reference:parse_gp_groups reads each response's group from its CONTEXT, re-resolves the group plan from the same node CONFIG and refuses the snapshot unless exactly one response per planned group arrived (any order; output and batch in plan order), then emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group with its IngestRequest (batch = sha256 of the concatenated payloads, reconcile Current for a complete snapshot, Duplicates when some groups answered 304; the concatenation archived as celestrak/gp-groups.csv through a raw HttpResponse); hostcap/storage-ingest persists through the policy-mediated storage.ingest_with_source hostcall. The optional OMM re-emission lane (node CONFIG celestrak_gp_groups_emit_omm) stores the group rows as $OMM when enabled. Egress: result (IngestResults), notice (FlowNotice Unchanged naming the groups that answered 304). All decisions live in-wasm.",
   "nodes": [
     {
       "nodeId": "req",
@@ -56,18 +56,7 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 64,
-      "opaque": true
-    },
-    {
-      "edgeId": "req-parse-job",
-      "fromNodeId": "req",
-      "fromPortId": "job",
-      "toNodeId": "parse",
-      "toPortId": "job",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 64
     },
     {
       "edgeId": "http-parse",
@@ -76,8 +65,7 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 64,
-      "opaque": true
+      "queueDepth": 64
     },
     {
       "edgeId": "parse-egp-meta",
@@ -86,19 +74,16 @@
       "toNodeId": "ingest_egp",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-egp-records",
       "fromNodeId": "parse",
       "fromPortId": "egp_records",
       "toNodeId": "ingest_egp",
-      "toPortId": "records",
+      "toPortId": "egp_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $EGP identity, so the record type is declared on the wire rather than signed away."
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-egp-raw",
@@ -107,8 +92,7 @@
       "toNodeId": "ingest_egp",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-meta",
@@ -117,29 +101,25 @@
       "toNodeId": "ingest_omm",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-omm-records",
       "fromNodeId": "parse",
       "fromPortId": "omm_records",
       "toNodeId": "ingest_omm",
-      "toPortId": "records",
+      "toPortId": "omm_records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": false,
-      "_comment": "NOT opaque: both ports resolve the concrete $OMM identity, so the record type is declared on the wire rather than signed away."
+      "queueDepth": 4
     },
     {
       "edgeId": "parse-unchanged-egress",
       "fromNodeId": "parse",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
-      "toPortId": "result",
+      "toPortId": "notice",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-egp-egress",
@@ -148,8 +128,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "ingest-omm-egress",
@@ -158,8 +137,7 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     }
   ],
   "triggers": [

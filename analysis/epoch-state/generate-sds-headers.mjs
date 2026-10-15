@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * Generate the C++ FlatBuffer headers this module consumes from the PUBLISHED
- * `spacedatastandards.org` package pinned in package.json (published-deps law).
- * The package ships schema/<FAMILY>/main.fbs and no generated C++, so the
- * headers are generated here with the pinned flatc-wasm.
+ * Generate the C++ FlatBuffer headers this module consumes from the SDS tree named by SPACE_DATA_STANDARDS_ROOT
+ * (else node_modules/spacedatastandards.org): schema/<FAMILY>/main.fbs, compiled here with flatc-wasm, so every
+ * family comes from one SDS release (the $PRW window arms are newer than any published C++ binding).
  *
- * SCHEMA_FAMILIES is in dependency order: $MPE needs MET; $OEM needs RFM, TIM,
- * CAT (PLD -> IDM, LCC) and PPE; $OMM needs RFM, TIM and MET. build.mjs concatenates the headers in this
- * order into one translation unit.
+ * SCHEMA_FAMILIES is in dependency order: $MPE needs MET; $OEM needs RFM, TIM, CAT (PLD -> IDM, LCC) and PPE; $OMM
+ * needs RFM, TIM, MET, CVR and PVN; $PRW needs FRM, TIM, PCE, PPE, NCD, EOP and SPW. build.mjs concatenates the
+ * headers in this order into one translation unit.
  */
 
 import fs from "node:fs";
@@ -16,10 +15,15 @@ import { fileURLToPath } from "node:url";
 import createFlatc from "flatc-wasm/module";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
-const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
+  : path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
-export const SCHEMA_FAMILIES = ["MET", "MPE", "RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "OMM"];
+export const SCHEMA_FAMILIES = [
+  "MET", "MPE", "RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "CVR", "PVN", "OMM",
+  "FRM", "PCE", "NCD", "EOP", "SPW", "PRW",
+];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
@@ -44,7 +48,7 @@ function rewriteGeneratedHeader(generated, family, includeFamilies) {
 
 export async function generateSdsHeaders() {
   if (!fs.existsSync(standardsRoot)) {
-    throw new Error(`spacedatastandards.org not installed at ${standardsRoot}; run npm ci in this package`);
+    throw new Error(`spacedatastandards.org not installed at ${standardsRoot}; set SPACE_DATA_STANDARDS_ROOT`);
   }
   const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, "package.json"), "utf8")).version;
 
@@ -84,6 +88,9 @@ export async function generateSdsHeaders() {
       "-I", "/schemas", "-o", "/out_cpp", `/schemas/${family}/main.fbs`,
     ]);
     if (rc !== 0) throw new Error(`flatc failed for ${family}`);
+    if (family === "PRW" && !flatc.FS.readFile("/out_cpp/main_generated.h", { encoding: "utf8" }).includes("PRWWindowQuery")) {
+      throw new Error(`${standardsRoot} predates the $PRW WINDOW_REQUEST / WINDOW_REPORT arms: set SPACE_DATA_STANDARDS_ROOT`);
+    }
     const generated = flatc.FS.readFile("/out_cpp/main_generated.h", { encoding: "utf8" });
     const header = rewriteGeneratedHeader(generated, family, schemaIncludeFamilies(schemaPath));
     fs.writeFileSync(path.join(outDir, `${family}_generated.h`), header);

@@ -1,8 +1,9 @@
 // Flow-level test for the compiled osm-serving flow in BRIDGE mode: the same
 // artifact the Go host mounts at /api/v1/osm/ is instantiated in the JS flow
 // runtime host, a $HTQ enters route, the route -> egress chain runs inside
-// the artifact, and the ONLY host crossing is plugin.getConfig, stubbed with
-// the Go-host response dialect (same stub shape as flows/terrain-serving).
+// the artifact, and the ONLY host crossing is plugin.getConfig - an SDS $PIV
+// invocation, answered as the Go node answers it (one ModuleConfig on raw
+// "config", nulls left out; same stub shape as flows/terrain-serving).
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,8 +12,8 @@ import { fileURLToPath } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 import { decodeHttpResponse, encodeHttpRequest } from "space-data-module-sdk/http";
+import { decodeHostCall, encodeHostCallResult, encodeModuleConfig } from "space-data-module-sdk/runtime-contracts";
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const RUNTIME_WASM = new URL("../dist/runtime.wasm", import.meta.url);
 
@@ -23,21 +24,16 @@ const RECORD = {
   REGION: "hessen",
   CRS: "EPSG:4326",
   PAYLOAD: { CID: "", SIZE_BYTES: 10, MEDIA_TYPE: "application/vnd.ipld.dag-pb" },
-  FILES: [{ NAME: "building.fgb", CATEGORY: "building", KIND: "polygon", BYTES: 10, SHA256: "a".repeat(64), FEATURE_COUNT: 1 }],
+  FILES: [{ NAME: "building.fgb", CATEGORY: "building", KIND: "polygon", MEDIA_TYPE: "application/x-flatgeobuf", BYTES: 10, SHA256: "a".repeat(64), FEATURE_COUNT: 1, LAYER: "multipolygons", WHERE: null }],
   DATASET_EPOCH: "2026-09-02T20:20:51Z",
-  PROVENANCE: { SOURCE: "OpenStreetMap", LICENSE: "ODbL-1.0", ATTRIBUTION: "© OpenStreetMap contributors" },
+  PROVENANCE: { SOURCE: "OpenStreetMap", SOURCE_URL: "https://download.geofabrik.de/europe/germany/hessen-latest.osm.pbf", RETRIEVED_AT: "2026-09-03T18:56:15Z", PROCESSOR: "osmium-tool", LICENSE: "ODbL-1.0", SHARE_ALIKE: true, ATTRIBUTION: "© OpenStreetMap contributors", OCEAN: null },
 };
 const CONFIG = { osm_epoch_cid: CID, osm_epoch_record: RECORD };
 
-function encodeHostcallEnvelope(meta) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const envelope = new Uint8Array(4 + metaBytes.length + 4);
-  const view = new DataView(envelope.buffer);
-  view.setUint32(0, metaBytes.length, true);
-  envelope.set(metaBytes, 4);
-  view.setUint32(4 + metaBytes.length, 0, true);
-  return envelope;
-}
+const withoutNulls = (v) =>
+  Array.isArray(v) ? v.map(withoutNulls)
+    : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null).map(([k, x]) => [k, withoutNulls(x)]))
+      : v;
 
 function createStub(config) {
   const calls = [];
@@ -48,13 +44,15 @@ function createStub(config) {
       call(opPtr, opLen, payloadPtr, payloadLen) {
         const heap = new Uint8Array(memoryRef.memory.buffer);
         const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
+        const call = decodeHostCall(Uint8Array.from(heap.subarray(payloadPtr, payloadPtr + payloadLen)));
+        assert.equal(call.op, operation);
         calls.push({ operation, payloadLen });
         if (operation === "plugin.getConfig") {
-          response = encodeHostcallEnvelope(config);
+          response = encodeHostCallResult({ ok: true, op: operation, raw: { config: encodeModuleConfig(withoutNulls(config)) } });
           return 0;
         }
-        response = encodeHostcallEnvelope({ ok: false, error: { message: `unexpected op ${operation}` } });
-        return 1;
+        response = encodeHostCallResult({ ok: false, error: { code: "unsupported", message: `unexpected op ${operation}` } });
+        return 0;
       },
       response_len() {
         return response.length;
@@ -107,6 +105,9 @@ test("the compiled flow answers the epoch record through the bridge, and the onl
   assert.equal(body.PAYLOAD.CID, CID);
   assert.equal(body.EPOCH_BASE_PATH, `/ipfs/${CID}/`);
   assert.deepEqual(body.FILES, RECORD.FILES);
+  assert.deepEqual(body.PROVENANCE, RECORD.PROVENANCE);
+  const { FORMAT, TILESET_ID, REGION, CRS, PAYLOAD, FILES, DATASET_EPOCH, PROVENANCE } = RECORD;
+  assert.equal(record.body, JSON.stringify({ FORMAT, TILESET_ID, REGION, CRS, PAYLOAD: { ...PAYLOAD, CID }, EPOCH_BASE_PATH: `/ipfs/${CID}/`, FILES, DATASET_EPOCH, PROVENANCE }), "the builder's record, byte for byte");
   assert.deepEqual(new Set(stub.calls.map((c) => c.operation)), new Set(["plugin.getConfig"]));
 
   const again = await pumpRequest(createStub(CONFIG), { method: "GET", path: "/api/v1/osm/tileset.json", query: "", headers: { "if-none-match": record.headers.etag } });

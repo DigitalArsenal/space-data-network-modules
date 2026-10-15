@@ -1,25 +1,25 @@
 {
   "pluginId": "com.digitalarsenal.flows.source-products",
   "name": "Source Products Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its CVR (COV_REALISM) and the source in PROVENANCE, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV PROVENANCE. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
+  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and models) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its CVR (COV_REALISM) and the source in PROVENANCE, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV PROVENANCE. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs. The source's recipe is the flow's node configuration (plugin.getConfig, one ModuleConfig for every node): derive.ages for epoch-state, attach.* for attach_covariance, attribute.* for attribute_maneuvers, maneuver-detection's options at the root; one run is one source. The reports are typed: FlowNotice (derive, mpe), $PRW WINDOW_REPORT (propagation), $MDE (detect, compare), $ERM ATTACH_REPORT (covariance, attribute).",
   "capabilities": [],
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "minVersion": "0.6.0",
-      "maxVersion": "0.6.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
-      "minVersion": "0.5.0",
-      "maxVersion": "0.5.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     }
   ],
   "externalInterfaces": [],
@@ -38,14 +38,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
@@ -67,13 +61,6 @@
                   "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
@@ -110,24 +97,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -175,47 +160,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -242,91 +222,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -341,22 +312,16 @@
           "portId": "mpe",
           "acceptedTypeSets": [
             {
-              "setId": "sds-mpe-aligned-stream",
+              "setId": "sds-mpe-stream",
               "allowedTypes": [
                 {
                   "schemaName": "MPE.fbs",
                   "fileIdentifier": "$MPE",
-                  "rootTypeName": "MPE"
-                },
-                {
-                  "schemaName": "MPE.fbs",
-                  "fileIdentifier": "$MPE",
                   "rootTypeName": "MPE",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+              "description": "Size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
             }
           ],
           "minStreams": 1,
@@ -370,24 +335,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -435,47 +398,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -502,146 +460,111 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
     {
-      "methodId": "element_set_recipe",
-      "displayName": "Flow trigger element_set_recipe",
-      "description": "Compiled-flow ingress for trigger \"element_set_recipe\" (manual).",
+      "methodId": "models",
+      "displayName": "Flow trigger models",
+      "description": "Compiled-flow ingress for trigger \"models\" (manual).",
       "inputPorts": [
         {
-          "portId": "options",
+          "portId": "models",
           "acceptedTypeSets": [
             {
-              "setId": "options-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
-              }
+              ]
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 16,
           "required": false,
-          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
-        },
-        {
-          "portId": "recipe",
-          "acceptedTypeSets": [
-            {
-              "setId": "recipe-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+          "description": "The models the recipe can use: $ERM MODEL records (form ElementSetModel with its realism CELLS, SOURCES and POOLED; data/e14-s3-kc.erm is E14's frozen S3-KC), size-prefixed, any number per frame. The recipe itself is node config: plugin.getConfig keys under \"attach.\" (version, source {id, kind, lineage, originator, provider, fitClass, licence {class, id}}, producer, created, latestOnly, maxOperatorRows, realism [...]), else the same keys at the root."
         }
       ],
       "outputPorts": [
@@ -649,24 +572,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -714,47 +635,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -781,91 +697,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -885,14 +792,8 @@
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
@@ -914,13 +815,6 @@
                   "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
@@ -957,24 +851,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -1022,47 +914,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -1089,91 +976,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -1195,13 +1073,6 @@
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
@@ -1218,24 +1089,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -1283,47 +1152,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -1350,91 +1214,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -1471,24 +1326,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -1536,47 +1389,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -1603,91 +1451,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -1724,24 +1563,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -1789,47 +1626,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -1856,91 +1688,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -1962,13 +1785,6 @@
                   "fileIdentifier": "$OCM",
                   "rootTypeName": "OCM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
               "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
@@ -1985,24 +1801,22 @@
           "portId": "mpe_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OMM, SOURCE_NAME \"epoch-state omm_from_mpe\", COUNT the records converted, REASON converted or refused-element-sets; ITEMS records=, converted=, failed=, then one \"failure index=<i> entity_id=<id> reason=<r>\" per refused record."
         },
         {
           "portId": "ocm",
@@ -2050,47 +1864,42 @@
           "portId": "covariance_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+          "description": "One $ERM ATTACH_REPORT record: the source (PVN), per object the rule that applied, why the earlier rules did not, every row's CVR label and verdict, the SHA-256 of each record; refused and unmatched records."
         },
         {
           "portId": "derive_report",
           "acceptedTypeSets": [
             {
-              "setId": "epoch-state-report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Derivation report."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OEM, SOURCE_NAME \"epoch-state derive\", COUNT the element sets derived, REASON derived or refused-element-sets; ITEMS records=, derived=, failed=, rows=, ages_days=, epochs_outside_leap_second_table=, max_round_trip_position_km=, max_round_trip_velocity_km_s= (%.17g), then one \"failure index=<i> entity_id=<id> reason=<r> sgp4_error=<n>\" per refused element set."
         },
         {
           "portId": "mnv",
@@ -2117,370 +1926,82 @@
           "portId": "attribute_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-erm",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
+          "description": "One $ERM ATTACH_REPORT record: the source and producer (SOURCE) and the maneuvers attributed (COUNTS.MANEUVERS)."
         },
         {
           "portId": "detect_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v2",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Per-object evidence of every detector as JSON."
+          "description": "One $MDE with the DETECT_REPORT arm: run status (NeedsPropagation with the query count, or Detected), duplicate epochs and refused sets, the options used, and per object its crossing pairs, levels (report_levels), every event each detector raised with its evidence, and the emitted events (MNV_ID names each $MNV)."
         },
         {
           "portId": "propagation_report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sds-prw-window-report",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
           "acceptedTypeSets": [
             {
-              "setId": "compare-report-v1",
+              "setId": "sds-mde",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The comparison as JSON."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot"
-    },
-    {
-      "methodId": "fit_recipe",
-      "displayName": "Flow trigger fit_recipe",
-      "description": "Compiled-flow ingress for trigger \"fit_recipe\" (manual).",
-      "inputPorts": [
-        {
-          "portId": "options",
-          "acceptedTypeSets": [
-            {
-              "setId": "options-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
-              }
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
-        },
-        {
-          "portId": "recipe",
-          "acceptedTypeSets": [
-            {
-              "setId": "recipe-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "mpe_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "epoch-state-report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Derivation report."
-        },
-        {
-          "portId": "ocm",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-ocm",
-              "allowedTypes": [
-                {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM",
+                  "schemaName": "MDE.fbs",
+                  "fileIdentifier": "$MDE",
+                  "rootTypeName": "MDE",
                   "wireFormat": "flatbuffer"
                 }
-              ],
-              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with a CVR per covariance epoch in COV_REALISM, COV_CALIBRATION (Calibrated only when every CVR is) and its evidence, and the source in PROVENANCE."
-        },
-        {
-          "portId": "omm",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-omm",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "flatbuffer"
-                }
-              ],
-              "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The element sets as published, ORIGINATOR the producer (the message's creator), PROVENANCE naming the source, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and that row's CVR in COV_REALISM."
-        },
-        {
-          "portId": "covariance_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
-        },
-        {
-          "portId": "derive_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "epoch-state-report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Derivation report."
-        },
-        {
-          "portId": "mnv",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-maneuvers",
-              "allowedTypes": [
-                {
-                  "schemaName": "MNV.fbs",
-                  "fileIdentifier": "$MNV",
-                  "rootTypeName": "MNV",
-                  "wireFormat": "flatbuffer"
-                }
-              ],
-              "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "The same maneuvers with PROVENANCE naming the source (SOURCE_ID, SOURCE_KIND, ORIGINATOR, PROVIDER_ID, LICENSE_CLASS, LICENSE_ID, LINEAGE) and the software that made the maneuver (PRODUCER)."
-        },
-        {
-          "portId": "attribute_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: the maneuvers attributed, the source and the producer.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON: the maneuvers attributed, the source and the producer."
-        },
-        {
-          "portId": "detect_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v2",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Per-object evidence of every detector as JSON."
-        },
-        {
-          "portId": "propagation_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
-        },
-        {
-          "portId": "compare_report",
-          "acceptedTypeSets": [
-            {
-              "setId": "compare-report-v1",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The comparison as JSON."
+          "description": "One $MDE with the COMPARE_REPORT arm: per object the version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver check (pre and post versions, modelled and executed change, status), with the counts."
         }
       ],
       "maxBatch": 1,
@@ -2504,6 +2025,11 @@
       "rootTypeName": "OEM"
     },
     {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    },
+    {
       "schemaName": "OCM.fbs",
       "fileIdentifier": "$OCM",
       "rootTypeName": "OCM"
@@ -2512,6 +2038,16 @@
       "schemaName": "MNV.fbs",
       "fileIdentifier": "$MNV",
       "rootTypeName": "MNV"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
+    },
+    {
+      "schemaName": "MDE.fbs",
+      "fileIdentifier": "$MDE",
+      "rootTypeName": "MDE"
     }
   ],
   "runtimeTargets": [
@@ -2748,11 +2284,22 @@
       "toNodeId": "egress",
       "toPortId": "mpe_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2775,22 +2322,11 @@
           "byteLength": 0,
           "requiredAlignment": 0
         },
-        "alignedType": {
-          "schemaName": "OEM.fbs",
-          "fileIdentifier": "$OEM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "OEM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 8
-        },
+        "alignedType": null,
         "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
+        "alignedEligible": false,
         "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
+        "routePolicy": "canonical-only"
       }
     },
     {
@@ -2800,11 +2336,22 @@
       "toNodeId": "s_respond",
       "toPortId": "requests",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "PRW.fbs",
+          "fileIdentifier": "$PRW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PRW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2945,11 +2492,22 @@
       "toNodeId": "egress",
       "toPortId": "covariance_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2960,11 +2518,22 @@
       "toNodeId": "egress",
       "toPortId": "derive_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3001,11 +2570,22 @@
       "toNodeId": "egress",
       "toPortId": "attribute_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3016,11 +2596,22 @@
       "toNodeId": "egress",
       "toPortId": "detect_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "MDE.fbs",
+          "fileIdentifier": "$MDE",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MDE",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3031,11 +2622,22 @@
       "toNodeId": "egress",
       "toPortId": "propagation_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "PRW.fbs",
+          "fileIdentifier": "$PRW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PRW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3058,22 +2660,11 @@
           "byteLength": 0,
           "requiredAlignment": 0
         },
-        "alignedType": {
-          "schemaName": "OEM.fbs",
-          "fileIdentifier": "$OEM",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "aligned-binary",
-          "rootTypeName": "OEM",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 8
-        },
+        "alignedType": null,
         "canonicalFallbackAvailable": true,
-        "alignedEligible": true,
+        "alignedEligible": false,
         "opaque": false,
-        "routePolicy": "aligned-shared-arena-or-canonical"
+        "routePolicy": "canonical-only"
       }
     },
     {
@@ -3135,11 +2726,22 @@
       "toNodeId": "egress",
       "toPortId": "covariance_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3150,11 +2752,22 @@
       "toNodeId": "egress",
       "toPortId": "derive_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3217,11 +2830,22 @@
       "toNodeId": "egress",
       "toPortId": "attribute_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -3232,11 +2856,22 @@
       "toNodeId": "egress",
       "toPortId": "compare_report",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "MDE.fbs",
+          "fileIdentifier": "$MDE",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MDE",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     }
@@ -3257,7 +2892,7 @@
       "httpPath": null
     },
     {
-      "triggerId": "element_set_recipe",
+      "triggerId": "models",
       "kind": "manual",
       "source": "host",
       "defaultIntervalMs": 0,
@@ -3293,13 +2928,6 @@
     },
     {
       "triggerId": "fit",
-      "kind": "manual",
-      "source": "host",
-      "defaultIntervalMs": 0,
-      "httpPath": null
-    },
-    {
-      "triggerId": "fit_recipe",
       "kind": "manual",
       "source": "host",
       "defaultIntervalMs": 0,
@@ -3333,21 +2961,6 @@
       "targetPortId": "mpe"
     },
     {
-      "triggerId": "element_set_recipe",
-      "targetNodeId": "s_derive",
-      "targetPortId": "options"
-    },
-    {
-      "triggerId": "element_set_recipe",
-      "targetNodeId": "s_attach",
-      "targetPortId": "recipe"
-    },
-    {
-      "triggerId": "element_set_recipe",
-      "targetNodeId": "s_attribute",
-      "targetPortId": "recipe"
-    },
-    {
       "triggerId": "ephemeris",
       "targetNodeId": "f_attach",
       "targetPortId": "operator"
@@ -3368,26 +2981,6 @@
       "targetPortId": "fit"
     },
     {
-      "triggerId": "fit_recipe",
-      "targetNodeId": "f_derive",
-      "targetPortId": "options"
-    },
-    {
-      "triggerId": "fit_recipe",
-      "targetNodeId": "f_attach",
-      "targetPortId": "recipe"
-    },
-    {
-      "triggerId": "fit_recipe",
-      "targetNodeId": "f_attribute",
-      "targetPortId": "recipe"
-    },
-    {
-      "triggerId": "fit_recipe",
-      "targetNodeId": "s_attribute",
-      "targetPortId": "recipe"
-    },
-    {
       "triggerId": "fit_omm",
       "targetNodeId": "f_derive",
       "targetPortId": "omm"
@@ -3406,6 +2999,16 @@
       "triggerId": "fit_omm",
       "targetNodeId": "s_respond",
       "targetPortId": "element_sets"
+    },
+    {
+      "triggerId": "models",
+      "targetNodeId": "s_attach",
+      "targetPortId": "models"
+    },
+    {
+      "triggerId": "models",
+      "targetNodeId": "f_attach",
+      "targetPortId": "models"
     }
   ],
   "abiVersion": 1

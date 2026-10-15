@@ -36,7 +36,19 @@ import zlib from "node:zlib";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
 
-import { decodeQuantizedMesh } from "./helpers.mjs";
+import {
+  decodeQuantizedMesh,
+  typedInput,
+  input,
+  invokeTyped,
+  decodeTileReport,
+  granuleFrame,
+  configFrame,
+  TYPE,
+  storeAnswer,
+  decodeFsoQuery,
+  createTypedHarness,
+} from "./helpers.mjs";
 
 const MANIFEST = JSON.parse(fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"));
 const WASM = fs.readFileSync(fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)));
@@ -61,22 +73,18 @@ const CONFIG = {
 const CONFIG_NO_FLOOR = { ...CONFIG };
 delete CONFIG_NO_FLOOR.terrain_ocean_synth_min_level;
 
-const frame = (portId, payload) => {
-  const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.byteLength },
-    payload: bytes,
-  };
-};
-const jsonFrame = (portId, value) => frame(portId, JSON.stringify(value));
+const frame = (portId, payload) => typedInput(portId, payload);
+// Typed contracts 1.0: a plan object is the $DTT header stream (+ options), granules HttpResponse frames (helpers.mjs).
+const typedFrame = input;
 
 async function withHarness(t, config = CONFIG) {
-  const harness = await createBrowserModuleHarness({
+  const harness = await createTypedHarness({
+    createBrowserModuleHarness,
     wasmSource: WASM,
     manifest: MANIFEST,
     surface: "direct",
-    hostcallDispatch: (operation) => {
+    config: () => {
+      const operation = "plugin.getConfig";
       if (operation === "plugin.getConfig") return config;
       throw new Error(`unexpected hostcall operation: ${operation}`);
     },
@@ -89,7 +97,7 @@ async function withHarness(t, config = CONFIG) {
 // stream — the exact wiring the compiled flow produces on a store miss.
 async function serveMiss(t, path, { ifNoneMatch, config = CONFIG } = {}) {
   const harness = await withHarness(t, config);
-  const routed = await harness.invoke({
+  const routed = await invokeTyped(harness, {
     methodId: "route",
     inputs: [
       {
@@ -106,15 +114,20 @@ async function serveMiss(t, path, { ifNoneMatch, config = CONFIG } = {}) {
   assert.equal(routed.statusCode, 0, `${routed.errorCode}: ${routed.errorMessage}`);
   const context = routed.outputs.find((o) => o.portId === "context");
   if (!context) return { direct: decodeHttpResponse(new Uint8Array(routed.outputs[0].payload)) };
-  const responded = await harness.invoke({
+  const responded = await invokeTyped(harness, {
     methodId: "respond",
     // The flatsql stream for zero rows: nothing but alignment padding.
-    inputs: [frame("stream", new Uint8Array(4)), frame("context", context.payload)],
+    inputs: [...storeAnswer(new Uint8Array(4)), frame("context", context.payload)],
   });
   assert.equal(responded.statusCode, 0, `${responded.errorCode}: ${responded.errorMessage}`);
+  // route forwards the request itself (typed contracts 1.0); what the lane decided about the address - inside the
+  // published availability or not, and which uniform mask a synthesized tile carries - is read off the response.
+  assert.deepEqual(Uint8Array.from(context.payload), Uint8Array.from(routed.inputs?.[0]?.payload ?? context.payload));
+  const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+  const synthesized = http.headers.find((h) => h.name === "x-terrain-synthesized")?.value;
   return {
-    context: JSON.parse(decoder.decode(context.payload)),
-    http: decodeHttpResponse(new Uint8Array(responded.outputs[0].payload)),
+    context: { insideAvailability: Boolean(synthesized), synthWater: synthesized === "uniform-water" },
+    http,
   };
 }
 

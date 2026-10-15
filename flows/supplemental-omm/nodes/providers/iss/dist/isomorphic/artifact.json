@@ -1,8 +1,0 @@
-{
-  "sha256": "15cdec4f942442b16f9c41a50c1583b25a31d90a6be1685219903ddb1f482158",
-  "canonicalModuleHash": "3e96d7eff2e2412090ae97f0312a757952119e8934ee27a56e2c276c36fd00f5",
-  "signedHash": "74abadb5ff9bc60b836dea29cfbd2d050a21bd0d15359ede8426d6fad3b3797c",
-  "signatureScope": "bundle",
-  "keyId": "spaceaware-sdn-isomorphic-2026-08-06",
-  "threadModel": "single-thread"
-}

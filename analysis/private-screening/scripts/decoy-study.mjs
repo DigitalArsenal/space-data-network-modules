@@ -29,6 +29,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { historiesLfv, windowsOem, featuresLfv, readLfv, lfvHistories, lfvFeatures, lfvReport } from '../tests/sds.mjs';
 import { readSets, shiftDay } from '../../gp-error-model/scripts/archive.mjs';
 import { epochStates, propagateArcs, unixSeconds } from '../../gp-error-model/scripts/hpop.mjs';
 
@@ -59,13 +60,19 @@ const perTarget = Number(args['per-target']);
 const seed = Number(args.seed);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(path.join(root, 'dist/isomorphic/module.wasm')),
-  manifest: JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'), 'utf8')), surface: 'direct' });
-const json = (portId, value) => ({ portId, payload: Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
-async function call(methodId, inputs) {
-  const r = await harness.invoke({ methodId, inputs });
-  if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorCode}: ${r.errorMessage}`);
-  return JSON.parse(Buffer.from(r.outputs[0].payload).toString());
+const wasmSource = fs.readFileSync(path.join(root, 'dist/isomorphic/module.wasm'));
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'), 'utf8'));
+// Typed frames in and out; the settings are node config, so one harness per call.
+const frame = (portId, payload, code) => ({ portId, payload,
+  typeRef: { schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' } });
+async function call(methodId, inputs, config) {
+  const harness = await createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct', hostOptions: { config: { [methodId]: config } } });
+  try {
+    const r = await harness.invoke({ methodId, inputs });
+    if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorCode}: ${r.errorMessage}`);
+    return readLfv(r.outputs[0].payload);
+  } finally {
+      }
 }
 
 // ── 1. population ──
@@ -116,11 +123,12 @@ fs.writeFileSync(path.join(out, 'population.json'), JSON.stringify({ objects: re
 const decoys = {};
 const generation = {};
 for (const g of generators) {
-  const res = await call('decoys', [json('population', { objects: reals }),
-    json('options', { generator: g, window: span, seed, donors: args.donors, perTarget })]);
-  decoys[g] = res.objects;
-  generation[g] = res.report;
-  console.log(`decoys ${g}: ${res.report.decoys} (${res.report.refused} refused)`);
+  const res = await call('decoys', [frame('population', historiesLfv(reals), 'LFV')],
+    { generator: g, window: span, seed, donors: args.donors, perTarget });
+  decoys[g] = lfvHistories(res);
+  generation[g] = { generator: g, donors: args.donors, population: res.REFERENCE_COUNT, targets: res.SOURCE_COUNT,
+    decoys: res.ROWS.length, refused: res.SKIPPED_COUNT };
+  console.log(`decoys ${g}: ${res.ROWS.length} (${res.SKIPPED_COUNT} refused)`);
 }
 
 const report = { kind: 'decoy-indistinguishability', version: 1,
@@ -180,8 +188,9 @@ async function features(view, g, window) {
   let f = null;
   for (let at = 0; at < decoys[g].length; at += CHUNK) {
     const part = decoys[g].slice(at, at + CHUNK);
-    const chunk = await call('features', [json('histories', { objects: [...real, ...(hpop ? await withWindows(part) : part)] }),
-      json('options', { view: hpop ? 'hpop' : 'gp', window })]);
+    const histories = [...real, ...(hpop ? await withWindows(part) : part)];
+    const chunk = lfvFeatures(await call('features', [frame('histories', historiesLfv(histories), 'LFV'),
+      ...(hpop ? [frame('ephemerides', windowsOem(histories), 'OEM')] : [])], { view: hpop ? 'hpop' : 'gp', window }));
     if (!f) f = chunk;
     else f.rows.push(...chunk.rows.filter((r) => r.role === 'decoy')), f.counts.histories += part.length, f.counts.tooFewPoints += chunk.counts.tooFewPoints;
   }
@@ -194,9 +203,9 @@ async function views(name, window) {
   for (const g of generators) {
     const f = await features(name, g, window);
     const options = { seed, relative: args.relative };
-    const result = await call('distinguish', [json('features', f), json('options', options)]);
+    const result = lfvReport(await call('distinguish', [frame('features', featuresLfv(f), 'LFV')], options));
     // An adversary who does not search public histories for a replayed sequence.
-    const noReplay = await call('distinguish', [json('features', f), json('options', { ...options, exclude: ['sequenceMatch'] })]);
+    const noReplay = lfvReport(await call('distinguish', [frame('features', featuresLfv(f), 'LFV')], { ...options, exclude: ['sequenceMatch'] }));
     rows[g] = { counts: f.counts, ...strip(result), withoutSequenceMatch: strip(noReplay) };
     console.log(`${name} ${g}: AUC ${result.auc.toFixed(3)}, eps >= ${(result.epsilon.epsilonLowerBound95 ?? NaN).toFixed(2)}, ` +
       `N_eff at N=10/100/1000: ${[10, 100, 1000].map((n) => neff(result.first, n)?.toFixed(1)).join('/')}; top: ` +
@@ -213,6 +222,5 @@ for (const name of viewNames) await views(name, name === 'gp-28d' ? span : hpopS
 if (viewNames.includes('hpop') && !args['reuse-features'])
   report.hpop = { ...hpopRun, seconds: Math.round(hpopRun.seconds),
     product: 'analysis/epoch-state GCRF state at the latest element set, propagated by propagator/hpop resident (point mass and degree/order 20 field)' };
-await harness.destroy();
 fs.writeFileSync(path.join(out, 'decoy-study.json'), `${JSON.stringify(report, null, 1)}\n`);
 console.log(`${out}/decoy-study.json`);

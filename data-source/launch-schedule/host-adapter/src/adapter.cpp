@@ -1,70 +1,83 @@
+/*
+ * data-source/launch-schedule/host-adapter - the launch notices flow's scheduling gate (typed contracts 1.0).
+ *
+ *   prepare_scheduled : "tick" TimerTick (TICK) -> node CONFIG (plugin.getConfig): launch_schedule_enabled must be true
+ *                       (else "status" FlowNotice Skipped "disabled"); launch_schedule_producer_peer_id must be set and
+ *                       launch_schedule_source.access must be "anonymous" (a keyed registry tier needs a credential
+ *                       adapter: refused, no request is sent) -> the tick forwarded verbatim on "tick" to launch-schedule
+ *                       plan_launches, which reads the plan from the same node CONFIG.
+ *   receipt_scheduled : "response" HttpResponse (HRSP) -> node CONFIG must still be enabled with a producer; a 304
+ *                       becomes "status" FlowNotice Unchanged (the stored notices are neither replaced nor republished);
+ *                       anything else is forwarded verbatim on "response" to launch-schedule parse_launches (which takes
+ *                       RETRIEVED_MS from the response and the producer peer id from the plan in CONTEXT).
+ *
+ * The only host call is the builtin plugin.getConfig (SDS $PIV, typedHostcall.hpp). No JSON.
+ */
 #include "space_data_module_invoke.h"
-#include <chrono>
+#include "typedHostcall.hpp"
+#include "HttpResponse_generated.h"
+#include "FlowNotice_generated.h"
+#include "TimerTick_generated.h"
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <string>
-#include <vector>
-using Json=nlohmann::json;
 namespace {
+namespace A = sdn::runtime::Aligned;
+namespace R = sdn::runtime;
 constexpr size_t maxBytes=4*1024*1024;
 int fail(const char* message) {plugin_set_error("launch-schedule-host-adapter",message);return 1;}
 #define CHECK(condition,message) do {if(!(condition)) return fail(message);} while(0)
-bool text(const Json& j,const char* key){return j.is_object()&&j.contains(key)&&j[key].is_string();}
-const plugin_input_frame_t* frame(const char* port) {
- const plugin_input_frame_t* result=nullptr;
- for(uint32_t i=0;i<plugin_get_input_count();++i){const auto* f=plugin_get_input_frame(i);if(!f||!f->port_id||!f->payload||f->payload_length>maxBytes)return nullptr;if(std::strcmp(f->port_id,port)==0){if(result)return nullptr;result=f;}}
- return result;
-}
-Json json(const char* port){const auto* f=frame(port);return f?Json::parse(f->payload,f->payload+f->payload_length,nullptr,false):Json();}
-int output(const char* port,const Json& j){const auto bytes=j.dump();return plugin_push_output_ex(port,nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(bytes.data()),bytes.size());}
-}
-// Generic host configuration and clock are the only runtime inputs here.
-// HTTP, persistence, signing and IPFS remain in existing host services.
-extern "C" {
-__attribute__((import_module("space_data_module_host"),import_name("call")))
-int32_t launch_host_call(const uint8_t*,int32_t,const uint8_t*,int32_t);
-__attribute__((import_module("space_data_module_host"),import_name("response_len")))
-int32_t launch_response_len();
-__attribute__((import_module("space_data_module_host"),import_name("read_response")))
-int32_t launch_read_response(uint8_t*,int32_t);
-}
-namespace {
-Json configuration() {
-  const char* op="plugin.getConfig";
-  const uint8_t request[]={2,0,0,0,'{','}',0,0,0,0};
-  launch_host_call(reinterpret_cast<const uint8_t*>(op),std::strlen(op),request,sizeof(request));
-  const int32_t size=launch_response_len();
-  if(size<8 || size>65536) return Json();
-  std::vector<uint8_t> bytes(size); launch_read_response(bytes.data(),size);
-  const uint32_t n=uint32_t(bytes[0]) | uint32_t(bytes[1])<<8 | uint32_t(bytes[2])<<16 | uint32_t(bytes[3])<<24;
-  if(n>bytes.size()-8) return Json();
-  const auto result=Json::parse(bytes.data()+4,bytes.data()+4+n,nullptr,false);
-  if(!result.is_object() || (result.contains("ok") && result["ok"]!=true)) return Json();
-  return result.contains("result")?result["result"]:result;
-}
-bool enabled(const Json& cfg) { return cfg.is_object() && cfg.contains("launch_schedule_enabled") && cfg["launch_schedule_enabled"]==true; }
 
+// plugin.getConfig: one ModuleConfig (MCFG) FlatBuffer on raw "config", read in place (nested objects are TableLists,
+// reached by dotted paths). ok() is false when the host has none.
+using Config = sdm_piv::Config;
+const sdn::runtime::ConfigEntry* entry(const Config& c, const char* key) { return c.entry(key); }
+bool isString(const sdn::runtime::ConfigEntry* e) { return e && e->KIND()==sdn::runtime::configValueKind_String; }
+std::string textOf(const sdn::runtime::ConfigEntry* e) { return isString(e) && e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string(); }
+bool enabled(const Config& c) { const auto* e=entry(c,"launch_schedule_enabled"); return e && e->KIND()==sdn::runtime::configValueKind_Bool && e->BOOL_VALUE(); }
+bool producerText(const Config& c) { return isString(entry(c,"launch_schedule_producer_peer_id")); }
+bool hasSource(const Config& c) {
+  for (size_t i=0,n=c.tables("launch_schedule_source"); i<n; i++) if (c.table("launch_schedule_source",i).size()) return true;
+  return false;
 }
+
+// The single frame on `port` when it is the invocation's only frame.
+const plugin_input_frame_t* only(const char* port) {
+  if (plugin_get_input_count()!=1) return nullptr;
+  const auto* f=plugin_get_input_frame(0);
+  return f && f->port_id && std::strcmp(f->port_id,port)==0 && f->payload && f->payload_length && f->payload_length<=maxBytes+64*1024 ? f : nullptr;
+}
+int notice(R::flowNoticeKind kind, const char* reason) {
+  flatbuffers::FlatBufferBuilder b(256);
+  R::FinishFlowNoticeBuffer(b, R::CreateFlowNoticeDirect(b, kind, "LDM.fbs", "launch-schedule", "upcoming", nullptr, 0, reason));
+  return plugin_push_output_ex("status","FlowNotice.fbs",R::FlowNoticeIdentifier(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,b.GetBufferPointer(),b.GetSize())<0?1:0;
+}
+}  // namespace
+
 extern "C" int prepare_scheduled() {
-  CHECK(plugin_get_input_count()==1 && plugin_get_input_frame(0) && plugin_get_input_frame(0)->port_id && std::strcmp(plugin_get_input_frame(0)->port_id,"tick")==0,"Exactly one timer tick is required.");
-  const auto cfg=configuration();
-  CHECK(cfg.is_object(),"Host configuration unavailable.");
-  if(!enabled(cfg)) return output("status",{{"skipped","disabled"}})<0?1:0;
-  CHECK(text(cfg,"launch_schedule_producer_peer_id") && !cfg["launch_schedule_producer_peer_id"].get<std::string>().empty(),"Producer peer ID is required before fetching.");
-  CHECK(cfg.contains("launch_schedule_source") && cfg["launch_schedule_source"].is_object(),"Launch registry configuration missing.");
-  const auto& source=cfg["launch_schedule_source"];
-  CHECK(text(source,"access") && source["access"]=="anonymous","A keyed registry tier requires a credential adapter; no request was sent.");
-  return output("config",source)<0?1:0;
+  const auto* tick=only("tick");
+  CHECK(tick,"Exactly one timer tick is required.");
+  flatbuffers::Verifier verifier(tick->payload,tick->payload_length);
+  CHECK(R::VerifyTimerTickBuffer(verifier),"The tick is not a TimerTick (TICK).");
+  const Config cfg=sdm_piv::get_config();
+  CHECK(cfg.ok(),"Host configuration unavailable.");
+  if(!enabled(cfg)) return notice(R::flowNoticeKind_Skipped,"disabled");
+  const auto* peer=entry(cfg,"launch_schedule_producer_peer_id");
+  CHECK(!textOf(peer).empty(),"Producer peer ID is required before fetching.");
+  CHECK(hasSource(cfg),"Launch registry configuration missing.");
+  const auto* access=entry(cfg,"launch_schedule_source.access");
+  CHECK(textOf(access)=="anonymous","A keyed registry tier requires a credential adapter; no request was sent.");
+  return plugin_push_output_ex("tick","TimerTick.fbs",R::TimerTickIdentifier(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"TimerTick",0,0,tick->payload,tick->payload_length)<0?1:0;
 }
+
 extern "C" int receipt_scheduled() {
-  CHECK(plugin_get_input_count()==2,"Exactly one job and response are required.");
-  const auto cfg=configuration();
-  CHECK(enabled(cfg) && text(cfg,"launch_schedule_producer_peer_id"),"Producer configuration missing or disabled.");
-  const auto* result=frame("response");
-  CHECK(result && result->payload_length>=8,"HTTP response missing.");
-  if(std::memcmp(result->payload,"$HRB",4)==0 && result->payload[4]==48 && result->payload[5]==1 && result->payload[6]==0 && result->payload[7]==0)
-    return output("status",{{"skipped","not-modified"}})<0?1:0;
-  const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-  CHECK(output("job",json("job"))>=0 && output("receipt",{{"retrieved_at_ms",now},{"producer_peer_id",cfg["launch_schedule_producer_peer_id"]}})>=0,"Could not emit receipt.");
-  return plugin_push_output_ex("response",nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,result->payload,result->payload_length)<0?1:0;
+  const auto* response=only("response");
+  CHECK(response,"Exactly one HTTP response is required.");
+  flatbuffers::Verifier verifier(response->payload,response->payload_length);
+  CHECK(R::VerifyHttpResponseBuffer(verifier),"The response is not an HttpResponse (HRSP).");
+  const Config cfg=sdm_piv::get_config();
+  CHECK(enabled(cfg) && producerText(cfg),"Producer configuration missing or disabled.");
+  if(R::GetHttpResponse(response->payload)->STATUS()==304) return notice(R::flowNoticeKind_Unchanged,"not-modified");
+  return plugin_push_output_ex("response","HttpResponse.fbs",R::HttpResponseIdentifier(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"HttpResponse",0,0,response->payload,response->payload_length)<0?1:0;
 }

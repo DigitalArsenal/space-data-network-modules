@@ -11,7 +11,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildGeoTiff, buildWaterTiff, buildOversizedTiffHeader, rawBodyFrameBytes } from "../helpers.mjs";
+import {
+  buildGeoTiff,
+  buildWaterTiff,
+  buildOversizedTiffHeader,
+  rawBodyFrameBytes,
+  planInputs,
+  configFrame,
+  storeAnswer,
+  typeRefOf,
+} from "../helpers.mjs";
+
+// TYPED CONTRACTS 1.0: every payload below is the FlatBuffer the module now takes - granules as HttpResponse (HRSP)
+// frames, plans as $DTT header streams (+ ModuleConfig options), configs as ModuleConfig (MCFG), serve contexts as the
+// routed $HTQ request, the store's answer as $FSB chunks plus an $FSO status. No JSON payload is committed.
 
 const outDir = fileURLToPath(new URL("./parity/", import.meta.url));
 fs.mkdirSync(outDir, { recursive: true });
@@ -25,7 +38,7 @@ const write = (name, bytes) => {
 // can tell a windowed decoder from a whole-granule one).
 const PX = 1200;
 const dem = write(
-  "dem-granule.hrb",
+  "dem-granule.hrsp",
   rawBodyFrameBytes(
     buildGeoTiff({
       width: PX,
@@ -45,7 +58,7 @@ const dem = write(
 
 // The water-body granule over the same square: water north of 45.6 degrees.
 const water = write(
-  "water-granule.hrb",
+  "water-granule.hrsp",
   rawBodyFrameBytes(
     buildWaterTiff({
       width: PX,
@@ -66,7 +79,7 @@ const water = write(
 // A granule whose DECLARED geometry crosses the 256 MiB decode budget. Its
 // refusal frame must be byte-identical in every lane.
 const oversized = write(
-  "oversized-granule.hrb",
+  "oversized-granule.hrsp",
   rawBodyFrameBytes(
     buildOversizedTiffHeader({
       width: 40000,
@@ -95,49 +108,43 @@ const base = {
 };
 
 // z11 span = 0.087890625 degrees. x=2166 -> west 10.3711; y=1546 -> south 45.4004.
-const single = write(
-  "plan-single.json",
-  Buffer.from(JSON.stringify({ ...base, level: 11, x: 2166, y: 1546, gridSize: 65 })),
-);
+// A plan as its "plan" ($DTT header stream) frame; the options frame is written beside it when the plan states any.
+const planFile = (name, plan) => {
+  const [planFrame, options] = planInputs(plan);
+  const file = write(name, Buffer.from(planFrame.payload));
+  file.options = options ? write(name.replace(/\.dtt$/, ".options.mcfg"), Buffer.from(options.payload)) : null;
+  return file;
+};
+const single = planFile("plan-single.dtt", { ...base, level: 11, x: 2166, y: 1546, gridSize: 65 });
 // A four-tile block: ONE granule decode, four records out.
-const block = write(
-  "plan-block.json",
-  Buffer.from(
-    JSON.stringify({
-      ...base,
-      level: 11,
-      gridSize: 65,
-      tiles: [
-        { x: 2166, y: 1546 },
-        { x: 2167, y: 1546 },
-        { x: 2166, y: 1547 },
-        { x: 2167, y: 1547 },
-      ],
-    }),
-  ),
-);
+const block = planFile("plan-block.dtt", {
+  ...base,
+  level: 11,
+  gridSize: 65,
+  tiles: [
+    { x: 2166, y: 1546 },
+    { x: 2167, y: 1546 },
+    { x: 2166, y: 1547 },
+    { x: 2167, y: 1547 },
+  ],
+});
 // A tile that straddles the water cut, so the mask is a real RASTER.
-const maskPlan = write(
-  "plan-water.json",
-  Buffer.from(JSON.stringify({ ...base, level: 11, x: 2166, y: 1548, gridSize: 65 })),
-);
-const layerPlan = write(
-  "plan-layer.json",
+const maskPlan = planFile("plan-water.dtt", { ...base, level: 11, x: 2166, y: 1548, gridSize: 65 });
+// layer_json renders the mount's config for the routed layer.json request.
+const layerConfig = write(
+  "config-layer.mcfg",
   Buffer.from(
-    JSON.stringify({
-      tilesetId: "spaceaware-terrain",
-      maxzoom: 13,
-      version: "1.0.0",
-      attribution: "Copernicus DEM",
-      description: "parity fixture",
-      available: [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]],
-    }),
+    configFrame({
+      terrain_tileset_id: "spaceaware-terrain",
+      terrain_maxzoom: 13,
+      terrain_version: "1.0.0",
+      terrain_attribution: "Copernicus DEM",
+      terrain_description: "parity fixture",
+      terrain_available: [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]],
+    }).payload,
   ),
 );
-const budgetPlan = write(
-  "plan-oversized.json",
-  Buffer.from(JSON.stringify({ ...base, level: 8, x: 271, y: 193, gridSize: 255 })),
-);
+const budgetPlan = planFile("plan-oversized.dtt", { ...base, level: 8, x: 271, y: 193, gridSize: 255 });
 
 // ── THE SERVING METHOD, WHICH THE PARITY GATE DID NOT COVER ────────────────
 //
@@ -166,16 +173,8 @@ const encodedStream = await (async () => {
   const response = await harness.invoke({
     methodId: "tile",
     inputs: [
-      {
-        portId: "plan",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: single.byteLength },
-        payload: new Uint8Array(fs.readFileSync(path.join(outDir, single.name))),
-      },
-      {
-        portId: "dem",
-        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: dem.byteLength },
-        payload: new Uint8Array(fs.readFileSync(path.join(outDir, dem.name))),
-      },
+      { portId: "plan", typeRef: typeRefOf(fs.readFileSync(path.join(outDir, single.name))), payload: new Uint8Array(fs.readFileSync(path.join(outDir, single.name))) },
+      { portId: "dem", typeRef: typeRefOf(fs.readFileSync(path.join(outDir, dem.name))), payload: new Uint8Array(fs.readFileSync(path.join(outDir, dem.name))) },
     ],
   });
   if (response.statusCode !== 0) {
@@ -185,7 +184,6 @@ const encodedStream = await (async () => {
 })();
 harness.destroy();
 
-const storedStream = write("stored-record.dttstream", encodedStream);
 // The ETag the stored record states, so the 304 case matches a real one rather
 // than a literal that drifts the moment the encoder changes a byte.
 const storedEtag = (() => {
@@ -203,28 +201,6 @@ const storedEtag = (() => {
   return record.subarray(sp + 4, sp + 4 + record.readUInt32LE(sp)).toString("utf8");
 })();
 
-const respondContext = (name, context) =>
-  write(name, Buffer.from(JSON.stringify({ tilesetId: "spaceaware-terrain", level: 11, x: 2166, y: 1546, ...context })));
-
-const ctxStored = respondContext("context-stored.json", { ifNoneMatch: "", acceptsGzip: true });
-const ctxIdentity = respondContext("context-identity.json", { ifNoneMatch: "", acceptsGzip: false });
-const ctxConditional = respondContext("context-conditional.json", { ifNoneMatch: storedEtag, acceptsGzip: true });
-const ctxSynth = respondContext("context-synth.json", {
-  x: 2170,
-  y: 1550,
-  ifNoneMatch: "",
-  acceptsGzip: true,
-  insideAvailability: true,
-  synthWater: true,
-  synthGridSize: 65,
-});
-const ctxMiss = respondContext("context-miss.json", {
-  x: 3000,
-  y: 1,
-  ifNoneMatch: "",
-  acceptsGzip: true,
-  insideAvailability: false,
-});
 // ── route, THE OTHER SERVING METHOD THE GATE DID NOT COVER ─────────────────
 //
 // `route` is the method that evaluates Cesium's isTileAvailable rule and turns
@@ -243,6 +219,39 @@ const ctxMiss = respondContext("context-miss.json", {
 const { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } = await import("space-data-module-sdk/http");
 const httpRequestBytes = (name, { method = "GET", path: reqPath, query = "", headers = {} }) =>
   write(name, Buffer.from(encodeHttpRequest({ method, path: reqPath, query, headers })));
+
+// THE SERVE CONTEXT is the routed request itself; respond re-derives the address and the miss verdict from it and
+// the mount config. In the bridge-free parity artifact the config is the documented defaults (the two level-0 roots)
+// unless a config frame is handed in - the synthesized-miss case hands in availability covering its address and the
+// ocean floor, so the synthesis path runs in every lane.
+const tilePath = (x, y) => `/api/v1/terrain/11/${x}/${y}.terrain`;
+const ctxStored = httpRequestBytes("context-stored.htq", { path: tilePath(2166, 1546) });
+const ctxIdentity = httpRequestBytes("context-identity.htq", {
+  path: tilePath(2166, 1546),
+  headers: { "accept-encoding": "identity" },
+});
+const ctxConditional = httpRequestBytes("context-conditional.htq", {
+  path: tilePath(2166, 1546),
+  headers: { "if-none-match": storedEtag },
+});
+const ctxSynth = httpRequestBytes("context-synth.htq", { path: tilePath(2170, 1550) });
+const cfgSynth = write(
+  "config-synth.mcfg",
+  Buffer.from(
+    configFrame({
+      terrain_tileset_id: "spaceaware-terrain",
+      terrain_maxzoom: 11,
+      terrain_ocean_synth_min_level: 0,
+      terrain_synth_grid_size: 65,
+      terrain_available: [
+        [{ startX: 0, startY: 0, endX: 1, endY: 0 }],
+        ...Array.from({ length: 10 }, () => []),
+        [{ startX: 2170, startY: 1550, endX: 2170, endY: 1550 }],
+      ],
+    }).payload,
+  ),
+);
+const ctxMiss = httpRequestBytes("context-miss.htq", { path: tilePath(3000, 1) });
 
 // Inside the default availability (level 0 covers both roots), so this is the
 // select-and-serve branch, availability walk included.
@@ -302,14 +311,16 @@ const catalogueConfig = {
   terrain_tileset_cid: "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
   terrain_tileset_size_bytes: 12345678,
 };
-const jsonFrame = (name, value) =>
-  write(name, Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8"));
+const configFile = (name, value) => {
+  const clean = Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined));
+  return write(name, Buffer.from(configFrame(clean).payload));
+};
 // The shipped shape: a node serving a published directory.
-const cfgCatalogue = jsonFrame("config-catalogue.json", catalogueConfig);
+const cfgCatalogue = configFile("config-catalogue.mcfg", catalogueConfig);
 // A node serving no IPFS tileset. PAYLOAD is `required`, so the record is
 // still built — present and EMPTY — rather than omitted, which is the case
 // that used to make the document unserializable ("field 34 must be set").
-const cfgCatalogueNoCid = jsonFrame("config-catalogue-no-cid.json", {
+const cfgCatalogueNoCid = configFile("config-catalogue-no-cid.mcfg", {
   ...catalogueConfig,
   terrain_tileset_cid: undefined,
   terrain_tileset_size_bytes: undefined,
@@ -317,7 +328,7 @@ const cfgCatalogueNoCid = jsonFrame("config-catalogue-no-cid.json", {
 // One required lineage field short: 503, no-store, naming the key. The
 // refusal is a behaviour of the record contract and has to be identical in
 // every runtime, not just in the one harness that could reach it.
-const cfgCatalogueNoLineage = jsonFrame("config-catalogue-no-lineage.json", {
+const cfgCatalogueNoLineage = configFile("config-catalogue-no-lineage.mcfg", {
   ...catalogueConfig,
   terrain_dataset_retrieved_at: undefined,
 });
@@ -332,17 +343,25 @@ const htqInput = (file) => ({
   typeRef: HTTP_REQUEST_TYPE_REF,
 });
 
-// A stream that is not a record stream at all: the refusal must be the same
-// named error, byte for byte, in every lane.
-const badStream = write("stream-malformed.bin", Buffer.from("not a size-prefixed $DTT stream", "utf8"));
-// The flatsql stream for zero rows: nothing but alignment padding.
-const emptyStream = write("stream-empty.bin", Buffer.alloc(4));
+// The store's answers, as hostcap/flatsql-query gives them: $FSB chunks then one $FSO status (one file per frame).
+const answerFiles = (stem, stream, options) =>
+  storeAnswer(stream, options).map((frame, i) => ({
+    portId: frame.portId,
+    file: write(`${stem}.${i}.${frame.portId === "status" ? "fso" : "fsb"}`, Buffer.from(frame.payload)),
+  }));
+// A stream that is not a record stream at all: the refusal must be the same named error, byte for byte, in every lane.
+const badStream = answerFiles("stream-malformed", Buffer.from("not a size-prefixed $DTT stream", "utf8"));
+// The store's answer for zero rows: nothing but alignment padding.
+const emptyStream = answerFiles("stream-empty", Buffer.alloc(4));
+const storedAnswer = answerFiles("stored-record", encodedStream);
 
-const alignedInput = (portId, file) => ({
+const typedInputFile = (portId, file) => ({
   portId,
   payloadFile: `parity/${file.name}`,
-  typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: file.byteLength },
+  typeRef: typeRefOf(fs.readFileSync(path.join(outDir, file.name))),
 });
+const planInputsOf = (file) => [typedInputFile("plan", file), ...(file.options ? [typedInputFile("options", file.options)] : [])];
+const answerInputs = (answer) => answer.map(({ portId, file }) => typedInputFile(portId, file));
 
 const fixture = {
   name: "terrain-source-parity",
@@ -352,25 +371,25 @@ const fixture = {
     {
       id: "tile-single",
       expect: "ok",
-      request: { methodId: "tile", inputs: [alignedInput("plan", single), alignedInput("dem", dem)] },
+      request: { methodId: "tile", inputs: [...planInputsOf(single), typedInputFile("dem", dem)] },
     },
     {
       id: "tile-block-amortized",
       expect: "ok",
-      request: { methodId: "tile", inputs: [alignedInput("plan", block), alignedInput("dem", dem)] },
+      request: { methodId: "tile", inputs: [...planInputsOf(block), typedInputFile("dem", dem)] },
     },
     {
       id: "tile-water-raster",
       expect: "ok",
       request: {
         methodId: "tile",
-        inputs: [alignedInput("plan", maskPlan), alignedInput("dem", dem), alignedInput("water", water)],
+        inputs: [...planInputsOf(maskPlan), typedInputFile("dem", dem), typedInputFile("water", water)],
       },
     },
     {
       id: "layer-json",
       expect: "ok",
-      request: { methodId: "layer_json", inputs: [alignedInput("plan", layerPlan)] },
+      request: { methodId: "layer_json", inputs: [typedInputFile("plan", reqLayer), typedInputFile("config", layerConfig)] },
     },
     {
       // THE REFUSAL. Same bytes in, same named error out, in every lane.
@@ -383,7 +402,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "tile",
-        inputs: [alignedInput("plan", budgetPlan), alignedInput("dem", oversized)],
+        inputs: [...planInputsOf(budgetPlan), typedInputFile("dem", oversized)],
       },
     },
     {
@@ -391,7 +410,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxStored)],
+        inputs: [...answerInputs(storedAnswer), typedInputFile("context", ctxStored)],
       },
     },
     {
@@ -402,7 +421,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxIdentity)],
+        inputs: [...answerInputs(storedAnswer), typedInputFile("context", ctxIdentity)],
       },
     },
     {
@@ -410,7 +429,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxConditional)],
+        inputs: [...answerInputs(storedAnswer), typedInputFile("context", ctxConditional)],
       },
     },
     {
@@ -422,7 +441,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", emptyStream), alignedInput("context", ctxSynth)],
+        inputs: [...answerInputs(emptyStream), typedInputFile("context", ctxSynth), typedInputFile("config", cfgSynth)],
       },
     },
     {
@@ -430,7 +449,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", emptyStream), alignedInput("context", ctxMiss)],
+        inputs: [...answerInputs(emptyStream), typedInputFile("context", ctxMiss)],
       },
     },
     {
@@ -438,7 +457,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "respond",
-        inputs: [alignedInput("stream", badStream), alignedInput("context", ctxStored)],
+        inputs: [...answerInputs(badStream), typedInputFile("context", ctxStored)],
       },
     },
     {
@@ -466,7 +485,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "route",
-        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogue)],
+        inputs: [htqInput(reqTileset), typedInputFile("config", cfgCatalogue)],
       },
     },
     {
@@ -474,7 +493,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "route",
-        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogueNoCid)],
+        inputs: [htqInput(reqTileset), typedInputFile("config", cfgCatalogueNoCid)],
       },
     },
     {
@@ -482,7 +501,7 @@ const fixture = {
       expect: "ok",
       request: {
         methodId: "route",
-        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogueNoLineage)],
+        inputs: [htqInput(reqTileset), typedInputFile("config", cfgCatalogueNoLineage)],
       },
     },
     {

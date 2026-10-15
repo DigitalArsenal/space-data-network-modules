@@ -1,26 +1,26 @@
 # CPF (ILRS predictions) Data Source (A2.2c-2)
 
-A Tier-1 `data_source` adapter on the shared provider template
-(`common/provider_source.hpp`). On a TIMERS-driven `pull` it discovers the newest
-ILRS **Consolidated Prediction Format (CPF v2)** file for a target from an
-unauthenticated archive, fetches it, and re-emits it as a schema-exact SDS
-**OEM** record with the CPF frame **preserved as declared**, then stores it,
-signs its content id, and publishes a schema-exact **PNM** pointer.
+Typed contracts 1.0 (FlatBuffers only, no JSON, no base64). The module fetches and stores nothing itself: it is a
+pure request-and-parse node beside `hostcap/http-request`, and its `$OEM` output is consumed in memory by
+`analysis/od` (`fit`), never stored, signed or published.
 
-## Pull flow (`src/cpf_source.cpp`)
+## Flow (`src/cpf_source.cpp`)
 
-1. **Discover** — GET the per-target CPF directory listing
-   (`https://edc.dgfi.tum.de/pub/slr/cpf_predicts_v2/2026/lageos1/`), scan the
-   Apache index for `<target>_cpf_…` filenames, select the **newest** (the
-   lexically-max filename — embedded `YYMMDD` + sequence sorts chronologically).
-2. **Fetch** — GET the selected CPF file (`text/plain`, whitespace-delimited CPF
-   v2 records).
-3. **Parse** — header `H1`/`H2`/`H5` (terminated by `H9`) + the type-`10`
-   position records (stop at the `99` trailer). `00` comments and other record
-   types are skipped for the canonical record; raw bytes are preserved by SHA-256
-   in provenance.
-4. **Canonical record** — a schema-exact SDS OEM, `storage.write` under schema
-   `OEM`, `keyslot.sign` its CID, `pubsub.publish` a PNM on `sdn/data-source/cpf`.
+| Method | In | Out |
+| --- | --- | --- |
+| `request` | `tick`: `TimerTick` (TICK; fields not read) | `request`: one GET `HttpRequest` (HREQ) for the EDC CPF v2 directory listing of the target |
+| `select_file` | `listing`: the listing's `HttpResponse` (HRSP) | `request`: one GET `HttpRequest` for the newest file of the target |
+| `emit` | `response`: the file's `HttpResponse` (HRSP) | `oem`: one $OEM (position-only, the CPF's declared frame, UTC, international designator from the ILRS id) |
+
+Node config through `plugin.getConfig` (sdm_piv, one `ModuleConfig` read in place; the module's only hostcall):
+`listingUrl`, `target`. Capabilities: none. A transport error, a status other than 200, an empty body, a listing without the target's file
+or a file with nothing fittable fails closed (`fetch-failed` / `fetch-empty`); nothing partial is emitted. The flow's
+trigger sets the cadence (the former module timer's cadence is noted in the manifest).
+
+The former `pull` method (JSON hostcalls; it declared a signed `$PNM` output but only ever returned the in-memory `$OEM`
+stream) and the hand-built guest-link (`guest-link/emit_entry.cpp`, `manifest.js`) are gone: the SDK compiler builds the
+module and its guest-link object (`dist/guest-link/`). `test/module.test.mjs` runs the methods in the SDK browser harness
+on the fixtures and checks the `$OEM` bytes against the legacy artifact's (`test/fixtures/legacy/oem-stream.bin`).
 
 ## Access: EDC (anonymous), NOT CDDIS (authenticated)
 
@@ -69,38 +69,24 @@ draft; must not be reported as independent parity.
 
 ## Fetch politeness / cadence math
 
-- One directory listing + one small CPF file per pull (LAGEOS-1 CPF ≈ 0.8 MB
+- One directory listing + one small CPF file per run (LAGEOS-1 CPF ≈ 0.8 MB
   full; the archive is a static file tree).
-- **Cadence** — `pull` every **12h** (2×/day). ILRS analysis centers regenerate
+- **Cadence** — a run (flow trigger) every **12h** (2×/day). ILRS analysis centers regenerate
   CPF predictions daily (some active targets sub-daily), so 12h catches the daily
   regeneration promptly. Configurable via `{"listingUrl":…,"target":…}`.
-
-## PNM / provenance
-
-- `FILE_ID` = `cpf:OEM:<NORAD>:<START_TIME>`. Published message =
-  `{"PNM":{…}, "provenance":{…}}`; provenance carries `SOURCE_NAME` `cpf`,
-  `DATA_SOURCE` `CPF`, `RECORD_SCHEMA` `OEM`, `NORAD_CAT_ID`, `OBJECT_ID`,
-  `ILRS_SATELLITE_ID`, `CPF_SOURCE_AGENCY`, `CPF_FRAME_CODE`, `REFERENCE_FRAME`,
-  `SOURCE_UNITS`/`RECORD_UNITS`, `HAS_VELOCITY:false`, `PRODUCT_KIND:"prediction"`,
-  `START_TIME`/`STOP_TIME`, `INTERVAL_SEC`, `POSITION_COUNT`.
 
 ## Build & test
 
 ```
-SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+export SPACE_DATA_STANDARDS_ROOT=<spacedatastandards.org checkout>
+node build.mjs
 node --test test/*.test.mjs
 ```
 
-`test/module.test.mjs` drives the rebuilt WASM with a mock
-`space_data_module_host` bridge serving a real EDC directory index + the trimmed
-real LAGEOS-1 CPF fixture, and asserts: directory discovery → newest-file
-selection, CPF parse → position-only OEM with schema-exact keys, `REFERENCE_FRAME
-= ITRF` (not transformed), `STATE_VECTOR_SIZE = 3` with no fabricated velocity
-keys, metres→km, real NORAD/COSPAR from H2, signed PNM structure, provenance
-`SOURCE_SHA256` binding, `listingUrl`/`target` override, and fail-closed on
-failed-listing / 404-file / malformed-CPF. No live network is touched.
-
-Test result: **10/10 pass** against the rebuilt artifact.
+`build.mjs` compiles through the SDK (`scripts/lib/build-source-module.mjs`: the SDS `$OEM` headers generated for the
+build, `common/oem_fb_builder.hpp`, this module's source). The test drives the methods in the SDK browser harness with
+the node config on `plugin.getConfig`, hands the fixtures back as `HttpResponse`s, compares the `$OEM` bytes with the
+legacy artifact's and checks the config overrides and the fail-closed cases. No live network is touched.
 
 ## Residuals (handoff)
 
@@ -117,9 +103,7 @@ Test result: **10/10 pass** against the rebuilt artifact.
 - **Frame realization.** CPF declares "geocentric Earth-fixed" but not the ITRF
   realization/epoch; `REFERENCE_FRAME:"ITRF"` is the honest family label, raw code
   preserved in provenance.
-- **Binary FlatBuffer / ingest lane / OD consumption** — same A2.2c/A2.3
-  residuals as the Starlink/ISS adapters (records are JSON; OD consumes the raw
-  CPF via the PNM `FILE_NAME` + `SOURCE_SHA256`, not this JSON record).
+- **Resolved by typed contracts 1.0:** the module emits `$OEM` FlatBuffers that `analysis/od` reads in memory; no JSON record is built.
 - **Time helper duplication.** `civil_from_days` / MJD math is duplicated from the
   OneWeb adapter (`common/` is locked by the GNSS worker) — flag for promotion to
   `common/` with the GPS-time helper.

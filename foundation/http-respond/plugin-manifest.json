@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.foundation.http-respond",
   "name": "SDN HTTP Respond",
-  "version": "0.2.1",
-  "description": "Single-purpose flow node: assembles one $HTR HttpResponse envelope from a routing-decision JSON frame (foundation/http-route contract) plus optional body / etag / error frames. Behavior: an \"error\" input (JSON {\"error\":msg}) wins over everything -> 502 application/json {\"error\":msg}; decision route=not_found -> 404 application/json {\"error\":decision.error|\"not found\"}; an \"etag\" input equal to decision.ifNoneMatch -> 304 with an etag header and empty body; otherwise 200 with the body frame verbatim (empty body when the frame is absent), content-type from decision.format (flatbuffer -> application/vnd.sdn.flatbuffers.stream, json -> application/json), x-sdn-record-count when derivable (the count of size-prefixed frames when format=flatbuffer and the body framing parses cleanly), and an etag header whenever the etag input is present. All response headers are lower-cased and sorted per the $HTR ABI. Pure compute \u2014 no capabilities. Body-reference delivery (loop C.5c): a body input frame that is a {\"$sdnbodyref\":1,\"token\":..,\"size\":..,\"frames\":..,\"fnv1a64\":\"..\"} JSON descriptor (instead of stream bytes) is forwarded as $HTR BODY_REF_TOKEN/BODY_REF_SIZE with no inline body; the host egress substitutes the buffer it registered under the token. x-sdn-record-count then comes from the descriptor's frames field. v0.2.1: error decisions may carry a machine-readable \"code\" string (gateway loop G.5 sandbox rejection codes) forwarded verbatim into the JSON error body.",
+  "version": "0.3.0",
+  "description": "The HTTP edge's responder (typed contracts 1.0): a typed decision plus the typed answer in, exactly one $HTR HttpResponse envelope out. Method respond takes the SDS $APR (API Request) decision and at most one body ($NHS node health, $NEV node events, $NST peers, $PNV publication verdicts, or a $DAV dataset availability with the dataset's records on its standard's *_records port); method respond_query takes the SDS $QRP (Query Page) decision and the $QRP page stream (page header + record frames, a projection, or the query surface). Status comes from the decision ($APR STATUS; a $QRP KIND Error's HTTP_STATUS, else derived from its ERROR_CODE), 304 when If-None-Match ($APR IF_NONE_MATCH / the $QRP request's ETAG) equals the answer's entity tag ($QRP page ETAG, $NST / $PNV / $DAV ETAG), else 200. FlatBuffer bodies go out verbatim (application/x-flatbuffers for one record, application/vnd.sdn.flatbuffers.stream for a stream); JSON is rendered here and only here, when the decision's ACCEPT / REPRESENTATION asks for Json: the public API's external representation, IDL field names exactly. No JSON travels between modules. Out-of-band delivery: a $QRP page header or a $DAV carrying BODY_REF_TOKEN / BODY_REF_SIZE answers the $HTR with BODY_REF_TOKEN / BODY_REF_SIZE and no inline body (the host egress substitutes the record stream it holds). $APR RESPONSE_HEADERS (a serving stage's own headers, e.g. cache freshness) are added to the answer: lower-cased, CR/LF stripped, the computed names refused, at most 16, values at most 1 KiB. Pure compute - no capabilities.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
@@ -17,165 +17,490 @@
   "methods": [
     {
       "methodId": "respond",
-      "displayName": "Assemble HTTP Response",
+      "displayName": "Respond (API Request)",
       "inputPorts": [
         {
           "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-route-decision-json",
+              "setId": "sds-apr-decision",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Routing-decision UTF-8 JSON bytes from foundation/http-route (aligned-binary wire format): {\"route\",\"format\",\"ifNoneMatch\"?,\"error\"?,...}."
+              "description": "$APR: the decision foundation/http-route made, passed on by the serving node verbatim, or with STATUS / ERROR_CODE / ERROR_MESSAGE set when the request was refused or could not be served. ACCEPT selects the representation; IF_NONE_MATCH the conditional request."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Routing decision controlling status, content-type, and conditional-request handling."
+          "description": "The decision."
         },
         {
-          "portId": "body",
+          "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-response-json-or-control-body",
+              "setId": "sds-nhs-body",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "NHS.fbs",
+                  "fileIdentifier": "$NHS",
+                  "rootTypeName": "NHS",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "JSON response or body-reference control bytes.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "JSON response bodies and body-reference descriptors are flow-local material and carry no SDS record identity."
-              }
+              "description": "$NHS: the node's health snapshot (hostcap/node-status)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional opaque response body; absent means an empty 200 body."
+          "description": "Body of route status."
         },
         {
-          "portId": "epm_body",
+          "portId": "activity",
           "acceptedTypeSets": [
             {
-              "setId": "sds-epm-response-body",
+              "setId": "sds-nev-body",
               "allowedTypes": [
                 {
-                  "schemaName": "EPM.fbs",
-                  "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM"
-                },
-                {
-                  "schemaName": "EPM.fbs",
-                  "fileIdentifier": "$EPM",
-                  "rootTypeName": "EPM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 1
+                  "schemaName": "NEV.fbs",
+                  "fileIdentifier": "$NEV",
+                  "rootTypeName": "NEV",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Typed $EPM response stream."
+              "description": "$NEV: the node's event log read (hostcap/node-activity)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional typed $EPM response stream."
+          "description": "Body of route activity."
         },
         {
-          "portId": "pnm_body",
+          "portId": "peers",
           "acceptedTypeSets": [
             {
-              "setId": "sds-pnm-response-body",
+              "setId": "sds-nst-body",
               "allowedTypes": [
                 {
-                  "schemaName": "PNM.fbs",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM"
-                },
-                {
-                  "schemaName": "PNM.fbs",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 1
+                  "schemaName": "NST.fbs",
+                  "fileIdentifier": "$NST",
+                  "rootTypeName": "NST",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Typed $PNM response stream."
+              "description": "$NST: the peers the node knows (hostcap/p2p-discovery peers_snapshot)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional typed $PNM response stream."
+          "description": "Body of routes peers_list / peer_get."
         },
         {
-          "portId": "omm_body",
+          "portId": "notices",
           "acceptedTypeSets": [
             {
-              "setId": "sds-omm-response-body",
+              "setId": "sds-pnv-body",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                },
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$PNV: the node's verdicts on publication notices (hostcap/p2p-discovery standards_snapshot / pnm_history)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Body of routes standards / pnm_history."
+        },
+        {
+          "portId": "availability",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dav-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "DAV.fbs",
+                  "fileIdentifier": "$DAV",
+                  "rootTypeName": "DAV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$DAV: the availability of a lane's latest dataset (hostcap/p2p-discovery latest_dataset); its ETAG is the dataset's entity tag; BODY_REF_TOKEN names records held out of band."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Body of route latest_dataset; the records ride their standard's *_records port beside it."
+        },
+        {
+          "portId": "omm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-record-stream",
+              "allowedTypes": [
                 {
                   "schemaName": "OMM.fbs",
                   "fileIdentifier": "$OMM",
                   "rootTypeName": "OMM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Typed $OMM response stream."
+              "description": "Size-prefixed $OMM record stream: the dataset's records, beside its $DAV on \"availability\"."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional typed $OMM response stream."
+          "description": "The dataset's records when its standard is OMM.fbs. At most one *_records port carries a frame, and only with \"availability\"."
         },
         {
-          "portId": "etag",
+          "portId": "mpe_records",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-etag-string-bytes",
+              "setId": "sds-mpe-record-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Entity tag as raw UTF-8 string bytes. Compared verbatim against decision.ifNoneMatch for 304 handling and echoed as the etag response header."
+              "description": "Size-prefixed $MPE record stream: the dataset's records, beside its $DAV on \"availability\"."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional entity tag frame."
+          "description": "The dataset's records when its standard is MPE.fbs. At most one *_records port carries a frame, and only with \"availability\"."
         },
         {
-          "portId": "error",
+          "portId": "cat_records",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-upstream-error-json",
+              "setId": "sds-cat-record-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Upstream error as UTF-8 JSON bytes {\"error\":\"message\"} (plain text tolerated). Presence forces a 502 response."
+              "description": "Size-prefixed $CAT record stream: the dataset's records, beside its $DAV on \"availability\"."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional upstream-error frame; presence forces 502."
+          "description": "The dataset's records when its standard is CAT.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "spw_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SPW record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is SPW.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "eop_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EOP record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is EOP.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "csm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-csm-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "CSM.fbs",
+                  "fileIdentifier": "$CSM",
+                  "rootTypeName": "CSM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CSM record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is CSM.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "egp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-egp-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "EGP.fbs",
+                  "fileIdentifier": "$EGP",
+                  "rootTypeName": "EGP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EGP record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is EGP.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "sit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-sit-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "SIT.fbs",
+                  "fileIdentifier": "$SIT",
+                  "rootTypeName": "SIT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $SIT record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is SIT.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "lcc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lcc-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "LCC.fbs",
+                  "fileIdentifier": "$LCC",
+                  "rootTypeName": "LCC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $LCC record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is LCC.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "tbs_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tbs-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is TBS.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "gnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gnp-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "GNP.fbs",
+                  "fileIdentifier": "$GNP",
+                  "rootTypeName": "GNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $GNP record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is GNP.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-wxf-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is WXF.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "cnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cnp-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "CNP.fbs",
+                  "fileIdentifier": "$CNP",
+                  "rootTypeName": "CNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CNP record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is CNP.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "rfb_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rfb-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFB.fbs",
+                  "fileIdentifier": "$RFB",
+                  "rootTypeName": "RFB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $RFB record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is RFB.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "iqc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-iqc-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "IQC.fbs",
+                  "fileIdentifier": "$IQC",
+                  "rootTypeName": "IQC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $IQC record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is IQC.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "tct_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tct-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "TCT.fbs",
+                  "fileIdentifier": "$TCT",
+                  "rootTypeName": "TCT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TCT record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is TCT.fbs. At most one *_records port carries a frame, and only with \"availability\"."
+        },
+        {
+          "portId": "dtt_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $DTT record stream: the dataset's records, beside its $DAV on \"availability\"."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The dataset's records when its standard is DTT.fbs. At most one *_records port carries a frame, and only with \"availability\"."
         }
       ],
       "outputPorts": [
@@ -188,7 +513,8 @@
                 {
                   "schemaName": "HttpResponseAbi.fbs",
                   "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
               ],
               "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
@@ -197,19 +523,238 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
+          "description": "Exactly one $HTR per HTTP exchange."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds the $HTR response: 502 on upstream error, 404 on not_found, 304 on ETag match, else 200 with negotiated content-type, optional x-sdn-record-count, and optional etag header. G.4 adds the explicit error decision: route=error answers decision.status (clamped 400-599, default 503) application/json {\"error\":msg,\"pnm\":{...}?} \u2014 the optional pnm publication pointer object is forwarded verbatim from the decision so unavailability answers stay actionable (no silent proxying). BATCHING: every input port here is single-stream BY CONTRACT (this node answers exactly one HTTP exchange) and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a flow that puts two frames on one port delivers both here in ONE invocation. Several deployed flows wire TWO edges into a single port of this node (cellular-network-aggregate: merge.decision + route.reply, merge.records + route.catalog; data-retrieval: gate.not_found + branch.decision; latest-dataset and public-query: two producers into body) and rely on the producers being mutually exclusive. They are, by construction - but this node used to depend on that silently, answering from whichever frame the queue held first and destroying the rest. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+      "description": "Answers an $APR-decided request. A refusal (STATUS set) without a body answers its STATUS with the $APR itself (FlatBuffer) or {\"error\":ERROR_MESSAGE,\"code\":ERROR_CODE} (Json); with a body beside it (503 + the $DAV of an unavailable dataset) the body is the answer at that STATUS. 304 when IF_NONE_MATCH equals the answer's ETAG ($NST, $PNV, $DAV). A $DAV with BODY_REF_TOKEN answers by reference (no inline body). RESPONSE_HEADERS ride the answer. Otherwise 200: FlatBuffer/Default -> the record verbatim (application/x-flatbuffers, x-sdn-file-identifier) or, for a dataset, one size-prefixed stream of its $DAV followed by its records (application/vnd.sdn.flatbuffers.stream, x-sdn-record-count); Json -> the record rendered with its IDL field names (enums by name, byte vectors hex), a dataset as a bare array of its records ($OMM only; another standard answers 406); Csv/Text -> 406. A decision served without any body answers 502. BATCHING: every input port is single-stream BY CONTRACT (one HTTP exchange) and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so two frames on one port - e.g. a router's refusal and a serving node's decision, which flows wire into the same \"decision\" port and which are mutually exclusive by construction - are refused with error code \"batched-input-frames\" rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames). Bodies on two different ports are refused too (\"ambiguous-body\")."
+    },
+    {
+      "methodId": "respond_query",
+      "displayName": "Respond (Query Page)",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-decision",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP: the request foundation/http-route decided, passed on verbatim by the serving node, or a KIND Error (from the router's \"refusal\" port or the serving node). REPRESENTATION selects the representation; ETAG is the client's If-None-Match."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The decision."
+        },
+        {
+          "portId": "page",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-page-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $QRP page stream: a size-prefixed QRP KIND Page header (ETAG, RECORD_COUNT, FILE_IDENTIFIER; or COLUMNS + ROWS for a projection; or TABLES + MAX_* for the query surface) followed by RECORD_COUNT size-prefixed record frames of the named standard."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The answer, absent on a refusal."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one $HTR per HTTP exchange."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Answers a $QRP-decided request. A KIND Error (decision or page header) answers its HTTP_STATUS, or when that is 0 the status its ERROR_CODE names: no-route/not-found 404, method-not-allowed 405, not-acceptable 406, timeout/too-large 422, host-failed 502, unavailable 503 (and any STATUS Busy/Cold, with retry-after from RETRY_AFTER_MS), any other code 400 - with the $QRP itself (FlatBuffer) or {\"error\":MESSAGE,\"code\":ERROR_CODE} (Json). 304 when the request's ETAG equals the page header's ETAG. A page header carrying BODY_REF_TOKEN answers by reference: the $HTR names the host's token, no inline body. Otherwise 200: FlatBuffer/Default -> the page stream verbatim (application/vnd.sdn.flatbuffers.stream, x-sdn-record-count, etag); Json -> a bare array of the page's records ($OMM only; another standard answers 406), a projection as a bare array of {COLUMN: value} objects (bytes base64), or the query surface as {\"TABLES\",\"MAX_ELAPSED_MS\",\"MAX_ROWS\",\"MAX_BYTES\"}. A request served without a page answers 502. BATCHING: every input port is single-stream BY CONTRACT (one HTTP exchange) and that is ENFORCED IN CODE: the compiled flow runtime drains a node's whole queue port-blind (maxStreams/maxBatch/drainPolicy are declarative only), so two frames on one port - e.g. a router's refusal and a serving node's decision, which flows wire into the same \"decision\" port and which are mutually exclusive by construction - are refused with error code \"batched-input-frames\" rather than answered from whichever frame the queue held first (graph task modules-guest-nodes-drop-batched-frames). Bodies on two different ports are refused too (\"ambiguous-body\")."
     }
   ],
   "schemasUsed": [
     {
       "schemaName": "HttpResponseAbi.fbs",
       "fileIdentifier": "$HTR",
-      "rootTypeName": "HttpResponse"
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NHS.fbs",
+      "fileIdentifier": "$NHS",
+      "rootTypeName": "NHS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NEV.fbs",
+      "fileIdentifier": "$NEV",
+      "rootTypeName": "NEV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "NST.fbs",
+      "fileIdentifier": "$NST",
+      "rootTypeName": "NST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DAV.fbs",
+      "fileIdentifier": "$DAV",
+      "rootTypeName": "DAV",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CSM.fbs",
+      "fileIdentifier": "$CSM",
+      "rootTypeName": "CSM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GNP.fbs",
+      "fileIdentifier": "$GNP",
+      "rootTypeName": "GNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [

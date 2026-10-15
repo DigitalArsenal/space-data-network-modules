@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { DCL_TYPE, STANDARDS_ROOT, call } from './dcl.mjs';
 
 // Independent references:
 // - Space Environment Technologies' JB2008 validation package
@@ -27,17 +27,6 @@ const wasm = fs.readFileSync(new URL('../dist/isomorphic/module.wasm', import.me
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const validateZip = process.env.SET_JB2008_VALIDATE ?? '/opt/data/sdn-archive/hac/set-jb2008/20261009/jb2008validate.zip';
 const haveSet = fs.existsSync(validateZip);
-
-async function call(method, request) {
-  const harness = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  try {
-    const response = await harness.invoke({ methodId: method, inputs: [{ portId: 'request', payload: Buffer.from(JSON.stringify(request)), typeRef: { schemaName: 'application/json' } }] });
-    if (response.statusCode !== 0) throw new Error(`${response.errorCode}: ${response.errorMessage}`);
-    return JSON.parse(Buffer.from(response.outputs[0].payload).toString('utf8'));
-  } finally {
-    await harness.destroy();
-  }
-}
 
 // One SET expected-output file: its instant, Sun, drivers and grid rows.
 function setFile(hour) {
@@ -67,8 +56,11 @@ const raw = (f, rows, inputs = f.inputs) => rows.map((r) => ({ mjd: f.mjd, sunRa
   latRad: r.lat * Math.PI / 180, altKm: r.z, inputs, rho: r.rho }));
 
 test('artifact passes the SDK compliance check', async () => {
-  const report = await validateArtifactWithStandards({ manifest, wasmBytes: wasm });
+  const report = await validateArtifactWithStandards({ manifest, wasmBytes: wasm, standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues ?? report, null, 1).slice(0, 2000));
+  // Every port of every method carries one concrete type, the $DCL record.
+  for (const method of manifest.methods)
+    for (const port of [...method.inputPorts, ...method.outputPorts]) assert.deepEqual(port.acceptedTypeSets.map((s) => s.allowedTypes), [[DCL_TYPE]], `${method.methodId}.${port.portId}`);
 });
 
 test('JB2008 reproduces SET\'s Fortran validation output (eight hours, 150-600 km)', { skip: !haveSet && `SET jb2008validate.zip not found at ${validateZip}` }, async () => {
@@ -78,7 +70,7 @@ test('JB2008 reproduces SET\'s Fortran validation output (eight hours, 150-600 k
     // Every 7th grid row keeps the call small and still spans all altitudes, longitudes and latitudes.
     const rows = f.rows.filter((r, i) => i % 7 === 0 && r.z >= 150);
     const out = await call('evaluate', { raw: raw(f, rows) });
-    rows.forEach((r, i) => { worst = Math.max(worst, Math.abs(out.density[i] / r.rho - 1)); ++n; });
+    rows.forEach((r, i) => { worst = Math.max(worst, Math.abs(out.POINTS.DENSITY_KG_M3[i] / r.rho - 1)); ++n; });
   }
   // SET prints the densities to five significant digits but the drivers
   // only to the unit (F10 129., ...) and the Sun to 1e-4 rad; half a unit of
@@ -96,13 +88,15 @@ test('calibrate recovers a known temperature offset from SET\'s densities', { sk
   const f = setFile('03');
   const rows = f.rows.filter((r, i) => i % 5 === 0 && r.z >= 250);
   const fit = async (lower) => (await call('calibrate', { raw: raw(f, rows, [...f.inputs.slice(0, 8), f.inputs[8] - lower]), degree: 2, binHours: 3,
-    fromMjd: f.mjd - 0.01, toMjd: f.mjd + 0.1, logSigma: 0.01, priorSigmaK: [500, 500, 500], minPoints: 10, iterations: 20, editSigma: 0 })).bins[0];
+    fromMjd: f.mjd - 0.01, toMjd: f.mjd + 0.1, logSigma: 0.01, priorSigmaK: [500, 500, 500], minPoints: 10, iterations: 20, editSigma: 0 })).CORRECTION.SEGMENTS[0];
   const control = await fit(0), shifted = await fit(37);
-  assert.equal(control.converged && shifted.converged, true);
-  control.coefficients.forEach((c, k) => assert.ok(Math.abs(c) < 1.6, `control coefficient ${k}: ${c} K`));
-  assert.ok(Math.abs(shifted.coefficients[0] - control.coefficients[0] - 37) < 0.1, `a00 ${shifted.coefficients[0]} vs control ${control.coefficients[0]}`);
-  shifted.coefficients.slice(1).forEach((c, k) => assert.ok(Math.abs(c - control.coefficients[k + 1]) < 0.1, `coefficient ${k + 1}: ${c} vs ${control.coefficients[k + 1]}`));
-  assert.ok(shifted.postfitRms < 3e-3, `post-fit rms ${shifted.postfitRms}`);
+  assert.equal(control.FIT.CONVERGED && shifted.FIT.CONVERGED, true);
+  const c0 = control.COEFFICIENTS_K, c1 = shifted.COEFFICIENTS_K;
+  c0.forEach((c, k) => assert.ok(Math.abs(c) < 1.6, `control coefficient ${k}: ${c} K`));
+  assert.ok(Math.abs(c1[0] - c0[0] - 37) < 0.1, `a00 ${c1[0]} vs control ${c0[0]}`);
+  c1.slice(1).forEach((c, k) => assert.ok(Math.abs(c - c0[k + 1]) < 0.1, `coefficient ${k + 1}: ${c} vs ${c0[k + 1]}`));
+  assert.ok(shifted.FIT.POSTFIT_RMS < 3e-3, `post-fit rms ${shifted.FIT.POSTFIT_RMS}`);
+  assert.equal(shifted.SIGMAS_K.length, 9, 'a formal sigma per coefficient');
 });
 
 test('the Sun\'s Earth-fixed direction matches JPL Horizons\' sub-solar point', async () => {
@@ -118,8 +112,9 @@ test('the Sun\'s Earth-fixed direction matches JPL Horizons\' sub-solar point', 
     rows.push({ DATE: new Date((day - 40587) * 86400000).toISOString().slice(0, 10), F10: 150, F10_CENTRED_81: 150, S10: 150, S10_CENTRED_81: 150,
       M10: 150, M10_CENTRED_81: 150, Y10: 150, Y10_CENTRED_81: 150, DTC_HOURLY_K: Array(24).fill(30) });
   }
-  const out = await call('evaluate', { points: { mjd, latDeg: mjd.map(() => 0), lonDeg: mjd.map(() => 0), altKm: mjd.map(() => 400) },
-    jb2008: { rows }, diagnostics: true });
+  const out = (await call('evaluate', { points: { mjd, latDeg: mjd.map(() => 0), lonDeg: mjd.map(() => 0), altKm: mjd.map(() => 400) },
+    jb2008: { rows }, diagnostics: true })).POINTS;
+  out.sunLonDeg = out.SUN_LONGITUDE_DEG; out.sunLatDeg = out.SUN_LATITUDE_DEG; out.lstHours = out.LOCAL_SOLAR_TIME_H;
   horizons.forEach(([, lon, lat, lt], i) => {
     const geometric = lon - 360.9856 * lt / 1440;
     const dLon = ((out.sunLonDeg[i] - geometric) % 360 + 540) % 360 - 180;
@@ -140,9 +135,12 @@ test('a global correction equals raising every DTC value by the same amount (hpo
     lonDeg: Array.from({ length: n }, (_, i) => -170 + 7 * i), altKm: Array.from({ length: n }, (_, i) => 300 + 8 * i) };
   const shifted = await call('evaluate', { points, jb2008: { rows: rows(40) } });
   const corrected = await call('evaluate', { points, jb2008: { rows: rows(0) }, correction: { degree: 1, segments: [{ fromMjd: 61040, toMjd: 61050, coefficients: [40, 0, 0, 0] }] } });
-  corrected.density.forEach((rho, i) => assert.ok(Math.abs(rho / shifted.density[i] - 1) < 1e-12));
-  assert.deepEqual(corrected.deltaT, Array(n).fill(40));
+  corrected.POINTS.DENSITY_KG_M3.forEach((rho, i) => assert.ok(Math.abs(rho / shifted.POINTS.DENSITY_KG_M3[i] - 1) < 1e-12));
+  assert.deepEqual(corrected.POINTS.DELTA_T_K, Array(n).fill(40));
+  // The answer carries the correction as applied.
+  assert.equal(corrected.CORRECTION.SEGMENTS[0].COEFFICIENTS_K[0], 40);
   // Outside the drivers' span (Y10 needs five days of lag) a point is refused, not guessed.
   const early = await call('evaluate', { points: { mjd: [61041.5], latDeg: [0], lonDeg: [0], altKm: [400] }, jb2008: { rows: rows(0) } });
-  assert.deepEqual(early.refused, [0]);
+  assert.deepEqual(early.POINTS.REFUSED, [0]);
+  assert.ok(Number.isNaN(early.POINTS.DENSITY_KG_M3[0]), 'a refused point has no density');
 });

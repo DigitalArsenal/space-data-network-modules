@@ -1,13 +1,18 @@
 {
   "pluginId": "covariance-analysis",
   "name": "Covariance Analysis",
-  "version": "0.1.0",
-  "description": "Combines direct covariance, synthetic TLE-series scatter, and sensor bias inputs into an SDS-compatible covariance product.",
+  "version": "0.2.0",
+  "description": "Combines a direct covariance ($OCM), the scatter of an element-set series ($OMM) and sensor biases, given as one $SBC covariance request, into one object's RTN covariance: a $OCM with the combined 6x6 lower triangle, and a $SBC with the diagnostics (contributors, the variance each added, one-sigma values, position covariance, ellipsoid semi-axes).",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
@@ -20,10 +25,18 @@
       "inputPorts": [
         {
           "portId": "covariance",
+          "description": "One $SBC with its REQUEST arm: OBJECT_ID, EPOCH, DIRECT_COVARIANCE ($OCM, 21-value lower triangle; per-axis sigmas as a diagonal), ELEMENT_SET_SERIES ($OMM) and SENSOR_BIASES (RADIAL_M, IN_TRACK_M, CROSS_TRACK_M).",
           "acceptedTypeSets": [
             {
-              "setId": "covariance-request",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "sbc-covariance-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "SBC.fbs",
+                  "fileIdentifier": "$SBC",
+                  "rootTypeName": "SBC",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
             }
           ],
           "minStreams": 1,
@@ -34,10 +47,38 @@
       "outputPorts": [
         {
           "portId": "covariance",
+          "description": "The combined covariance as an $OCM: COVARIANCE_DATA (21 values, LTM, km**2 family) at the request EPOCH, COV_REF_FRAME the direct covariance's frame (RTN by name when none).",
           "acceptedTypeSets": [
             {
               "setId": "ocm-covariance-result",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "diagnostics",
+          "description": "The $SBC DIAGNOSTICS arm of the combination.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sbc-covariance-diagnostics",
+              "allowedTypes": [
+                {
+                  "schemaName": "SBC.fbs",
+                  "fileIdentifier": "$SBC",
+                  "rootTypeName": "SBC",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
             }
           ],
           "minStreams": 0,

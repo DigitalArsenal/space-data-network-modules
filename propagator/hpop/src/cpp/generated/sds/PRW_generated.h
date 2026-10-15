@@ -181,6 +181,22 @@ struct PRWVersionResult;
 struct PRWVersionResultBuilder;
 struct PRWVersionResultT;
 
+struct PRWWindowQuery;
+struct PRWWindowQueryBuilder;
+struct PRWWindowQueryT;
+
+struct PRWWindowRequest;
+struct PRWWindowRequestBuilder;
+struct PRWWindowRequestT;
+
+struct PRWWindowRefusal;
+struct PRWWindowRefusalBuilder;
+struct PRWWindowRefusalT;
+
+struct PRWWindowReport;
+struct PRWWindowReportBuilder;
+struct PRWWindowReportT;
+
 struct PRW;
 struct PRWBuilder;
 struct PRWT;
@@ -7043,6 +7059,610 @@ inline ::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResultDirect(
 
 ::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWVersionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWWindowQueryT : public ::flatbuffers::NativeTable {
+  typedef PRWWindowQuery TableType;
+  uint32_t SEQUENCE = 0;
+  uint32_t SET_INDEX = 0;
+  uint32_t ENTITY_HANDLE = 0;
+  std::string OBJECT_KEY{};
+  uint32_t NORAD_CAT_ID = 0;
+  std::string OBJECT_ID{};
+  std::unique_ptr<TIMInstantT> SOURCE_EPOCH{};
+  std::unique_ptr<TIMInstantT> START{};
+  std::unique_ptr<TIMInstantT> STOP{};
+  double STEP_SECONDS = 0.0;
+  PRWWindowQueryT() = default;
+  PRWWindowQueryT(const PRWWindowQueryT &o);
+  PRWWindowQueryT(PRWWindowQueryT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWWindowQueryT &operator=(PRWWindowQueryT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One propagation window: propagate one source (an element set, an
+/// initialized entity or a resident handle) from START to STOP, sampling at
+/// most STEP_SECONDS apart with the last sample exactly at STOP. The answer is
+/// one $OEM data block per query, in SEQUENCE order, covering [START, STOP];
+/// a provider that cannot answer returns an empty block whose COMMENT begins
+/// "REFUSED" and reports the reason in PRWWindowReport.
+struct PRWWindowQuery FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWWindowQueryT NativeTableType;
+  typedef PRWWindowQueryBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SEQUENCE = 4,
+    VT_SET_INDEX = 6,
+    VT_ENTITY_HANDLE = 8,
+    VT_OBJECT_KEY = 10,
+    VT_NORAD_CAT_ID = 12,
+    VT_OBJECT_ID = 14,
+    VT_SOURCE_EPOCH = 16,
+    VT_START = 18,
+    VT_STOP = 20,
+    VT_STEP_SECONDS = 22
+  };
+  /// Position of the query in the request, 0-based; answers keep this order.
+  uint32_t SEQUENCE() const {
+    return GetField<uint32_t>(VT_SEQUENCE, 0);
+  }
+  /// 0-based index of the source record among the source records passed
+  /// with the request (e.g. the $OMM element sets, across all frames, in input
+  /// order). Ignored when ENTITY_HANDLE is used.
+  uint32_t SET_INDEX() const {
+    return GetField<uint32_t>(VT_SET_INDEX, 0);
+  }
+  /// Entity handle of an initialized or resident source; 0 = use SET_INDEX.
+  uint32_t ENTITY_HANDLE() const {
+    return GetField<uint32_t>(VT_ENTITY_HANDLE, 0);
+  }
+  /// Object key of the source as the requester names it (e.g. "NORAD:25544");
+  /// the answer block must be of this object.
+  const ::flatbuffers::String *OBJECT_KEY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_KEY);
+  }
+  /// NORAD catalog number of the object; 0 = none (then OBJECT_ID identifies
+  /// it).
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
+  /// International designator or provider object identifier; empty = none.
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  /// Epoch of the source record, for reference; absent = not stated.
+  const TIMInstant *SOURCE_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_SOURCE_EPOCH);
+  }
+  /// First and last instants of the window (UTC unless TIME_SYSTEM says
+  /// otherwise).
+  const TIMInstant *START() const {
+    return GetPointer<const TIMInstant *>(VT_START);
+  }
+  const TIMInstant *STOP() const {
+    return GetPointer<const TIMInstant *>(VT_STOP);
+  }
+  /// Largest sample spacing, seconds (> 0).
+  double STEP_SECONDS() const {
+    return GetField<double>(VT_STEP_SECONDS, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SET_INDEX, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ENTITY_HANDLE, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_KEY) &&
+           verifier.VerifyString(OBJECT_KEY()) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyOffset(verifier, VT_SOURCE_EPOCH) &&
+           verifier.VerifyTable(SOURCE_EPOCH()) &&
+           VerifyOffsetRequired(verifier, VT_START) &&
+           verifier.VerifyTable(START()) &&
+           VerifyOffsetRequired(verifier, VT_STOP) &&
+           verifier.VerifyTable(STOP()) &&
+           VerifyField<double>(verifier, VT_STEP_SECONDS, 8) &&
+           verifier.EndTable();
+  }
+  PRWWindowQueryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWWindowQueryT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWWindowQuery> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowQueryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWWindowQueryBuilder {
+  typedef PRWWindowQuery Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SEQUENCE(uint32_t SEQUENCE) {
+    fbb_.AddElement<uint32_t>(PRWWindowQuery::VT_SEQUENCE, SEQUENCE, 0);
+  }
+  void add_SET_INDEX(uint32_t SET_INDEX) {
+    fbb_.AddElement<uint32_t>(PRWWindowQuery::VT_SET_INDEX, SET_INDEX, 0);
+  }
+  void add_ENTITY_HANDLE(uint32_t ENTITY_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWWindowQuery::VT_ENTITY_HANDLE, ENTITY_HANDLE, 0);
+  }
+  void add_OBJECT_KEY(::flatbuffers::Offset<::flatbuffers::String> OBJECT_KEY) {
+    fbb_.AddOffset(PRWWindowQuery::VT_OBJECT_KEY, OBJECT_KEY);
+  }
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(PRWWindowQuery::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(PRWWindowQuery::VT_OBJECT_ID, OBJECT_ID);
+  }
+  void add_SOURCE_EPOCH(::flatbuffers::Offset<TIMInstant> SOURCE_EPOCH) {
+    fbb_.AddOffset(PRWWindowQuery::VT_SOURCE_EPOCH, SOURCE_EPOCH);
+  }
+  void add_START(::flatbuffers::Offset<TIMInstant> START) {
+    fbb_.AddOffset(PRWWindowQuery::VT_START, START);
+  }
+  void add_STOP(::flatbuffers::Offset<TIMInstant> STOP) {
+    fbb_.AddOffset(PRWWindowQuery::VT_STOP, STOP);
+  }
+  void add_STEP_SECONDS(double STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWWindowQuery::VT_STEP_SECONDS, STEP_SECONDS, 0.0);
+  }
+  explicit PRWWindowQueryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWWindowQuery> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWWindowQuery>(end);
+    fbb_.Required(o, PRWWindowQuery::VT_START);
+    fbb_.Required(o, PRWWindowQuery::VT_STOP);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWWindowQuery> CreatePRWWindowQuery(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SEQUENCE = 0,
+    uint32_t SET_INDEX = 0,
+    uint32_t ENTITY_HANDLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_KEY = 0,
+    uint32_t NORAD_CAT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    ::flatbuffers::Offset<TIMInstant> SOURCE_EPOCH = 0,
+    ::flatbuffers::Offset<TIMInstant> START = 0,
+    ::flatbuffers::Offset<TIMInstant> STOP = 0,
+    double STEP_SECONDS = 0.0) {
+  PRWWindowQueryBuilder builder_(_fbb);
+  builder_.add_STEP_SECONDS(STEP_SECONDS);
+  builder_.add_STOP(STOP);
+  builder_.add_START(START);
+  builder_.add_SOURCE_EPOCH(SOURCE_EPOCH);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
+  builder_.add_OBJECT_KEY(OBJECT_KEY);
+  builder_.add_ENTITY_HANDLE(ENTITY_HANDLE);
+  builder_.add_SET_INDEX(SET_INDEX);
+  builder_.add_SEQUENCE(SEQUENCE);
+  return builder_.Finish();
+}
+
+struct PRWWindowQuery::Traits {
+  using type = PRWWindowQuery;
+  static auto constexpr Create = CreatePRWWindowQuery;
+};
+
+inline ::flatbuffers::Offset<PRWWindowQuery> CreatePRWWindowQueryDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SEQUENCE = 0,
+    uint32_t SET_INDEX = 0,
+    uint32_t ENTITY_HANDLE = 0,
+    const char *OBJECT_KEY = nullptr,
+    uint32_t NORAD_CAT_ID = 0,
+    const char *OBJECT_ID = nullptr,
+    ::flatbuffers::Offset<TIMInstant> SOURCE_EPOCH = 0,
+    ::flatbuffers::Offset<TIMInstant> START = 0,
+    ::flatbuffers::Offset<TIMInstant> STOP = 0,
+    double STEP_SECONDS = 0.0) {
+  auto OBJECT_KEY__ = OBJECT_KEY ? _fbb.CreateString(OBJECT_KEY) : 0;
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  return CreatePRWWindowQuery(
+      _fbb,
+      SEQUENCE,
+      SET_INDEX,
+      ENTITY_HANDLE,
+      OBJECT_KEY__,
+      NORAD_CAT_ID,
+      OBJECT_ID__,
+      SOURCE_EPOCH,
+      START,
+      STOP,
+      STEP_SECONDS);
+}
+
+::flatbuffers::Offset<PRWWindowQuery> CreatePRWWindowQuery(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowQueryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWWindowRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWWindowRequest TableType;
+  std::vector<std::unique_ptr<PRWWindowQueryT>> QUERIES{};
+  std::string PROPAGATOR_PORT_ID{};
+  uint32_t NEIGHBOUR_SETS = 0;
+  std::string TARGET_FRAME{};
+  std::string INSTRUCTIONS{};
+  PRWWindowRequestT() = default;
+  PRWWindowRequestT(const PRWWindowRequestT &o);
+  PRWWindowRequestT(PRWWindowRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWWindowRequestT &operator=(PRWWindowRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// A batch of propagation windows. Existing BATCH_REQUEST propagates every
+/// entity to one EPOCH; a window request propagates each query's source over
+/// its own [START, STOP] at STEP_SECONDS.
+struct PRWWindowRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWWindowRequestT NativeTableType;
+  typedef PRWWindowRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_QUERIES = 4,
+    VT_PROPAGATOR_PORT_ID = 6,
+    VT_NEIGHBOUR_SETS = 8,
+    VT_TARGET_FRAME = 10,
+    VT_INSTRUCTIONS = 12
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowQuery>> *QUERIES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowQuery>> *>(VT_QUERIES);
+  }
+  /// Port of the propagator expected to answer; empty = the host's default.
+  const ::flatbuffers::String *PROPAGATOR_PORT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROPAGATOR_PORT_ID);
+  }
+  /// Neighbouring source records each window spans on either side (context
+  /// for the requester's replay); 0 = not stated.
+  uint32_t NEIGHBOUR_SETS() const {
+    return GetField<uint32_t>(VT_NEIGHBOUR_SETS, 0);
+  }
+  /// Frame the answers should be in, as an RFM name (e.g. "TEME", "GCRF");
+  /// empty = the provider's native frame.
+  const ::flatbuffers::String *TARGET_FRAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_FRAME);
+  }
+  /// How to answer, human-readable.
+  const ::flatbuffers::String *INSTRUCTIONS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_INSTRUCTIONS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_QUERIES) &&
+           verifier.VerifyVector(QUERIES()) &&
+           verifier.VerifyVectorOfTables(QUERIES()) &&
+           VerifyOffset(verifier, VT_PROPAGATOR_PORT_ID) &&
+           verifier.VerifyString(PROPAGATOR_PORT_ID()) &&
+           VerifyField<uint32_t>(verifier, VT_NEIGHBOUR_SETS, 4) &&
+           VerifyOffset(verifier, VT_TARGET_FRAME) &&
+           verifier.VerifyString(TARGET_FRAME()) &&
+           VerifyOffset(verifier, VT_INSTRUCTIONS) &&
+           verifier.VerifyString(INSTRUCTIONS()) &&
+           verifier.EndTable();
+  }
+  PRWWindowRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWWindowRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWWindowRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWWindowRequestBuilder {
+  typedef PRWWindowRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_QUERIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowQuery>>> QUERIES) {
+    fbb_.AddOffset(PRWWindowRequest::VT_QUERIES, QUERIES);
+  }
+  void add_PROPAGATOR_PORT_ID(::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_PORT_ID) {
+    fbb_.AddOffset(PRWWindowRequest::VT_PROPAGATOR_PORT_ID, PROPAGATOR_PORT_ID);
+  }
+  void add_NEIGHBOUR_SETS(uint32_t NEIGHBOUR_SETS) {
+    fbb_.AddElement<uint32_t>(PRWWindowRequest::VT_NEIGHBOUR_SETS, NEIGHBOUR_SETS, 0);
+  }
+  void add_TARGET_FRAME(::flatbuffers::Offset<::flatbuffers::String> TARGET_FRAME) {
+    fbb_.AddOffset(PRWWindowRequest::VT_TARGET_FRAME, TARGET_FRAME);
+  }
+  void add_INSTRUCTIONS(::flatbuffers::Offset<::flatbuffers::String> INSTRUCTIONS) {
+    fbb_.AddOffset(PRWWindowRequest::VT_INSTRUCTIONS, INSTRUCTIONS);
+  }
+  explicit PRWWindowRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWWindowRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWWindowRequest>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWWindowRequest> CreatePRWWindowRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowQuery>>> QUERIES = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_PORT_ID = 0,
+    uint32_t NEIGHBOUR_SETS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_FRAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> INSTRUCTIONS = 0) {
+  PRWWindowRequestBuilder builder_(_fbb);
+  builder_.add_INSTRUCTIONS(INSTRUCTIONS);
+  builder_.add_TARGET_FRAME(TARGET_FRAME);
+  builder_.add_NEIGHBOUR_SETS(NEIGHBOUR_SETS);
+  builder_.add_PROPAGATOR_PORT_ID(PROPAGATOR_PORT_ID);
+  builder_.add_QUERIES(QUERIES);
+  return builder_.Finish();
+}
+
+struct PRWWindowRequest::Traits {
+  using type = PRWWindowRequest;
+  static auto constexpr Create = CreatePRWWindowRequest;
+};
+
+inline ::flatbuffers::Offset<PRWWindowRequest> CreatePRWWindowRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<PRWWindowQuery>> *QUERIES = nullptr,
+    const char *PROPAGATOR_PORT_ID = nullptr,
+    uint32_t NEIGHBOUR_SETS = 0,
+    const char *TARGET_FRAME = nullptr,
+    const char *INSTRUCTIONS = nullptr) {
+  auto QUERIES__ = QUERIES ? _fbb.CreateVector<::flatbuffers::Offset<PRWWindowQuery>>(*QUERIES) : 0;
+  auto PROPAGATOR_PORT_ID__ = PROPAGATOR_PORT_ID ? _fbb.CreateString(PROPAGATOR_PORT_ID) : 0;
+  auto TARGET_FRAME__ = TARGET_FRAME ? _fbb.CreateString(TARGET_FRAME) : 0;
+  auto INSTRUCTIONS__ = INSTRUCTIONS ? _fbb.CreateString(INSTRUCTIONS) : 0;
+  return CreatePRWWindowRequest(
+      _fbb,
+      QUERIES__,
+      PROPAGATOR_PORT_ID__,
+      NEIGHBOUR_SETS,
+      TARGET_FRAME__,
+      INSTRUCTIONS__);
+}
+
+::flatbuffers::Offset<PRWWindowRequest> CreatePRWWindowRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWWindowRefusalT : public ::flatbuffers::NativeTable {
+  typedef PRWWindowRefusal TableType;
+  uint32_t SEQUENCE = 0;
+  uint32_t SET_INDEX = 0;
+  std::string REASON{};
+};
+
+/// A window the provider refused.
+struct PRWWindowRefusal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWWindowRefusalT NativeTableType;
+  typedef PRWWindowRefusalBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SEQUENCE = 4,
+    VT_SET_INDEX = 6,
+    VT_REASON = 8
+  };
+  /// The query's SEQUENCE.
+  uint32_t SEQUENCE() const {
+    return GetField<uint32_t>(VT_SEQUENCE, 0);
+  }
+  /// The query's SET_INDEX.
+  uint32_t SET_INDEX() const {
+    return GetField<uint32_t>(VT_SET_INDEX, 0);
+  }
+  /// Reason code, e.g. "set-out-of-range", "mean-element-theory-not-sgp4:X",
+  /// "invalid-span", "span-too-long", "sgp4-propagate".
+  const ::flatbuffers::String *REASON() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REASON);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SET_INDEX, 4) &&
+           VerifyOffset(verifier, VT_REASON) &&
+           verifier.VerifyString(REASON()) &&
+           verifier.EndTable();
+  }
+  PRWWindowRefusalT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWWindowRefusalT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWWindowRefusal> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRefusalT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWWindowRefusalBuilder {
+  typedef PRWWindowRefusal Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SEQUENCE(uint32_t SEQUENCE) {
+    fbb_.AddElement<uint32_t>(PRWWindowRefusal::VT_SEQUENCE, SEQUENCE, 0);
+  }
+  void add_SET_INDEX(uint32_t SET_INDEX) {
+    fbb_.AddElement<uint32_t>(PRWWindowRefusal::VT_SET_INDEX, SET_INDEX, 0);
+  }
+  void add_REASON(::flatbuffers::Offset<::flatbuffers::String> REASON) {
+    fbb_.AddOffset(PRWWindowRefusal::VT_REASON, REASON);
+  }
+  explicit PRWWindowRefusalBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWWindowRefusal> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWWindowRefusal>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWWindowRefusal> CreatePRWWindowRefusal(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SEQUENCE = 0,
+    uint32_t SET_INDEX = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REASON = 0) {
+  PRWWindowRefusalBuilder builder_(_fbb);
+  builder_.add_REASON(REASON);
+  builder_.add_SET_INDEX(SET_INDEX);
+  builder_.add_SEQUENCE(SEQUENCE);
+  return builder_.Finish();
+}
+
+struct PRWWindowRefusal::Traits {
+  using type = PRWWindowRefusal;
+  static auto constexpr Create = CreatePRWWindowRefusal;
+};
+
+inline ::flatbuffers::Offset<PRWWindowRefusal> CreatePRWWindowRefusalDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SEQUENCE = 0,
+    uint32_t SET_INDEX = 0,
+    const char *REASON = nullptr) {
+  auto REASON__ = REASON ? _fbb.CreateString(REASON) : 0;
+  return CreatePRWWindowRefusal(
+      _fbb,
+      SEQUENCE,
+      SET_INDEX,
+      REASON__);
+}
+
+::flatbuffers::Offset<PRWWindowRefusal> CreatePRWWindowRefusal(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRefusalT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWWindowReportT : public ::flatbuffers::NativeTable {
+  typedef PRWWindowReport TableType;
+  uint32_t QUERIES = 0;
+  uint32_t ANSWERED = 0;
+  uint32_t REFUSED = 0;
+  uint32_t SOURCE_RECORDS = 0;
+  std::vector<std::unique_ptr<PRWWindowRefusalT>> REFUSALS{};
+  std::string PROVIDER{};
+  PRWWindowReportT() = default;
+  PRWWindowReportT(const PRWWindowReportT &o);
+  PRWWindowReportT(PRWWindowReportT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWWindowReportT &operator=(PRWWindowReportT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Summary of the answers to a window request.
+struct PRWWindowReport FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWWindowReportT NativeTableType;
+  typedef PRWWindowReportBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_QUERIES = 4,
+    VT_ANSWERED = 6,
+    VT_REFUSED = 8,
+    VT_SOURCE_RECORDS = 10,
+    VT_REFUSALS = 12,
+    VT_PROVIDER = 14
+  };
+  /// Queries received, answered and refused.
+  uint32_t QUERIES() const {
+    return GetField<uint32_t>(VT_QUERIES, 0);
+  }
+  uint32_t ANSWERED() const {
+    return GetField<uint32_t>(VT_ANSWERED, 0);
+  }
+  uint32_t REFUSED() const {
+    return GetField<uint32_t>(VT_REFUSED, 0);
+  }
+  /// Source records received.
+  uint32_t SOURCE_RECORDS() const {
+    return GetField<uint32_t>(VT_SOURCE_RECORDS, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowRefusal>> *REFUSALS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowRefusal>> *>(VT_REFUSALS);
+  }
+  /// The propagator and its configuration, e.g. "SGP4, Vallado, WGS-72,
+  /// opsmode i; TEME, UTC, km and km/s".
+  const ::flatbuffers::String *PROVIDER() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_QUERIES, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ANSWERED, 4) &&
+           VerifyField<uint32_t>(verifier, VT_REFUSED, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SOURCE_RECORDS, 4) &&
+           VerifyOffset(verifier, VT_REFUSALS) &&
+           verifier.VerifyVector(REFUSALS()) &&
+           verifier.VerifyVectorOfTables(REFUSALS()) &&
+           VerifyOffset(verifier, VT_PROVIDER) &&
+           verifier.VerifyString(PROVIDER()) &&
+           verifier.EndTable();
+  }
+  PRWWindowReportT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWWindowReportT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWWindowReport> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowReportT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWWindowReportBuilder {
+  typedef PRWWindowReport Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_QUERIES(uint32_t QUERIES) {
+    fbb_.AddElement<uint32_t>(PRWWindowReport::VT_QUERIES, QUERIES, 0);
+  }
+  void add_ANSWERED(uint32_t ANSWERED) {
+    fbb_.AddElement<uint32_t>(PRWWindowReport::VT_ANSWERED, ANSWERED, 0);
+  }
+  void add_REFUSED(uint32_t REFUSED) {
+    fbb_.AddElement<uint32_t>(PRWWindowReport::VT_REFUSED, REFUSED, 0);
+  }
+  void add_SOURCE_RECORDS(uint32_t SOURCE_RECORDS) {
+    fbb_.AddElement<uint32_t>(PRWWindowReport::VT_SOURCE_RECORDS, SOURCE_RECORDS, 0);
+  }
+  void add_REFUSALS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowRefusal>>> REFUSALS) {
+    fbb_.AddOffset(PRWWindowReport::VT_REFUSALS, REFUSALS);
+  }
+  void add_PROVIDER(::flatbuffers::Offset<::flatbuffers::String> PROVIDER) {
+    fbb_.AddOffset(PRWWindowReport::VT_PROVIDER, PROVIDER);
+  }
+  explicit PRWWindowReportBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWWindowReport> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWWindowReport>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWWindowReport> CreatePRWWindowReport(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t QUERIES = 0,
+    uint32_t ANSWERED = 0,
+    uint32_t REFUSED = 0,
+    uint32_t SOURCE_RECORDS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWWindowRefusal>>> REFUSALS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER = 0) {
+  PRWWindowReportBuilder builder_(_fbb);
+  builder_.add_PROVIDER(PROVIDER);
+  builder_.add_REFUSALS(REFUSALS);
+  builder_.add_SOURCE_RECORDS(SOURCE_RECORDS);
+  builder_.add_REFUSED(REFUSED);
+  builder_.add_ANSWERED(ANSWERED);
+  builder_.add_QUERIES(QUERIES);
+  return builder_.Finish();
+}
+
+struct PRWWindowReport::Traits {
+  using type = PRWWindowReport;
+  static auto constexpr Create = CreatePRWWindowReport;
+};
+
+inline ::flatbuffers::Offset<PRWWindowReport> CreatePRWWindowReportDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t QUERIES = 0,
+    uint32_t ANSWERED = 0,
+    uint32_t REFUSED = 0,
+    uint32_t SOURCE_RECORDS = 0,
+    const std::vector<::flatbuffers::Offset<PRWWindowRefusal>> *REFUSALS = nullptr,
+    const char *PROVIDER = nullptr) {
+  auto REFUSALS__ = REFUSALS ? _fbb.CreateVector<::flatbuffers::Offset<PRWWindowRefusal>>(*REFUSALS) : 0;
+  auto PROVIDER__ = PROVIDER ? _fbb.CreateString(PROVIDER) : 0;
+  return CreatePRWWindowReport(
+      _fbb,
+      QUERIES,
+      ANSWERED,
+      REFUSED,
+      SOURCE_RECORDS,
+      REFUSALS__,
+      PROVIDER__);
+}
+
+::flatbuffers::Offset<PRWWindowReport> CreatePRWWindowReport(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowReportT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWT : public ::flatbuffers::NativeTable {
   typedef PRW TableType;
   std::unique_ptr<PRWInitT> INIT{};
@@ -7066,6 +7686,8 @@ struct PRWT : public ::flatbuffers::NativeTable {
   std::unique_ptr<PRWEarthOrientationT> EARTH_ORIENTATION{};
   std::unique_ptr<PRWSpaceWeatherTableT> SPACE_WEATHER{};
   std::unique_ptr<PRWJB2008IndicesTableT> JB2008_INDICES{};
+  std::unique_ptr<PRWWindowRequestT> WINDOW_REQUEST{};
+  std::unique_ptr<PRWWindowReportT> WINDOW_REPORT{};
   PRWT() = default;
   PRWT(const PRWT &o);
   PRWT(PRWT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -7098,7 +7720,9 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_VERSION_RESULT = 38,
     VT_EARTH_ORIENTATION = 40,
     VT_SPACE_WEATHER = 42,
-    VT_JB2008_INDICES = 44
+    VT_JB2008_INDICES = 44,
+    VT_WINDOW_REQUEST = 46,
+    VT_WINDOW_REPORT = 48
   };
   const PRWInit *INIT() const {
     return GetPointer<const PRWInit *>(VT_INIT);
@@ -7164,6 +7788,13 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PRWJB2008IndicesTable *JB2008_INDICES() const {
     return GetPointer<const PRWJB2008IndicesTable *>(VT_JB2008_INDICES);
   }
+  /// Propagation over windows: one $OEM block per query answers it.
+  const PRWWindowRequest *WINDOW_REQUEST() const {
+    return GetPointer<const PRWWindowRequest *>(VT_WINDOW_REQUEST);
+  }
+  const PRWWindowReport *WINDOW_REPORT() const {
+    return GetPointer<const PRWWindowReport *>(VT_WINDOW_REPORT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -7208,6 +7839,10 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(SPACE_WEATHER()) &&
            VerifyOffset(verifier, VT_JB2008_INDICES) &&
            verifier.VerifyTable(JB2008_INDICES()) &&
+           VerifyOffset(verifier, VT_WINDOW_REQUEST) &&
+           verifier.VerifyTable(WINDOW_REQUEST()) &&
+           VerifyOffset(verifier, VT_WINDOW_REPORT) &&
+           verifier.VerifyTable(WINDOW_REPORT()) &&
            verifier.EndTable();
   }
   PRWT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -7282,6 +7917,12 @@ struct PRWBuilder {
   void add_JB2008_INDICES(::flatbuffers::Offset<PRWJB2008IndicesTable> JB2008_INDICES) {
     fbb_.AddOffset(PRW::VT_JB2008_INDICES, JB2008_INDICES);
   }
+  void add_WINDOW_REQUEST(::flatbuffers::Offset<PRWWindowRequest> WINDOW_REQUEST) {
+    fbb_.AddOffset(PRW::VT_WINDOW_REQUEST, WINDOW_REQUEST);
+  }
+  void add_WINDOW_REPORT(::flatbuffers::Offset<PRWWindowReport> WINDOW_REPORT) {
+    fbb_.AddOffset(PRW::VT_WINDOW_REPORT, WINDOW_REPORT);
+  }
   explicit PRWBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -7315,8 +7956,12 @@ inline ::flatbuffers::Offset<PRW> CreatePRW(
     ::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT = 0,
     ::flatbuffers::Offset<PRWEarthOrientation> EARTH_ORIENTATION = 0,
     ::flatbuffers::Offset<PRWSpaceWeatherTable> SPACE_WEATHER = 0,
-    ::flatbuffers::Offset<PRWJB2008IndicesTable> JB2008_INDICES = 0) {
+    ::flatbuffers::Offset<PRWJB2008IndicesTable> JB2008_INDICES = 0,
+    ::flatbuffers::Offset<PRWWindowRequest> WINDOW_REQUEST = 0,
+    ::flatbuffers::Offset<PRWWindowReport> WINDOW_REPORT = 0) {
   PRWBuilder builder_(_fbb);
+  builder_.add_WINDOW_REPORT(WINDOW_REPORT);
+  builder_.add_WINDOW_REQUEST(WINDOW_REQUEST);
   builder_.add_JB2008_INDICES(JB2008_INDICES);
   builder_.add_SPACE_WEATHER(SPACE_WEATHER);
   builder_.add_EARTH_ORIENTATION(EARTH_ORIENTATION);
@@ -9658,6 +10303,235 @@ inline ::flatbuffers::Offset<PRWVersionResult> PRWVersionResult::Pack(::flatbuff
       _MODULE_ID);
 }
 
+inline PRWWindowQueryT::PRWWindowQueryT(const PRWWindowQueryT &o)
+      : SEQUENCE(o.SEQUENCE),
+        SET_INDEX(o.SET_INDEX),
+        ENTITY_HANDLE(o.ENTITY_HANDLE),
+        OBJECT_KEY(o.OBJECT_KEY),
+        NORAD_CAT_ID(o.NORAD_CAT_ID),
+        OBJECT_ID(o.OBJECT_ID),
+        SOURCE_EPOCH((o.SOURCE_EPOCH) ? new TIMInstantT(*o.SOURCE_EPOCH) : nullptr),
+        START((o.START) ? new TIMInstantT(*o.START) : nullptr),
+        STOP((o.STOP) ? new TIMInstantT(*o.STOP) : nullptr),
+        STEP_SECONDS(o.STEP_SECONDS) {
+}
+
+inline PRWWindowQueryT &PRWWindowQueryT::operator=(PRWWindowQueryT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SEQUENCE, o.SEQUENCE);
+  std::swap(SET_INDEX, o.SET_INDEX);
+  std::swap(ENTITY_HANDLE, o.ENTITY_HANDLE);
+  std::swap(OBJECT_KEY, o.OBJECT_KEY);
+  std::swap(NORAD_CAT_ID, o.NORAD_CAT_ID);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(SOURCE_EPOCH, o.SOURCE_EPOCH);
+  std::swap(START, o.START);
+  std::swap(STOP, o.STOP);
+  std::swap(STEP_SECONDS, o.STEP_SECONDS);
+  return *this;
+}
+
+inline PRWWindowQueryT *PRWWindowQuery::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWWindowQueryT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWWindowQuery::UnPackTo(PRWWindowQueryT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SEQUENCE(); _o->SEQUENCE = _e; }
+  { auto _e = SET_INDEX(); _o->SET_INDEX = _e; }
+  { auto _e = ENTITY_HANDLE(); _o->ENTITY_HANDLE = _e; }
+  { auto _e = OBJECT_KEY(); if (_e) _o->OBJECT_KEY = _e->str(); }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = SOURCE_EPOCH(); if (_e) { if(_o->SOURCE_EPOCH) { _e->UnPackTo(_o->SOURCE_EPOCH.get(), _resolver); } else { _o->SOURCE_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->SOURCE_EPOCH) { _o->SOURCE_EPOCH.reset(); } }
+  { auto _e = START(); if (_e) { if(_o->START) { _e->UnPackTo(_o->START.get(), _resolver); } else { _o->START = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->START) { _o->START.reset(); } }
+  { auto _e = STOP(); if (_e) { if(_o->STOP) { _e->UnPackTo(_o->STOP.get(), _resolver); } else { _o->STOP = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->STOP) { _o->STOP.reset(); } }
+  { auto _e = STEP_SECONDS(); _o->STEP_SECONDS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWWindowQuery> CreatePRWWindowQuery(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowQueryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWWindowQuery::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWWindowQuery> PRWWindowQuery::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowQueryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWWindowQueryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SEQUENCE = _o->SEQUENCE;
+  auto _SET_INDEX = _o->SET_INDEX;
+  auto _ENTITY_HANDLE = _o->ENTITY_HANDLE;
+  auto _OBJECT_KEY = _o->OBJECT_KEY.empty() ? 0 : _fbb.CreateString(_o->OBJECT_KEY);
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
+  auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
+  auto _SOURCE_EPOCH = _o->SOURCE_EPOCH ? CreateTIMInstant(_fbb, _o->SOURCE_EPOCH.get(), _rehasher) : 0;
+  auto _START = _o->START ? CreateTIMInstant(_fbb, _o->START.get(), _rehasher) : 0;
+  auto _STOP = _o->STOP ? CreateTIMInstant(_fbb, _o->STOP.get(), _rehasher) : 0;
+  auto _STEP_SECONDS = _o->STEP_SECONDS;
+  return CreatePRWWindowQuery(
+      _fbb,
+      _SEQUENCE,
+      _SET_INDEX,
+      _ENTITY_HANDLE,
+      _OBJECT_KEY,
+      _NORAD_CAT_ID,
+      _OBJECT_ID,
+      _SOURCE_EPOCH,
+      _START,
+      _STOP,
+      _STEP_SECONDS);
+}
+
+inline PRWWindowRequestT::PRWWindowRequestT(const PRWWindowRequestT &o)
+      : PROPAGATOR_PORT_ID(o.PROPAGATOR_PORT_ID),
+        NEIGHBOUR_SETS(o.NEIGHBOUR_SETS),
+        TARGET_FRAME(o.TARGET_FRAME),
+        INSTRUCTIONS(o.INSTRUCTIONS) {
+  QUERIES.reserve(o.QUERIES.size());
+  for (const auto &QUERIES_ : o.QUERIES) { QUERIES.emplace_back((QUERIES_) ? new PRWWindowQueryT(*QUERIES_) : nullptr); }
+}
+
+inline PRWWindowRequestT &PRWWindowRequestT::operator=(PRWWindowRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(QUERIES, o.QUERIES);
+  std::swap(PROPAGATOR_PORT_ID, o.PROPAGATOR_PORT_ID);
+  std::swap(NEIGHBOUR_SETS, o.NEIGHBOUR_SETS);
+  std::swap(TARGET_FRAME, o.TARGET_FRAME);
+  std::swap(INSTRUCTIONS, o.INSTRUCTIONS);
+  return *this;
+}
+
+inline PRWWindowRequestT *PRWWindowRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWWindowRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWWindowRequest::UnPackTo(PRWWindowRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = QUERIES(); if (_e) { _o->QUERIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->QUERIES[_i]) { _e->Get(_i)->UnPackTo(_o->QUERIES[_i].get(), _resolver); } else { _o->QUERIES[_i] = std::unique_ptr<PRWWindowQueryT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->QUERIES.resize(0); } }
+  { auto _e = PROPAGATOR_PORT_ID(); if (_e) _o->PROPAGATOR_PORT_ID = _e->str(); }
+  { auto _e = NEIGHBOUR_SETS(); _o->NEIGHBOUR_SETS = _e; }
+  { auto _e = TARGET_FRAME(); if (_e) _o->TARGET_FRAME = _e->str(); }
+  { auto _e = INSTRUCTIONS(); if (_e) _o->INSTRUCTIONS = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWWindowRequest> CreatePRWWindowRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWWindowRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWWindowRequest> PRWWindowRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWWindowRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _QUERIES = _o->QUERIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWWindowQuery>> (_o->QUERIES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWWindowQuery(*__va->__fbb, __va->__o->QUERIES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROPAGATOR_PORT_ID = _o->PROPAGATOR_PORT_ID.empty() ? 0 : _fbb.CreateString(_o->PROPAGATOR_PORT_ID);
+  auto _NEIGHBOUR_SETS = _o->NEIGHBOUR_SETS;
+  auto _TARGET_FRAME = _o->TARGET_FRAME.empty() ? 0 : _fbb.CreateString(_o->TARGET_FRAME);
+  auto _INSTRUCTIONS = _o->INSTRUCTIONS.empty() ? 0 : _fbb.CreateString(_o->INSTRUCTIONS);
+  return CreatePRWWindowRequest(
+      _fbb,
+      _QUERIES,
+      _PROPAGATOR_PORT_ID,
+      _NEIGHBOUR_SETS,
+      _TARGET_FRAME,
+      _INSTRUCTIONS);
+}
+
+inline PRWWindowRefusalT *PRWWindowRefusal::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWWindowRefusalT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWWindowRefusal::UnPackTo(PRWWindowRefusalT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SEQUENCE(); _o->SEQUENCE = _e; }
+  { auto _e = SET_INDEX(); _o->SET_INDEX = _e; }
+  { auto _e = REASON(); if (_e) _o->REASON = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWWindowRefusal> CreatePRWWindowRefusal(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRefusalT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWWindowRefusal::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWWindowRefusal> PRWWindowRefusal::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowRefusalT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWWindowRefusalT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SEQUENCE = _o->SEQUENCE;
+  auto _SET_INDEX = _o->SET_INDEX;
+  auto _REASON = _o->REASON.empty() ? 0 : _fbb.CreateString(_o->REASON);
+  return CreatePRWWindowRefusal(
+      _fbb,
+      _SEQUENCE,
+      _SET_INDEX,
+      _REASON);
+}
+
+inline PRWWindowReportT::PRWWindowReportT(const PRWWindowReportT &o)
+      : QUERIES(o.QUERIES),
+        ANSWERED(o.ANSWERED),
+        REFUSED(o.REFUSED),
+        SOURCE_RECORDS(o.SOURCE_RECORDS),
+        PROVIDER(o.PROVIDER) {
+  REFUSALS.reserve(o.REFUSALS.size());
+  for (const auto &REFUSALS_ : o.REFUSALS) { REFUSALS.emplace_back((REFUSALS_) ? new PRWWindowRefusalT(*REFUSALS_) : nullptr); }
+}
+
+inline PRWWindowReportT &PRWWindowReportT::operator=(PRWWindowReportT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(QUERIES, o.QUERIES);
+  std::swap(ANSWERED, o.ANSWERED);
+  std::swap(REFUSED, o.REFUSED);
+  std::swap(SOURCE_RECORDS, o.SOURCE_RECORDS);
+  std::swap(REFUSALS, o.REFUSALS);
+  std::swap(PROVIDER, o.PROVIDER);
+  return *this;
+}
+
+inline PRWWindowReportT *PRWWindowReport::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWWindowReportT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWWindowReport::UnPackTo(PRWWindowReportT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = QUERIES(); _o->QUERIES = _e; }
+  { auto _e = ANSWERED(); _o->ANSWERED = _e; }
+  { auto _e = REFUSED(); _o->REFUSED = _e; }
+  { auto _e = SOURCE_RECORDS(); _o->SOURCE_RECORDS = _e; }
+  { auto _e = REFUSALS(); if (_e) { _o->REFUSALS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->REFUSALS[_i]) { _e->Get(_i)->UnPackTo(_o->REFUSALS[_i].get(), _resolver); } else { _o->REFUSALS[_i] = std::unique_ptr<PRWWindowRefusalT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->REFUSALS.resize(0); } }
+  { auto _e = PROVIDER(); if (_e) _o->PROVIDER = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWWindowReport> CreatePRWWindowReport(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowReportT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWWindowReport::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWWindowReport> PRWWindowReport::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWWindowReportT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWWindowReportT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _QUERIES = _o->QUERIES;
+  auto _ANSWERED = _o->ANSWERED;
+  auto _REFUSED = _o->REFUSED;
+  auto _SOURCE_RECORDS = _o->SOURCE_RECORDS;
+  auto _REFUSALS = _o->REFUSALS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWWindowRefusal>> (_o->REFUSALS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWWindowRefusal(*__va->__fbb, __va->__o->REFUSALS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROVIDER = _o->PROVIDER.empty() ? 0 : _fbb.CreateString(_o->PROVIDER);
+  return CreatePRWWindowReport(
+      _fbb,
+      _QUERIES,
+      _ANSWERED,
+      _REFUSED,
+      _SOURCE_RECORDS,
+      _REFUSALS,
+      _PROVIDER);
+}
+
 inline PRWT::PRWT(const PRWT &o)
       : INIT((o.INIT) ? new PRWInitT(*o.INIT) : nullptr),
         BATCH_REQUEST((o.BATCH_REQUEST) ? new PRWBatchRequestT(*o.BATCH_REQUEST) : nullptr),
@@ -9679,7 +10553,9 @@ inline PRWT::PRWT(const PRWT &o)
         VERSION_RESULT((o.VERSION_RESULT) ? new PRWVersionResultT(*o.VERSION_RESULT) : nullptr),
         EARTH_ORIENTATION((o.EARTH_ORIENTATION) ? new PRWEarthOrientationT(*o.EARTH_ORIENTATION) : nullptr),
         SPACE_WEATHER((o.SPACE_WEATHER) ? new PRWSpaceWeatherTableT(*o.SPACE_WEATHER) : nullptr),
-        JB2008_INDICES((o.JB2008_INDICES) ? new PRWJB2008IndicesTableT(*o.JB2008_INDICES) : nullptr) {
+        JB2008_INDICES((o.JB2008_INDICES) ? new PRWJB2008IndicesTableT(*o.JB2008_INDICES) : nullptr),
+        WINDOW_REQUEST((o.WINDOW_REQUEST) ? new PRWWindowRequestT(*o.WINDOW_REQUEST) : nullptr),
+        WINDOW_REPORT((o.WINDOW_REPORT) ? new PRWWindowReportT(*o.WINDOW_REPORT) : nullptr) {
 }
 
 inline PRWT &PRWT::operator=(PRWT o) FLATBUFFERS_NOEXCEPT {
@@ -9704,6 +10580,8 @@ inline PRWT &PRWT::operator=(PRWT o) FLATBUFFERS_NOEXCEPT {
   std::swap(EARTH_ORIENTATION, o.EARTH_ORIENTATION);
   std::swap(SPACE_WEATHER, o.SPACE_WEATHER);
   std::swap(JB2008_INDICES, o.JB2008_INDICES);
+  std::swap(WINDOW_REQUEST, o.WINDOW_REQUEST);
+  std::swap(WINDOW_REPORT, o.WINDOW_REPORT);
   return *this;
 }
 
@@ -9737,6 +10615,8 @@ inline void PRW::UnPackTo(PRWT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = EARTH_ORIENTATION(); if (_e) { if(_o->EARTH_ORIENTATION) { _e->UnPackTo(_o->EARTH_ORIENTATION.get(), _resolver); } else { _o->EARTH_ORIENTATION = std::unique_ptr<PRWEarthOrientationT>(_e->UnPack(_resolver)); } } else if (_o->EARTH_ORIENTATION) { _o->EARTH_ORIENTATION.reset(); } }
   { auto _e = SPACE_WEATHER(); if (_e) { if(_o->SPACE_WEATHER) { _e->UnPackTo(_o->SPACE_WEATHER.get(), _resolver); } else { _o->SPACE_WEATHER = std::unique_ptr<PRWSpaceWeatherTableT>(_e->UnPack(_resolver)); } } else if (_o->SPACE_WEATHER) { _o->SPACE_WEATHER.reset(); } }
   { auto _e = JB2008_INDICES(); if (_e) { if(_o->JB2008_INDICES) { _e->UnPackTo(_o->JB2008_INDICES.get(), _resolver); } else { _o->JB2008_INDICES = std::unique_ptr<PRWJB2008IndicesTableT>(_e->UnPack(_resolver)); } } else if (_o->JB2008_INDICES) { _o->JB2008_INDICES.reset(); } }
+  { auto _e = WINDOW_REQUEST(); if (_e) { if(_o->WINDOW_REQUEST) { _e->UnPackTo(_o->WINDOW_REQUEST.get(), _resolver); } else { _o->WINDOW_REQUEST = std::unique_ptr<PRWWindowRequestT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_REQUEST) { _o->WINDOW_REQUEST.reset(); } }
+  { auto _e = WINDOW_REPORT(); if (_e) { if(_o->WINDOW_REPORT) { _e->UnPackTo(_o->WINDOW_REPORT.get(), _resolver); } else { _o->WINDOW_REPORT = std::unique_ptr<PRWWindowReportT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_REPORT) { _o->WINDOW_REPORT.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRW> CreatePRW(::flatbuffers::FlatBufferBuilder &_fbb, const PRWT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -9768,6 +10648,8 @@ inline ::flatbuffers::Offset<PRW> PRW::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _EARTH_ORIENTATION = _o->EARTH_ORIENTATION ? CreatePRWEarthOrientation(_fbb, _o->EARTH_ORIENTATION.get(), _rehasher) : 0;
   auto _SPACE_WEATHER = _o->SPACE_WEATHER ? CreatePRWSpaceWeatherTable(_fbb, _o->SPACE_WEATHER.get(), _rehasher) : 0;
   auto _JB2008_INDICES = _o->JB2008_INDICES ? CreatePRWJB2008IndicesTable(_fbb, _o->JB2008_INDICES.get(), _rehasher) : 0;
+  auto _WINDOW_REQUEST = _o->WINDOW_REQUEST ? CreatePRWWindowRequest(_fbb, _o->WINDOW_REQUEST.get(), _rehasher) : 0;
+  auto _WINDOW_REPORT = _o->WINDOW_REPORT ? CreatePRWWindowReport(_fbb, _o->WINDOW_REPORT.get(), _rehasher) : 0;
   return CreatePRW(
       _fbb,
       _INIT,
@@ -9790,7 +10672,9 @@ inline ::flatbuffers::Offset<PRW> PRW::Pack(::flatbuffers::FlatBufferBuilder &_f
       _VERSION_RESULT,
       _EARTH_ORIENTATION,
       _SPACE_WEATHER,
-      _JB2008_INDICES);
+      _JB2008_INDICES,
+      _WINDOW_REQUEST,
+      _WINDOW_REPORT);
 }
 
 inline const PRW *GetPRW(const void *buf) {

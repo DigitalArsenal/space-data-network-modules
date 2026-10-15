@@ -1,0 +1,51 @@
+{
+  "pluginId": "cislunar-propagator",
+  "name": "Cislunar Propagation & Maneuver Plugin",
+  "version": "0.2.0",
+  "description": "Circular restricted three-body problem (CR3BP) on the SDS Three-Body Problem standard: one $TBP request in (PROBLEM: Propagation, LibrationPoints, JacobiConstant, PeriodicOrbit, HaloFirstGuess, NearRectilinearHalo, Transfer, StationKeeping or FrameConversion), one $TBP answer out.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command", "direct"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "invoke",
+      "displayName": "Solve a Three-Body Problem",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "tbp",
+              "allowedTypes": [
+                { "schemaName": "TBP.fbs", "fileIdentifier": "$TBP", "rootTypeName": "TBP", "wireFormat": "flatbuffer" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "tbp",
+              "allowedTypes": [
+                { "schemaName": "TBP.fbs", "fileIdentifier": "$TBP", "rootTypeName": "TBP", "wireFormat": "flatbuffer" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

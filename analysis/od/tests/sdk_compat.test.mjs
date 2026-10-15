@@ -12,6 +12,7 @@ import {
   materializeHarnessScenario,
 } from "space-data-module-sdk/testing";
 import { verifyModuleArtifact } from "space-data-module-sdk/bundle";
+import { filFrame } from "./fit_harness.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -21,6 +22,10 @@ const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url
 // the node, so rebuilding never reads a repository private-key fixture.
 const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
   "49f6454d9f3c20209671081363d979e830d524a9fd040a82c603eb43a953db1c";
+// The owner-held module-signing key, which signs the released dist (owner 2026-10-14).
+const OWNER_MODULE_SIGNER_PUBLIC_KEY_HEX =
+  "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34";
+const TRUSTED_MODULE_SIGNER_PUBLIC_KEYS = [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX, OWNER_MODULE_SIGNER_PUBLIC_KEY_HEX];
 const MINIMAL_MEME = `created:2026-03-10 20:32:53 UTC
 ephemeris_start:2026-03-10 20:16:42 UTC ephemeris_stop:2026-03-13 20:16:42 UTC step_size:60
 ephemeris_source:blend
@@ -43,6 +48,11 @@ function readFixtureBytes() {
   return new TextEncoder().encode(MINIMAL_MEME);
 }
 
+// The text ephemeris travels as an SDS $FIL.
+function readFixtureFile() {
+  return filFrame(readFixtureBytes()).payload;
+}
+
 function createHarnessScenario(surface) {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const plan = generateManifestHarnessPlan({
@@ -51,7 +61,7 @@ function createHarnessScenario(surface) {
       if (portId !== "meme") {
         return null;
       }
-      return readFixtureBytes();
+      return readFixtureFile();
     },
   });
   const scenario = plan.generatedCases.find((entry) => entry.surface === surface);
@@ -66,20 +76,15 @@ function createInvokeRequest() {
     // MEME is optional in the manifest (OEM is the alternative), so the
     // generated minimal request intentionally contains no input. Supply the
     // selected text fixture explicitly for this command-compatibility test.
-    inputs: [{portId: "meme", payload: readFixtureBytes()}],
+    inputs: [filFrame(readFixtureBytes())],
   };
 }
 
 function assertSuccessfulResponse(response) {
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   assert.ok(response.errorCode === "" || response.errorCode === null);
-  assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "result");
-
-  const payloadText = new TextDecoder().decode(response.outputs[0].payload);
-  const payload = JSON.parse(payloadText);
-  assert.equal(payload.error, undefined);
-  assert.equal(typeof payload.RMS, "string");
+  assert.deepEqual(response.outputs.map((frame) => frame.portId), ["omm", "ocm", "obd"]);
+  assert.deepEqual(response.outputs.map((frame) => frame.typeRef?.fileIdentifier), ["$OMM", "$OCM", "$OBD"]);
 }
 
 function isWasmEdgeAvailable() {
@@ -102,18 +107,20 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
-// Main carries unsigned builds (owner 2026-10-12): the node signs at
-// publication. A signature, when present, must be the trusted signer.
+// Main carried unsigned builds (owner 2026-10-12: the node signs at
+// publication); since 2026-10-14 the dist is signed with the owner-held
+// module-signing key, because OrbPro refuses an unsigned artifact. A
+// signature, when present, must be one of the trusted signers.
 test("a signed artifact is signed by the trusted SDS module signer", async () => {
   const signature = await verifyModuleArtifact(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     {
-      trustedPublicKeys: [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
+      trustedPublicKeys: TRUSTED_MODULE_SIGNER_PUBLIC_KEYS,
       requireSignature: false,
     },
   );
   if (signature?.publicKeyHex) {
-    assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
+    assert.ok(TRUSTED_MODULE_SIGNER_PUBLIC_KEYS.includes(signature.publicKeyHex), signature.publicKeyHex);
   }
 });
 
@@ -125,8 +132,10 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
     new Set(inspection.imports.map((entry) => entry.module)),
   ).sort();
 
-  assert.equal(inspection.profile, "standalone");
-  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
+  // The plugin.getConfig hostcall makes the artifact a host-ABI module.
+  assert.equal(inspection.profile, "module-host-abi");
+  // plugin.getConfig (node CONFIG) is the one hostcall: space_data_module_host.call.
+  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
   assert.ok(inspection.exports.includes("_start"));
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
@@ -228,7 +237,7 @@ for (const surface of ["direct", "command", "wasmedge"]) {
     for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
       const response = await harness.invoke({methodId: "fit", inputs: [await createOemInput(wireFormat)]});
       assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-      assert.equal(response.outputs.length, 2);
+      assert.deepEqual(response.outputs.map(x => x.portId), ["omm", "ocm", "obd"]);
       const {OCM} = await import("spacedatastandards.org/lib/js/OCM/OCM.js");
       const ocmFrame = response.outputs.find(x => x.portId === "ocm");
       assert.ok(ocmFrame);

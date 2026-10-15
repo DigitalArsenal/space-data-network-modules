@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -33,10 +34,12 @@ function inlineGeneratedHeader(source) {
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 // Topological order over the flatc include graph: LKS (linkCategory) feeds
 // RFB (rfBandDesignation), which $IQC includes for its BAND field.
+// The module-sdk runtime types (TimerTick, HttpRequest, HttpResponse, IngestRequest, FlowNotice) and
+// typedHostcall.hpp are staged by the SDK compiler.
 const inlineStandards = ["LKS", "RFB", "IQC"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
-    fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
+    generateSdsHeader(standard, import.meta.url),
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
@@ -66,7 +69,8 @@ const compilation = await compileModuleFromSource({
   // module-sdk-wasi-sequential-max-memory.
   threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
-  // plugin.getConfig; symbols resolve at instantiation.
+  // plugin.getConfig (an SDS $PIV invocation through typedHostcall.hpp);
+  // symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
 

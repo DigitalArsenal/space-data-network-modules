@@ -16,6 +16,7 @@ import fs from "node:fs";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 
 import { invokePiv, loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
+import { reportOf } from "../../../analysis/maneuver-detection/study/lib/mde.mjs";
 import {
   ReferenceFrame,
   decodeOem,
@@ -154,16 +155,18 @@ test("analysis/maneuver-detection reads the $OEM as its ephemerides", async () =
     module._plugin_destroy();
   }
   const dir = new URL("../../../analysis/maneuver-detection/", import.meta.url);
+  // maneuver-detection's options are its node configuration (detect.*), served on plugin.getConfig.
   const detector = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(new URL("dist/isomorphic/module.wasm", dir)),
-    manifest: JSON.parse(fs.readFileSync(new URL("plugin-manifest.json", dir))), surface: "direct" });
+    manifest: JSON.parse(fs.readFileSync(new URL("plugin-manifest.json", dir))), surface: "direct",
+    hostOptions: { config: { detect: { median_sets: 2 } } } });
   try {
     // median_sets 2: a step test over five sets (2 * 2 + 1).
     const result = await detector.invoke({ methodId: "detect_maneuvers", inputs: [
       { portId: "ephemerides", payload: oem, typeRef: { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM", wireFormat: "flatbuffer" } },
-      { portId: "options", payload: Buffer.from(JSON.stringify({ median_sets: 2 })) },
     ] });
     assert.equal(result.statusCode, 0, result.errorMessage);
-    const report = JSON.parse(Buffer.from(result.outputs.find((o) => o.portId === "report").payload).toString("utf8"));
+    // The report is one $MDE (DETECT_REPORT), read through maneuver-detection's own client rendering.
+    const report = await reportOf(new Uint8Array(result.outputs.find((o) => o.portId === "report").payload));
     assert.equal(report.objects_screened, 1);
     // maneuver-detection 0.3.0 keys an object by its NORAD number when the $OEM gives one.
     assert.equal(report.objects[0].object, "NORAD:25544");

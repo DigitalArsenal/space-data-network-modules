@@ -11,11 +11,13 @@ import {
   materializeHarnessScenario,
 } from "space-data-module-sdk/testing";
 
+import { M, unpackPlan } from "./mpl_client.mjs";
+
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const DIST_MANIFEST_PATH = new URL("../dist/plugin-manifest.json", import.meta.url);
 const REQUEST_FIXTURE_PATH = new URL(
-  "../tests/fixtures/request.hohmann.json",
+  "../tests/fixtures/request.hohmann.mpl",
   import.meta.url,
 );
 const FLOW_EXAMPLE_PATH = new URL(
@@ -55,12 +57,13 @@ function assertSuccessfulResponse(response) {
   assert.equal(response.statusCode, 0);
   assert.ok(response.errorCode === "" || response.errorCode === null);
   assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "response");
+  assert.equal(response.outputs[0].portId, "plan");
 
-  const payload = JSON.parse(new TextDecoder().decode(response.outputs[0].payload));
-  assert.equal(payload.error, undefined);
-  assert.equal(typeof payload.totalDeltaV, "number");
-  assert.ok(payload.totalDeltaV > 0);
+  const plan = unpackPlan(response.outputs[0].payload);
+  assert.equal(plan.STATUS, M.mplStatus.Solved);
+  assert.equal(plan.PROBLEM, M.mplProblem.Hohmann);
+  assert.ok(plan.TOTAL_DELTA_V_KM_S > 0);
+  assert.equal(plan.BURNS.length, 2);
 }
 
 test("build publishes ONE artifact, and the manifest beside it", () => {
@@ -171,10 +174,10 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
 
 });
 
-test("hosted-runtime example is wired to the canonical invoke contract", () => {
+test("hosted-runtime example is wired to the $MPL plan contract", () => {
   const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
   assert.equal(flow.nodes.length, 1);
   assert.equal(flow.nodes[0].pluginId, "maneuver-planner");
-  assert.equal(flow.nodes[0].methodId, "invoke");
+  assert.equal(flow.nodes[0].methodId, "plan");
   assert.equal(flow.triggerBindings[0].targetPortId, "request");
 });

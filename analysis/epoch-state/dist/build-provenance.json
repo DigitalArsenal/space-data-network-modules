@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.226.0",
+  "spacedatastandards": "1.249.0",
   "sdsFamilies": [
     "MET",
     "MPE",
@@ -11,7 +11,15 @@
     "CAT",
     "PPE",
     "OEM",
-    "OMM"
+    "CVR",
+    "PVN",
+    "OMM",
+    "FRM",
+    "PCE",
+    "NCD",
+    "EOP",
+    "SPW",
+    "PRW"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",

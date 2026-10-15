@@ -1,571 +1,239 @@
 /*
- * Flow-level tests for the compiled data-retrieval flow — BRIDGE mode.
- *
- * WHAT THESE TESTS ARE FOR (graph task
- * `modules-data-retrieval-flatbuffer-branch-emits-nothing`, P1):
- *
- * This suite used to be written exclusively against engineLinkage "flatsql"
- * (loop C.7 direct linkage). That linkage is RETIRED — the shipped bundle is
- * engineLinkage "bridge" — so every test in the file failed at setup with
- * "engineLink was provided but the flow artifact exports no
- * sdn_flatsql_link_init". A suite that cannot instantiate the artifact it
- * ships asserts NOTHING, and that is exactly how the flow's DEFAULT branch
- * reached production dead: /omm/bulk and /cat/bulk answered 502 "flow produced
- * no HTTP response" for every request that did not say format=json, while the
- * only lane with (nominal) coverage was the json one.
- *
- * So these tests instantiate THE SHIPPED ARTIFACT (dist/isomorphic/module.wasm,
- * engineLinkage "bridge") against a REAL JS-hosted FlatSQL engine behind a
- * hostcall stub that implements the Go host's storage.flatsql_* contract
- * INCLUDING "deliver":"ref" — the reference-delivery election that the live Go
- * host honours (sdn-server internal/modulert/caps/storage.go streamResult) and
- * that the flow's flatbuffer branch always requests.
- *
- * THE REGRESSION THEY PIN: a body-reference descriptor is a frame on the SAME
- * typed edge as the bytes it stands for ($OMM/OMM.fbs, alignment 8). It used
- * to be pushed with no type claim and required_alignment=1, so the compiled
- * runtime's route_output rejected it (-26) and DROPPED it silently: `branch`
- * was never invoked, no $HTR was ever emitted, drain reported no error, and
- * the host answered 502 with no detail. Any test that asserts a 200 on the
- * DEFAULT (format-less) request would have caught it; none existed.
+ * Flow-level tests for the compiled data-retrieval flow (typed contracts 1.0). The SAME artifact the host mounts at
+ * /api/v1/data runs in the JS flow runtime host: a $HTQ enters http-route route, the $QRP decision and the $QRP page
+ * travel route -> data-source/retrieval omm_bulk | data_query -> http-respond respond_query linked-direct inside the
+ * artifact (a refusal goes straight from the router to the responder), and the only host crossings are the typed $PIV
+ * hostcalls (storage.flatsql_epoch_stream, storage.flatsql_query_stream, plugin.getConfig, clock.now), answered here on
+ * the wire the way a typed host answers them.
  */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
-import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/main.js";
-import { loadFlatSQLStandalone } from "../../../../flatsql/wasm/standalone.js";
-import { createFlowRuntimeHost, decodeFlowProgram } from "space-data-module-sdk/flow";
-import {
-  decodeHttpResponse,
-  encodeHttpRequest,
-  findHttpHeader,
-  fnv1a64Hex,
-} from "space-data-module-sdk/http";
+import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import { decodeHttpResponse, encodeHttpRequest, fnv1a64Hex } from "space-data-module-sdk/http";
+import { decodeHostCall, decodeSqlValues, encodeHostCallResult, encodeModuleConfig } from "space-data-module-sdk/runtime-contracts";
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const ARTIFACT_PATH = new URL("../dist/artifact.json", import.meta.url);
-const MANIFEST_PATH = new URL("../dist/plugin-manifest.json", import.meta.url);
-
-// Non-integer epoch so the reference query's JS param tagging (f64) matches
-// the module's TLV encoding exactly.
-const EPOCH_SECONDS = 1_782_950_400.5;
-const SOURCE = "celestrak-gp";
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-function readWasm() {
-  return new Uint8Array(fs.readFileSync(fileURLToPath(WASM_PATH)));
+async function loadStandard(code) {
+  const esbuild = await import(pathToFileURL(path.join(STANDARDS_ROOT, "node_modules", "esbuild", "lib", "main.js")).href);
+  const flatbuffersEntry = fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"));
+  const out = await esbuild.build({ entryPoints: [path.join(STANDARDS_ROOT, "lib", "ts", code, "main.ts")], bundle: true, format: "esm", write: false, platform: "neutral", alias: { flatbuffers: flatbuffersEntry }, logLevel: "silent" });
+  return import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
 }
+const flatbuffers = await import(pathToFileURL(fs.realpathSync(path.join(STANDARDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"))).href);
+const { QRP } = await loadStandard("QRP");
+const { OMM, OMMT } = await loadStandard("OMM");
 
-// ---------------------------------------------------------------------------
-// Real engine database: the server's engine OMM schema (byte-copied from
-// sdn-server internal/storage/engine_records.go), $OMM routing, per-source
-// shadow tables + unified view — the same layout FlatSQLStore builds.
-// ---------------------------------------------------------------------------
-
-const ENGINE_RECORD_SCHEMA = `
-  table OMM {
-    CCSDS_OMM_VERS:double;
-    CREATION_DATE:string;
-    ORIGINATOR:string;
-    OBJECT_NAME:string;
-    OBJECT_ID:string;
-    CENTER_NAME:string;
-    REFERENCE_FRAME:RFM;
-    REFERENCE_FRAME_EPOCH:string;
-    TIME_SYSTEM:timingStandard = UTC;
-    MEAN_ELEMENT_THEORY:meanElementSource = SGP4;
-    COMMENT:string;
-    EPOCH:string;
-    SEMI_MAJOR_AXIS:double;
-    MEAN_MOTION:double;
-    ECCENTRICITY:double;
-    INCLINATION:double;
-    RA_OF_ASC_NODE:double;
-    ARG_OF_PERICENTER:double;
-    MEAN_ANOMALY:double;
-    GM:double;
-    MASS:double;
-    SOLAR_RAD_AREA:double;
-    SOLAR_RAD_COEFF:double;
-    DRAG_AREA:double;
-    DRAG_COEFF:double;
-    EPHEMERIS_TYPE:ephemerisFormat = SGP4;
-    CLASSIFICATION_TYPE:string;
-    NORAD_CAT_ID:uint32;
-    ELEMENT_SET_NO:uint32;
-    REV_AT_EPOCH:double;
-    BSTAR:double;
-    MEAN_MOTION_DOT:double;
-    MEAN_MOTION_DDOT:double;
-    COV_REFERENCE_FRAME:RFM;
-    COVARIANCE:[double];
-    USER_DEFINED_BIP_0044_TYPE:uint;
-    USER_DEFINED_OBJECT_DESIGNATOR:string;
-    USER_DEFINED_EARTH_MODEL:string;
-    USER_DEFINED_EPOCH_TIMESTAMP: double;
-    USER_DEFINED_MICROSECONDS: double;
-  }
-  root_type OMM;
-  file_identifier "$OMM";
-`;
-
-// The engine-native nearest-epoch SQL — byte-identical in the retrieval
-// module, the Go store, and here (?1 source shadow, ?2 epoch, ?3 limit).
-const NEAREST_SQL =
-  "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY " +
-  "ABS(USER_DEFINED_EPOCH_TIMESTAMP - ?2)) rn FROM OMM WHERE (?1 = '' OR _source = ?1)) WHERE " +
-  "rn = 1 LIMIT ?3";
-
-const RECORDS = [
-  {
-    norad_cat_id: 25544,
-    object_name: "ISS (ZARYA)",
-    object_id: "1998-067A",
-    epoch: "2026-07-01T12:00:00.000000Z",
-    epoch_ts: 1_782_907_200,
-    mean_motion: 15.49309239,
-    eccentricity: 0.0007976,
-    inclination: 51.6416,
-  },
-  {
-    norad_cat_id: 33591,
-    object_name: "NOAA 19",
-    object_id: "2009-005A",
-    epoch: "2026-07-01T00:00:00.000000Z",
-    epoch_ts: 1_782_864_000,
-    mean_motion: 14.12501077,
-    eccentricity: 0.0013872,
-    inclination: 99.1943,
-  },
-];
-
-function encodeOmm(record) {
-  const builder = new flatbuffers.Builder(512);
-  const objectName = builder.createString(record.object_name);
-  const objectId = builder.createString(record.object_id);
-  const epoch = builder.createString(record.epoch);
-  OMM.startOMM(builder);
-  OMM.addObjectName(builder, objectName);
-  OMM.addObjectId(builder, objectId);
-  OMM.addEpoch(builder, epoch);
-  OMM.addMeanMotion(builder, record.mean_motion);
-  OMM.addEccentricity(builder, record.eccentricity);
-  OMM.addInclination(builder, record.inclination);
-  OMM.addNoradCatId(builder, record.norad_cat_id);
-  OMM.addUserDefinedEpochTimestamp(builder, record.epoch_ts);
-  OMM.finishOMMBuffer(builder, OMM.endOMM(builder));
-  return builder.asUint8Array();
+const concat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0; for (const p of parts) { out.set(p, at); at += p.length; } return out; };
+// $OMM records as the store delivers them: size-prefixed, concatenated.
+function ommStream(records) {
+  return concat(...records.map((fields) => {
+    const b = new flatbuffers.Builder(256);
+    b.finishSizePrefixed(Object.assign(new OMMT(), fields).pack(b), "$OMM");
+    return b.asUint8Array().slice();
+  }));
 }
-
-async function createEngineWithData() {
-  const engine = await loadFlatSQLStandalone();
-  const db = engine.createDatabase(ENGINE_RECORD_SCHEMA, "sdn-parity");
-  db.registerFileId("$OMM", "OMM");
-  const rt = engine._runtime;
-  rt.withCString(SOURCE, (ptr) => rt.exports.flatsql_register_source(db._handle, ptr));
-  rt.exports.flatsql_create_unified_views(db._handle);
-  for (const record of RECORDS) {
-    const seq = db.ingestOne(encodeOmm(record), SOURCE);
-    assert.ok(seq >= 0, "engine ingest failed");
-  }
-  return { engine, db };
-}
-
-// The reference bytes: what the ENGINE itself serves for the nearest-epoch
-// query the flow is about to run (all sources, limit 100).
-function referenceStream(db, { limit = 100 } = {}) {
-  return db.queryRawFlatBufferStream(NEAREST_SQL, ["", EPOCH_SECONDS, limit]);
-}
-
-// Mirrors http_respond_module.cpp count_stream_frames EXACTLY: size-prefixed
-// frames, zero-length prefixes skipped as padding, NO alignment padding. The
-// header the flow serves must equal this for byte-identical streams.
-function countStreamFrames(bytes) {
-  let count = 0;
-  let offset = 0;
+// A page stream -> { header (unpacked QRP), records (the bytes after the header and its padding) }.
+function splitPage(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  while (offset < bytes.length) {
-    if (bytes.length - offset < 4) return -1;
-    const size = view.getUint32(offset, true);
-    offset += 4;
-    if (size === 0) continue;
-    if (size > bytes.length - offset) return -1;
-    offset += size;
-    count++;
-  }
-  return count;
+  const size = view.getUint32(0, true);
+  const header = QRP.getSizePrefixedRootAsQRP(new flatbuffers.ByteBuffer(bytes.slice(0, 4 + size))).unpack();
+  let at = 4 + size;
+  while (at + 4 <= bytes.length && view.getUint32(at, true) === 0) at += 4;
+  return { header, records: bytes.slice(at) };
 }
 
-function encodeHostcallEnvelope(meta, segments = []) {
-  const metaBytes = encoder.encode(JSON.stringify(meta));
-  const total =
-    4 + metaBytes.length + 4 + segments.reduce((sum, segment) => sum + 4 + segment.length, 0);
-  const envelope = new Uint8Array(total);
-  const view = new DataView(envelope.buffer);
-  let offset = 0;
-  view.setUint32(offset, metaBytes.length, true);
-  envelope.set(metaBytes, offset + 4);
-  offset += 4 + metaBytes.length;
-  view.setUint32(offset, segments.length, true);
-  offset += 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length, true);
-    envelope.set(segment, offset + 4);
-    offset += 4 + segment.length;
-  }
-  return envelope;
-}
-
-// The host publishes the WORD-FOLDED FNV-1a 64 of the stream (Go:
-// flatsqlrt.RawStream.FNV1a64). It is the same function the flow computes
-// in-wasm on the byte path, which is why a ref-delivered body and a
-// byte-delivered body must carry the SAME etag — asserted below.
-const hostStreamHash = (bytes) => fnv1a64Hex(bytes);
-
-// ---------------------------------------------------------------------------
-// Hostcall bridge stub — the Go host's storage capability, faithfully.
-//
-// It honours "deliver":"ref" exactly as
-// sdn-server internal/modulert/caps/storage.go streamResult does: the stream
-// bytes stay OUT of the flow's memory and only {token,size,frames,fnv1a64}
-// crosses, to be substituted at the egress sink. This is the contract the
-// flatbuffer branch always requests, so a stub that ignored it (or that failed
-// to parse the LENGTH-PREFIXED payload and so never saw the key) would silently
-// exercise the byte path only — and miss the P1 entirely.
-// ---------------------------------------------------------------------------
-
-function createBridgeStub(db) {
+// A typed host on the wire: each $PIV call is decoded and answered with a $PIV response by `answer(call)`.
+function typedHost(answer) {
   const calls = [];
-  const bodyRefs = new Map();
-  let nextToken = 1n;
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
-
-  function streamResult(bytes, deliver) {
-    const rows = countStreamFrames(bytes);
-    if (deliver === "ref") {
-      const token = nextToken++;
-      bodyRefs.set(token, bytes);
-      return encodeHostcallEnvelope({
-        ok: true,
-        result: {
-          rows,
-          columns: ["_data"],
-          ref: {
-            token: Number(token),
-            size: bytes.length,
-            frames: rows,
-            fnv1a64: hostStreamHash(bytes),
-          },
-        },
-      });
-    }
-    return encodeHostcallEnvelope(
-      { ok: true, result: { rows, columns: ["_data"], stream: { $bin: 0 } } },
-      [bytes],
-    );
-  }
-
   const imports = {
     space_data_module_host: {
-      call(opPtr, opLen, payloadPtr) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const view = new DataView(memoryRef.memory.buffer);
-        const operation = decoder.decode(heap.subarray(opPtr, opPtr + opLen));
-        // Payload is LENGTH-PREFIXED: [u32 LE json length][json][pad].
-        const jsonLength = view.getUint32(payloadPtr, true);
-        const payloadText = decoder.decode(
-          heap.subarray(payloadPtr + 4, payloadPtr + 4 + jsonLength),
-        );
-        let payload = {};
-        try {
-          payload = JSON.parse(payloadText);
-        } catch {
-          /* non-JSON payloads are not storage ops */
-        }
-        calls.push({ operation, deliver: payload.deliver ?? null });
-
-        if (operation === "storage.flatsql_epoch_stream") {
-          const bytes = db.queryRawFlatBufferStream(NEAREST_SQL, [
-            payload.source ?? "",
-            payload.epoch ?? EPOCH_SECONDS,
-            payload.limit ?? 50000,
-          ]);
-          response = streamResult(bytes, payload.deliver);
-          return 0;
-        }
-        if (operation === "storage.flatsql_query_stream") {
-          const params = (payload.params ?? []).map((p) =>
-            p && typeof p === "object" && "v" in p ? p.v : p,
-          );
-          const bytes = db.queryRawFlatBufferStream(payload.sql, params);
-          response = streamResult(bytes, payload.deliver);
-          return 0;
-        }
-        response = encodeHostcallEnvelope({ ok: false, message: "no module config" });
+      call(opPtr, opLen, ptr, len) {
+        const call = decodeHostCall(new Uint8Array(memoryRef.memory.buffer).slice(ptr, ptr + len));
+        calls.push(call);
+        let out;
+        try { out = { ok: true, op: call.op, ...(answer(call) ?? {}) }; } catch (error) { out = { ok: false, error: { code: error.code ?? "failed", message: error.message } }; }
+        response = encodeHostCallResult(out);
         return 0;
       },
-      response_len() {
-        return response.length;
-      },
-      read_response(dstPtr, dstLen) {
-        const heap = new Uint8Array(memoryRef.memory.buffer);
-        const length = Math.min(dstLen, response.length);
-        heap.set(response.subarray(0, length), dstPtr);
-        return length;
+      response_len: () => response.length,
+      read_response(dst, len) {
+        const n = Math.min(len, response.length);
+        new Uint8Array(memoryRef.memory.buffer).set(response.subarray(0, n), dst);
+        return n;
       },
     },
   };
-
-  return { calls, imports, memoryRef, bodyRefs };
+  return { calls, imports, memoryRef };
 }
+const hostError = (code, message) => Object.assign(new Error(message), { code });
 
-// ---------------------------------------------------------------------------
-// Flow runner. ONE HTTP exchange per flow instance — the Go host checks an
-// instance out of a pool per request, and a failed exchange must not be able
-// to leave frames queued for the next one.
-// ---------------------------------------------------------------------------
-
-async function createFlow() {
-  const { engine, db } = await createEngineWithData();
-  const stub = createBridgeStub(db);
-  const host = await createFlowRuntimeHost({
-    wasmSource: readWasm(),
-    extraImports: stub.imports,
-    // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
-    // when the caller states it. Without this the artifact's declared
-    // runtimeTargets are never checked here at all.
-    runtimeTarget: "wasmedge",
-  });
-  stub.memoryRef.memory = host.memory;
-  return { host, stub, engine, db };
-}
-
-async function pumpRequest(flow, request) {
+async function serve(wasmUrl, host, request) {
+  const runtime = await createFlowRuntimeHost({ wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(wasmUrl))), extraImports: host.imports, runtimeTarget: "wasmedge" });
+  host.memoryRef.memory = runtime.memory;
   const responses = [];
-  flow.host.enqueueTriggerFrame(0, {
-    portId: "request",
-    bytes: encodeHttpRequest(request),
-  });
-  const drain = await flow.host.drain(
-    {
-      "sdn.flow.egress:emit": ({ frames }) => {
-        for (const frame of frames) {
-          const http = decodeHttpResponse(frame.bytes);
-          if (http.bodyRefSize > 0) {
-            // Out-of-band body: the egress substitutes the buffer the storage
-            // capability registered during this same exchange (the JS
-            // counterpart of the Go host's htrPipe TakeBodyRef).
-            const resolved = flow.stub.bodyRefs.get(BigInt(http.bodyRefToken));
-            assert.ok(resolved, "body-ref token must resolve on this exchange");
-            assert.equal(BigInt(resolved.length), BigInt(http.bodyRefSize));
-            http.body = resolved;
-          }
-          responses.push(http);
-        }
-        return { statusCode: 0 };
-      },
-    },
-    { maxIterations: 100 },
-  );
-  // A dropped frame is silent: drain succeeds, nothing is emitted, and the Go
-  // host turns that into 502 "flow produced no HTTP response" with NO detail.
-  // Name it here instead.
-  assert.equal(
-    responses.length,
-    1,
-    `expected exactly one $HTR frame, got ${responses.length} — the flow emitted no HTTP ` +
-      `response, which is the 502 the node serves (drain=${JSON.stringify(drain)})`,
-  );
-  return responses[0];
+  runtime.enqueueTriggerFrame(0, { portId: "request", bytes: encodeHttpRequest(request) });
+  await runtime.drain({ "sdn.flow.egress:emit": ({ frames }) => { for (const f of frames) responses.push(decodeHttpResponse(f.bytes)); return { statusCode: 0 }; } }, { maxIterations: 100 });
+  assert.equal(responses.length, 1, "exactly one $HTR");
+  const [http] = responses;
+  http.header = (name) => http.headers.find((h) => h.name === name)?.value;
+  http.json = () => JSON.parse(new TextDecoder().decode(http.body));
+  return http;
 }
 
-function get(path, query) {
-  return { method: "GET", path, query, headers: [] };
-}
+const FLOW_WASM = new URL("../dist/runtime.wasm", import.meta.url);
+const NOW_MS = 1791900000123n;
+const RECORDS = ommStream([
+  { NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)", EPOCH: "2026-10-13T06:00:00.000Z", MEAN_MOTION: 15.5, BSTAR: 0.00012 },
+  { NORAD_CAT_ID: 20580, OBJECT_NAME: "HST", MEAN_MOTION: 15.1 },
+]);
+const ETAG = `W/"fnv1a64-${fnv1a64Hex(RECORDS)}"`;
 
-// ---------------------------------------------------------------------------
-// Artifact shape
-// ---------------------------------------------------------------------------
-
-test("compiled BRIDGE bundle: linkage marker, capability set, embedded FLOW program", async () => {
-  const artifact = JSON.parse(fs.readFileSync(fileURLToPath(ARTIFACT_PATH), "utf8"));
-  assert.equal(artifact.engineLinkage, "bridge");
-  assert.deepEqual(artifact.capabilities, ["storage_query"]);
-  const manifest = JSON.parse(fs.readFileSync(fileURLToPath(MANIFEST_PATH), "utf8"));
-  assert.deepEqual(manifest.capabilities, ["storage_query"]);
-  assert.equal(manifest.pluginFamily, "flow");
-
-  // Bridge linkage reaches the store over hostcalls, NOT direct engine imports.
-  const wasmModule = await WebAssembly.compile(readWasm().slice().buffer);
-  const imports = WebAssembly.Module.imports(wasmModule).map((i) => `${i.module}.${i.name}`);
-  assert.ok(
-    !imports.some((name) => name.startsWith("flatsql.")),
-    "a bridge artifact must not import the engine directly",
-  );
-
-  const flow = await createFlow();
-  assert.equal(flow.host.nodeCount, 8);
-  assert.equal(flow.host.edgeCount, 13);
-  assert.equal(flow.host.dependencyCount, 5);
-
-  const exports = flow.host.instance.exports;
-  const ptr = exports.flow_get_manifest_flatbuffer();
-  const size = exports.flow_get_manifest_flatbuffer_size();
-  const program = decodeFlowProgram(new Uint8Array(flow.host.memory.buffer, ptr, size).slice());
-  assert.equal(program.programId, "com.digitalarsenal.flows.data-retrieval");
-  assert.equal(program.nodes.length, 8);
-});
-
-// ---------------------------------------------------------------------------
-// THE DEFAULT BRANCH. Public consumers send no format param at all.
-// ---------------------------------------------------------------------------
-
-test("GET /omm/bulk with NO format param serves the flatbuffer stream (the P1 regression)", async () => {
-  const flow = await createFlow();
-  const http = await pumpRequest(flow, get("/api/v1/data/omm/bulk", `epoch=${EPOCH_SECONDS}`));
-
-  assert.equal(http.status, 200);
-  assert.equal(
-    findHttpHeader(http.headers, "content-type"),
-    "application/vnd.sdn.flatbuffers.stream",
-  );
-
-  // The flatbuffer branch elects reference delivery, so the bytes must have
-  // crossed as a body-ref — not as a copy through the flow's memory.
-  assert.ok(http.bodyRefSize > 0, "the flatbuffer branch must deliver by reference");
-  assert.ok(
-    flow.stub.calls.some((c) => c.operation.startsWith("storage.") && c.deliver === "ref"),
-    'the flatbuffer branch must request "deliver":"ref"',
-  );
-
-  // Body is byte-identical to what the engine itself serves.
-  const expected = referenceStream(flow.db);
-  assert.deepEqual(Buffer.from(http.body), Buffer.from(expected));
-
-  // Record count + etag are the canonical ones.
-  assert.equal(
-    findHttpHeader(http.headers, "x-sdn-record-count"),
-    String(countStreamFrames(expected)),
-  );
-  assert.equal(findHttpHeader(http.headers, "etag"), `W/"fnv1a64-${fnv1a64Hex(expected)}"`);
-});
-
-test("GET /omm/bulk?format=flatbuffer is identical to the format-less default", async () => {
-  const bare = await createFlow();
-  const explicit = await createFlow();
-  const a = await pumpRequest(bare, get("/api/v1/data/omm/bulk", `epoch=${EPOCH_SECONDS}`));
-  const b = await pumpRequest(
-    explicit,
-    get("/api/v1/data/omm/bulk", `format=flatbuffer&epoch=${EPOCH_SECONDS}`),
-  );
-  assert.equal(a.status, b.status);
-  assert.deepEqual(Buffer.from(a.body), Buffer.from(b.body));
-  assert.equal(
-    findHttpHeader(a.headers, "x-sdn-record-count"),
-    findHttpHeader(b.headers, "x-sdn-record-count"),
-  );
-  assert.equal(findHttpHeader(a.headers, "etag"), findHttpHeader(b.headers, "etag"));
-});
-
-// ---------------------------------------------------------------------------
-// format=json -> engine bytes cross engine->flow in-wasm -> omm-json
-// ---------------------------------------------------------------------------
-
-test("GET /omm/bulk?format=json field-extracts the in-wasm materialized stream", async () => {
-  const flow = await createFlow();
-  const http = await pumpRequest(
-    flow,
-    get("/api/v1/data/omm/bulk", `format=json&epoch=${EPOCH_SECONDS}`),
-  );
-  assert.equal(http.status, 200);
-  assert.equal(findHttpHeader(http.headers, "content-type"), "application/json");
-  const body = JSON.parse(decoder.decode(http.body));
-  assert.ok(Array.isArray(body), "format=json must return a bare top-level array");
-  assert.equal(body.length, RECORDS.length);
-
-  // The json branch needs the bytes IN the flow, so it must NOT ask for a ref.
-  assert.ok(
-    flow.stub.calls.every((c) => c.deliver !== "ref"),
-    "the json branch must take byte delivery",
-  );
-});
-
-test("the record-count header agrees across formats for the same query", async () => {
-  const fb = await createFlow();
-  const js = await createFlow();
-  const a = await pumpRequest(fb, get("/api/v1/data/omm/bulk", `epoch=${EPOCH_SECONDS}`));
-  const b = await pumpRequest(
-    js,
-    get("/api/v1/data/omm/bulk", `format=json&epoch=${EPOCH_SECONDS}`),
-  );
-  assert.equal(
-    findHttpHeader(a.headers, "x-sdn-record-count"),
-    findHttpHeader(b.headers, "x-sdn-record-count"),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Per-schema bulk lane: /<code>/bulk routes through the SAME retrieval method
-// with query.schema set, so it rides the same delivery path.
-// ---------------------------------------------------------------------------
-
-test("GET /cat/bulk with NO format param serves the flatbuffer stream", async () => {
-  const flow = await createFlow();
-  const http = await pumpRequest(flow, get("/api/v1/data/cat/bulk", `epoch=${EPOCH_SECONDS}`));
-  assert.equal(http.status, 200);
-  assert.equal(
-    findHttpHeader(http.headers, "content-type"),
-    "application/vnd.sdn.flatbuffers.stream",
-  );
-  assert.ok(http.bodyRefSize > 0, "the cat/bulk flatbuffer branch must deliver by reference");
-  assert.ok(http.body.length > 0, "cat/bulk must return a body");
-});
-
-test("GET /cat/bulk?format=json refuses with 404 — CAT has no json encoder", async () => {
-  const flow = await createFlow();
-  const http = await pumpRequest(
-    flow,
-    get("/api/v1/data/cat/bulk", `format=json&epoch=${EPOCH_SECONDS}`),
-  );
-  assert.equal(http.status, 404);
-  const body = JSON.parse(decoder.decode(http.body));
-  assert.match(body.error, /json encoding is not available for CAT\.fbs/);
-});
-
-// ---------------------------------------------------------------------------
-// Conditional requests + routing
-// ---------------------------------------------------------------------------
-
-test("If-None-Match revalidation returns 304 with an empty body", async () => {
-  const first = await createFlow();
-  const seen = await pumpRequest(first, get("/api/v1/data/omm/bulk", `epoch=${EPOCH_SECONDS}`));
-  const etag = findHttpHeader(seen.headers, "etag");
-  assert.ok(etag, "the 200 must carry an etag to revalidate against");
-
-  const second = await createFlow();
-  const http = await pumpRequest(second, {
-    method: "GET",
-    path: "/api/v1/data/omm/bulk",
-    query: `epoch=${EPOCH_SECONDS}`,
-    headers: [["if-none-match", etag]],
+// The store as storage.flatsql_epoch_stream / storage.flatsql_query_stream / plugin.getConfig / clock.now answer it.
+function store({ config = {}, stream = RECORDS, fail = null, ref = null } = {}) {
+  return typedHost((call) => {
+    if (call.op === "clock.now") return { result: { UNIX_MS: NOW_MS } };
+    if (call.op === "plugin.getConfig") return { raw: { config: encodeModuleConfig(config) } };
+    if (call.op === "storage.flatsql_epoch_stream" || call.op === "storage.flatsql_query_stream") {
+      if (fail) throw fail;
+      if (ref && call.params.DELIVER === 1) return { result: { ROWS: 2n, COLUMNS: 1, REF: ref } };
+      return { result: { ROWS: 2n, COLUMNS: 1 }, raw: { stream } };
+    }
+    throw hostError("unsupported", `unexpected op ${call.op}`);
   });
-  assert.equal(http.status, 304);
-  assert.equal(http.body?.length ?? 0, 0);
+}
+const BULK = "/api/v1/data/omm/bulk";
+const sqlOf = (call) => new TextDecoder().decode(call.raw.sql);
+// The tagged SQL values on a call's raw "params" as [tag, value] (i64 as a Number).
+const sqlParams = (call) => decodeSqlValues(call.raw.params).map(({ t, v }) => [t, t === "i64" ? Number(v) : v]);
+
+test("GET omm/bulk: every query-string parameter reaches storage.flatsql_epoch_stream; the page answers verbatim", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, { method: "GET", path: BULK, query: "source=celestrak&mode=as_of&epoch=2026-10-13T06%3A00%3A00Z&limit=250" });
+  assert.equal(http.status, 200);
+  assert.equal(http.header("content-type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(http.header("x-sdn-record-count"), "2");
+  assert.equal(http.header("etag"), ETAG, "W/\"fnv1a64-<FNV-1a 64 of the record stream>\"");
+  const { header, records } = splitPage(http.body);
+  assert.deepEqual([header.SCHEMA_NAME, header.FILE_IDENTIFIER, header.RECORD_COUNT, header.ETAG, header.SOURCE_NAME, header.LIMIT], ["OMM", "$OMM", 2, ETAG, "celestrak", 250]);
+  assert.deepEqual(records, RECORDS);
+  const epoch = host.calls.find((c) => c.op === "storage.flatsql_epoch_stream");
+  assert.deepEqual([epoch.params.SCHEMA, epoch.params.SOURCE, epoch.params.PROFILE, epoch.params.EPOCH, epoch.params.LIMIT, epoch.params.DELIVER],
+    ["OMM.fbs", "celestrak", "as_of", Date.UTC(2026, 9, 13, 6) / 1000, 250, 1], "FlatBuffers ask DELIVER Ref; a host that answers inline is served inline");
+  assert.equal(host.calls.some((c) => c.op === "clock.now"), false, "a stated epoch needs no clock");
 });
 
-test("GET /nope routes to 404 without touching the engine", async () => {
-  const flow = await createFlow();
-  const http = await pumpRequest(flow, get("/api/v1/data/nosuchthing", ""));
-  assert.equal(http.status, 404);
-  assert.ok(
-    flow.stub.calls.every((c) => !c.operation.startsWith("storage.")),
-    "a 404 must not query the store",
-  );
+test("format=json renders the page's records as an OMM array; If-None-Match equal to the ETAG answers 304", async () => {
+  const http = await serve(FLOW_WASM, store(), { method: "GET", path: BULK, query: "format=json" });
+  assert.deepEqual([http.status, http.header("content-type"), http.header("etag")], [200, "application/json", ETAG]);
+  const body = http.json();
+  assert.deepEqual(body.map((r) => [r.NORAD_CAT_ID, r.OBJECT_NAME, r.MEAN_MOTION]), [[25544, "ISS (ZARYA)", 15.5], [20580, "HST", 15.1]]);
+  assert.equal(body[0].BSTAR, 0.00012);
+  const jsonHost = store();
+  await serve(FLOW_WASM, jsonHost, { method: "GET", path: BULK, query: "format=json" });
+  assert.equal(jsonHost.calls.find((c) => c.op === "storage.flatsql_epoch_stream").params.DELIVER, 0, "JSON asks DELIVER Inline");
+  const notModified = await serve(FLOW_WASM, store(), { method: "GET", path: BULK, headers: { "If-None-Match": ETAG } });
+  assert.deepEqual([notModified.status, notModified.header("etag"), notModified.body.length], [304, ETAG, 0]);
+});
+
+test("no parameters: the module config, then the compiled defaults with epoch = clock.now", async () => {
+  const host = store({ config: { profiles: { "OMM.fbs": { profile: "forward", limit: 123 } } } });
+  const http = await serve(FLOW_WASM, host, { method: "GET", path: BULK });
+  assert.equal(http.status, 200);
+  const ops = host.calls.map((c) => c.op);
+  assert.ok(ops.includes("plugin.getConfig") && ops.includes("clock.now"), ops.join(","));
+  const epoch = host.calls.find((c) => c.op === "storage.flatsql_epoch_stream");
+  assert.deepEqual([epoch.params.PROFILE, epoch.params.LIMIT, epoch.params.EPOCH], ["forward", 123, Number(NOW_MS) / 1000]);
+  const bare = store();
+  await serve(FLOW_WASM, bare, { method: "GET", path: BULK });
+  const fallback = bare.calls.find((c) => c.op === "storage.flatsql_epoch_stream");
+  assert.deepEqual([fallback.params.PROFILE, fallback.params.LIMIT], ["nearest", 50000]);
+});
+
+test("a host BodyRef answers the $HTR by reference (no inline body), 304 on its etag", async () => {
+  const REF = { TOKEN: 31337n, SIZE: BigInt(RECORDS.length), FRAMES: 2n, FNV1A64: fnv1a64Hex(RECORDS) };
+  const http = await serve(FLOW_WASM, store({ ref: REF }), { method: "GET", path: BULK, query: "epoch=1" });
+  assert.deepEqual([http.status, http.body.length, Number(http.bodyRefToken), http.bodyRefSize], [200, 0, 31337, RECORDS.length]);
+  assert.deepEqual([http.header("content-type"), http.header("x-sdn-record-count"), http.header("etag")], ["application/vnd.sdn.flatbuffers.stream", "2", ETAG]);
+  const notModified = await serve(FLOW_WASM, store({ ref: REF }), { method: "GET", path: BULK, query: "epoch=1", headers: { "If-None-Match": ETAG } });
+  assert.deepEqual([notModified.status, notModified.body.length, Number(notModified.bodyRefToken)], [304, 0, 0]);
+  const query = await serve(FLOW_WASM, store({ ref: REF }), { method: "POST", path: "/api/v1/data/query", body: "SELECT _data FROM OMM" });
+  assert.deepEqual([query.status, Number(query.bodyRefToken), query.header("x-sdn-record-count")], [200, 31337, "2"]);
+  const json = await serve(FLOW_WASM, store({ ref: REF }), { method: "GET", path: BULK, query: "epoch=1&format=json" });
+  assert.deepEqual([json.status, Number(json.bodyRefToken), json.json().length], [200, 0, 2], "JSON asks Inline and renders");
+});
+
+test("?profile=all reads every record of the lane through storage.flatsql_query_stream; no profile keeps the epoch-stream defaults", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, { method: "GET", path: BULK, query: "profile=all&source=celestrak&limit=10" });
+  assert.equal(http.status, 200);
+  assert.equal(host.calls.some((c) => c.op === "storage.flatsql_epoch_stream"), false);
+  const call = host.calls.find((c) => c.op === "storage.flatsql_query_stream");
+  assert.match(sqlOf(call), /^SELECT _data FROM "OMM" WHERE \(\?1 = '' OR _source = \?1\)/);
+  assert.deepEqual(sqlParams(call)[0], ["str", "OMM@celestrak"]);
+  assert.deepEqual(sqlParams(call).at(-1), ["i64", 10]);
+  assert.equal(splitPage(http.body).header.RECORD_COUNT, 2);
+  const unspecified = store();
+  await serve(FLOW_WASM, unspecified, { method: "GET", path: BULK, query: "epoch=1" });
+  assert.equal(unspecified.calls.find((c) => c.op === "storage.flatsql_epoch_stream").params.PROFILE, "nearest", "Unspecified: the configured default");
+});
+
+test("rfb/bulk serves $RFB as FlatBuffers; JSON of $RFB is refused 406 without reaching the host", async () => {
+  const host = store();
+  const fb = await serve(FLOW_WASM, host, { method: "GET", path: "/api/v1/data/rfb/bulk", query: "format=flatbuffer" });
+  assert.equal(fb.status, 200);
+  assert.equal(host.calls.find((c) => c.op === "storage.flatsql_epoch_stream").params.SCHEMA, "RFB.fbs");
+  const refused = store();
+  const json = await serve(FLOW_WASM, refused, { method: "GET", path: "/api/v1/data/rfb/bulk", query: "format=json" });
+  assert.deepEqual([json.status, json.json().code], [406, "not-acceptable"]);
+  assert.match(json.json().error, /RFB\.fbs; request format=flatbuffer/);
+  assert.equal(refused.calls.length, 0);
+});
+
+test("POST /query: a JSON body's SQL and tagged params, or raw SQL text, reach storage.flatsql_query_stream", async () => {
+  const host = store();
+  const http = await serve(FLOW_WASM, host, { method: "POST", path: "/api/v1/data/query", body: JSON.stringify({ sql: "SELECT _data FROM OMM WHERE NORAD_CAT_ID = ? AND OBJECT_NAME LIKE ?", params: [{ t: "i64", v: 25544 }, { t: "str", v: "ISS%" }] }) });
+  assert.equal(http.status, 200);
+  assert.equal(splitPage(http.body).header.RECORD_COUNT, 2);
+  const [call] = host.calls;
+  assert.equal(call.op, "storage.flatsql_query_stream");
+  assert.equal(sqlOf(call), "SELECT _data FROM OMM WHERE NORAD_CAT_ID = ? AND OBJECT_NAME LIKE ?");
+  assert.deepEqual(sqlParams(call), [["i64", 25544], ["str", "ISS%"]]);
+  assert.equal(call.params.DELIVER, 1, "FlatBuffers ask DELIVER Ref");
+
+  const raw = store();
+  await serve(FLOW_WASM, raw, { method: "POST", path: "/api/v1/data/query", body: "SELECT _data FROM OMM LIMIT 1" });
+  assert.equal(sqlOf(raw.calls[0]), "SELECT _data FROM OMM LIMIT 1");
+
+  const empty = store();
+  const missing = await serve(FLOW_WASM, empty, { method: "POST", path: "/api/v1/data/query", query: "format=json", body: "" });
+  assert.deepEqual([missing.status, missing.json().code], [400, "missing-sql"]);
+  assert.equal(empty.calls.length, 0);
+});
+
+test("an unknown path is 404 no-route without reaching the host; a storage failure is 502", async () => {
+  const host = store();
+  const none = await serve(FLOW_WASM, host, { method: "GET", path: "/api/v1/data/omm", query: "format=json" });
+  assert.deepEqual([none.status, none.json().code], [404, "no-route"]);
+  assert.equal(host.calls.length, 0);
+  const failed = await serve(FLOW_WASM, store({ fail: hostError("failed", "disk I/O error") }), { method: "GET", path: BULK, query: "format=json&epoch=0.001" });
+  assert.deepEqual([failed.status, failed.json().code], [502, "host-failed"]);
+  assert.match(failed.json().error, /disk I\/O error/);
+  const fb = await serve(FLOW_WASM, store({ fail: hostError("failed", "disk I/O error") }), { method: "GET", path: BULK, query: "epoch=1" });
+  assert.equal(fb.status, 502);
+  assert.equal(fb.header("x-sdn-file-identifier"), "$QRP", "the refusal record itself, as FlatBuffers");
+});
+
+test("the bundle carries the api block for the OpenAPI generator", () => {
+  const flow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/flow.json", import.meta.url)), "utf8"));
+  assert.equal(flow.api.basePath, "/api/v1/data");
+  assert.deepEqual(flow.api.routes.map((r) => [r.method, r.path, r.anonymous]), [["GET", "omm/bulk", true], ["GET", "rfb/bulk", true], ["POST", "query", false]]);
+  assert.deepEqual(Object.keys(flow.api.routes[0].responses["200"].content).sort(), ["application/json", "application/vnd.sdn.flatbuffers.stream"]);
+  assert.deepEqual(Object.keys(flow.api.routes[1].responses["200"].content), ["application/vnd.sdn.flatbuffers.stream"]);
 });

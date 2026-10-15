@@ -50,6 +50,12 @@
 #include <vector>
 
 #include "space_data_module_invoke.h"
+#include "typedHostcall.hpp"
+#include "HttpResponse_generated.h"
+#include "FlowNotice_generated.h"
+#include "ModuleConfig_generated.h"
+// $DTT, $FSO and $FSB (spacedatastandards.org lib/cpp/<CODE>/main_generated.h) and the SDK's $HTQ / $HTR envelope
+// headers are inlined ahead of this file by source.mjs.
 
 namespace {
 
@@ -266,7 +272,10 @@ int push_dtt_stream(const char* port, const std::vector<uint8_t>& bytes) {
 // that straddles a 2x2 granule neighbourhood — so their budget is 4; every
 // other port is single-stream by contract.
 uint32_t port_stream_budget(const char* port_id) {
-    return (std::strcmp(port_id, "dem") == 0 || std::strcmp(port_id, "water") == 0) ? 4u : 1u;
+    if (std::strcmp(port_id, "dem") == 0 || std::strcmp(port_id, "water") == 0) return 4u;
+    // respond's "records": the store's result as ordered $FSB chunks of at most 1 MiB, one invocation's worth.
+    if (std::strcmp(port_id, "records") == 0) return 64u;
+    return 1u;
 }
 
 bool find_batched_input_port(char* message, size_t message_len) {
@@ -1347,6 +1356,22 @@ DatasetContract contract_of(const std::string& provenance_json) {
     return c;
 }
 
+// The same contract, read off a plan header's DTTProvenance (typed contracts 1.0).
+DatasetContract contract_of(const DTTProvenance* p) {
+    DatasetContract c;
+    if (!p) return c;
+    const auto text = [](const flatbuffers::String* v) { return v ? v->str() : std::string(); };
+    c.dataset_id = text(p->DATASET_ID());
+    c.dataset_name = text(p->DATASET_NAME());
+    c.dataset_epoch = text(p->DATASET_EPOCH());
+    c.retrieved_at = text(p->RETRIEVED_AT());
+    c.license = text(p->LICENSE());
+    c.license_url = text(p->LICENSE_URL());
+    c.attribution = text(p->ATTRIBUTION());
+    c.source_url = text(p->SOURCE_URL());
+    return c;
+}
+
 flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuilder& b,
                                                     const DatasetContract& c) {
     const auto p_id = b.CreateString(c.dataset_id);
@@ -1371,60 +1396,168 @@ flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuild
 
 // ── serving lane helpers (route / respond) ─────────────────────────────────
 
-// The sync hostcall bridge, used for exactly ONE operation: plugin.getConfig.
-// Same import surface the tests already admit (space_data_module_host) and the
-// same precedent geonames-ingest set: reading the flow's host-provided config
-// is not a capability, it is the module asking who it was deployed as.
+// ── THE NODE CONFIG, TYPED ─────────────────────────────────────────────────
 //
-// TERRAIN_SOURCE_NO_HOST_BRIDGE compiles the three imports OUT. It exists for
-// ONE reason: the SDK's tri-runtime parity lane cannot execute a module that
-// imports space_data_module_host at all — the wasmedge lanes run
-// `wasmedge module.wasm` with no host module to link against, and the browser
-// lane's own host construction reaches a dynamic import that its served bundle
-// externalizes away. Both are lane-provisioning limits, not properties of this
-// code, and they apply to every production module using the sanctioned
-// plugin.getConfig bridge. The SHIPPED artifact always keeps the imports; the
-// parity artifact (npm run build:parity) drops them so the ENCODER's byte
-// identity across the three runtimes can still be measured. See the task md.
-#ifdef TERRAIN_SOURCE_NO_HOST_BRIDGE
-namespace {
-int32_t sdm_host_call(const uint8_t*, int32_t, const uint8_t*, int32_t) { return 0; }
-int32_t sdm_host_response_len(void) { return 0; }
-int32_t sdm_host_read_response(uint8_t*, int32_t) { return 0; }
-}  // namespace
-#else
-extern "C" {
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
-                      const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t sdm_host_response_len(void);
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-}
-#endif
+// plugin.getConfig is an SDS $PIV hostcall (typedHostcall.hpp) answering one ModuleConfig FlatBuffer (MCFG) on raw
+// "config"; sdm_piv::get_config() verifies it and reads it in place. A frame on an optional "config" port (route /
+// layer_json / respond) is the same ModuleConfig. The serving config is read from either through ONE reader,
+// build_serving_config(const sdm_piv::ConfigTable&): scalars by key, and the availability index - the one large value -
+// as a NumberList read as a span in place (see parse_availability). Nothing JSON ever crosses a port.
+//
+// The encoder's "options" frame (tile) is a handful of scalars; it is still folded into the small config object its
+// readers were written against (module_config_object).
+//
+// TERRAIN_SOURCE_NO_HOST_BRIDGE compiles the hostcall OUT. It exists for ONE reason: the SDK's tri-runtime parity
+// lane cannot execute a module that imports space_data_module_host at all (the wasmedge lanes run `wasmedge
+// module.wasm` with no host module to link against). The SHIPPED artifact keeps the bridge; the parity artifact
+// (npm run build:parity) answers every config read empty, and its callers hand the config in on the "config" port.
+struct ConfigValue {
+    std::string key;
+    std::string json;  // the value as a JSON literal
+};
 
-std::string fetch_config() {
-    static const char* op = "plugin.getConfig";
-    const std::string payload_json = "{}";
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
-    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
-                  req.data(), static_cast<int32_t>(req.size()));
-    const int32_t len = sdm_host_response_len();
-    if (len <= 4) return "{}";
-    std::vector<uint8_t> buf(static_cast<size_t>(len));
-    sdm_host_read_response(buf.data(), len);
-    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
-                          (static_cast<uint32_t>(buf[2]) << 16) |
-                          (static_cast<uint32_t>(buf[3]) << 24);
-    if (buf.size() < 4u + rlen) return "{}";
-    return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
+std::string config_number_literal(double v) {
+    char buf[40];
+    if (std::isfinite(v) && v == std::floor(v) && std::fabs(v) < 1e15) {
+        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
+        return buf;
+    }
+    std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
+}
+
+struct ConfigNode {
+    std::string name;
+    bool leaf = false;
+    std::string json;
+    std::vector<ConfigNode> kids;
+};
+
+void config_insert(ConfigNode* root, const std::string& key, const std::string& json) {
+    ConfigNode* node = root;
+    size_t start = 0;
+    while (true) {
+        const size_t dot = key.find('.', start);
+        const std::string part = key.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
+        ConfigNode* next = nullptr;
+        for (ConfigNode& kid : node->kids) {
+            if (kid.name == part) { next = &kid; break; }
+        }
+        if (!next) {
+            node->kids.push_back(ConfigNode());
+            node->kids.back().name = part;
+            next = &node->kids.back();
+        }
+        node = next;
+        if (dot == std::string::npos) break;
+        start = dot + 1;
+    }
+    node->leaf = true;
+    node->json = json;
+}
+
+bool config_all_digits(const std::string& s) {
+    if (s.empty()) return false;
+    for (const char c : s) if (c < '0' || c > '9') return false;
+    return true;
+}
+
+std::string config_render(const ConfigNode& node) {
+    if (node.leaf && node.kids.empty()) return node.json;
+    bool array = !node.kids.empty();
+    for (const ConfigNode& kid : node.kids) array = array && config_all_digits(kid.name);
+    if (array) {
+        std::vector<const ConfigNode*> ordered;
+        for (const ConfigNode& kid : node.kids) ordered.push_back(&kid);
+        std::sort(ordered.begin(), ordered.end(), [](const ConfigNode* a, const ConfigNode* b) {
+            return std::strtoull(a->name.c_str(), nullptr, 10) < std::strtoull(b->name.c_str(), nullptr, 10);
+        });
+        // A flattened list cannot state an EMPTY element (it has no entries to flatten), so its index is simply
+        // absent: the gap is restored as an empty element of its siblings' shape - a level with no availability
+        // rectangles stays a level, and the levels after it keep their indices.
+        std::string filler = "null";
+        for (const ConfigNode* kid : ordered) {
+            const std::string rendered = config_render(*kid);
+            if (!rendered.empty() && rendered[0] == '[') { filler = "[]"; break; }
+            if (!rendered.empty() && rendered[0] == '{') { filler = "{}"; break; }
+        }
+        std::string out = "[";
+        size_t next = 0;
+        for (const ConfigNode* kid : ordered) {
+            const size_t index = static_cast<size_t>(std::strtoull(kid->name.c_str(), nullptr, 10));
+            if (index > next + 100000) break;  // a sparse index is not a list; refuse to inflate it
+            for (; next < index; next++) out += (next ? "," : "") + filler;
+            out += (next ? "," : "") + config_render(*kid);
+            next = index + 1;
+        }
+        return out + "]";
+    }
+    std::string out = "{";
+    for (size_t i = 0; i < node.kids.size(); i++) {
+        out += (i ? ",\"" : "\"") + json_escape(node.kids[i].name) + "\":" + config_render(node.kids[i]);
+    }
+    return out + "}";
+}
+
+std::string config_object(const std::vector<ConfigValue>& values) {
+    ConfigNode root;
+    for (const ConfigValue& v : values) {
+        if (!v.key.empty()) config_insert(&root, v.key, v.json);
+    }
+    return root.kids.empty() ? std::string("{}") : config_render(root);
+}
+
+// One ModuleConfig entry (and, for its list kinds, its elements under dotted keys).
+void module_config_values(const sdn::runtime::ConfigEntry* e, const std::string& prefix, std::vector<ConfigValue>* out) {
+    if (!e || !e->KEY()) return;
+    const std::string key = prefix + e->KEY()->str();
+    switch (e->KIND()) {
+        case sdn::runtime::configValueKind_String:
+            out->push_back({key, "\"" + json_escape(e->STRING_VALUE() ? e->STRING_VALUE()->str() : std::string()) + "\""});
+            break;
+        case sdn::runtime::configValueKind_Number:
+            out->push_back({key, config_number_literal(e->NUMBER_VALUE())});
+            break;
+        case sdn::runtime::configValueKind_Bool:
+            out->push_back({key, e->BOOL_VALUE() ? "true" : "false"});
+            break;
+        case sdn::runtime::configValueKind_StringList:
+            if (e->STRINGS())
+                for (uint32_t i = 0; i < e->STRINGS()->size(); i++)
+                    out->push_back({key + "." + std::to_string(i), "\"" + json_escape(e->STRINGS()->Get(i)->str()) + "\""});
+            break;
+        case sdn::runtime::configValueKind_NumberList:
+            if (e->NUMBERS())
+                for (uint32_t i = 0; i < e->NUMBERS()->size(); i++)
+                    out->push_back({key + "." + std::to_string(i), config_number_literal(e->NUMBERS()->Get(i))});
+            break;
+        case sdn::runtime::configValueKind_TableList:
+            if (e->TABLES())
+                for (uint32_t i = 0; i < e->TABLES()->size(); i++) {
+                    const auto* table = e->TABLES()->Get(i);
+                    if (!table || !table->ENTRIES()) continue;
+                    for (const auto* inner : *table->ENTRIES())
+                        module_config_values(inner, key + "." + std::to_string(i) + ".", out);
+                }
+            break;
+        default:
+            break;
+    }
+}
+
+// A ModuleConfig (MCFG) frame as the config object; `ok` false when the bytes are not one.
+std::string module_config_object(const uint8_t* data, size_t length, bool* ok) {
+    ::flatbuffers::Verifier verifier(data, length);
+    if (!data || length < 8 || !sdn::runtime::VerifyModuleConfigBuffer(verifier)) {
+        *ok = false;
+        return "{}";
+    }
+    *ok = true;
+    std::vector<ConfigValue> values;
+    const auto* config = sdn::runtime::GetModuleConfig(data);
+    if (config->ENTRIES())
+        for (const auto* e : *config->ENTRIES()) module_config_values(e, "", &values);
+    return config_object(values);
 }
 
 // ── THE SERVING CONFIG IS FETCHED ONCE PER INSTANCE, NOT ONCE PER REQUEST ──
@@ -1456,15 +1589,7 @@ std::string fetch_config() {
 // tests/route-cost.test.mjs across 45 B / 9.7 KB / 318 KB / 6.9 MB indices,
 // which is the gate: the spread across four orders of magnitude of index size
 // must stay inside the noise of the smallest.
-const std::string& load_config() {
-    static std::string cached;
-    static bool loaded = false;
-    if (!loaded) {
-        cached = fetch_config();
-        loaded = true;
-    }
-    return cached;
-}
+// (serving_config() below is that once-per-instance read.)
 
 struct HeaderEntry {
     std::string name;
@@ -1642,24 +1767,16 @@ std::vector<std::string> split_json_objects(const std::string& array_json) {
 
 // ── the http response lane ─────────────────────────────────────────────────
 //
-// Janus (e): com.digitalarsenal.hostcap.http-request is the ONLY fetch hook
-// for both the elevation and the water-body granules, and both opt into
-// responseWire "raw-body-v1" — the $HRB frame the cell-tower lane set the
-// precedent for. A 40 MB granule expands to 54 MB of base64 in the default
-// JSON dialect and is then copied through several string buffers before this
-// module sees a byte of it; $HRB hands over the bytes verbatim.
-//
-//   0..3  "$HRB"
-//   4..7  HTTP status, little endian (0 means connector failure)
-//   8..N  response body, verbatim
-//
-// The JSON dialect is still read, because a plan may be replayed from a
-// recorded fixture that predates the raw lane.
+// Janus (e): com.digitalarsenal.hostcap.http-request is the ONLY fetch hook for both the elevation and the water-body
+// granules. Typed contracts 1.0: every response is an HttpResponse (HRSP, module-sdk runtime type) whose BODY is the
+// granule verbatim - no base64, no JSON dialect, no $HRB side lane. STATUS 0 is the connector's own failure (ERROR says
+// why): it is neither a granule nor open ocean, so it is refused like any other non-2xx.
 struct HttpFrame {
     bool present = false;
+    bool invalid = false;
     long status = 0;
     std::string body;
-    bool raw = false;
+    std::string error;
 };
 
 HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
@@ -1667,24 +1784,18 @@ HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
     const int32_t idx = plugin_find_input_index(port_id, ordinal);
     if (idx < 0) return f;
     const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
-    if (!frame || !frame->payload || frame->payload_length == 0) return f;
+    if (!frame) return f;
     f.present = true;
-    const uint8_t* p = frame->payload;
-    if (frame->payload_length >= 8 && p[0] == '$' && p[1] == 'H' && p[2] == 'R' && p[3] == 'B') {
-        const uint32_t raw_status = static_cast<uint32_t>(p[4]) |
-                                    (static_cast<uint32_t>(p[5]) << 8) |
-                                    (static_cast<uint32_t>(p[6]) << 16) |
-                                    (static_cast<uint32_t>(p[7]) << 24);
-        f.status = static_cast<long>(static_cast<int32_t>(raw_status));
-        f.body.assign(reinterpret_cast<const char*>(p + 8),
-                      static_cast<size_t>(frame->payload_length) - 8);
-        f.raw = true;
+    ::flatbuffers::Verifier verifier(frame->payload ? frame->payload : reinterpret_cast<const uint8_t*>(""),
+                                     frame->payload ? frame->payload_length : 0);
+    if (!frame->payload || frame->payload_length < 8 || !sdn::runtime::VerifyHttpResponseBuffer(verifier)) {
+        f.invalid = true;
         return f;
     }
-    const std::string json(reinterpret_cast<const char*>(p),
-                           static_cast<size_t>(frame->payload_length));
-    f.status = response_status(json);
-    f.body = response_body(json);
+    const sdn::runtime::HttpResponse* r = sdn::runtime::GetHttpResponse(frame->payload);
+    f.status = r->STATUS();
+    if (r->BODY()) f.body.assign(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
+    if (r->ERROR()) f.error = r->ERROR()->str();
     return f;
 }
 
@@ -2276,26 +2387,6 @@ SourceExtremes measure_source_extremes(const std::vector<DemGrid>& granules,
 // its requests against: everything inside it will be answered, everything
 // outside it is never asked for. That makes it the exact test for whether a
 // store miss is normal traffic or a broken promise.
-std::vector<std::string> split_json_arrays(const std::string& outer) {
-    std::vector<std::string> out;
-    int depth = 0;
-    bool in_string = false;
-    size_t start = 0;
-    // Skip the opening bracket of the OUTER array so its members are depth 1.
-    for (size_t i = 0; i < outer.size(); i++) {
-        const char c = outer[i];
-        if (in_string) {
-            if (c == '\\') i++;
-            else if (c == '"') in_string = false;
-            continue;
-        }
-        if (c == '"') in_string = true;
-        else if (c == '[') { if (depth++ == 1) start = i; }
-        else if (c == ']') { if (--depth == 1) out.push_back(outer.substr(start, i - start + 1)); }
-    }
-    return out;
-}
-
 struct AvailabilityRect {
     double sx, sy, ex, ey;
 };
@@ -2327,22 +2418,47 @@ struct AvailabilityIndex {
     std::vector<std::vector<AvailabilityRect>> levels;
 };
 
-AvailabilityIndex parse_availability(const std::string& available) {
-    AvailabilityIndex index;
-    for (const std::string& level_json : split_json_arrays(available)) {
-        std::vector<AvailabilityRect> rects;
-        for (const std::string& rect : split_json_objects(level_json)) {
-            AvailabilityRect r;
-            r.sx = json_number(rect, "startX", -1);
-            r.sy = json_number(rect, "startY", -1);
-            r.ex = json_number(rect, "endX", -1);
-            r.ey = json_number(rect, "endY", -1);
-            if (r.sx < 0 || r.sy < 0 || r.ex < 0 || r.ey < 0) continue;
-            rects.push_back(r);
-        }
-        index.levels.push_back(std::move(rects));
+// THE INDEX ON THE WIRE IS ONE NumberList, read IN PLACE. `terrain_available` is a flat run of 5-tuples
+// [level, startX, startY, endX, endY] - one per rectangle, in layer.json order (tools/terrain-pyramid writes it with
+// availabilityNumbers()). A ModuleConfig has no list-of-lists kind, and the layer.json shape as tables cost a table
+// and four keyed entries per rectangle; as numbers it is 40 bytes a rectangle, verified once and walked once here
+// straight out of the host's response, never copied element by element. A level with no rectangles is an empty level
+// (the levels after it keep their indices). A tuple that is not whole non-negative integers, or a level past 63, is
+// dropped as the JSON reader dropped a malformed rectangle; a list whose length is not a multiple of 5 is refused
+// (false) and the default roots answer.
+constexpr uint32_t kMaxAvailabilityLevels = 64;
+bool parse_availability(sdm_piv::Span<double> numbers, AvailabilityIndex* index) {
+    index->levels.clear();
+    if (numbers.empty() || numbers.size() % 5 != 0) return false;
+    auto whole = [](double v) { return std::isfinite(v) && v >= 0 && v == std::floor(v) && v < 9.0e15; };
+    for (size_t at = 0; at < numbers.size(); at += 5) {
+        const double level = numbers[at];
+        if (!whole(level) || level >= kMaxAvailabilityLevels) continue;
+        const AvailabilityRect r{numbers[at + 1], numbers[at + 2], numbers[at + 3], numbers[at + 4]};
+        if (!whole(r.sx) || !whole(r.sy) || !whole(r.ex) || !whole(r.ey)) continue;
+        const size_t z = static_cast<size_t>(level);
+        if (index->levels.size() <= z) index->levels.resize(z + 1);
+        index->levels[z].push_back(r);
     }
-    return index;
+    return !index->levels.empty();
+}
+
+// layer.json `available`, rendered from the parsed index: the array-of-levels-of-rectangles the client reads.
+std::string availability_json(const AvailabilityIndex& index) {
+    std::string out = "[";
+    char buf[128];
+    for (size_t z = 0; z < index.levels.size(); z++) {
+        out += z ? ",[" : "[";
+        const std::vector<AvailabilityRect>& rects = index.levels[z];
+        for (size_t i = 0; i < rects.size(); i++) {
+            const AvailabilityRect& r = rects[i];
+            std::snprintf(buf, sizeof(buf), "%s{\"startX\":%.0f,\"startY\":%.0f,\"endX\":%.0f,\"endY\":%.0f}",
+                          i ? "," : "", r.sx, r.sy, r.ex, r.ey);
+            out += buf;
+        }
+        out += "]";
+    }
+    return out + "]";
 }
 
 // ── AVAILABILITY, AS THE CLIENT COMPUTES IT ────────────────────────────────
@@ -2512,88 +2628,111 @@ struct ServingConfig {
     double west_deg = 0, south_deg = 0, east_deg = 0, north_deg = 0;
 };
 
-ServingConfig build_serving_config(const std::string& config) {
-    ServingConfig sc;
-    sc.tileset_id = json_string(config, "terrain_tileset_id", "spaceaware-terrain");
-    sc.mount_prefix = json_string(config, "terrain_mount_path", "/api/v1/terrain/");
-    if (sc.mount_prefix.empty() || sc.mount_prefix.back() != '/') sc.mount_prefix += '/';
-    sc.version = json_string(config, "terrain_version", "1.0.0");
-
-    std::string available;
-    if (!json_raw_value(config, "terrain_available", &available) || available.empty() ||
-        available[0] != '[') {
-        // Default: the two level-0 roots of the two-root geographic scheme.
-        // Honest exactly when maxzoom is 0; a deeper pyramid MUST configure
-        // terrain_available.
-        available = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
+// The serving config's scalar readers over a ModuleConfig table: a String (fallback when absent or another kind, as
+// the JSON reader's json_string), a Number (a numeric String tolerated, as an operator config always allowed).
+std::string cfg_string(const sdm_piv::ConfigTable& c, const char* key, const char* fallback) {
+    if (c.kind(key, sdn::runtime::configValueKind_Number) != sdn::runtime::configValueKind_String) return fallback;
+    return std::string(c.string(key));
+}
+double cfg_number(const sdm_piv::ConfigTable& c, const char* key, double fallback) {
+    if (!c.has(key)) return fallback;
+    if (c.kind(key) == sdn::runtime::configValueKind_Number) return c.number(key, fallback);
+    if (c.kind(key) == sdn::runtime::configValueKind_String) {
+        const std::string text(c.string(key));
+        char* end = nullptr;
+        const double v = strtod(text.c_str(), &end);
+        if (end != text.c_str()) return v;
     }
-    sc.availability = parse_availability(available);
+    return fallback;
+}
 
-    const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
+ServingConfig build_serving_config(const sdm_piv::ConfigTable& config) {
+    ServingConfig sc;
+    sc.tileset_id = cfg_string(config, "terrain_tileset_id", "spaceaware-terrain");
+    sc.mount_prefix = cfg_string(config, "terrain_mount_path", "/api/v1/terrain/");
+    if (sc.mount_prefix.empty() || sc.mount_prefix.back() != '/') sc.mount_prefix += '/';
+    sc.version = cfg_string(config, "terrain_version", "1.0.0");
+
+    // Default: the two level-0 roots of the two-root geographic scheme. Honest exactly when maxzoom is 0; a deeper
+    // pyramid MUST configure terrain_available.
+    if (!parse_availability(config.numbers("terrain_available"), &sc.availability)) {
+        static const double kRoots[5] = {0, 0, 0, 1, 0};
+        parse_availability(sdm_piv::Span<double>(kRoots, 5), &sc.availability);
+    }
+    const std::string available = availability_json(sc.availability);
+
+    const long maxzoom = static_cast<long>(cfg_number(config, "terrain_maxzoom", 0));
 
     sc.layer_plan = std::string("{\"tilesetId\":\"") + json_escape(sc.tileset_id) + "\"" +
                     ",\"maxzoom\":" + std::to_string(maxzoom) + ",\"attribution\":\"" +
-                    json_escape(json_string(config, "terrain_attribution", "")) + "\"" +
+                    json_escape(cfg_string(config, "terrain_attribution", "")) + "\"" +
                     ",\"description\":\"" +
-                    json_escape(json_string(config, "terrain_description", "")) + "\"" +
+                    json_escape(cfg_string(config, "terrain_description", "")) + "\"" +
                     ",\"version\":\"" + json_escape(sc.version) + "\"" +
                     ",\"tiles\":\"" +
-                    json_escape(json_string(config, "terrain_tiles_template",
+                    json_escape(cfg_string(config, "terrain_tiles_template",
                                             "{z}/{x}/{y}.terrain?v={version}")) + "\"" +
                     // The datum rides into layer.json, which is the ONLY
                     // metadata document a client on the IPFS path reads
                     // besides the catalogue record. See
                     // ServingConfig::vertical_datum_name.
                     ",\"verticalDatum\":\"GEOID\",\"verticalDatumName\":\"" +
-                    json_escape(json_string(config, "terrain_vertical_datum_name",
+                    json_escape(cfg_string(config, "terrain_vertical_datum_name",
                                             "EGM2008")) + "\"" +
                     ",\"available\":" + available + "}";
 
     sc.layer_plan_token = sha256_multihash(
         std::vector<uint8_t>(sc.layer_plan.begin(), sc.layer_plan.end()));
 
-    sc.tileset_cid = json_string(config, "terrain_tileset_cid", "");
-    sc.gateway_path = json_string(config, "terrain_gateway_path", "/ipfs/");
+    sc.tileset_cid = cfg_string(config, "terrain_tileset_cid", "");
+    sc.gateway_path = cfg_string(config, "terrain_gateway_path", "/ipfs/");
     if (sc.gateway_path.empty() || sc.gateway_path.back() != '/') sc.gateway_path += '/';
-    sc.gateway_origin = json_string(config, "terrain_gateway_origin", "");
+    sc.gateway_origin = cfg_string(config, "terrain_gateway_origin", "");
     while (!sc.gateway_origin.empty() && sc.gateway_origin.back() == '/')
         sc.gateway_origin.pop_back();
-    sc.dataset_epoch = json_string(config, "terrain_dataset_epoch", "");
-    sc.attribution = json_string(config, "terrain_attribution", "");
+    sc.dataset_epoch = cfg_string(config, "terrain_dataset_epoch", "");
+    sc.attribution = cfg_string(config, "terrain_attribution", "");
     sc.maxzoom = maxzoom;
-    sc.tileset_size_bytes = json_number(config, "terrain_tileset_size_bytes", 0);
-    sc.dataset_id = json_string(config, "terrain_dataset_id", "");
-    sc.dataset_name = json_string(config, "terrain_dataset_name", "");
-    sc.license = json_string(config, "terrain_license", "");
-    sc.license_url = json_string(config, "terrain_license_url", "");
-    sc.dataset_retrieved_at = json_string(config, "terrain_dataset_retrieved_at", "");
+    sc.tileset_size_bytes = cfg_number(config, "terrain_tileset_size_bytes", 0);
+    sc.dataset_id = cfg_string(config, "terrain_dataset_id", "");
+    sc.dataset_name = cfg_string(config, "terrain_dataset_name", "");
+    sc.license = cfg_string(config, "terrain_license", "");
+    sc.license_url = cfg_string(config, "terrain_license_url", "");
+    sc.dataset_retrieved_at = cfg_string(config, "terrain_dataset_retrieved_at", "");
     // NOT terrain_tileset_cid. See ServingConfig::source_dataset_cid: the
     // tileset directory is PAYLOAD.CID and nothing else may be read as it.
-    sc.source_dataset_cid = json_string(config, "terrain_source_dataset_cid", "");
-    sc.vertical_datum_name = json_string(config, "terrain_vertical_datum_name", "EGM2008");
+    sc.source_dataset_cid = cfg_string(config, "terrain_source_dataset_cid", "");
+    sc.vertical_datum_name = cfg_string(config, "terrain_vertical_datum_name", "EGM2008");
     {
-        std::string w, so, e, n;
-        sc.has_extent = json_raw_value(config, "terrain_west_deg", &w) &&
-                        json_raw_value(config, "terrain_south_deg", &so) &&
-                        json_raw_value(config, "terrain_east_deg", &e) &&
-                        json_raw_value(config, "terrain_north_deg", &n);
+        sc.has_extent = config.has("terrain_west_deg") && config.has("terrain_south_deg") &&
+                        config.has("terrain_east_deg") && config.has("terrain_north_deg");
         if (sc.has_extent) {
-            sc.west_deg = json_number(config, "terrain_west_deg", 0);
-            sc.south_deg = json_number(config, "terrain_south_deg", 0);
-            sc.east_deg = json_number(config, "terrain_east_deg", 0);
-            sc.north_deg = json_number(config, "terrain_north_deg", 0);
+            sc.west_deg = cfg_number(config, "terrain_west_deg", 0);
+            sc.south_deg = cfg_number(config, "terrain_south_deg", 0);
+            sc.east_deg = cfg_number(config, "terrain_east_deg", 0);
+            sc.north_deg = cfg_number(config, "terrain_north_deg", 0);
         }
     }
 
-    sc.ocean_synth_min_level = json_number(config, "terrain_ocean_synth_min_level", -1);
-    const double synth = json_number(config, "terrain_synth_grid_size", 65);
+    sc.ocean_synth_min_level = cfg_number(config, "terrain_ocean_synth_min_level", -1);
+    const double synth = cfg_number(config, "terrain_synth_grid_size", 65);
     sc.synth_grid = static_cast<uint32_t>(synth < 2 || synth > 255 ? 65 : synth);
     return sc;
 }
 
 const ServingConfig& serving_config() {
     static ServingConfig* cached = nullptr;
-    if (!cached) cached = new ServingConfig(build_serving_config(load_config()));
+    if (!cached) {
+#ifdef TERRAIN_SOURCE_NO_HOST_BRIDGE
+        cached = new ServingConfig(build_serving_config(sdm_piv::ConfigTable()));
+#else
+        // The host's response is kept only while the config is read: the availability index is walked in place
+        // out of it, and what the instance holds afterwards is the parsed rectangles.
+        const sdm_piv::Config config = sdm_piv::get_config();
+        cached = new ServingConfig(build_serving_config(config.ok() ? static_cast<const sdm_piv::ConfigTable&>(config)
+                                                                    : sdm_piv::ConfigTable()));
+#endif
+    }
     return *cached;
 }
 
@@ -2904,6 +3043,156 @@ flatbuffers::Offset<DTTProvenance> parent_provenance(flatbuffers::FlatBufferBuil
     return builder.Finish();
 }
 
+// ── the serving lane's typed frames (route / layer_json / respond) ──────────
+//
+// Typed contracts 1.0: route forwards the $HTQ it accepted - verbatim - to layer_json ("layer_plan") and to respond
+// ("context"), and each re-derives what it needs from that request and the mount's config with the SAME functions route
+// uses (mount prefix, the one admitted query token, the tile address, If-None-Match and Accept-Encoding), so the three
+// nodes cannot disagree about a request and no bespoke context shape crosses a port. The record-store read is a
+// FlatSQL $FSO (QUERY_RECORDS) for hostcap/flatsql-query, answered as $FSB chunks plus one $FSO status.
+
+const sdn::http::HttpRequest* htq_input(const char* port, bool* present) {
+    *present = false;
+    const int32_t idx = plugin_find_input_index(port, 0);
+    const plugin_input_frame_t* frame = idx >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(idx)) : nullptr;
+    if (!frame) return nullptr;
+    *present = true;
+    if (!frame->payload || frame->payload_length < 8) return nullptr;
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::VerifyHttpRequestBuffer(verifier)) return nullptr;
+    return sdn::http::GetHttpRequest(frame->payload);
+}
+
+// CONDITIONAL AND NEGOTIATION STATE. If-None-Match is BOUNDED AT THE DOOR: every ETag this module issues is a quoted
+// sha2-256 multihash (71 bytes), so a value past 256 bytes cannot match one and is DROPPED (degrades to a 200).
+// Accept-Encoding: absent means anything is acceptable (RFC 9110 12.5.3), so gzip is the default and only an explicit
+// refusal changes it; a value past 512 bytes is not a negotiation and reads as "gzip is fine".
+struct Negotiation {
+    std::string if_none_match;
+    bool accepts_gzip = true;
+};
+
+Negotiation negotiation_of(const sdn::http::HttpRequest* request) {
+    constexpr size_t kMaxIfNoneMatchBytes = 256;
+    Negotiation n;
+    if (!request || !request->HEADERS()) return n;
+    for (const auto* h : *request->HEADERS()) {
+        if (!h->NAME() || !h->VALUE()) continue;
+        const std::string name = h->NAME()->str();
+        if (name == "if-none-match") {
+            if (h->VALUE()->size() <= kMaxIfNoneMatchBytes) n.if_none_match = h->VALUE()->str();
+            else n.if_none_match.clear();
+        } else if (name == "accept-encoding") {
+            if (h->VALUE()->size() <= 512) n.accepts_gzip = accept_encoding_allows_gzip(h->VALUE()->str());
+        }
+    }
+    return n;
+}
+
+// The serving config for THIS invocation: the optional "config" port's ModuleConfig when one is wired (the parity
+// lane, and any caller with no host bridge), cached against its own bytes because a 4.4 MB availability index must
+// not be re-parsed per invoke; else the host's, read once per instance (serving_config). nullptr: the frame is not
+// a ModuleConfig.
+const ServingConfig* invocation_serving_config() {
+    static std::string* frame_config_key = new std::string();
+    static ServingConfig* frame_config_value = new ServingConfig();
+    const int32_t idx = plugin_find_input_index("config", 0);
+    const plugin_input_frame_t* frame = idx >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(idx)) : nullptr;
+    if (!frame) return &serving_config();
+    const size_t length = frame->payload ? frame->payload_length : 0;
+    if (length == 0) return nullptr;
+    if (frame_config_key->size() == length && std::memcmp(frame_config_key->data(), frame->payload, length) == 0)
+        return frame_config_value;
+    // Verified and read in place (copied to an 8-aligned buffer only when the frame is not aligned).
+    std::vector<uint64_t> aligned;
+    const uint8_t* data = frame->payload;
+    if (reinterpret_cast<uintptr_t>(data) % 8) {
+        aligned.resize((length + 7) / 8);
+        std::memcpy(aligned.data(), frame->payload, length);
+        data = reinterpret_cast<const uint8_t*>(aligned.data());
+    }
+    ::flatbuffers::Verifier::Options options;
+    options.max_tables = 100000000;
+    ::flatbuffers::Verifier verifier(data, length, options);
+    if (length < 8 || !sdn::runtime::VerifyModuleConfigBuffer(verifier)) return nullptr;
+    *frame_config_value = build_serving_config(sdm_piv::ConfigTable(sdn::runtime::GetModuleConfig(data)->ENTRIES()));
+    frame_config_key->assign(reinterpret_cast<const char*>(frame->payload), length);
+    return frame_config_value;
+}
+
+// The path below the mount, when the request is addressed to it with at most the one admitted query token ("v=" +
+// the configured version); false otherwise (route answers those 404).
+bool mount_rest_of(const ServingConfig& cfg, const sdn::http::HttpRequest* request, std::string* rest) {
+    const std::string path = request && request->PATH() ? request->PATH()->str() : "";
+    const std::string raw_query = request && request->QUERY() ? request->QUERY()->str() : "";
+    if (path.size() < cfg.mount_prefix.size() || path.compare(0, cfg.mount_prefix.size(), cfg.mount_prefix) != 0)
+        return false;
+    if (!raw_query.empty() && raw_query != "v=" + cfg.version) return false;
+    *rest = path.substr(cfg.mount_prefix.size());
+    return true;
+}
+
+// The layer_json plan: the mount's layer plan (built once with the config) plus the request's conditional state.
+std::string layer_plan_for(const ServingConfig& cfg, const Negotiation& n) {
+    std::string plan = cfg.layer_plan;
+    plan.insert(plan.size() - 1, std::string(",\"planToken\":\"") + cfg.layer_plan_token + "\"" +
+                                     ",\"ifNoneMatch\":\"" + json_escape(n.if_none_match) + "\"" +
+                                     ",\"acceptsGzip\":" + (n.accepts_gzip ? "true" : "false"));
+    return plan;
+}
+
+// respond's serve context for one tile address: the address, its conditional state, and what a miss there means.
+std::string serve_context_for(const ServingConfig& cfg, uint32_t z, uint32_t x, uint32_t y, const Negotiation& n) {
+    const bool inside = address_available_to_client(cfg.availability, z, x, y);
+    const double ocean_min_raw = cfg.ocean_synth_min_level;
+    const bool synth_water = ocean_min_raw >= 0 && static_cast<double>(z) >= ocean_min_raw;
+    return std::string("{\"tilesetId\":\"") + json_escape(cfg.tileset_id) + "\"" +
+           ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
+           ",\"ifNoneMatch\":\"" + json_escape(n.if_none_match) + "\",\"acceptsGzip\":" +
+           (n.accepts_gzip ? "true" : "false") + ",\"insideAvailability\":" + (inside ? "true" : "false") +
+           ",\"synthWater\":" + (synth_water ? "true" : "false") + ",\"maxLevel\":" + std::to_string(cfg.maxzoom) +
+           ",\"synthGridSize\":" + std::to_string(cfg.synth_grid) + "}";
+}
+
+// FlatSQL's tagged parameter encoding: [u8 tag][u32le size][bytes] (tags 2 int64, 4 string).
+void fso_param_string(std::vector<uint8_t>* out, const std::string& v) {
+    out->push_back(4);
+    put_u32(out, static_cast<uint32_t>(v.size()));
+    out->insert(out->end(), v.begin(), v.end());
+}
+void fso_param_int(std::vector<uint8_t>* out, int64_t v) {
+    out->push_back(2);
+    put_u32(out, 8);
+    for (int i = 0; i < 8; i++) out->push_back(static_cast<uint8_t>((static_cast<uint64_t>(v) >> (8 * i)) & 0xff));
+}
+
+int push_tile_query(const ServingConfig& cfg, uint32_t z, uint32_t x, uint32_t y) {
+    const std::string sql =
+        "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
+        "ORDER BY _rowid DESC LIMIT 1";
+    std::vector<uint8_t> params;
+    fso_param_string(&params, cfg.tileset_id);
+    fso_param_int(&params, z);
+    fso_param_int(&params, x);
+    fso_param_int(&params, y);
+    ::flatbuffers::FlatBufferBuilder b(512 + sql.size() + params.size());
+    const auto query = b.CreateVector(reinterpret_cast<const uint8_t*>(sql.data()), sql.size());
+    const auto parameters = b.CreateVector(params);
+    FSOBuilder fso(b);
+    fso.add_OPERATION(flatSqlNodeOperation_QUERY_RECORDS);
+    fso.add_QUERY(query);
+    fso.add_PARAMETERS(parameters);
+    fso.add_PARAMETER_COUNT(4);
+    FinishFSOBuffer(b, fso.Finish());
+    return plugin_push_output_ex("query", "FSO.fbs", FSOIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FSO", 0,
+                                 0, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize()));
+}
+
+int push_htq(const char* port, const plugin_input_frame_t* frame) {
+    return plugin_push_output_ex(port, "HttpRequestAbi.fbs", "$HTQ", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "HttpRequest", 0, 0, frame->payload, frame->payload_length);
+}
+
 }  // namespace
 
 extern "C" {
@@ -3136,31 +3425,94 @@ int reduce_parent(void) {
 int tile(void) {
     if (refuse_batched()) return 500;
 
-    const std::string plan = input_text("plan");
-    if (plan.empty()) {
+    // ── THE PLAN: ONE $DTT HEADER RECORD PER TILE ADDRESS ───────────────────
+    //
+    // Typed contracts 1.0: the plan is a size-prefixed $DTT record stream, one HEADER record per address to build -
+    // the record this node will emit, without its mesh (PAYLOAD present and empty, as the IDL requires): TILESET_ID,
+    // TILING_SCHEME, LEVEL / X / Y, ROW_ORIGIN_NORTH, GRID_WIDTH (the plan's gridSize), MAX_LEVEL, CHILD_AVAILABILITY,
+    // SOURCE_CLASS, VERTICAL_DATUM_NAME, PROVENANCE (the dataset contract every record is published under), and the
+    // water-mask DIRECTIVE as WATER_MASK_KIND / WATER_MASK_WIDTH / WATER_MASK_HEIGHT / WATER_MASK_PROVENANCE (NONE: no
+    // directive). The block's shared fields are read from the first header; every header must name the same tileset.
+    // The encoder's own knobs (maxGridSize, minGridSize, measureAccuracy, skipOceanTiles) are not facts about a tile
+    // and ride on the optional "options" port as a ModuleConfig (MCFG); absent, the defaults below.
+    const int32_t plan_index = plugin_find_input_index("plan", 0);
+    const plugin_input_frame_t* plan_frame =
+        plan_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(plan_index)) : nullptr;
+    if (!plan_frame || !plan_frame->payload || plan_frame->payload_length == 0) {
         plugin_set_error("missing-plan-frame", "tile requires the plan frame on port \"plan\".");
         return 400;
     }
+    std::vector<const DTT*> headers;
+    {
+        const uint8_t* data = plan_frame->payload;
+        const size_t length = plan_frame->payload_length;
+        size_t at = 0;
+        while (at < length) {
+            if (length - at < 4) { at = length + 1; break; }
+            const uint32_t size = static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) |
+                                  (static_cast<uint32_t>(data[at + 2]) << 16) |
+                                  (static_cast<uint32_t>(data[at + 3]) << 24);
+            at += 4;
+            if (size == 0) continue;  // alignment padding, as in every record stream
+            if (size > length - at) { at = length + 1; break; }
+            ::flatbuffers::Verifier verifier(data + at, size);
+            if (!DTTBufferHasIdentifier(data + at) || !VerifyDTTBuffer(verifier)) { at = length + 1; break; }
+            headers.push_back(GetDTT(data + at));
+            at += size;
+        }
+        if (at != length) {
+            plugin_set_error("invalid-plan-frame",
+                             "the plan frame is not a size-prefixed stream of $DTT header records.");
+            return 400;
+        }
+    }
+    if (headers.empty()) {
+        plugin_set_error("empty-tile-block", "the plan carries no $DTT header record, so no address to build.");
+        return 400;
+    }
+    const DTT& head = *headers[0];
 
-    std::string provenance_json;
-    json_raw_value(plan, "provenance", &provenance_json);
-    const DatasetContract contract = contract_of(provenance_json);
+    // The encoder's options, as the config object the readers below were written against.
+    std::string plan = "{}";
+    {
+        const int32_t options_index = plugin_find_input_index("options", 0);
+        const plugin_input_frame_t* options =
+            options_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(options_index)) : nullptr;
+        if (options) {
+            bool ok = false;
+            plan = module_config_object(options->payload, options->payload_length, &ok);
+            if (!ok) {
+                plugin_set_error("invalid-options-frame", "the options frame is not a ModuleConfig (MCFG).");
+                return 400;
+            }
+        }
+    }
+
+    const DatasetContract contract = contract_of(head.PROVENANCE());
     if (!contract.complete()) {
         plugin_set_error("incomplete-dataset-contract",
                          "DTTProvenance requires DATASET_ID, DATASET_EPOCH, RETRIEVED_AT and "
-                         "LICENSE on every record. The plan frame supplies them verbatim and "
+                         "LICENSE on every record. The plan's header records supply them verbatim and "
                          "they are never defaulted: a tile published under a guessed epoch is "
                          "comparable to the wrong bytes.");
         return 400;
     }
 
-    const std::string tileset_id = json_string(plan, "tilesetId", "");
+    const std::string tileset_id = head.TILESET_ID() ? head.TILESET_ID()->str() : std::string();
     if (tileset_id.empty()) {
-        plugin_set_error("missing-tileset-id", "the plan frame must state tilesetId.");
+        plugin_set_error("missing-tileset-id", "the plan's header records must state TILESET_ID.");
         return 400;
     }
-    const uint32_t grid = static_cast<uint32_t>(json_number(plan, "gridSize", 65));
-    const uint32_t max_level = static_cast<uint32_t>(json_number(plan, "maxLevel", 0));
+    for (const DTT* h : headers) {
+        if (!h->TILESET_ID() || h->TILESET_ID()->str() != tileset_id) {
+            plugin_set_error("mixed-tileset-plan",
+                             "every header record of one plan must name the same TILESET_ID.");
+            return 400;
+        }
+    }
+    // GRID_WIDTH 0 is an unstated gridSize: the encoder's default 65, as before.
+    const uint32_t grid = head.GRID_WIDTH() == 0 ? 65u : head.GRID_WIDTH();
+    const uint32_t max_level = head.MAX_LEVEL();
     if (grid < 2 || grid > 255) {
         plugin_set_error("bad-grid-size", "gridSize must lie in [2, 255].");
         return 400;
@@ -3190,33 +3542,8 @@ int tile(void) {
     const double max_grid_raw = json_number(plan, "maxGridSize", grid);
     uint32_t sample_grid = max_grid_raw < grid ? grid : static_cast<uint32_t>(max_grid_raw);
     if (sample_grid > 511) sample_grid = 511;
-    // Every candidate must be a subset of the sampled lattice, which means the
-    // sampled lattice's INTERVAL count has to be a power-of-two multiple of
-    // each candidate's. Round the top DOWN to the nearest such multiple of the
-    // plan's grid rather than refusing an awkward number.
-    // NOTE: gridSize is NOT required to be one of the candidates when
-    // maxGridSize raises the ladder. Requiring it would force the sampled
-    // lattice's interval count to be a multiple of (gridSize-1), and that is
-    // what starves the ladder: from 64 the only reachable interval counts are
-    // 64, 128, 192, 384 …, whose divisor sets are nearly all powers of two, so
-    // a tile that needs a little more than 193 posts has nowhere to go but 385
-    // and stays at the cap. 240 intervals — which does not admit 65 — offers
-    // 41, 49, 61, 81, 121, 241, and a tile buys what it needs. gridSize keeps
-    // its meaning as the density used when there is no error signal to choose
-    // by (see the measure_accuracy branch below), resolved to the nearest
-    // candidate at or below it.
-    // The self-measurement is on by default and can be turned off for a run
-    // that only wants bytes; it costs one strided pass over the tile's own
-    // resident source posts per candidate the ladder tries (and it is what
-    // chooses the density, so a run with it off ships the plan's gridSize).
-    // READ AS A BOOLEAN, because that is what callers write. json_number
-    // refuses anything that does not start with a digit or '-', so
-    // `"measureAccuracy": false` fell through to the fallback and the flag
-    // never turned anything off — silently, because the only visible effect
-    // was that the measurement ran when it had been asked not to.
-    // tools/terrain-pyramid/measure-tradeoff.mjs has been passing it as JSON
-    // `false` since it was written. A NUMBER is still accepted, so a caller
-    // that wrote 0 or 1 keeps working.
+    // The self-measurement is on by default and can be turned off for a run that only wants bytes (options
+    // measureAccuracy false, or 0); with it off the run ships the plan's gridSize.
     const bool measure_accuracy = json_bool(plan, "measureAccuracy",
                                             json_number(plan, "measureAccuracy", 1) != 0);
 
@@ -3230,27 +3557,29 @@ int tile(void) {
     // verifies and the config surface could not correct. The plan states it by
     // the enum's own name; an unstated class is UNSPECIFIED, which is what
     // ordinal 0 means, rather than a guess.
-    const std::string source_class_name = json_string(plan, "sourceClass", "");
-    const dttSourceClass source_class = parse_source_class(source_class_name);
-    if (!source_class_name.empty() && source_class == dttSourceClass_UNSPECIFIED) {
+    const dttSourceClass source_class = head.SOURCE_CLASS();
+    if (source_class < dttSourceClass_MIN || source_class > dttSourceClass_MAX) {
         plugin_set_error("unknown-source-class",
-                         "plan.sourceClass must name a dttSourceClass member exactly (e.g. "
-                         "SPACEBORNE_RADAR_INTERFEROMETRIC); an unrecognised name is refused "
+                         "SOURCE_CLASS must name a dttSourceClass member (e.g. "
+                         "SPACEBORNE_RADAR_INTERFEROMETRIC); an unrecognised ordinal is refused "
                          "rather than published as a different production technique.");
         return 422;
     }
-    if (json_bool(plan, "rowOriginNorth", false)) {
-        plugin_set_error("unsupported-row-origin",
-                         "this encoder addresses the GEOGRAPHIC_WGS84 pyramid with a TMS "
-                         "(south) row origin only; rowOriginNorth true is refused rather "
-                         "than silently flipped.");
-        return 400;
-    }
-    const std::string scheme = json_string(plan, "scheme", "GEOGRAPHIC_WGS84");
-    if (scheme != "GEOGRAPHIC_WGS84") {
-        plugin_set_error("unsupported-scheme",
-                         "only the GEOGRAPHIC_WGS84 two-root scheme is modelled.");
-        return 400;
+    const std::string source_class_name =
+        source_class == dttSourceClass_UNSPECIFIED ? std::string() : std::string(EnumNamedttSourceClass(source_class));
+    for (const DTT* h : headers) {
+        if (h->ROW_ORIGIN_NORTH()) {
+            plugin_set_error("unsupported-row-origin",
+                             "this encoder addresses the GEOGRAPHIC_WGS84 pyramid with a TMS "
+                             "(south) row origin only; ROW_ORIGIN_NORTH true is refused rather "
+                             "than silently flipped.");
+            return 400;
+        }
+        // UNSPECIFIED is an unstated scheme: the only one modelled, as before.
+        if (h->TILING_SCHEME() != dttTilingScheme_GEOGRAPHIC_WGS84 && h->TILING_SCHEME() != dttTilingScheme_UNSPECIFIED) {
+            plugin_set_error("unsupported-scheme", "only the GEOGRAPHIC_WGS84 two-root scheme is modelled.");
+            return 400;
+        }
     }
     // Ocean tiles are NOT STORED (Atlas): the tileset's availability index
     // stays exact, the store holds no tile whose every byte is sea level, and
@@ -3258,33 +3587,14 @@ int tile(void) {
     // so a single-tile plan still gets the record it asked for.
     const bool skip_ocean = json_bool(plan, "skipOceanTiles", false);
 
-    // ── the tile block ──────────────────────────────────────────────────────
+    // ── the tile block: one address per header record ──────────────────────
     std::vector<TileJob> jobs;
-    std::string tiles_json;
-    if (json_raw_value(plan, "tiles", &tiles_json) && !tiles_json.empty() &&
-        tiles_json[0] == '[') {
-        const uint32_t default_level = static_cast<uint32_t>(json_number(plan, "level", 0));
-        for (const std::string& entry : split_json_objects(tiles_json)) {
-            TileJob job;
-            job.level = static_cast<uint32_t>(json_number(entry, "level", default_level));
-            job.x = static_cast<uint32_t>(json_number(entry, "x", 0));
-            job.y = static_cast<uint32_t>(json_number(entry, "y", 0));
-            job.child_availability =
-                static_cast<uint32_t>(json_number(entry, "childAvailability", 0));
-            jobs.push_back(job);
-        }
-        if (jobs.empty()) {
-            plugin_set_error("empty-tile-block",
-                             "the plan carries a tiles[] block with no addresses in it.");
-            return 400;
-        }
-    } else {
+    for (const DTT* h : headers) {
         TileJob job;
-        job.level = static_cast<uint32_t>(json_number(plan, "level", 0));
-        job.x = static_cast<uint32_t>(json_number(plan, "x", 0));
-        job.y = static_cast<uint32_t>(json_number(plan, "y", 0));
-        job.child_availability =
-            static_cast<uint32_t>(json_number(plan, "childAvailability", 0));
+        job.level = h->LEVEL();
+        job.x = h->X();
+        job.y = h->Y();
+        job.child_availability = h->CHILD_AVAILABILITY();
         jobs.push_back(job);
     }
 
@@ -3316,14 +3626,18 @@ int tile(void) {
         responses++;
         // 404 = the dataset publishes no granule here (open ocean). That is
         // DATA — sea level — not a failure.
+        if (f.invalid) {
+            plugin_set_error("invalid-response-frame", "a \"dem\" frame is not an HttpResponse (HRSP).");
+            return 400;
+        }
         if (f.status == 404) { absent_granules++; continue; }
-        if (f.status != 0 && (f.status < 200 || f.status >= 300)) {
-            char message[192];
+        if (f.status < 200 || f.status >= 300) {
+            char message[320];
             std::snprintf(message, sizeof(message),
-                          "a DEM granule fetch answered HTTP %ld; a failed fetch and open "
+                          "a DEM granule fetch answered HTTP %ld%s%s; a failed fetch and open "
                           "ocean are not the same observation, so this is refused rather "
                           "than encoded as sea level.",
-                          f.status);
+                          f.status, f.error.empty() ? "" : " - ", f.error.substr(0, 96).c_str());
             plugin_set_error("upstream-status", message);
             return 502;
         }
@@ -3373,14 +3687,18 @@ int tile(void) {
         const HttpFrame f = http_input_at("water", ordinal);
         if (!f.present) break;
         water_responses++;
+        if (f.invalid) {
+            plugin_set_error("invalid-response-frame", "a \"water\" frame is not an HttpResponse (HRSP).");
+            return 400;
+        }
         if (f.status == 404) { water_absent++; continue; }
-        if (f.status != 0 && (f.status < 200 || f.status >= 300)) {
-            char message[208];
+        if (f.status < 200 || f.status >= 300) {
+            char message[336];
             std::snprintf(message, sizeof(message),
-                          "a water-body granule fetch answered HTTP %ld; the mask decides "
+                          "a water-body granule fetch answered HTTP %ld%s%s; the mask decides "
                           "which of this tile renders as reflective ocean, so a failed fetch "
                           "is refused rather than defaulted to land.",
-                          f.status);
+                          f.status, f.error.empty() ? "" : " - ", f.error.substr(0, 96).c_str());
             plugin_set_error("upstream-status", message);
             return 502;
         }
@@ -3396,20 +3714,20 @@ int tile(void) {
 
     // ── the water-mask DIRECTIVE (Janus (e): kind + geometry + lineage, never
     //    a base64 raster riding inside a JSON control frame) ─────────────────
-    std::string water_json;
-    json_raw_value(plan, "waterMask", &water_json);
-    const std::string directive_kind = json_string(water_json, "kind", "");
-    if (!directive_kind.empty() && directive_kind != "UNIFORM_LAND" &&
-        directive_kind != "UNIFORM_WATER" && directive_kind != "RASTER") {
+    // The directive is the header's WATER_MASK_KIND (NONE: none given), its geometry WATER_MASK_WIDTH /
+    // WATER_MASK_HEIGHT (0: unstated, the 256x256 this encoder cuts) and its lineage WATER_MASK_PROVENANCE.
+    const bool has_directive = head.WATER_MASK_KIND() != dttWaterMask_NONE;
+    if (has_directive && head.WATER_MASK_KIND() != dttWaterMask_UNIFORM_LAND &&
+        head.WATER_MASK_KIND() != dttWaterMask_UNIFORM_WATER && head.WATER_MASK_KIND() != dttWaterMask_RASTER) {
         plugin_set_error("bad-water-mask-kind",
-                         "waterMask.kind must be UNIFORM_LAND, UNIFORM_WATER or RASTER.");
+                         "WATER_MASK_KIND must be UNIFORM_LAND, UNIFORM_WATER or RASTER.");
         return 422;
     }
-    if (!water_json.empty()) {
-        const uint32_t declared_w =
-            static_cast<uint32_t>(json_number(water_json, "width", kMaskSize));
-        const uint32_t declared_h =
-            static_cast<uint32_t>(json_number(water_json, "height", kMaskSize));
+    const std::string directive_kind =
+        has_directive ? std::string(EnumNamedttWaterMask(head.WATER_MASK_KIND())) : std::string();
+    if (has_directive) {
+        const uint32_t declared_w = head.WATER_MASK_WIDTH() == 0 ? kMaskSize : head.WATER_MASK_WIDTH();
+        const uint32_t declared_h = head.WATER_MASK_HEIGHT() == 0 ? kMaskSize : head.WATER_MASK_HEIGHT();
         if (declared_w != kMaskSize || declared_h != kMaskSize) {
             plugin_set_error("water-mask-size-mismatch",
                              "this encoder cuts 256x256 water-mask rasters at every level "
@@ -3419,13 +3737,11 @@ int tile(void) {
             return 422;
         }
     }
-    std::string water_provenance_json;
-    json_raw_value(water_json, "provenance", &water_provenance_json);
-    const DatasetContract water_contract = contract_of(water_provenance_json);
+    const DatasetContract water_contract = contract_of(head.WATER_MASK_PROVENANCE());
 
     // ── encode every tile in the block ──────────────────────────────────────
     std::vector<uint8_t> stream;
-    std::string tiles_report;
+    std::vector<std::string> tile_items;
     uint32_t emitted = 0, skipped_ocean_count = 0, skipped_ocean_from_source_count = 0;
     // Block-wide totals for the two numbers a run must not be able to hide: a
     // mask post inferred from an absent granule, and one an elevation granule
@@ -3567,16 +3883,11 @@ int tile(void) {
             if (t == 0) first = stats;
             block_mask_from_absence += stats.mask_from_absence;
             block_mask_unclassified += stats.mask_unclassified;
-            if (!tiles_report.empty()) tiles_report += ",";
-            tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
-                            ",\"x\":" + std::to_string(job.x) + ",\"y\":" +
-                            std::to_string(job.y) + ",\"skippedOcean\":true" +
-                            ",\"oceanFromSource\":" +
-                            (stats.ocean_from_source ? "true" : "false") +
-                            ",\"maskFromAbsenceSamples\":" +
-                            std::to_string(stats.mask_from_absence) +
-                            ",\"maskUnclassifiedSamples\":" +
-                            std::to_string(stats.mask_unclassified) + "}";
+            tile_items.push_back(std::to_string(job.level) + "/" + std::to_string(job.x) + "/" +
+                                 std::to_string(job.y) + " skippedOcean=true oceanFromSource=" +
+                                 (stats.ocean_from_source ? "true" : "false") +
+                                 " maskFromAbsenceSamples=" + std::to_string(stats.mask_from_absence) +
+                                 " maskUnclassifiedSamples=" + std::to_string(stats.mask_unclassified));
         };
         const bool lattice_says_ocean =
             min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER";
@@ -3862,7 +4173,9 @@ int tile(void) {
         const auto f_tileset = b.CreateString(tileset_id);
         const auto f_version = b.CreateString("1.0");
         const auto f_datum_name =
-            b.CreateString(json_string(plan, "verticalDatumName", "EGM2008"));
+            b.CreateString(head.VERTICAL_DATUM_NAME() && head.VERTICAL_DATUM_NAME()->size()
+                               ? head.VERTICAL_DATUM_NAME()->str()
+                               : std::string("EGM2008"));
         const auto f_etag = b.CreateString(etag);
         const auto f_remarks = b.CreateString(kGeoidRemark);
         // The SHIPPED lattice's spacing, not the plan's. With density adapting
@@ -3943,74 +4256,69 @@ int tile(void) {
         block_band_bridged += stats.band_bridged;
         block_edge_clamped += stats.edge_clamped;
 
-        if (!tiles_report.empty()) tiles_report += ",";
-        tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
-                        ",\"x\":" + std::to_string(job.x) + ",\"y\":" + std::to_string(job.y) +
-                        ",\"minHeightM\":" + fmt_double(min_h) +
-                        ",\"maxHeightM\":" + fmt_double(max_h) +
-                        ",\"coverageFraction\":" + fmt_double(stats.coverage) +
-                        ",\"waterMaskKind\":\"" + water_kind + "\"" +
-                        ",\"maskFromAbsenceSamples\":" +
-                        std::to_string(stats.mask_from_absence) +
-                        ",\"maskUnclassifiedSamples\":" +
-                        std::to_string(stats.mask_unclassified) +
-                        ",\"edgeClampedPosts\":" + std::to_string(stats.edge_clamped) +
-                        ",\"bandBridgedPosts\":" + std::to_string(stats.band_bridged) +
-                        ",\"gridSize\":" + std::to_string(stats.grid) +
-                        ",\"errorTargetM\":" + fmt_double(stats.error_target_m) +
-                        ",\"atCeiling\":" + (stats.at_ceiling ? "true" : "false") +
-                        ",\"verticalAccuracyM\":" +
-                        fmt_double(stats.vertical_accuracy_m) +
-                        ",\"accuracyProbes\":" + std::to_string(stats.accuracy_probes) +
-                        ",\"meshBytes\":" + std::to_string(stats.mesh_bytes) +
-                        ",\"payloadBytes\":" + std::to_string(stats.payload_bytes) +
-                        ",\"digest\":\"" + digest + "\"}";
+        tile_items.push_back(std::to_string(job.level) + "/" + std::to_string(job.x) + "/" + std::to_string(job.y) +
+                             " minHeightM=" + fmt_double(min_h) + " maxHeightM=" + fmt_double(max_h) +
+                             " coverageFraction=" + fmt_double(stats.coverage) + " waterMaskKind=" + water_kind +
+                             " maskFromAbsenceSamples=" + std::to_string(stats.mask_from_absence) +
+                             " maskUnclassifiedSamples=" + std::to_string(stats.mask_unclassified) +
+                             " edgeClampedPosts=" + std::to_string(stats.edge_clamped) +
+                             " bandBridgedPosts=" + std::to_string(stats.band_bridged) +
+                             " gridSize=" + std::to_string(stats.grid) +
+                             " errorTargetM=" + fmt_double(stats.error_target_m) +
+                             " atCeiling=" + (stats.at_ceiling ? "true" : "false") +
+                             " verticalAccuracyM=" + fmt_double(stats.vertical_accuracy_m) +
+                             " accuracyProbes=" + std::to_string(stats.accuracy_probes) +
+                             " meshBytes=" + std::to_string(stats.mesh_bytes) +
+                             " payloadBytes=" + std::to_string(stats.payload_bytes) + " digest=" + digest);
     }
 
-    const std::string report =
-        std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
-        ",\"level\":" + std::to_string(jobs[0].level) +
-        ",\"x\":" + std::to_string(jobs[0].x) + ",\"y\":" + std::to_string(jobs[0].y) +
-        ",\"gridSize\":" + std::to_string(grid) +
-        ",\"maxGridSize\":" + std::to_string(sample_grid) +
-        ",\"tilesAtCeiling\":" + std::to_string(block_at_ceiling) +
-        ",\"bandBridgedPosts\":" + std::to_string(block_band_bridged) +
-        ",\"edgeClampedPosts\":" + std::to_string(block_edge_clamped) +
-        ",\"tileCount\":" + std::to_string(jobs.size()) +
-        ",\"tilesEmitted\":" + std::to_string(emitted) +
-        // ingest_meta reads recordsOut to catch a batch that reported success
-        // while storing nothing; the name is its contract, not ours.
-        ",\"recordsOut\":" + std::to_string(emitted) +
-        ",\"tilesSkippedOcean\":" + std::to_string(skipped_ocean_count) +
-        ",\"tilesSkippedOceanFromSource\":" +
-        std::to_string(skipped_ocean_from_source_count) +
-        ",\"granulesDecoded\":" + std::to_string(granules.size()) +
-        ",\"granulesAbsent\":" + std::to_string(absent_granules) +
-        ",\"waterGranulesDecoded\":" + std::to_string(water_granules.size()) +
-        ",\"waterGranulesAbsent\":" + std::to_string(water_absent) +
-        ",\"decodeResidentBytes\":" + std::to_string(budget.used) +
-        ",\"decodeBudgetBytes\":" + std::to_string(kDecodeByteBudget) +
-        ",\"tileGzipCeilingBytes\":" + std::to_string(kTileGzipCeilingBytes) +
-        ",\"sourcePostSpacingM\":" + fmt_double(source_post_spacing) +
-        ",\"sourcePostsPerTileEdge\":" + fmt_double(source_posts_per_tile_edge) +
-        ",\"maskFromAbsenceSamples\":" + std::to_string(block_mask_from_absence) +
-        ",\"maskUnclassifiedSamples\":" + std::to_string(block_mask_unclassified) +
-        ",\"worstVerticalAccuracyM\":" + fmt_double(block_worst_accuracy_m) +
-        ",\"sourceClass\":\"" + json_escape(source_class_name) + "\"" +
-        ",\"noDataSamples\":" + std::to_string(first.nodata) +
-        ",\"uncoveredSamples\":" + std::to_string(first.uncovered) +
-        ",\"coverageFraction\":" + fmt_double(first.coverage) +
-        ",\"minHeightM\":" + fmt_double(first.min_h) +
-        ",\"maxHeightM\":" + fmt_double(first.max_h) +
-        ",\"waterMaskKind\":\"" + json_escape(first.water_kind) + "\"" +
-        ",\"meshBytes\":" + std::to_string(first.mesh_bytes) +
-        ",\"payloadBytes\":" + std::to_string(first.payload_bytes) +
-        ",\"digest\":\"" + first.digest + "\"" +
-        ",\"contentEncoding\":\"gzip\"" +
-        ",\"tiles\":[" + tiles_report + "]" +
-        ",\"verticalDatum\":\"GEOID\",\"verticalDatumNote\":\"heights redistributed on the "
-        "source geoid datum, not converted to ellipsoidal; bounded <~100 m offset if "
-        "rendered as above-ellipsoid\"}";
+    // THE REPORT IS A FlowNotice (FNTC, KIND Info, REASON "tile-block"): COUNT is the records this block emitted
+    // (ingest_meta reads it to catch a batch that reports success while storing nothing), ITEMS the block's
+    // measurements as "name=value" facts, then one item per address ("z/x/y name=value ..."; an address the ocean
+    // test dropped says skippedOcean=true, which is how a runner learns which addresses to DECLARE as ocean).
+    std::vector<std::string> items = {
+        "tilesetId=" + tileset_id,
+        "level=" + std::to_string(jobs[0].level),
+        "x=" + std::to_string(jobs[0].x),
+        "y=" + std::to_string(jobs[0].y),
+        "gridSize=" + std::to_string(grid),
+        "maxGridSize=" + std::to_string(sample_grid),
+        "tilesAtCeiling=" + std::to_string(block_at_ceiling),
+        "bandBridgedPosts=" + std::to_string(block_band_bridged),
+        "edgeClampedPosts=" + std::to_string(block_edge_clamped),
+        "tileCount=" + std::to_string(jobs.size()),
+        "tilesEmitted=" + std::to_string(emitted),
+        "recordsOut=" + std::to_string(emitted),
+        "tilesSkippedOcean=" + std::to_string(skipped_ocean_count),
+        "tilesSkippedOceanFromSource=" + std::to_string(skipped_ocean_from_source_count),
+        "granulesDecoded=" + std::to_string(granules.size()),
+        "granulesAbsent=" + std::to_string(absent_granules),
+        "waterGranulesDecoded=" + std::to_string(water_granules.size()),
+        "waterGranulesAbsent=" + std::to_string(water_absent),
+        "decodeResidentBytes=" + std::to_string(budget.used),
+        "decodeBudgetBytes=" + std::to_string(kDecodeByteBudget),
+        "tileGzipCeilingBytes=" + std::to_string(kTileGzipCeilingBytes),
+        "sourcePostSpacingM=" + fmt_double(source_post_spacing),
+        "sourcePostsPerTileEdge=" + fmt_double(source_posts_per_tile_edge),
+        "maskFromAbsenceSamples=" + std::to_string(block_mask_from_absence),
+        "maskUnclassifiedSamples=" + std::to_string(block_mask_unclassified),
+        "worstVerticalAccuracyM=" + fmt_double(block_worst_accuracy_m),
+        "sourceClass=" + source_class_name,
+        "noDataSamples=" + std::to_string(first.nodata),
+        "uncoveredSamples=" + std::to_string(first.uncovered),
+        "coverageFraction=" + fmt_double(first.coverage),
+        "minHeightM=" + fmt_double(first.min_h),
+        "maxHeightM=" + fmt_double(first.max_h),
+        "waterMaskKind=" + first.water_kind,
+        "meshBytes=" + std::to_string(first.mesh_bytes),
+        "payloadBytes=" + std::to_string(first.payload_bytes),
+        "digest=" + first.digest,
+        "contentEncoding=gzip",
+        "verticalDatum=GEOID",
+        "verticalDatumNote=heights redistributed on the source geoid datum, not converted to ellipsoidal; bounded "
+        "<~100 m offset if rendered as above-ellipsoid",
+    };
+    items.insert(items.end(), tile_items.begin(), tile_items.end());
 
     // A CELL WHOSE EVERY TILE IS OCEAN STILL EMITS A FRAME. Skipping the push
     // leaves the downstream scheduler with no `records` input, its node never
@@ -4022,7 +4330,20 @@ int tile(void) {
     // nothing.
     if (stream.empty()) put_u32(&stream, 0);
     if (push_dtt_stream("records", stream) < 0) return 500;
-    return push_json("report", report) < 0 ? 500 : 0;
+    sdn::runtime::FlowNoticeT notice;
+    notice.KIND = sdn::runtime::flowNoticeKind_Info;
+    notice.SCHEMA = "DTT.fbs";
+    notice.SOURCE_NAME = tileset_id;
+    notice.COUNT = emitted;
+    notice.REASON = "tile-block";
+    notice.ITEMS = std::move(items);
+    ::flatbuffers::FlatBufferBuilder nb(4096);
+    sdn::runtime::FinishFlowNoticeBuffer(nb, sdn::runtime::FlowNotice::Pack(nb, &notice));
+    return plugin_push_output_ex("report", "FlowNotice.fbs", sdn::runtime::FlowNoticeIdentifier(),
+                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0, nb.GetBufferPointer(),
+                                 static_cast<uint32_t>(nb.GetSize())) < 0
+               ? 500
+               : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -4032,12 +4353,25 @@ int tile(void) {
 int layer_json(void) {
     if (refuse_batched()) return 500;
 
-    const std::string plan = input_text("plan");
-    if (plan.empty()) {
+    // The request route accepted for ".../layer.json" ($HTQ, verbatim) is the plan: the body is the mount's layer
+    // plan (from the config, as route reads it), rendered under this request's If-None-Match / Accept-Encoding.
+    bool present = false;
+    const sdn::http::HttpRequest* request = htq_input("plan", &present);
+    if (!present) {
         plugin_set_error("missing-plan-frame",
-                         "layer_json requires the plan frame on port \"plan\".");
+                         "layer_json requires the routed $HTQ request on port \"plan\".");
         return 400;
     }
+    if (!request) {
+        plugin_set_error("invalid-plan-frame", "the plan frame is not a $HTQ HttpRequest.");
+        return 400;
+    }
+    const ServingConfig* cfg_ptr = invocation_serving_config();
+    if (!cfg_ptr) {
+        plugin_set_error("invalid-config-frame", "the config frame is not a ModuleConfig (MCFG).");
+        return 400;
+    }
+    const std::string plan = layer_plan_for(*cfg_ptr, negotiation_of(request));
     const std::string tileset_id = json_string(plan, "tilesetId", "");
     if (tileset_id.empty()) {
         plugin_set_error("missing-tileset-id", "the plan frame must state tilesetId.");
@@ -4188,8 +4522,10 @@ int layer_json(void) {
 // SERVING CONFIG (plugin.getConfig, all optional):
 //   terrain_tileset_id   the pyramid served (default "spaceaware-terrain")
 //   terrain_maxzoom      layer.json maxzoom (default 0)
-//   terrain_available    layer.json availability array VERBATIM (default the
-//                        two level-0 roots — honest exactly when maxzoom is 0)
+//   terrain_available    the availability index as a NumberList of
+//                        [level, startX, startY, endX, endY] tuples, rendered
+//                        into layer.json `available` (default the two level-0
+//                        roots — honest exactly when maxzoom is 0)
 //   terrain_attribution / terrain_description / terrain_version
 // The availability index is the ORCHESTRATOR'S knowledge; first light takes
 // it from config rather than aggregating SQL per request, because layer.json
@@ -4227,92 +4563,20 @@ int route(void) {
     const std::string path = request->PATH() ? request->PATH()->str() : "";
     const std::string raw_query = request->QUERY() ? request->QUERY()->str() : "";
 
-    // O(1) in the size of the availability index: read once per instance, and
-    // everything derived from it derived once with it. See ServingConfig.
-    //
-    // ── THE CONFIG MAY ARRIVE ON A FRAME ────────────────────────────────────
-    //
-    // Optional input port "config": the same JSON object plugin.getConfig
-    // returns, handed in by the caller instead of read over the host bridge.
-    // A flow that already knows the mount's config can wire it; nothing in the
-    // shipped flow does, so the production path is unchanged and still one
-    // branch per request.
-    //
-    // It exists because the CATALOGUE SURFACE HAD NO TRI-RUNTIME COVERAGE AT
-    // ALL. The parity twin is compiled with TERRAIN_SOURCE_NO_HOST_BRIDGE, so
-    // plugin.getConfig answers nothing there and /tileset.json answered 503 in
-    // every configuration — the whole $DTT record path, the PAYLOAD-always-
-    // present shape and the lineage refusal were structurally unreachable in
-    // the artifact the browser/WasmEdge/docker-WasmEdge lanes measure. With
-    // the config on a frame the same three lanes execute the same record
-    // builder over the same bytes, and the twin substitution stays exact:
-    // this branch is compiled into BOTH artifacts.
-    //
-    // Cached against its own bytes, for the same reason the host-bridge config
-    // is cached: a 4.4 MB availability index must not be re-parsed per invoke.
-    static std::string* frame_config_key = new std::string();
-    static ServingConfig* frame_config_value = new ServingConfig();
-    const std::string frame_config = input_text("config");
-    if (!frame_config.empty() && *frame_config_key != frame_config) {
-        *frame_config_value = build_serving_config(frame_config);
-        *frame_config_key = frame_config;
+    // O(1) in the size of the availability index: read once per instance (or, from the optional "config" port's
+    // ModuleConfig, once per distinct frame), and everything derived from it derived once with it. See ServingConfig.
+    // The config port exists because the CATALOGUE SURFACE HAD NO TRI-RUNTIME COVERAGE: the parity twin is compiled
+    // with TERRAIN_SOURCE_NO_HOST_BRIDGE, so plugin.getConfig answers nothing there; with the config on a frame the
+    // three parity lanes execute the same record builder over the same bytes.
+    const ServingConfig* cfg_ptr = invocation_serving_config();
+    if (!cfg_ptr) {
+        plugin_set_error("invalid-config-frame", "the config frame is not a ModuleConfig (MCFG).");
+        return 400;
     }
-    const ServingConfig& cfg =
-        frame_config.empty() ? serving_config() : *frame_config_value;
+    const ServingConfig& cfg = *cfg_ptr;
+    const Negotiation negotiation = negotiation_of(request);
+    const std::string& if_none_match = negotiation.if_none_match;
 
-    // ── CONDITIONAL AND NEGOTIATION STATE, READ ONCE FOR BOTH PATHS ─────────
-    //
-    // layer.json used to skip this entirely, which is why it shipped with one
-    // header and no policy at all. Both response paths need the same two
-    // facts, so both read them here.
-    //
-    // If-None-Match is BOUNDED AT THE DOOR. Every ETag this module issues is a
-    // quoted sha2-256 multihash (71 bytes); a value longer than the bound
-    // cannot match one, so carrying it — client-controlled, unbounded, across
-    // two guest invokes and through a control frame — buys nothing and costs
-    // an allocation per request. Over-long values are DROPPED, which degrades
-    // to a 200.
-    constexpr size_t kMaxIfNoneMatchBytes = 256;
-    std::string if_none_match;
-    // CONTENT NEGOTIATION, actually negotiated. The stored bytes are gzipped
-    // and respond() used to state `content-encoding: gzip` unconditionally,
-    // without reading Accept-Encoding and without a `vary`. Browsers always
-    // accept gzip so no client lane could see it, but a shared cache or a
-    // non-browser client that asked for identity got a body it had not
-    // accepted, under a cache key that did not record the difference. Absent
-    // Accept-Encoding means anything is acceptable (RFC 9110 12.5.3), so the
-    // default is true and only an explicit refusal changes it.
-    bool accepts_gzip = true;
-    if (request->HEADERS()) {
-        for (const auto* h : *request->HEADERS()) {
-            if (!h->NAME() || !h->VALUE()) continue;
-            const std::string name = h->NAME()->str();
-            if (name == "if-none-match") {
-                if (h->VALUE()->size() <= kMaxIfNoneMatchBytes) if_none_match = h->VALUE()->str();
-                else if_none_match.clear();
-            } else if (name == "accept-encoding") {
-                // Bounded like every other client-controlled header on this
-                // path: a value past the bound is not a negotiation, and the
-                // conservative reading of an unreadable one is "gzip is fine".
-                if (h->VALUE()->size() <= 512) accepts_gzip = accept_encoding_allows_gzip(
-                    h->VALUE()->str());
-            }
-        }
-    }
-
-    // ── THE MOUNT IS A PREFIX, AND ONLY A PREFIX ────────────────────────────
-    // This used to strip up to the LAST "/terrain/", which made one tile
-    // reachable at unboundedly many distinct URLs
-    // (/api/v1/terrain/<any junk>/terrain/8/271/192.terrain), each answered 200
-    // with `public, max-age=86400`: a cache-filling amplifier no URL-keyed
-    // purge could ever invalidate. The first fix left a SEARCH FALLBACK for the
-    // case where no mount is configured — and that fallback still answered
-    // /junk/terrain/8/271/192.terrain, and still did so when a mount WAS
-    // configured, which is the exact amplifier the fix claimed to have
-    // removed. There is no fallback now: the mount is owned by the flow's
-    // config (`terrain_mount_path`, default the flow's own basePath), a path
-    // that does not START with it is a 404, and one tile is reachable at
-    // exactly one URL.
     const std::string& mount_prefix = cfg.mount_prefix;
     if (path.size() < mount_prefix.size() ||
         path.compare(0, mount_prefix.size(), mount_prefix) != 0) {
@@ -4596,16 +4860,9 @@ int route(void) {
     }
 
     if (rest == "layer.json") {
-        // The negotiation state rides with the plan: layer_json renders the
-        // body, so layer_json is where the ETag, the coding and the 304 are
-        // decided.
-        std::string plan = cfg.layer_plan;
-        plan.insert(plan.size() - 1, std::string(",\"planToken\":\"") + cfg.layer_plan_token +
-                                         "\"" + ",\"ifNoneMatch\":\"" +
-                                         json_escape(if_none_match) + "\"" +
-                                         ",\"acceptsGzip\":" +
-                                         (accepts_gzip ? "true" : "false"));
-        return push_json("layer_plan", plan) < 0 ? 500 : 0;
+        // The request itself is layer_json's plan: it renders the mount's layer.json under this request's
+        // conditional state (layer_plan_for), from the same config.
+        return push_htq("layer_plan", frame) < 0 ? 500 : 0;
     }
 
     uint32_t z = 0, x = 0, y = 0;
@@ -4626,67 +4883,10 @@ int route(void) {
     // vtab declares and the form the owner's engine-routed law states
     // (2026-08-25); tests/serve.test.mjs executes this SQL against an engine
     // with a registered source so the difference cannot go unmeasured again.
-    const std::string sql =
-        "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
-        "ORDER BY _rowid DESC LIMIT 1";
-    const std::string query =
-        std::string("{\"sql\":\"") + sql + "\",\"params\":[{\"t\":\"str\",\"v\":\"" +
-        json_escape(cfg.tileset_id) + "\"},{\"t\":\"i64\",\"v\":" + std::to_string(z) +
-        "},{\"t\":\"i64\",\"v\":" + std::to_string(x) + "},{\"t\":\"i64\",\"v\":" +
-        std::to_string(y) + "}]}";
-    if (push_json("query", query) < 0) return 500;
-
-    // THE MISS VERDICT, decided here because this is where the configured
-    // availability index lives. `available` is the promise layer.json makes to
-    // the client: it plans its requests against exactly these rectangles, so a
-    // store miss INSIDE them is a broken promise and a 404 the client never
-    // asked to handle. Atlas: a 404 must never reach the browser. respond()
-    // synthesizes such an address at height 0. A miss OUTSIDE availability
-    // stays a cheap cacheable 404: nobody was promised it.
-    //
-    // The rectangles were parsed once, at instance construction; the walk is
-    // over the pyramid's DEPTH (at most 32 levels), never over its byte size.
-    const bool inside = address_available_to_client(cfg.availability, z, x, y);
-    const uint32_t synth_grid = cfg.synth_grid;
-
-    // ── WHETHER A SYNTHESIZED TILE MAY CLAIM WATER ──────────────────────────
-    // It used to claim it unconditionally, and that was the worst defect on
-    // this lane's serving path: the two level-0 roots are inside availability
-    // by construction (a native provider with no level-0 entry never asks for
-    // a tile at all), the builder builds NOTHING at level 0, and the client
-    // upsamples every level the pyramid does not cover from that root — so an
-    // unconditional UNIFORM_WATER root painted every continent on the planet
-    // as specular ocean, cached publicly for a day, under a manifest that
-    // documented the case as a 404.
-    //
-    // A synthesized tile may only be called water where the STORE IS
-    // AUTHORITATIVE — a level the builder actually built, where "inside
-    // availability and not stored" really does mean "the encoder measured it
-    // all-ocean and skipped it". `terrain_ocean_synth_min_level` is that
-    // level and the pyramid verifier writes it alongside terrain_available.
-    // ABSENT, IT FAILS SAFE: no level is authoritative, every synthesized tile
-    // is flat LAND, and the worst outcome is coarse terrain rather than an
-    // ocean where Europe is.
-    const double ocean_min_raw = cfg.ocean_synth_min_level;
-    const bool ocean_configured = ocean_min_raw >= 0;
-    const bool synth_water =
-        ocean_configured && static_cast<double>(z) >= ocean_min_raw;
-
-    const std::string context =
-        std::string("{\"tilesetId\":\"") + json_escape(cfg.tileset_id) + "\"" +
-        ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) +
-        ",\"y\":" + std::to_string(y) + ",\"ifNoneMatch\":\"" + json_escape(if_none_match) +
-        "\",\"acceptsGzip\":" + (accepts_gzip ? "true" : "false") +
-        ",\"insideAvailability\":" + (inside ? "true" : "false") +
-        ",\"synthWater\":" + (synth_water ? "true" : "false") +
-        // THE TILESET'S OWN DEPTH, so respond() can bound the cacheable-404
-        // key family by the pyramid instead of by a constant. maxzoom is the
-        // deepest level layer.json declares, and route() is the only node that
-        // holds it, so it is carried rather than re-derived. See
-        // push_htr_not_found.
-        ",\"maxLevel\":" + std::to_string(cfg.maxzoom) +
-        ",\"synthGridSize\":" + std::to_string(synth_grid) + "}";
-    return push_json("context", context) < 0 ? 500 : 0;
+    // The newest stored record for the address wins (_rowid, NOT rowid: on a node DTT is a unified VIEW and a view
+    // has no implicit rowid). The request rides on to respond as its context.
+    if (push_tile_query(cfg, z, x, y) < 0) return 500;
+    return push_htq("context", frame) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -4703,16 +4903,88 @@ int route(void) {
 int respond(void) {
     if (refuse_batched()) return 500;
 
-    const int32_t stream_index = plugin_find_input_index("stream", 0);
-    const plugin_input_frame_t* frame =
-        stream_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(stream_index))
-                          : nullptr;
-    if (!frame) {
-        plugin_set_error("missing-stream-frame",
-                         "respond requires the flatsql-query stream frame on port \"stream\".");
+    // ── THE STORE'S ANSWER: one $FSO status, and the result stream as $FSB chunks ──
+    //
+    // hostcap/flatsql-query answers a query with its records as ordered $FSB chunks (DATA <= 1 MiB each,
+    // CHUNK_SEQUENCE from 0, FINAL on the last; a stored tile record may exceed one chunk) and ONE $FSO status. A
+    // query the store refused or failed answers on status alone; that is answered here as a 503 the client may retry,
+    // never as a miss (a miss would synthesize terrain over a store that was simply unreachable).
+    const int32_t status_index = plugin_find_input_index("status", 0);
+    const plugin_input_frame_t* status_frame =
+        status_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(status_index)) : nullptr;
+    if (!status_frame) {
+        plugin_set_error("missing-status-frame",
+                         "respond requires the flatsql-query status frame ($FSO) on port \"status\".");
         return 400;
     }
-    const std::string context = input_text("context");
+    {
+        ::flatbuffers::Verifier verifier(status_frame->payload ? status_frame->payload : reinterpret_cast<const uint8_t*>(""),
+                                         status_frame->payload ? status_frame->payload_length : 0);
+        if (!status_frame->payload || status_frame->payload_length < 8 || !VerifyFSOBuffer(verifier)) {
+            plugin_set_error("invalid-status-frame", "the status frame is not an $FSO.");
+            return 400;
+        }
+        const FSO& status = *GetFSO(status_frame->payload);
+        if (status.STATUS() != flatSqlNodeStatus_COMPLETE && status.STATUS() != flatSqlNodeStatus_OK) {
+            const std::string code = status.ERROR_CODE() ? status.ERROR_CODE()->str() : std::string("query-failed");
+            return push_htr_json(503,
+                                 "{\"error\":\"terrain store query failed\",\"code\":\"" + json_escape(code) + "\"}",
+                                 "no-store");
+        }
+    }
+    std::vector<uint8_t> stream_bytes;
+    {
+        std::vector<std::pair<uint32_t, const FSB*>> chunks;
+        for (uint32_t ordinal = 0;; ordinal++) {
+            const int32_t idx = plugin_find_input_index("records", ordinal);
+            if (idx < 0) break;
+            const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
+            ::flatbuffers::Verifier verifier(f && f->payload ? f->payload : reinterpret_cast<const uint8_t*>(""),
+                                             f && f->payload ? f->payload_length : 0);
+            if (!f || !f->payload || f->payload_length < 8 || !VerifyFSBBuffer(verifier)) {
+                plugin_set_error("invalid-records-frame", "a records frame is not an $FSB chunk.");
+                return 400;
+            }
+            const FSB* chunk = GetFSB(f->payload);
+            chunks.push_back({chunk->CHUNK_SEQUENCE(), chunk});
+        }
+        std::sort(chunks.begin(), chunks.end(),
+                  [](const std::pair<uint32_t, const FSB*>& l, const std::pair<uint32_t, const FSB*>& r) {
+                      return l.first < r.first;
+                  });
+        for (size_t i = 0; i < chunks.size(); i++) {
+            if (chunks[i].first != i) {
+                plugin_set_error("incomplete-result-stream",
+                                 "the $FSB chunks do not run 0..n-1; a tile assembled from a partial stream is "
+                                 "refused rather than served.");
+                return 400;
+            }
+            if (const auto* d = chunks[i].second->DATA()) stream_bytes.insert(stream_bytes.end(), d->begin(), d->end());
+        }
+    }
+
+    // The request route accepted, and the config, give the serve context: the address, the conditional state and
+    // what a miss means there. No request: the address is unknown (no synthesis, an uncacheable 404), as before.
+    const ServingConfig* cfg_ptr = invocation_serving_config();
+    if (!cfg_ptr) {
+        plugin_set_error("invalid-config-frame", "the config frame is not a ModuleConfig (MCFG).");
+        return 400;
+    }
+    std::string context;
+    {
+        bool present = false;
+        const sdn::http::HttpRequest* request = htq_input("context", &present);
+        if (present && !request) {
+            plugin_set_error("invalid-context-frame", "the context frame is not a $HTQ HttpRequest.");
+            return 400;
+        }
+        std::string rest;
+        uint32_t z = 0, x = 0, y = 0;
+        if (request && mount_rest_of(*cfg_ptr, request, &rest) && parse_tile_path(rest, &z, &x, &y)) {
+            context = serve_context_for(*cfg_ptr, z, x, y, negotiation_of(request));
+        }
+    }
+
 
     // Walk the aligned size-prefixed stream, exactly as foundation/omm-json
     // does: zero-length prefixes are alignment padding; frames verify with
@@ -4748,8 +5020,8 @@ int respond(void) {
     const std::string want_tileset = json_string(context, "tilesetId", "");
     const bool address_known = want_level >= 0 && want_x >= 0 && want_y >= 0;
 
-    const uint8_t* data = frame->payload;
-    const size_t length = data ? static_cast<size_t>(frame->payload_length) : 0u;
+    const uint8_t* data = stream_bytes.data();
+    const size_t length = stream_bytes.size();
     std::vector<uint8_t> scratch;
     const DTT* record = nullptr;
     uint32_t address_mismatches = 0;

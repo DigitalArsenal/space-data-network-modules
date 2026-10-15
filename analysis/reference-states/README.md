@@ -15,8 +15,12 @@ One SP3 file per call, read first by `files/orbit-products` `read_container`.
 | `ephemeris` | `$OEM` | `read_container` output: one block per satellite, Earth-fixed, on the file's time scale |
 | `descriptor` | `$NCD` | `read_container` output: the SP3 header and the file's SHA-256 |
 | `earth_orientation` | `$EOP` | rows bracketing the file (one row, several frames, or a size-prefixed stream) |
-| `identities` | JSON | `{product, source, statedSigmaM?, statedSigmaBasis?, satellites: {"G01": {norad, objectId, name}}}` |
 | `reference` (out) | `$OEM` | one per identified satellite |
+
+The identities are node config, read through `plugin.getConfig` (one
+ModuleConfig, `sdm_piv::get_config`): `product`, `source`, optional
+`statedSigmaM` with `statedSigmaBasis`, and `satellites.<SP3 id>` =
+`{norad, objectId, name}`. One config per SP3 file.
 
 - **Time:** GPS, Galileo and QZSS time are TAI − 19 s; BeiDou time is
   TAI − 33 s; GLONASS time is UTC + 3 h. TAI, TT and UTC are also accepted.
@@ -53,7 +57,8 @@ SynCoPate files, read by `files/orbit-products` 0.1.4) is scored for realism.
 | --- | --- | --- |
 | `ephemeris` | `$OEM` | block 0: TEME (`TEMEOFDATE`) or GCRF, UTC; uniform or line states; covariance lines optional, in the block's frame |
 | `reference` | `$OEM` | block 0: GCRF or EME2000, UTC, line states |
-| `report` (out) | JSON | per reference epoch inside the ephemeris span: `errorKm` (reference minus ephemeris, GCRF), `errorNormKm`, and with covariance `d2` (Mahalanobis distance squared on the position block) and `sigmaKm`; `meanD2Over3`, `coverage95` (d² ≤ 7.8147, the 0.95 point of χ² with 3 degrees of freedom), `compared`, `outsideSpan` |
+| `residuals` (out) | `$OEM` | one GCRF/UTC block: per reference epoch inside the ephemeris span, the position error (reference minus ephemeris, km) as X/Y/Z, and with covariance the ephemeris's GCRF position covariance (km²) as a covariance line; `d2` and the sigmas follow from the two |
+| `report` (out) | `$CVR` | `MEAN_D2_OVER_3`, `COVERAGE_95` (d² ≤ 7.8147, the 0.95 point of χ² with 3 degrees of freedom) over `SAMPLES` epochs with covariance (NaN / 0 without); `TEST_WINDOW` the compared span; `MEASURED_LINEAGE` the frames; `EVIDENCE` the degree and the compared / outside-span counts |
 
 - **Interpolation:** the block's `INTERPOLATION_DEGREE` (5 when absent) Lagrange
   interpolant through the nearest degree + 1 states; the same interpolant through

@@ -1,373 +1,112 @@
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { decodeHttpResponse, encodeHttpRequest, encodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+// hostcap/http-request on the typed contracts (1.0): HttpRequest frames in, HttpResponse frames out, and the host
+// call itself an SDS $PIV hostcall the SDK host bridge decodes into the host's own http.request arguments.
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT
-  ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-function readManifest() {
-  return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-}
-
-function readWasm() {
-  return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
-}
-
-// SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength: the
-// SDK invoke codec (src/invoke/codec.js normalizeFrameTypeRef) rejects a frame
-// without them and the invoke throws before the wasm is ever entered. This
-// suite omitted both, so every behavioural test in it was dead — failing
-// identically against old and new artifacts, which reads as "the harness is
-// broken" rather than "these fixtures are". Repaired under graph task
-// modules-guest-nodes-drop-batched-frames.
-function jsonInput(portId, value) {
-  const payload = encoder.encode(JSON.stringify(value));
-  return {
-    portId,
-    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
-    payload,
-  };
-}
+const readManifest = () => JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+const readWasm = () => fs.readFileSync(fileURLToPath(WASM_PATH));
+const requestFrame = (request) => ({ portId: "request", typeRef: { schemaName: "HttpRequest.fbs", fileIdentifier: "HREQ", rootTypeName: "HttpRequest", wireFormat: "flatbuffer" }, payload: encodeHttpRequest(request) });
 
 const RESPONSE_BODY = Uint8Array.from({ length: 40 }, (_, i) => (i * 17 + 9) & 0xff);
 const REQUEST_BODY = Uint8Array.from({ length: 20 }, (_, i) => (i * 5 + 1) & 0xff);
 
-// Byte params arrive as live views into guest memory; snapshot at dispatch.
-function snapshotParams(params) {
-  if (params instanceof Uint8Array) return Uint8Array.from(params);
-  if (Array.isArray(params)) return params.map(snapshotParams);
-  if (params && typeof params === "object") {
-    return Object.fromEntries(
-      Object.entries(params).map(([key, value]) => [key, snapshotParams(value)]),
-    );
-  }
-  return params;
-}
-
-// SDK JS host dialect: {status,statusText,ok,headers,body:Uint8Array}.
-function createJsHostStub({ failOps = {}, response } = {}) {
+// The SDK JS host's http.request: arguments {url, method, headers, body, timeoutMs, maxBytes, redirect, responseType},
+// answer {url, status, headers, body}. Byte arguments arrive as views into guest memory, so they are copied.
+function hostStub({ fail = {}, answer } = {}) {
   const calls = [];
   const dispatch = (operation, params) => {
-    calls.push({ operation, params: snapshotParams(params) });
-    if (failOps[operation]) {
-      throw new Error(failOps[operation]);
-    }
-    if (operation === "http.request") {
-      return (
-        response ?? {
-          url: params.url,
-          status: 200,
-          statusText: "OK",
-          ok: true,
-          headers: { "content-type": "application/octet-stream", "x-node": "js" },
-          body: RESPONSE_BODY,
-        }
-      );
-    }
-    throw new Error(`unexpected hostcall operation: ${operation}`);
+    calls.push({ operation, params: { ...params, body: params?.body ? Uint8Array.from(params.body) : undefined } });
+    if (fail[params?.url]) throw Object.assign(new Error(fail[params.url]), { name: "HostCapabilityError" });
+    if (operation !== "http.request") throw new Error(`unexpected hostcall ${operation}`);
+    return answer?.(params) ?? { url: params.url, status: 200, headers: { "Content-Type": "application/octet-stream", "X-Node": "js" }, body: RESPONSE_BODY };
   };
   return { calls, dispatch };
 }
-
-// Go host dialect: {status,headers,body:<string>,body_encoding:"utf8"|"base64"}.
-function createGoHostStub(result) {
-  const calls = [];
-  const dispatch = (operation, params) => {
-    calls.push({ operation, params: snapshotParams(params) });
-    if (operation === "http.request") {
-      return result;
-    }
-    throw new Error(`unexpected hostcall operation: ${operation}`);
-  };
-  return { calls, dispatch };
-}
-
-async function createHarness(t, stub) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: readWasm(),
-    manifest: readManifest(),
-    surface: "direct",
-    hostcallDispatch: stub.dispatch,
-  });
+async function harnessFor(t, stub) {
+  const harness = await createBrowserModuleHarness({ wasmSource: readWasm(), manifest: readManifest(), surface: "direct", hostcallDispatch: stub.dispatch });
   t.after(() => harness.destroy());
   return harness;
 }
-
-function decodeResponse(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1);
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "response");
-  assert.equal(frame.wireFormat, "aligned-binary");
-  return JSON.parse(decoder.decode(frame.payload));
-}
-
-function decodeRawResponse(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1);
-  const payload = new Uint8Array(response.outputs[0].payload);
-  assert.equal(decoder.decode(payload.subarray(0, 4)), "$HRB");
-  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  return { status: view.getInt32(4, true), body: payload.subarray(8) };
-}
-
-test("hostcap/http-request artifact passes SDK compliance", async () => {
-  const report = await validateArtifactWithStandards({
-    manifest: readManifest(),
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    standardsRoot: STANDARDS_ROOT,
+function responses(result) {
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  return result.outputs.map((frame) => {
+    assert.equal(frame.portId, "response");
+    return decodeHttpResponse(frame.payload);
   });
+}
+
+test("hostcap/http-request passes SDK compliance with typed ports", async () => {
+  const report = await validateArtifactWithStandards({ manifest: readManifest(), wasmPath: fileURLToPath(WASM_PATH), standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+  const [method] = readManifest().methods;
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "HREQ");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "HRSP");
 });
 
-test("hostcap/http-request artifact exports the canonical ABI and imports only WASI + the sync hostcall bridge", async () => {
+test("hostcap/http-request imports only WASI and the sync hostcall bridge", async () => {
   const inspection = await inspectModule(readWasm());
   assert.equal(inspection.profile, "module-host-abi");
-  const importedModuleNames = Array.from(new Set(inspection.imports.map((entry) => entry.module))).sort();
-  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
-  for (const required of [
-    "plugin_alloc",
-    "plugin_free",
-    "plugin_invoke_stream",
-    "plugin_get_manifest_flatbuffer",
-    "plugin_get_manifest_flatbuffer_size",
-  ]) {
-    assert.ok(inspection.exports.includes(required), `missing export ${required}`);
-  }
+  assert.deepEqual(Array.from(new Set(inspection.imports.map((e) => e.module))).sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);
 });
 
-test("request forwards method/url/headers/body/timeout and normalizes a JS-host binary response", async (t) => {
-  const stub = createJsHostStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [
-      jsonInput("request", {
-        method: "POST",
-        url: "https://api.example.test/v1/data",
-        headers: { "content-type": "application/octet-stream" },
-        bodyB64: Buffer.from(REQUEST_BODY).toString("base64"),
-        timeoutMs: 15000,
-      }),
-    ],
-  });
-
-  const out = decodeResponse(response);
+test("an HttpRequest becomes the host's http.request; the HttpResponse carries the body verbatim", async (t) => {
+  const stub = hostStub();
+  const harness = await harnessFor(t, stub);
+  const context = encodeFlowNotice({ kind: "info", reason: "lead f006" });
+  const [out] = responses(await harness.invoke({ methodId: "request", inputs: [requestFrame({
+    method: "POST", url: "https://api.example.test/v1/data", headers: { "Content-Type": "application/octet-stream", Range: "bytes=0-63" },
+    body: REQUEST_BODY, timeoutMs: 15000, maxBytes: 4194304, context,
+  })] }));
   assert.equal(out.status, 200);
-  assert.equal(out.headers["x-node"], "js");
-  assert.deepEqual(new Uint8Array(Buffer.from(out.bodyB64, "base64")), RESPONSE_BODY);
+  assert.equal(out.url, "https://api.example.test/v1/data");
+  assert.deepEqual(out.body, RESPONSE_BODY);
+  assert.deepEqual(out.headers, { "content-type": "application/octet-stream", "x-node": "js" });
+  assert.deepEqual(out.context, context, "CONTEXT is echoed verbatim");
+  assert.equal(out.error, "");
+  assert.ok(Math.abs(out.retrievedMs - Date.now()) < 60_000);
 
   assert.equal(stub.calls.length, 1);
   const { operation, params } = stub.calls[0];
   assert.equal(operation, "http.request");
-  assert.equal(params.method, "POST");
-  assert.equal(params.url, "https://api.example.test/v1/data");
-  assert.deepEqual(params.headers, { "content-type": "application/octet-stream" });
-  assert.equal(params.timeoutMs, 15000, "JS-host timeout spelling");
-  assert.equal(params.timeout_ms, 15000, "Go-host timeout spelling");
-  assert.equal(params.responseType, "binary");
-  assert.equal(params.body_encoding, "base64", "Go-host body encoding marker");
-  assert.deepEqual(
-    new Uint8Array(params.body),
-    REQUEST_BODY,
-    "request body must reach the host as raw bytes (binary segment)",
-  );
+  assert.deepEqual([params.method, params.url, params.timeoutMs, params.maxBytes, params.redirect], ["POST", "https://api.example.test/v1/data", 15000, 4194304, "follow"]);
+  assert.deepEqual(params.headers, { "content-type": "application/octet-stream", range: "bytes=0-63" });
+  assert.deepEqual(params.body, REQUEST_BODY, "the request body reaches the host as bytes");
 });
 
-test("request forwards maxBytes to the host as max_bytes (Go-host response byte budget)", async (t) => {
-  const stub = createJsHostStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/EOP-All.csv", maxBytes: 4194304 })],
-  });
-  decodeResponse(response);
-  const { params } = stub.calls[0];
-  assert.equal(params.max_bytes, 4194304, "the host cap clamps its read limit to this and errors past it");
+test("a URL longer than any aligned string travels on the raw url frame", async (t) => {
+  const stub = hostStub();
+  const harness = await harnessFor(t, stub);
+  const url = `https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261013/06/atmos/${"x".repeat(600)}.idx`;
+  const [out] = responses(await harness.invoke({ methodId: "request", inputs: [requestFrame({ url })] }));
+  assert.equal(out.url, url);
+  assert.equal(stub.calls[0].params.method, "GET");
 });
 
-test("request defaults to GET with no body and no timeout fields", async (t) => {
-  const stub = createJsHostStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/" })],
-  });
-
-  decodeResponse(response);
-  const { params } = stub.calls[0];
-  assert.equal(params.method, "GET");
-  assert.equal(params.body, undefined, "no body field without bodyB64");
-  assert.equal(params.timeoutMs, undefined);
-  assert.equal(params.max_bytes, undefined, "no budget field without maxBytes");
+test("every request of a fan-in batch is answered in order; a refused one answers STATUS 0 with its ERROR", async (t) => {
+  const stub = hostStub({ fail: { "https://b.example.test/": "http not granted" }, answer: (p) => ({ url: p.url, status: p.url.includes("c.") ? 304 : 200, headers: {}, body: new TextEncoder().encode(p.url) }) });
+  const harness = await harnessFor(t, stub);
+  const urls = ["https://a.example.test/", "https://b.example.test/", "https://c.example.test/"];
+  const out = responses(await harness.invoke({ methodId: "request", inputs: urls.map((url) => requestFrame({ url })) }));
+  assert.deepEqual(out.map((r) => r.status), [200, 0, 304]);
+  assert.equal(new TextDecoder().decode(out[0].body), urls[0]);
+  assert.match(out[1].error, /^not-authorized: http not granted/);
+  assert.equal(out[2].body.length, urls[2].length);
 });
 
-test("request normalizes the Go-host utf8 string body dialect to bodyB64", async (t) => {
-  const stub = createGoHostStub({
-    status: 404,
-    headers: { "Content-Type": "text/plain" },
-    body: "not found",
-    body_encoding: "utf8",
-  });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/missing" })],
-  });
-
-  const out = decodeResponse(response);
-  assert.equal(out.status, 404);
-  assert.equal(out.headers["Content-Type"], "text/plain");
-  assert.equal(Buffer.from(out.bodyB64, "base64").toString("utf8"), "not found");
-});
-
-test("raw-body-v1 carries a large-consumer response without base64 expansion", async (t) => {
-  const geojson = "{\"label\":\"Zürich & Bern\\n\\\"mast\\\"\",\"features\":[]}";
-  const stub = createGoHostStub({
-    status: 200,
-    headers: { "Content-Type": "application/geo+json" },
-    body: geojson,
-    body_encoding: "utf8",
-  });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [
-      jsonInput("request", {
-        url: "https://example.test/national.geojson",
-        responseWire: "raw-body-v1",
-      }),
-    ],
-  });
-
-  const out = decodeRawResponse(response);
-  assert.equal(out.status, 200);
-  assert.equal(decoder.decode(out.body), geojson);
-  assert.equal(
-    out.body.byteLength,
-    Buffer.byteLength(geojson),
-    "raw lane must not grow the body by base64's 4/3 expansion",
-  );
-});
-
-test("raw-body-v1 decodes the Go-host base64 dialect directly into the frame", async (t) => {
-  const bodyB64 = Buffer.from(RESPONSE_BODY).toString("base64");
-  const stub = createGoHostStub({ status: 200, headers: {}, body: bodyB64, body_encoding: "base64" });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/blob", responseWire: "raw-body-v1" })],
-  });
-  const out = decodeRawResponse(response);
-  assert.equal(out.status, 200);
-  assert.deepEqual(out.body, RESPONSE_BODY);
-});
-
-test("raw-body-v1 failures keep their positional slot", async (t) => {
-  const stub = createJsHostStub({ failOps: { "http.request": "origin down" } });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/", responseWire: "raw-body-v1" })],
-  });
-
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.outputs.length, 1);
-  const payload = new Uint8Array(response.outputs[0].payload);
-  assert.equal(decoder.decode(payload.subarray(0, 4)), "$HRB");
-  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  assert.equal(view.getInt32(4, true), 0);
-  assert.equal(payload.byteLength, 8);
-});
-
-test("request passes the Go-host base64 body dialect through verbatim", async (t) => {
-  const bodyB64 = Buffer.from(RESPONSE_BODY).toString("base64");
-  const stub = createGoHostStub({
-    status: 200,
-    headers: {},
-    body: bodyB64,
-    body_encoding: "base64",
-  });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/blob" })],
-  });
-
-  const out = decodeResponse(response);
-  assert.equal(out.status, 200);
-  assert.equal(out.bodyB64, bodyB64);
-});
-
-test("request rejects a missing url before any hostcall", async (t) => {
-  const stub = createJsHostStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { method: "GET" })],
-  });
-
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "missing-url");
-  assert.equal(stub.calls.length, 0);
-});
-
-test("request rejects invalid bodyB64 before any hostcall", async (t) => {
-  const stub = createJsHostStub();
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://example.test/", bodyB64: "@@not-base64@@" })],
-  });
-
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "invalid-body");
-  assert.equal(stub.calls.length, 0);
-});
-
-test("request surfaces host errors (origin denied) with the host message", async (t) => {
-  const stub = createJsHostStub({
-    failOps: { "http.request": 'HTTP origin "https://evil.test" is not permitted by this host.' },
-  });
-  const harness = await createHarness(t, stub);
-  const response = await harness.invoke({
-    methodId: "request",
-    inputs: [jsonInput("request", { url: "https://evil.test/" })],
-  });
-
-  assert.notEqual(response.statusCode, 0);
-  assert.equal(response.errorCode, "http-request-failed");
-  assert.match(String(response.errorMessage), /not permitted by this host/);
-
-  // A FAILED REQUEST STILL EMITS ITS SLOT. This assertion used to read
-  // `outputs.length === 0`, and it was stale from the moment 7fefaf4 landed —
-  // it was never caught because every behavioural test in this suite was dead
-  // (the fixtures omitted the aligned typeRef fields the SDK invoke codec
-  // requires, so the invoke threw before the wasm was entered; repaired under
-  // graph task modules-guest-nodes-drop-batched-frames).
-  //
-  // The contract this node now holds is ONE RESPONSE FRAME PER REQUEST FRAME,
-  // in input order, INCLUDING failures: a failure that emits nothing shifts
-  // every later body one slot left and silently misattributes it to the wrong
-  // request. Status 0 is outside 2xx, so a consumer filtering on status drops
-  // this exactly as it drops a 500, while the slot stays aligned.
-  assert.equal(response.outputs.length, 1, "a failed request must still occupy its slot");
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "response");
-  const slot = JSON.parse(decoder.decode(new Uint8Array(frame.payload)));
-  assert.equal(slot.status, 0);
-  assert.equal(slot.bodyB64, "");
-  assert.equal(slot.error, "http-request-failed");
-  assert.match(String(slot.errorMessage), /not permitted by this host/);
+test("a frame that is not an HttpRequest is refused", async (t) => {
+  const harness = await harnessFor(t, hostStub());
+  const result = await harness.invoke({ methodId: "request", inputs: [{ portId: "request", typeRef: { schemaName: "HttpRequest.fbs", fileIdentifier: "HREQ", rootTypeName: "HttpRequest", wireFormat: "flatbuffer" }, payload: encodeFlowNotice({ kind: "info" }) }] });
+  assert.notEqual(result.statusCode, 0);
+  assert.equal(result.errorCode, "invalid-request");
 });

@@ -16,12 +16,17 @@
 
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 import { cellCountOf, decodeChunk } from "./zarrChunk.ts";
 import { parseCycloneCsv } from "./cycloneCsv.ts";
 
-const WXF_LIB_URL = new URL("../../../../../spacedatastandards.org/lib/js/WXF/main.js", import.meta.url);
-const TCT_LIB_URL = new URL("../../../../../spacedatastandards.org/lib/js/TCT/main.js", import.meta.url);
+// SPACE_DATA_STANDARDS_ROOT wins when set (as in build.mjs); else the sibling checkout.
+const STANDARDS_ROOT_URL = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? pathToFileURL(`${process.env.SPACE_DATA_STANDARDS_ROOT.replace(/\/$/, "")}/`)
+  : new URL("../../../../../spacedatastandards.org/", import.meta.url);
+const WXF_LIB_URL = new URL("lib/js/WXF/main.js", STANDARDS_ROOT_URL);
+const TCT_LIB_URL = new URL("lib/js/TCT/main.js", STANDARDS_ROOT_URL);
 
 // One flatbuffers instance: the generated code imports the bare specifier
 // "flatbuffers" from the standards checkout, so the Builder/ByteBuffer used

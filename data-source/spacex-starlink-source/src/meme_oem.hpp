@@ -32,8 +32,19 @@
 #include <string>
 #include <vector>
 
+// A typed-contracts build inlines the SDS $OEM types (lib/cpp, unscoped enums) and oem_fb_builder.hpp ahead of this
+// header and defines MEME_OEM_TYPES_INLINED, MEME_OEM_FRAME and MEME_OEM_TIME_SYSTEM; the native test includes the
+// licensing/core headers (scoped enums).
+#ifndef MEME_OEM_TYPES_INLINED
 #include "OEM_generated.h"
 #include "oem_fb_builder.hpp"
+#endif
+#ifndef MEME_OEM_FRAME
+#define MEME_OEM_FRAME CelestialFrame::EME2000
+#endif
+#ifndef MEME_OEM_TIME_SYSTEM
+#define MEME_OEM_TIME_SYSTEM timingStandard::UTC
+#endif
 
 namespace meme_oem {
 
@@ -178,7 +189,7 @@ inline std::vector<uint8_t> build_oem_fb(const MemeMeta& m,
     const oem_fb::Identity id{m.object_name.c_str(), "",
                               static_cast<uint32_t>(m.norad_cat_id)};
     return oem_fb::build_oem_flatbuffer_compact(
-        id, CelestialFrame::EME2000, "EARTH", timingStandard::UTC, m.start_iso.c_str(),
+        id, MEME_OEM_FRAME, "EARTH", MEME_OEM_TIME_SYSTEM, m.start_iso.c_str(),
         m.stop_iso.c_str(), static_cast<double>(m.step_size), states.data(),
         static_cast<int>(states.size()));
 }
