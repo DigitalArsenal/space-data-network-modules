@@ -22,6 +22,10 @@ const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url
 // the node, so rebuilding never reads a repository private-key fixture.
 const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
   "49f6454d9f3c20209671081363d979e830d524a9fd040a82c603eb43a953db1c";
+// The owner-held module-signing key, which signs the released dist (owner 2026-10-14).
+const OWNER_MODULE_SIGNER_PUBLIC_KEY_HEX =
+  "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34";
+const TRUSTED_MODULE_SIGNER_PUBLIC_KEYS = [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX, OWNER_MODULE_SIGNER_PUBLIC_KEY_HEX];
 const MINIMAL_MEME = `created:2026-03-10 20:32:53 UTC
 ephemeris_start:2026-03-10 20:16:42 UTC ephemeris_stop:2026-03-13 20:16:42 UTC step_size:60
 ephemeris_source:blend
@@ -103,18 +107,20 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
-// Main carries unsigned builds (owner 2026-10-12): the node signs at
-// publication. A signature, when present, must be the trusted signer.
+// Main carried unsigned builds (owner 2026-10-12: the node signs at
+// publication); since 2026-10-14 the dist is signed with the owner-held
+// module-signing key, because OrbPro refuses an unsigned artifact. A
+// signature, when present, must be one of the trusted signers.
 test("a signed artifact is signed by the trusted SDS module signer", async () => {
   const signature = await verifyModuleArtifact(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     {
-      trustedPublicKeys: [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
+      trustedPublicKeys: TRUSTED_MODULE_SIGNER_PUBLIC_KEYS,
       requireSignature: false,
     },
   );
   if (signature?.publicKeyHex) {
-    assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
+    assert.ok(TRUSTED_MODULE_SIGNER_PUBLIC_KEYS.includes(signature.publicKeyHex), signature.publicKeyHex);
   }
 });
 

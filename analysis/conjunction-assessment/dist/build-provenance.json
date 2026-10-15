@@ -34,7 +34,7 @@
       "ERM": "2192121fd565462ed2afeb14b60eaf6375604e62b4ed0a60b7e98506505ae2b8"
     }
   },
-  "sdk": "0.9.5",
+  "sdk": "0.9.7",
   "compiler": "wasm32-wasi-clang++ (wasi-threads)",
   "threadModel": "emscripten-pthreads",
   "runtimeTargets": [
