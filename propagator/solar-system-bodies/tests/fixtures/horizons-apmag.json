@@ -1,0 +1,261 @@
+{
+ "source": "JPL Horizons API (https://ssd-api.jpl.nasa.gov/doc/horizons.html), observer table, QUANTITIES=9 (APmag) and 24 (S-T-O), CENTER=500@399 (geocentre), TIME_TYPE=TT",
+ "retrieved": "2026-10-12",
+ "query": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='<id>'&OBJ_DATA='NO'&MAKE_EPHEM='YES'&EPHEM_TYPE='OBSERVER'&CENTER='500@399'&TLIST='2451545.0','2455000.5','2459000.5','2461000.5','2465000.5','2469000.5'&TLIST_TYPE='JD'&TIME_TYPE='TT'&QUANTITIES='9,24'&CSV_FORMAT='YES'",
+ "tolerance_mag": 0.3,
+ "tolerance_rationale": "Design A4: the module's V uses Mallama & Hilton (2018) as Horizons does for the planets, but without light time or Mars/Uranus orientation terms; 0.3 mag is the display requirement.",
+ "rows": [
+  {
+   "id": 199,
+   "jd_tt": 2451545.0,
+   "apmag": -0.734,
+   "sun_target_observer_deg": 18.2395
+  },
+  {
+   "id": 199,
+   "jd_tt": 2455000.5,
+   "apmag": 0.17,
+   "sun_target_observer_deg": 93.7367
+  },
+  {
+   "id": 199,
+   "jd_tt": 2459000.5,
+   "apmag": 0.163,
+   "sun_target_observer_deg": 93.3914
+  },
+  {
+   "id": 199,
+   "jd_tt": 2461000.5,
+   "apmag": 6.098,
+   "sun_target_observer_deg": 174.8302
+  },
+  {
+   "id": 199,
+   "jd_tt": 2465000.5,
+   "apmag": -0.811,
+   "sun_target_observer_deg": 15.5453
+  },
+  {
+   "id": 199,
+   "jd_tt": 2469000.5,
+   "apmag": 5.085,
+   "sun_target_observer_deg": 168.0716
+  },
+  {
+   "id": 299,
+   "jd_tt": 2451545.0,
+   "apmag": -4.066,
+   "sun_target_observer_deg": 58.9242
+  },
+  {
+   "id": 299,
+   "jd_tt": 2455000.5,
+   "apmag": -4.286,
+   "sun_target_observer_deg": 83.3271
+  },
+  {
+   "id": 299,
+   "jd_tt": 2459000.5,
+   "apmag": -4.024,
+   "sun_target_observer_deg": 171.5228
+  },
+  {
+   "id": 299,
+   "jd_tt": 2461000.5,
+   "apmag": -3.92,
+   "sun_target_observer_deg": 15.6
+  },
+  {
+   "id": 299,
+   "jd_tt": 2465000.5,
+   "apmag": -3.971,
+   "sun_target_observer_deg": 48.3796
+  },
+  {
+   "id": 299,
+   "jd_tt": 2469000.5,
+   "apmag": -4.465,
+   "sun_target_observer_deg": 89.2661
+  },
+  {
+   "id": 499,
+   "jd_tt": 2451545.0,
+   "apmag": 1.086,
+   "sun_target_observer_deg": 31.4633
+  },
+  {
+   "id": 499,
+   "jd_tt": 2455000.5,
+   "apmag": 1.219,
+   "sun_target_observer_deg": 30.3169
+  },
+  {
+   "id": 499,
+   "jd_tt": 2459000.5,
+   "apmag": -0.041,
+   "sun_target_observer_deg": 45.9475
+  },
+  {
+   "id": 499,
+   "jd_tt": 2461000.5,
+   "apmag": 1.406,
+   "sun_target_observer_deg": 8.6658
+  },
+  {
+   "id": 499,
+   "jd_tt": 2465000.5,
+   "apmag": 1.636,
+   "sun_target_observer_deg": 8.2211
+  },
+  {
+   "id": 499,
+   "jd_tt": 2469000.5,
+   "apmag": 1.74,
+   "sun_target_observer_deg": 21.0829
+  },
+  {
+   "id": 599,
+   "jd_tt": 2451545.0,
+   "apmag": -2.521,
+   "sun_target_observer_deg": 11.0305
+  },
+  {
+   "id": 599,
+   "jd_tt": 2455000.5,
+   "apmag": -2.563,
+   "sun_target_observer_deg": 10.0333
+  },
+  {
+   "id": 599,
+   "jd_tt": 2459000.5,
+   "apmag": -2.558,
+   "sun_target_observer_deg": 8.2214
+  },
+  {
+   "id": 599,
+   "jd_tt": 2461000.5,
+   "apmag": -2.464,
+   "sun_target_observer_deg": 9.0822
+  },
+  {
+   "id": 599,
+   "jd_tt": 2465000.5,
+   "apmag": -2.652,
+   "sun_target_observer_deg": 7.8634
+  },
+  {
+   "id": 599,
+   "jd_tt": 2469000.5,
+   "apmag": -2.821,
+   "sun_target_observer_deg": 5.82
+  },
+  {
+   "id": 699,
+   "jd_tt": 2451545.0,
+   "apmag": 0.104,
+   "sun_target_observer_deg": 5.3163
+  },
+  {
+   "id": 699,
+   "jd_tt": 2455000.5,
+   "apmag": 0.96,
+   "sun_target_observer_deg": 6.0767
+  },
+  {
+   "id": 699,
+   "jd_tt": 2459000.5,
+   "apmag": 0.399,
+   "sun_target_observer_deg": 4.556
+  },
+  {
+   "id": 699,
+   "jd_tt": 2461000.5,
+   "apmag": 0.871,
+   "sun_target_observer_deg": 5.3302
+  },
+  {
+   "id": 699,
+   "jd_tt": 2465000.5,
+   "apmag": 0.6,
+   "sun_target_observer_deg": 5.7999
+  },
+  {
+   "id": 699,
+   "jd_tt": 2469000.5,
+   "apmag": 0.502,
+   "sun_target_observer_deg": 5.2046
+  },
+  {
+   "id": 799,
+   "jd_tt": 2451545.0,
+   "apmag": 5.942,
+   "sun_target_observer_deg": 1.6032
+  },
+  {
+   "id": 799,
+   "jd_tt": 2455000.5,
+   "apmag": 5.912,
+   "sun_target_observer_deg": 2.8989
+  },
+  {
+   "id": 799,
+   "jd_tt": 2459000.5,
+   "apmag": 5.906,
+   "sun_target_observer_deg": 1.5299
+  },
+  {
+   "id": 799,
+   "jd_tt": 2461000.5,
+   "apmag": 5.617,
+   "sun_target_observer_deg": 0.0357
+  },
+  {
+   "id": 799,
+   "jd_tt": 2465000.5,
+   "apmag": 5.53,
+   "sun_target_observer_deg": 2.8199
+  },
+  {
+   "id": 799,
+   "jd_tt": 2469000.5,
+   "apmag": 5.589,
+   "sun_target_observer_deg": 2.1655
+  },
+  {
+   "id": 899,
+   "jd_tt": 2451545.0,
+   "apmag": 7.853,
+   "sun_target_observer_deg": 0.7299
+  },
+  {
+   "id": 899,
+   "jd_tt": 2455000.5,
+   "apmag": 7.737,
+   "sun_target_observer_deg": 1.6737
+  },
+  {
+   "id": 899,
+   "jd_tt": 2459000.5,
+   "apmag": 7.789,
+   "sun_target_observer_deg": 1.9069
+  },
+  {
+   "id": 899,
+   "jd_tt": 2461000.5,
+   "apmag": 7.717,
+   "sun_target_observer_deg": 1.6277
+  },
+  {
+   "id": 899,
+   "jd_tt": 2465000.5,
+   "apmag": 7.676,
+   "sun_target_observer_deg": 0.5262
+  },
+  {
+   "id": 899,
+   "jd_tt": 2469000.5,
+   "apmag": 7.679,
+   "sun_target_observer_deg": 0.8883
+  }
+ ]
+}

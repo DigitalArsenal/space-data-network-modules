@@ -1,0 +1,5 @@
+{
+  "spacedatastandards": "1.248.0+1791889784785",
+  "schema": "PNM",
+  "threadModel": "wasi-sequential"
+}

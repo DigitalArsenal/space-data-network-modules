@@ -187,6 +187,91 @@ inline bool orientation(int naifBody, double tdbDaysSinceJ2000,
   return true;
 }
 
+
+// ---------------------------------------------------------------------------
+// Generic PCK rotation model: the WGCCRE pole/prime-meridian evaluator driven
+// by the variables of a NAIF text PCK (pck00011.tpc), for every body the kernel
+// lists rather than the built-in table above. The arithmetic is the toolkit's
+// BODEUL: RA and DEC are polynomials in TDB Julian centuries plus
+// sum(ra_i sin theta_i) and sum(dec_i cos theta_i); W is a polynomial in TDB
+// days plus sum(w_i sin theta_i); each phase theta_i is a polynomial of degree
+// BODYnnn_MAX_PHASE_DEGREE (default 1) in centuries, read from the system
+// barycentre's NUT_PREC_ANGLES. Missing trailing coefficients are zero.
+// https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/pck.html ("Text PCK
+// Contents"). Inputs are degrees; outputs are radians and radians/second.
+// ---------------------------------------------------------------------------
+namespace pck {
+
+struct RotationModel {
+  double poleRa[3] = {0.0, 0.0, 0.0};   // deg, deg/century, deg/century^2
+  double poleDec[3] = {0.0, 0.0, 0.0};  // deg, deg/century, deg/century^2
+  double pm[3] = {0.0, 0.0, 0.0};       // deg, deg/day, deg/day^2
+  const double* nutRa = nullptr;
+  unsigned nNutRa = 0;
+  const double* nutDec = nullptr;
+  unsigned nNutDec = 0;
+  const double* nutPm = nullptr;
+  unsigned nNutPm = 0;
+  const double* phases = nullptr;  // NUT_PREC_ANGLES of the system barycentre
+  unsigned nPhases = 0;            // number of doubles in `phases`
+  unsigned maxPhaseDegree = 1;
+  double epochDays = 0.0;          // CONSTANTS_JED_EPOCH - 2451545.0, else 0
+};
+
+/// Pole RA, DEC, W (radians, W in [0, 2pi)) and dW/dt (rad/s) at TDB seconds
+/// past J2000. ICRF -> body-fixed is R3(W) R1(pi/2 - DEC) R3(pi/2 + RA).
+inline bool evaluate(const RotationModel& m, double tdbSeconds, double* ra,
+                     double* dec, double* w, double* wRate) {
+  if (!ra || !dec || !w || !wRate || !std::isfinite(tdbSeconds)) return false;
+  constexpr double k = detail::kRadiansPerDegree;
+  const double d = tdbSeconds / 86400.0 - m.epochDays;
+  const double t = d / 36525.0;
+  double a = m.poleRa[0] + t * (m.poleRa[1] + t * m.poleRa[2]);
+  double de = m.poleDec[0] + t * (m.poleDec[1] + t * m.poleDec[2]);
+  double ww = m.pm[0] + d * (m.pm[1] + d * m.pm[2]);
+  double wDot = (m.pm[1] + 2.0 * m.pm[2] * d) / 86400.0;  // deg/s
+  const unsigned stride = m.maxPhaseDegree + 1;
+  const unsigned nAngles = stride ? m.nPhases / stride : 0;
+  const unsigned nTerms = nAngles;
+  double sumRa = 0.0, sumDec = 0.0, sumW = 0.0;
+  for (unsigned i = 0; i < nTerms; ++i) {
+    double theta = 0.0, thetaRate = 0.0, tk = 1.0;
+    for (unsigned p = 0; p < stride; ++p) {
+      const double c = m.phases[i * stride + p];
+      theta += c * tk;
+      if (p > 0) thetaRate += static_cast<double>(p) * c * (tk / t);
+      tk *= t;
+    }
+    if (stride > 1 && t == 0.0) thetaRate = m.phases[i * stride + 1];
+    const double s = std::sin(theta * k), co = std::cos(theta * k);
+    if (i < m.nNutRa) sumRa += m.nutRa[i] * s;
+    if (i < m.nNutDec) sumDec += m.nutDec[i] * co;
+    if (i < m.nNutPm) {
+      sumW += m.nutPm[i] * s;
+      wDot += m.nutPm[i] * co * (thetaRate * k) / (36525.0 * 86400.0);
+    }
+  }
+  // As BODEUL: the periodic sums are formed first and added to the
+  // polynomials once, which is what keeps W's rounding identical to the
+  // toolkit's for fast rotators (|W| ~ 1e7 degrees for Phobos).
+  a += sumRa;
+  de += sumDec;
+  ww += sumW;
+  // BODEUL converts to radians before reducing W modulo 2 pi; reducing in
+  // degrees first rounds differently by ~1e-10 rad for fast rotators (Phobos).
+  constexpr double twoPi = 6.283185307179586476925286766559;
+  double wr = std::fmod(ww * k, twoPi);
+  if (wr < 0.0) wr += twoPi;
+  if (!std::isfinite(a) || !std::isfinite(de) || !std::isfinite(wr)) return false;
+  *ra = a * k;
+  *dec = de * k;
+  *w = wr;
+  *wRate = wDot * k;
+  return true;
+}
+
+}  // namespace pck
+
 }  // namespace iau2015
 }  // namespace frames
 }  // namespace sdn
