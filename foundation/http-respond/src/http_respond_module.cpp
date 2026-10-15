@@ -346,15 +346,27 @@ bool frames_of(const uint8_t* data, size_t length, size_t offset, std::vector<Fr
     return true;
 }
 
+// A frame whose payload is itself a size-prefixed FlatBuffer: the store's published dataset shards frame each STORED
+// record (already size-prefixed, the ingest wire form) in a shard frame of its own, so a served batch's frame is
+// [u32 frame][u32 record][record]. The payload's first word then equals the payload length less its own 4 bytes, and
+// the record's root offset lands inside the record past its identifier. A plain frame can match the first test (an
+// empty table rooted in its last 4 bytes) but not the second: its word at payload+4 is its file identifier.
+bool nests_record(const uint8_t* data, const Frame& f) {
+    if (f.size < 12 || read_u32le(data + f.at + 4) != f.size - 4) return false;
+    const uint32_t root = read_u32le(data + f.at + 8);
+    return root >= 8 && root < f.size - 4;
+}
+
 // The 4-character file identifier of a stream frame (a FlatBuffer built size-prefixed carries it at prefix+8, i.e.
-// frame byte 4; one built plain and then prefixed carries it at frame byte 4 too).
+// frame byte 4; one built plain and then prefixed carries it at frame byte 4 too; a shard frame's record carries it
+// 4 bytes further in).
 std::string identifier_of(const uint8_t* data, const Frame& f) {
     if (f.size < 8) return std::string();
-    return std::string(reinterpret_cast<const char*>(data + f.at + 8), 4);
+    return std::string(reinterpret_cast<const char*>(data + f.at + (nests_record(data, f) ? 12 : 8)), 4);
 }
 
 // A stream frame copied into aligned scratch, as a T root: size-prefixed first (the store's wire contract: internal
-// alignment counts the 4-byte prefix), else re-anchored as a plain buffer.
+// alignment counts the 4-byte prefix), then a shard frame's size-prefixed record, else re-anchored as a plain buffer.
 template <typename T, bool (*VerifyPrefixed)(flatbuffers::Verifier&), bool (*VerifyPlain)(flatbuffers::Verifier&),
           const T* (*GetPrefixed)(const void*), const T* (*GetPlain)(const void*)>
 const T* frame_root(const uint8_t* data, const Frame& f, std::vector<uint8_t>* scratch) {
@@ -362,6 +374,10 @@ const T* frame_root(const uint8_t* data, const Frame& f, std::vector<uint8_t>* s
     flatbuffers::Verifier prefixed(scratch->data(), scratch->size());
     if (VerifyPrefixed(prefixed)) return GetPrefixed(scratch->data());
     scratch->erase(scratch->begin(), scratch->begin() + 4);
+    if (nests_record(data, f)) {
+        flatbuffers::Verifier nested(scratch->data(), scratch->size());
+        if (VerifyPrefixed(nested)) return GetPrefixed(scratch->data());
+    }
     flatbuffers::Verifier plain(scratch->data(), scratch->size());
     return VerifyPlain(plain) ? GetPlain(scratch->data()) : nullptr;
 }

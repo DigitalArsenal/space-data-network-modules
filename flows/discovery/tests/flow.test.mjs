@@ -288,6 +288,19 @@ test("latest: a host BodyRef answers the $HTR by reference (no inline body), 304
   assert.deepEqual(json.json().map((r) => r.NORAD_CAT_ID), [25544, 20580]);
 });
 
+test("latest: a published shard (each stored size-prefixed record in a shard frame of its own) renders as JSON", async () => {
+  // The node serves a batch's shard files verbatim: [u32 frame][u32 record][record] per record.
+  const shardFrame = (record) => { const prefix = new Uint8Array(4); new DataView(prefix.buffer).setUint32(0, record.length, true); return concat(prefix, record); };
+  const shard = concat(shardFrame(ommFrame({ NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)", MEAN_MOTION: 15.5 })), shardFrame(ommFrame({ NORAD_CAT_ID: 20580, OBJECT_NAME: "HST", MEAN_MOTION: 15.1 })));
+  const answers = { "p2p.latest_dataset": { result: { ...LATEST, BYTE_COUNT: BigInt(shard.length) }, raw: { stream: shard } } };
+  const json = await serve("latest", typedHost(answers), { method: "GET", path: `/api/v1/peers/${PEER_A}/omm/latest`, query: "format=json" });
+  assert.deepEqual([json.status, json.header("x-sdn-record-count"), json.header("etag")], [200, "2", LATEST_ETAG]);
+  assert.deepEqual(json.json().map((r) => [r.NORAD_CAT_ID, r.OBJECT_NAME]), [[25544, "ISS (ZARYA)"], [20580, "HST"]]);
+  const fb = await serve("latest", typedHost(answers), { method: "GET", path: `/api/v1/peers/${PEER_A}/omm/latest` });
+  assert.deepEqual([fb.status, fb.header("x-sdn-record-count")], [200, "2"]);
+  assert.deepEqual(fb.body.slice(fb.body.length - shard.length), shard, "the shard verbatim after the $DAV");
+});
+
 test("latest: known but unpinned answers 503 with the $DAV and the newest notice's pointer; unknown answers 404 with the $DAV", async () => {
   const unpinned = await serve("latest", typedHost({ "p2p.latest_dataset": { result: { ...LATEST, PINNED: false, REASON: "not-pinned" } } }),
     { method: "GET", path: `/api/v1/peers/${PEER_A}/omm/latest`, query: "format=json" });
