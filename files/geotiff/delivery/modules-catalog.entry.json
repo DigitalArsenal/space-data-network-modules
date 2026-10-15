@@ -1,0 +1,22 @@
+{
+  "MODULE_ID": "com.digitalarsenal.files.geotiff",
+  "PLUGIN_ID": "com.digitalarsenal.files.geotiff",
+  "NAME": "GeoTIFF imagery",
+  "DESCRIPTION": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery: reads the header and level table, and draws EPSG:4326 windows as RGBA from the byte ranges the caller has.",
+  "VERSION": "0.2.0",
+  "EPOCH": 1,
+  "CONTENT_HASH": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
+  "ARTIFACT_SIZE_BYTES": 222656,
+  "ARTIFACT_PATH": "/modules/com.digitalarsenal.files.geotiff/0.2.0/module.wasm",
+  "TRUST_TIER": "OPTIONAL",
+  "DEFAULT_ENABLED": false,
+  "ACCESS_POLICY": "ANONYMOUS",
+  "ENTRY_STATE": "ACTIVE",
+  "PLUGIN_TYPE": "Parser",
+  "RUNTIME_TARGETS": [
+    "browser",
+    "wasmedge"
+  ],
+  "LICENSE": "",
+  "source_artifact": "artifacts/31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495.wasm"
+}
