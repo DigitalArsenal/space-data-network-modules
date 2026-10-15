@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
   "name": "Geostationary Imager Observation Parser Node",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A parser and fetch-engine flow node (capabilities: none: every byte comes through the flow's http connector) for imager observations: GOES-East/West ABI NetCDF4, Himawari-9 AHI ISatSS tiles and L2 cloud HDF5 files (byte ranges), and EUMETSAT's view-service imagery (Meteosat-12 FCI, Meteosat-9 SEVIRI IODC, Metop-B/C AVHRR). Each field becomes its world product - the area mean of the native pixels in each 4096 x 2048 cell, holes sampled at the cell centre - at 4096, 2048 and/or 1024 wide, as size-prefixed $WXF records (one per 64-row band) quantized at the instrument's precision with the SDS 1.238 encodings, the reference producer's formulas (Cesium_Weather raw_satellite.py).",
   "pluginFamily": "data_source",
   "capabilities": [],

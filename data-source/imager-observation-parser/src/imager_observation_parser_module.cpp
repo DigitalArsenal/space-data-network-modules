@@ -761,6 +761,7 @@ struct Work {
     std::vector<double> sizes;
     int band = 0;
     int behind = 0;   // hours behind the satellite's newest frame when planned (0: the newest)
+    double budget_minutes = 40;   // how long a tick may spend on frames behind the newest
     // ahi-h5 / view
     std::vector<std::string> fields, variables;
 };
@@ -788,6 +789,7 @@ bool read_work(const std::string& json, Work* w, std::string* err) {
     if (json_number_field(json, "max_part_bytes", &v) && v >= 1024 * 1024) w->max_part = v;
     if (json_number_field(json, "band", &v)) w->band = static_cast<int>(v);
     if (json_number_field(json, "behind", &v)) w->behind = static_cast<int>(v);
+    if (json_number_field(json, "budget_minutes", &v) && v > 0) w->budget_minutes = v;
     w->keys = json_string_array(json_array_slice(json, "keys"));
     w->sizes = json_number_array(json_array_slice(json, "sizes"));
     w->fields = json_string_array(json_array_slice(json, "fields"));
@@ -1098,6 +1100,12 @@ size_t g_outstanding_next = 0;
 std::vector<OutBatch> g_out;                // finished batches, emitted one per invocation
 std::vector<std::string> g_side;            // notices / status frames to emit ("n:" / "s:" + JSON)
 int g_landed_before = 0, g_failures = 0;
+// A tick's budget for frames behind the newest. The node runs a trigger's drain to its end and holds the next tick
+// until then (seen on the weather node: a 72-hour backfill drained 5.5 hours, and no newer hour was planned meanwhile),
+// so once a tick has spent its budget the engine stops taking backfill jobs: they stay queued, the drain ends, and
+// the next tick's newest frames go first. The newest frame of a satellite is always taken.
+int64_t g_tick_started_ms = 0;
+double g_budget_minutes = 40;
 std::string g_last_failure;
 
 struct Job {
@@ -1998,7 +2006,7 @@ int run() {
                 if (g_landed_before && !g_emitted) status("{\"landed_before\":" + std::to_string(g_landed_before) + ",\"status\":304,\"unchanged\":true}");
                 const int failures = g_failures;
                 const std::string last = g_last_failure;
-                g_landed_before = 0; g_failures = 0; g_last_failure.clear(); g_emitted = 0;
+                g_landed_before = 0; g_failures = 0; g_last_failure.clear(); g_emitted = 0; g_tick_started_ms = 0;
                 if (emit_side() != 0) return 500;
                 if (failures) {
                     const std::string msg = std::to_string(failures) + " imager job(s) failed; the last: " + last;
@@ -2006,6 +2014,19 @@ int run() {
                     return 422;
                 }
                 return 0;
+            }
+            {
+                size_t best = 0;
+                for (size_t q = 1; q < g_queue.size(); q++)
+                    if (g_queue[q].behind < g_queue[best].behind || (g_queue[q].behind == g_queue[best].behind && g_queue[q].frame_ms > g_queue[best].frame_ms)) best = q;
+                if (g_queue[best].behind > 0 && g_tick_started_ms > 0 &&
+                    now_unix_ms() - g_tick_started_ms > static_cast<int64_t>(g_budget_minutes * 60000.0)) {
+                    // the tick's budget spent: the rest waits for the next tick (queued, not yielded)
+                    set_yield(false);
+                    status("{\"deferred\":" + std::to_string(g_queue.size()) + ",\"why\":\"the tick's budget for frames behind the newest is spent\"}");
+                    g_tick_started_ms = 0;
+                    return emit_side();
+                }
             }
             // each satellite's newest frame first, then the newest frames (a backfill never holds back the hour that just
             // came out, nor a satellite whose newest hour is late - Metop's arrives hours after it is flown)
@@ -2043,10 +2064,13 @@ extern "C" {
 // requests, $WXF batches (wxf_meta + wxf_records, one per invocation), notices and status. Resumed without input while
 // it has work that needs no response.
 int parse(void) {
-    for (const plugin_input_frame_t* f : frames_on("work")) {
+    const std::vector<const plugin_input_frame_t*> work_frames = frames_on("work");
+    if (!work_frames.empty() && g_tick_started_ms == 0) g_tick_started_ms = now_unix_ms();   // (a tick's work: its budget starts)
+    for (const plugin_input_frame_t* f : work_frames) {
         Work w;
         std::string err;
         if (!read_work(frame_text(f), &w, &err)) { g_failures++; g_last_failure = err; status("{\"failed\":{\"error\":\"" + json_escape(err) + "\"}}"); continue; }
+        g_budget_minutes = w.budget_minutes;
         if (std::find(g_known.begin(), g_known.end(), w.identity) != g_known.end()) continue;   // queued or active already
         g_known.push_back(w.identity);
         g_queue.push_back(std::move(w));

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
   "name": "Geostationary Imager Observation Request Builder Nodes",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Request-builder flow nodes for imager observations from public sources, no credentials: GOES-East/West ABI (NOAA noaa-goes19/18 NetCDF4), Himawari-9 AHI (NOAA noaa-himawari9: ISatSS tiles and the L2 cloud HDF5 files) and EUMETSAT's public view service (Meteosat-12 FCI, Meteosat-9 SEVIRI IODC, Metop-B/C AVHRR, WMS). plan turns a timer tick into, per satellite, the frame hours of the window not yet landed: one S3 ListObjectsV2 request per product folder (with its list job), or a view work job straight to the parser; select_files turns the listings into one parser work job per file or band of tiles; note takes the parser's notices; publish_request turns a storage-ingest result plus the parser's ingest meta into the field's landed mark (a one-byte GET of the source object under ?sdn-ingest=landed, so the node's HTTP validator ledger remembers it across restarts) and, when imager_publish_url is set, the dataset-publication POST. Node CONFIG through plugin.getConfig: imager_live_access, imager_satellites, imager_fields, imager_widths, imager_backfill_hours (72), imager_view_backfill_hours (0), imager_frame_time, imager_lag_minutes[_<satellite>], imager_max_part_bytes, timeouts, imager_publish_url. No credentials: capabilities none.",
   "pluginFamily": "data_source",
   "capabilities": [],

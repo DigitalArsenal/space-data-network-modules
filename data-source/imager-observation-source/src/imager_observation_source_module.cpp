@@ -21,7 +21,8 @@
  * ("4096,2048,1024"), imager_backfill_hours (72: the ledger satellites' window), imager_view_backfill_hours (0),
  * imager_frame_time (one fixed hour, ISO or Unix ms), imager_lag_minutes / imager_lag_minutes_<satellite> (per
  * satellite: ABI/AHI 20, Meteosat 40, Metop 360), imager_max_part_bytes (64 MiB), imager_list_timeout_ms (60000),
- * imager_file_timeout_ms (300000), imager_publish_url (unset: no publication).
+ * imager_file_timeout_ms (300000), imager_publish_url (unset: no publication), imager_tick_budget_minutes (40: how long a
+ * tick spends on frames behind each satellite's newest before it leaves the rest to the next tick).
  */
 #include <algorithm>
 #include <cctype>
@@ -695,8 +696,9 @@ std::string frame_string(const plugin_input_frame_t* f) {
 }
 
 // The attribution every job carries to the parser (and on to the records and the ingest meta).
+double g_budget_minutes = 40;   // imager_tick_budget_minutes, read by plan, carried in every job to the parser
 std::string attribution_json(const Satellite& sat) {
-    return std::string("\"satellite\":\"") + sat.id + "\",\"sensor\":\"" + json_escape(sat.sensor) + "\",\"provider_id\":\"" + sat.provider +
+    return std::string("\"budget_minutes\":") + format_number(g_budget_minutes) + ",\"satellite\":\"" + sat.id + "\",\"sensor\":\"" + json_escape(sat.sensor) + "\",\"provider_id\":\"" + sat.provider +
            "\",\"source_name\":\"" + sat.dataset + "-world\",\"dataset_id\":\"" + sat.dataset + "\",\"origin_id\":\"" + json_escape(sat.origin) +
            "\",\"license\":\"" + sat.license_id + "\",\"license_class\":\"OpenAttribution\",\"license_url\":\"" + json_escape(sat.license_url) +
            "\",\"citation\":\"" + json_escape(sat.citation) + "\"";
@@ -744,6 +746,7 @@ int plan(void) {
     const long timeout = static_cast<long>(config_number(config, "imager_list_timeout_ms", kDefaultListTimeoutMs));
     const int backfill = std::max(1, static_cast<int>(config_number(config, "imager_backfill_hours", kDefaultBackfillHours)));
     const int view_backfill = std::max(1, static_cast<int>(config_number(config, "imager_view_backfill_hours", kDefaultViewBackfillHours)));
+    g_budget_minutes = std::max(5.0, config_number(config, "imager_tick_budget_minutes", 40));
     const int64_t now = now_unix_ms();
     if (now <= 0 && !fixed) { plugin_set_error("invalid-frame-time", "no clock"); return 400; }
     forget_before(floor_hour(now) - static_cast<int64_t>(std::max(backfill, view_backfill) + 24) * 3600000);
