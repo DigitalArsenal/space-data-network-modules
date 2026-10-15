@@ -776,7 +776,7 @@ int plan(void) {
                 Pending p;
                 p.port_a = "work";
                 p.a = std::string("{\"kind\":\"view\",") + attribution_json(*sat) + ",\"frame_time_ms\":" + std::to_string(frame) +
-                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":" + fields_json(todo) + "}";
+                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":" + fields_json(todo) + ",\"behind\":" + std::to_string(h) + "}";
                 by_hour[size_t(h)].push_back(p);
                 continue;
             }
@@ -813,7 +813,7 @@ int plan(void) {
                 p.port_b = "jobs";
                 p.b = std::string("{\"what\":\"") + what + "\"," + attribution_json(*sat) + ",\"bucket\":\"" + sat->dataset +
                       "\",\"prefix\":\"" + json_escape(l.first) + "\",\"frame_time_ms\":" + std::to_string(frame) +
-                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":\"" + list_fields + "\"}";
+                      ",\"widths\":\"" + json_escape(widths) + "\",\"fields\":\"" + list_fields + "\",\"behind\":" + std::to_string(h) + "}";
                 by_hour[size_t(h)].push_back(p);
             }
         }
@@ -850,7 +850,8 @@ int select_files(void) {
     for (size_t k = 0; k < jobs.size(); k++) {
         const std::string job = frame_string(jobs[k]);
         std::string what, satellite, bucket, prefix, fields, widths;
-        double frame_ms = 0;
+        double frame_ms = 0, behind = 0;
+        json_number_field(job, "behind", &behind);
         json_string_field(job, "what", &what);
         json_string_field(job, "satellite", &satellite);
         json_string_field(job, "bucket", &bucket);
@@ -872,7 +873,8 @@ int select_files(void) {
         const std::vector<Listed> listing = parse_listing(body);
         const std::string common = std::string("\"bucket\":\"") + json_escape(bucket) + "\"," + attribution_json(*sat) +
                                    ",\"frame_time_ms\":" + format_number(frame_ms) + ",\"widths\":\"" + json_escape(widths) +
-                                   "\",\"timeout_ms\":" + std::to_string(timeout) + ",\"max_part_bytes\":" + format_number(max_part);
+                                   "\",\"timeout_ms\":" + std::to_string(timeout) + ",\"max_part_bytes\":" + format_number(max_part) +
+                                   ",\"behind\":" + format_number(behind);
         auto queue_work = [&](const std::string& work) { Pending p; p.port_a = "work"; p.a = work; g_select_backlog.push_back(p); };
         auto missing_field = [&](const std::string& field) {
             note_missing("{\"field\":\"" + field + "\",\"satellite\":\"" + json_escape(satellite) + "\",\"frame_time_ms\":" + format_number(frame_ms) + "}");

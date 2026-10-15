@@ -760,6 +760,7 @@ struct Work {
     std::vector<std::string> keys;
     std::vector<double> sizes;
     int band = 0;
+    int behind = 0;   // hours behind the satellite's newest frame when planned (0: the newest)
     // ahi-h5 / view
     std::vector<std::string> fields, variables;
 };
@@ -786,6 +787,7 @@ bool read_work(const std::string& json, Work* w, std::string* err) {
     if (json_number_field(json, "timeout_ms", &v) && v > 0) w->timeout_ms = static_cast<long>(v);
     if (json_number_field(json, "max_part_bytes", &v) && v >= 1024 * 1024) w->max_part = v;
     if (json_number_field(json, "band", &v)) w->band = static_cast<int>(v);
+    if (json_number_field(json, "behind", &v)) w->behind = static_cast<int>(v);
     w->keys = json_string_array(json_array_slice(json, "keys"));
     w->sizes = json_number_array(json_array_slice(json, "sizes"));
     w->fields = json_string_array(json_array_slice(json, "fields"));
@@ -2005,9 +2007,14 @@ int run() {
                 }
                 return 0;
             }
-            // the newest frame first (a backfill queued behind never holds back the hour that just came out)
+            // each satellite's newest frame first, then the newest frames (a backfill never holds back the hour that just
+            // came out, nor a satellite whose newest hour is late - Metop's arrives hours after it is flown)
             size_t pick = 0;
-            for (size_t q = 1; q < g_queue.size(); q++) if (g_queue[q].frame_ms > g_queue[pick].frame_ms) pick = q;
+            for (size_t q = 1; q < g_queue.size(); q++) {
+                const Work& a = g_queue[q];
+                const Work& b = g_queue[pick];
+                if (a.behind < b.behind || (a.behind == b.behind && a.frame_ms > b.frame_ms)) pick = q;
+            }
             g_active = make_job(g_queue[pick]);
             g_queue.erase(g_queue.begin() + long(pick));
         }
