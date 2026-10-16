@@ -149,10 +149,10 @@ await part('(i) response byte identity', async () => {
       for (const host of stateless) await host.destroy();
     }
   }
-  return { pass: true, evidence: `${seeds.length} seeds (${seeds.join(',')}), ${pairs} paired calls, ${bytes} response bytes identical; sha256=${digest.digest('hex')}; ${oldSet ? 'old/new artefacts' : 'same artefact (pre-rename)'}; skipped >2 MB: ${skipped.join(', ') || 'none'}` };
+  return { pass: true, evidence: `${seeds.length} seeds (${seeds.join(',')}), ${pairs} paired calls, ${bytes} response bytes identical; sha256=${digest.digest('hex')}; ${oldSet ? 'old/new artifacts' : 'same artifact (pre-rename)'}; skipped >2 MB: ${skipped.join(', ') || 'none'}` };
 });
 
-await part('(iv) artefact scan', () => {
+await part('(iv) artifact scan', () => {
   let total = 0;
   const evidence = ['dist/isomorphic/module.wasm', 'dist/browser/module.js'].map((filename) => {
     const contents = fs.readFileSync(path.join(moduleDir, filename)).toString('latin1');
