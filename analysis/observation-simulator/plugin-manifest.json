@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.observation-simulator",
   "name": "Observation simulator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Simulates raw sensor observations of targets from their truth trajectories: radar ($RDO), optical ($EOO) and passive RF ($RFO), scheduled inside access windows with tasking limits, measured with the estimation module's models in GCRF, with noise, biases, detection limits and false alarms.",
   "pluginFamily": "analysis",
   "capabilities": [],

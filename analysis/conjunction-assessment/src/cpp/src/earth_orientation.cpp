@@ -15,6 +15,8 @@ double eraSp00(double, double);
 void eraPom00(double, double, double, double[3][3]);
 void eraC2tcio(double[3][3], double, double[3][3], double[3][3]);
 void eraBp06(double, double, double[3][3], double[3][3], double[3][3]);
+void eraPnm80(double, double, double[3][3]);
+double eraEqeq94(double, double);
 }
 namespace conjunction {
 bool earth_orientation_at(const std::vector<EarthOrientation> &rows, double jd,
@@ -57,23 +59,25 @@ bool earth_orientation_at(const std::vector<EarthOrientation> &rows, double jd,
   return true;
 }
 namespace {
-bool earth_matrix(double jd, double offset_seconds, const EarthOrientation &e,
-                  bool eme, double r[3][3]) {
-  double tai1, tai2, tt1, tt2, u1, u2;
+bool earth_utc_parts(double jd, double &day, double &utcFraction) {
   // Keep sub-day quantities separate to avoid 40 us JD rounding in the
   // rotation derivative. ERFA owns UTC/leap-second conversion.
   int year, m, d;
-  double fraction, day, utcFraction;
+  double fraction;
   if (eraJd2cal(jd, 0, &year, &m, &d, &fraction))
     return false;
   const double seconds = fraction * 86400.;
   int hour = static_cast<int>(seconds / 3600.);
   int minute = static_cast<int>((seconds - hour * 3600.) / 60.);
   // Nominal UTC JD -> ERFA quasi-JD, including 86401-second leap days.
-  if (eraDtf2d("UTC", year, m, d, hour, minute,
-               seconds - hour * 3600. - minute * 60., &day, &utcFraction) < 0)
-    return false;
-  if (eraUtctai(day, utcFraction, &tai1, &tai2) < 0 ||
+  return eraDtf2d("UTC", year, m, d, hour, minute,
+                 seconds - hour * 3600. - minute * 60., &day, &utcFraction) >= 0;
+}
+bool earth_matrix(double jd, double offset_seconds, const EarthOrientation &e,
+                  bool eme, double r[3][3]) {
+  double day, utcFraction, tai1, tai2, tt1, tt2, u1, u2;
+  if (!earth_utc_parts(jd, day, utcFraction) ||
+      eraUtctai(day, utcFraction, &tai1, &tai2) < 0 ||
       eraTaitt(tai1, tai2, &tt1, &tt2) < 0 ||
       eraUtcut1(day, utcFraction, e.dut1, &u1, &u2) < 0)
     return false;
@@ -95,7 +99,47 @@ bool earth_matrix(double jd, double offset_seconds, const EarthOrientation &e,
     }
   return true;
 }
+bool teme_eme2000_matrix(double jd, double r[3][3]) {
+  double day, utcFraction, tai1, tai2, tt1, tt2;
+  if (!earth_utc_parts(jd, day, utcFraction) ||
+      eraUtctai(day, utcFraction, &tai1, &tai2) < 0 ||
+      eraTaitt(tai1, tai2, &tt1, &tt2) < 0)
+    return false;
+  // TEME -> true equator/equinox of date -> mean equator/equinox J2000.
+  // ERFA's IAU 1976/1980 precession/nutation matches the conventional TEME
+  // realization (also used by Orekit). The equation of the equinoxes is
+  // GAST-GMST, so TEME -> TOD is the active +equation rotation about z.
+  // No terrestrial rotation or UT1 approximation is involved. TT is adequate
+  // for Eqeq94's TDB argument: the <1.7 ms difference is negligible here.
+  double pn[3][3];
+  eraPnm80(tt1, tt2, pn);
+  const double equation = eraEqeq94(tt1, tt2);
+  const double c = std::cos(equation), s = std::sin(equation);
+  for (int i = 0; i < 3; ++i) {
+    r[i][0] = pn[0][i] * c + pn[1][i] * s;
+    r[i][1] = -pn[0][i] * s + pn[1][i] * c;
+    r[i][2] = pn[2][i];
+  }
+  return true;
+}
 } // namespace
+bool teme_to_eme2000(double jd, double j[6][6]) {
+  double r[3][3];
+  if (!teme_eme2000_matrix(jd, r))
+    return false;
+  for (int a = 0; a < 6; ++a)
+    for (int b = 0; b < 6; ++b)
+      j[a][b] = 0;
+  for (int a = 0; a < 3; ++a)
+    for (int b = 0; b < 3; ++b) {
+      j[a][b] = j[a + 3][b + 3] = r[a][b];
+      // CDM carries the osculating inertial velocity vector resolved on the
+      // destination axes. Rotate it with position so the physical RTN basis
+      // and its covariance remain invariant. This is an instantaneous vector
+      // transformation, not differentiation of coordinates on moving axes.
+    }
+  return true;
+}
 bool itrf_to_inertial(double jd, const EarthOrientation &e, bool eme,
                       double j[6][6], double epoch_rounding_seconds) {
   double r[3][3], before[3][3], after[3][3];

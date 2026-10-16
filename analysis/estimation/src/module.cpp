@@ -114,8 +114,10 @@ core::Observation observation_from_wire(const wire::EstimationObservation& sourc
   out.media.total_electron_content = source.total_electron_content();
   out.media.total_electron_content_rate_per_second = source.total_electron_content_rate_per_second();
   out.media.frequency_hz = source.frequency_hz() > 0.0 ? source.frequency_hz() : 8.4e9;
+  // Flags: 0x01 disables light time; 0x02 disables Sagnac; 0x04 opts into two-way light time.
   out.apply_light_time = (source.flags() & 0x01u) == 0;
   out.apply_sagnac = (source.flags() & 0x02u) == 0;
+  out.two_way = (source.flags() & 0x04u) != 0;
   out.transmitter_index = source.transmitter_index();
   out.receiver_index = source.receiver_index();
   return out;
@@ -148,8 +150,10 @@ void apply_error_models(const wire::EstimationRequest* request,
           observation.sigma[i] = source->noise_sigma();
         }
       }
+      // Same flags as observations: 0x01/0x02 disable; 0x04 enables two-way light time.
       if ((source->flags() & 0x01u) != 0) observation.apply_light_time = false;
       if ((source->flags() & 0x02u) != 0) observation.apply_sagnac = false;
+      if ((source->flags() & 0x04u) != 0) observation.two_way = true;
     }
   }
 }
