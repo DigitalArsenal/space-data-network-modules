@@ -120,8 +120,15 @@ bool same(double a, double b) { return a == b || (std::isnan(a) && std::isnan(b)
 void equal(const ConjunctionEvent2& a, const ConjunctionEvent2& b) {
   require(a.pc.method == b.pc.method && a.pc.tier == b.pc.tier &&
     same(a.pc.probability, b.pc.probability) && same(a.pc.probability_2d, b.pc.probability_2d) &&
-    a.pc.converged == b.pc.converged && a.pc.usage_reason == b.pc.usage_reason &&
+    a.has_covariance == b.has_covariance && a.pc.converged == b.pc.converged &&
+    a.pc.usage_checked == b.pc.usage_checked && a.pc.usage_violation == b.pc.usage_violation &&
+    a.pc.usage_reason == b.pc.usage_reason && a.pc.failure_reason == b.pc.failure_reason &&
+    a.usage.violated == b.usage.violated && a.usage.fully_evaluated == b.usage.fully_evaluated &&
+    a.usage.curvature_skipped == b.usage.curvature_skipped && a.usage.reason == b.usage.reason &&
+    same(a.usage.relative_velocity_uncertainty, b.usage.relative_velocity_uncertainty) &&
+    same(a.usage.extended, b.usage.extended) && same(a.usage.offset, b.usage.offset) &&
     a.pc.sample_count == b.pc.sample_count && a.pc.collision_count == b.pc.collision_count &&
+    a.pc.initial_overlap_count == b.pc.initial_overlap_count && a.pc.entry_collision_count == b.pc.entry_collision_count &&
     same(a.pc.lower_probability, b.pc.lower_probability) && same(a.pc.upper_probability, b.pc.upper_probability),
     "batch differs from event-seeded serial result");
 }
@@ -243,6 +250,128 @@ void screening_far_tail_oracle() {
     "Screening far-tail disk agrees with independent analytic Rice/Bessel series");
   std::printf("Screening far-tail disk: analytic_series=%.17Lg; Pc=%.17g; relative_error=%.12Lg; nodes=%d\n",
     expected, actual.probability, relative, actual.iterations);
+}
+void screening_curvature_policy() {
+  // Public synthetic inertial states: km, km/s, covariance km^2 and
+  // km^2/s^2, common UTC JD 2451545, Earth mu 398600.4418 km^3/s^2.
+  // The perpendicular relative speed is exactly 1 km/s. A velocity variance
+  // of 0.0121 therefore gives 0.11 relative uncertainty; zero variance
+  // gives 0. The 1 km radial miss with 0.1 km position sigma gives a far-tail
+  // Foster Pc. This checks an evaluation policy, not a new orbital oracle:
+  // both branches must retain the identical computed disk integral.
+  constexpr const char* skipped = "curvature not evaluated: Pc2D far below the reporting floor";
+  for (bool velocity_violation : {false, true}) {
+    auto encounter = centered(.02, false);
+    encounter.gravitational_parameter = 398600.4418;
+    encounter.primary[4] = encounter.secondary[4] = 7.5;
+    encounter.secondary[5] = 1;
+    encounter.secondary[0] += 1;
+    if (velocity_violation) encounter.covariance_primary[35] = .0121;
+    ConjunctionEngine screening;
+    screening.set_pc_grade(PcGrade::Screening);
+    const auto after = screening.compute_pc(encounter);
+    require(after.has_covariance && after.pc.probability_2d > 0 &&
+      after.pc.probability_2d < kDefaultPcReportingFloor * 1e-3,
+      "public orbital encounter is safely three decades below the reporting floor");
+    ConjunctionEngine full;
+    full.set_pc_grade(PcGrade::Screening);
+    require(full.set_pc_tier_options({after.pc.probability_2d * 999, kDefaultPcMonteCarloFloor}),
+      "public control floor disables only the far-below-floor shortcut");
+    const auto before = full.compute_pc(encounter);
+    require(before.has_covariance && before.pc.probability == after.pc.probability &&
+      before.pc.probability_2d == after.pc.probability_2d,
+      "curvature shortcut leaves the final Foster probability and Pc2D bit identical");
+    require(after.usage.curvature_skipped && !after.pc.usage_checked &&
+      after.pc.usage_reason.find(skipped) != std::string::npos &&
+      before.pc.usage_reason.find(skipped) == std::string::npos,
+      "curvature omission is explicitly disclosed only below the three-decade boundary");
+    require(std::abs(after.usage.relative_velocity_uncertainty - (velocity_violation ? .11 : 0)) < 2e-15 &&
+      after.usage.extended < .02 && after.usage.offset < .01 &&
+      after.pc.usage_violation == velocity_violation,
+      "far-below-floor policy still evaluates rectilinear duration, offset and velocity uncertainty");
+    require(after.pc.method == "FOSTER-2D" &&
+      after.pc.tier == (velocity_violation ? "usage-violation, below floor" : "FOSTER-2D") &&
+      (before.pc.tier == "FOSTER-2D" || before.pc.tier == "usage-violation, below floor"),
+      "curvature shortcut only permits disclosed Foster/below-floor routing and never changes fallback membership");
+    ConjunctionEngine reference;
+    const auto reference_result = reference.compute_pc(encounter);
+    require(reference_result.pc.usage_reason.find(skipped) == std::string::npos,
+      "Reference grade never uses the Screening far-below-floor shortcut");
+    std::printf("Screening curvature policy: velocity_uncertainty=%.12g; Pc2D=%.17g; before=%s; after=%s; usage_checked=false; %s\n",
+      after.usage.relative_velocity_uncertainty, after.pc.probability_2d,
+      before.pc.tier.c_str(), after.pc.tier.c_str(), skipped);
+  }
+}
+void screening_work_budget() {
+  // Public synthetic Earth encounter, inertial km/km/s at UTC JD 2451545;
+  // covariance in km^2 and km^2/s^2. The independent acceptance reference is
+  // Reference's identical seeded prefix of fully classified trajectories,
+  // not a probability generated by this new stopping rule. Wilson arithmetic
+  // is compared within 2e-15 for endpoint cancellation in binary64.
+  auto encounter = centered(.02, false);
+  encounter.gravitational_parameter = 398600.4418;
+  encounter.primary[4] = encounter.secondary[4] = 7.5;
+  encounter.secondary[0] += .05;
+  encounter.secondary[5] = .1;
+  encounter.covariance_primary[35] = .0121;
+  PcFallbackOptions options;
+  options.grade = PcGrade::Screening;
+  options.time_start = -30; options.time_end = 30;
+  options.samples = options.minimum_samples = 4096;
+  options.target_hits = 0; options.seed = 12345;
+  options.screening_propagation_budget = 32;
+  const auto limited = pc_monte_carlo(encounter, options);
+  require(limited.pc.converged && limited.work_limited && limited.samples > 0 && limited.samples < options.samples,
+    "Screening deterministic work budget can override the sample minimum after a complete trajectory");
+  require(limited.propagation_budget == options.screening_propagation_budget &&
+    limited.propagation_evaluations >= limited.propagation_budget &&
+    limited.propagation_evaluations <= limited.propagation_budget + 401410,
+    "Screening work checkpoint is bounded by one fully classified trajectory");
+  require(limited.hits == limited.initial_hits + limited.entry_hits &&
+    limited.limitation.find("Screening budget: " + std::to_string(limited.samples) + " samples") != std::string::npos &&
+    limited.limitation.find("complete-sample stopping=propagation budget") != std::string::npos &&
+    limited.limitation.find("sample minimum overridden") != std::string::npos,
+    "Screening work limit exposes the actual sample count and complete-sample stop reason");
+  auto reference = options;
+  reference.grade = PcGrade::Reference; reference.samples = limited.samples;
+  const auto prefix = pc_monte_carlo(encounter, reference);
+  require(prefix.pc.converged && prefix.samples == limited.samples && prefix.hits == limited.hits &&
+    prefix.initial_hits == limited.initial_hits && prefix.entry_hits == limited.entry_hits &&
+    prefix.pc.probability == limited.pc.probability &&
+    std::abs(prefix.pc.lower_probability - limited.pc.lower_probability) < 2e-15 &&
+    std::abs(prefix.pc.upper_probability - limited.pc.upper_probability) < 2e-15,
+    "work-limited Screening result equals the complete Reference sample prefix including Wilson uncertainty");
+  require(limited.pc.lower_probability >= 0 && limited.pc.lower_probability <= limited.pc.probability &&
+    limited.pc.upper_probability >= limited.pc.probability && limited.pc.upper_probability <= 1,
+    "work-limited probability retains a valid 95 percent Wilson interval");
+  reference.samples = 97; reference.screening_propagation_budget = 1;
+  const auto reference_budget = pc_monte_carlo(encounter, reference);
+  require(reference_budget.pc.converged && reference_budget.samples == reference.samples &&
+    !reference_budget.work_limited && reference_budget.propagation_evaluations == 0 && reference_budget.propagation_budget == 0,
+    "Reference ignores the Screening work budget and retains its requested sample count");
+  auto automatic = options;
+  automatic.samples = automatic.minimum_samples = 32;
+  automatic.screening_propagation_budget = 0;
+  const auto default_budget = pc_monte_carlo(encounter, automatic);
+  require(default_budget.pc.converged && default_budget.propagation_budget == kDefaultScreeningPcPropagationBudget,
+    "zero Screening work budget selects its documented named default");
+  ConjunctionEngine engine;
+  engine.set_pc_grade(PcGrade::Screening);
+  engine.set_pc_fallback(ConjunctionEngine::Fallback::MonteCarlo, options);
+  const auto scalar = engine.compute_pc(encounter);
+  require(scalar.has_covariance && scalar.pc.sample_count > 0 && scalar.pc.sample_count < options.samples &&
+    scalar.pc.usage_reason.find("complete-sample stopping=propagation budget") != std::string::npos,
+    "engine result exposes work-limited Monte Carlo samples and stop rule");
+  const std::vector<PcEncounter> inputs(31, encounter);
+  for (unsigned threads : {1u, 4u, 27u}) {
+    const auto batch = engine.compute_pc_batch(inputs, threads);
+    require(batch.size() == inputs.size(), "work-budget batch preserves every event");
+    for (const auto& result : batch) equal(result, scalar);
+  }
+  std::printf("Screening MC work budget: samples=%llu/%llu; propagations=%llu/%llu; hits=%llu; Wilson=[%.12g,%.12g]; complete Reference prefix identical; engine threads 1/4/27 identical\n",
+    static_cast<unsigned long long>(limited.samples), static_cast<unsigned long long>(options.samples),
+    static_cast<unsigned long long>(limited.propagation_evaluations), static_cast<unsigned long long>(limited.propagation_budget),
+    static_cast<unsigned long long>(limited.hits), limited.pc.lower_probability, limited.pc.upper_probability);
 }
 void screening_cara_agreement() {
   // Synthetic variants of ALL twelve public CARA Alfano geometries, never
@@ -535,6 +664,27 @@ int main() {
       require(batch.size() == screening_serial.size(), "Screening batch preserves result count");
       for (unsigned i = 0; i < batch.size(); ++i) equal(batch[i], screening_serial[i]);
     }
+    // More inputs than workers exercise all 27 workers. Interleave cheap
+    // Foster/unavailable results with Nc and MC so a cost-ordered fallback
+    // pass must restore input order, including duplicate event seeds.
+    std::vector<PcEncounter> mixed;
+    for (unsigned repeat = 0; repeat < 5; ++repeat)
+      mixed.insert(mixed.end(), inputs.begin(), inputs.end());
+    std::vector<ConjunctionEvent2> mixed_scalar;
+    for (const auto& input : mixed) mixed_scalar.push_back(engine.compute_pc(input));
+    for (unsigned threads : {1u, 4u, 27u}) {
+      const auto batch = engine.compute_pc_batch(mixed, threads);
+      require(batch.size() == mixed_scalar.size(), "two-pass Screening batch keeps every input");
+      for (unsigned i = 0; i < batch.size(); ++i) equal(batch[i], mixed_scalar[i]);
+    }
+    std::reverse(mixed.begin(), mixed.end());
+    for (unsigned threads : {1u, 4u, 27u}) {
+      const auto batch = engine.compute_pc_batch(mixed, threads);
+      require(batch.size() == mixed_scalar.size(), "reordered two-pass Screening batch keeps every input");
+      for (unsigned i = 0; i < batch.size(); ++i) equal(batch[i], mixed_scalar[mixed_scalar.size() - 1 - i]);
+    }
+    std::printf("Screening two-pass batch: %zu mixed encounters; scalar and threads 1/4/27 identical in original and reversed input order\n",
+      mixed.size());
     ConjunctionEngine screening_budget;
     screening_budget.set_pc_grade(PcGrade::Screening);
     screening_budget.set_pc_fallback(ConjunctionEngine::Fallback::MonteCarlo);
@@ -550,6 +700,8 @@ int main() {
     optimized_hall_oracle();
     screening_disk_oracle();
     screening_far_tail_oracle();
+    screening_curvature_policy();
+    screening_work_budget();
     screening_cara_agreement();
     std::printf("Tiered engine E2E: %u assertions passed; four tiers, forced fallbacks, unavailable covariance, batch threads 1/4/27 and reordered inputs\n", passed);
     std::printf("Tier evidence: valid=%s; below=%s; moderate=%s; high=%s; Pc2D=%.12g; shape_max=%.12g\n",
@@ -587,7 +739,7 @@ async function native() {
   const built = await run('cmake', ['--build', build, '--target', ...targets, '-j6'], { echo: false });
   fs.writeFileSync(path.join(build, 'pc_tiered_screen_build.log'), built);
   console.log('Native build PASS');
-  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Screening far-tail disk:|Screening synthetic CARA|Screening MC outside|Tiered engine E2E:|Tier evidence:)/;
+  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Screening far-tail disk:|Screening curvature policy:|Screening MC work budget:|Screening two-pass batch:|Screening synthetic CARA|Screening MC outside|Tiered engine E2E:|Tier evidence:)/;
   async function checkedBinary(target, args = []) {
     const output = await run(path.join(build, target), args, { echo: false });
     fs.writeFileSync(path.join(build, `pc_tiered_screen_${target}${args.length ? '_hall' : ''}.log`), output);
@@ -718,8 +870,12 @@ function verifyScreen(summary, label) {
   for (const value of [summary.wallMs, summary.timings?.loadMs, summary.timings?.gridMs, summary.timings?.refineMs]) {
     check(() => assert(Number.isFinite(value) && value >= 0, `${label}: stage timing missing`));
   }
-  for (const phase of ['start', 'end']) check(() => assert(summary.loadAverage?.[phase]?.length === 3 &&
-    summary.loadAverage[phase].every(Number.isFinite), `${label}: loadAverage.${phase} missing`));
+  for (const phase of ['start', 'end']) check(() => {
+    assert(summary.loadAverage?.[phase]?.length === 3 && summary.loadAverage[phase].every(Number.isFinite),
+      `${label}: loadAverage.${phase} missing`);
+    assert(summary.loadAverage[phase][0] <= 30,
+      `${label}: loadAverage.${phase} one-minute load exceeds 30: ${summary.loadAverage[phase][0]}`);
+  });
   return failures;
 }
 
@@ -799,13 +955,20 @@ async function synthetic() {
   function checkPair(off, on, label) {
     assert.deepEqual(on.events.map(identity), off.events.map(identity), `${label}: Pc preserves every event and its input order`);
     assert.deepEqual(on.excluded, off.excluded, `${label}: Pc preserves exclusion evidence`);
-    const fallbacks = [], unavailable = [];
+    const fallbacks = [], unavailable = [], skippedCurvature = [];
     for (const [i, event] of on.events.entries()) {
       const p = event.PROBABILITY, cdm = event.CONJUNCTION_MESSAGE, summary = on.summaries[i];
       const comments = [cdm?.COMMENT, cdm?.OBJECT1?.COMMENT, cdm?.OBJECT2?.COMMENT].filter(Boolean).join('\n');
       assert.equal(event.COMBINED_RADIUS_M, 10, `${label}: requested combined HBR`);
       assert(Number.isFinite(summary.pc) && summary.pc >= 0 && summary.pc <= 1, `${label}: finite Pc`);
       assert(!event.error && !event.errorCode && !event.errorMessage, `${label}: no event error`);
+      if (comments.includes('curvature not evaluated: Pc2D far below the reporting floor')) {
+        assert.equal(summary.method, 'FOSTER-2D', `${label}: disclosed curvature skip retains Foster Pc`);
+        assert(['FOSTER-2D', 'usage-violation, below floor'].includes(summary.tier),
+          `${label}: a curvature-skipped event cannot enter an expensive fallback tier`);
+        skippedCurvature.push({ primary: event.PRIMARY_NAME, secondary: event.SECONDARY_NAME,
+          tier: summary.tier, pc: summary.pc });
+      }
       if (summary.tier.startsWith('usage-violation,')) {
         assert(cdm, `${label}: usage violation carries a CDM`);
         assert(comments.includes(summary.tier), `${label}: exact machine tier retained in comment`);
@@ -846,7 +1009,9 @@ async function synthetic() {
       }
     }
     assert(fallbacks.length > 0, `${label}: fixture must exercise an unrepresentable Nc/MC fallback`);
+    assert(skippedCurvature.length > 0, `${label}: fixture must expose the Screening curvature policy in its CDMs`);
     console.log(`${label}: labelled fallback CDMs=${JSON.stringify(fallbacks)}; all ${on.events.length} events retained`);
+    console.log(`${label}: disclosed curvature skips=${skippedCurvature.length}; example=${JSON.stringify(skippedCurvature[0])}`);
     if (unavailable.length) console.log(`${label}: Pc unavailable, maximum-only retained=${JSON.stringify(unavailable)}`);
   }
   let handle;

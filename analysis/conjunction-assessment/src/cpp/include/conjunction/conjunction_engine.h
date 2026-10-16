@@ -149,6 +149,10 @@ inline constexpr double kDefaultPcMonteCarloFloor = 1e-4;
 /// shape-scaled maximum only if Pc2D is unavailable). Below reporting_floor,
 /// retain Pc2D and its usage diagnostics; at monte_carlo_floor select Monte
 /// Carlo directly. Intermediate events use 3D-Nc and its applicability checks.
+/// Screening Automatic omits curvature when Pc2D < reporting_floor * 1e-3:
+/// rectilinear/velocity checks still run, Pc2D is unchanged, and usage_checked
+/// is false. A clean rectilinear result keeps the FOSTER-2D tier with an explicit
+/// "curvature not evaluated" reason; a violation keeps the below-floor tier.
 struct PcTierOptions {
   double reporting_floor = kDefaultPcReportingFloor;
   double monte_carlo_floor = kDefaultPcMonteCarloFloor;
@@ -218,7 +222,9 @@ public:
   /// Evaluate independent encounters on workers, returning results in input
   /// order. Monte Carlo seeds depend on the encounter and configured seed,
   /// never the worker or scheduling. Zero threads uses one worker. Engine
-  /// configuration must remain unchanged while a batch is running.
+  /// configuration must remain unchanged while a batch is running. The first
+  /// pass prepares 2-D results; the second schedules required fallbacks by
+  /// predicted cost, writing directly to their original output slots.
   std::vector<ConjunctionEvent2> compute_pc_batch(
       const std::vector<PcEncounter> &encounters, unsigned threads = 1) const;
 
@@ -262,6 +268,10 @@ private:
     return options;
   }();
   PcTierOptions tier_options_;
+  // Both scalar and batch calls share these numerical phases. Preparation
+  // writes its final 2-D result or leaves a fallback plan in the same slot.
+  bool prepare_encounter(const PcEncounter&, ConjunctionEvent2&, bool& direct_monte_carlo) const;
+  void finish_fallback(const PcEncounter&, ConjunctionEvent2&, bool direct_monte_carlo) const;
   ConjunctionEvent2 evaluate_encounter(const PcEncounter& encounter) const;
   double radius1_m_ = 5.0;
   double radius2_m_ = 5.0;

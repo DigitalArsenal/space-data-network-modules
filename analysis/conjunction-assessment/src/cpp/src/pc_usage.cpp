@@ -52,18 +52,20 @@ PcUsageResult assess_pc_usage(const PcEncounter& e,PcUsageEvaluation evaluation)
         if(std::min({ve[0],ve[1],ve[2]}) < -1e-10*largest){flag("INVALID_VELOCITY_COVARIANCE");return out;}
         out.relative_velocity_uncertainty=std::sqrt(largest)/speed;
     }
-    if(evaluation==PcUsageEvaluation::StopOnRectilinearViolation &&
-       e.gravitational_parameter>0 && out.relative_velocity_uncertainty>0.1) {
+    if(evaluation==PcUsageEvaluation::RectilinearOnly ||
+       (evaluation==PcUsageEvaluation::StopOnRectilinearViolation &&
+        e.gravitational_parameter>0 && out.relative_velocity_uncertainty>0.1)) {
         out.curvature_skipped=true;
-        // This safeguard is independent of the curvilinear correction: no Q(t)
-        // refinement can change the violating classification. Do not claim a
-        // curvature value or convergence that was never evaluated. Fallbacks
-        // request Full separately, so their integration windows stay unchanged.
+        // Retain all rectilinear diagnostics without asserting a curvature
+        // value or convergence. RectilinearOnly is the engine's explicitly
+        // incomplete far-tail assessment; the other mode already violates
+        // independently of Q(t). Fallbacks request Full separately.
         pc_usage_detail::set_time_extent(out,orbital_period);
         if(out.extended>0.02)flag("EXTENDED_ENCOUNTER");
         if(out.offset>0.01)flag("OFFSET_ENCOUNTER");
-        flag("RELATIVE_VELOCITY_UNCERTAINTY");
-        out.reason+=";CURVATURE_ANALYSIS_SKIPPED_RECTILINEAR_VIOLATION";
+        if(out.relative_velocity_uncertainty>0.1)flag("RELATIVE_VELOCITY_UNCERTAINTY");
+        if(evaluation==PcUsageEvaluation::StopOnRectilinearViolation)
+            out.reason+=";CURVATURE_ANALYSIS_SKIPPED_RECTILINEAR_VIOLATION";
         return out;
     }
     bool curvature_ok=false;

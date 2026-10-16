@@ -70,12 +70,18 @@ full-state fallbacks, and output-format limits. The historical no-covariance
 spherical value is an approximation, not a bound for arbitrary covariance
 shapes.
 
-Catalog screens evaluate tiered Pc in parallel at Screening grade; pair
-assessments retain Reference grade. Pc2D and usage diagnostics remain visible
-below the reporting floor, with 3D-Nc or seeded Monte Carlo above it. When a
-fallback has no CQR algorithm enum, the CQR probability stays labelled
-maximum-only and `CONJUNCTION_MESSAGE` carries its actual method, value and
-tier. See [Pc methods](docs/pc-methods.md) for floors and accuracy and
+Catalog screens evaluate tiered Pc in two parallel passes at Screening
+grade and return events in input order; pair assessments retain Reference
+grade. Pc2D and usage diagnostics remain visible below the reporting floor,
+with 3D-Nc or seeded Monte Carlo above it. Far-below-floor events disclose
+when the curvature check is omitted. Screening Monte Carlo can stop at a
+deterministic work checkpoint between complete samples and reports its
+actual sample count and Wilson interval. Parallel WASM screens reserve a
+bounded working heap before starting workers to avoid a reproduced V8
+shared-memory growth failure. When a fallback has no CQR algorithm enum,
+the CQR probability stays labelled maximum-only and `CONJUNCTION_MESSAGE`
+carries its actual method, value and tier. See [Pc methods](docs/pc-methods.md)
+for floors, usage-check shortcuts, work limits and accuracy and
 [benchmarks](docs/benchmark.md) for measured screen cost.
 
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:

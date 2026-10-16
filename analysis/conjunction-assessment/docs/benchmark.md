@@ -233,3 +233,165 @@ the curvature analysis.
 Detailed logs and summary JSON remain in ignored
 `tests/data/ca-retime/phaseb/` and `tests/data/ca-retime/pc-tiered-screen-*/`.
 They are local benchmark evidence, not redistributed catalog data.
+
+## Round 3: CPU cost and shared-memory diagnosis
+
+The following measurements use the same catalog, 27 workers and catalog
+floors `1e-4 / 1e-4`. Temporary instrumentation records elapsed time with
+`steady_clock` and actual worker CPU time with `CLOCK_THREAD_CPUTIME_ID`.
+For Node 25.4.0, a local diagnostic loader supplies that WASI clock from
+`process.threadCpuUsage()`; no SDK file is changed. Process CPU includes
+the whole Node process, while event CPU includes only Pc evaluation.
+Elapsed event times include scheduling delays and must not be treated as
+CPU time. One refinement boundary repeats a covariance event: 289,456 Pc
+evaluations produce 289,455 covariance events plus 5,089 maximum-only events.
+
+| Measurement | Pc | Total elapsed, s | Load stage, s | Search, s | Refine, s | Process CPU, s | 1-minute load, start → end |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Instrumented baseline | off | 21.136 | 1.503 | 10.154 | 8.294 | 215.080 | 18.47 → 28.88 |
+| Instrumented baseline | on | 79.620 | 1.932 | 9.604 | 66.708 | 552.266 | 26.94 → 24.12 |
+| Step 1, run 1 | off | 22.150 | 1.582 | 11.223 | 8.095 | 209.962 | 24.22 → 24.86 |
+| Step 1, run 2 | on | 43.691 | 1.518 | 9.844 | 30.897 | 489.451 | 24.86 → 40.18 |
+| Step 1, run 3 | off | 19.229 | 1.499 | 9.073 | 7.514 | 218.246 | 29.67 → 29.07 |
+| Step 1, run 4 | on | 42.016 | 1.496 | 9.525 | 29.607 | 478.545 | 29.07 → 32.52 |
+| Step 2, run 1 | off | 19.836 | 1.505 | 9.602 | 7.581 | 212.176 | 24.52 → 31.78 |
+| Step 2, run 2 | on | 46.148 | 1.631 | 9.878 | 33.253 | 473.925 | 26.38 → 27.53 |
+| Step 2, run 3 | off | 20.163 | 1.540 | 9.651 | 7.744 | 220.962 | 27.53 → 30.41 |
+| Step 2, run 4 | on | 50.271 | 1.628 | 10.672 | 36.328 | 485.688 | 28.62 → 40.21 |
+
+Step 1 combines a deterministic Monte Carlo propagation-work budget with
+bounded Screening time-node caches and serial heap preparation. The two
+Pc-on runs have identical method/tier counts and no event errors: Foster
+288,779, Monte Carlo 676, maximum-only 5,089; valid Foster 25,966,
+below-floor 262,813, Monte Carlo 676 and maximum-only 5,089. Both end loads
+exceed 30, so these timings are diagnostic. Their mean-total ratio is
+2.0712397743 (42.853 s on / 20.690 s off), which also exceeds 2.0.
+
+Step 2 separates Pc2D preparation from fallback evaluation and starts the
+estimated expensive fallbacks first, using a second worker pool. Every run
+completes with no event errors and unchanged method/tier counts. Mean total
+is 48.209 s on / 20.000 s off, ratio 2.4105212561. Mean summed batch wall
+time rises from Step 1's 16.617118 s to 20.269946 s; mean event CPU remains
+similar, 247.277025 s versus 245.912677 s. This two-pool arrangement does not
+improve the measured screen time. Only the first Pc-on run has both load
+endpoints below 30; both Pc-off runs and the second Pc-on run exceed 30 at
+the end, so the four-run ratio is diagnostic and does not satisfy acceptance.
+
+### Baseline distribution and worker imbalance
+
+The baseline's 31 Pc batches take 52.852009 s of wall time. Summed event CPU
+is 315.068492 s, compared with 383.007018 s of summed event elapsed time.
+Including per-worker loop overhead, CPU is 315.946411 s. The busiest worker
+uses 36.456886 CPU-s; the least busy uses 8.171340 CPU-s. The longest batch
+takes 21.069008 s and contains the 21.065260 s event below.
+
+Histogram boundaries are elapsed seconds: `[0,.001)`, `[.001,.01)`,
+`[.01,.1)`, `[.1,1)`, `[1,10)`, and `[10,infinity)`.
+
+| Tier | Evaluations | Event CPU, s | Event elapsed sum, s | <1 ms | 1–10 ms | 10–100 ms | 0.1–1 s | 1–10 s | ≥10 s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Valid Foster | 25,966 | 8.055990 | 10.097613 | 25,248 | 677 | 41 | 0 | 0 | 0 |
+| Below floor | 262,814 | 181.576199 | 236.584750 | 207,206 | 53,736 | 1,870 | 2 | 0 | 0 |
+| Monte Carlo | 676 | 125.436303 | 136.324654 | 0 | 0 | 582 | 65 | 28 | 1 |
+
+The 20 slowest baseline events are all `SDMC-TWO-BODY`. Batch/index labels
+identify local diagnostic slots without publishing catalog records.
+
+| Batch/index | Elapsed, s | CPU, s | Samples | Hits |
+| --- | ---: | ---: | ---: | ---: |
+| 23/212 | 21.065260 | 20.765950 | 49,152 | 5 |
+| 13/48 | 4.844208 | 4.815393 | 49,152 | 2 |
+| 13/47 | 4.492664 | 4.456957 | 49,152 | 3 |
+| 10/45 | 4.444386 | 4.380805 | 49,152 | 4 |
+| 13/49 | 4.243491 | 4.211075 | 49,152 | 0 |
+| 8/144 | 3.546514 | 3.334246 | 49,152 | 6 |
+| 16/44 | 3.522403 | 3.474165 | 49,152 | 3 |
+| 10/46 | 3.482899 | 3.441048 | 49,152 | 3 |
+| 8/147 | 3.443106 | 3.226772 | 49,152 | 7 |
+| 10/47 | 3.396396 | 3.379216 | 49,152 | 6 |
+| 10/48 | 3.372690 | 3.295915 | 49,152 | 5 |
+| 16/42 | 3.342823 | 3.304048 | 49,152 | 2 |
+| 8/150 | 3.336180 | 3.111518 | 49,152 | 3 |
+| 8/153 | 3.145813 | 2.963548 | 49,152 | 3 |
+| 16/41 | 3.074087 | 3.026656 | 49,152 | 4 |
+| 16/40 | 2.840293 | 2.762373 | 49,152 | 0 |
+| 19/48 | 2.482822 | 2.475823 | 49,152 | 1 |
+| 8/420 | 2.026294 | 1.811833 | 49,152 | 3 |
+| 11/375 | 1.659576 | 1.584348 | 49,152 | 4 |
+| 11/362 | 1.386924 | 1.319024 | 49,152 | 1 |
+
+### Native replay of the 29 slow Monte Carlo events
+
+The native replay exactly reproduces all 29 baseline sample counts and hit
+counts. All use 49,152 samples. The total is 71.792406 CPU-s and 73.340514
+elapsed seconds; the maximum event uses 17.227127 CPU-s. `uptime` reports
+one-minute load 22.73 before and 18.53 after. Across these events there are
+411,640,418 propagated states, 205,820,209 distance evaluations,
+799,744,474 visited intervals and 250,629 bisections. The slowest event
+alone uses 101,496,446 propagated states and 50,748,223 distance evaluations.
+This identifies repeated two-body propagation as the expensive work.
+
+A three-million-propagation budget stops after a complete sample, retaining
+seed order, collision decisions and Wilson intervals. In the replay,
+28/29 events reach the work budget; 22 finish below the normal 32,768-sample
+minimum. Sample counts range from 1,454 to 49,152. Total native CPU falls
+to 15.755169 s and summed elapsed time to 16.927423 s; maximum event CPU is
+0.600041 s. Load is 17.91 before and 21.51 after. The slowest original event
+finishes 1,454 samples with zero hits and Wilson interval `[0,0.002635032]`;
+the result explicitly reports that the work budget overrode the sample
+minimum.
+
+For this slow-event subset, 22/29 budget estimates lie inside the preceding
+Screening estimate's 95% Wilson interval; all 29 pairs of intervals overlap.
+The seven outside estimates are zero: slots 8/150, 10/48, 13/47, 16/42,
+16/44, 19/48 and 23/212. This comparison uses the preceding Screening run,
+not Reference, and does not establish the Reference agreement criterion.
+
+| Pc-on measurement | Sum of batch wall times, s | Valid Foster CPU, s | Below-floor CPU, s | Monte Carlo CPU, s | Maximum event CPU, s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 52.852009 | 8.055990 | 181.576199 | 125.436303 | 20.765950 |
+| Step 1, run 2 | 17.040219 | 8.217807 | 185.279128 | 57.199670 | 0.942351 |
+| Step 1, run 4 | 16.194016 | 8.038940 | 179.912875 | 55.905631 | 0.942954 |
+| Step 2, run 2 | 19.730812 | 8.126752 | 182.802767 | 52.757777 | 0.861952 |
+| Step 2, run 4 | 20.809079 | 8.284002 | 186.410033 | 53.444023 | 0.908869 |
+
+### Shared-memory bulk-copy trap
+
+A minimal WebAssembly diagnostic reproduces the trap on Node 25.4.0 / V8
+14.1.146.11-node.15, with 27 consumers sharing imported memory. It contains
+only shared memory, atomics, scalar stores, `memory.grow` and `memory.copy`:
+no SDK, allocator, C++ containers or Pc calculations. At round 27, worker
+19 reports a stale 28-page memory size while shared memory has 29 pages.
+Source and destination scalar stores succeed beyond the old limit, then a
+valid 272-byte `memory.copy` traps at `wasm-function[0]:0xdb`. The other 26
+workers complete the same round and observe 29 pages. Load is 26.11.
+
+Fixed-memory and consumer `memory.grow(0)` controls each complete 1,024
+rounds per worker (loads 25.79 and 21.33). An additional control instantiates
+all workers with one page, grows serially to 1,025 pages, then enters their
+WASM loops: all 27 × 1,024 rounds pass at load 29.66. Expanded diagnostic
+growth-only repeats also pass, so the failure depends on scheduling;
+`memory.grow(0)` alone is not established as a sufficient fix.
+
+The production preparation reserves allocator-managed pages serially before
+parallel screening. It holds 1 MiB allocations until total memory reaches
+`min(1 GiB, 128 MiB + 24 KiB/source + 4 MiB/worker)`, then frees them for
+reuse. Raw memory growth is avoided. Screening kernel and rate caches each
+retain at most 8,192 nodes; eviction recomputes the same arithmetic. Monte
+Carlo samples stream through fixed storage.
+
+| Measurement | First reported pages | Peak pages | Peak MiB | Fraction of 32,768-page limit |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline off, after refinement | 6,817 | 6,871 | 429.4375 | 20.9686% |
+| Baseline on, after refinement | 6,808 | 6,867 | 429.1875 | 20.9564% |
+| Step 1, all four runs, after reserve | 15,970 | 15,970 | 998.1250 | 48.7366% |
+| Step 2, all four runs, after reserve | 15,970 | 15,970 | 998.1250 | 48.7366% |
+
+Each Step 1 and Step 2 process starts reserve preparation at 2,707 pages
+and reaches 15,970 pages while holding 843 allocations. Every subsequent refinement
+reports the same 15,970 pages, below the 70% limit. These figures are total
+WASM linear memory, not live heap allocations. The reserve target itself
+does not impose a hard memory limit on arbitrary inputs.
+
+Round 3 logs, replay counters and the minimal WASM diagnostic are retained
+under ignored `tests/data/ca-retime/phaseb/round3/`.

@@ -22,8 +22,19 @@ struct SamplePoint {
     V3 relative{},relative_velocity{};
     double distance_squared=0,derivative=0;
 };
-bool distance_at(const V6& a,const V6& b,double t,double mu,SamplePoint& point) {
-    V6 x{},y{};if(!propagate(a,t,mu,x)||!propagate(b,t,mu,y))return false;
+// Work policy is separate from the trajectory search: a budget never changes
+// its subdivision grid or turns an unfinished trajectory into a miss.
+struct ScreeningWork {
+    std::uint64_t budget=0,evaluations=0;
+    bool reached() const { return evaluations>=budget; }
+};
+bool distance_at(const V6& a,const V6& b,double t,double mu,SamplePoint& point,
+    ScreeningWork* work=nullptr) {
+    V6 x{},y{};
+    if(work)++work->evaluations;
+    if(!propagate(a,t,mu,x))return false;
+    if(work)++work->evaluations;
+    if(!propagate(b,t,mu,y))return false;
     V3 r=sub(position(y),position(x)),v=sub(velocity(y),velocity(x));
     point.relative=r;point.relative_velocity=v;point.distance_squared=dot(r,r);point.derivative=dot(r,v);
     return std::isfinite(point.distance_squared);
@@ -117,7 +128,7 @@ double relative_gravity_bound(const V3& relative,const V3& speed,double extent,
 }
 bool collision(const V6& a,const V6& b,double lo,double hi,double radius,double mu,
     const SamplePoint& start,double acceleration,double acceleration_a,double acceleration_b,
-    double roundoff,bool screening,bool& valid) {
+    double roundoff,bool screening,bool& valid,ScreeningWork* work=nullptr) {
     valid=true;
     if(mu<=0) {
         V3 r=sub(position(b),position(a)),v=sub(velocity(b),velocity(a));
@@ -164,7 +175,7 @@ bool collision(const V6& a,const V6& b,double lo,double hi,double radius,double 
         }
         double t=lo+(hi-lo)*i/intervals;
         SamplePoint point;
-        if(!distance_at(a,b,t,mu,point)){valid=false;return false;}
+        if(!distance_at(a,b,t,mu,point,work)){valid=false;return false;}
         if(point.distance_squared<=radius*radius)return true;
         if(!certified&&previous.derivative<0&&point.derivative>=0) {
             double left=prev_t,right=t;
@@ -174,7 +185,7 @@ bool collision(const V6& a,const V6& b,double lo,double hi,double radius,double 
             for(int k=0;k<48;++k) {
                 if(chord_excludes_collision(left_point,right_point,right-left,acceleration,radius,roundoff))break;
                 double mid=(left+right)/2;SamplePoint middle;
-                if(!distance_at(a,b,mid,mu,middle)){valid=false;return false;}
+                if(!distance_at(a,b,mid,mu,middle,work)){valid=false;return false;}
                 if(middle.distance_squared<=radius*radius)return true;
                 if(middle.derivative<0){left=mid;left_point=middle;}
                 else {right=mid;right_point=middle;}
@@ -197,7 +208,7 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
     result.limitation="Finite-window Monte Carlo; probability resolution and 95% Wilson interval depend on sample count.";
     const bool screening=options.grade==PcGrade::Screening;
     if(screening)result.limitation+=" Screening grade: deterministic adaptive sampling, minimum="+
-        std::to_string(std::min(options.minimum_samples,options.samples))+", target_hits="+
+        std::to_string(std::min(options.minimum_samples,options.samples))+" (subject to work budget), target_hits="+
         std::to_string(options.target_hits)+", sample_cap="+std::to_string(options.samples)+".";
     if(!e.has_velocity_covariance)result.limitation+=" Velocity covariance unavailable; supplied position uncertainty only.";
     std::array<double,144> joint{},vectors{};std::array<double,12> values{};
@@ -216,9 +227,19 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
     }
     NormalStream random(options.seed);result.samples=options.samples;
     double mu=options.two_body?e.gravitational_parameter:0;
+    ScreeningWork work{options.screening_propagation_budget ? options.screening_propagation_budget
+        : kDefaultScreeningPcPropagationBudget};
+    auto* work_counter=screening?&work:nullptr;
+    const char* stopping="sample cap";
     for(std::uint64_t k=0;k<options.samples;++k) {
+        // Every preceding sample has a complete collision classification.
+        // Stop before drawing another sample; retain the same deterministic
+        // prefix and Wilson calculation with the number actually evaluated.
+        if(screening&&work.reached()) {
+            result.samples=k;result.work_limited=true;stopping="propagation budget";break;
+        }
         if(screening&&options.target_hits>0&&k>=options.minimum_samples&&result.hits>=options.target_hits) {
-            result.samples=k;break;
+            result.samples=k;stopping="hit target";break;
         }
         std::array<double,12> z{},delta{};for(double& value:z)value=random.normal();
         for(int i=0;i<12;++i)for(int j=0;j<12;++j)delta[i]+=vectors[i*12+j]*z[j];
@@ -248,16 +269,24 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
             }
         }
         bool valid=false;SamplePoint start;
-        if(!distance_at(a,b,bounds.first,mu,start)){
+        if(!distance_at(a,b,bounds.first,mu,start,work_counter)){
             result.pc.converged=false;result.limitation="A sampled initial state failed to propagate.";return result;
         }
         if(start.distance_squared<=e.combined_radius*e.combined_radius){
             ++result.initial_hits;valid=true;if(options.include_initial_overlap)++result.hits;
         } else if(collision(a,b,bounds.first,bounds.second,e.combined_radius,mu,start,acceleration,
-            acceleration_a,acceleration_b,roundoff,screening,valid)){
+            acceleration_a,acceleration_b,roundoff,screening,valid,work_counter)){
             ++result.entry_hits;++result.hits;
         }
         if(!valid){result.pc.converged=false;result.limitation="A sampled trajectory failed to propagate; Pc is unavailable.";return result;}
+    }
+    if(screening) {
+        result.propagation_evaluations=work.evaluations;result.propagation_budget=work.budget;
+        result.limitation+=" Screening budget: "+std::to_string(result.samples)+
+            " samples; propagation evaluations="+std::to_string(work.evaluations)+"/"+
+            std::to_string(work.budget)+"; complete-sample stopping="+stopping+
+            (result.work_limited&&result.samples<std::min(options.minimum_samples,options.samples)
+                ? "; sample minimum overridden." : ".");
     }
     double n=static_cast<double>(result.samples),p=static_cast<double>(result.hits)/n;
     constexpr double z=1.959963984540054;double z2=z*z,den=1+z2/n;

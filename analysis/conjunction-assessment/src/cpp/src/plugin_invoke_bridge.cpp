@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <flatbuffers/flatbuffers.h>
 #include <limits>
@@ -67,6 +68,46 @@ std::string text(const flatbuffers::String *s) {
 bool error(const char *code, const std::string &detail) {
   plugin_set_error(code, detail.c_str());
   return false;
+}
+bool reserveScreeningHeap(size_t sources, unsigned workers) {
+#if defined(__wasm__) && !defined(CONJUNCTION_SINGLE_THREAD)
+  if (workers <= 1) return true;
+  // V8 14.1 can retain stale bulk-memory bounds in an active instance when
+  // another instance grows their shared memory. Reserve the catalog working
+  // heap serially, before starting workers. Holding malloc blocks until the
+  // target is reached makes the added pages usable by the allocator; raw
+  // memory.grow would leave a gap outside its existing managed segments.
+  // This preparation target is capped at 1 GiB, half the artifact's 2 GiB
+  // limit. It is a reserve for screening, not a bound on every possible input.
+  constexpr size_t pageBytes = 65536, blockBytes = 1024 * 1024;
+  constexpr size_t maximumReserveBytes = 1024 * blockBytes;
+  const uint64_t requestedBytes = 128 * uint64_t(blockBytes) +
+      uint64_t(sources) * 24 * 1024 + uint64_t(workers) * 4 * blockBytes;
+  const size_t targetPages = (std::min<uint64_t>(maximumReserveBytes, requestedBytes) +
+                              pageBytes - 1) / pageBytes;
+  const size_t beforePages = __builtin_wasm_memory_size(0);
+  if (beforePages >= targetPages) return true;
+  std::array<void*, maximumReserveBytes / blockBytes> blocks{};
+  size_t count = 0;
+  while (__builtin_wasm_memory_size(0) < targetPages && count < blocks.size()) {
+    void* block = std::malloc(blockBytes);
+    if (!block) break;
+    blocks[count++] = block;
+    // Keep the allocation observable even under whole-program optimization.
+    *static_cast<volatile unsigned char*>(block) = 0;
+  }
+  const size_t afterPages = __builtin_wasm_memory_size(0), allocatedBlocks = count;
+  while (count) std::free(blocks[--count]);
+  std::fprintf(stderr, "PC_R3_RESERVE sources=%zu workers=%u before_pages=%zu after_pages=%zu target_pages=%zu blocks=%zu\n",
+               sources, workers, beforePages, afterPages, targetPages, allocatedBlocks);
+  if (afterPages < targetPages)
+    return error("screening-memory-reserve-failed",
+                 "Unable to reserve the bounded working heap before parallel screening.");
+#else
+  (void)sources;
+  (void)workers;
+#endif
+  return true;
 }
 bool isFinite(double x) { return std::isfinite(x); }
 bool positive(double x) { return isFinite(x) && x > 0; }
@@ -1071,10 +1112,11 @@ std::unique_ptr<PRWResidentStateT> state(const conjunction::StateVector &v,
 // shared CDM builder retains per-object provenance. Put encounter-wide usage
 // diagnostics once in relative metadata, where CQR consumers read the tier.
 std::unique_ptr<CDMT> conjunctionCdm(const ConjunctionEvent& e, int axes) {
-  const bool usageViolation = e.probability_note.find("2D_USAGE_VIOLATION") != std::string::npos;
+  const bool usageDiagnostics = e.probability_note.find("2D_USAGE_VIOLATION") != std::string::npos ||
+      e.probability_note.find("grade=Screening") != std::string::npos;
   const char* frame = axes == 1 ? "TEME" : axes == 2 ? "GCRF" : "EME2000";
   auto message = [&]() {
-    if (!usageViolation) return build_conjunction_cdm(e, frame);
+    if (!usageDiagnostics) return build_conjunction_cdm(e, frame);
     auto projected = e;
     projected.probability_note.clear();
     return build_conjunction_cdm(projected, frame);
@@ -1086,7 +1128,7 @@ std::unique_ptr<CDMT> conjunctionCdm(const ConjunctionEvent& e, int axes) {
     message->COMMENT += text;
   };
   append(e.probability_failure);
-  if (usageViolation)
+  if (usageDiagnostics)
     append(e.probability_note);
   return message;
 }
@@ -2103,6 +2145,8 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
   stats.total_objects = p.size() + s.size();
   if (p.empty())
     return error("invalid-catalog", "At least one primary source is required.");
+  if (!reserveScreeningHeap(p.size() + s.size(), c.num_threads))
+    return false;
   bool means =
       std::all_of(p.begin(), p.end(), [](auto &x) { return x.mean; }) &&
       std::all_of(s.begin(), s.end(), [](auto &x) { return x.mean; });
@@ -2672,6 +2716,8 @@ bool screenWindow(const char *method) {
     auto native = find_resident_screening_index(i->native_handle);
     if (!native)
       return error("invalid-index-handle", "Resident native index is absent.");
+    if (!reserveScreeningHeap(i->sources.size(), c.num_threads))
+      return false;
     ScreeningStats stats;
     auto events = screen_resident_index_window(*native, c, stats);
     if (has_error())
@@ -2741,7 +2787,7 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
                    " cannot bound its motion between coarse steps; supply its trajectory as PPE.");
     t.refs.push_back(e);
   }
-  return true;
+  return reserveScreeningHeap(t.index->sources.size(), c.num_threads);
 }
 
 // The screening work products are $SCR records, one arm each.
@@ -2971,6 +3017,9 @@ extern "C" int search_grid() {
 // reported for the window.
 extern "C" int refine_candidates() {
   using namespace ca_cqr;
+#ifdef __wasm__
+  struct MemoryTrace { ~MemoryTrace() { std::fprintf(stderr,"PC_R3_MEMORY {\"pages\":%zu,\"maximum_pages\":32768}\n",__builtin_wasm_memory_size(0)); } } memory_trace;
+#endif
   if (hasPending("refine_candidates"))
     return emitPending("refine_candidates") ? 0 : 422;
   ScreeningConfig c;

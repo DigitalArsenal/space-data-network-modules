@@ -46,7 +46,10 @@ enum class PcUsageEvaluation {
     // The velocity-uncertainty safeguard alone establishes a violation. Keep
     // rectilinear times/flags and report skipped curvature; expensive fallback
     // integrators still request Full to obtain their own integration bounds.
-    StopOnRectilinearViolation
+    StopOnRectilinearViolation,
+    // Preserve covariance, duration, offset and velocity checks; omit the
+    // orbital Q(t) curvature analysis and retain fully_evaluated=false.
+    RectilinearOnly
 };
 
 // CARA duration/offset and three-point Q(t) curvature diagnostics with

@@ -194,16 +194,26 @@ and `kCatalogPcMonteCarloFloor = 1e-4`. A usage-violating event with
 and `usage-violation, below floor`; it is not omitted. Pair assessments
 retain the engine's `1e-7` reporting floor. The full-catalog measurements
 for both floor pairs are recorded in [benchmark measurements](benchmark.md#tiered-pc-2026-10-16).
-With these catalog constants, the rebuilt WASM's two-run means were 80.095 s
-with Pc and 20.527 s without Pc over three days and 294,544 events, a 3.9020
-ratio against the 2.0 cost limit.
 
 `PcGrade::Reference` is the engine default and the grade used by pair
 assessments and `emit_cdm`. It preserves the authoritative calculations and
 their CARA tolerances. Catalog, resident-window and refinement screens use
 `PcGrade::Screening` and `compute_pc_batch` with the request's worker count.
-Results retain input order; Monte Carlo seeds depend on the encounter, not
-the worker or scheduling.
+Batch evaluation has two passes: prepare every encounter and its tier gate,
+then evaluate the required fallbacks. The fallback pass starts wide, slow
+encounters first to reduce worker imbalance. Results retain input order;
+the inputs and their destination slots do not move. Monte Carlo seeds and
+work budgets depend on the encounter and options, not the worker, elapsed
+time or scheduling.
+
+Before parallel WASM screening, the bridge reserves allocator-managed heap
+space serially. This addresses a reproduced V8 14.1 shared-memory-growth
+failure in which an active instance retained stale bulk-memory bounds when
+another instance grew the memory. The reserve depends on source and worker
+counts and is capped at 1 GiB, half the artifact's 2 GiB limit; it is not a
+guarantee that arbitrary inputs cannot require further growth. Reservation
+failure is reported before workers start. Native and single-thread builds
+do not need this reserve.
 
 Screening uses bounded 48-point Foster disk quadrature where its relative
 error budget is `1e-5`, with adaptive integration elsewhere and near a tier
@@ -216,25 +226,55 @@ quadrature within `1.15e-13` relative. The public isotropic 36.6-sigma miss
 case with radius 0.08 sigma agrees with an independent Bessel-series
 integral within `1.35e-14`.
 
+For Screening with automatic routing and positive gravitational parameter,
+a usable Pc2D strictly below `reporting_floor * 1e-3` skips the curvilinear
+analysis. Covariance validation and the rectilinear duration, offset and
+relative-velocity checks still run. A violation found by those checks
+retains the below-floor tier; otherwise the event retains the `FOSTER-2D`
+tier with `usage_checked=false`. The reason records
+`curvature not evaluated: Pc2D far below the reporting floor`; the tier
+does not claim a complete 2-D validity assessment. Reference and explicitly
+selected fallbacks retain their existing usage analysis.
+
 Hall sphere flux starts with fewer time knots and angular points and a
 relative tolerance of `1e-2`. Its separately named quadratic-time
 approximation requires `R / sigma_min <= 0.1`, log-density variation no
 greater than 0.2, bounded quadratic-fit and inward-flux variation, and an
 observation interval below 0.02 orbital periods. Failed guards retain full
 sphere flux. Applicability checks for initial occupancy and repeated
-entries remain in force. Screening Monte Carlo uses deterministic sample
-prefixes, at least 32,768 samples and a 30-hit stopping target, with a
-default cap of 49,152; the result includes its 95% Wilson interval. An
-explicit sample budget remains authoritative. Grade and numerical-policy
-text accompany the result.
+entries remain in force.
+
+Screening Monte Carlo streams a deterministic sample prefix, with a 30-hit
+target after 32,768 samples and a default cap of 49,152 samples. A separate
+work checkpoint, `kDefaultScreeningPcPropagationBudget = 3000000`, counts
+individual object propagations through the unchanged time grid and
+minimum-distance searches. `PcFallbackOptions.screening_propagation_budget`
+sets that checkpoint; zero selects the default. The checkpoint can stop
+sampling before either the sample minimum or an explicitly requested
+sample count. It never truncates a trajectory: stopping occurs before the
+next sample, so the final complete sample can exceed the checkpoint.
+Reference ignores this setting and preserves its sampling policy.
+
+The result reports the actual sample and propagation counts, the work
+checkpoint, the stopping reason, and whether the sample minimum was
+overridden. Its 95% Wilson interval uses the completed sample count. A
+work-limited zero-hit estimate remains zero with a nonzero upper bound;
+it does not establish negligible collision risk. This work policy changes
+precision, not the trajectory model or time resolution. Grade and
+numerical-policy text accompany the result.
 
 On two seeded samples totaling 6,000 real encounters, Screening Nc differed
 from Reference by a median 0.007%, p99 0.49%, and maximum 0.99%. The
-acceptance limits are median at most 1% and p99 at most 10%. Screening Monte
-Carlo fell inside Reference's 95% Wilson interval for 35 of 36 encounters
-(97.2%; required at least 90%). The native stage of
+acceptance limits are median at most 1% and p99 at most 10%. Before the
+propagation checkpoint was added, Screening Monte Carlo fell inside
+Reference's 95% Wilson interval for 35 of 36 encounters (97.2%; required at
+least 90%). That measurement does not establish the same precision for
+shorter, work-limited prefixes. The native stage of
 `tests/pcTieredScreen.e2e.mjs` guards agreement using public CARA geometries
-and retains all Reference assertions. See [benchmark measurements](benchmark.md)
+and retains all Reference assertions. It also checks that work-limited
+samples equal the same seeded Reference prefix, that Wilson intervals use
+the actual sample count, and that batch scheduling preserves results.
+See [benchmark measurements](benchmark.md)
 for full-catalog timing and screen floor selection.
 
 ### Usage checks and fallback interpretation

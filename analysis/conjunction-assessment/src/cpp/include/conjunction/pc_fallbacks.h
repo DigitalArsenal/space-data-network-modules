@@ -8,6 +8,7 @@
 namespace conjunction {
 
 inline constexpr std::uint64_t kDefaultScreeningPcSampleCap = 49152;
+inline constexpr std::uint64_t kDefaultScreeningPcPropagationBudget = 3000000;
 
 struct PcFallbackOptions {
     PcGrade grade = PcGrade::Reference;
@@ -28,6 +29,12 @@ struct PcFallbackOptions {
     // Total finite-window collision probability includes overlap at t_start.
     // False exposes the first-entry convention used by CARA's published MC.
     bool include_initial_overlap = true;
+    // Screening only: checkpoint after each complete sampled trajectory.
+    // Counts individual object propagations, not elapsed time. Reaching the
+    // budget overrides minimum_samples and an explicit samples cap; the last
+    // complete sample may exceed the checkpoint. Zero selects the default.
+    // Reference ignores this setting and preserves its sampling policy.
+    std::uint64_t screening_propagation_budget = kDefaultScreeningPcPropagationBudget;
 };
 
 struct PcFallbackResult {
@@ -43,6 +50,12 @@ struct PcFallbackResult {
     // collision probability (initial occupancy / possible repeated entries).
     bool requires_monte_carlo = false;
     std::string limitation;
+    // Screening work diagnostics. A complete trajectory can add at most
+    // 2*(1+4096*(1+48)) propagations beyond a checkpoint (initial state, the
+    // bounded pericenter grid and bounded minimum-search bisections).
+    // Reference leaves these zero; its calculation is not instrumented.
+    std::uint64_t propagation_evaluations = 0, propagation_budget = 0;
+    bool work_limited = false;
 };
 
 // Hall/Coppola collision-sphere inward flux, with Cartesian Gaussian

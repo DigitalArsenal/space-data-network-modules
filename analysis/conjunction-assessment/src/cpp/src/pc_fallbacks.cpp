@@ -8,6 +8,9 @@
 namespace conjunction {
 using namespace pc_detail;
 namespace {
+// Screening, including its Reference recovery, retains a bounded set of time
+// samples. Eviction only repeats the same deterministic kernel/rate arithmetic.
+constexpr size_t kMaximumScreeningTimeCacheEntries = 8192;
 struct SurfacePoint {V3 normal;double weight;};
 std::vector<SurfacePoint> canonical_sphere(unsigned order) {
     std::vector<SurfacePoint> out;out.reserve(2*order*order);
@@ -270,19 +273,25 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         auto points=sphere(order,initial.v),coarse_points=sphere(order/2,initial.v);
         struct Rates {double fine=0,coarse=0;};
         std::map<double,Rates> cache;bool valid=true,temporal_ok=true;
+        size_t rate_evaluations=0;
         auto evaluate=[&](double t) {
             if(stop_on_invalid&&!valid)return Rates{};
             auto found=cache.find(t);if(found!=cache.end())return found->second;
+            ++rate_evaluations;
             auto entry=kernels.find(t);Rates value;
             if(entry==kernels.end()) {
                 Kernel k;
                 if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall))valid=false;
-                else entry=kernels.emplace(t,std::move(k)).first;
+                else {
+                    if(stop_on_invalid&&kernels.size()>=kMaximumScreeningTimeCacheEntries)kernels.clear();
+                    entry=kernels.emplace(t,std::move(k)).first;
+                }
             }
             if(entry!=kernels.end()) {
                 value.fine=rate(entry->second,points,e.combined_radius);
                 value.coarse=rate(entry->second,coarse_points,e.combined_radius);
             }
+            if(stop_on_invalid&&cache.size()>=kMaximumScreeningTimeCacheEntries)cache.clear();
             cache.emplace(t,value);return value;
         };
         auto simpson=[](double a,double b,Rates fa,Rates fm,Rates fb) {
@@ -331,7 +340,7 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
                 if(stop_on_invalid&&!valid)break;
                 total.fine+=part.fine;total.coarse+=part.coarse;previous=next;}
         }
-        current=total.fine;result.pc.iterations+=cache.size();
+        current=total.fine;result.pc.iterations+=rate_evaluations;
         if(!valid)return result;
         if(temporal_ok&&close(total.fine,total.coarse,o.relative_tolerance)){result.pc.converged=true;break;}
         if(order>=256||!temporal_ok)break;
