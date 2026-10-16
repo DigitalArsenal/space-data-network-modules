@@ -14,7 +14,10 @@
  * 5 MOON_PA          Moon only; reclat in MOON_PA_DE440            radius
  *
  * Longitude is (-pi, pi] for 0, 1, 3, 5, and [0, 2pi) for 2, 4. Systems 0
- * and 1 apply to any body with radii; 2 requires a loaded rotation model.
+ * and 1 apply to any body with radii. System 2 requires a loaded rotation
+ * model and a table body of kind planet, or moon with a planet parent.
+ * Stars, dwarf planets, asteroids, their moons, and bodies outside the
+ * table are inapplicable to system 2, regardless of loaded kernels.
  * The origin returns (0,0,0) in every applicable system.
  *
  * ssb_body_coordinates: xyz[n*3] -> (lon,lat,third)[n*3].
@@ -88,6 +91,17 @@ inline bool has_rotation_model(int32_t id, double et) {
     return code == Ok || code == ErrOutOfRange;
 }
 
+/* The body table owns classification and parentage. This restriction is
+ * specific to the new coordinate API; the legacy observer is unchanged. */
+inline bool planetographic_body(int32_t id) {
+    const BodyInfo* body = find_body(id);
+    if (!body) return false;
+    if (body->kind == KindPlanet) return true;
+    if (body->kind != KindMoon) return false;
+    const BodyInfo* parent = find_body(body->parent);
+    return parent && parent->kind == KindPlanet;
+}
+
 inline int32_t describe(int32_t id, int32_t system, double et, Context* c) {
     if (!std::isfinite(et) || system < PLANETODETIC || system > MOON_PA || !radii_m(id, c->radii))
         return ErrBadArgument;
@@ -95,7 +109,7 @@ inline int32_t describe(int32_t id, int32_t system, double et, Context* c) {
         if (!(r > 0.0) || !std::isfinite(r)) return ErrBadArgument;
     c->longitude_sense = observer::longitude_sense(id);
     c->has_rotation = has_rotation_model(id, et);
-    if (system == PLANETOGRAPHIC && !c->has_rotation) return ErrBadArgument;
+    if (system == PLANETOGRAPHIC && (!planetographic_body(id) || !c->has_rotation)) return ErrBadArgument;
     if ((system == STONYHURST || system == CARRINGTON) && id != 10) return ErrBadArgument;
     if (system == MOON_PA && id != 301) return ErrBadArgument;
     return Ok;

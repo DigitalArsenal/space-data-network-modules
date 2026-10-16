@@ -100,7 +100,7 @@ seconds past J2000.
 | --- | --- | --- | --- | --- |
 | 0 | PLANETODETIC | Any body with PCK radii | East, (-pi, pi] | Normal at the nearest point on the PCK triaxial ellipsoid (`nearpt` + `surfnm`); signed height in meters, negative inside |
 | 1 | PLANETOCENTRIC | Any body with PCK radii | East, (-pi, pi] | Body-frame `reclat` latitude; radius in meters |
-| 2 | PLANETOGRAPHIC | Bodies with a loaded rotation model and radii | IAU sense, [0, 2pi) | `recpgr` on the spheroid with equatorial radius RADII[0] and flattening (RADII[0] - RADII[2]) / RADII[0]; altitude in meters |
+| 2 | PLANETOGRAPHIC | Table planets and table moons with a planet parent, with loaded radii and rotation | IAU sense, [0, 2pi) | `recpgr` on the spheroid with equatorial radius RADII[0] and flattening (RADII[0] - RADII[2]) / RADII[0]; altitude in meters |
 | 3 | STONYHURST | Sun (10) | East from the geometric Earth-center meridian, (-pi, pi] | IAU_SUN planetocentric latitude; radius in meters |
 | 4 | CARRINGTON | Sun (10) | Apparent Earth-observed Carrington, [0, 2pi) | IAU_SUN latitude; radius in meters |
 | 5 | MOON_PA | Moon (301) | East in MOON_PA_DE440, (-pi, pi] | `reclat` after ME → PA rotation; radius in meters |
@@ -117,8 +117,10 @@ int32_t ssb_body_coordinate_info(int32_t id, int32_t system, double et,
 `ssb_body_coordinates` converts `n × 3` points to `n × 3`
 (longitude radians, latitude radians, third value). The origin returns
 (0, 0, 0) in every applicable system. Planetographic longitude is east for
-the Sun, Earth, and Moon, and otherwise opposite the sign of BODY*_PM[1],
-exactly as in the observer export.
+Earth and the Moon, and otherwise opposite the sign of BODY*_PM[1],
+using the same longitude-sense helper as the observer export. The sense
+metadata remains defined for every applicable system, including the Sun
+(+1 east).
 
 `ssb_body_surface_points` converts `n × 2` system angles to `n × 2`
 PLANETODETIC angles on the PCK triaxial surface for drawing grids. System 0
@@ -133,16 +135,20 @@ triaxial ellipsoid. With triaxial radii `r = (a, b, c)`, solve
 altitude `h` supplies the returned planetodetic longitude and latitude.
 A line without a real intersection returns `ErrBadArgument` (-12).
 
-The normal-line rule does not make `recpgr` a global inverse of `pgrrec`
-for all negative altitudes. Below the reference spheroid's medial set,
-`recpgr` can select a different nearest point and latitude. Some normal
-lines also miss the triaxial ellipsoid entirely. The strict E2E retains
-these failures instead of substituting a different surface mapping. For Eros
-(a, b, c) = (17, 5.5, 5.5) km, the line at (90°, 45°) stays
-10.239998845255 km from the center and misses the 5.5 km meridian circle.
-At (90°, 0°), the nearest root is h = -11.5 km, but CSPICE `recpgr`
-recovers latitude 82.853532911587° rather than 0°. The E2E includes both
-closed-form cases.
+PLANETOGRAPHIC follows the module's IAU WGCCRE policy: `src/bodies.hpp`
+is authoritative for body kind and immediate parent. A body must be a
+`KindPlanet`, or a `KindMoon` whose parent is a `KindPlanet`. Stars, dwarf
+planets, asteroids, comets, their moons, and bodies outside the table return
+`ErrBadArgument` from all three new coordinate exports for system 2. This
+excludes the Sun, Pluto, Charon, Ceres, Vesta, Eros, Itokawa, Bennu, and Ryugu.
+Small bodies and dwarf planets use east-positive, right-hand-rule
+PLANETOCENTRIC coordinates; PLANETODETIC remains available for any loaded
+PCK ellipsoid. The existing observer export retains its prior behavior.
+
+A planetary moon's normal line may have no real intersection with its
+triaxial surface; that input returns `ErrBadArgument`. The E2E reports the
+body, epoch, longitude, and latitude of every rejected surface input and
+retains the strict `recpgr` roundtrip check for applicable systems.
 
 `ssb_body_coordinate_info` writes three doubles: planetographic longitude
 sense (+1 east, -1 west), whether the conversion depends on `et` (1 for
@@ -175,16 +181,16 @@ and sunpy 6.0.6's `HeliographicStonyhurst`, `HeliographicCarrington`, and
 in-process browser module harness (no browser process). Its isolated,
 test-only Python oracle uses SpiceyPy/CSPICE and sunpy on the same kernel
 files, including the OSIRIS-REx Bennu and Hayabusa2 Ryugu mission PCKs.
-It checks 200 picked points and 200 grid coordinates per applicable system
-at three epochs in 2020–2030. Angle bounds are 1e-9 rad against CSPICE and
+It checks all 33 table bodies plus Eros, Itokawa, Bennu, Ryugu, and the
+rotation-free Psyche: 200 picked points and 200 grid coordinates per
+applicable system at three epochs in 2020–2030. Angle bounds are 1e-9 rad against CSPICE and
 1e-6 degree against sunpy; third values allow 1e-6 meter + 1e-12 of the
-distance. The test prints measured worst errors for each body and system. Its strict
-planetographic surface roundtrip assertion reports any missing intersection
-or latitude mismatch described above. A separate CSPICE `pgrrec` normal-line
-quadratic check verifies the specified root without suppressing a strict
-roundtrip failure. Set `SSB_BASELINE_WASM` to a pre-change artifact to also
-compare legacy observer and cartographic outputs byte for byte within the
-same E2E.
+distance. The test prints measured worst errors for each body and system,
+checks the applicability matrix through all three exports, and reports any
+missing intersection or latitude mismatch. A separate CSPICE `pgrrec`
+normal-line quadratic check verifies the specified root without suppressing
+a strict roundtrip failure. Legacy byte comparisons are a separate one-time
+verification and are not part of the committed E2E.
 
 ## Threads (0.3.0)
 

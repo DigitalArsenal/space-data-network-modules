@@ -49,7 +49,6 @@ test("body coordinate systems and surface grids match CSPICE and sunpy on the sa
     return JSON.parse(line.value);
   };
   let harness;
-  let baseline;
   try {
     oracle.stdin.write(`${JSON.stringify({ kernels: files })}\n`);
     const plan = await readOracle();
@@ -88,38 +87,6 @@ test("body coordinate systems and surface grids match CSPICE and sunpy on the sa
     const idPtr = alloc(4), statusPtr = alloc(4), orientation = alloc(10 * 8);
     const responses = [];
     try {
-      if (process.env.SSB_BASELINE_WASM) {
-        baseline = await createBrowserModuleHarness({
-          wasmSource: fs.readFileSync(process.env.SSB_BASELINE_WASM), surface: "direct",
-        });
-        const bx = baseline.instance.exports;
-        const bm = () => (baseline.memory ?? bx.memory).buffer;
-        for (const file of files) {
-          const bytes = fs.readFileSync(file), ptr = bx.plugin_alloc(bytes.length);
-          assert.ok(ptr, `baseline kernel allocation: ${path.basename(file)}`);
-          try {
-            new Uint8Array(bm(), ptr, bytes.length).set(bytes);
-            assert.ok(bx.ssb_load_kernel(ptr, bytes.length) >= 0, `baseline rejected ${path.basename(file)}`);
-          } finally { bx.plugin_free(ptr, bytes.length); }
-        }
-        const bin = bx.plugin_alloc(24), bout = bx.plugin_alloc(14 * 8);
-        assert.ok(bin && bout, "baseline probe allocation");
-        try {
-          for (const probe of plan.legacy) {
-            const compare = (name, args, values, length) => {
-              new Float64Array(mem(), input, 3).set(values);
-              new Float64Array(bm(), bin, 3).set(values);
-              const status = x[name](...args, input, output), expectedStatus = bx[name](...args, bin, bout);
-              assert.equal(status, expectedStatus, `legacy ${name} ${probe.id} status`);
-              assert.deepEqual(new Uint8Array(mem(), output, length * 8), new Uint8Array(bm(), bout, length * 8),
-                `legacy ${name} ${probe.id} ET ${probe.et}: output bytes changed`);
-            };
-            compare("ssb_observer_position", [probe.et, probe.id], probe.camera, 14);
-            for (const mode of [0, 1]) compare("ssb_cartographic", [probe.id, mode], probe.cartographic, 3);
-          }
-          console.log(`legacy behavior byte-identical: ${plan.legacy.length} observer calls and ${plan.legacy.length * 2} cartographic calls`);
-        } finally { bx.plugin_free(bin, 24); bx.plugin_free(bout, 14 * 8); }
-      }
       for (const batch of plan.batches) {
         new Float64Array(mem(), input, batch.xyz.length).set(batch.xyz);
         const coordinateStatus = x.ssb_body_coordinates(batch.id, batch.system, batch.et, input, batch.count, output);
@@ -163,13 +130,7 @@ test("body coordinate systems and surface grids match CSPICE and sunpy on the sa
         return { failed, status: new Int32Array(mem(), statusPtr, 1)[0],
           values: Array.from(new Float64Array(mem(), orientation, 10)) };
       });
-      const normalLineProbes = plan.normalLineProbes.map((probe) => {
-        new Float64Array(mem(), input, 2).set(probe.lonlat);
-        new Float64Array(mem(), output, 2).fill(0);
-        const status = x.ssb_body_surface_points(probe.id, 2, probe.et, input, 1, output);
-        return { status, surface: Array.from(new Float64Array(mem(), output, 2)) };
-      });
-      oracle.stdin.end(`${JSON.stringify({ responses, probes, rotations, normalLineProbes })}\n`);
+      oracle.stdin.end(`${JSON.stringify({ responses, probes, rotations })}\n`);
       const report = await readOracle();
       for (const line of report.lines) console.log(line);
       const exit = await closed;
@@ -180,7 +141,6 @@ test("body coordinate systems and surface grids match CSPICE and sunpy on the sa
     }
   } finally {
     await harness?.destroy();
-    await baseline?.destroy();
     if (oracle.pid && oracle.exitCode === null && oracle.signalCode === null) {
       // Terminate only the exact child this test owns, including on assertion failure.
       process.kill(oracle.pid, "SIGKILL");

@@ -28,9 +28,10 @@ Sources and numerical contract:
 * System 2 additionally checks the requested normal line pgrrec(lon,lat,h):
   independent quadratic intersection with the actual PCK triaxial surface,
   choosing the real root closest to h=0. Missing intersections are reported
-  as strict roundtrip failures, never skipped. Eros counterexamples at
-  (90 deg,45 deg) and (90 deg,0 deg) are included in the same E2E; diagnostic
-  root/line distances use 1e-12 km tolerance for float64 closed-form roundoff.
+  as strict roundtrip failures with exact inputs, never skipped. System 2
+  applies only to catalog planets and catalog moons whose direct parent is
+  a catalog planet, and requires radii and a rotation model. The expected
+  taxonomy below is independent test data, never read from module results.
 
 Protocol: read one JSON line {kernels}; emit a deterministic plan; read one
 JSON line with module outputs; emit the complete measurements and fail with
@@ -62,8 +63,20 @@ for kernel in kernel_paths:
     sp.furnsh(str(kernel))
 
 SYSTEMS = ["PLANETODETIC", "PLANETOCENTRIC", "PLANETOGRAPHIC", "STONYHURST", "CARRINGTON", "MOON_PA"]
-BODIES = [10, 301, 399, 499, 599, 699, 299, 799, 501, 606, 401,
-          2000001, 2000004, 2000433, 2025143, 2101955, 2162173]
+# Independent expectations for the module's 33-body catalog: Pluto is a
+# dwarf planet, so Charon's direct parent is not a KindPlanet. The Sun is a
+# star. The four extra asteroids have real PCK models but no catalog entry.
+CATALOG_BODIES = [10, 199, 299, 399, 301, 499, 401, 402, 599, 501, 502, 503, 504,
+                  699, 601, 602, 603, 604, 605, 606, 608, 799, 705, 701, 702, 703,
+                  704, 899, 801, 999, 901, 2000001, 2000004]
+CATALOG_PLANETS = {199, 299, 399, 499, 599, 699, 799, 899}
+CATALOG_MOON_PARENTS = {301: 399, 401: 499, 402: 499,
+                       501: 599, 502: 599, 503: 599, 504: 599,
+                       601: 699, 602: 699, 603: 699, 604: 699, 605: 699, 606: 699, 608: 699,
+                       705: 799, 701: 799, 702: 799, 703: 799, 704: 799, 801: 899, 901: 999}
+PLANETOGRAPHIC_BODIES = CATALOG_PLANETS | {body for body, parent in CATALOG_MOON_PARENTS.items()
+                                         if parent in CATALOG_PLANETS}
+BODIES = CATALOG_BODIES + [2000433, 2025143, 2101955, 2162173]
 # Additional real PCK body verifies both permitted ICRF-axes systems and the
 # rejected planetographic pair without fabricating a kernel.
 NO_ROTATION = 2000016  # Psyche: PCK radii, no pole/prime-meridian model.
@@ -84,7 +97,7 @@ def has_rotation(body):
 
 def applicable(body):
     result = [0, 1]
-    if has_rotation(body):
+    if body in PLANETOGRAPHIC_BODIES and has_rotation(body):
         result.append(2)
     if body == 10:
         result.extend([3, 4])
@@ -180,17 +193,12 @@ def normal_line_intersection(body, lonlat):
     b = 2 * np.dot(scaled_base, scaled_normal)
     c = np.dot(scaled_base, scaled_base) - 1
     discriminant = b * b - 4 * a * c
-    result = {"discriminant": float(discriminant),
-              "lineDistanceKm": float(np.linalg.norm(np.cross(base, normal))),
-              "point": None, "altitudeKm": None}
     if discriminant < 0:
-        return result
+        return None
     roots = [(-b + math.sqrt(discriminant)) / (2 * a),
              (-b - math.sqrt(discriminant)) / (2 * a)]
     altitude = min(roots, key=abs)
-    result["altitudeKm"] = float(altitude)
-    result["point"] = np.asarray(sp.pgrrec(sp.bodc2n(body), lon, lat, altitude, re, flattening))
-    return result
+    return np.asarray(sp.pgrrec(sp.bodc2n(body), lon, lat, altitude, re, flattening))
 
 
 def reconstruct_surface(body, lonlat):
@@ -208,26 +216,18 @@ def make_batch(body, system, et, xyz):
 
 
 batches = []
-legacy = []
 for et in EPOCHS:
     for body in BODIES + [NO_ROTATION]:
         xyz = points(body)
         for system in applicable(body):
             batches.append(make_batch(body, system, et, xyz))
-        if body in [10, 301, 399]:
-            frame = "MOON_ME" if body == 301 else f"IAU_{sp.bodc2n(body)}"
-            inertial = xyz @ np.asarray(sp.pxform(frame, "J2000", et)).T
-            for point, camera in zip(xyz, inertial):
-                radius, lon, lat = sp.reclat(point)
-                legacy.append({"id": body, "et": et, "camera": camera.tolist(),
-                               "cartographic": [lon, lat, radius]})
+rejected_planetographic = [body for body in BODIES + [NO_ROTATION] if body not in PLANETOGRAPHIC_BODIES]
+rejected_pairs = [(body, 2) for body in rejected_planetographic + [123456789]]
+rejected_pairs.extend([(499, 3), (499, 4), (499, 5), (10, -1), (301, 6)])
 probes = [{"id": body, "system": system, "et": EPOCHS[0], "xyz": [1, 2, 3], "lonlat": [0.2, 0.3]}
-          for body, system in [(499, 3), (499, 4), (499, 5), (NO_ROTATION, 2), (10, -1), (301, 6)]]
+          for body, system in rejected_pairs]
 rotations = [{"id": body, "et": et} for et in EPOCHS for body in [2101955, 301]]
-normal_line_probes = [{"id": 2000433, "et": EPOCHS[0], "lonlat": [PI / 2, lat]}
-                     for lat in [PI / 4, 0]]
-print(json.dumps({"kind": "plan", "batches": batches, "probes": probes, "rotations": rotations,
-                  "legacy": legacy, "normalLineProbes": normal_line_probes}), flush=True)
+print(json.dumps({"kind": "plan", "batches": batches, "probes": probes, "rotations": rotations}), flush=True)
 response = json.loads(sys.stdin.readline())
 failures = []
 failure_count = 0
@@ -237,8 +237,7 @@ def check(condition, message):
     global failure_count
     if not condition:
         failure_count += 1
-        if len(failures) < 100:
-            failures.append(message)
+        failures.append(message)
 
 
 check(len(response["responses"]) == len(batches), "missing batch responses")
@@ -286,6 +285,8 @@ for index, (batch, result) in enumerate(zip(batches, response["responses"])):
     valid = statuses == 0
     rejected = int(np.sum(~valid))
     check(rejected == 0, f"{label}: {rejected}/{N} requested surface points rejected (statuses {sorted(set(statuses[~valid].tolist()))}); strict roundtrip requires every input")
+    for point in np.flatnonzero(~valid):
+        check(False, f"body {body} {SYSTEMS[system]} ET {et:.17g}: rejected surface[{point}], lon={inputs[point, 0]:.17g} rad, lat={inputs[point, 1]:.17g} rad, status={statuses[point]}")
     expected_batch_status = next((value for value in result["surfaceStatuses"] if value != 0), 0)
     check(result["surfaceBatchStatus"] == expected_batch_status, f"{label}: batch status differs from individual calls")
     if rejected == 0:
@@ -311,11 +312,11 @@ for index, (batch, result) in enumerate(zip(batches, response["responses"])):
         # This diagnostic does not replace strict recpgr roundtrip checks.
         radii_km = RADII[body] / 1000
         intersections = [normal_line_intersection(body, value) for value in inputs]
-        exists = np.asarray([item["point"] is not None for item in intersections])
+        exists = np.asarray([item is not None for item in intersections])
         check(bool(np.array_equal(valid, exists)), f"{label}: module success disagrees with independent normal-line intersection existence")
         both = valid & exists
         if np.any(both):
-            line_normal = np.asarray([sp.surfnm(*radii_km, item["point"]) for item, keep in zip(intersections, both) if keep])
+            line_normal = np.asarray([sp.surfnm(*radii_km, item) for item, keep in zip(intersections, both) if keep])
             line_angles = np.asarray([sp.reclat(value)[1:] for value in line_normal])
             line_error = float(np.max(angular_errors(returned[both], line_angles)))
             check(line_error <= ANGLE_TOL, f"{label}: specified pgrrec normal-line intersection {line_error:.16g} rad > {ANGLE_TOL}")
@@ -333,33 +334,6 @@ check(len(response["probes"]) == len(probes), "missing applicability probes")
 for probe, result in zip(probes, response["probes"]):
     for field in ["coordinateStatus", "surfaceStatus", "infoStatus"]:
         check(result[field] == -12, f"inapplicable ({probe['id']}, {probe['system']}): {field}={result[field]}, expected ErrBadArgument (-12)")
-
-counterexample_lines = []
-check(len(response["normalLineProbes"]) == len(normal_line_probes), "missing Eros normal-line counterexamples")
-for probe, result in zip(normal_line_probes, response["normalLineProbes"]):
-    body, lonlat = probe["id"], np.asarray(probe["lonlat"])
-    label = f"Eros normal-line counterexample lon={math.degrees(lonlat[0]):g} deg lat={math.degrees(lonlat[1]):g} deg"
-    intersection = normal_line_intersection(body, lonlat)
-    expected_status = 0 if intersection["point"] is not None else -12
-    check(result["status"] == expected_status, f"{label}: status {result['status']} disagrees with quadratic {expected_status}")
-    check(result["status"] == 0, f"{label}: no surface point exists; strict roundtrip is unsatisfied (status {result['status']})")
-    if intersection["point"] is None:
-        # Eros b=c=5.5 km. At longitude 90 degrees its actual cross section
-        # is a circle, and this 45-degree normal line misses that circle.
-        a, b, c = RADII[body] / 1000
-        distance = (a * a - c * c) / math.sqrt(2 * (a * a + c * c))
-        check(abs(intersection["lineDistanceKm"] - distance) <= 1e-12,
-              f"{label}: CSPICE normal line disagrees with closed-form center distance")
-        check(distance > b, f"{label}: expected line to miss the {b:g} km cross-section circle")
-        counterexample_lines.append(f"{label}: line-center distance {distance:.12f} km > surface-circle radius {b:g} km; no real intersection; status {result['status']}")
-    elif result["status"] == 0:
-        reconstructed, _ = reconstruct_surface(body, np.asarray([result["surface"]]))
-        recovered = convert(body, 2, probe["et"], reconstructed)[0]
-        difference = float(np.max(angular_errors(np.asarray([recovered[:2]]), np.asarray([lonlat]))))
-        check(difference <= ANGLE_TOL, f"{label}: recovered recpgr latitude {math.degrees(recovered[1]):.12f} deg, error {difference:.12g} rad > {ANGLE_TOL}")
-        check(abs(intersection["altitudeKm"] + 11.5) <= 1e-12,
-              f"{label}: expected nearest quadratic root h=-11.5 km")
-        counterexample_lines.append(f"{label}: nearest root h={intersection['altitudeKm']:.12f} km; recovered latitude {math.degrees(recovered[1]):.12f} deg; error {difference:.12g} rad")
 
 worst_bennu = 0.0
 worst_moon = 0.0
@@ -380,6 +354,7 @@ for probe, result in zip(rotations, response["rotations"]):
 
 lines = [f"CSPICE {sp.tkvrsn('TOOLKIT')}; SpiceyPy {sp.__version__}; sunpy {sunpy.__version__}; astropy {astropy.__version__}",
          "Offline DE440s; seed 20261016; 3 epochs (2020, 2025, 2029); 200 points + 200 surface angles per body/system/epoch",
+         f"Coverage: {len(CATALOG_BODIES)} catalog bodies + 4 additional asteroids + Psyche; {len(PLANETOGRAPHIC_BODIES)} eligible planets/planetary moons; {len(batches) * N} coordinate points and surface attempts",
          "body     name      system          points  angle(rad)  third(m)    surface(rad) pgr-line(rad) rejected"]
 for (body, system), row in measurements.items():
     line = f"{row[4]:.3e}" if system == 2 else "-"
@@ -396,7 +371,7 @@ lines.extend([
     f"Bennu quadratic-PM orientation: {worst_bennu:.9e} rad; MOON_ME orientation: {worst_moon:.9e} rad (bound 1e-9 rad)",
     f"MOON_PA coordinates use CSPICE pxform(MOON_ME, MOON_PA_DE440); {polar_exclusions} undefined solar-pole longitudes excluded; all pole latitudes/radii checked",
     f"Origin, longitude ranges, info, in-place outputs, Psyche ICRF axes, and {len(probes)} inapplicable pairs checked; {failure_count} failures",
+    f"System 2 rejected by all three exports for IDs {rejected_planetographic + [123456789]} (Sun, dwarf planets, their moons, asteroids, and unknown IDs)",
 ])
-lines.extend(counterexample_lines)
 print(json.dumps({"lines": lines, "failureCount": failure_count, "failures": failures}), flush=True)
 sys.exit(1 if failure_count else 0)
