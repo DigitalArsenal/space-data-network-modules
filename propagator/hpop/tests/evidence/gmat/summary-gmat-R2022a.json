@@ -72,18 +72,22 @@
    "suite": {
     "worstM": 0.0003161838730220653,
     "atHour": 24,
-    "steps": 2346
+    "steps": 2346,
+    "met": true
    },
    "steps30": {
     "worstM": 0.00006671437947257408,
     "atHour": 24,
-    "steps": 2903
+    "steps": 2903,
+    "met": true
    },
    "finest": {
     "worstM": 0.000010783484850603663,
     "atHour": 24,
-    "steps": 8608
-   }
+    "steps": 8608,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F1-J2",
@@ -100,18 +104,22 @@
    "suite": {
     "worstM": 0.0182250229506174,
     "atHour": 24,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007297892891671816,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006730069752993059,
     "atHour": 24,
-    "steps": 8612
-   }
+    "steps": 8612,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F2-zonal20",
@@ -128,18 +136,22 @@
    "suite": {
     "worstM": 0.018220460764292606,
     "atHour": 24,
-    "steps": 1344
+    "steps": 1344,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007281994966467992,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006615700988828336,
     "atHour": 24,
-    "steps": 8611
-   }
+    "steps": 8611,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z1-zonal20-sun-moon",
@@ -156,18 +168,22 @@
    "suite": {
     "worstM": 0.01827969622027118,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000686296741944591,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000626029815994808,
     "atHour": 24,
-    "steps": 8606
-   }
+    "steps": 8606,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z2-zonal20-sun-moon-srp",
@@ -184,18 +200,22 @@
    "suite": {
     "worstM": 0.012343353866344015,
     "atHour": 5,
-    "steps": 1415
+    "steps": 1415,
+    "met": true
    },
    "steps30": {
     "worstM": 0.019713085965583653,
     "atHour": 19,
-    "steps": 2961
+    "steps": 2961,
+    "met": true
    },
    "finest": {
     "worstM": 0.01976909802289462,
     "atHour": 19,
-    "steps": 8641
-   }
+    "steps": 8641,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -210,18 +230,22 @@
    "suite": {
     "worstM": 1.3783546708079844,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1415,
+    "met": true
    },
    "steps30": {
     "worstM": 1.3608942918593199,
     "atHour": 24,
-    "steps": 2958
+    "steps": 2958,
+    "met": true
    },
    "finest": {
     "worstM": 1.360800808881654,
     "atHour": 24,
-    "steps": 8634
-   }
+    "steps": 8634,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F3-field20x20",
@@ -238,18 +262,22 @@
    "suite": {
     "worstM": 0.018247369652435695,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007675451356822083,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006877175972560316,
     "atHour": 24,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F4-field-sun-moon",
@@ -266,18 +294,22 @@
    "suite": {
     "worstM": 0.01827539860907334,
     "atHour": 24,
-    "steps": 1344
+    "steps": 1344,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007264487253619978,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006507768198928003,
     "atHour": 24,
-    "steps": 8611
-   }
+    "steps": 8611,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F5-field-sun-moon-srp",
@@ -294,18 +326,22 @@
    "suite": {
     "worstM": 0.008929350039601406,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1415,
+    "met": true
    },
    "steps30": {
     "worstM": 0.010443036027656952,
     "atHour": 23,
-    "steps": 2958
+    "steps": 2958,
+    "met": true
    },
    "finest": {
     "worstM": 0.010555322923260552,
     "atHour": 23,
-    "steps": 8640
-   }
+    "steps": 8640,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 F6-field-sun-moon-srp-drag",
@@ -320,18 +356,22 @@
    "suite": {
     "worstM": 1.3800865152338566,
     "atHour": 24,
-    "steps": 1414
+    "steps": 1414,
+    "met": true
    },
    "steps30": {
     "worstM": 1.3626009547252882,
     "atHour": 24,
-    "steps": 2959
+    "steps": 2959,
+    "met": true
    },
    "finest": {
     "worstM": 1.3625080061782926,
     "atHour": 24,
-    "steps": 8638
-   }
+    "steps": 8638,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
@@ -348,18 +388,22 @@
    "suite": {
     "worstM": 0.02271138832807512,
     "atHour": 24,
-    "steps": 1341
+    "steps": 1341,
+    "met": true
    },
    "steps30": {
     "worstM": 0.005415945928220343,
     "atHour": 23,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0053463864247833524,
     "atHour": 23,
-    "steps": 8607
-   }
+    "steps": 8607,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 T1-field-sun-moon-solid-tides",
@@ -376,18 +420,22 @@
    "suite": {
     "worstM": 0.04517194825611981,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.03053354091061864,
     "atHour": 23,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.030475515304976757,
     "atHour": 23,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 I1-field-sun-moon-in-track",
@@ -404,18 +452,22 @@
    "suite": {
     "worstM": 0.018274747005913153,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007166561736160961,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000654973518468602,
     "atHour": 24,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 E1-field-sun-moon-eme2000",
@@ -432,18 +484,22 @@
    "suite": {
     "worstM": 0.01819454919908577,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007170003538939253,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006345338411583175,
     "atHour": 24,
-    "steps": 8608
-   }
+    "steps": 8608,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 G1-egm96-36x36-sun-moon",
@@ -460,18 +516,22 @@
    "suite": {
     "worstM": 0.01732922430927566,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007116361107587496,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006622681868167692,
     "atHour": 24,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "LEO400 G2-egm2008-36z24t-sun-moon",
@@ -488,18 +548,22 @@
    "suite": {
     "worstM": 0.018299313043515578,
     "atHour": 24,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0007275870302639155,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0006634122690237052,
     "atHour": 24,
-    "steps": 8607
-   }
+    "steps": 8607,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F0-point-mass",
@@ -516,18 +580,22 @@
    "suite": {
     "worstM": 0.0003038705808978272,
     "atHour": 24,
-    "steps": 2196
+    "steps": 2196,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000048016486261573984,
     "atHour": 24,
-    "steps": 2902
+    "steps": 2902,
+    "met": true
    },
    "finest": {
     "worstM": 0.0000015050979623024147,
     "atHour": 6,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F1-J2",
@@ -544,18 +612,22 @@
    "suite": {
     "worstM": 0.016225070899311564,
     "atHour": 24,
-    "steps": 1258
+    "steps": 1258,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0005064609555445038,
     "atHour": 22,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0004838857444706598,
     "atHour": 22,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F2-zonal20",
@@ -572,18 +644,22 @@
    "suite": {
     "worstM": 0.016232468729854618,
     "atHour": 24,
-    "steps": 1256
+    "steps": 1256,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000486645304992957,
     "atHour": 22,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.00045734887391059927,
     "atHour": 21,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z1-zonal20-sun-moon",
@@ -600,18 +676,22 @@
    "suite": {
     "worstM": 0.01615558341660336,
     "atHour": 24,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "worstM": 0.00046477772867148165,
     "atHour": 22,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0004467342262231034,
     "atHour": 21,
-    "steps": 8606
-   }
+    "steps": 8606,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z2-zonal20-sun-moon-srp",
@@ -628,18 +708,22 @@
    "suite": {
     "worstM": 0.027702512516082845,
     "atHour": 24,
-    "steps": 1345
+    "steps": 1345,
+    "met": true
    },
    "steps30": {
     "worstM": 0.012748207710148753,
     "atHour": 13,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "worstM": 0.012847467306503236,
     "atHour": 13,
-    "steps": 8676
-   }
+    "steps": 8676,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -654,18 +738,22 @@
    "suite": {
     "worstM": 0.16469248564467856,
     "atHour": 24,
-    "steps": 1341
+    "steps": 1341,
+    "met": true
    },
    "steps30": {
     "worstM": 0.18024959350766892,
     "atHour": 24,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "worstM": 0.179935528290945,
     "atHour": 24,
-    "steps": 8680
-   }
+    "steps": 8680,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F3-field20x20",
@@ -682,18 +770,22 @@
    "suite": {
     "worstM": 0.016200710648219655,
     "atHour": 24,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0004648694543805799,
     "atHour": 22,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.00043897060801752766,
     "atHour": 21,
-    "steps": 8609
-   }
+    "steps": 8609,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F4-field-sun-moon",
@@ -710,18 +802,22 @@
    "suite": {
     "worstM": 0.01636617873200081,
     "atHour": 24,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0004572320305069087,
     "atHour": 22,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0004307393452774498,
     "atHour": 22,
-    "steps": 8607
-   }
+    "steps": 8607,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F5-field-sun-moon-srp",
@@ -738,18 +834,22 @@
    "suite": {
     "worstM": 0.022865549012567463,
     "atHour": 23,
-    "steps": 1345
+    "steps": 1345,
+    "met": true
    },
    "steps30": {
     "worstM": 0.008617579307365009,
     "atHour": 23,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "worstM": 0.008901367994407935,
     "atHour": 23,
-    "steps": 8677
-   }
+    "steps": 8677,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -764,18 +864,22 @@
    "suite": {
     "worstM": 0.16285476788044378,
     "atHour": 24,
-    "steps": 1339
+    "steps": 1339,
+    "met": true
    },
    "steps30": {
     "worstM": 0.17833741992627555,
     "atHour": 24,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "worstM": 0.17802996020402853,
     "atHour": 24,
-    "steps": 8675
-   }
+    "steps": 8675,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F0-point-mass",
@@ -792,18 +896,22 @@
    "suite": {
     "worstM": 0.000017149018532164574,
     "atHour": 24,
-    "steps": 342
+    "steps": 342,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000004106765611614921,
     "atHour": 24,
-    "steps": 2883
+    "steps": 2883,
+    "met": true
    },
    "finest": {
     "worstM": 0.000002131986604162085,
     "atHour": 24,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F1-J2",
@@ -820,18 +928,22 @@
    "suite": {
     "worstM": 0.00001568987484158614,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000014462156609344237,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000015666152648795218,
     "atHour": 24,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F2-zonal20",
@@ -848,18 +960,22 @@
    "suite": {
     "worstM": 0.000012742570992905995,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.00001832886132476453,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000019897086213222633,
     "atHour": 24,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS Z1-zonal20-sun-moon",
@@ -876,18 +992,22 @@
    "suite": {
     "worstM": 0.0012819179585800804,
     "atHour": 19,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012682916043979745,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0012674253362901307,
     "atHour": 19,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS Z2-zonal20-sun-moon-srp",
@@ -904,18 +1024,22 @@
    "suite": {
     "worstM": 0.0012900903135232083,
     "atHour": 19,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012764041035657424,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0012775511822774581,
     "atHour": 19,
-    "steps": 8597
-   }
+    "steps": 8597,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F3-field20x20",
@@ -932,18 +1056,22 @@
    "suite": {
     "worstM": 0.000014922295124307454,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000015933282287785708,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000018517882684018758,
     "atHour": 24,
-    "steps": 8595
-   }
+    "steps": 8595,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F4-field-sun-moon",
@@ -960,18 +1088,22 @@
    "suite": {
     "worstM": 0.0012876453153129591,
     "atHour": 19,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012725349677897655,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0012712669788955753,
     "atHour": 19,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS F5-field-sun-moon-srp",
@@ -988,18 +1120,22 @@
    "suite": {
     "worstM": 0.0012964259605201323,
     "atHour": 19,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012831435662205698,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0012842956501585955,
     "atHour": 19,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS R2-field-sun-moon-relativity-iers2010",
@@ -1016,18 +1152,22 @@
    "suite": {
     "worstM": 0.0015056223430690754,
     "atHour": 20,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0014886813751752983,
     "atHour": 20,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0014876797551537488,
     "atHour": 20,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS T1-field-sun-moon-solid-tides",
@@ -1044,18 +1184,22 @@
    "suite": {
     "worstM": 0.002531713816242396,
     "atHour": 22,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0025128183498954785,
     "atHour": 21,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0025117772525819586,
     "atHour": 21,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS E1-field-sun-moon-eme2000",
@@ -1072,18 +1216,22 @@
    "suite": {
     "worstM": 0.0012909051383604528,
     "atHour": 19,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012758345564835294,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.00127596951696595,
     "atHour": 19,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS G1-egm96-70x70-sun-moon",
@@ -1100,18 +1248,22 @@
    "suite": {
     "worstM": 0.0012811165331797845,
     "atHour": 19,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012646996685197612,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0012658562227589206,
     "atHour": 19,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
@@ -1128,18 +1280,22 @@
    "suite": {
     "worstM": 0.0012898038334787408,
     "atHour": 19,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "worstM": 0.001276284456715179,
     "atHour": 19,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.001278287587979375,
     "atHour": 19,
-    "steps": 8641
-   }
+    "steps": 8641,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F0-point-mass",
@@ -1156,18 +1312,22 @@
    "suite": {
     "worstM": 0.0000013165320146380774,
     "atHour": 18,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0000030734415457357764,
     "atHour": 22,
-    "steps": 2882
+    "steps": 2882,
+    "met": true
    },
    "finest": {
     "worstM": 0.0000013862160579197517,
     "atHour": 16,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F1-J2",
@@ -1184,18 +1344,22 @@
    "suite": {
     "worstM": 0.0000058691523592664835,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000006677727650464349,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000006998054924655684,
     "atHour": 24,
-    "steps": 8592
-   }
+    "steps": 8592,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F2-zonal20",
@@ -1212,18 +1376,22 @@
    "suite": {
     "worstM": 0.000007600612041878889,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000008322738805640995,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000007651365414319885,
     "atHour": 24,
-    "steps": 8593
-   }
+    "steps": 8593,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO Z1-zonal20-sun-moon",
@@ -1240,18 +1408,22 @@
    "suite": {
     "worstM": 0.0013029920714875839,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0013025864847388943,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.001303596476562722,
     "atHour": 24,
-    "steps": 8592
-   }
+    "steps": 8592,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO Z2-zonal20-sun-moon-srp",
@@ -1268,18 +1440,22 @@
    "suite": {
     "worstM": 0.001329992581267796,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.001329238766011369,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0013287151693317444,
     "atHour": 24,
-    "steps": 8593
-   }
+    "steps": 8593,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F3-field20x20",
@@ -1296,18 +1472,22 @@
    "suite": {
     "worstM": 0.000008415257185203486,
     "atHour": 23,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.000007805158144816093,
     "atHour": 23,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.000005756890970851973,
     "atHour": 20,
-    "steps": 8592
-   }
+    "steps": 8592,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F4-field-sun-moon",
@@ -1324,18 +1504,22 @@
    "suite": {
     "worstM": 0.0012997011029336955,
     "atHour": 24,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0012995938862939828,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.001299224816409578,
     "atHour": 24,
-    "steps": 8592
-   }
+    "steps": 8592,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "GEO F5-field-sun-moon-srp",
@@ -1352,18 +1536,22 @@
    "suite": {
     "worstM": 0.0013271388568102803,
     "atHour": 24,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "worstM": 0.001325549805972487,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0013271875198014327,
     "atHour": 24,
-    "steps": 8592
-   }
+    "steps": 8592,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F0-point-mass",
@@ -1380,18 +1568,22 @@
    "suite": {
     "worstM": 0.000059218850041160875,
     "atHour": 24,
-    "steps": 553
+    "steps": 553,
+    "met": true
    },
    "steps30": {
     "worstM": 0.00007389210385793861,
     "atHour": 24,
-    "steps": 2886
+    "steps": 2886,
+    "met": true
    },
    "finest": {
     "worstM": 0.000052024838143177314,
     "atHour": 24,
-    "steps": 8594
-   }
+    "steps": 8594,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F1-J2",
@@ -1408,18 +1600,22 @@
    "suite": {
     "worstM": 0.0006436061237486447,
     "atHour": 12,
-    "steps": 417
+    "steps": 417,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0016825403793418157,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.001702137971124915,
     "atHour": 24,
-    "steps": 8595
-   }
+    "steps": 8595,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F2-zonal20",
@@ -1436,18 +1632,22 @@
    "suite": {
     "worstM": 0.0006210265527818337,
     "atHour": 12,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0016587439625466343,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0017054722140787838,
     "atHour": 24,
-    "steps": 8598
-   }
+    "steps": 8598,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA Z1-zonal20-sun-moon",
@@ -1464,18 +1664,22 @@
    "suite": {
     "worstM": 0.014198724267010524,
     "atHour": 24,
-    "steps": 417
+    "steps": 417,
+    "met": true
    },
    "steps30": {
     "worstM": 0.015311573428084391,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.01535369499590266,
     "atHour": 24,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
@@ -1492,18 +1696,22 @@
    "suite": {
     "worstM": 0.026144225833178415,
     "atHour": 24,
-    "steps": 430
+    "steps": 430,
+    "met": true
    },
    "steps30": {
     "worstM": 0.027052292676260355,
     "atHour": 24,
-    "steps": 2896
+    "steps": 2896,
+    "met": true
    },
    "finest": {
     "worstM": 0.027147940140668844,
     "atHour": 24,
-    "steps": 8605
-   }
+    "steps": 8605,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F3-field20x20",
@@ -1520,18 +1728,22 @@
    "suite": {
     "worstM": 0.0006463225123499611,
     "atHour": 12,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "worstM": 0.0016507356110427311,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.0016741017977958338,
     "atHour": 24,
-    "steps": 8595
-   }
+    "steps": 8595,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F4-field-sun-moon",
@@ -1548,18 +1760,22 @@
    "suite": {
     "worstM": 0.01397225322238789,
     "atHour": 24,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "worstM": 0.01528246149808773,
     "atHour": 24,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "worstM": 0.015300589798344357,
     "atHour": 24,
-    "steps": 8596
-   }
+    "steps": 8596,
+    "met": true
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F5-field-sun-moon-srp",
@@ -1576,18 +1792,22 @@
    "suite": {
     "worstM": 0.028313226436290757,
     "atHour": 24,
-    "steps": 429
+    "steps": 429,
+    "met": true
    },
    "steps30": {
     "worstM": 0.02952996024219133,
     "atHour": 24,
-    "steps": 2896
+    "steps": 2896,
+    "met": true
    },
    "finest": {
     "worstM": 0.029600856166493366,
     "atHour": 24,
-    "steps": 8602
-   }
+    "steps": 8602,
+    "met": true
+   },
+   "met": true
   }
  ],
  "skipped": [
@@ -1659,5 +1879,577 @@
    "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
    "reason": "Knocke Earth radiation: not modelled by GMAT"
   }
- ]
+ ],
+ "protocol": {
+  "source": "Stored NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; all historical scores retained.",
+  "units": "maximum 3D position difference, metres; STM relative column difference, dimensionless",
+  "frame": "GCRF; EME2000 for explicitly marked EME2000 cases",
+  "epoch": "2026-08-02T00:00:00Z",
+  "timeScale": "UTC",
+  "durationS": 86400,
+  "sampleIntervalS": 3600,
+  "scoredSamples": 24,
+  "toleranceRationale": "Unchanged shared GMAT protocol: point mass 0.01 m, gravity 0.05 m, SRP 0.1 m, drag 1.5 m. Corrected drag also compared with the shared default 0.1 m. The JR atmosphere frame note is retained verbatim.",
+  "replayToleranceM": 0,
+  "replayToleranceRationale": "Exact replay of the same shipped WASM, inputs and settings. C++ disables fused multiply-add so kilometre-to-metre conversion rounds before subtraction as in the historical scorer; the C++ norm reproduces both stored scores exactly. worstM, atHour and integration steps must all match exactly."
+ },
+ "verdict": {
+  "release": "R2022a",
+  "setting": "suite",
+  "total": 55,
+  "met": 55,
+  "missed": 0,
+  "statement": "55 of 55 R2022a cases meet the stated GMAT limits at the suite setting. These drag cases use Jacchia-Roberts, not NRLMSISE-00; the R2026a anomalous-oxygen diagnosis is not applicable. The existing JR drag note and 17 skipped cases are retained.",
+  "misses": [],
+  "stm": {
+   "byRow": {},
+   "caseCount": 0,
+   "worstRelativeColumnDifference": null,
+   "agreement": "not measured",
+   "statement": "R2022a has no stored STM comparisons; no agreement claim is made."
+  }
+ },
+ "fileHashes": [
+  {
+   "path": "gmat-R2022a.json",
+   "sha256": "ca3db54be26f0a832f8462ad7009b38968884bcf4e16ab32ca92a4819c123917"
+  },
+  {
+   "path": "anomalous-oxygen.json",
+   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380"
+  },
+  {
+   "path": "../cases/hpop-reference-cases.json",
+   "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
+  },
+  {
+   "path": "../../../dist/isomorphic/module.wasm",
+   "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+  },
+  {
+   "path": "../../../plugin-manifest.json",
+   "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+  },
+  {
+   "path": "../../../package.json",
+   "sha256": "70593d6ba44980fcaef96f94de08c34d68c2641876e1bdf36ae1db62f89afd29"
+  },
+  {
+   "path": "../../fixtures/orekit/orekit-reference.json",
+   "sha256": "9c8d444639bd35d33d0fa84e2bfeb719e8b42ddf044198657ed922decb2d5207"
+  },
+  {
+   "path": "../../fixtures/orekit/eop-2026-08.json",
+   "sha256": "772246c35fe1a6e644c4bd6e7690d632450710c06fe8054b726ebdc055720a6a"
+  },
+  {
+   "path": "../../fixtures/orekit/eop-2026-06.json",
+   "sha256": "7dddcf4fda6e10a05fca12c1ecf5524a8550a662f2a409a2e6ece06b850aad79"
+  },
+  {
+   "path": "../../fixtures/orekit/jb2008-2026-06.json",
+   "sha256": "c1842dac76cd17b6c60c8c61b1654e390a340a5ce09f40fe5947113c414625a6"
+  },
+  {
+   "path": "../../fixtures/orekit/spw-2026-08.json",
+   "sha256": "b2514e0bd9cd62cbeadddcf9a150a8918e3d3416af7818ab16a946d7a45d9275"
+  },
+  {
+   "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
+  }
+ ],
+ "provenance": {
+  "sourceIdentity": [
+   {
+    "path": "evidence.mjs",
+    "sha256": "7207f41f8fd2022ab8e317231cb04f312456d1c4f267c96fce077ae3d9b2b74f"
+   },
+   {
+    "path": "gmat-metrics.cpp",
+    "sha256": "a10d2c4f2c2c375bc9c634b96ee489b611d05dc56ea1e9698153e0c9fb2a5396"
+   },
+   {
+    "path": "check-gmat.mjs",
+    "sha256": "2db8125bf4e1198b6d45d46ecf78492138bb207efed2383e0575e6e135e8d8a4"
+   },
+   {
+    "path": "update-summary.mjs",
+    "sha256": "90c1d0e6243f6cbac6fddd0481549128e5e226c830e93f319303392aaa8eef88"
+   },
+   {
+    "path": "score-gmat.mjs",
+    "sha256": "4a4cfeafa9b09639cb4cf26007cfc20d54e109dbdf76eb3212d3cc11fc597c22"
+   },
+   {
+    "path": "anomalous-oxygen.mjs",
+    "sha256": "1390913fc44da27eacee2d105dfd1c858220988abf8bbe31c9fea6d6a3758f48"
+   },
+   {
+    "path": "run-gmat.mjs",
+    "sha256": "b6e6cd78c368104ccdc9f42b8db8134f97c6e7328e3c103e0e5d29dd685b9f6f"
+   },
+   {
+    "path": "gmat-files.mjs",
+    "sha256": "42115300b4f0acb89baa337119b2aa68d6f72a2c752c37785ccd327fe2655f7d"
+   },
+   {
+    "path": "../nyx/scoring.mjs",
+    "sha256": "793c80f35e009b3a1ddfa0e381f7de7a4e8ce3824c0ea7e122fc6035b37c3f94"
+   },
+   {
+    "path": "../../lib/orekitCases.mjs",
+    "sha256": "3851f896a0b0d443b661dbdbdccc8ac970ee16c85b56f3e47a981db32febd020"
+   },
+   {
+    "path": "../../lib/prwCodec.mjs",
+    "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+   },
+   {
+    "path": "../../../lib/nrlmsise00.cpp",
+    "sha256": "de3e389541a998c02a9d859689637da2419ec305e242e22a94b16ffcb3c5cb5b"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+    "source": "NASA GMAT NRLMSISE-00 plugin source copy",
+    "lines": "284-285, 322",
+    "statement": "Density calls gtd7_ and returns xden[5] * 1000 kg/m^3.",
+    "sha256": "2d2a5ce8bf697b7e0a1bb7e251d99dae877185c4661b76da58f411ca1eabafa6"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+    "source": "NASA GMAT NRLMSISE-00 Fortran-to-C source copy",
+    "lines": "1044-1054, 1338-1345, 2226-2230",
+    "statement": "gtd7 total mass density excludes anomalous oxygen; gtd7d adds species 9 times atomic mass 16.",
+    "sha256": "7aac10bad258766be26f5276af6cbb25beedaa658b1030d5fca4063310e3d0d9"
+   }
+  ],
+  "trajectory": {
+   "path": "gmat-R2022a.json",
+   "sha256": "ca3db54be26f0a832f8462ad7009b38968884bcf4e16ab32ca92a4819c123917"
+  },
+  "caseExport": {
+   "path": "../cases/hpop-reference-cases.json",
+   "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
+  },
+  "anomalousOxygen": {
+   "path": "anomalous-oxygen.json",
+   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380",
+   "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
+  },
+  "inputFiles": {
+   "eop-eop-2026-08": {
+    "file": "eop-2026-08.c04.txt",
+    "sha256": "7cf418242e60620a12c852cb3d9df0ee0c92e565c3163cd481632cffa2c38f55"
+   },
+   "EGM2008-2x0": {
+    "file": "EGM2008-2x0.cof",
+    "sha256": "df8ca6a02ae323b1b4691d935eafc46d9c7b0f6a0bc6ced4897a16b035f2c2ea"
+   },
+   "EGM2008-20x0": {
+    "file": "EGM2008-20x0.cof",
+    "sha256": "aedf824d8dec7cf3cb76d03e08e0101575abebf4455e32d32123e794b9b86f9a"
+   },
+   "EGM2008-20x20": {
+    "file": "EGM2008-20x20.cof",
+    "sha256": "eabb951a121ffa78ab07f13b909771aa99fc0341f3dad08fd563132187464b84"
+   },
+   "EGM2008-20x20-no-pole-tide-eop-2026-08-increments": {
+    "file": "EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "poleTideC21": -2.2607545398355703e-10,
+    "poleTideS21": -1.451881049208188e-10,
+    "note": "GMAT pole-tide increments subtracted from C21, S21 of this file"
+   },
+   "EGM2008-20x20-no-pole-tide-eop-2026-08": {
+    "file": "EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "sha256": "2075355ab3a5bdc0f98fac172d5a59fdf20412dfdbd7c936fd6c8756f2003b65"
+   },
+   "EGM96-36x36": {
+    "file": "EGM96-36x36.cof",
+    "sha256": "641d14f29f34bc694a79c7652d2abf348a4b93f02de672a05699715e893a40cc"
+   },
+   "EGM2008-36x24t24": {
+    "file": "EGM2008-36x24t24.cof",
+    "sha256": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060"
+   },
+   "EGM96-70x70": {
+    "file": "EGM96-70x70.cof",
+    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9"
+   }
+  },
+  "sourceScope": "Local NASA GMAT source copies confirm the density convention; no unrecorded source revision or fresh GMAT rerun is claimed.",
+  "historicalArtifacts": [
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/eop-2026-08.c04.txt",
+    "sha256": "7cf418242e60620a12c852cb3d9df0ee0c92e565c3163cd481632cffa2c38f55",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM2008-2x0.cof",
+    "sha256": "df8ca6a02ae323b1b4691d935eafc46d9c7b0f6a0bc6ced4897a16b035f2c2ea",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM2008-20x0.cof",
+    "sha256": "aedf824d8dec7cf3cb76d03e08e0101575abebf4455e32d32123e794b9b86f9a",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM2008-20x20.cof",
+    "sha256": "eabb951a121ffa78ab07f13b909771aa99fc0341f3dad08fd563132187464b84",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "sha256": "2075355ab3a5bdc0f98fac172d5a59fdf20412dfdbd7c936fd6c8756f2003b65",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM96-36x36.cof",
+    "sha256": "641d14f29f34bc694a79c7652d2abf348a4b93f02de672a05699715e893a40cc",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM2008-36x24t24.cof",
+    "sha256": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/EGM96-70x70.cof",
+    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F0-point-mass.txt",
+    "sha256": "79a6c5dcb62ad6ea7b1416d191b449d089024ff28b09b23eb788d1efa344fc4a",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F1-J2.txt",
+    "sha256": "ae87ded56d13341d354853cfe9d8b7a955cefb39fb21fe847240e1274a8ac570",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F2-zonal20.txt",
+    "sha256": "0e7144686517a4b6f4329f739fd2cf5a9fd2ca2522b782f25042b2aacb127fc2",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_Z1-zonal20-sun-moon.txt",
+    "sha256": "12234cef95ce47c99365c3611ba8e31afd2ec2315dda8f73caed7689a06546b7",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "041f43889e9720772c1b2eb2521e7e7ea7dfbcdc4f345e98f4e00c97035eda2a",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_Z3-zonal20-sun-moon-srp-drag.txt",
+    "sha256": "3accbd6e4245cbf2b02fd62abb9a938841b2b4a715c0314ba146e04dd2f5746f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z3-zonal20-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F3-field20x20.txt",
+    "sha256": "12baa9d305261a2d5a6c1e2315edcdead649247dceb497b92c98f012218450b7",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F4-field-sun-moon.txt",
+    "sha256": "80f9590225ef60d69369501d5f444873457942db8a554b099eed218d0e48f2e9",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F5-field-sun-moon-srp.txt",
+    "sha256": "4b6ae0559a3bf1af6e388527dc9f528cfe22db93798652514e5657325562bc6e",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_F6-field-sun-moon-srp-drag.txt",
+    "sha256": "1d8d970ab9e0bb3263b0182b02c1f0070f67998aa0b0d24054d9a030dc02095a",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F6-field-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_R2-field-sun-moon-relativity-iers2010.txt",
+    "sha256": "6ef5b3a0f2843e33a084e9f0e5ffe02b88479a580f4a66c708bdff4d2839e840",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 R2-field-sun-moon-relativity-iers2010"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_T1-field-sun-moon-solid-tides.txt",
+    "sha256": "4481f979dad54cc5242430633313ab93ba4d1f321229da98cb7b410aaae79a9f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 T1-field-sun-moon-solid-tides"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_I1-field-sun-moon-in-track.txt",
+    "sha256": "49f858be337bf20b2b3075ad728893bf0ac3719361424dbb798567458b9845cb",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 I1-field-sun-moon-in-track"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_E1-field-sun-moon-eme2000.txt",
+    "sha256": "f0488155af8279115a652ad88d9e4f638880a436facdc5acd5fadbba8d33fb49",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 E1-field-sun-moon-eme2000"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_G1-egm96-36x36-sun-moon.txt",
+    "sha256": "7ad9fdf363c89c466948e25ae09e60700faba7be015dacc166f6fd5873659754",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 G1-egm96-36x36-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/LEO400_G2-egm2008-36z24t-sun-moon.txt",
+    "sha256": "cdd4b15cabff229d1f34c7c248aa98cb70fb3905c0599a33c6bae0663ab5b92c",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 G2-egm2008-36z24t-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F0-point-mass.txt",
+    "sha256": "8b486dd39eef3fa8396e07cb433548d55b8d9a4cf2764828625e10e3bb15b98b",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F1-J2.txt",
+    "sha256": "7cc1e27d28133ad344d5164343ec23c264591f3aa76b698188917726e24ca8f0",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F2-zonal20.txt",
+    "sha256": "001dd1d0c3948f31e3dc074acf54dd2867dea0a3dee4ca0c65fa35f5b74bbb96",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_Z1-zonal20-sun-moon.txt",
+    "sha256": "9b98f8af7058e5107c74f4f8ebcb48df865cfc4570d5151fc029d42c75055ef9",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "2ad42f50db082f5c9805ce21ca42df754fc3eeb7f2febd1acbc45e5bdab1e5d7",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_Z3-zonal20-sun-moon-srp-drag.txt",
+    "sha256": "f1f7bbcb8eb935575baac3f6859bcdf5881c4a49209cb4570c1a5f8ba3c2ab98",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z3-zonal20-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F3-field20x20.txt",
+    "sha256": "6e3c6d7592d66e6c18ab6a1046257502a7ac5757b66d2e42fc35f7fc1dc2bebe",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F4-field-sun-moon.txt",
+    "sha256": "2163d44c56e5cc67e23c3ef79f392f2550cc12b74c228a8d0b9796e1e501fe41",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F5-field-sun-moon-srp.txt",
+    "sha256": "dad3fe352fef0551e2fa9e99149a7f710013a7fad8b72b803cacd72aa7a6845b",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/SSO700_F6-field-sun-moon-srp-drag.txt",
+    "sha256": "5cc20b8ae56a68bdb707b025911feb66a8381d888f99ac52014a20ef32ed14b7",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F6-field-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F0-point-mass.txt",
+    "sha256": "69c7e0d1ec374d51e57d1174cf75c1dad995537b6d14136f11d1609fc7b0fb3f",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F1-J2.txt",
+    "sha256": "5606d6a5dd2a31cbd30b8aac47a7d65a8ae4d1b29fffb50a91bb064e4d275410",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F2-zonal20.txt",
+    "sha256": "5cd4b4e60ea327095d56c833414b384ddf833b574608cbe74d185671adfd1b8e",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_Z1-zonal20-sun-moon.txt",
+    "sha256": "8d4133f13575bdc175233fecef884ece45b65a3b2c8f8d737f86d2d689a77625",
+    "role": "recorded GMAT report",
+    "caseId": "GPS Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "190b01e26594c09b15c608e7870a5919258703796399299515388305f2e3b9dc",
+    "role": "recorded GMAT report",
+    "caseId": "GPS Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F3-field20x20.txt",
+    "sha256": "653899659f2c9ff5c1fd24b458c1347b88355f23ec1acf4f7a689052f3b4d479",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F4-field-sun-moon.txt",
+    "sha256": "f7e988385bd1e796accf23072ae830d39aada0e50660a33523a31d4d13b302c7",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_F5-field-sun-moon-srp.txt",
+    "sha256": "6aeaf790a558f74530eb71436bfb6edd44d92a748b8ee669e42973aa93fc7452",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_R2-field-sun-moon-relativity-iers2010.txt",
+    "sha256": "1925560db3b582d364b4487359413d090e7815ecdad7fd388a91593e19845681",
+    "role": "recorded GMAT report",
+    "caseId": "GPS R2-field-sun-moon-relativity-iers2010"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_T1-field-sun-moon-solid-tides.txt",
+    "sha256": "a9058b48a99bacec7c186a55b8f6c04b789ff1c32f269afca7dc167f24a053c8",
+    "role": "recorded GMAT report",
+    "caseId": "GPS T1-field-sun-moon-solid-tides"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_E1-field-sun-moon-eme2000.txt",
+    "sha256": "a81a956cf2327cc41cb4fa170d927185939c326f5b6a44b708fcc01360cdb623",
+    "role": "recorded GMAT report",
+    "caseId": "GPS E1-field-sun-moon-eme2000"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_G1-egm96-70x70-sun-moon.txt",
+    "sha256": "77cd8e797782b3a6c4488ba981891d411ffb5bd79d191a59e20b577a6447f766",
+    "role": "recorded GMAT report",
+    "caseId": "GPS G1-egm96-70x70-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GPS_C1-field-sun-moon-srp-intrack-jacobians.txt",
+    "sha256": "156d56a9ff461d756930bc18e2bd962016e19b530603ac29f4a136ea2166a45e",
+    "role": "recorded GMAT report",
+    "caseId": "GPS C1-field-sun-moon-srp-intrack-jacobians"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F0-point-mass.txt",
+    "sha256": "12c0a9d09caee483de1ada578885e386ec79251697267b3f3438affa2a3366b5",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F1-J2.txt",
+    "sha256": "4bd98c1386526653d11f28405f603e529123883b00f44cf83aefcfc1ecce260a",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F2-zonal20.txt",
+    "sha256": "910a6c519df6c4105c529774966e9b2f335f0703112643adb858671ad8dac481",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_Z1-zonal20-sun-moon.txt",
+    "sha256": "1dcd8bc337f0c343962fe5479cd5d0e33e0b997d36e62aba65d8972fda14ec05",
+    "role": "recorded GMAT report",
+    "caseId": "GEO Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "3ce7177f52b0b1a3aa1c81a1affe049f240f5bc6550a4e99d5826064a5e436ce",
+    "role": "recorded GMAT report",
+    "caseId": "GEO Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F3-field20x20.txt",
+    "sha256": "4069e611f478b1a619a65f880968063f28367e9e2d235cdf3a98bc5b653833ac",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F4-field-sun-moon.txt",
+    "sha256": "1e7ff6adf54405fc4cdf566d60506fcdcc17fd9c37edee3965912e64d7e93f4f",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/GEO_F5-field-sun-moon-srp.txt",
+    "sha256": "14d7d3ff22d7e0e17be2b599285a46a35e6c78dc4776bd2a0011782048854aa9",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F0-point-mass.txt",
+    "sha256": "819b1aff0e81ea72ff83bf8f2cb5a2f08470c36795194a31416c7bd95b3e2af7",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F1-J2.txt",
+    "sha256": "9e2897a2bdc2e4240d03f21fb1ec656748ba2fb2ececc734afeb1e2cadc07e3d",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F2-zonal20.txt",
+    "sha256": "3d92300d27f6d5f4bfd2903b9a8fc2368614bb24ca43371112822d93432640b6",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_Z1-zonal20-sun-moon.txt",
+    "sha256": "68c4b528d540a5c4dce6e140382623bb2bdf11220082627ed8c0193a8b88215c",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "b7b5aa7a12b14b38e720b6d8c1b1ca73a86fff7f78df738db86280475580d7c8",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F3-field20x20.txt",
+    "sha256": "24368ed356ea8d26071026ab7b6978fe8d4b57b444cd87e7d5b06220debe456b",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F4-field-sun-moon.txt",
+    "sha256": "94c2e5a06be2e56e7cafc446a84c3135a0e87b2f6e7dabafe5cdccdbc2c0af87",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/r22/MOLNIYA_F5-field-sun-moon-srp.txt",
+    "sha256": "f7960be4031707fc980449d4475f324757a370fdc1c8666134b6cf4ca217bb98",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F5-field-sun-moon-srp"
+   }
+  ],
+  "hashPolicy": "Verify every available path against its declared digest; unavailable historical binaries, reports and input files are explicit provenance gaps, never silently re-pinned."
+ }
 }
