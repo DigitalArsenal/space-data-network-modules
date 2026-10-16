@@ -601,7 +601,8 @@ inline int32_t hill_radius(int32_t id, double et, double* out) {
 /* The observer for the sky: SSB position and velocity (ICRF, m, m/s). Inside
  * the central body's Hill sphere it moves with that body plus the camera's own
  * inertial velocity (and, for a camera fixed in the body's frame, the body's
- * rotation: omega x r about its pole); from the Hill radius out to 1e14 m the
+ * rotation: omega x r about its pole, no faster than the body's synchronous
+ * orbit); from the Hill radius out to 1e14 m the
  * velocity eases to zero (a smoothstep in log distance); beyond, it is the SSB
  * at rest. */
 inline int32_t observer_state(int32_t central, double et, const double cam_pos[3], const double cam_vel_in[3],
@@ -611,9 +612,25 @@ inline int32_t observer_state(int32_t central, double et, const double cam_pos[3
         double rot[9], spin = 0.0;
         if (rotation(central, et, rot, &spin) == Ok) {
             const double w[3] = {rot[6] * spin, rot[7] * spin, rot[8] * spin};
-            cam_vel[0] += w[1] * cam_pos[2] - w[2] * cam_pos[1];
-            cam_vel[1] += w[2] * cam_pos[0] - w[0] * cam_pos[2];
-            cam_vel[2] += w[0] * cam_pos[1] - w[1] * cam_pos[0];
+            double v[3] = {w[1] * cam_pos[2] - w[2] * cam_pos[1], w[2] * cam_pos[0] - w[0] * cam_pos[2],
+                           w[0] * cam_pos[1] - w[1] * cam_pos[0]};
+            /* A point at rest in the body's frame is a physical observer out to
+             * the synchronous radius r_s = (GM / w^2)^(1/3), where it is itself
+             * in orbit; beyond, its speed |w| r outruns every orbit and, 1e13 m
+             * from the Sun, reaches 0.08 c (aberration then threw the planets
+             * tens of au across the screen while zooming out, owner
+             * 2026-10-16). From r_s out the speed holds at the synchronous
+             * orbit's own, |w| r_s: the surface and GEO are untouched. */
+            double gm = 0.0, cap = 0.0;
+            if (spin != 0.0 && gm_m3s2(central, &gm) && gm > 0.0) {
+                cap = std::fabs(spin) * std::cbrt(gm / (spin * spin));
+            } else {
+                double r3[3];
+                if (radii_m(central, r3)) cap = std::fabs(spin) * std::fmax(r3[0], std::fmax(r3[1], r3[2]));
+            }
+            const double speed = norm3(v);
+            const double scale = speed > cap ? cap / speed : 1.0;
+            for (int i = 0; i < 3; ++i) cam_vel[i] += scale * v[i];
         }
     }
     double c[6];

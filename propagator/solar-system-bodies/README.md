@@ -110,6 +110,13 @@ waits for a kernel. Text kernels are read at once (`ssb_load_kernel`).
   (bound 2e-10), lengths within 1e-6 m + 1e-12 of the distance; ecliptic
   8.9e-16 rad and 4.1e-16 in au; Galactic 8.6 mas from CSPICE's FK4-based
   GALACTIC (the Hipparcos definition is held exactly at the pole and node).
+- `tests/observer_state.e2e.test.mjs` (0.4.1): a camera at rest in the
+  central body's frame adds omega x r up to the synchronous radius
+  (GM / omega^2)^(1/3) and the synchronous orbit's speed beyond it: Earth's
+  surface and GEO unchanged (1e-9), the Sun held at 72 km/s from 0.169 au, so
+  the co-rotation aberration of any central body stays under 50" (it was
+  0.08 c at 1e13 m from the Sun, and the planets slid tens of au across the
+  screen while zooming out).
 - `tests/parity.mjs`: `evaluate` byte-identical in browser, WasmEdge and
   Docker WasmEdge (`conformance/parity.json`).
 
