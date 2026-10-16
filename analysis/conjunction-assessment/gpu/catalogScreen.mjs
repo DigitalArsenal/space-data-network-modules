@@ -64,13 +64,38 @@ export function screenWindows(startJd, days, windowHours) {
     durationDays: Math.min(windowHours, days * 24 - k * windowHours) / 24 }));
 }
 
+const PC_METHOD_NAMES = {
+  FOSTER: 'FOSTER-2D', PATERA: 'PATERA-2001', ALFANO_MAXIMUM: 'ALFANO-SPHERICAL-SMALL-HBR-MAX',
+  CHAN: 'CHAN-1997', ALFRIEND_1999: 'ALFRIEND-1999', ALFRIEND_1999_MAXIMUM: 'ALFRIEND-1999-MAX',
+  ALFANO_2005: 'ALFANO-2005', LAAS_2015: 'LAAS-2015', ALFRIEND_2D: 'ALFRIEND-2D',
+};
+const PC_TIERS = ['FOSTER-2D', 'usage-violation, below floor', 'usage-violation, 3D-Nc', 'usage-violation, Monte Carlo'];
+
+// Keep standards probability metadata decoding separate from event identity.
+// A fallback's actual method/value and tier live in CDM because the CQR enum
+// cannot represent every engine method. Never infer its tier from the Pc.
+function probabilitySummary(e) {
+  const p = e.PROBABILITY, cdm = e.CONJUNCTION_MESSAGE;
+  const uncertainty = cqrUncertaintyOrigin[p?.UNCERTAINTY_SOURCE] ?? null;
+  const maximumOnly = uncertainty === 'MAXIMUM_PROBABILITY_ONLY';
+  const method = cdm?.COLLISION_PROBABILITY_METHOD || (maximumOnly ? 'ALFANO-SPHERICAL-SMALL-HBR-MAX' :
+    PC_METHOD_NAMES[cqrProbabilityAlgorithm[p?.ALGORITHM]] ?? 'PC-UNAVAILABLE');
+  const comment = cdm?.COMMENT?.trim() ?? '';
+  const tier = PC_TIERS.find((label) => comment.startsWith(label)) ??
+    (cdm?.COLLISION_PROBABILITY_METHOD ? method : maximumOnly ? 'maximum-only' : method);
+  return {
+    probability: p?.PROBABILITY ?? null,
+    pc: cdm?.COLLISION_PROBABILITY ?? p?.PROBABILITY ?? null,
+    method, tier, uncertainty,
+    calibration: covarianceCalibration[p?.CALIBRATION] ?? null,
+  };
+}
+
 export const eventSummary = (e) => ({
   primary: e.PRIMARY_NAME, secondary: e.SECONDARY_NAME,
   primaryNorad: e.PRIMARY_NORAD_ID, secondaryNorad: e.SECONDARY_NORAD_ID,
   tcaJd: e.TCA?.JULIAN_DATE, missM: e.MISS_DISTANCE_M, speedMS: e.RELATIVE_SPEED_M_S,
-  probability: e.PROBABILITY?.PROBABILITY ?? null,
-  uncertainty: cqrUncertaintyOrigin[e.PROBABILITY?.UNCERTAINTY_SOURCE] ?? null,
-  calibration: covarianceCalibration[e.PROBABILITY?.CALIBRATION] ?? null,
+  ...probabilitySummary(e),
 });
 
 /**

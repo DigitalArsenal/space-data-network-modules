@@ -142,6 +142,18 @@ struct ConjunctionEvent2 {
 
 // ── Engine ──
 
+inline constexpr double kDefaultPcReportingFloor = 1e-7;
+inline constexpr double kDefaultPcMonteCarloFloor = 1e-4;
+
+/// Automatic usage-violation routing, based on the true Foster Pc2D (or the
+/// shape-scaled maximum only if Pc2D is unavailable). Below reporting_floor,
+/// retain Pc2D and its usage diagnostics; at monte_carlo_floor select Monte
+/// Carlo directly. Intermediate events use 3D-Nc and its applicability checks.
+struct PcTierOptions {
+  double reporting_floor = kDefaultPcReportingFloor;
+  double monte_carlo_floor = kDefaultPcMonteCarloFloor;
+};
+
 class ConjunctionEngine {
 public:
   ConjunctionEngine();
@@ -195,12 +207,23 @@ public:
   /// cross covariance. This preserves velocity uncertainty for usage checks.
   ConjunctionEvent2 compute_pc(const PcEncounter &encounter) const;
 
-  /// Fallback policy for usage violations. Automatic chooses Hall 3D-Nc (Cartesian when mu=0),
-  /// or deterministic Monte Carlo when relative-velocity uncertainty is large.
+  /// Evaluate independent encounters on workers, returning results in input
+  /// order. Monte Carlo seeds depend on the encounter and configured seed,
+  /// never the worker or scheduling. Zero threads uses one worker. Engine
+  /// configuration must remain unchanged while a batch is running.
+  std::vector<ConjunctionEvent2> compute_pc_batch(
+      const std::vector<PcEncounter> &encounters, unsigned threads = 1) const;
+
+  /// Fallback policy for usage violations. Floors apply only to Automatic;
+  /// explicit fallback selections retain their existing forced behavior.
   enum class Fallback { Automatic, TwoDimensionalNc, ThreeDimensionalNc, MonteCarlo };
   void set_pc_fallback(Fallback method, const PcFallbackOptions &options = {}) {
     fallback_ = method; fallback_options_ = options;
   }
+
+  /// Set dimensionless probability floors with 0 <= reporting <= Monte Carlo
+  /// <= 1. Returns false for invalid values and preserves the previous options.
+  bool set_pc_tier_options(const PcTierOptions &options);
 
   /// Screen multiple objects
   std::vector<ConjunctionEvent2>
@@ -215,7 +238,16 @@ public:
 private:
   std::unique_ptr<PcMethod> pc_method_;
   Fallback fallback_ = Fallback::Automatic;
-  PcFallbackOptions fallback_options_;
+  // Automatic screening starts with fewer quadrature nodes, while retaining
+  // the same 1e-4 convergence budget and adaptive refinement. Explicit
+  // set_pc_fallback calls preserve the caller's options (including {} defaults).
+  PcFallbackOptions fallback_options_ = [] {
+    PcFallbackOptions options;
+    options.angular_order = 16;
+    options.time_intervals = 128;
+    return options;
+  }();
+  PcTierOptions tier_options_;
   ConjunctionEvent2 evaluate_encounter(const PcEncounter& encounter) const;
   double radius1_m_ = 5.0;
   double radius2_m_ = 5.0;

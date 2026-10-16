@@ -32,6 +32,14 @@ import { createHpopFarm } from './lib/hpopFarm.mjs';
 import { aotModule } from './lib/aot.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Presentation-only aggregation: methods and tiers are decoded from module output.
+function countsBy(events, key) {
+  const counts = new Map();
+  for (const event of events) counts.set(event[key], (counts.get(event[key]) ?? 0) + 1);
+  return Object.fromEntries([...counts.keys()].sort().map((label) => [label, counts.get(label)]));
+}
+
 const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, runtime: { type: 'string', default: 'wasmedge' }, propagator: { type: 'string', default: 'sgp4' },
   start: { type: 'string', default: '2461314.5' }, days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' },
@@ -42,6 +50,7 @@ const { values: o } = parseArgs({ options: {
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
 if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is sgp4 or hpop: one propagator per run.');
 
+const loadAverage = { start: os.loadavg() };
 const t0 = performance.now();
 const catalog = splitCatalog(new Uint8Array(fs.readFileSync(o.catalog)));
 const workers = Number(o.workers ?? Math.max(1, os.availableParallelism() - 1));
@@ -102,10 +111,13 @@ try {
   });
   process.stderr.write('\n');
   const wallMs = performance.now() - t0 - aotCompileMs, t = result.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
+  loadAverage.end = os.loadavg();
   const summaries = result.events.map(eventSummary);
+  const methodCounts = countsBy(summaries, 'method'), tierCounts = countsBy(summaries, 'tier');
   if (o.out) fs.writeFileSync(o.out, JSON.stringify({ catalog: path.basename(o.catalog), runtime: o.runtime, propagator: o.propagator,
     startJd: +o.start, durationDays: +o.days, windowHours, workers, wallMs, aotCompileMs, objects: result.objects, windows: result.windows,
-    candidates: result.candidates, excluded: result.excluded, timings: t, algorithm: o.algorithm,
+    candidates: result.candidates, conjunctions: summaries.length, excluded: result.excluded, timings: t, algorithm: o.algorithm,
+    methodCounts, tierCounts, loadAverage,
     uncertaintyModel: o['uncertainty-model'] ? path.basename(o['uncertainty-model']) : null,
     processCpuS: (({ user, system }) => (user + system) / 1e6)(process.cpuUsage()),
     ...(farm ? { hpop: { profile: farm.profile, farmWorkers: farm.workers, instances: farm.instances, loadCeiling: o['load-ceiling'] ? Number(o['load-ceiling']) : null,
@@ -121,7 +133,8 @@ try {
       `; HPOP reentries: ${farm.reentries.filter((x) => x.phase === 'catch-up').length} before the screen, ` +
       `${farm.reentries.filter((x) => x.phase === 'screen').length} during it` : '') +
     (o['uncertainty-model'] ? `; ${o.algorithm}: ${summaries.filter((e) => e.uncertainty === 'SYNTHESIZED_COVARIANCE').length} ` +
-      `covariance probabilities, ${summaries.filter((e) => e.calibration === 'Calibrated').length} calibrated` : ''));
+      `covariance probabilities, ${summaries.filter((e) => e.calibration === 'Calibrated').length} calibrated` : '') +
+    `; methodCounts ${JSON.stringify(methodCounts)}; tierCounts ${JSON.stringify(tierCounts)}; loadAverage ${JSON.stringify(loadAverage)}`);
 } finally {
   await farm?.close();
   await harness.destroy?.();

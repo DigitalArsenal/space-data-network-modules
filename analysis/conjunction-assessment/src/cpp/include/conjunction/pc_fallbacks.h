@@ -41,18 +41,20 @@ struct PcFallbackResult {
 // Hall/Coppola collision-sphere inward flux, with Cartesian Gaussian
 // covariance propagation. Honest names distinguish the model from CARA's
 // equinoctial peak-overlap Hall implementation.
-PcFallbackResult pc_3d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {});
-PcFallbackResult pc_2d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {});
+// An optional usage result reuses a full assessment of this same encounter;
+// callers must not substitute the engine's short-circuit routing diagnostics.
+PcFallbackResult pc_3d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {}, const PcUsageResult* = nullptr);
+PcFallbackResult pc_2d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {}, const PcUsageResult* = nullptr);
 // Equinoctial Gaussian propagation and iterative peak-overlap linearization
 // following Hall/CARA, validated against all 12 published Alfano 3D cases.
 // Check requires_monte_carlo before interpreting Nc as total finite-window Pc.
-PcFallbackResult pc_3d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {});
-PcFallbackResult pc_2d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {});
+PcFallbackResult pc_3d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {}, const PcUsageResult* = nullptr);
+PcFallbackResult pc_2d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {}, const PcUsageResult* = nullptr);
 
 // SDMC-style sampling of full correlated position/velocity states, including
 // optional between-object covariance. Explicit SplitMix64 + Box-Muller gives
 // a reproducible stream independent of C++ standard-library RNG distribution.
-PcFallbackResult pc_monte_carlo(const PcEncounter&, const PcFallbackOptions& = {});
+PcFallbackResult pc_monte_carlo(const PcEncounter&, const PcFallbackOptions& = {}, const PcUsageResult* = nullptr);
 
 } // namespace conjunction
 #endif

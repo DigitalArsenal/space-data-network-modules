@@ -22,7 +22,7 @@ struct PcEncounter {
 
 struct PcUsageResult {
     bool violated = false;
-    bool fully_evaluated = false;
+    bool fully_evaluated = false; // False when engine routing skips curvature.
     bool low_relative_speed = false;
     bool covariance_repaired = false;
     bool cross_correlation_applied = false;
@@ -37,10 +37,19 @@ struct PcUsageResult {
     std::string reason;
 };
 
+enum class PcUsageEvaluation {
+    Full,
+    // The velocity-uncertainty safeguard alone establishes a violation. Keep
+    // rectilinear times/flags and report skipped curvature; expensive fallback
+    // integrators still request Full to obtain their own integration bounds.
+    StopOnRectilinearViolation
+};
+
 // CARA duration/offset and three-point Q(t) curvature diagnostics with
 // equinoctial peak-overlap propagation, plus a separate velocity-uncertainty
 // safeguard. Non-convergent curvature analyses are explicitly flagged.
-PcUsageResult assess_pc_usage(const PcEncounter& encounter);
+PcUsageResult assess_pc_usage(const PcEncounter& encounter,
+    PcUsageEvaluation evaluation = PcUsageEvaluation::Full);
 
 // Relative-state covariance includes -C12-C12^T only when explicitly enabled.
 std::array<double, 36> relative_pc_covariance(const PcEncounter& encounter);

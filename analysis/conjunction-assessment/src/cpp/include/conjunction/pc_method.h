@@ -35,6 +35,7 @@
 #include <memory>
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 
 namespace conjunction {
 
@@ -131,6 +132,10 @@ struct BPlaneGeometry {
 struct PcResult {
     double probability = 0;
     std::string method;
+    // Stable engine routing label. Empty for direct method-only evaluations.
+    std::string tier;
+    // True Foster disk integral before any fallback; NaN if unavailable.
+    double probability_2d = std::numeric_limits<double>::quiet_NaN();
     bool converged = true;
     int iterations = 0;          // for iterative methods
     double max_probability = 0;  // Method-specific maximum; see max_method.

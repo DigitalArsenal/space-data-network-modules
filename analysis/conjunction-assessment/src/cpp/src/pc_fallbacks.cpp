@@ -9,13 +9,8 @@ namespace conjunction {
 using namespace pc_detail;
 namespace {
 struct SurfacePoint {V3 normal;double weight;};
-std::vector<SurfacePoint> sphere(unsigned order,const V3& velocity) {
+std::vector<SurfacePoint> canonical_sphere(unsigned order) {
     std::vector<SurfacePoint> out;out.reserve(2*order*order);
-    V3 pole=velocity;double speed=norm(pole);if(speed==0)pole={0,0,1};else for(double& x:pole)x/=speed;
-    V3 axis=std::abs(pole[0])<0.8?V3{1,0,0}:V3{0,1,0};
-    double projection=dot(axis,pole);for(int i=0;i<3;++i)axis[i]-=projection*pole[i];
-    double length=norm(axis);for(double& x:axis)x/=length;
-    V3 third={pole[1]*axis[2]-pole[2]*axis[1],pole[2]*axis[0]-pole[0]*axis[2],pole[0]*axis[1]-pole[1]*axis[0]};
     unsigned half=order/2;
     for(unsigned k=0;k<order;++k) {
         double x=std::cos(pi*((k%half)+0.75)/(half+0.5)),derivative=0;
@@ -28,10 +23,34 @@ std::vector<SurfacePoint> sphere(unsigned order,const V3& velocity) {
         x=k<half?(x-1)/2:(x+1)/2;
         double radial=std::sqrt(std::max(0.0,1-x*x));
         for(unsigned j=0;j<2*order;++j) {
-            double az=pi*(j+0.5)/order;V3 n{};
-            for(int i=0;i<3;++i)n[i]=x*pole[i]+radial*(std::cos(az)*axis[i]+std::sin(az)*third[i]);
-            out.push_back({n,weight});
+            double az=pi*(j+0.5)/order;
+            out.push_back({{x,radial*std::cos(az),radial*std::sin(az)},weight});
         }
+    }
+    return out;
+}
+std::vector<SurfacePoint> sphere(unsigned order,const V3& velocity) {
+    // Quadrature roots, azimuth trigonometry and weights depend on order only.
+    // Each worker owns its reusable small rules; the event only rotates the
+    // normals. Large refinements are temporary, bounding retained WASM memory.
+    thread_local std::map<unsigned,std::vector<SurfacePoint>> rules;
+    std::vector<SurfacePoint> temporary;
+    const std::vector<SurfacePoint>* canonical=nullptr;
+    if(order<=32) {
+        auto found=rules.find(order);
+        if(found==rules.end())found=rules.emplace(order,canonical_sphere(order)).first;
+        canonical=&found->second;
+    } else {temporary=canonical_sphere(order);canonical=&temporary;}
+    V3 pole=velocity;double speed=norm(pole);if(speed==0)pole={0,0,1};else for(double& x:pole)x/=speed;
+    V3 axis=std::abs(pole[0])<0.8?V3{1,0,0}:V3{0,1,0};
+    double projection=dot(axis,pole);for(int i=0;i<3;++i)axis[i]-=projection*pole[i];
+    double length=norm(axis);for(double& x:axis)x/=length;
+    V3 third={pole[1]*axis[2]-pole[2]*axis[1],pole[2]*axis[0]-pole[0]*axis[2],pole[0]*axis[1]-pole[1]*axis[0]};
+    std::vector<SurfacePoint> out;out.reserve(canonical->size());
+    for(const auto& point:*canonical) {
+        V3 normal{};
+        for(int i=0;i<3;++i)normal[i]=point.normal[0]*pole[i]+point.normal[1]*axis[i]+point.normal[2]*third[i];
+        out.push_back({normal,point.weight});
     }
     return out;
 }
@@ -64,8 +83,8 @@ bool kernel(const PcEncounter& e,double t,bool two_body,Kernel& k,bool& repaired
         k.conditional[i*3+j]+=eigenvectors[i*3+h]*eigenvectors[j*3+h]*std::max(0.0,eigenvalues[h]);}
     return true;
 }
-PcFallbackResult initialize(const PcEncounter& e,const PcFallbackOptions& o,const char* method) {
-    PcFallbackResult result;result.pc.method=method;result.usage=assess_pc_usage(e);
+PcFallbackResult initialize(const PcEncounter& e,const PcFallbackOptions& o,const char* method,const PcUsageResult* usage) {
+    PcFallbackResult result;result.pc.method=method;result.usage=usage?*usage:assess_pc_usage(e);
     auto times=time_bounds(e,o,result.usage);result.time_start=times.first;result.time_end=times.second;
     result.limitation="Cartesian Gaussian propagation and Hall/Coppola inward sphere flux; not CARA equinoctial peak-overlap Hall. Nc equals Pc only for an isolated encounter without recrossings.";
     if(!e.has_velocity_covariance)result.limitation+=" Velocity covariance unavailable.";
@@ -95,9 +114,9 @@ void mark_count_applicability(PcFallbackResult& result,const PcEncounter& e) {
 bool close(double a,double b,double tolerance) {return std::abs(a-b)<=std::max(1e-15,tolerance*std::max(std::abs(a),std::abs(b)));}
 }
 
-static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall) {
+static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall,const PcUsageResult* usage) {
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"3D-NC-HALL":"3D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
-    auto result=initialize(e,o,hall?"3D-NC-HALL":"3D-NC-CARTESIAN");
+    auto result=initialize(e,o,hall?"3D-NC-HALL":"3D-NC-CARTESIAN",usage);
     if(hall)result.limitation="Hall equinoctial peak-overlap sphere flux; Nc equals Pc for an isolated encounter without recrossings or initial occupancy.";
     if(!(e.combined_radius>0)||!(result.time_end>result.time_start)){result.pc.converged=false;return result;}
     Kernel initial;
@@ -115,15 +134,25 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
     }
     unsigned order=std::clamp(o.angular_order,8u,128u);if(order%2)++order;
     double current=0;result.pc.converged=false;
+    // Angular refinement changes only the surface rule. Preserve the costly
+    // propagated Gaussian kernels at time nodes already visited.
+    std::map<double,Kernel> kernels;
     for(int refinement=0;refinement<6;++refinement) {
         auto points=sphere(order,initial.v),coarse_points=sphere(order/2,initial.v);
         struct Rates {double fine=0,coarse=0;};
         std::map<double,Rates> cache;bool valid=true,temporal_ok=true;
         auto evaluate=[&](double t) {
             auto found=cache.find(t);if(found!=cache.end())return found->second;
-            Kernel k;Rates value;
-            if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall))valid=false;
-            else{value.fine=rate(k,points,e.combined_radius);value.coarse=rate(k,coarse_points,e.combined_radius);}
+            auto entry=kernels.find(t);Rates value;
+            if(entry==kernels.end()) {
+                Kernel k;
+                if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall))valid=false;
+                else entry=kernels.emplace(t,std::move(k)).first;
+            }
+            if(entry!=kernels.end()) {
+                value.fine=rate(entry->second,points,e.combined_radius);
+                value.coarse=rate(entry->second,coarse_points,e.combined_radius);
+            }
             cache.emplace(t,value);return value;
         };
         auto simpson=[](double a,double b,Rates fa,Rates fm,Rates fb) {
@@ -160,9 +189,9 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
     return result;
 }
 
-static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall) {
+static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall,const PcUsageResult* usage) {
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"2D-NC-HALL":"2D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
-    auto result=initialize(e,o,hall?"2D-NC-HALL":"2D-NC-CARTESIAN");result.pc.converged=false;
+    auto result=initialize(e,o,hall?"2D-NC-HALL":"2D-NC-CARTESIAN",usage);result.pc.converged=false;
     if(hall)result.limitation="Hall equinoctial peak-overlap model with quadratic time integration; requires an isolated Gaussian-shaped collision-rate peak.";
     if(hall&&!result.usage.fully_evaluated){
         result.requires_monte_carlo=true;
@@ -203,8 +232,8 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
     }
     return result;
 }
-PcFallbackResult pc_3d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o){return compute_nc3(e,o,nullptr);}
-PcFallbackResult pc_2d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o){return compute_nc2(e,o,nullptr);}
-PcFallbackResult pc_3d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o){HallModel model(e);return compute_nc3(e,o,&model);}
-PcFallbackResult pc_2d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o){HallModel model(e);return compute_nc2(e,o,&model);}
+PcFallbackResult pc_3d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){return compute_nc3(e,o,nullptr,usage);}
+PcFallbackResult pc_2d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){return compute_nc2(e,o,nullptr,usage);}
+PcFallbackResult pc_3d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){HallModel model(e);return compute_nc3(e,o,&model,usage);}
+PcFallbackResult pc_2d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){HallModel model(e);return compute_nc2(e,o,&model,usage);}
 } // namespace conjunction
