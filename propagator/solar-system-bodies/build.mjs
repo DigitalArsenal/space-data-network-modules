@@ -29,6 +29,7 @@ const parts = [
   await read(path.join(root, "src", "bodies.hpp")),
   await read(path.join(root, "src", "solar_system_bodies_module.cpp")),
   await read(path.join(root, "src", "observer_position.hpp")),
+  await read(path.join(root, "src", "body_coordinates.hpp")),
   await read(path.join(root, "src", "kernel_loader.hpp")),
   await read(path.join(root, "src", "scene.hpp")),
 ];
