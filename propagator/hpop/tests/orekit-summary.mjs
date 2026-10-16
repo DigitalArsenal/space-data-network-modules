@@ -22,13 +22,12 @@
 // Prints Markdown tables (README.md quotes them) and writes the numbers as JSON
 // (default tests/evidence/orekit/summary.json).
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
-import { REFERENCE, integratorTolerance, requestInputs, scoreJacobians } from './lib/orekitCases.mjs';
-import { decodeResult } from './lib/prwCodec.mjs';
+import { REFERENCE, requestInputs } from './lib/orekitCases.mjs';
+import { buildMetrics, scoreResponse } from './evidence/orekit/scoring.mjs';
 
 const { values: o, positionals } = parseArgs({ options: { reference: { type: 'string' } }, allowPositionals: true });
 const reference = o.reference ? JSON.parse(fs.readFileSync(o.reference, 'utf8')) : REFERENCE;
@@ -54,7 +53,11 @@ const FAMILIES = [
   ['In-track thrust (I1)', /^I1$/], ['Drag-area rate (B1)', /^B1$/], ['Drag (F6 Z3 W1 J1)', /^(F6|Z3|W1|J1)$/],
 ];
 
-const norm3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const work = fs.mkdtempSync(new URL('./evidence/orekit/.refresh-', import.meta.url).pathname);
+process.on('exit', () => fs.rmSync(work, { recursive: true, force: true }));
+const metrics = buildMetrics(work);
+const max = (values) => metrics({ mode: 'maximum', values });
+const met = (value, limit) => metrics({ mode: 'met', value, limit });
 const results = Object.fromEntries(SETTINGS.map((s) => [s.id, []]));
 for (const setting of SETTINGS) {
   for (const c of reference.cases) {
@@ -62,13 +65,7 @@ for (const setting of SETTINGS) {
     try {
       const response = await harness.invoke({ methodId: 'invoke', inputs: requestInputs(c, { maxStep: setting.maxStep, ...(setting.tolerance ? { tolerance: setting.tolerance } : {}) }) });
       if (response.statusCode !== 0) throw new Error(`${c.orbit} ${c.forces}: ${response.errorCode}: ${response.errorMessage}`);
-      const result = decodeResult(response);
-      const positions = result.samples.map((s) => s.position.map((v) => v * 1000));
-      const difference = positions.map((p, i) => norm3(p, c.samples[i + 1].slice(1, 4)));
-      const worst = Math.max(...difference);
-      const row = { orbit: c.orbit, forces: c.forces, worstM: worst, atHour: c.samples[difference.indexOf(worst) + 1][0] / 3600,
-        steps: result.samples.at(-1).integrationSteps, positions };
-      if (c.parameters && setting.id === 'suite') row.jacobians = scoreJacobians(c, response);
+      const row = { orbit: c.orbit, forces: c.forces, ...scoreResponse(c, response, metrics, Boolean(c.parameters && setting.id === 'suite')) };
       results[setting.id].push(row);
     } finally { harness.destroy(); }
   }
@@ -80,8 +77,7 @@ const differential = (setting, orbit, base, added) => {
   const a = results[setting].find((r) => r.orbit === orbit && r.forces.startsWith(`${base}-`)), b = results[setting].find((r) => r.orbit === orbit && r.forces.startsWith(`${added}-`));
   const oa = reference.cases.find((c) => c.orbit === orbit && c.forces.startsWith(`${base}-`)), ob = reference.cases.find((c) => c.orbit === orbit && c.forces.startsWith(`${added}-`));
   if (!a || !b || !oa || !ob) return undefined;
-  return Math.max(...a.positions.map((p, i) => norm3(
-    p.map((v, k) => b.positions[i][k] - v), ob.samples[i + 1].slice(1, 4).map((v, k) => v - oa.samples[i + 1][1 + k]))));
+  return metrics({ mode: 'difference', a: a.positions, b: b.positions, referenceA: oa.samples, referenceB: ob.samples });
 };
 const DIFFERENTIALS = [['A1', 'F5', 'LEO400'], ['A1', 'F5', 'GPS'], ['O1', 'F4', 'LEO400'], ['O1', 'F4', 'GPS']].map(([added, base, orbit]) => ({
   added, base, orbit, ...Object.fromEntries(SETTINGS.map((s) => [`${s.id}M`, differential(s.id, orbit, base, added)])) }));
@@ -89,12 +85,10 @@ const DIFFERENTIALS = [['A1', 'F5', 'LEO400'], ['A1', 'F5', 'GPS'], ['O1', 'F4',
 // HPOP's own integration error at the suite's request: its trajectory there against its own at the finest setting.
 const integrationError = (c) => {
   const a = results.suite.find((r) => r.orbit === c.orbit && r.forces === c.forces), b = results.finest.find((r) => r.orbit === c.orbit && r.forces === c.forces);
-  return Math.max(...a.positions.map((p, i) => norm3(p, b.positions[i])));
+  return metrics({ mode: 'difference', a: a.positions, b: b.positions });
 };
-const mm = (m) => (m * 1000 < 10 ? (m * 1000).toFixed(2) : (m * 1000).toFixed(1));
-const cm = (m) => (m < 0.1 ? `${(m * 100).toFixed(1)} cm` : `${(m * 100).toFixed(0)} cm`);
-const fmt = (m) => (m < 0.01 ? `${mm(m)} mm` : cm(m));
-const maxOf = (rows) => rows.length ? Math.max(...rows.map((r) => r.worstM)) : undefined;
+const fmt = (value) => metrics({ mode: 'format', value });
+const maxOf = (rows) => rows.length ? max(rows.map((r) => r.worstM)) : undefined;
 const find = (id, pred) => results[id].filter((r) => pred(reference.cases.find((c) => c.orbit === r.orbit && c.forces === r.forces)));
 
 console.log(`| Force set | ${SETTINGS.map((s) => `${s.id} (${s.label})`).join(' | ')} |`);
@@ -117,27 +111,34 @@ for (const [name, re] of FAMILIES) {
 }
 console.log();
 const jacobians = results.suite.filter((r) => r.jacobians);
-console.log(`State-transition matrix, largest relative column difference (suite request): ${Math.max(...jacobians.map((r) => r.jacobians.stm)).toExponential(2)}`);
-console.log(`Parameter columns, largest relative difference (suite request): ${Math.max(...jacobians.flatMap((r) => Object.values(r.jacobians.parameters))).toExponential(2)}`);
+console.log(`State-transition matrix, largest relative column difference (suite request): ${metrics({ mode: 'format-scientific', value: max(jacobians.map((r) => r.jacobians.stm)) })}`);
+console.log(`Parameter columns, largest relative difference (suite request): ${metrics({ mode: 'format-scientific', value: max(jacobians.flatMap((r) => Object.values(r.jacobians.parameters))) })}`);
 console.log();
 console.log(`| Force added to a base set | Orbit | ${SETTINGS.map((s) => s.id).join(' | ')} |`);
 console.log(`|---|---|${SETTINGS.map(() => '---:').join('|')}|`);
-for (const d of DIFFERENTIALS) console.log(`| ${d.added} on ${d.base} | ${d.orbit} | ${SETTINGS.map((s) => `${(d[`${s.id}M`] * 1000).toFixed(3)} mm`).join(' | ')} |`);
+for (const d of DIFFERENTIALS) console.log(`| ${d.added} on ${d.base} | ${d.orbit} | ${SETTINGS.map((s) => `${metrics({ mode: 'format-mm', value: d[`${s.id}M`] })} mm`).join(' | ')} |`);
 console.log();
 console.log('| Orbit | HPOP\'s own integration error at the suite\'s request |');
 console.log('|---|---:|');
-for (const orbit of ORBITS) console.log(`| ${orbit} | ${fmt(Math.max(...reference.cases.filter((c) => c.orbit === orbit).map(integrationError)))} |`);
+for (const orbit of ORBITS) console.log(`| ${orbit} | ${fmt(max(reference.cases.filter((c) => c.orbit === orbit).map(integrationError)))} |`);
 
+const hash = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const exported = JSON.parse(fs.readFileSync(new URL('./evidence/cases/hpop-reference-cases.json', import.meta.url), 'utf8'));
+const limitFor = (c) => exported.protocol.tolerancesM.default[exported.cases.find((g) => g.id === `${c.orbit} ${c.forces}`).toleranceClass];
+const inputFiles = [new URL(o.reference ?? './fixtures/orekit/orekit-reference.json', import.meta.url), ...['eop-2026-06.json', 'eop-2026-08.json', 'spw-2026-08.json', 'jb2008-2026-06.json', 'OrekitReference.java'].map((name) => new URL(`./fixtures/orekit/${name}`, import.meta.url)), new URL('./evidence/cases/hpop-reference-cases.json', import.meta.url), ...['./orekit-summary.mjs', './evidence/orekit/scoring.mjs', './evidence/orekit/score-metrics.cpp', './evidence/orekit/check-orekit.mjs'].map((file) => new URL(file, import.meta.url))];
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, `${JSON.stringify({
   note: 'HPOP against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite\'s integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.',
   module: { version: JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, sha256: createHash('sha256').update(wasm).digest('hex') },
   reference: o.reference ? path.basename(o.reference) : 'tests/fixtures/orekit/orekit-reference.json',
-  node: process.version, host: `${os.cpus()[0].model}, ${os.availableParallelism()} cores`,
+  orekit: { version: '13.1', settings: reference.source, sourcePin: { kind: 'reference-generator-source', path: '../../fixtures/orekit/OrekitReference.java', sha256: hash(new URL('./fixtures/orekit/OrekitReference.java', import.meta.url)) }, engineBinary: { status: 'unavailable', reason: 'The original Orekit 13.1 jar is not retained locally; the stored trajectory and generation source are pinned. Installed 13.1.2 and 13.1.6 jars are not substituted.' } },
+  fileHashes: inputFiles.map((file) => ({ path: path.relative(new URL('./evidence/orekit/', import.meta.url).pathname, file.pathname), sha256: hash(file) })),
+  verdict: Object.fromEntries(SETTINGS.map((setting) => { const rows = results[setting.id]; const { flags, ...verdict } = metrics({ mode: 'verdict', values: rows.map((r) => r.worstM), limits: rows.map(limitFor) }); return [setting.id, verdict]; })),
+  skipped: [],
   settings: SETTINGS,
-  cases: reference.cases.map((c) => ({ orbit: c.orbit, forces: c.forces, ...Object.fromEntries(SETTINGS.map((s) => {
+  cases: reference.cases.map((c) => ({ id: `${c.orbit} ${c.forces}`, orbit: c.orbit, forces: c.forces, toleranceM: limitFor(c), ...Object.fromEntries(SETTINGS.map((s) => {
     const r = results[s.id].find((x) => x.orbit === c.orbit && x.forces === c.forces);
-    return [s.id, { worstM: r.worstM, atHour: r.atHour, steps: r.steps, ...(r.jacobians ? { jacobians: r.jacobians } : {}) }];
+    return [s.id, { worstM: r.worstM, met: met(r.worstM, limitFor(c)), atHour: r.atHour, steps: r.steps, ...(r.jacobians ? { jacobians: r.jacobians } : {}) }];
   })), integrationErrorM: integrationError(c) })),
   differentials: DIFFERENTIALS,
 }, null, 1)}\n`);

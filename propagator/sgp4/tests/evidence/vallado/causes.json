@@ -1,0 +1,99 @@
+{
+  "about": "Causes for primary-criterion misses and printing-resolution diagnostics in summary-vallado.json. The fixed source/module limits and the per-sample request-epoch consistency inequality are separate from decimal printing resolution; decomposition rows do not enter primary counts.",
+  "source": {
+    "classification": "native-source-versus-printed-reference",
+    "statement": "The native build of the same Vallado SGP4.cpp exceeds the decimal output's rounding envelope, including the long-propagation 20413 block. The pinned upstream source is identical after CR removal; this residual is isolated to native floating-point evaluation versus the published printed values, not the WASM adapter.",
+    "evidence": [
+      "tools.json#/reference/files/extension~1SGP4.cpp",
+      "summary-vallado.json#/tables/all/source",
+      "sgp4_vallado_native.cpp"
+    ]
+  },
+  "afspc": {
+    "classification": "operation-mode-convention",
+    "statement": "AFSPC mode a is intentionally different from the printed improved-mode i reference; the source comparison separately measures the native-versus-print residual.",
+    "evidence": [
+      "tools.json#/opsmode",
+      "summary-vallado.json#/tables/all/afspc",
+      "run-vallado.mjs"
+    ]
+  },
+  "fastMath": {
+    "classification": "compiler-floating-point-flags",
+    "statement": "The same native Vallado path and times are subtracted with and without -ffast-math, isolating the compiler arithmetic setting.",
+    "evidence": [
+      "summary-vallado.json#/native",
+      "summary-vallado.json#/tables/all/fastMath",
+      "run-vallado.mjs"
+    ]
+  },
+  "emccFast": {
+    "classification": "wasm-compiler-arithmetic",
+    "statement": "The same Vallado path is compiled to WASM with fast-math and compared with the strict native evaluation; emccStrict separately isolates the result without fast-math.",
+    "evidence": [
+      "summary-vallado.json#/native/emccFlags",
+      "summary-vallado.json#/tables/all/emccFast",
+      "summary-vallado.json#/tables/all/emccStrict"
+    ]
+  },
+  "emccStrict": {
+    "classification": "native-versus-wasm-floating-point",
+    "statement": "The strict WASM and native builds evaluate the same source, elements and times. Their subtraction isolates cross-target floating-point evaluation, including accumulated error in the long 20413 arc.",
+    "evidence": [
+      "summary-vallado.json#/native/emccFlags",
+      "summary-vallado.json#/tables/all/emccStrict",
+      "run-vallado.mjs"
+    ]
+  },
+  "elements": {
+    "classification": "element-and-epoch-representation",
+    "statement": "The module OMM initialization path is compared with Vallado TLE initialization at the identical effective tsince, isolating element conversion and the single-double Julian-date epoch representation.",
+    "evidence": [
+      "sgp4_vallado_native.cpp",
+      "summary-vallado.json#/epochRoundingSeconds",
+      "summary-vallado.json#/tables/all/elements"
+    ]
+  },
+  "build": {
+    "classification": "shipped-build-floating-point",
+    "statement": "The shipped WASM and native module path use the identical OMM initialization and request, isolating the shipped build's arithmetic.",
+    "evidence": [
+      "summary-vallado.json#/module",
+      "summary-vallado.json#/tables/all/build",
+      "run-vallado.mjs"
+    ]
+  },
+  "module": {
+    "classification": "element-and-shipped-build-floating-point",
+    "statement": "The stored module subtraction compares shipped WASM with native Vallado at the same effective minutes since epoch; there is no tcppver.out row at the shifted time. OMM/epoch conversion and shipped build arithmetic are isolated by elements and build. The fixed 1 mm / 1e-5 m/s criterion is not enlarged for the emccFast versus emccStrict compiler-arithmetic spread; any exceedance retains this measured cause.",
+    "evidence": [
+      "summary-vallado.json#/tables/all/elements",
+      "summary-vallado.json#/tables/all/build",
+      "summary-vallado.json#/tables/all/module",
+      "summary-vallado.json#/tables/all/emccFast",
+      "summary-vallado.json#/tables/all/emccStrict",
+      "summary-vallado.json#/acceptance"
+    ]
+  },
+  "timeOnly": {
+    "classification": "single-double-request-epoch",
+    "statement": "Vallado is evaluated at both the intended tsince and the tsince recovered from a single-double Julian-date request; only request-time rounding differs.",
+    "evidence": [
+      "summary-vallado.json#/requestTimeShiftSeconds",
+      "summary-vallado.json#/tables/all/timeOnly",
+      "sgp4_vallado_native.cpp"
+    ]
+  },
+  "wasm": {
+    "classification": "request-time-rounding-plus-native-print-residual",
+    "statement": "The request-epoch difference is module + timeOnly + source as vectors. The requested norm inequality uses only the module and timeOnly norms plus the 3D printing envelope. It can miss when the native-source-versus-printed residual exceeds that envelope, as measured in source; printing alone is not a bound on native evaluation error. Request-time rounding accounts for the large absolute differences. The literal inequality is reported without enlarging its allowance or substituting a sum of table maxima.",
+    "evidence": [
+      "summary-vallado.json#/tables/all/timeOnly",
+      "summary-vallado.json#/tables/all/module",
+      "summary-vallado.json#/tables/all/source",
+      "summary-vallado.json#/tables/all/wasm",
+      "summary-vallado.json#/acceptance",
+      "replay-metrics.cpp"
+    ]
+  }
+}

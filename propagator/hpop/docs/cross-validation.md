@@ -77,7 +77,9 @@ These differences are part of the measured spread:
   - **Epochs:** GMAT carries epochs as a double-precision MJD, so a sample
     lands within about 0.15 us of the hour. That is ±1 mm in LEO and up to
     4.5 mm at MOLNIYA perigee.
-  - **Drag:** the macOS build of R2022a has no NRLMSISE-00 plugin, so GMAT's
+  - **Drag:** R2026a includes NRLMSISE-00; its anomalous-oxygen convention
+    is measured in [the GMAT summary](../tests/evidence/gmat/summary-gmat-R2026a.json).
+    The macOS build of R2022a has no NRLMSISE-00 plugin, so its
     drag cases use Jacchia-Roberts and HPOP is asked for Jacchia-Roberts on
     them. These cases are not compared with the NRLMSISE-00 tools. GMAT's
     Earth is given WGS84's flattening on them, the ellipsoid Orekit and HPOP
@@ -136,9 +138,15 @@ These differences are part of the measured spread:
     Ap, the same convention as the others. Its altitude is taken on the
     WGS84 ellipsoid in ITRF93. On LEO400 it ends 12.1 m from Orekit after a
     day, which is 2.8e-4 of the 44 km drag effect; SSO700 agrees to 2 cm.
-    The cause of the LEO400 gap was not isolated in this pass.
+    The LEO400 gap is isolated to the NRLMSISE-00 port formulas. The
+    measured correction and WGS84 runner setting are separated in
+    [the Nyx summary](../tests/evidence/nyx/summary-nyx-2.6.0.json).
 
 ## Results
+
+The tables below retain the original subset and artifact identified here.
+The [72-case reference suite](#reference-suite-on-72-cases) scores the shipped
+artifact and supplies the current coverage and diagnoses.
 
 Largest 3D position difference over 24 h, at hourly samples, measured on
 2026-10-11 with HPOP WASM 9c24bf0e...a8a99e3 (propagator/hpop 1.3.0) through
@@ -505,8 +513,9 @@ Measured, without a bound:
   series (`latest.long`) through IAU 1976/1980 with nutation corrections and
   degree-20 Chebyshev fits (its comment area, `tools.json`), while the June
   case rows agree with the current IERS finals to 0.004 mas. The a-priori
-  5 mas bound is missed by the reference, not by HPOP; the kernel states
-  its own accuracy as several microradians.
+  5 mas bound remains a miss: the measured reference spread plus HPOP's
+  clock contribution explains it. The kernel states its own accuracy as
+  several microradians.
 - **Defect 1: `lib/coords` IAU 1976 precession.** `coords::precession`
   states "as ERFA pmat76" but multiplies the Lieske coefficients' T0 terms by
   T: zeta and z each carry an extra 1.39656 T^2 - 0.000139 T^3 arcsec and
@@ -532,10 +541,12 @@ Measured, without a bound:
   position batches) and the force model's no-EOP fallback
   `ForceModel::GcrfToEarthFixed(jd)`: 212 mas, 7.0 m at LEO radius and 43 m
   at GEO radius, inside the 0.5 arcsec band `environment_conformance.cpp`
-  gates them with. The PRW propagation path and every reference case use
-  `EarthRotation` (a PRW request with an Earth-fixed force and no EOP is
-  refused), and the SGP4 module uses `foundation/frames`; neither is
-  affected. No HPOP code was changed here.
+  gates them with. Reference-suite field and drag cases supply EOP and use
+  the CIO `EarthRotation` chain. Point-mass plus NRLMSISE-00 without EOP is
+  accepted and reaches the classical fallback; the blanket refusal statement
+  does not apply. The SGP4 module uses `foundation/frames`. Reachability and
+  shipped ECEF effects are recorded in
+  [the frame diagnosis](../tests/evidence/erfa-spice/summary-erfa-spice.json).
 - **TEME definitions.** SGP4's TEME taken as the IAU 2006/2000A true
   equator rotated by the equation of the equinoxes (`foundation/frames`)
   and as the FK5 true equator rotated by `eraEqeq94` differ by 77.7 mas,
@@ -550,26 +561,15 @@ Measured, without a bound:
 
 ## SGP4: Vallado's verification set
 
-The SGP4 module (`propagator/sgp4`) is checked against all 666 rows of
-Vallado's `tcppver.out` (33 sets of `SGP4-VER.TLE`, python-sgp4 2.27 sdist
-`06d37247...85f9`). Runner and evidence: `propagator/sgp4/tests/evidence/vallado/`
-(`run-vallado.mjs`, `sgp4_vallado_native.cpp`, `summary-vallado.json`,
-`tools.json`); method and table in `propagator/sgp4/README.md`, "Vallado's
-verification set". The case export holds no mean-element sets, so this
-runner reads Vallado's own.
+Vallado's `SGP4-VER.TLE` and `tcppver.out` define the mean elements, UTC
+sample times and TEME states. The evidence separates native-source arithmetic,
+operation mode, compiler flags, OMM conversion and single-JD request rounding.
+[Verification sets](../../sgp4/README.md#verification-sets) gives generated
+numbers and links to the authenticated inputs and replay check.
 
-| Comparison | Near-Earth | Deep space |
-| --- | ---: | ---: |
-| Module's `SGP4.cpp`, native, against `tcppver.out` | 7.3 µm | 8.1 µm (118 µm 1.28e6 min out) |
-| Shipped wasm against that, at the module's own minutes | 0.41 µm | 112 µm |
-| Shipped wasm against `tcppver.out` through `propagate_state` | 15.2 cm | 14.6 cm (9.74 m on 33333) |
-
-Error codes agree (1, 1, 6, 6, 4, 3, 6). Findings: the deep-space
-micrometres are `-ffast-math` in the module's CMake flags (the same wasm
-build without it agrees to 0.23 µm), and the centimetres are the request's
-single Julian-date double and the set epoch kept as one double (up to
-19.4 µs and 19.8 µs). SGP4-XP: no US Space Force baseline cases are
-available here; `propagator/sgp4-xp/vectors` remains the adapter check.
+SGP4-XP is checked for exact agreement with the Space Force library's own
+runtime. Its theory has no independent public reference outside that library;
+[the XP summary](../../sgp4/tests/evidence/xp/summary-xp.json) states the scope.
 
 ## Not compared, and why
 
@@ -577,4 +577,46 @@ available here; `propagator/sgp4-xp/vectors` remains the adapter check.
 | --- | --- |
 | STK/HPOP (Ansys AGI), FreeFlyer (a.i. solutions), ODTK | Commercial licences; not installed and not runnable here |
 | JPL MONTE, ESA GODOT | Distribution restricted to their agencies and partners |
-| Basilisk (CU Boulder AVS) | In `repos/ancillary-packages/basilisk` as source. It is a spacecraft-simulation framework: matching this setup needs a full Basilisk build plus a simulation scenario per case. That was left for a later pass once four independent propagators were in place |
+
+## Reference suite on 72 cases
+
+<!-- BEGIN GENERATED REFERENCE SUITE -->
+| Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 18.897 mm | 45.193 mm | 45.172 mm | 17.772 mm | 18.113 mm | 19.898 mm | 17.745 mm | 1.318 mm |
+| LEO400 | drag | 25.022 mm | 2.337 m | 1.380 m | 12.459 m | 38.838 mm | 33.545 mm | 5418.749 m | 4.054 mm |
+| SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 14.817 mm | 19.400 mm | 27.703 mm | 15.972 mm | 14.416 mm | 14.264 mm | 15.821 mm | 1.351 mm |
+| SSO700 | drag | 16.929 mm | 7.965 m | 164.692 mm | 45.653 mm | 13.506 mm | 65.290 mm | 58.128 m | 1.096 mm |
+| GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
+| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.139 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.219 mm |
+| GPS | drag | — | — | — | — | — | — | — | — |
+| GEO | point mass | 0.035 mm | 0.001 mm | 0.001 mm | 0.002 mm | 9.906e-04 mm | 0.003 mm | 6.219e-04 mm | 0.037 mm |
+| GEO | field + third bodies + SRP (no drag) | 0.066 mm | 0.150 mm | 1.330 mm | 0.153 mm | 0.147 mm | 0.141 mm | 0.148 mm | 0.065 mm |
+| GEO | drag | — | — | — | — | — | — | — | — |
+| MOLNIYA | point mass | 0.579 mm | 0.013 mm | 0.059 mm | 0.003 mm | 0.007 mm | 0.008 mm | 0.020 mm | 0.572 mm |
+| MOLNIYA | field + third bodies + SRP (no drag) | 11.034 mm | 5.116 mm | 28.313 mm | 1.172 mm | 10.767 mm | 11.221 mm | 1.134 mm | 9.839 mm |
+| MOLNIYA | drag | — | — | — | — | — | — | — | — |
+
+### Drag cases with the tool-side setting difference removed (diagnostic)
+
+| Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.265 mm | 1.500 m | not met | met |
+| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.955 mm | 1.500 m | not met | met |
+| Nyx | LEO400 | 5 | 12.459 m | 50.136 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 45.653 mm | 14.967 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.749 m | 26.553 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.128 m | 15.210 mm | 100.000 mm | not met | met |
+
+*Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: [GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic](../tests/evidence/gmat/anomalous-oxygen.json); [Nyx: Published NRLMSISE-00 formulas + WGS84 shape](../tests/evidence/nyx/drag-settings-diagnostic.json); [Basilisk: WGS84 coordinates + native gtd7d density](../tests/evidence/basilisk/summary-basilisk-2.12.0.json#/diagnostics/wgs84-gtd7d). Limits: [shared protocol](../tests/evidence/cases/hpop-reference-cases.json), with GMAT limits applying only to GMAT.*
+
+Evidence: [Orekit](../tests/evidence/orekit/), [GMAT R2026a](../tests/evidence/gmat/), [GMAT R2022a](../tests/evidence/gmat/), [Nyx](../tests/evidence/nyx/), [tudatpy](../tests/evidence/tudat/), [Tudat WASM](../tests/evidence/tudat/), [Basilisk](../tests/evidence/basilisk/), [ERFA/SPICE](../tests/evidence/erfa-spice/), [Horizons](../tests/evidence/horizons/), [Vallado](../../sgp4/tests/evidence/vallado/), [SGP4-XP](../../sgp4/tests/evidence/xp/), [consolidated report](../tests/evidence/CONSOLIDATED.md).
+
+From the repository root:
+
+```sh
+UV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/hpop/tests/evidence/check-all.mjs
+```
+<!-- END GENERATED REFERENCE SUITE -->

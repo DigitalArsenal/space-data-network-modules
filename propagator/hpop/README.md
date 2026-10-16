@@ -629,6 +629,13 @@ const propagator = await createHPOPPropagator();
 | `recipientPrivateKey` | `string` | Optional SDK 0.8 recipient key override for encrypted module envelopes. |
 | `lowMemory` | `boolean` | Use reduced memory configuration. |
 
+## Agreement with reference tools
+
+The [72-case reference suite](docs/cross-validation.md#reference-suite-on-72-cases)
+reports agreement, supported cases, model settings and measured causes using the
+shipped WASM. The [consolidated evidence](tests/evidence/CONSOLIDATED.md) includes
+STM, frame/time/ephemeris and SGP4 checks, with reproducible version and checksum pins.
+
 ## Verification
 
 Run the full package suite:
