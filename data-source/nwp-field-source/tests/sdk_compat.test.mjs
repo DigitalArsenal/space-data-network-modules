@@ -52,14 +52,12 @@ const GEFS = "https://noaa-gefs-pds.s3.amazonaws.com/gefs.20261006/00/atmos/pgrb
 const FILES = {
   "gfs-1p00-motion": { url: `${GFS}/gfs.t00z.pgrb2.1p00.f024`, idx: "gfs.t00z.pgrb2.1p00.f024.idx", lead: 24 },
   "gefs-0p50-spread": { url: `${GEFS}/gespr.t00z.pgrb2a.0p50.f024`, idx: "gespr.t00z.pgrb2a.0p50.f024.idx", lead: 24 },
-  "gfs-0p50-clouds": { url: `${GFS}/gfs.t00z.pgrb2.0p50.f024`, idx: "gfs.t00z.pgrb2.0p50.f024.idx", lead: 24 },
   "gfs-0p25-physics": { url: `${GFS}/gfs.t00z.pgrb2.0p25.f000`, idx: "gfs.t00z.pgrb2.0p25.f000.idx", lead: 0 },
 };
 // What each product's job header must say (the parser cuts the records by it).
 const JOB = {
   "gfs-1p00-motion": { modelKey: "gfs", modelId: "NCEP GFS 1°", modelClass: "NumericalGlobalDeterministic", deg: 1, bandRows: 0, tiles: 1, spread: false, ensemble: 0 },
   "gefs-0p50-spread": { modelKey: "gefs", modelId: "NCEP GEFS 0.5° (every other point)", modelClass: "NumericalGlobalEnsemble", deg: 1, bandRows: 0, tiles: 1, spread: true, ensemble: 31 },
-  "gfs-0p50-clouds": { modelKey: "gfs", modelId: "NCEP GFS 0.5°", modelClass: "NumericalGlobalDeterministic", deg: 0.5, bandRows: 0, tiles: 1, spread: false, ensemble: 0 },
   "gfs-0p25-physics": { modelKey: "gfs", modelId: "NCEP GFS 0.25°", modelClass: "NumericalGlobalDeterministic", deg: 0.25, bandRows: 64, tiles: 1, spread: false, ensemble: 0 },
   "gfs-0p25-sea": { modelKey: "gfs", modelId: "NCEP GFS 0.25°", modelClass: "NumericalGlobalDeterministic", deg: 0.25, bandRows: 0, tiles: 512, spread: false, ensemble: 0 },
 };
@@ -71,7 +69,6 @@ const instantaneous = (t) => t === "anl" || /^\d+ hour fcst$/.test(t);
 const REFERENCE = {
   "gfs-1p00-motion": (v, l, t, lead) => MOTION.includes(l) && (v === "UGRD" || v === "VGRD" || (v === "HGT" && lead <= 12)) && instantaneous(t),
   "gefs-0p50-spread": (v, l, t) => MOTION.includes(l) && (v === "UGRD" || v === "VGRD") && instantaneous(t),
-  "gfs-0p50-clouds": (v, l, t) => instantaneous(t) && ["TCDC:entire atmosphere", "LCDC:low cloud layer", "MCDC:middle cloud layer", "HCDC:high cloud layer"].includes(`${v}:${l}`),
   "gfs-0p25-physics": (v, l, t) => instantaneous(t) && (
     ["TMP:2 m above ground", "DPT:2 m above ground", "UGRD:10 m above ground", "VGRD:10 m above ground", "HPBL:surface", "CAPE:surface", "HGT:surface",
       "LCDC:low cloud layer", "MCDC:middle cloud layer", "HCDC:high cloud layer"].includes(`${v}:${l}`) ||
