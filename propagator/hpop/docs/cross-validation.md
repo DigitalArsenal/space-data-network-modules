@@ -548,6 +548,29 @@ Measured, without a bound:
   `docs/de440-validation.md`), and `propagator/solar-system-bodies`
   (`tests/cspice_oracle.py`, `tests/parity.mjs`).
 
+## SGP4: Vallado's verification set
+
+The SGP4 module (`propagator/sgp4`) is checked against all 666 rows of
+Vallado's `tcppver.out` (33 sets of `SGP4-VER.TLE`, python-sgp4 2.27 sdist
+`06d37247...85f9`). Runner and evidence: `propagator/sgp4/tests/evidence/vallado/`
+(`run-vallado.mjs`, `sgp4_vallado_native.cpp`, `summary-vallado.json`,
+`tools.json`); method and table in `propagator/sgp4/README.md`, "Vallado's
+verification set". The case export holds no mean-element sets, so this
+runner reads Vallado's own.
+
+| Comparison | Near-Earth | Deep space |
+| --- | ---: | ---: |
+| Module's `SGP4.cpp`, native, against `tcppver.out` | 7.3 µm | 8.1 µm (118 µm 1.28e6 min out) |
+| Shipped wasm against that, at the module's own minutes | 0.41 µm | 112 µm |
+| Shipped wasm against `tcppver.out` through `propagate_state` | 15.2 cm | 14.6 cm (9.74 m on 33333) |
+
+Error codes agree (1, 1, 6, 6, 4, 3, 6). Findings: the deep-space
+micrometres are `-ffast-math` in the module's CMake flags (the same wasm
+build without it agrees to 0.23 µm), and the centimetres are the request's
+single Julian-date double and the set epoch kept as one double (up to
+19.4 µs and 19.8 µs). SGP4-XP: no US Space Force baseline cases are
+available here; `propagator/sgp4-xp/vectors` remains the adapter check.
+
 ## Not compared, and why
 
 | Tool | Reason |

@@ -1,0 +1,24 @@
+{
+ "about": "Reference data and tools of run-vallado.mjs, in user space under /Users/tj/software/tools/xval/sgp4-vallado. Test oracles only; nothing here ships.",
+ "reference": {
+  "package": "python-sgp4 2.27 (Brandon Rhodes; MIT), source distribution",
+  "url": "https://files.pythonhosted.org/packages/a8/62/e1282ea86299c76159e182cd36046e6d7980b120fef14c101757e1f650b3/sgp4-2.27.tar.gz",
+  "uploaded": "2026-07-03T12:54:49Z",
+  "sha256": "06d37247c6985739b707b8b39b6b83e06e8af783b2531e31965501ba983985f9",
+  "files": {
+   "sgp4/SGP4-VER.TLE": {"sha256": "d246d1d9d768ace445a38a965713fa9ba52d80fd8a41a0502ff83d7acffe2881", "what": "Vallado's 33 verification sets (near-Earth, deep space, resonant, decaying, error cases), each with start, stop and step minutes"},
+   "sgp4/tcppver.out": {"sha256": "687bf28dbe52df86e8e60ab5cb4a08d1aa3dbcaf4e63b1f7ab95f044fbe3833b", "what": "Vallado's testcpp output for those sets: TEME km (%16.8f) and km/s (%12.9f), WGS-72; 700 lines, 666 data rows on 32 sets that start"},
+   "extension/SGP4.cpp": {"sha256": "2ee7ad0e8f201e8251894083fe21e33a7aace2f43c871bf04357eb44a891b06e", "sha256WithoutCR": "3388a777d710a169f780dfec83ea42f8e51d2c2652b7efe8a3187a3da0a0191d", "note": "Vallado's SGP4.cpp (12 mar 20). Identical, line endings aside, to propagator/sgp4/src/cpp/src/SGP4.cpp; SGP4.h likewise (ec22575c...5741 without CR)"}
+  },
+  "errorCodes": "python-sgp4's test_legacy_against_tcppver: Vallado's code returns 1, 1, 6, 6, 4, 3, 6, in that order, while producing tcppver.out"
+ },
+ "opsmode": "tcppver.out is Vallado's improved mode ('i'), the mode the module uses: the 'a' (AFSPC) mode moves deep-space sets by up to 964 m (23599 at 460 min)",
+ "native": {"compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101), arm64", "flags": "-std=c++17 -O2 -ffp-contract=off; second build -O3 -ffast-math"},
+ "emcc": {"compiler": "emcc 4.0.23-git (Homebrew /opt/homebrew/bin/emcc)", "flags": "the module's CMake flags (-O3 -flto -ffast-math -msimd128) and the same without -ffast-math", "note": "Not the module's toolchain (emsdk 6.0.1): used to isolate what -ffast-math does to SGP4.cpp in wasm, not to reproduce the shipped bytes"},
+ "module": {"package": "propagator/sgp4 1.2.0", "dist/browser/module.wasm": "fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347", "dist/isomorphic/module.wasm": "fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347", "surface": "ingest_omm ($OMM from the TLE text, epoch as an ISO string with the day fraction written out exactly) and propagate_state (output_frame TEME, epoch = the set's Julian date + tsince / 1440 in one double)"},
+ "ussfSgp4Xp": {
+  "status": "not available",
+  "reason": "The US Space Force's own baseline outputs ship only in the Astro Standards packages on Space-Track. None is on this machine; third_party/ussf-sgp4 holds the C Sgp4Prop wasm package (v9.1.1.0, XP build), whose zip carries no verification cases. The release notes state that XP results of the C library differ from the Fortran baseline (SHADOW computation).",
+  "existing": "propagator/sgp4-xp/vectors (vectors.json, PROVENANCE.md): the module against the unmodified USSF wasm at 0, 90 and 1440 min on five XP sets, 2.3 cm; this checks the adapter, not the XP theory"
+ }
+}

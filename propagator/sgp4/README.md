@@ -132,6 +132,52 @@ the PIV contract, the Tudat-derived SGP4 cases (below), and:
 in Chrome, native WasmEdge and Docker WasmEdge and writes
 [`conformance/parity.json`](conformance/parity.json).
 
+### Vallado's verification set
+
+`node tests/evidence/vallado/run-vallado.mjs` checks every row of
+Vallado's `tcppver.out` (python-sgp4 2.27 sdist, SHA-256
+`06d37247...85f9`; 33 sets, 666 TEME rows, WGS-72, improved mode) against
+this module, and writes `tests/evidence/vallado/summary-vallado.json`
+(pins in `tools.json`). `src/cpp/src/SGP4.cpp` is the file python-sgp4
+2.27 ships, line endings aside. Module 1.2.0, `module.wasm` SHA-256
+`fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347`.
+Largest 3D position difference over each set's span (velocity at most
+1e-6 m/s in the first three rows, 1.8e-4 m/s in the last):
+
+| Comparison | Near-Earth, 9 sets | Deep space, 23 sets |
+| --- | ---: | ---: |
+| `SGP4.cpp`, native, Vallado's TLE path, against `tcppver.out` | 7.3 µm | 8.1 µm; 118 µm on 20413 at 1.28e6 min |
+| Shipped wasm (`ingest_omm`, `propagate_state` TEME) against that path, at the minutes from epoch the module uses | 0.41 µm | 112 µm (26900 at 9400 min) |
+| `SGP4.cpp` in wasm without `-ffast-math`, against the native path | 0.005 µm | 0.23 µm; 37 µm on 20413 at 1.28e6 min |
+| Shipped wasm against `tcppver.out`, request = epoch + tsince / 1440 in one Julian-date double | 15.2 cm | 14.6 cm; 9.74 m on 33333 |
+
+- **Printing.** `tcppver.out` prints 1e-8 km and 1e-9 km/s. The native
+  path is within half a unit in every component except two rows at
+  5.03e-9 km (rounding) and 20413's run 1.28 million minutes from epoch,
+  where the 720-minute resonance integration carries rounding to 1.2e-7 km
+  (python-sgp4's own test allows 2e-7).
+- **Error codes.** The native path stops where `tcppver.out` stops, with
+  codes 1, 1, 6, 6, 4, 3, 6 in python-sgp4's order. The module refuses
+  33334 at ingestion (code 3 at its epoch) and returns `valid` false at each
+  stopping time. `PropagatorState` carries no error code.
+- **`-ffast-math`** (CMake flags of `SGP4.cpp`) is the deep-space
+  difference: the same wasm build without it agrees with the native path to
+  0.23 µm; with it (emcc 4.0.23) the resonant sets (8195, 9880, 21897,
+  22674, 26900, 26975) move 28 to 183 µm and 23333 4.1 mm at its epoch, and
+  the near-Earth sets reproduce the shipped build's 0.41 µm on the same
+  sample. The shipped build (emsdk 6.0.1) moves the same six sets 31 to
+  113 µm.
+- **Time.** `propagate_state` takes one Julian-date double (40 µs steps
+  near JD 2.46e6), and the set's epoch is kept as one double after the ISO
+  text: the minutes the module propagates differ from the intended ones by
+  up to 19.4 µs, and the epoch by up to 19.8 µs. That is the whole of the
+  last row: Vallado's path at the module's minutes reproduces it to the
+  micrometre. 33333 (e = 0.995, failing at 25 min) moves 6.5 m per 6 µs at
+  20 min while its velocity reads 1 km/s.
+- **SGP4-XP.** No US Space Force baseline cases are available here (they
+  ship with the Astro Standards packages on Space-Track); `propagator/sgp4-xp/vectors`
+  remains the adapter check against the unmodified USSF wasm (2.3 cm).
+
 ## Tudat-Derived Verification
 
 The package-local SGP4 regression suite is derived from:
