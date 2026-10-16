@@ -92,7 +92,9 @@ export function lolaFrames(dir, product, first, count, parts = 1) {
 /**
  * The answer hostcap/http-request would give one of lola_plan's requests, served from local copies of the PDS files
  * (LOLA_DIR): the .lbl whole (200), an .img byte range as a 206 with its Content-Range. `request` is the decoded
- * HttpRequest ({url, headers}). The If-Match ETag is checked against the configured product's, as the server would.
+ * HttpRequest ({url, headers}). An image range must carry If-Match (the lane's default); its VALUE is not checked
+ * here, because a local copy has no server ETag - the pinned ETags in terrain-ingest's product table are what the PDS
+ * server compares, and a mismatch there is a 412 that tile refuses like any non-2xx frame.
  */
 export function localResponse(dir, request, portId = "dem") {
   const name = request.url.split("/").at(-1);
@@ -100,6 +102,7 @@ export function localResponse(dir, request, portId = "dem") {
   if (name.endsWith(".lbl")) return granuleFrame(portId, fs.readFileSync(file), 200, { url: request.url });
   const range = (request.headers?.range ?? "").match(/^bytes=(\d+)-(\d+)$/);
   if (!range) throw new Error(`no whole-line range on ${request.url}`);
+  if (!request.headers?.["if-match"]) throw new Error(`no If-Match on ${request.url}`);
   const [a, b] = [Number(range[1]), Number(range[2])];
   const total = fs.statSync(file).size;
   const body = Buffer.alloc(b - a + 1);

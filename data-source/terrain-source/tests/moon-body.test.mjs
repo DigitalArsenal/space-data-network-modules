@@ -117,52 +117,84 @@ test("a level-7 Moon tile is a body record with normals, on the 1737.4 km sphere
   }
 });
 
-// Shared posts of two adjacent tiles: same place, same height to within both tiles' height quantization, same normal.
-function compareEdge(a, b, edgeOfA, edgeOfB, along) {
-  const all = [vertices(a), vertices(b)];
-  const normal = (tile, i) => `${tile.mesh.extensions[0].bytes[2 * i]},${tile.mesh.extensions[0].bytes[2 * i + 1]}`;
-  const byPos = new Map();
-  all[1].forEach((w, j) => { if (edgeOfB(w)) byPos.set(along(w).toFixed(9), j); });
-  let shared = 0, sameNormal = 0;
-  all[0].forEach((v, i) => {
-    if (!edgeOfA(v)) return;
-    const j = byPos.get(along(v).toFixed(9));
-    if (j === undefined) return;
-    shared++;
-    const w = all[1][j];
-    assert.ok(Math.abs(v.h - w.h) <= quantum(a.mesh) + quantum(b.mesh) + 1e-6, `height ${v.h} vs ${w.h}`);
-    if (normal(a, i) === normal(b, j)) sameNormal++;
-  });
-  return { shared, sameNormal };
+// THE SEAM BETWEEN TWO NEIGHBOURS, MEASURED AS THE POLYLINES THEY RENDER. Each tile's edge is its edge vertices (the
+// mesh's own edge index lists) in order along the edge; the gap is the largest vertical distance between the two
+// polylines, each evaluated linearly at every vertex of the other. Comparing only the posts both tiles happen to
+// carry would miss exactly the case that matters - neighbours on different densities whose posts interleave.
+function edgeLine(tile, side) {
+  const vs = vertices(tile);
+  const along = side === "east" || side === "west" ? (w) => w.v : (w) => w.u;
+  return tile.mesh.edges[side].map((i) => ({ s: along(vs[i]), h: vs[i].h, n: normalOf(tile, i) })).sort((p, q) => p.s - q.s);
 }
+const normalOf = (tile, i) => `${tile.mesh.extensions[0].bytes[2 * i]},${tile.mesh.extensions[0].bytes[2 * i + 1]}`;
+function heightAt(line, s) {
+  let k = 0;
+  while (k + 1 < line.length && line[k + 1].s < s) k++;
+  if (k + 1 >= line.length || line[k + 1].s === line[k].s) return line[k].h;
+  return line[k].h + ((s - line[k].s) / (line[k + 1].s - line[k].s)) * (line[k + 1].h - line[k].h);
+}
+function seam(a, b, sideOfA, sideOfB) {
+  const A = edgeLine(a, sideOfA), B = edgeLine(b, sideOfB);
+  const gap = Math.max(...A.map((p) => Math.abs(p.h - heightAt(B, p.s))), ...B.map((p) => Math.abs(p.h - heightAt(A, p.s))));
+  const samePosts = A.length === B.length && A.every((p, k) => p.s === B[k].s);
+  const sameNormals = samePosts && A.every((p, k) => p.n === B[k].n);
+  return { gap, samePosts, sameNormals, tolerance: quantum(a.mesh) + quantum(b.mesh) + 1e-6 };
+}
+// The interior density a tile settled on: its distinct interior columns, plus the two edges.
+const density = (tile) => new Set(tile.mesh.u.filter((u) => u > 0 && u < 32767)).size + 2;
 
-test("adjacent Moon tiles agree on every shared post: east-west, north-south, across the antimeridian, at both poles and on the polar product (0 cracks)", { skip }, async () => {
-  const equator = await lane.planUnit(L7_FIRST_UNIT + 15);
-  const pole = await lane.planUnit(L7_FIRST_UNIT + 31);  // rows 124-127: the north pole row
-  const eq = await lane.encode(equator, (k) => ["7/100/60", "7/101/60", "7/100/61", "7/0/62", "7/255/62"].includes(k));
+test("Moon neighbours render one edge polyline whatever density each settles on: east-west, north-south, across units, the antimeridian, both poles and the polar product (0 cracks)", { skip }, async () => {
+  const equator = await lane.planUnit(L7_FIRST_UNIT + 15);  // rows 60-63
+  const below = await lane.planUnit(L7_FIRST_UNIT + 14);    // rows 56-59
+  const pole = await lane.planUnit(L7_FIRST_UNIT + 31);     // rows 124-127: the north pole row
+  // A 32 x 2 block of the equatorial band, every tile, so neighbours on different densities are measured too.
+  const block = (k) => { const [l, x, y] = k.split("/").map(Number); return l === 7 && x >= 96 && x < 128 && (y === 60 || y === 61); };
+  const eq = await lane.encode(equator, (k) => block(k) || ["7/0/62", "7/255/62"].includes(k));
+  const south = await lane.encode(below, (k) => k === "7/100/59");
   const np = await lane.encode(pole, (k) => ["7/10/127", "7/11/127", "7/140/127"].includes(k));
   const polarUnit = await lane.unitFor(10, 1000, 0, 143, 199);
   const sp = await lane.encode(polarUnit, (k) => ["10/1000/0", "10/1001/0", "10/1000/1"].includes(k));
   const T = (r, k) => tileOf(r.byKey.get(k));
   const pairs = [
-    ["polar east-west", T(sp, "10/1000/0"), T(sp, "10/1001/0"), (v) => v.u === 32767, (v) => v.u === 0, (v) => v.lat],
-    ["polar north-south", T(sp, "10/1000/0"), T(sp, "10/1000/1"), (v) => v.v === 32767, (v) => v.v === 0, (v) => v.lon],
-    ["east-west", T(eq, "7/100/60"), T(eq, "7/101/60"), (v) => v.u === 32767, (v) => v.u === 0, (v) => v.lat],
-    ["north-south", T(eq, "7/100/60"), T(eq, "7/100/61"), (v) => v.v === 32767, (v) => v.v === 0, (v) => v.lon],
-    ["antimeridian", T(eq, "7/255/62"), T(eq, "7/0/62"), (v) => v.u === 32767, (v) => v.u === 0, (v) => v.lat],
-    ["pole east-west", T(np, "7/10/127"), T(np, "7/11/127"), (v) => v.u === 32767, (v) => v.u === 0, (v) => v.lat],
+    ["polar east-west", T(sp, "10/1000/0"), T(sp, "10/1001/0"), "east", "west"],
+    ["polar north-south", T(sp, "10/1000/0"), T(sp, "10/1000/1"), "north", "south"],
+    ["across units", T(south, "7/100/59"), T(eq, "7/100/60"), "north", "south"],
+    ["antimeridian", T(eq, "7/255/62"), T(eq, "7/0/62"), "east", "west"],
+    ["pole east-west", T(np, "7/10/127"), T(np, "7/11/127"), "east", "west"],
   ];
-  for (const [name, a, b, ea, eb, along] of pairs) {
-    const { shared, sameNormal } = compareEdge(a, b, ea, eb, along);
-    assert.ok(shared >= 5, `${name}: ${shared} shared posts`);
-    assert.ok(sameNormal >= shared - 1, `${name}: ${sameNormal} of ${shared} shared normals identical`);
+  for (let x = 96; x < 128; x++) {
+    for (const y of [60, 61]) {
+      if (x < 127) pairs.push([`7/${x}/${y} east`, T(eq, `7/${x}/${y}`), T(eq, `7/${x + 1}/${y}`), "east", "west"]);
+    }
+    pairs.push([`7/${x}/60 north`, T(eq, `7/${x}/60`), T(eq, `7/${x}/61`), "north", "south"]);
   }
+  let mixed = 0;
+  for (const [name, a, b, sa, sb] of pairs) {
+    const { gap, samePosts, sameNormals, tolerance } = seam(a, b, sa, sb);
+    assert.ok(samePosts, `${name}: the two edges carry different posts`);
+    assert.ok(sameNormals, `${name}: a shared post's normal differs`);
+    assert.ok(gap <= tolerance, `${name}: edge polylines part by ${gap} m (height quantization ${tolerance} m)`);
+    if (density(a) !== density(b)) mixed++;
+  }
+  assert.ok(mixed >= 20, `only ${mixed} of ${pairs.length} pairs settled on different densities`);
   // Every pole post of every tile touching the pole is one height: the mean of LDEM_64's first line.
   const poleHeights = ["7/10/127", "7/11/127", "7/140/127"].flatMap((k) => vertices(T(np, k)).filter((v) => v.v === 32767).map((v) => v.h));
   const spread = Math.max(...poleHeights) - Math.min(...poleHeights);
   const southPole = ["10/1000/0", "10/1001/0"].flatMap((k) => vertices(T(sp, k)).filter((v) => v.v === 0).map((v) => v.h));
   assert.ok(Math.max(...southPole) - Math.min(...southPole) <= 2 * Math.max(quantum(T(sp, "10/1000/0").mesh), quantum(T(sp, "10/1001/0").mesh)) + 1e-6);
   assert.ok(spread <= 2 * Math.max(...["7/10/127", "7/11/127", "7/140/127"].map((k) => quantum(T(np, k).mesh))) + 1e-6, `pole spread ${spread} m`);
+  // Every mesh covers its tile exactly once: every triangle counter-clockwise, their areas summing to the square.
+  for (const [k, sized] of eq.byKey) {
+    const { mesh } = tileOf(sized);
+    let area = 0;
+    for (let i = 0; i < mesh.indices.length; i += 3) {
+      const [a, b, c] = [mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2]];
+      const twice = (mesh.u[b] - mesh.u[a]) * (mesh.v[c] - mesh.v[a]) - (mesh.u[c] - mesh.u[a]) * (mesh.v[b] - mesh.v[a]);
+      assert.ok(twice > 0, `${k}: triangle ${i / 3} is not counter-clockwise`);
+      area += twice / 2;
+    }
+    assert.equal(area, 32767 * 32767, `${k}: triangles cover ${area} of the tile's ${32767 * 32767}`);
+  }
 });
 
 test("a body plan is refused when it is not a reference sphere, names Earth, or disagrees with the product's label", { skip }, async () => {
@@ -179,10 +211,43 @@ test("a body plan is refused when it is not a reference sphere, names Earth, or 
   // A range that is not whole lines, and a label for another sample type.
   const bad = [frames[0], granuleFrame("dem", Buffer.alloc(92160 + 7), 206, { headers: { "content-range": `bytes 0-${92160 + 6}/1061683200` } })];
   assert.equal((await run(moonPlan(tile), bad)).errorCode, "pds-range-unsupported");
-  const label = Buffer.from(fs.readFileSync(`${LOLA_DIR}/ldem_64_float.lbl`, "utf8").replace("PC_REAL", "MSB_INTEGER"));
+  const text = fs.readFileSync(`${LOLA_DIR}/ldem_64_float.lbl`, "utf8");
+  const label = Buffer.from(text.replace("PC_REAL", "MSB_INTEGER"));
   assert.equal((await run(moonPlan(tile), [granuleFrame("dem", label), ...frames.slice(1)])).errorCode, "pds-label-unsupported");
+  // Heights stored above an OFFSET that is not the body's A_AXIS_RADIUS.
+  const offset = Buffer.from(text.replace(/^(\s*OFFSET\s*=\s*)1737\.4/m, "$11737.0"));
+  assert.notEqual(offset.toString(), text);
+  const refused = await run(moonPlan(tile), [granuleFrame("dem", offset), ...frames.slice(1)]);
+  assert.equal(refused.errorCode, "pds-label-unsupported");
+  assert.match(refused.errorMessage, /OFFSET/);
   // And the frames that are right encode.
   assert.equal((await run(moonPlan(tile))).statusCode, 0);
+});
+
+test("a cylindrical product's pole is the mean of its edge line's MEASURED posts: a non-finite post does not move it", { skip }, async () => {
+  // Tile 2/0/3 (45-90 N, 180-135 W) from LDEM_4: lines 0-189 hold it with the halo. One post of line 0 - on the far
+  // side of the body from this tile - is made NaN.
+  const [labelFrame] = lolaFrames(LOLA_DIR, "ldem_4", 0, 1, 1);
+  const recordBytes = 1440 * 4, lines = 190;
+  const body = Buffer.alloc(lines * recordBytes);
+  const fd = fs.openSync(`${LOLA_DIR}/ldem_4_float.img`, "r");
+  try { fs.readSync(fd, body, 0, body.length, 0); } finally { fs.closeSync(fd); }
+  body.writeFloatLE(NaN, 0);
+  let sum = 0, measured = 0;
+  for (let s = 0; s < 1440; s++) {
+    const km = body.readFloatLE(s * 4);
+    if (Number.isFinite(km)) { sum += km * 1000; measured++; }
+  }
+  assert.equal(measured, 1439);
+  const range = granuleFrame("dem", body, 206, { headers: { "content-range": `bytes 0-${body.length - 1}/${720 * recordBytes}` } });
+  const plan = moonPlan([{ level: 2, x: 0, y: 3 }], { product: "ldem_4" });
+  const response = await lane.source.invoke({ methodId: "tile", inputs: [...planInputs(plan), labelFrame, range] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const records = Buffer.from(response.outputs.find((o) => o.portId === "records").payload);
+  const tile = tileOf(records.subarray(0, 4 + records.readUInt32LE(0)));
+  const pole = vertices(tile).filter((v) => v.v === 32767).map((v) => v.h);
+  assert.ok(pole.length >= 2);
+  for (const h of pole) assert.ok(Math.abs(h - sum / measured) <= quantum(tile.mesh) + 1e-6, `pole ${h} m against the measured mean ${sum / measured} m`);
 });
 
 test("pack writes the root file and whole 4x4 block files, each a size-prefixed $DTT stream in (level, y, x) order", { skip }, async () => {

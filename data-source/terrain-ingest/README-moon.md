@@ -35,28 +35,41 @@ replaces the table.
 Unit 0 is levels 0-2. A global product is walked one block row per unit; a
 polar product by whole 4x4 blocks sorted by the first image line they touch, at
 most 64 blocks and `lola_max_range_bytes` (72 MiB) of lines per unit. 199
-units, 179,882 tiles, about 4.7 GB of ranges.
+units, 179,882 tiles, 4.59 GB (4.27 GiB) of ranges.
 
 Density: each tile takes the coarsest lattice (5 to 321 posts) whose RMS
 departure from the product's own posts meets `level_zero_error_m / 2^L`
-(1920: 15 m at level 7), under the 32 KiB ceiling.
+(1920: 15 m at level 7), under the 32 KiB ceiling. Each edge is chosen from
+the heights along it alone, so neighbours carry the same edge posts and
+render one seam whatever interior density each settles on.
 
 Measured on the products (`tools/moon-sample-budget.mjs`: levels 0-4 whole,
 1,000 tiles a level stratified by row beyond):
 
 | Level | Tiles | Mean bytes | RMS (m) | p99 (m) | Over cap |
 | --- | --- | --- | --- | --- | --- |
-| 7 | 32,768 | 13,415 | 12.35 | 45 | 0.9% |
-| 8 | 21,504 | 6,963 | 6.25 | 22 | 0% |
-| 9 | 57,344 | 5,120 | 3.01 | 11 | 0% |
-| 10 | 57,344 | 4,107 | 1.54 | 6 | 0% |
-| all | 179,882 | | | | at most 2.3% |
+| 7 | 32,768 | 14,124 | 12.44 | 45 | 1.1% |
+| 8 | 21,504 | 7,673 | 6.26 | 22 | 0% |
+| 9 | 57,344 | 5,645 | 3.04 | 11 | 0% |
+| 10 | 57,344 | 4,597 | 1.55 | 6 | 0% |
+| all | 179,882 | | | | at most 3.1% |
 
-Total 1.293 GB (95% upper bound 1.307 GB). One unit peaks at 1.06 GiB RSS
+Total 1.399 GB (95% upper bound 1.414 GB). One unit peaks at 1.03 GiB RSS
 (level 6, 67 MB of lines).
+
+Against the LOLA RDR shots themselves (13 orbit files, 2009-2019,
+`terrain-source/tests/moon-rdr-residual.test.mjs`), the published mesh at the
+deepest level built at each shot:
+
+| Zone | Level | Shots | Mesh RMS (m) | LDEM RMS (m) |
+| --- | --- | --- | --- | --- |
+| global | 7 | 478,053 | 24.53 | 20.50 |
+| >= 85 S | 9-10 | 76,346 | 2.33 | 1.75 |
+| >= 85 N | 9 | 61,197 | 3.95 | 2.32 |
 
 ```sh
 npm install && npm run build && npm test
 LOLA_DIR=~/software/data/lola node ../terrain-source/tools/moon-sample-budget.mjs out.json
 LOLA_DIR=~/software/data/lola node ../terrain-source/tools/moon-unit.mjs 16
+LOLA_DIR=~/software/data/lola LOLA_RDR_DIR=~/software/data/lola-rdr node --test ../terrain-source/tests/moon-rdr-residual.test.mjs
 ```

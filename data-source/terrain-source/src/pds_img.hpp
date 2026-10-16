@@ -155,6 +155,12 @@ bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
         *error = "the product is not posted on a sphere (A, B and C axis radii differ)";
         return false;
     }
+    // Heights are stored relative to OFFSET and the body is A_AXIS_RADIUS: a
+    // product whose two disagree states its heights above some other surface.
+    if (std::fabs(l->offset_km * 1000.0 - l->a_axis_m) > 1e-6) {
+        *error = "the label's OFFSET is not its A_AXIS_RADIUS: heights would be read above another surface";
+        return false;
+    }
     if (l->lon_direction != "EAST") {
         *error = "only POSITIVE_LONGITUDE_DIRECTION EAST is modelled";
         return false;
@@ -365,11 +371,12 @@ DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, c
                              (line - home->first_line) * l.record_bytes;
         float* dst = &g.samples[static_cast<size_t>(line - first) * width];
         double sum = 0;
+        long measured = 0;  // the pole mean is over the line's measured posts only
         for (long s = 0; s < W; s++) {
             float dn;
             std::memcpy(&dn, src + static_cast<size_t>(s) * 4, 4);
             const float h = std::isfinite(dn) ? static_cast<float>(static_cast<double>(dn) * to_m) : kNoData;
-            sum += h;
+            if (h != kNoData) { sum += h; measured++; }
             if (g.proj == kProjLinear) {
                 long k = s - W / 2 + 1;  // stored column of virtual column (s - W/2) mod W
                 if (k < 1) k += W;
@@ -381,8 +388,11 @@ DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, c
         if (g.proj == kProjLinear) {
             dst[0] = dst[W];
             dst[W + 1] = dst[1];
-            if (line == 0) { g.has_north_pole = true; g.north_pole_m = sum / static_cast<double>(W); }
-            if (line == l.lines - 1) { g.has_south_pole = true; g.south_pole_m = sum / static_cast<double>(W); }
+            if (line == 0 && measured) { g.has_north_pole = true; g.north_pole_m = sum / static_cast<double>(measured); }
+            if (line == l.lines - 1 && measured) {
+                g.has_south_pole = true;
+                g.south_pole_m = sum / static_cast<double>(measured);
+            }
         }
     }
     g.ok = true;

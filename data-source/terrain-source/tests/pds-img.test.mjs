@@ -15,49 +15,18 @@ import test from "node:test";
 import zlib from "node:zlib";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
-import { MOON_RADIUS_M } from "../lola-frames.mjs";
+import { cylindrical, polar, product } from "./lola-reference.mjs";
 import { createMoonLane, dttOf } from "../tools/moon-lane.mjs";
 
 const LOLA_DIR = process.env.LOLA_DIR;
 const skip = !(LOLA_DIR && fs.existsSync(`${LOLA_DIR}/ldem_75s_240m_float.img`)) && "LOLA_DIR unset";
-const R = MOON_RADIUS_M;
 
-// A product read in place: float32 km per post, row-major.
-function product(name, n, lines) {
-  const fd = fs.openSync(`${LOLA_DIR}/${name}.img`, "r");
-  const cache = new Map();
-  const line = (j) => {
-    if (!cache.has(j)) {
-      const buf = Buffer.alloc(n * 4);
-      fs.readSync(fd, buf, 0, buf.length, j * n * 4);
-      cache.set(j, buf);
-    }
-    return cache.get(j);
-  };
-  const at = (j, i) => line(j).readFloatLE(i * 4) * 1000;
-  return { n, lines, at, close: () => fs.closeSync(fd) };
-}
-const bilinear = (p, s, l, wrap = false) => {
-  const i0 = Math.floor(s), j0 = Math.floor(l), fx = s - i0, fy = l - j0;
-  const col = (i) => (wrap ? ((i % p.n) + p.n) % p.n : i);
-  const g = (j, i) => p.at(j, col(i));
-  return (1 - fy) * ((1 - fx) * g(j0, i0) + fx * g(j0, i0 + 1)) + fy * ((1 - fx) * g(j0 + 1, i0) + fx * g(j0 + 1, i0 + 1));
-};
-const cylindrical = (p, ppd) => (lat, lon) => bilinear(p, (((lon % 360) + 360) % 360) * ppd - 0.5, (90 - lat) * ppd - 0.5, true);
-function polar(p, scale, south) {
-  const c = p.n / 2 - 0.5;
-  return (lat, lon) => {
-    const r = (2 * R * Math.tan(((90 - Math.abs(lat)) * Math.PI) / 360)) / scale;
-    const a = (lon * Math.PI) / 180;
-    return bilinear(p, c + r * Math.sin(a), south ? c - r * Math.cos(a) : c + r * Math.cos(a));
-  };
-}
-
-// The mesh's posts (exact lattice positions from the shipped grid) against the independent reading.
+// The mesh's posts (exact positions on the plan's 321-post lattice, which every vertex of a body mesh sits on)
+// against the independent reading.
 function compareMesh(sized, reference) {
   const t = dttOf(sized.subarray(4)).unpack();
   const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(t.PAYLOAD.BYTES)));
-  const grid = Math.round(Math.sqrt(mesh.vertexCount));
+  const grid = 321;
   const q = (mesh.header.maxHeight - mesh.header.minHeight) / 32767;
   let worst = 0;
   for (let k = 0; k < mesh.vertexCount; k++) {

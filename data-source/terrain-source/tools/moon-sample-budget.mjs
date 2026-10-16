@@ -1,8 +1,9 @@
 // THE MOON LANE'S SIZE, PROJECTED BEFORE IT IS BUILT (moon-terrain-lane-20261013).
 //
 // Runs the real lane on local copies of the PDS LOLA products: terrain-ingest:lola_plan enumerates every unit of the
-// walk, each request it makes is answered from the local files exactly as the PDS server would (label 200, image
-// ranges 206 with Content-Range, If-Match checked), and terrain-source:tile encodes the SAMPLED tiles of each unit with
+// walk, each request it makes is answered from the local files as the PDS server answers it (label 200, image ranges
+// 206 with Content-Range; If-Match required but its value not checked, lola-frames.mjs localResponse), and
+// terrain-source:tile encodes the SAMPLED tiles of each unit with
 // the production options (normals, the density ladder, the 32 KiB ceiling, gzip). Levels 0-4 are encoded whole; every
 // deeper level gets 1,000 tiles stratified by tile row (proportional allocation, at least 2 a row, seeded by
 // sha256("moon-terrain-sample-v1")).
@@ -16,7 +17,7 @@
 //
 // Usage: LOLA_DIR=~/software/data/lola node tools/moon-sample-budget.mjs [out.json]
 // (The peak RSS it prints is this tool's, which holds the whole walk's plans; one unit's encode is measured by
-// tools/moon-unit-rss.mjs.)
+// tools/moon-unit.mjs.)
 
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -30,6 +31,7 @@ const OUT = process.argv[2];
 const BUDGET = 1.6e9;
 const SAMPLES = 1000;
 const FULL_LEVELS = 4;
+const RESIDUAL_OVERFLOW_BIN = 8192;  // terrain-source kResidualHistogramBins - 1
 let peakRss = 0;
 const rss = () => { peakRss = Math.max(peakRss, process.memoryUsage().rss); };
 
@@ -119,14 +121,15 @@ function levelStats(level, strata, tiles) {
       for (const [b, c] of histogramOf(t.residualHistogramM)) hist.set(b, (hist.get(b) ?? 0) + c);
     }
   }
-  let acc = 0, p99 = null;
+  // The bin's upper edge, metres; in the encoder's last (overflow) bin it is only a lower bound, and says so.
+  let acc = 0, p99 = null, p99Floor = false;
   for (const b of [...hist.keys()].sort((a, c) => a - c)) {
     acc += hist.get(b);
-    if (p99 === null && acc >= 0.99 * probes) p99 = b + 1;  // the bin's upper edge, metres
+    if (p99 === null && acc >= 0.99 * probes) { p99 = b + 1; p99Floor = b === RESIDUAL_OVERFLOW_BIN; }
   }
   return {
     level, tiles: N, sampled: n, totalBytes: total, upper95: total + 1.96 * Math.sqrt(variance),
-    meanBytes: total / N, overCapShare: overCap / n, rmsM: Math.sqrt(sumSq / probes), p99M: p99, worstM: worst,
+    meanBytes: total / N, overCapShare: overCap / n, rmsM: Math.sqrt(sumSq / probes), p99M: p99, p99Floor, worstM: worst,
     probes, msPerTile: ms / n,
   };
 }
@@ -207,7 +210,7 @@ async function main() {
   for (const l of levels) {
     console.log(`L${l.level}: ${l.tiles} tiles (${l.sampled} encoded), mean ${l.meanBytes.toFixed(0)} B, total ` +
       `${(l.totalBytes / 1e6).toFixed(1)} MB (95% <= ${(l.upper95 / 1e6).toFixed(1)}), RMS ${l.rmsM.toFixed(2)} m, ` +
-      `p99 ${l.p99M} m, worst ${l.worstM.toFixed(1)} m, over cap ${(100 * l.overCapShare).toFixed(1)}%, ${l.msPerTile.toFixed(0)} ms/tile`);
+      `p99 ${l.p99Floor ? ">= " : ""}${l.p99M} m, worst ${l.worstM.toFixed(1)} m, over cap ${(100 * l.overCapShare).toFixed(1)}%, ${l.msPerTile.toFixed(0)} ms/tile`);
   }
   console.log(`total ${(base.total / 1e9).toFixed(3)} GB (95% <= ${(base.upper95 / 1e9).toFixed(3)} GB); ` +
     `re-cap [${result.recap.join("; ")}] -> ${(current.total / 1e9).toFixed(3)} GB (95% <= ${(current.upper95 / 1e9).toFixed(3)} GB); ` +

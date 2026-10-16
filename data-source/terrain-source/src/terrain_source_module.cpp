@@ -1955,45 +1955,41 @@ void classify_water_mask(const TileJob& job, const std::vector<DemGrid>& water_g
     }
 }
 
+#include "tile_mesh.hpp"
+
 // ── THE quantized-mesh encoder ─────────────────────────────────────────────
 //
-// `heights` is grid*grid metres in SOUTH-row-major order (j = 0 at the south
-// edge), the lattice tile() samples. `water_raster` is either empty (a uniform
-// mask, whose single byte `uniform_water` picks) or exactly kMaskSize^2 bytes.
+// `heights` is one height in metres per vertex of `tile_mesh`, in its vertex
+// order. `water_raster` is either empty (a uniform mask, whose single byte
+// `uniform_water` picks) or exactly kMaskSize^2 bytes.
 //
 // It lives here rather than inline in tile() because respond() must be able to
 // synthesize a tile the store does not hold, and two encoders for one wire
 // format is two encoders to keep in agreement.
 //
 // `body` says what the mesh is cut ON and what rides with it beyond the heights:
-// the body's radii, oct-encoded vertex normals (extension 1, two bytes per post
-// in the same SOUTH-row-major lattice order as `heights`) and whether the
-// water-mask extension (2) is written at all. The default is Earth exactly as
-// before - WGS84, no normals, the mask extension always present - so an Earth
-// tile's bytes do not change.
+// the body's radii, oct-encoded vertex normals (extension 1, two bytes per
+// vertex in the same order as `heights`) and whether the water-mask extension
+// (2) is written at all. The default is Earth exactly as before - WGS84, no
+// normals, the mask extension always present - so an Earth tile's bytes do not
+// change.
 struct MeshBody {
     BodyShape shape = kEarthShape;
     const std::vector<uint8_t>* oct_normals = nullptr;
     bool water_extension = true;
 };
 
-void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& ext,
-                           const std::vector<double>& heights_in,
-                           const std::vector<uint8_t>& water_raster, bool uniform_water,
-                           std::vector<uint8_t>* out, const MeshBody& body = MeshBody()) {
-    (void)ext;
-    const bool with_normals =
-        body.oct_normals && body.oct_normals->size() == static_cast<size_t>(grid) * grid * 2;
-    const uint32_t n_verts = grid * grid;
+void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vector<double>& heights_in,
+                 const std::vector<uint8_t>& water_raster, bool uniform_water, std::vector<uint8_t>* out,
+                 const MeshBody& body = MeshBody()) {
+    const uint32_t n = tile_mesh.n;
+    const uint32_t n_verts = static_cast<uint32_t>(tile_mesh.size());
+    const bool with_normals = body.oct_normals && body.oct_normals->size() == static_cast<size_t>(n_verts) * 2;
     std::vector<double> heights = heights_in;
     std::vector<double> lats(n_verts), lons(n_verts);
-    for (uint32_t j = 0; j < grid; j++) {
-        const double lat = lattice_lat(job.level, job.y, j, grid);
-        for (uint32_t i = 0; i < grid; i++) {
-            const uint32_t v = j * grid + i;
-            lats[v] = lat;
-            lons[v] = lattice_lon(job.level, job.x, i, grid);
-        }
+    for (uint32_t v = 0; v < n_verts; v++) {
+        lats[v] = lattice_lat(job.level, job.y, tile_mesh.row[v], n);
+        lons[v] = lattice_lon(job.level, job.x, tile_mesh.col[v], n);
     }
     double min_h = heights[0], max_h = heights[0];
     for (const double h : heights) {
@@ -2003,29 +1999,12 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
 
     std::vector<uint16_t> qu(n_verts), qv(n_verts), qh(n_verts);
     const double h_range = max_h - min_h;
-    for (uint32_t j = 0; j < grid; j++) {
-        for (uint32_t i = 0; i < grid; i++) {
-            const uint32_t v = j * grid + i;
-            qu[v] = static_cast<uint16_t>((32767ull * i) / (grid - 1));
-            qv[v] = static_cast<uint16_t>((32767ull * j) / (grid - 1));
-            qh[v] = h_range > 0 ? static_cast<uint16_t>(
-                                      std::lround(32767.0 * (heights[v] - min_h) / h_range))
-                                : 0;
-        }
+    for (uint32_t v = 0; v < n_verts; v++) {
+        qu[v] = static_cast<uint16_t>((32767ull * tile_mesh.col[v]) / (n - 1));
+        qv[v] = static_cast<uint16_t>((32767ull * tile_mesh.row[v]) / (n - 1));
+        qh[v] = h_range > 0 ? static_cast<uint16_t>(std::lround(32767.0 * (heights[v] - min_h) / h_range)) : 0;
     }
-    // Regular-grid triangulation, CCW in the u-v plane.
-    std::vector<uint32_t> indices;
-    indices.reserve(static_cast<size_t>(grid - 1) * (grid - 1) * 6);
-    for (uint32_t j = 0; j + 1 < grid; j++) {
-        for (uint32_t i = 0; i + 1 < grid; i++) {
-            const uint32_t bl = j * grid + i;
-            const uint32_t br = bl + 1;
-            const uint32_t tl = bl + grid;
-            const uint32_t tr = tl + 1;
-            indices.push_back(bl); indices.push_back(br); indices.push_back(tr);
-            indices.push_back(bl); indices.push_back(tr); indices.push_back(tl);
-        }
-    }
+    std::vector<uint32_t> indices = tile_mesh.indices;
 
     std::vector<uint8_t> normals;  // in the renumbered vertex order, when the body carries them
 
@@ -2144,6 +2123,15 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
     }
 }
 
+// The regular grid*grid mesh (heights SOUTH-row-major), as every Earth tile has
+// always been cut.
+void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& ext,
+                           const std::vector<double>& heights, const std::vector<uint8_t>& water_raster,
+                           bool uniform_water, std::vector<uint8_t>* out, const MeshBody& body = MeshBody()) {
+    (void)ext;
+    encode_mesh(job, regular_mesh(grid), heights, water_raster, uniform_water, out, body);
+}
+
 // ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY, AT THE SOURCE POSTS ───────
 //
 // $DTT.VERTICAL_ACCURACY_M is the one field a consumer reads to reason about
@@ -2244,10 +2232,126 @@ bool tile_post_window(const DemGrid& g, double west, double east, double south, 
     return true;
 }
 
-bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
-                            uint32_t cand, const std::vector<double>& cand_heights, double abort_above,
-                            SourcePostProbe* out);
+// The surface the encoder renders, evaluated where a source post lies.
+//
+// RegularGridSurface is the cand x cand grid of encode_quantized_mesh: (bl, br,
+// tr) below each cell's split diagonal, (bl, tr, tl) above it, kept here so the
+// measurement and the mesh cannot drift apart. BodyMeshSurface is any
+// TileMesh (a body's edge-matched mesh) through MeshSurface. Both take a
+// longitude/latitude inside the tile's bounds.
+struct RegularGridSurface {
+    double west, south, u_per_deg, v_per_deg, span;
+    uint32_t cand;
+    const std::vector<double>* heights;
 
+    double at(double lon, double lat) const {
+        double vv = (lat - south) * v_per_deg;
+        if (vv < 0) vv = 0;
+        if (vv > span) vv = span;
+        uint32_t cj = static_cast<uint32_t>(vv);
+        if (cj > cand - 2) cj = cand - 2;
+        const double dv = vv - static_cast<double>(cj);
+        double uu = (lon - west) * u_per_deg;
+        if (uu < 0) uu = 0;
+        if (uu > span) uu = span;
+        uint32_t ci = static_cast<uint32_t>(uu);
+        if (ci > cand - 2) ci = cand - 2;
+        const double du = uu - static_cast<double>(ci);
+        const double* row_lo = &(*heights)[static_cast<size_t>(cj) * cand];
+        const double* row_hi = row_lo + cand;
+        const double h_bl = row_lo[ci], h_br = row_lo[ci + 1];
+        const double h_tl = row_hi[ci], h_tr = row_hi[ci + 1];
+        return dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
+                        : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
+    }
+};
+
+struct BodyMeshSurface {
+    double west, south, u_per_deg, v_per_deg;
+    const MeshSurface* surface;
+
+    double at(double lon, double lat) const {
+        return surface->at((lon - west) * u_per_deg, (lat - south) * v_per_deg);
+    }
+};
+
+// One source post's departure from the rendered surface; false when
+// `abort_above` stops the walk.
+bool probe_post(double rendered, float truth, double abort_above, SourcePostProbe* out) {
+    const double delta = std::fabs(rendered - static_cast<double>(truth));
+    out->probes++;
+    out->sum_sq += delta * delta;
+    if (out->histogram) {
+        const size_t bin = static_cast<size_t>(std::min(delta, static_cast<double>(out->histogram->size() - 1)));
+        (*out->histogram)[bin]++;
+    }
+    if (delta > out->worst) {
+        out->worst = delta;
+        if (abort_above > 0 && out->worst > abort_above) {
+            out->complete = false;
+            return false;
+        }
+    }
+    return true;
+}
+
+// The same walk over a POLAR STEREOGRAPHIC product: its posts are regular in
+// the projected grid, not in latitude and longitude, so the posts inside the
+// tile are found from the tile's footprint in that grid and each is taken back
+// to latitude/longitude before the mesh is interpolated at it. False when
+// `abort_above` stopped the walk.
+template <class Surface>
+bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
+                            const Surface& surface, double abort_above, SourcePostProbe* out) {
+    if (!g.covers || g.samples.empty()) return true;
+    double s_lo = 0, s_hi = 0, l_lo = 0, l_hi = 0;
+    if (!polar_stereo_footprint(polar_of(g), west, east, south, north, &s_lo, &s_hi, &l_lo, &l_hi)) return true;
+    const long x0 = std::max<long>(0, static_cast<long>(std::floor(s_lo)) - 1 - g.off_x);
+    const long x1 = std::min<long>(static_cast<long>(g.width) - 1, static_cast<long>(std::ceil(s_hi)) + 1 - g.off_x);
+    const long y0 = std::max<long>(0, static_cast<long>(std::floor(l_lo)) - 1 - g.off_y);
+    const long y1 = std::min<long>(static_cast<long>(g.height) - 1, static_cast<long>(std::ceil(l_hi)) + 1 - g.off_y);
+    for (long iy = y0; iy <= y1; iy++) {
+        for (long ix = x0; ix <= x1; ix++) {
+            const float truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
+            if (truth == kNoData) continue;
+            double lat = 0, lon = 0;
+            polar_lat_lon(g, static_cast<double>(ix + g.off_x), static_cast<double>(iy + g.off_y), &lat, &lon);
+            if (lat < south || lat > north || lon < west || lon > east) continue;
+            if (!probe_post(surface.at(lon, lat), truth, abort_above, out)) return false;
+        }
+    }
+    return true;
+}
+
+template <class Surface>
+SourcePostProbe measure_surface_accuracy(const std::vector<DemGrid>& granules, double west, double east,
+                                         double south, double north, const Surface& surface,
+                                         double abort_above, std::vector<uint64_t>* histogram) {
+    SourcePostProbe out;
+    out.histogram = histogram;
+    for (const DemGrid& g : granules) {
+        if (g.proj == kProjPolarStereo) {
+            if (!measure_polar_accuracy(g, west, east, south, north, surface, abort_above, &out)) return out;
+            continue;
+        }
+        PostWindow w;
+        if (!tile_post_window(g, west, east, south, north, &w)) continue;
+        for (long iy = w.y0; iy <= w.y1; iy++) {
+            const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
+            const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
+            for (long ix = w.x0; ix <= w.x1; ix++) {
+                const float truth = src[ix];
+                if (truth == kNoData) continue;
+                const double lon = full_lon(g, static_cast<double>(g.off_x + ix));
+                if (!probe_post(surface.at(lon, lat), truth, abort_above, &out)) return out;
+            }
+        }
+    }
+    return out;
+}
+
+// The regular cand x cand candidate (Earth's, and the measurement of record
+// for it).
 SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
                                       uint32_t cand, const std::vector<double>& cand_heights,
                                       bool enabled, double abort_above,
@@ -2255,7 +2359,6 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
     SourcePostProbe out;
     out.histogram = histogram;
     if (!enabled || cand < 2 || cand_heights.size() < static_cast<size_t>(cand) * cand) return out;
-
     // The tile's own bounds, from the SAME global lattice the vertices were cut
     // from, so a post exactly on a vertex evaluates to that vertex.
     const double west = lattice_lon(job.level, job.x, 0, cand);
@@ -2264,121 +2367,29 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
     const double north = lattice_lat(job.level, job.y, cand - 1, cand);
     if (!(east > west) || !(north > south)) return out;
     const double span = static_cast<double>(cand - 1);
-    const double u_per_deg = span / (east - west);
-    const double v_per_deg = span / (north - south);
-
-    for (const DemGrid& g : granules) {
-        if (g.proj == kProjPolarStereo) {
-            if (!measure_polar_accuracy(g, west, east, south, north, cand, cand_heights, abort_above, &out)) return out;
-            continue;
-        }
-        PostWindow w;
-        if (!tile_post_window(g, west, east, south, north, &w)) continue;
-        const long x0 = w.x0, x1 = w.x1, y0 = w.y0, y1 = w.y1;
-
-        for (long iy = y0; iy <= y1; iy++) {
-            const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
-            double vv = (lat - south) * v_per_deg;
-            if (vv < 0) vv = 0;
-            if (vv > span) vv = span;
-            uint32_t cj = static_cast<uint32_t>(vv);
-            if (cj > cand - 2) cj = cand - 2;
-            const double dv = vv - static_cast<double>(cj);
-            const double* row_lo = &cand_heights[static_cast<size_t>(cj) * cand];
-            const double* row_hi = row_lo + cand;
-            const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
-            for (long ix = x0; ix <= x1; ix++) {
-                const float truth = src[ix];
-                if (truth == kNoData) continue;
-                const double lon = full_lon(g, static_cast<double>(g.off_x + ix));
-                double uu = (lon - west) * u_per_deg;
-                if (uu < 0) uu = 0;
-                if (uu > span) uu = span;
-                uint32_t ci = static_cast<uint32_t>(uu);
-                if (ci > cand - 2) ci = cand - 2;
-                const double du = uu - static_cast<double>(ci);
-                // The encoder's own triangulation: (bl, br, tr) below the split
-                // diagonal, (bl, tr, tl) above it — the surface
-                // encode_quantized_mesh renders, kept in one place so the
-                // measurement and the mesh cannot drift apart.
-                const double h_bl = row_lo[ci], h_br = row_lo[ci + 1];
-                const double h_tl = row_hi[ci], h_tr = row_hi[ci + 1];
-                const double rendered = dv <= du
-                                            ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
-                                            : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
-                const double delta = std::fabs(rendered - static_cast<double>(truth));
-                out.probes++;
-                out.sum_sq += delta * delta;
-                if (out.histogram) {
-                    const size_t bin = static_cast<size_t>(std::min(delta, static_cast<double>(out.histogram->size() - 1)));
-                    (*out.histogram)[bin]++;
-                }
-                if (delta > out.worst) {
-                    out.worst = delta;
-                    if (abort_above > 0 && out.worst > abort_above) {
-                        out.complete = false;
-                        return out;
-                    }
-                }
-            }
-        }
-    }
-    return out;
+    const RegularGridSurface surface{west, south, span / (east - west), span / (north - south), span, cand, &cand_heights};
+    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram);
 }
 
-// The same walk over a POLAR STEREOGRAPHIC product: its posts are regular in
-// the projected grid, not in latitude and longitude, so the posts inside the
-// tile are found from the tile's footprint in that grid and each is taken back
-// to latitude/longitude before the mesh is interpolated at it. False when
-// `abort_above` stopped the walk.
-bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
-                            uint32_t cand, const std::vector<double>& cand_heights, double abort_above,
-                            SourcePostProbe* out) {
-    if (!g.covers || g.samples.empty()) return true;
-    double s_lo = 0, s_hi = 0, l_lo = 0, l_hi = 0;
-    if (!polar_stereo_footprint(polar_of(g), west, east, south, north, &s_lo, &s_hi, &l_lo, &l_hi)) return true;
-    const long x0 = std::max<long>(0, static_cast<long>(std::floor(s_lo)) - 1 - g.off_x);
-    const long x1 = std::min<long>(static_cast<long>(g.width) - 1, static_cast<long>(std::ceil(s_hi)) + 1 - g.off_x);
-    const long y0 = std::max<long>(0, static_cast<long>(std::floor(l_lo)) - 1 - g.off_y);
-    const long y1 = std::min<long>(static_cast<long>(g.height) - 1, static_cast<long>(std::ceil(l_hi)) + 1 - g.off_y);
-    const double span = static_cast<double>(cand - 1);
-    const double u_per_deg = span / (east - west);
-    const double v_per_deg = span / (north - south);
-    for (long iy = y0; iy <= y1; iy++) {
-        for (long ix = x0; ix <= x1; ix++) {
-            const float truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
-            if (truth == kNoData) continue;
-            double lat = 0, lon = 0;
-            polar_lat_lon(g, static_cast<double>(ix + g.off_x), static_cast<double>(iy + g.off_y), &lat, &lon);
-            if (lat < south || lat > north || lon < west || lon > east) continue;
-            const double uu = std::min(std::max((lon - west) * u_per_deg, 0.0), span);
-            const double vv = std::min(std::max((lat - south) * v_per_deg, 0.0), span);
-            uint32_t ci = static_cast<uint32_t>(uu), cj = static_cast<uint32_t>(vv);
-            if (ci > cand - 2) ci = cand - 2;
-            if (cj > cand - 2) cj = cand - 2;
-            const double du = uu - ci, dv = vv - cj;
-            const double* row_lo = &cand_heights[static_cast<size_t>(cj) * cand];
-            const double* row_hi = row_lo + cand;
-            const double h_bl = row_lo[ci], h_br = row_lo[ci + 1], h_tl = row_hi[ci], h_tr = row_hi[ci + 1];
-            const double rendered = dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
-                                             : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
-            const double delta = std::fabs(rendered - static_cast<double>(truth));
-            out->probes++;
-            out->sum_sq += delta * delta;
-            if (out->histogram) {
-                const size_t bin = static_cast<size_t>(std::min(delta, static_cast<double>(out->histogram->size() - 1)));
-                (*out->histogram)[bin]++;
-            }
-            if (delta > out->worst) {
-                out->worst = delta;
-                if (abort_above > 0 && out->worst > abort_above) {
-                    out->complete = false;
-                    return false;
-                }
-            }
-        }
+// Any TileMesh with one height per vertex (a body's edge-matched candidate).
+SourcePostProbe measure_body_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
+                                           const TileMesh& mesh, const std::vector<double>& mesh_heights,
+                                           uint32_t cand, double abort_above,
+                                           std::vector<uint64_t>* histogram = nullptr) {
+    const uint32_t n = mesh.n;
+    const double west = lattice_lon(job.level, job.x, 0, n);
+    const double east = lattice_lon(job.level, job.x, n - 1, n);
+    const double south = lattice_lat(job.level, job.y, 0, n);
+    const double north = lattice_lat(job.level, job.y, n - 1, n);
+    if (!(east > west) || !(north > south)) {
+        SourcePostProbe out;
+        out.histogram = histogram;
+        return out;
     }
-    return true;
+    const MeshSurface lookup(mesh, mesh_heights, cand - 1);
+    const double span = static_cast<double>(n - 1);
+    const BodyMeshSurface surface{west, south, span / (east - west), span / (north - south), &lookup};
+    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram);
 }
 
 // ── IS THIS TILE OCEAN ACCORDING TO THE SOURCE, NOT THE MESH? ──────────────
@@ -2851,7 +2862,10 @@ struct BodyPlan {
 // stopped its density climb before it met its error target), its RMS
 // departure from the source posts, and the non-empty
 // bins of its departure histogram as "bin:count" pairs (bin k = [k, k+1) m,
-// bin 256 = 256 m and beyond).
+// the last bin, kResidualHistogramBins - 1, everything beyond). The range runs
+// to 8 km so a coarse level's percentiles are values, not the floor of an
+// overflow bin (level 0's target alone is 1.9 km).
+constexpr size_t kResidualHistogramBins = 8193;
 std::string body_tile_items(bool over_cap, double rms_m, const std::vector<uint64_t>& histogram) {
     std::string out = std::string(" overCap=") + (over_cap ? "true" : "false") + " rmsM=" + fmt_double(rms_m);
     std::string bins;
@@ -3725,6 +3739,12 @@ int tile(void) {
     const double max_grid_raw = json_number(plan, "maxGridSize", grid);
     uint32_t sample_grid = max_grid_raw < grid ? grid : static_cast<uint32_t>(max_grid_raw);
     if (sample_grid > 511) sample_grid = 511;
+    // A body's mesh joins its edges to an interior ring (tile_mesh.hpp), which
+    // needs at least four posts a side on every candidate.
+    if (body.active && sample_grid < 5) {
+        plugin_set_error("bad-grid-size", "a body plan's maxGridSize (or gridSize) must be at least 5.");
+        return 400;
+    }
     // The self-measurement is on by default and can be turned off for a run that only wants bytes (options
     // measureAccuracy false, or 0); with it off the run ships the plan's gridSize.
     const bool measure_accuracy = json_bool(plan, "measureAccuracy",
@@ -4221,12 +4241,15 @@ int tile(void) {
         // candidate is a subset of the one lattice sampled above, so the
         // source is read once per tile however many candidates are tried.
         //
-        // TWO ADJACENT TILES MAY SETTLE ON DIFFERENT DENSITIES. Their shared
-        // edge posts still come from the same global lattice and still agree
-        // exactly; the finer tile simply carries posts between them, which is
-        // the same T-junction a native client already handles between adjacent
-        // LEVELS and which the format's edge indices (and the skirts a client
-        // builds from them) exist for.
+        // TWO ADJACENT TILES MAY SETTLE ON DIFFERENT DENSITIES. On Earth the
+        // posts both candidates keep come from the same global lattice and agree
+        // exactly; where the two strides do not nest (65 and 97 on a 193-post
+        // lattice) the edges are two different polylines, and the skirts a
+        // client builds from the edge indices close that gap. A body's tiles do
+        // not rely on that: each EDGE is chosen from the heights along it alone
+        // (matched_edge_posts, tile_mesh.hpp), the same choice in both tiles
+        // that share it, so neighbours carry the same edge posts whatever
+        // interior density each settles on.
         // `levelZeroErrorM` (options) states the level-0 target for a dataset
         // whose body or resolution the Earth figure does not fit; absent, the
         // Earth expression exactly as it was.
@@ -4278,8 +4301,21 @@ int tile(void) {
         }
         if (ladder.empty()) ladder.push_back(sample_grid);
 
+        // A body's four edges (south, east, north, west), each from its own
+        // lattice heights against the tile's own target and metric.
+        std::array<std::vector<uint32_t>, 4> body_edges;
+        if (body.active) {
+            const uint32_t n = sample_grid;
+            body_edges[0] = matched_edge_posts(heights, n, 0, 1, ladder, error_target_m, rms_metric);
+            body_edges[1] = matched_edge_posts(heights, n, n - 1, n, ladder, error_target_m, rms_metric);
+            body_edges[2] = matched_edge_posts(heights, n, static_cast<size_t>(n - 1) * n, 1, ladder, error_target_m,
+                                               rms_metric);
+            body_edges[3] = matched_edge_posts(heights, n, 0, n, ladder, error_target_m, rms_metric);
+        }
+
         uint32_t chosen_grid = 0;
-        std::vector<double> chosen_heights;
+        std::vector<double> chosen_heights;  // per vertex of chosen_shape (a body) or the cand grid (Earth)
+        TileMesh chosen_shape;               // a body's chosen mesh
         std::vector<uint8_t> mesh;
         std::vector<uint8_t> payload_bytes;
         bool gzipped = false;
@@ -4296,21 +4332,22 @@ int tile(void) {
                 }
             }
             std::vector<uint8_t> cand_mesh;
+            TileMesh cand_shape;
             if (body.active) {
-                std::vector<uint8_t> cand_normals(static_cast<size_t>(cand) * cand * 2);
-                for (uint32_t j = 0; j < cand; j++) {
-                    for (uint32_t i = 0; i < cand; i++) {
-                        const size_t from = (static_cast<size_t>(j * stride) * sample_grid + i * stride) * 2;
-                        const size_t to = (static_cast<size_t>(j) * cand + i) * 2;
-                        cand_normals[to] = lattice_normals[from];
-                        cand_normals[to + 1] = lattice_normals[from + 1];
-                    }
+                cand_shape = edge_matched_mesh(sample_grid, cand, body_edges);
+                cand_heights.resize(cand_shape.size());
+                std::vector<uint8_t> cand_normals(cand_shape.size() * 2);
+                for (size_t v = 0; v < cand_shape.size(); v++) {
+                    const size_t from = static_cast<size_t>(cand_shape.row[v]) * sample_grid + cand_shape.col[v];
+                    cand_heights[v] = heights[from];
+                    cand_normals[v * 2] = lattice_normals[from * 2];
+                    cand_normals[v * 2 + 1] = lattice_normals[from * 2 + 1];
                 }
                 MeshBody mesh_body;
                 mesh_body.shape = body.shape;
                 mesh_body.oct_normals = &cand_normals;
                 mesh_body.water_extension = false;
-                encode_quantized_mesh(job, cand, ext, cand_heights, water_raster, false, &cand_mesh, mesh_body);
+                encode_mesh(job, cand_shape, cand_heights, water_raster, false, &cand_mesh, mesh_body);
             } else {
                 encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,
                                       water_kind == "UNIFORM_WATER", &cand_mesh);
@@ -4328,6 +4365,7 @@ int tile(void) {
             }
             chosen_grid = cand;
             chosen_heights.swap(cand_heights);
+            chosen_shape = std::move(cand_shape);
             mesh.swap(cand_mesh);
             payload_bytes.swap(cand_payload);
             gzipped = cand_gzipped;
@@ -4365,8 +4403,10 @@ int tile(void) {
             // dataset whose acceptance is stated as RMS and a percentile (a
             // body's craters put a few posts hundreds of metres from any mesh
             // the 32 KiB ceiling admits). Absent, the worst, as before.
-            const SourcePostProbe probe = measure_mesh_accuracy(
-                granules, job, cand, chosen_heights, measure_accuracy, rms_metric ? 0.0 : error_target_m);
+            const double abort_above = rms_metric ? 0.0 : error_target_m;
+            const SourcePostProbe probe =
+                body.active ? measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights, cand, abort_above)
+                            : measure_mesh_accuracy(granules, job, cand, chosen_heights, measure_accuracy, abort_above);
             stats.vertical_accuracy_m = probe.worst;
             stats.accuracy_probes = probe.probes;
             const double judged =
@@ -4414,9 +4454,9 @@ int tile(void) {
         std::vector<uint64_t> residual_histogram;
         double rms_m = 0.0;
         if (measure_accuracy && body.active) {
-            residual_histogram.assign(257, 0);
-            const SourcePostProbe settled = measure_mesh_accuracy(granules, job, chosen_grid, chosen_heights, true,
-                                                                  0.0, &residual_histogram);
+            residual_histogram.assign(kResidualHistogramBins, 0);
+            const SourcePostProbe settled = measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights,
+                                                                       chosen_grid, 0.0, &residual_histogram);
             stats.vertical_accuracy_m = settled.worst;
             stats.accuracy_probes = settled.probes;
             rms_m = settled.probes ? std::sqrt(settled.sum_sq / static_cast<double>(settled.probes)) : 0.0;
@@ -4428,20 +4468,27 @@ int tile(void) {
         stats.payload_bytes = payload_bytes.size();
 
         // Coverage, clamps and band bridges are reported over the posts that
-        // ACTUALLY SHIPPED, on the candidate's own stride.
+        // ACTUALLY SHIPPED: the candidate's own stride, or a body mesh's vertices.
         {
-            const uint32_t stride = (sample_grid - 1) / (chosen_grid - 1);
-            for (uint32_t j = 0; j < chosen_grid; j++) {
-                for (uint32_t i = 0; i < chosen_grid; i++) {
-                    const size_t v = static_cast<size_t>(j * stride) * sample_grid + i * stride;
-                    stats.uncovered += post_absent[v];
-                    stats.nodata += post_nodata[v];
-                    stats.edge_clamped += post_clamped[v];
-                    stats.band_bridged += post_bridged[v];
+            auto count_post = [&](size_t v) {
+                stats.uncovered += post_absent[v];
+                stats.nodata += post_nodata[v];
+                stats.edge_clamped += post_clamped[v];
+                stats.band_bridged += post_bridged[v];
+            };
+            double shipped_posts = 0;
+            if (body.active) {
+                for (size_t v = 0; v < chosen_shape.size(); v++)
+                    count_post(static_cast<size_t>(chosen_shape.row[v]) * sample_grid + chosen_shape.col[v]);
+                shipped_posts = static_cast<double>(chosen_shape.size());
+            } else {
+                const uint32_t stride = (sample_grid - 1) / (chosen_grid - 1);
+                for (uint32_t j = 0; j < chosen_grid; j++) {
+                    for (uint32_t i = 0; i < chosen_grid; i++)
+                        count_post(static_cast<size_t>(j * stride) * sample_grid + i * stride);
                 }
+                shipped_posts = static_cast<double>(chosen_grid) * static_cast<double>(chosen_grid);
             }
-            const double shipped_posts =
-                static_cast<double>(chosen_grid) * static_cast<double>(chosen_grid);
             stats.coverage =
                 1.0 - static_cast<double>(stats.nodata + stats.uncovered) / shipped_posts;
             double cmin = chosen_heights[0], cmax = chosen_heights[0];
