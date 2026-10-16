@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -703,6 +703,322 @@
       "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch. THE DURABLE MARK IS AN $IRM RECORD - the planner's job completed from the verified result - written through hostcap/storage-write (record port; the old JSON meta port is gone, the type is the frame's own) and read back through the code-named FlatSQL view; the same $IRM lands on egress for an operator. A mark advanced at plan time turns a crash between fetch and store into a permanently skipped batch of tiles, and the hole is invisible. A batch storage REFUSED is an error (ingest-refused) and the mark does not move; the silent nop - inserted=0 for a batch that carried tiles - is refused the same way (ingest-stored-nothing). The publication POST (an IngestResult FlatBuffer body) is fail-closed: emitted ONLY when publish_url is configured, and the mark is NOT gated on it. TYPED CONTRACTS 1.0: IngestResult, IngestRequest and $IRM in; $IRM and HttpRequest out. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE; a surplus is refused with error code \"batched-input-frames\".",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "lola_plan",
+      "displayName": "Plan one unit of the Moon's LOLA terrain walk",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (TICK). FIRED_MS (else SCHEDULED_MS) is the run's clock when the flow config does not state retrieved_at; RETRIEVED_AT is required on every record and is never invented here."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One scheduler tick."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-byte-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "hostcap/flatsql-query's answer to mark_query: ordered $FSB chunks (CHUNK_SEQUENCE 0..n-1) whose DATA is the aligned size-prefixed $IRM record stream, newest first. The first record whose JOB_ID is dataset@tileset@epoch is this walk's mark (NEXT_CHUNK_INDEX, RECORDS_COMMITTED, SOURCE.ENTITY_TAG); a mark for another job is ignored, an ABANDONED / INVALIDATED one restarts the walk, and a pre-1.0 mark whose DECODER_STATE stamps disagree is refused."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The durable resume mark, when one is stored (absent on the first run)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "dem_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the unit's LOLA product PDS3 label (.lbl), so the encoder decodes with the source's own geometry."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the unit's LOLA product PDS3 label (.lbl), so the encoder decodes with the source's own geometry."
+        },
+        {
+          "portId": "dem_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET part 1 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET part 1 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+        },
+        {
+          "portId": "dem_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET part 2 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET part 2 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+        },
+        {
+          "portId": "dem_3",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET part 3 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET part 3 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+        },
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON), REFERENCE_RADII_M [1737400], PROVENANCE (DATASET_ID nasa-lola-gdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img, NATIVE_ID the PDS4 LIDVID)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON), REFERENCE_RADII_M [1737400], PROVENANCE (DATASET_ID nasa-lola-gdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img, NATIVE_ID the PDS4 LIDVID)."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The encoder's options (MCFG): maxGridSize (max_grid_size, default 321: a ladder of 5 to 321 posts that holds 41, 65 and 81), levelZeroErrorM (level_zero_error_m, default 1920: 15 m at level 7) and errorMetric (error_metric, default rms: each tile's density is the coarsest whose RMS departure from the source posts meets the level's target)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The encoder's options (MCFG): maxGridSize (max_grid_size, default 321: a ladder of 5 to 321 posts that holds 41, 65 and 81), levelZeroErrorM (level_zero_error_m, default 1920: 15 m at level 7) and errorMetric (error_metric, default rms: each tile's density is the coarsest whose RMS departure from the source posts meets the level's target)."
+        },
+        {
+          "portId": "pack",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "terrain-source:pack's options (MCFG): pathPrefix (path_prefix, default terrain/301) and rootMaxLevel 2."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "terrain-source:pack's options (MCFG): pathPrefix (path_prefix, default terrain/301) and rootMaxLevel 2."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "ingest-resume-mark",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The job: the $IRM this unit will make durable once its files are stored - JOB_ID dataset@tileset@epoch, PROVIDER_ID (nasa-lola), SOURCE (SOURCE_URL the PDS base, SOURCE_VERSION the edition), STATE IN_PROGRESS, RANGE_MODE PART_INDEX, LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the unit + 1, RECORDS_COMMITTED what the resumed mark had committed, UPDATED_AT the run's clock, TAGS lane:terrain + walk:lola, NOTES product/level/lines/tiles."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The run contract for this unit."
+        }
+      ],
+      "description": "The Moon's planner (GEOGRAPHIC_TWO_ROOT_BODY on the 1737.4 km reference sphere). Walks the NASA LRO LOLA gridded products in the PDS Geosciences Node (public domain) by caps (config lola_caps; default ldem_4 L0-3, ldem_16 L4-5 and ldem_64 L6-7 global, ldem_75{s,n}_240m L8 |lat| >= 75, ldem_75{s,n}_120m L9 |lat| >= 80, ldem_75s_60m L10 lat <= -85; a tile is built from a cap only when its whole extent lies inside the band). Unit 0 is every tile of levels 0-2 (the root file); after it, per cap and level, a global product is walked one BLOCK ROW (four tile rows) per unit and a polar product by whole 4x4 blocks sorted by the first image line their footprint touches, at most 64 blocks and lola_max_range_bytes (default 72 MiB) of lines per unit, so every packed block file is complete in one unit. Each unit asks for the product's label and THREE whole-line ranges of its image; the enumeration is a pure function of the config, so the $IRM mark is one integer (the next unit). A drained walk is a clean no-op.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "announce_files",
+      "displayName": "Announce the Moon terrain files added to IPFS",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "ingest-resume-mark",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The unit's job ($IRM) from lola_plan."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The unit's job ($IRM) from lola_plan."
+        },
+        {
+          "portId": "added",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-added",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One size-prefixed $PNM per file the host adapter added to the node's IPFS (CID, FILE_NAME)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "One size-prefixed $PNM per file the host adapter added to the node's IPFS (CID, FILE_NAME)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, provider nasa-lola, source moon-terrain (config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, provider nasa-lola, source moon-terrain (config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
+        }
+      ],
+      "description": "Completes the host adapter's IPFS add results into the $PNM records the Moon's terrain is published as (PNM.fbs, provider nasa-lola, source moon-terrain: the console resolves the files through SOLAR_SYSTEM_LANES.terrain and fetches each by CID) and authors the IngestRequest the storage lane cannot invent. publish_request then advances the walk:lola mark from the verified store result.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "buildArtifacts": [
@@ -734,6 +1050,11 @@
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
       "rootTypeName": "FSB"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
     }
   ]
 }

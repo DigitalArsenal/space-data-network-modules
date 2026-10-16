@@ -539,6 +539,17 @@ struct DemGrid {
     bool budget_refused = false;  // the error is already set; do not overwrite it
     bool ok = false;
     std::string error;
+    // ── A BODY'S PDS PRODUCT (pds_img.hpp); unused by GeoTIFF granules ─────
+    // proj 0 is the linear lon/lat georeference above; 1 is polar
+    // stereographic, addressed in the product's own (sample, line) grid with
+    // off_x/off_y the window's offset in it. full_rows is the product's line
+    // count; the pole heights are the means of the first/last line.
+    int proj = 0;
+    long full_rows = 0;
+    bool ps_south = false;
+    double ps_center = 0.0, ps_scale_m = 0.0, ps_radius_m = 0.0;
+    bool has_north_pole = false, has_south_pole = false;
+    double north_pole_m = 0.0, south_pole_m = 0.0;
     size_t resident_bytes() const { return samples.size() * 4u + classes.size(); }
 };
 
@@ -1141,77 +1152,10 @@ bool sample_water(const std::vector<DemGrid>& granules, double lon, double lat, 
     return true;
 }
 
-// ── WGS 84 / quantized-mesh math ───────────────────────────────────────────
+// ── body geometry: radii, ECEF, horizon occlusion (body_shape.hpp) ─────────
 
-constexpr double kPi = 3.14159265358979323846;
-constexpr double kSemiMajor = 6378137.0;
-constexpr double kSemiMinor = 6356752.3142451793;
-
-struct Vec3 {
-    double x = 0, y = 0, z = 0;
-};
-
-Vec3 geodetic_to_ecef(double lat_deg, double lon_deg, double height_m) {
-    const double lat = lat_deg * kPi / 180.0;
-    const double lon = lon_deg * kPi / 180.0;
-    const double e2 = 1.0 - (kSemiMinor * kSemiMinor) / (kSemiMajor * kSemiMajor);
-    const double sin_lat = std::sin(lat);
-    const double n = kSemiMajor / std::sqrt(1.0 - e2 * sin_lat * sin_lat);
-    Vec3 v;
-    v.x = (n + height_m) * std::cos(lat) * std::cos(lon);
-    v.y = (n + height_m) * std::cos(lat) * std::sin(lon);
-    v.z = (n * (1.0 - e2) + height_m) * sin_lat;
-    return v;
-}
-
-// Horizon occlusion point per the quantized-mesh spec (Cesium's
-// EllipsoidalOccluder.computeHorizonCullingPoint): work in ellipsoid-scaled
-// space, take the max occlusion magnitude along the scaled direction to the
-// tile centre over every vertex, and RETURN THE SCALED-SPACE POINT.
-//
-// IT IS NOT UNSCALED. The wire field is read verbatim by
-// CesiumTerrainProvider into QuantizedMeshTerrainData._horizonOcclusionPoint
-// and handed to EllipsoidalOccluder.isScaledSpacePointVisible as the
-// literally-named `occludeePointInScaledSpace`; Cesium's own
-// magnitudeToPoint() returns direction * magnitude and never multiplies the
-// radii back in. Multiplying them back in (which this function did until
-// 2026-08-26) makes |point| ~6.37e6 instead of ~1, and the visibility test
-// then degenerates into a camera-only expression that is INVARIANT under
-// scaling of the occludee: horizon culling silently stops working and the
-// client over-fetches back-side terrain. Every stored tile's payload DIGEST
-// and ETAG are taken over these bytes, so changing it re-encodes the pyramid.
-Vec3 horizon_occlusion_point(const std::vector<Vec3>& positions, const Vec3& center) {
-    Vec3 scaled_center{center.x / kSemiMajor, center.y / kSemiMajor, center.z / kSemiMinor};
-    const double c_mag =
-        std::sqrt(scaled_center.x * scaled_center.x + scaled_center.y * scaled_center.y +
-                  scaled_center.z * scaled_center.z);
-    Vec3 dir{0, 0, 1};
-    if (c_mag > 0) dir = {scaled_center.x / c_mag, scaled_center.y / c_mag, scaled_center.z / c_mag};
-    double max_magnitude = 0.0;
-    for (const Vec3& p : positions) {
-        Vec3 sp{p.x / kSemiMajor, p.y / kSemiMajor, p.z / kSemiMinor};
-        double mag_sq = sp.x * sp.x + sp.y * sp.y + sp.z * sp.z;
-        double mag = std::sqrt(mag_sq);
-        Vec3 unit = mag > 0 ? Vec3{sp.x / mag, sp.y / mag, sp.z / mag} : Vec3{0, 0, 0};
-        mag_sq = std::max(1.0, mag_sq);
-        mag = std::max(1.0, mag);
-        const double cos_alpha = unit.x * dir.x + unit.y * dir.y + unit.z * dir.z;
-        const Vec3 cross{unit.y * dir.z - unit.z * dir.y, unit.z * dir.x - unit.x * dir.z,
-                         unit.x * dir.y - unit.y * dir.x};
-        const double sin_alpha =
-            std::sqrt(cross.x * cross.x + cross.y * cross.y + cross.z * cross.z);
-        const double cos_beta = 1.0 / mag;
-        const double sin_beta = std::sqrt(mag_sq - 1.0) * cos_beta;
-        const double denom = cos_alpha * cos_beta - sin_alpha * sin_beta;
-        if (denom <= 0) continue;  // point occludes the whole horizon direction
-        max_magnitude = std::max(max_magnitude, 1.0 / denom);
-    }
-    // Degenerate input (every vertex occluding the whole direction) leaves the
-    // magnitude unset; the scaled centre itself is the honest fallback rather
-    // than a zero vector, which reads on the wire as "always visible".
-    if (!(max_magnitude > 0.0)) max_magnitude = c_mag > 0 ? c_mag : 1.0;
-    return {dir.x * max_magnitude, dir.y * max_magnitude, dir.z * max_magnitude};
-}
+#include "body_shape.hpp"
+#include "oct_normals.hpp"
 
 // ── little-endian byte emitters ────────────────────────────────────────────
 
@@ -1337,6 +1281,7 @@ struct DatasetContract {
     std::string license_url;
     std::string attribution;
     std::string source_url;
+    std::string native_id;  // the source's own identifier for the product (a PDS LIDVID); stated when given
     bool complete() const {
         return !dataset_id.empty() && !dataset_epoch.empty() && !retrieved_at.empty() &&
                !license.empty();
@@ -1369,6 +1314,7 @@ DatasetContract contract_of(const DTTProvenance* p) {
     c.license_url = text(p->LICENSE_URL());
     c.attribution = text(p->ATTRIBUTION());
     c.source_url = text(p->SOURCE_URL());
+    c.native_id = text(p->NATIVE_ID());
     return c;
 }
 
@@ -1382,6 +1328,7 @@ flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuild
     const auto p_license_url = c.license_url.empty() ? 0 : b.CreateString(c.license_url);
     const auto p_attribution = c.attribution.empty() ? 0 : b.CreateString(c.attribution);
     const auto p_source_url = c.source_url.empty() ? 0 : b.CreateString(c.source_url);
+    const auto p_native_id = c.native_id.empty() ? 0 : b.CreateString(c.native_id);
     DTTProvenanceBuilder pb(b);
     pb.add_DATASET_ID(p_id);
     pb.add_DATASET_EPOCH(p_epoch);
@@ -1391,6 +1338,7 @@ flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuild
     if (p_license_url.o) pb.add_LICENSE_URL(p_license_url);
     if (p_attribution.o) pb.add_ATTRIBUTION(p_attribution);
     if (p_source_url.o) pb.add_SOURCE_URL(p_source_url);
+    if (p_native_id.o) pb.add_NATIVE_ID(p_native_id);
     return pb.Finish();
 }
 
@@ -1777,6 +1725,7 @@ struct HttpFrame {
     long status = 0;
     std::string body;
     std::string error;
+    std::string content_range;  // a body's PDS product is read by whole-line ranges
 };
 
 HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
@@ -1796,6 +1745,14 @@ HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
     f.status = r->STATUS();
     if (r->BODY()) f.body.assign(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
     if (r->ERROR()) f.error = r->ERROR()->str();
+    if (r->HEADERS()) {
+        for (const auto* h : *r->HEADERS()) {
+            if (!h || !h->NAME() || !h->VALUE()) continue;
+            std::string name = h->NAME()->str();
+            for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (name == "content-range") f.content_range = h->VALUE()->str();
+        }
+    }
     return f;
 }
 
@@ -1856,6 +1813,10 @@ struct TileStats {
 struct TileExtent {
     double west, east, south, north;
 };
+
+// ── a body's PDS products (pds_img.hpp), read by whole-line ranges ─────────
+
+#include "pds_img.hpp"
 
 // GEOGRAPHIC_WGS84: level z has 2^(z+1) x 2^z tiles of (180/2^z) degrees, row
 // 0 at the SOUTH edge (TMS).
@@ -2003,11 +1964,26 @@ void classify_water_mask(const TileJob& job, const std::vector<DemGrid>& water_g
 // It lives here rather than inline in tile() because respond() must be able to
 // synthesize a tile the store does not hold, and two encoders for one wire
 // format is two encoders to keep in agreement.
+//
+// `body` says what the mesh is cut ON and what rides with it beyond the heights:
+// the body's radii, oct-encoded vertex normals (extension 1, two bytes per post
+// in the same SOUTH-row-major lattice order as `heights`) and whether the
+// water-mask extension (2) is written at all. The default is Earth exactly as
+// before - WGS84, no normals, the mask extension always present - so an Earth
+// tile's bytes do not change.
+struct MeshBody {
+    BodyShape shape = kEarthShape;
+    const std::vector<uint8_t>* oct_normals = nullptr;
+    bool water_extension = true;
+};
+
 void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& ext,
                            const std::vector<double>& heights_in,
                            const std::vector<uint8_t>& water_raster, bool uniform_water,
-                           std::vector<uint8_t>* out) {
+                           std::vector<uint8_t>* out, const MeshBody& body = MeshBody()) {
     (void)ext;
+    const bool with_normals =
+        body.oct_normals && body.oct_normals->size() == static_cast<size_t>(grid) * grid * 2;
     const uint32_t n_verts = grid * grid;
     std::vector<double> heights = heights_in;
     std::vector<double> lats(n_verts), lons(n_verts);
@@ -2051,6 +2027,8 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
         }
     }
 
+    std::vector<uint8_t> normals;  // in the renumbered vertex order, when the body carries them
+
     // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the index
     // stream must land exactly when it becomes the highest index seen, so the
     // vertices are renumbered by first appearance and every array permuted to
@@ -2069,6 +2047,14 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
             pu[nv] = qu[v]; pv[nv] = qv[v]; ph[nv] = qh[v];
             ph_m[nv] = heights[v]; plat[nv] = lats[v]; plon[nv] = lons[v];
         }
+        if (with_normals) {
+            const std::vector<uint8_t>& lattice = *body.oct_normals;
+            normals.resize(static_cast<size_t>(n_verts) * 2);
+            for (uint32_t v = 0; v < n_verts; v++) {
+                normals[static_cast<size_t>(remap[v]) * 2] = lattice[static_cast<size_t>(v) * 2];
+                normals[static_cast<size_t>(remap[v]) * 2 + 1] = lattice[static_cast<size_t>(v) * 2 + 1];
+            }
+        }
         qu.swap(pu); qv.swap(pv); qh.swap(ph);
         heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
         for (uint32_t& idx : indices) idx = remap[idx];
@@ -2077,7 +2063,7 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
     // ── header geometry (ECEF, metres, real heights) ────────────────────────
     std::vector<Vec3> positions(n_verts);
     for (uint32_t v = 0; v < n_verts; v++) {
-        positions[v] = geodetic_to_ecef(lats[v], lons[v], heights[v]);
+        positions[v] = geodetic_to_ecef(body.shape, lats[v], lons[v], heights[v]);
     }
     Vec3 centroid;
     for (const Vec3& p : positions) { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; }
@@ -2087,7 +2073,7 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
         const double dx = p.x - centroid.x, dy = p.y - centroid.y, dz = p.z - centroid.z;
         radius = std::max(radius, std::sqrt(dx * dx + dy * dy + dz * dz));
     }
-    const Vec3 occlusion = horizon_occlusion_point(positions, centroid);
+    const Vec3 occlusion = horizon_occlusion_point(body.shape, positions, centroid);
 
     std::vector<uint8_t>& mesh = *out;
     mesh.clear();
@@ -2139,6 +2125,14 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
     put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
     put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
 
+    // Oct-encoded vertex normals (extensionId 1): two bytes per vertex, in
+    // vertex order.
+    if (with_normals) {
+        put_u8(&mesh, 1);
+        put_u32(&mesh, static_cast<uint32_t>(normals.size()));
+        mesh.insert(mesh.end(), normals.begin(), normals.end());
+    }
+    if (!body.water_extension) return;
     // Watermask extension (extensionId 2): one byte uniform, or the raster.
     put_u8(&mesh, 2);
     if (!water_raster.empty()) {
@@ -2202,6 +2196,12 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
 struct SourcePostProbe {
     double worst = 0.0;
     uint64_t probes = 0;
+    // The sum of squared departures (RMS = sqrt(sum_sq / probes)) and, when the
+    // caller asks, their histogram in whole metres (bin k counts [k, k+1) m,
+    // the last bin everything beyond). A body's tiles report both, so a level's
+    // RMS and percentiles are exact sums over its tiles.
+    double sum_sq = 0.0;
+    std::vector<uint64_t>* histogram = nullptr;
     // False only when `abort_above` stopped the walk. A record's stated
     // accuracy is never taken from an incomplete walk.
     bool complete = true;
@@ -2244,10 +2244,16 @@ bool tile_post_window(const DemGrid& g, double west, double east, double south, 
     return true;
 }
 
+bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
+                            uint32_t cand, const std::vector<double>& cand_heights, double abort_above,
+                            SourcePostProbe* out);
+
 SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
                                       uint32_t cand, const std::vector<double>& cand_heights,
-                                      bool enabled, double abort_above) {
+                                      bool enabled, double abort_above,
+                                      std::vector<uint64_t>* histogram = nullptr) {
     SourcePostProbe out;
+    out.histogram = histogram;
     if (!enabled || cand < 2 || cand_heights.size() < static_cast<size_t>(cand) * cand) return out;
 
     // The tile's own bounds, from the SAME global lattice the vertices were cut
@@ -2262,6 +2268,10 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
     const double v_per_deg = span / (north - south);
 
     for (const DemGrid& g : granules) {
+        if (g.proj == kProjPolarStereo) {
+            if (!measure_polar_accuracy(g, west, east, south, north, cand, cand_heights, abort_above, &out)) return out;
+            continue;
+        }
         PostWindow w;
         if (!tile_post_window(g, west, east, south, north, &w)) continue;
         const long x0 = w.x0, x1 = w.x1, y0 = w.y0, y1 = w.y1;
@@ -2298,6 +2308,11 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
                                             : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
                 const double delta = std::fabs(rendered - static_cast<double>(truth));
                 out.probes++;
+                out.sum_sq += delta * delta;
+                if (out.histogram) {
+                    const size_t bin = static_cast<size_t>(std::min(delta, static_cast<double>(out.histogram->size() - 1)));
+                    (*out.histogram)[bin]++;
+                }
                 if (delta > out.worst) {
                     out.worst = delta;
                     if (abort_above > 0 && out.worst > abort_above) {
@@ -2309,6 +2324,61 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
         }
     }
     return out;
+}
+
+// The same walk over a POLAR STEREOGRAPHIC product: its posts are regular in
+// the projected grid, not in latitude and longitude, so the posts inside the
+// tile are found from the tile's footprint in that grid and each is taken back
+// to latitude/longitude before the mesh is interpolated at it. False when
+// `abort_above` stopped the walk.
+bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
+                            uint32_t cand, const std::vector<double>& cand_heights, double abort_above,
+                            SourcePostProbe* out) {
+    if (!g.covers || g.samples.empty()) return true;
+    double s_lo = 0, s_hi = 0, l_lo = 0, l_hi = 0;
+    if (!polar_stereo_footprint(polar_of(g), west, east, south, north, &s_lo, &s_hi, &l_lo, &l_hi)) return true;
+    const long x0 = std::max<long>(0, static_cast<long>(std::floor(s_lo)) - 1 - g.off_x);
+    const long x1 = std::min<long>(static_cast<long>(g.width) - 1, static_cast<long>(std::ceil(s_hi)) + 1 - g.off_x);
+    const long y0 = std::max<long>(0, static_cast<long>(std::floor(l_lo)) - 1 - g.off_y);
+    const long y1 = std::min<long>(static_cast<long>(g.height) - 1, static_cast<long>(std::ceil(l_hi)) + 1 - g.off_y);
+    const double span = static_cast<double>(cand - 1);
+    const double u_per_deg = span / (east - west);
+    const double v_per_deg = span / (north - south);
+    for (long iy = y0; iy <= y1; iy++) {
+        for (long ix = x0; ix <= x1; ix++) {
+            const float truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
+            if (truth == kNoData) continue;
+            double lat = 0, lon = 0;
+            polar_lat_lon(g, static_cast<double>(ix + g.off_x), static_cast<double>(iy + g.off_y), &lat, &lon);
+            if (lat < south || lat > north || lon < west || lon > east) continue;
+            const double uu = std::min(std::max((lon - west) * u_per_deg, 0.0), span);
+            const double vv = std::min(std::max((lat - south) * v_per_deg, 0.0), span);
+            uint32_t ci = static_cast<uint32_t>(uu), cj = static_cast<uint32_t>(vv);
+            if (ci > cand - 2) ci = cand - 2;
+            if (cj > cand - 2) cj = cand - 2;
+            const double du = uu - ci, dv = vv - cj;
+            const double* row_lo = &cand_heights[static_cast<size_t>(cj) * cand];
+            const double* row_hi = row_lo + cand;
+            const double h_bl = row_lo[ci], h_br = row_lo[ci + 1], h_tl = row_hi[ci], h_tr = row_hi[ci + 1];
+            const double rendered = dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
+                                             : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
+            const double delta = std::fabs(rendered - static_cast<double>(truth));
+            out->probes++;
+            out->sum_sq += delta * delta;
+            if (out->histogram) {
+                const size_t bin = static_cast<size_t>(std::min(delta, static_cast<double>(out->histogram->size() - 1)));
+                (*out->histogram)[bin]++;
+            }
+            if (delta > out->worst) {
+                out->worst = delta;
+                if (abort_above > 0 && out->worst > abort_above) {
+                    out->complete = false;
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 // ── IS THIS TILE OCEAN ACCORDING TO THE SOURCE, NOT THE MESH? ──────────────
@@ -2757,6 +2827,117 @@ dttSourceClass parse_source_class(const std::string& name) {
         if (name == entry.name) return entry.value;
     }
     return dttSourceClass_UNSPECIFIED;
+}
+
+// ── A BODY OTHER THAN EARTH (GEOGRAPHIC_TWO_ROOT_BODY) ──────────────────────
+//
+// The same two-root geographic addressing as GEOGRAPHIC_WGS84 (tile_extent and
+// the lattice are unchanged), on the body the plan NAMES: CENTER_NAME (never
+// EARTH, whose tiles keep the WGS84 scheme), REFERENCE_RADII_M with ONE radius
+// (a reference sphere; a spheroid or triaxial body is refused, see
+// body_shape.hpp) and heights above that sphere (VERTICAL_DATUM
+// REFERENCE_SPHERE, or UNSPECIFIED read as it). Its source is a PDS product
+// (pds_img.hpp), its tiles carry oct-encoded normals and no water mask, and its
+// record states the body, the radii and the horizontal datum the plan gives.
+struct BodyPlan {
+    bool active = false;
+    BodyShape shape = kEarthShape;
+    std::string center_name;
+    std::string horizontal_datum;
+    std::string remarks;
+};
+
+// A body tile's extra report facts: whether it is OVER CAP (the 32 KiB ceiling
+// stopped its density climb before it met its error target), its RMS
+// departure from the source posts, and the non-empty
+// bins of its departure histogram as "bin:count" pairs (bin k = [k, k+1) m,
+// bin 256 = 256 m and beyond).
+std::string body_tile_items(bool over_cap, double rms_m, const std::vector<uint64_t>& histogram) {
+    std::string out = std::string(" overCap=") + (over_cap ? "true" : "false") + " rmsM=" + fmt_double(rms_m);
+    std::string bins;
+    for (size_t k = 0; k < histogram.size(); k++) {
+        if (!histogram[k]) continue;
+        if (!bins.empty()) bins += ",";
+        bins += std::to_string(k) + ":" + std::to_string(histogram[k]);
+    }
+    return out + " residualHistogramM=" + bins;
+}
+
+// 0 = not a body plan; otherwise the HTTP status of the refusal (error set).
+int parse_body_plan(const std::vector<const DTT*>& headers, BodyPlan* body) {
+    const DTT& head = *headers[0];
+    if (head.TILING_SCHEME() != dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY) return 0;
+    const std::string center = head.CENTER_NAME() ? head.CENTER_NAME()->str() : std::string();
+    std::string upper = center;
+    for (char& c : upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (center.empty() || upper == "EARTH") {
+        plugin_set_error("bad-body-plan",
+                         "GEOGRAPHIC_TWO_ROOT_BODY needs CENTER_NAME naming a body other than EARTH "
+                         "(Earth's tiles are GEOGRAPHIC_WGS84).");
+        return 400;
+    }
+    const auto* radii = head.REFERENCE_RADII_M();
+    if (!radii || radii->size() == 0) {
+        plugin_set_error("bad-body-plan", "a body plan must state REFERENCE_RADII_M.");
+        return 400;
+    }
+    if (radii->size() != 1) {
+        plugin_set_error("unsupported-reference-body",
+                         "only a reference SPHERE (one REFERENCE_RADII_M value) is modelled: on a spheroid "
+                         "planetocentric and geodetic latitude differ and that conversion is not done here, so "
+                         "a two- or three-radius body is refused rather than mis-posted.");
+        return 422;
+    }
+    const double r = radii->Get(0);
+    if (!(r > 0) || !std::isfinite(r)) {
+        plugin_set_error("bad-body-plan", "REFERENCE_RADII_M must be a positive finite radius in metres.");
+        return 400;
+    }
+    if (head.VERTICAL_DATUM() != dttVerticalDatum_REFERENCE_SPHERE &&
+        head.VERTICAL_DATUM() != dttVerticalDatum_UNSPECIFIED) {
+        plugin_set_error("bad-body-plan",
+                         "a body's heights are above its reference sphere: VERTICAL_DATUM must be "
+                         "REFERENCE_SPHERE (or UNSPECIFIED, read as it).");
+        return 400;
+    }
+    for (const DTT* h : headers) {
+        const auto* hr = h->REFERENCE_RADII_M();
+        if (h->TILING_SCHEME() != head.TILING_SCHEME() || !h->CENTER_NAME() || h->CENTER_NAME()->str() != center ||
+            !hr || hr->size() != 1 || hr->Get(0) != r || h->VERTICAL_DATUM() != head.VERTICAL_DATUM()) {
+            plugin_set_error("mixed-body-plan",
+                             "every header record of one body plan must state the same scheme, CENTER_NAME, "
+                             "REFERENCE_RADII_M and VERTICAL_DATUM.");
+            return 400;
+        }
+    }
+    body->active = true;
+    body->shape = BodyShape{r, r};
+    body->center_name = center;
+    body->horizontal_datum = head.HORIZONTAL_DATUM_NAME() ? head.HORIZONTAL_DATUM_NAME()->str() : std::string();
+    body->remarks = head.REMARKS() && head.REMARKS()->size()
+                        ? head.REMARKS()->str()
+                        : std::string("Heights are metres above the body's reference sphere (VERTICAL_DATUM "
+                                      "REFERENCE_SPHERE, radius REFERENCE_RADII_M) as the source product publishes "
+                                      "them; no geoid is applied.");
+    return 0;
+}
+
+// A post of the GLOBAL lattice by its global row/column, with the one-post
+// halo beyond a tile folded back onto the body: a row past a pole is the row
+// the same distance on the other side of it, half way round; a column past the
+// antimeridian wraps. The doubles are the ones lattice_lat/lattice_lon give the
+// same post from the tile that owns it.
+void body_lattice_post(uint32_t level, uint32_t grid, int64_t row, int64_t col, double* lat, double* lon) {
+    const int64_t rows = static_cast<int64_t>(1u << level) * (grid - 1);   // pole to pole
+    const int64_t cols = static_cast<int64_t>(2u << level) * (grid - 1);   // once round
+    if (row < 0) { row = -row; col += cols / 2; }
+    if (row > rows) { row = 2 * rows - row; col += cols / 2; }
+    col %= cols;
+    if (col < 0) col += cols;
+    const double lat_step = 180.0 / (static_cast<double>(1u << level) * (grid - 1));
+    const double lon_step = 360.0 / (static_cast<double>(2u << level) * (grid - 1));
+    *lat = -90.0 + static_cast<double>(row) * lat_step;
+    *lon = -180.0 + static_cast<double>(col) * lon_step;
 }
 
 constexpr const char* kGeoidRemark =
@@ -3471,6 +3652,8 @@ int tile(void) {
         return 400;
     }
     const DTT& head = *headers[0];
+    BodyPlan body;
+    if (const int refused = parse_body_plan(headers, &body)) return refused;
 
     // The encoder's options, as the config object the readers below were written against.
     std::string plan = "{}";
@@ -3576,6 +3759,7 @@ int tile(void) {
             return 400;
         }
         // UNSPECIFIED is an unstated scheme: the only one modelled, as before.
+        if (body.active) continue;  // parse_body_plan checked every header's scheme
         if (h->TILING_SCHEME() != dttTilingScheme_GEOGRAPHIC_WGS84 && h->TILING_SCHEME() != dttTilingScheme_UNSPECIFIED) {
             plugin_set_error("unsupported-scheme", "only the GEOGRAPHIC_WGS84 two-root scheme is modelled.");
             return 400;
@@ -3585,7 +3769,7 @@ int tile(void) {
     // stays exact, the store holds no tile whose every byte is sea level, and
     // the serving lane synthesizes such an address on demand. Off by default
     // so a single-tile plan still gets the record it asked for.
-    const bool skip_ocean = json_bool(plan, "skipOceanTiles", false);
+    const bool skip_ocean = !body.active && json_bool(plan, "skipOceanTiles", false);
 
     // ── the tile block: one address per header record ──────────────────────
     std::vector<TileJob> jobs;
@@ -3620,7 +3804,81 @@ int tile(void) {
     DecodeBudget budget;
     std::vector<DemGrid> granules;
     uint32_t responses = 0, absent_granules = 0;
-    for (uint32_t ordinal = 0; ordinal < 4; ordinal++) {
+    if (body.active) {
+        // A BODY'S PDS PRODUCT: "dem" frame 0 is the product's PDS3 label, frames
+        // 1..3 whole-line ranges of its image (pds_img.hpp). The window is the
+        // union extent plus one post of the densest lattice, which the normals'
+        // halo reads.
+        std::vector<HttpFrame> frames;
+        for (uint32_t ordinal = 0; ordinal < 4; ordinal++) {
+            HttpFrame f = http_input_at("dem", ordinal);
+            if (!f.present) break;
+            if (f.invalid) {
+                plugin_set_error("invalid-response-frame", "a \"dem\" frame is not an HttpResponse (HRSP).");
+                return 400;
+            }
+            if (f.status < 200 || f.status >= 300) {
+                char message[320];
+                std::snprintf(message, sizeof(message),
+                              "a body product fetch answered HTTP %ld%s%s; a body has no ocean to read a 404 "
+                              "as, so every response must succeed.",
+                              f.status, f.error.empty() ? "" : " - ", f.error.substr(0, 96).c_str());
+                plugin_set_error("upstream-status", message);
+                return 502;
+            }
+            frames.push_back(std::move(f));
+        }
+        responses = static_cast<uint32_t>(frames.size());
+        if (frames.size() < 2) {
+            plugin_set_error("missing-dem-frame",
+                             "a body plan needs the product's PDS3 label on \"dem\" frame 0 and at least one "
+                             "whole-line range of its image after it.");
+            return 400;
+        }
+        if (http_input_at("water", 0).present) {
+            plugin_set_error("unexpected-water-frame", "a body plan carries no water mask; no \"water\" frame is read.");
+            return 400;
+        }
+        PdsLabel label;
+        std::string error;
+        if (!parse_pds_label(frames[0].body, &label, &error)) {
+            plugin_set_error("pds-label-unsupported", error.c_str());
+            return 422;
+        }
+        if (std::fabs(label.a_axis_m - body.shape.a) > 1e-6 || std::fabs(label.offset_km * 1000.0 - body.shape.a) > 1e-6) {
+            plugin_set_error("pds-reference-mismatch",
+                             "the product's sphere (A_AXIS_RADIUS, OFFSET) is not the plan's REFERENCE_RADII_M: its "
+                             "heights would be stated above the wrong surface.");
+            return 422;
+        }
+        std::vector<PdsBand> bands;
+        for (size_t i = 1; i < frames.size(); i++) {
+            PdsBand band;
+            if (!pds_band_of(label, frames[i].content_range, frames[i].body, &band, &error)) {
+                plugin_set_error("pds-range-unsupported", error.c_str());
+                return 422;
+            }
+            bands.push_back(band);
+        }
+        const double max_grid = json_number(plan, "maxGridSize", grid);
+        const double densest = std::max<double>(grid, std::min(511.0, max_grid));
+        uint32_t shallowest = jobs[0].level;
+        for (const TileJob& j : jobs) shallowest = std::min(shallowest, j.level);
+        const double halo = 180.0 / (std::ldexp(1.0, static_cast<int>(shallowest)) * (densest - 1.0));
+        std::vector<TileExtent> boxes;
+        for (const TileExtent& e : extents) {
+            boxes.push_back(TileExtent{e.west - halo, e.east + halo, std::max(-90.0, e.south - halo),
+                                       std::min(90.0, e.north + halo)});
+        }
+        DemGrid g = decode_pds_bands(label, bands, boxes, &budget);
+        if (g.budget_refused) return 413;
+        if (!g.ok) {
+            plugin_set_error("pds-band-gap", g.error.c_str());
+            return 422;
+        }
+        if (g.covers) granules.push_back(std::move(g));
+    }
+    for (uint32_t ordinal = 0; ordinal < 4 && !body.active; ordinal++) {
         const HttpFrame f = http_input_at("dem", ordinal);
         if (!f.present) break;
         responses++;
@@ -3672,8 +3930,14 @@ int tile(void) {
     // maxGridSize of 217 under-resolves by 1.5x, 361 covers it.)
     double source_posts_per_tile_edge = 0.0;
     for (const DemGrid& g : granules) {
+        if (g.proj == kProjPolarStereo) {
+            source_post_spacing = g.ps_scale_m;
+            source_posts_per_tile_edge =
+                (180.0 / std::pow(2.0, static_cast<double>(jobs[0].level))) * (kPi / 180.0) * body.shape.a / g.ps_scale_m;
+            break;
+        }
         if (g.scale_lat > 0) {
-            source_post_spacing = g.scale_lat * (kPi / 180.0) * 6371008.8;
+            source_post_spacing = g.scale_lat * (kPi / 180.0) * (body.active ? body.shape.a : 6371008.8);
             source_posts_per_tile_edge = (180.0 / std::pow(2.0, static_cast<double>(jobs[0].level))) /
                                          g.scale_lat;
             break;
@@ -3789,8 +4053,9 @@ int tile(void) {
                 bool nodata = false;
                 bool clamped = false;
                 bool bridged = false;
-                const bool covered =
-                    sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
+                const bool covered = body.active
+                                         ? body_sample(granules, lon, lat, &h, &nodata, &clamped)
+                                         : sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
                 post_clamped[v] = clamped ? 1 : 0;
                 post_bridged[v] = bridged ? 1 : 0;
                 if (!covered) {
@@ -3818,10 +4083,41 @@ int tile(void) {
         stats.max_h = max_h;
         stats.coverage = 1.0 - static_cast<double>(absent_posts + nodata_posts) / n_verts;
 
+        // ── a body's normals, over the lattice just sampled plus its halo ────
+        // (oct_normals.hpp). The ring one post beyond the tile is sampled at the
+        // global lattice posts body_lattice_post folds back onto the body.
+        std::vector<uint8_t> lattice_normals;
+        if (body.active) {
+            const uint32_t span = sample_grid + 2;
+            std::vector<Vec3> halo(static_cast<size_t>(span) * span);
+            const int64_t row0 = static_cast<int64_t>(job.y) * (sample_grid - 1);
+            const int64_t col0 = static_cast<int64_t>(job.x) * (sample_grid - 1);
+            for (int64_t j = -1; j <= static_cast<int64_t>(sample_grid); j++) {
+                for (int64_t i = -1; i <= static_cast<int64_t>(sample_grid); i++) {
+                    const size_t at = static_cast<size_t>(j + 1) * span + static_cast<size_t>(i + 1);
+                    const bool inside = j >= 0 && i >= 0 && j < static_cast<int64_t>(sample_grid) &&
+                                        i < static_cast<int64_t>(sample_grid);
+                    if (inside) {
+                        const size_t v = static_cast<size_t>(j) * sample_grid + static_cast<size_t>(i);
+                        halo[at] = geodetic_to_ecef(body.shape, lats[v], lons[v], heights[v]);
+                        continue;
+                    }
+                    double plat = 0, plon = 0, h = 0;
+                    bool nd = false, cl = false;
+                    body_lattice_post(job.level, sample_grid, row0 + j, col0 + i, &plat, &plon);
+                    if (!body_sample(granules, plon, plat, &h, &nd, &cl) || nd) h = 0.0;
+                    halo[at] = geodetic_to_ecef(body.shape, plat, plon, h);
+                }
+            }
+            lattice_oct_normals(halo, sample_grid, &lattice_normals);
+        }
+
         // ── the water mask ──────────────────────────────────────────────────
         std::string water_kind;
         std::vector<uint8_t> water_raster;
-        if (!water_granules.empty()) {
+        if (body.active) {
+            water_kind = "NONE";  // a body carries no water mask at all
+        } else if (!water_granules.empty()) {
             classify_water_mask(job, water_granules, granules, &water_raster,
                                 &stats.mask_from_absence, &stats.mask_unclassified);
             bool uniform = true;
@@ -3931,8 +4227,15 @@ int tile(void) {
         // the same T-junction a native client already handles between adjacent
         // LEVELS and which the format's edge indices (and the skirts a client
         // builds from them) exist for.
+        // `levelZeroErrorM` (options) states the level-0 target for a dataset
+        // whose body or resolution the Earth figure does not fit; absent, the
+        // Earth expression exactly as it was.
+        const bool rms_metric = json_string(plan, "errorMetric", "max") == "rms";
+        std::string level_zero_raw;
         const double error_target_m =
-            2.0 * 77067.0 / std::ldexp(1.0, static_cast<int>(job.level));
+            json_raw_value(plan, "levelZeroErrorM", &level_zero_raw)
+                ? json_number(plan, "levelZeroErrorM", 0) / std::ldexp(1.0, static_cast<int>(job.level))
+                : 2.0 * 77067.0 / std::ldexp(1.0, static_cast<int>(job.level));
 
         // The candidate ladder: gridSize and every halving of its interval
         // down to the FLOOR, ascending. A gridSize whose interval does not
@@ -3981,6 +4284,7 @@ int tile(void) {
         std::vector<uint8_t> payload_bytes;
         bool gzipped = false;
         bool at_ceiling = false;  // shipped at the cap without meeting the target
+        bool cap_stopped = false;  // the 32 KiB ceiling, not the ladder's top, ended the climb
         for (size_t c = 0; c < ladder.size(); c++) {
             const uint32_t cand = ladder[c];
             const uint32_t stride = (sample_grid - 1) / (cand - 1);
@@ -3992,8 +4296,25 @@ int tile(void) {
                 }
             }
             std::vector<uint8_t> cand_mesh;
-            encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,
-                                  water_kind == "UNIFORM_WATER", &cand_mesh);
+            if (body.active) {
+                std::vector<uint8_t> cand_normals(static_cast<size_t>(cand) * cand * 2);
+                for (uint32_t j = 0; j < cand; j++) {
+                    for (uint32_t i = 0; i < cand; i++) {
+                        const size_t from = (static_cast<size_t>(j * stride) * sample_grid + i * stride) * 2;
+                        const size_t to = (static_cast<size_t>(j) * cand + i) * 2;
+                        cand_normals[to] = lattice_normals[from];
+                        cand_normals[to + 1] = lattice_normals[from + 1];
+                    }
+                }
+                MeshBody mesh_body;
+                mesh_body.shape = body.shape;
+                mesh_body.oct_normals = &cand_normals;
+                mesh_body.water_extension = false;
+                encode_quantized_mesh(job, cand, ext, cand_heights, water_raster, false, &cand_mesh, mesh_body);
+            } else {
+                encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,
+                                      water_kind == "UNIFORM_WATER", &cand_mesh);
+            }
             std::vector<uint8_t> cand_payload;
             const bool cand_gzipped = gzip_compress(cand_mesh, &cand_payload);
             if (!cand_gzipped) cand_payload = cand_mesh;
@@ -4002,6 +4323,7 @@ int tile(void) {
                 // Past the cap. Anything accepted so far is what ships, and it
                 // ships as the densest mesh the ceiling admits.
                 at_ceiling = chosen_grid != 0;
+                cap_stopped = true;
                 break;
             }
             chosen_grid = cand;
@@ -4036,11 +4358,20 @@ int tile(void) {
             // missed does not need its exact error, only the fact that it
             // missed, and the tile that ships is re-measured with the abort off
             // below.
+            //
+            // `errorMetric` "rms" (options) judges a candidate by its RMS
+            // departure over the source posts instead of its worst one - a
+            // walk that cannot stop early, so it is never aborted - for a
+            // dataset whose acceptance is stated as RMS and a percentile (a
+            // body's craters put a few posts hundreds of metres from any mesh
+            // the 32 KiB ceiling admits). Absent, the worst, as before.
             const SourcePostProbe probe = measure_mesh_accuracy(
-                granules, job, cand, chosen_heights, measure_accuracy, error_target_m);
+                granules, job, cand, chosen_heights, measure_accuracy, rms_metric ? 0.0 : error_target_m);
             stats.vertical_accuracy_m = probe.worst;
             stats.accuracy_probes = probe.probes;
-            if (probe.complete && probe.worst <= error_target_m) { at_ceiling = false; break; }
+            const double judged =
+                rms_metric ? (probe.probes ? std::sqrt(probe.sum_sq / static_cast<double>(probe.probes)) : 0.0) : probe.worst;
+            if (probe.complete && judged <= error_target_m) { at_ceiling = false; break; }
             // Provisional: a denser candidate may still clear the target. If
             // none does, `at_ceiling` is the tile stating that it is as
             // accurate as it was ALLOWED to be — by the byte cap or by the
@@ -4071,11 +4402,24 @@ int tile(void) {
         // the tile's worst post. A tile that settled AT THE CAP is exactly that
         // case — it is the one whose stated accuracy a consumer most needs to
         // trust — so it is re-measured over every source post, once.
-        if (measure_accuracy && at_ceiling) {
+        if (measure_accuracy && at_ceiling && !body.active) {
             const SourcePostProbe settled =
                 measure_mesh_accuracy(granules, job, chosen_grid, chosen_heights, true, 0.0);
             stats.vertical_accuracy_m = settled.worst;
             stats.accuracy_probes = settled.probes;
+        }
+        // A BODY'S TILE IS ALWAYS MEASURED BY A COMPLETE WALK, and states its RMS
+        // and the histogram of its departures (whole metres) as well as the
+        // worst, so a level's RMS and percentiles are exact sums over its tiles.
+        std::vector<uint64_t> residual_histogram;
+        double rms_m = 0.0;
+        if (measure_accuracy && body.active) {
+            residual_histogram.assign(257, 0);
+            const SourcePostProbe settled = measure_mesh_accuracy(granules, job, chosen_grid, chosen_heights, true,
+                                                                  0.0, &residual_histogram);
+            stats.vertical_accuracy_m = settled.worst;
+            stats.accuracy_probes = settled.probes;
+            rms_m = settled.probes ? std::sqrt(settled.sum_sq / static_cast<double>(settled.probes)) : 0.0;
         }
         stats.grid = chosen_grid;
         stats.error_target_m = error_target_m;
@@ -4177,16 +4521,22 @@ int tile(void) {
                                ? head.VERTICAL_DATUM_NAME()->str()
                                : std::string("EGM2008"));
         const auto f_etag = b.CreateString(etag);
-        const auto f_remarks = b.CreateString(kGeoidRemark);
+        const auto f_remarks = b.CreateString(body.active ? body.remarks : std::string(kGeoidRemark));
         // The SHIPPED lattice's spacing, not the plan's. With density adapting
         // per tile these differ, and a record that states the plan's number
         // describes a mesh nobody has.
         const double post_spacing =
-            (ext.north - ext.south) / (chosen_grid - 1) * (kPi / 180.0) * 6371008.8;
+            (ext.north - ext.south) / (chosen_grid - 1) * (kPi / 180.0) * (body.active ? body.shape.a : 6371008.8);
+        // A body's identity, copied from the plan only when it states it (absent
+        // fields leave an Earth record's bytes as they were).
+        const auto f_center = body.active ? b.CreateString(body.center_name) : 0;
+        const auto f_radii = body.active ? b.CreateVector(std::vector<double>{body.shape.a})
+                                         : flatbuffers::Offset<flatbuffers::Vector<double>>(0);
+        const auto f_horizontal = body.active && !body.horizontal_datum.empty() ? b.CreateString(body.horizontal_datum) : 0;
 
         DTTBuilder db(b);
         db.add_TILESET_ID(f_tileset);
-        db.add_TILING_SCHEME(dttTilingScheme_GEOGRAPHIC_WGS84);
+        db.add_TILING_SCHEME(body.active ? dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY : dttTilingScheme_GEOGRAPHIC_WGS84);
         db.add_LEVEL(job.level);
         db.add_X(job.x);
         db.add_Y(job.y);
@@ -4209,8 +4559,9 @@ int tile(void) {
         // set that was actually decoded. Unset (0) only when no granule
         // covered the block, which is exactly when there is nothing to state.
         if (source_post_spacing > 0) db.add_SOURCE_POST_SPACING_M(source_post_spacing);
-        db.add_VERTICAL_DATUM(dttVerticalDatum_GEOID);
+        db.add_VERTICAL_DATUM(body.active ? dttVerticalDatum_REFERENCE_SPHERE : dttVerticalDatum_GEOID);
         db.add_VERTICAL_DATUM_NAME(f_datum_name);
+        if (f_horizontal.o) db.add_HORIZONTAL_DATUM_NAME(f_horizontal);
         // Measured, not asserted, and measured AT THE SOURCE POSTS: the
         // largest |mesh - source| over every post the granule set carries
         // inside this tile (coordinator resolution 2026-08-27 (1)). Stated
@@ -4221,10 +4572,12 @@ int tile(void) {
         }
         db.add_DATA_COVERAGE_FRACTION(stats.coverage);
         db.add_NO_DATA_VALUE(kNoData);
-        db.add_WATER_MASK_KIND(water_kind == "UNIFORM_WATER"
-                                   ? dttWaterMask_UNIFORM_WATER
-                                   : (water_kind == "RASTER" ? dttWaterMask_RASTER
-                                                             : dttWaterMask_UNIFORM_LAND));
+        if (!body.active) {
+            db.add_WATER_MASK_KIND(water_kind == "UNIFORM_WATER"
+                                       ? dttWaterMask_UNIFORM_WATER
+                                       : (water_kind == "RASTER" ? dttWaterMask_RASTER
+                                                                 : dttWaterMask_UNIFORM_LAND));
+        }
         if (water_ref.o) {
             // Themis: WATER_MASK and its two dimensions are set TOGETHER or
             // not at all — a mask whose geometry is unstated is undecodable.
@@ -4239,6 +4592,8 @@ int tile(void) {
         db.add_PROVENANCE(provenance);
         db.add_ETAG(f_etag);
         db.add_REMARKS(f_remarks);
+        if (f_center.o) db.add_CENTER_NAME(f_center);
+        if (f_radii.o) db.add_REFERENCE_RADII_M(f_radii);
         FinishDTTBuffer(b, db.Finish());
 
         // Size-prefixed record stream: [uint32 LE length][record], per tile.
@@ -4269,7 +4624,8 @@ int tile(void) {
                              " verticalAccuracyM=" + fmt_double(stats.vertical_accuracy_m) +
                              " accuracyProbes=" + std::to_string(stats.accuracy_probes) +
                              " meshBytes=" + std::to_string(stats.mesh_bytes) +
-                             " payloadBytes=" + std::to_string(stats.payload_bytes) + " digest=" + digest);
+                             " payloadBytes=" + std::to_string(stats.payload_bytes) + " digest=" + digest +
+                             (body.active ? body_tile_items(cap_stopped && at_ceiling, rms_m, residual_histogram) : std::string()));
     }
 
     // THE REPORT IS A FlowNotice (FNTC, KIND Info, REASON "tile-block"): COUNT is the records this block emitted
@@ -4314,10 +4670,13 @@ int tile(void) {
         "payloadBytes=" + std::to_string(first.payload_bytes),
         "digest=" + first.digest,
         "contentEncoding=gzip",
-        "verticalDatum=GEOID",
-        "verticalDatumNote=heights redistributed on the source geoid datum, not converted to ellipsoidal; bounded "
-        "<~100 m offset if rendered as above-ellipsoid",
+        body.active ? std::string("verticalDatum=REFERENCE_SPHERE") : std::string("verticalDatum=GEOID"),
+        body.active ? "verticalDatumNote=heights are metres above the body's reference sphere (" +
+                          fmt_double(body.shape.a) + " m), as the source product states them"
+                    : std::string("verticalDatumNote=heights redistributed on the source geoid datum, not converted "
+                                  "to ellipsoidal; bounded <~100 m offset if rendered as above-ellipsoid"),
     };
+    if (body.active) items.push_back("centerName=" + body.center_name);
     items.insert(items.end(), tile_items.begin(), tile_items.end());
 
     // A CELL WHOSE EVERY TILE IS OCEAN STILL EMITS A FRAME. Skipping the push
@@ -5310,6 +5669,153 @@ int respond(void) {
     }
     if (!stored_encoding.empty()) headers.push_back({"content-encoding", stored_encoding});
     return push_htr(200, headers, payload->BYTES()->data(), payload->BYTES()->size());
+}
+
+// ---------------------------------------------------------------------------
+// pack - a $DTT record stream -> the lane's published FILES.
+//
+// A body's tileset is published as files, one $PNM each, fetched by CID (the
+// console reads them over SDN; there is no tile server for a body). The tiles
+// are grouped so a client fetches a few files, not tens of thousands of tiles:
+//   <prefix>/root.dtts          every tile at level <= rootMaxLevel (default 2:
+//                               2 + 8 + 32 = 42 tiles)
+//   <prefix>/<L>/<X>_<Y>.dtts   one 4x4 block of same-level tiles, X = x >> 2,
+//                               Y = y >> 2 (row 0 at the SOUTH, as the tiles)
+// Each file is itself a size-prefixed $DTT stream - [u32 LE length][record] per
+// tile, ordered by (level, y, x) - so no new format exists: a reader walks it
+// exactly as it walks any record stream. Records are copied byte for byte.
+//
+// One "file" frame per file, the file's bytes (itself a $DTT stream, so the
+// frame is typed $DTT like every record stream of this lane), and ONE "names"
+// frame: a size-prefixed $PNM stream whose k-th record's FILE_NAME names the
+// k-th file - the IPFS adapter adds each file and completes its $PNM with the
+// CID. The planner hands pack WHOLE blocks (a block's tiles never span two
+// plans), so a file is complete when it is emitted.
+// ---------------------------------------------------------------------------
+int pack(void) {
+    if (plugin_get_input_count() > 2) {
+        plugin_set_error("batched-input-frames", "pack takes one records stream and at most one options frame.");
+        return 500;
+    }
+    const int32_t records_index = plugin_find_input_index("records", 0);
+    const plugin_input_frame_t* records =
+        records_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(records_index)) : nullptr;
+    if (!records || !records->payload) {
+        plugin_set_error("missing-records-frame", "pack needs the $DTT record stream on port \"records\".");
+        return 400;
+    }
+    std::string options = "{}";
+    if (const int32_t oi = plugin_find_input_index("options", 0); oi >= 0) {
+        const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(oi));
+        bool ok = false;
+        options = module_config_object(f->payload, f->payload_length, &ok);
+        if (!ok) {
+            plugin_set_error("invalid-options-frame", "the options frame is not a ModuleConfig (MCFG).");
+            return 400;
+        }
+    }
+    const std::string prefix = json_string(options, "pathPrefix", "");
+    bool prefix_ok = !prefix.empty() && prefix.size() <= 64 && prefix.front() != '/' && prefix.back() != '/';
+    for (const char c : prefix)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '/' || c == '-' || c == '_' || c == '.')) prefix_ok = false;
+    if (!prefix_ok || prefix.find("..") != std::string::npos) {
+        plugin_set_error("bad-path-prefix",
+                         "pack needs options.pathPrefix: a relative path of letters, digits, '-', '_', '.' and '/' "
+                         "(no leading or trailing '/', no '..'), at most 64 characters.");
+        return 400;
+    }
+    const double root_raw = json_number(options, "rootMaxLevel", 2);
+    if (!(root_raw >= 0 && root_raw <= 4) || root_raw != std::floor(root_raw)) {
+        plugin_set_error("bad-root-level", "options.rootMaxLevel must be a whole number in [0, 4].");
+        return 400;
+    }
+    const uint32_t root_max = static_cast<uint32_t>(root_raw);
+
+    struct Entry {
+        uint32_t level, x, y;
+        size_t at, size;
+        std::string file;
+    };
+    std::vector<Entry> entries;
+    std::string tileset;
+    const uint8_t* data = records->payload;
+    const size_t length = records->payload_length;
+    for (size_t at = 0; at < length;) {
+        if (length - at < 4) {
+            plugin_set_error("invalid-records-frame", "the record stream ends inside a size prefix.");
+            return 400;
+        }
+        const uint32_t size = static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) |
+                              (static_cast<uint32_t>(data[at + 2]) << 16) | (static_cast<uint32_t>(data[at + 3]) << 24);
+        at += 4;
+        if (size == 0) continue;  // the "no records here" frame and alignment padding
+        if (size > length - at) {
+            plugin_set_error("invalid-records-frame", "a record's size prefix runs past the stream.");
+            return 400;
+        }
+        ::flatbuffers::Verifier verifier(data + at, size);
+        if (!DTTBufferHasIdentifier(data + at) || !VerifyDTTBuffer(verifier)) {
+            plugin_set_error("invalid-records-frame", "a record of the stream is not a valid $DTT.");
+            return 400;
+        }
+        const DTT* t = GetDTT(data + at);
+        const std::string id = t->TILESET_ID() ? t->TILESET_ID()->str() : std::string();
+        if (tileset.empty()) tileset = id;
+        if (id.empty() || id != tileset) {
+            plugin_set_error("mixed-tileset-records", "every record packed together must name the same TILESET_ID.");
+            return 400;
+        }
+        Entry e{t->LEVEL(), t->X(), t->Y(), at, size, std::string()};
+        e.file = e.level <= root_max ? prefix + "/root.dtts"
+                                     : prefix + "/" + std::to_string(e.level) + "/" + std::to_string(e.x >> 2) + "_" +
+                                           std::to_string(e.y >> 2) + ".dtts";
+        entries.push_back(std::move(e));
+        at += size;
+    }
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        if (a.file != b.file) return a.file < b.file;
+        if (a.level != b.level) return a.level < b.level;
+        if (a.y != b.y) return a.y < b.y;
+        return a.x < b.x;
+    });
+    for (size_t i = 1; i < entries.size(); i++) {
+        if (entries[i].level == entries[i - 1].level && entries[i].x == entries[i - 1].x &&
+            entries[i].y == entries[i - 1].y) {
+            plugin_set_error("duplicate-tile-address", "the record stream carries one tile address twice.");
+            return 400;
+        }
+    }
+    uint32_t files = 0;
+    std::vector<uint8_t> names;
+    for (size_t i = 0; i < entries.size();) {
+        size_t j = i;
+        std::vector<uint8_t> frame;
+        const std::string& name = entries[i].file;
+        for (; j < entries.size() && entries[j].file == name; j++) {
+            put_u32(&frame, static_cast<uint32_t>(entries[j].size));
+            frame.insert(frame.end(), data + entries[j].at, data + entries[j].at + entries[j].size);
+        }
+        if (++files > 64) {
+            plugin_set_error("too-many-files", "one plan packs into at most 64 files (the adapter's frame budget).");
+            return 413;
+        }
+        if (push_dtt_stream("file", frame) < 0) return 500;
+        flatbuffers::FlatBufferBuilder b(128 + name.size());
+        const auto file_name = b.CreateString(name);
+        PNMBuilder pb(b);
+        pb.add_FILE_NAME(file_name);
+        FinishSizePrefixedPNMBuffer(b, pb.Finish());
+        names.insert(names.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+        i = j;
+    }
+    if (files == 0) {
+        plugin_set_error("empty-records-frame", "pack was handed no records, so there is no file to write.");
+        return 400;
+    }
+    return plugin_push_output_ex("names", "PNM.fbs", "$PNM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PNM", 0, 0,
+                                 names.data(), static_cast<uint32_t>(names.size())) < 0
+               ? 500
+               : 0;
 }
 
 }  // extern "C"

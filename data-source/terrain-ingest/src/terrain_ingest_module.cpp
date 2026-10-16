@@ -88,6 +88,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -902,6 +903,11 @@ void split_job_id(const std::string& job_id, std::string* dataset, std::string* 
 struct PlanHeader {
     std::string tileset, dataset, dataset_name, epoch, retrieved_at, license, license_url, attribution, source_url;
     std::string source_query, water_source_query, vertical_datum_name, etag, remarks;
+    // A body other than Earth (GEOGRAPHIC_TWO_ROOT_BODY on a reference sphere): set only by lola_plan, so an Earth
+    // header's bytes are unchanged.
+    bool body = false;
+    std::string center_name, horizontal_datum_name, native_id;
+    double radius_m = 0;
     dttSourceClass source_class = dttSourceClass_UNSPECIFIED;
     uint32_t level = 0, x = 0, y = 0, grid = 0, max_level = 0, child_availability = 0;
     bool has_extent = false;
@@ -914,7 +920,7 @@ flatbuffers::Offset<DTTProvenance> plan_provenance(flatbuffers::FlatBufferBuilde
     const auto id = b.CreateString(h.dataset), epoch = b.CreateString(h.epoch), retrieved = b.CreateString(h.retrieved_at),
                license = b.CreateString(h.license);
     const auto name = opt(h.dataset_name), license_url = opt(h.license_url), attribution = opt(h.attribution),
-               source_url = opt(h.source_url), query = opt(source_query);
+               source_url = opt(h.source_url), query = opt(source_query), native_id = opt(h.native_id);
     DTTProvenanceBuilder pb(b);
     pb.add_DATASET_ID(id);
     pb.add_DATASET_EPOCH(epoch);
@@ -925,6 +931,7 @@ flatbuffers::Offset<DTTProvenance> plan_provenance(flatbuffers::FlatBufferBuilde
     if (!attribution.IsNull()) pb.add_ATTRIBUTION(attribution);
     if (!source_url.IsNull()) pb.add_SOURCE_URL(source_url);
     if (!query.IsNull()) pb.add_SOURCE_QUERY(query);
+    if (!native_id.IsNull()) pb.add_NATIVE_ID(native_id);
     return pb.Finish();
 }
 
@@ -938,11 +945,15 @@ void append_plan_header(Bytes* stream, const PlanHeader& h) {
     const auto provenance = plan_provenance(b, h, h.source_query);
     const auto water_provenance = h.water_source_query.empty() ? flatbuffers::Offset<DTTProvenance>()
                                                                 : plan_provenance(b, h, h.water_source_query);
+    const auto center = h.body ? b.CreateString(h.center_name) : flatbuffers::Offset<flatbuffers::String>();
+    const auto radii = h.body ? b.CreateVector(std::vector<double>{h.radius_m}) : flatbuffers::Offset<flatbuffers::Vector<double>>();
+    const auto horizontal = h.body && !h.horizontal_datum_name.empty() ? b.CreateString(h.horizontal_datum_name)
+                                                                         : flatbuffers::Offset<flatbuffers::String>();
     DTTPayloadRefBuilder payload_builder(b);
     const auto payload = payload_builder.Finish();
     DTTBuilder d(b);
     d.add_TILESET_ID(tileset);
-    d.add_TILING_SCHEME(dttTilingScheme_GEOGRAPHIC_WGS84);
+    d.add_TILING_SCHEME(h.body ? dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY : dttTilingScheme_GEOGRAPHIC_WGS84);
     d.add_LEVEL(h.level);
     d.add_X(h.x);
     d.add_Y(h.y);
@@ -966,6 +977,12 @@ void append_plan_header(Bytes* stream, const PlanHeader& h) {
     d.add_PROVENANCE(provenance);
     if (!etag.IsNull()) d.add_ETAG(etag);
     if (!remarks.IsNull()) d.add_REMARKS(remarks);
+    if (h.body) {
+        d.add_VERTICAL_DATUM(dttVerticalDatum_REFERENCE_SPHERE);
+        d.add_CENTER_NAME(center);
+        d.add_REFERENCE_RADII_M(radii);
+        if (!horizontal.IsNull()) d.add_HORIZONTAL_DATUM_NAME(horizontal);
+    }
     FinishSizePrefixedDTTBuffer(b, d.Finish());
     stream->insert(stream->end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
@@ -1071,6 +1088,11 @@ long wrap_lon(long lon) {
     return lon;
 }
 
+
+// ── the Moon's walk (lola_plan.hpp, with terrain-source's polar_stereo.hpp) ──
+
+#include "polar_stereo.hpp"
+#include "lola_plan.hpp"
 
 }  // namespace
 
@@ -1596,6 +1618,280 @@ int ingest_meta(void) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// lola_plan - the MOON's planner (lola_plan.hpp): TimerTick + $FSB mark? -> the
+// product's PDS3 label (dem_0) and three whole-line ranges of its image
+// (dem_1..dem_3) as HttpRequests, the $DTT plan headers of one unit (a body
+// plan: GEOGRAPHIC_TWO_ROOT_BODY, CENTER_NAME, REFERENCE_RADII_M, REFERENCE_SPHERE),
+// the encoder's options (MCFG), pack's options (MCFG: pathPrefix,
+// rootMaxLevel) and the job ($IRM, walk:lola, stride 1).
+// ---------------------------------------------------------------------------
+int lola_plan(void) {
+    if (refuse_batched()) return 500;
+    const std::string config = load_config();
+    const std::string tileset = config_string(config, "tileset_id", "");
+    const std::string epoch = config_string(config, "dataset_epoch", "");
+    if (tileset.empty() || epoch.empty()) {
+        plugin_set_error("missing-tileset-id",
+                         "lola_plan needs tileset_id and dataset_epoch: a walk with no identity or edition cannot be "
+                         "resumed or superseded.");
+        return 400;
+    }
+    const std::string dataset = config_string(config, "dataset_id", "nasa-lola-gdr");
+    const int64_t clock = tick_ms();
+    if (clock < 0) {
+        plugin_set_error("invalid-tick-frame", "the tick frame is not a TimerTick (TICK).");
+        return 400;
+    }
+    std::string retrieved_at = config_string(config, "retrieved_at", "");
+    if (retrieved_at.empty() && clock > 0) retrieved_at = iso_ms(clock);
+    if (retrieved_at.empty()) {
+        plugin_set_error("missing-retrieved-at",
+                         "DTTProvenance.RETRIEVED_AT is required on every record: state retrieved_at in the flow "
+                         "config or fire the tick with FIRED_MS.");
+        return 400;
+    }
+    std::string error;
+    const std::vector<LolaCap> caps = lola_caps(config, &error);
+    if (caps.empty()) {
+        plugin_set_error("invalid-lola-caps", error.c_str());
+        return 400;
+    }
+    const long grid = static_cast<long>(json_number_or(config, "grid_size", 65));
+    // 321 posts (320 intervals) puts 41, 65 and 81 on the density ladder: a tile whose relief needs a little more
+    // than 65 posts takes 81 (1.6x the vertices, under the 32 KiB ceiling) rather than jumping to 129, which never
+    // fits (measured on the LOLA sample: every tile the 65 rung left over its RMS target was within 1.45x of it).
+    const double max_grid = json_number_or(config, "max_grid_size", 321);
+    const double range_bytes = json_number_or(config, "lola_max_range_bytes", kLolaDefaultRangeBytes);
+    if (grid < 5 || grid > 255 || max_grid < grid || max_grid > 511 || !(range_bytes >= 1024.0 * 1024.0)) {
+        plugin_set_error("invalid-lola-options",
+                         "grid_size must lie in [5, 255], max_grid_size in [grid_size, 511] and "
+                         "lola_max_range_bytes be at least 1 MiB.");
+        return 400;
+    }
+
+    Bytes stream;
+    if (!mark_stream(&stream)) {
+        plugin_set_error("invalid-mark-frame", "the mark frames are not a complete $FSB chunk sequence.");
+        return 400;
+    }
+    const std::string job_id = mark_job_id(dataset, tileset, epoch);
+    const MarkState mark = read_mark(stream, job_id);
+    const long long start = mark.found && mark.next_index > 0 ? mark.next_index : 0;
+    LolaUnit unit;
+    long long total = 0;
+    if (!lola_unit_at(caps, max_grid, range_bytes, start, &unit, &total)) {
+        plugin_set_backlog_remaining(0);  // the walk is drained: a clean no-op
+        return 0;
+    }
+    const LolaProduct& product = *unit.cap->product;
+    const std::string base = config_string(config, "lola_base_url", kLolaBaseUrl);
+    const std::string img_url = base + product.path + ".img", lbl_url = base + product.path + ".lbl";
+    const bool if_match = json_number_or(config, "lola_verify_etag", 1) != 0;
+    const long timeout_ms = config_timeout_ms(config);
+
+    // dem_0: the label, so the geometry the encoder decodes with is the source's own.
+    if (push_typed("dem_0", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest",
+                   granule_request(lbl_url, timeout_ms)) < 0)
+        return 500;
+    // dem_1..3: the unit's lines as three whole-line ranges.
+    const uint64_t record_bytes = product.samples * 4, lines = unit.last_line - unit.first_line + 1;
+    const uint64_t per = (lines + 2) / 3;
+    for (int part = 0; part < 3; part++) {
+        const uint64_t a = unit.first_line + std::min<uint64_t>(lines - 1, per * part);
+        const uint64_t b = std::min<uint64_t>(unit.last_line, unit.first_line + per * (part + 1) - 1);
+        const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
+                                  std::to_string((std::max(a, b) + 1) * record_bytes - 1);
+        flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
+        std::vector<flatbuffers::Offset<R::Header>> headers;
+        headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
+        if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", product.etag));
+        R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
+                                                                  static_cast<uint32_t>(timeout_ms), 0, nullptr));
+        char port[8];
+        std::snprintf(port, sizeof(port), "dem_%d", part + 1);
+        if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b2)) < 0) return 500;
+    }
+
+    long max_level = 0;
+    for (const LolaCap& c : caps) max_level = std::max(max_level, c.max_level);
+    PlanHeader header;
+    header.tileset = tileset;
+    header.dataset = dataset;
+    header.dataset_name = config_string(config, "dataset_name", "LRO LOLA gridded data records (LOLA GDR)");
+    header.epoch = std::string(product.created) + "T00:00:00.000Z";
+    header.retrieved_at = retrieved_at;
+    header.license = config_string(config, "license", "Public domain (NASA)");
+    header.license_url = config_string(config, "license_url", "https://www.nasa.gov/nasa-brand-center/images-and-media/");
+    header.attribution = config_string(config, "attribution", "LOLA: NASA/GSFC (Smith et al.)");
+    header.source_url = img_url;
+    header.native_id = product.lidvid;
+    header.vertical_datum_name = config_string(config, "vertical_datum_name", "LOLA reference sphere 1737.4 km");
+    header.source_class = dttSourceClass_SPACEBORNE_ALTIMETRIC;
+    header.grid = static_cast<uint32_t>(grid);
+    header.max_level = static_cast<uint32_t>(max_level);
+    header.body = true;
+    header.center_name = config_string(config, "center_name", "MOON");
+    header.radius_m = kMoonRadiusM;
+    header.horizontal_datum_name = config_string(config, "horizontal_datum_name", "MOON_ME (DE421 mean Earth/polar axis)");
+    Bytes plan;
+    for (const auto& t : unit.tiles) {
+        PlanHeader h = header;
+        h.level = static_cast<uint32_t>(t[0]);
+        h.x = static_cast<uint32_t>(t[1]);
+        h.y = static_cast<uint32_t>(t[2]);
+        append_plan_header(&plan, h);
+    }
+    if (push_typed("plan", "DTT.fbs", "$DTT", "DTT", plan) < 0) return 500;
+
+    const auto module_config = [](std::vector<std::unique_ptr<R::ConfigEntryT>> entries) {
+        R::ModuleConfigT options;
+        options.ENTRIES = std::move(entries);
+        flatbuffers::FlatBufferBuilder b(256);
+        R::FinishModuleConfigBuffer(b, R::ModuleConfig::Pack(b, &options));
+        return finished(b);
+    };
+    const auto number = [](const char* key, double v) {
+        auto e = std::make_unique<R::ConfigEntryT>();
+        e->KEY = key;
+        e->KIND = R::configValueKind_Number;
+        e->NUMBER_VALUE = v;
+        return e;
+    };
+    {
+        std::vector<std::unique_ptr<R::ConfigEntryT>> entries;
+        entries.push_back(number("maxGridSize", max_grid));
+        // The level-0 RMS target (15 m at level 7, the lane's acceptance), judged as RMS over the source posts.
+        entries.push_back(number("levelZeroErrorM", json_number_or(config, "level_zero_error_m", 1920)));
+        auto metric = std::make_unique<R::ConfigEntryT>();
+        metric->KEY = "errorMetric";
+        metric->KIND = R::configValueKind_String;
+        metric->STRING_VALUE = config_string(config, "error_metric", "rms");
+        entries.push_back(std::move(metric));
+        if (push_typed("options", "ModuleConfig.fbs", R::ModuleConfigIdentifier(), "ModuleConfig",
+                       module_config(std::move(entries))) < 0)
+            return 500;
+    }
+    {
+        std::vector<std::unique_ptr<R::ConfigEntryT>> entries;
+        auto prefix = std::make_unique<R::ConfigEntryT>();
+        prefix->KEY = "pathPrefix";
+        prefix->KIND = R::configValueKind_String;
+        prefix->STRING_VALUE = config_string(config, "path_prefix", "terrain/301");
+        entries.push_back(std::move(prefix));
+        entries.push_back(number("rootMaxLevel", static_cast<double>(kLolaRootMaxLevel)));
+        if (push_typed("pack", "ModuleConfig.fbs", R::ModuleConfigIdentifier(), "ModuleConfig",
+                       module_config(std::move(entries))) < 0)
+            return 500;
+    }
+
+    Job job;
+    job.job_id = job_id;
+    job.provider = config_string(config, "provider_id", "nasa-lola");
+    job.source_url = base;
+    job.epoch = epoch;
+    job.updated_at = retrieved_at;
+    job.walk = "lola";
+    job.first_index = start;
+    job.next_index = start + 1;
+    job.records_committed = mark.found && mark.stored_total > 0 ? mark.stored_total : 0;
+    job.notes = std::string("product ") + product.key + (unit.root ? ", levels 0-2" : ", level " + std::to_string(unit.level)) +
+                ", lines " + std::to_string(unit.first_line) + "-" + std::to_string(unit.last_line) + ", " +
+                std::to_string(unit.tiles.size()) + " tiles in " + std::to_string(unit.blocks) + " files, unit " +
+                std::to_string(start) + " of " + std::to_string(total);
+    if (push_typed("job", "IRM.fbs", "$IRM", "IRM", build_irm(job, false)) < 0) return 500;
+    const long long backlog = total - (start + 1);
+    plugin_set_backlog_remaining(backlog > 0xffffffffLL ? 0xffffffffu : static_cast<uint32_t>(backlog < 0 ? 0 : backlog));
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// announce_files - the job ($IRM), the files the host adapter added to IPFS
+// ("added": one size-prefixed $PNM each, CID + FILE_NAME) and the encoder's
+// report (FlowNotice, optional) -> the $PNM records to publish (completed:
+// /ipfs/ address, PUBLISH_TIMESTAMP = the run's retrieval time, FILE_ID
+// provider:source:name:CID) and the IngestRequest the storage lane stores them
+// under (provider nasa-lola, source moon-terrain, one batch per unit).
+// ---------------------------------------------------------------------------
+int announce_files(void) {
+    Job job;
+    if (!read_job("job", &job)) {
+        plugin_set_error("missing-job-frame", "announce_files requires the job frame ($IRM).");
+        return 400;
+    }
+    const std::string config = load_config();
+    const std::string provider = config_string(config, "provider_id", "nasa-lola");
+    const std::string source = config_string(config, "source_name", "moon-terrain");
+    Bytes records;
+    uint32_t files = 0;
+    for (uint32_t i = 0; i < plugin_get_input_count(); i++) {
+        const plugin_input_frame_t* f = plugin_get_input_frame(i);
+        if (!f || !f->port_id || std::strcmp(f->port_id, "added") != 0) continue;
+        if (++files > 64) {
+            plugin_set_error("batched-input-frames", "announce_files takes at most 64 added files.");
+            return 500;
+        }
+        const uint8_t* data = f->payload;
+        const size_t length = f->payload_length;
+        if (!data || length < 8) {
+            plugin_set_error("invalid-added-frame", "an added frame is not a size-prefixed $PNM.");
+            return 400;
+        }
+        const uint32_t size = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+                              (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
+        flatbuffers::Verifier verifier(data + 4, length - 4);
+        if (size != length - 4 || !PNMBufferHasIdentifier(data + 4) || !VerifyPNMBuffer(verifier)) {
+            plugin_set_error("invalid-added-frame", "an added frame is not a size-prefixed $PNM.");
+            return 400;
+        }
+        const PNM* added = GetPNM(data + 4);
+        const std::string cid = text_of(added->CID()), name = text_of(added->FILE_NAME());
+        if (cid.empty() || name.empty()) {
+            plugin_set_error("invalid-added-frame", "an added file states no CID or FILE_NAME; nothing is announced.");
+            return 400;
+        }
+        flatbuffers::FlatBufferBuilder b(512);
+        const auto address = b.CreateString("/ipfs/" + cid), when = b.CreateString(job.updated_at),
+                   cid_off = b.CreateString(cid), name_off = b.CreateString(name),
+                   id_off = b.CreateString(provider + ":" + source + ":" + name + ":" + cid);
+        PNMBuilder pb(b);
+        pb.add_MULTIFORMAT_ADDRESS(address);
+        pb.add_PUBLISH_TIMESTAMP(when);
+        pb.add_CID(cid_off);
+        pb.add_FILE_NAME(name_off);
+        pb.add_FILE_ID(id_off);
+        FinishSizePrefixedPNMBuffer(b, pb.Finish());
+        records.insert(records.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    }
+    if (files == 0) {
+        plugin_set_error("missing-added-frame", "announce_files needs at least one added file.");
+        return 400;
+    }
+    std::string dataset, tileset, epoch;
+    split_job_id(job.job_id, &dataset, &tileset, &epoch);
+    R::IngestRequestT meta;
+    meta.SCHEMA = "PNM";
+    meta.TAGS = std::make_unique<R::SourceTagsT>();
+    meta.TAGS->PROVIDER_ID = provider;
+    meta.TAGS->SOURCE_NAME = source;
+    meta.TAGS->BATCH_ID = tileset + "@" + epoch + "#" + std::to_string(job.first_index);
+    meta.TAGS->SOURCE_URL = job.source_url;
+    meta.TAGS->LICENSE = config_string(config, "license", "Public domain (NASA)");
+    meta.TAGS->CITATION = config_string(config, "attribution", "LOLA: NASA/GSFC (Smith et al.)");
+    meta.RECONCILE = R::reconcileMode_None;  // a unit is a window of the tileset, never its whole set
+    meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
+    meta.PROVENANCE->SOURCE_URL = job.source_url;
+    meta.PROVENANCE->PARSER = "terrain-source";
+    meta.PROVENANCE->PARSER_VERSION = kIngestorId;
+    meta.PROVENANCE->NORMALIZED_COUNT = files;
+    meta.PROVENANCE->SCHEMAS = {"PNM.fbs"};
+    meta.PROVENANCE->SCHEMA_COUNTS = {files};
+    flatbuffers::FlatBufferBuilder mb(1024);
+    R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+    if (push_typed("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", finished(mb)) < 0) return 500;
+    return push_typed("records", "PNM.fbs", "$PNM", "PNM", records) < 0 ? 500 : 0;
+}
+
 // publish_request: the storage-ingest IngestResult, the IngestRequest that produced it and the job ($IRM) -> the
 // advanced durable mark ($IRM, for hostcap/storage-write and egress) and, only when publish_url is configured, the
 // dataset-publication POST (body: the IngestResult naming the stored batch). The mark advances FROM THE VERIFIED STORE
@@ -1667,7 +1963,17 @@ int publish_request(void) {
     }
     const std::string stamped = config_string(config, "retrieved_at", "");
     if (!stamped.empty()) job.updated_at = stamped;
-    if (job.walk == "cell") {
+    if (job.walk == "lola") {
+        // The Moon's walk: its length is the same pure function of the config lola_plan walks.
+        std::string error;
+        const std::vector<LolaCap> caps = lola_caps(config, &error);
+        long long total = 0;
+        LolaUnit unused;
+        if (!caps.empty())
+            lola_unit_at(caps, json_number_or(config, "max_grid_size", 321),
+                         json_number_or(config, "lola_max_range_bytes", kLolaDefaultRangeBytes), -1, &unused, &total);
+        job.complete = total > 0 && job.next_index >= total;
+    } else if (job.walk == "cell") {
         // The walk's length is a pure function of the config, re-derived exactly as granule_plan derives it.
         const long global_max_level = static_cast<long>(json_number_or(config, "max_level", -1));
         const std::vector<Region> regions = parse_regions(config, global_max_level < 0 ? 0 : global_max_level);

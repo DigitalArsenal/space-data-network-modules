@@ -21,7 +21,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
-import { decodeHttpResponse } from "space-data-module-sdk/http";
+import { decodeHttpRequest, decodeHttpResponse } from "space-data-module-sdk/http";
 import { embeddedPlgManifest } from "space-data-module-sdk/host/runtime-target-gate";
 import { decodePluginInvokeResponse } from "space-data-module-sdk/invoke";
 import {
@@ -56,7 +56,9 @@ test(
       { ...fixture, threadCounts: [1], cases: fixture.cases.filter((c) => wanted.includes(c.id)) },
       { fixtureDir: FIXTURE_DIR },
     );
-    const ifNoneMatch = JSON.parse(fs.readFileSync(`${FIXTURE_DIR}parity/context-conditional.json`, "utf8")).ifNoneMatch;
+    // Typed contracts 1.0: the serve context is the routed $HTQ request itself, so its If-None-Match is a header.
+    const conditional = decodeHttpRequest(new Uint8Array(fs.readFileSync(`${FIXTURE_DIR}parity/context-conditional.htq`)));
+    const ifNoneMatch = header(conditional, "if-none-match");
     const observed = [];
     const laneRunners = Object.fromEntries(
       Object.entries(defaultParityLaneRunners).map(([lane, runner]) => [

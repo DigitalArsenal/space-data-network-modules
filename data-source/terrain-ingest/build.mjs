@@ -45,8 +45,28 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 // FlatSQL $FSB chunks and asked for with an $FSO - so all four generated SDS headers are inlined ahead of the module
 // (each self-contained; the SDK runtime types - TimerTick, HttpRequest/Response, IngestRequest/Result, FlowNotice,
 // ModuleConfig - are staged by the SDK compiler).
-const headers = await Promise.all(["IRM", "DTT", "FSO", "FSB"].map((code) => readSdsHeader(code, import.meta.url)));
-const implementationSource = await fs.readFile(sourcePath, "utf8");
+// $PNM is the Moon lane's publication record (announce_files).
+const headers = await Promise.all(["IRM", "DTT", "FSO", "FSB", "PNM"].map((code) => readSdsHeader(code, import.meta.url)));
+
+// The module's own headers (src/lola_plan.hpp) and terrain-source's polar projection (polar_stereo.hpp, so the
+// planner and the decoder share one definition of where a tile lies in a polar product) are inlined where the
+// implementation includes them.
+const includeRoots = [path.join(packageRoot, "src"), path.join(packageRoot, "..", "terrain-source", "src")];
+async function inlineLocalIncludes(source) {
+  const pattern = /^#include "([a-z_]+\.hpp)"\s*$/m;
+  let out = source;
+  for (let match = out.match(pattern); match; match = out.match(pattern)) {
+    let body = null;
+    for (const root of includeRoots) {
+      body = await fs.readFile(path.join(root, match[1]), "utf8").catch(() => null);
+      if (body !== null) break;
+    }
+    if (body === null) throw new Error(`no ${match[1]} under ${includeRoots.join(" or ")}`);
+    out = out.replace(match[0], () => `// ---- ${match[1]} ----\n${body}\n// ---- end ${match[1]} ----`);
+  }
+  return out;
+}
+const implementationSource = await inlineLocalIncludes(await fs.readFile(sourcePath, "utf8"));
 const sourceCode = `${headers.map(inlineGeneratedHeader).join("\n")}\n${implementationSource}`;
 
 await fs.rm(distRoot, { recursive: true, force: true });

@@ -1,0 +1,109 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.terrain-ingest-host",
+  "name": "Terrain ingest host adapter (body terrain files to IPFS)",
+  "version": "0.1.0",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "ipfs"
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One ipfs.add host call per file, serially; the host owns I/O. No threads."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "publish_files",
+      "displayName": "Add packed terrain files to the node's IPFS",
+      "inputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-file",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One packed terrain file per frame from terrain-source:pack (a size-prefixed $DTT stream)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "The packed terrain files."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-file-names",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "terrain-source:pack's names: a size-prefixed $PNM stream, the k-th FILE_NAME naming the k-th file frame (terrain/<NAIF id>/root.dtts or terrain/<NAIF id>/<L>/<X>_<Y>.dtts)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The file names."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "added",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-added",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One size-prefixed $PNM per file: CID (ipfs.add, pinned on the node's own Kubo) and FILE_NAME; terrain-ingest:announce_files completes it."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "The IPFS add result per file, as a $PNM."
+        }
+      ],
+      "description": "Adds each packed terrain file to the node's IPFS through the ipfs host capability (ipfs.add, pinned) and emits its CID and name as a $PNM. A refused add stops the batch: nothing is announced for files that are not on the node.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

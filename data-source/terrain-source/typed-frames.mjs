@@ -51,6 +51,7 @@ function provenanceOf(b, p = {}) {
   const opt = (v) => (v ? b.createString(v) : 0);
   const id = s(p.datasetId), epoch = s(p.datasetEpoch), retrieved = s(p.retrievedAt), license = s(p.license);
   const name = opt(p.datasetName), licenseUrl = opt(p.licenseUrl), attribution = opt(p.attribution), sourceUrl = opt(p.sourceUrl);
+  const nativeId = opt(p.nativeId);
   DTTProvenance.startDTTProvenance(b);
   DTTProvenance.addDatasetId(b, id);
   DTTProvenance.addDatasetEpoch(b, epoch);
@@ -60,15 +61,21 @@ function provenanceOf(b, p = {}) {
   if (licenseUrl) DTTProvenance.addLicenseUrl(b, licenseUrl);
   if (attribution) DTTProvenance.addAttribution(b, attribution);
   if (sourceUrl) DTTProvenance.addSourceUrl(b, sourceUrl);
+  if (nativeId) DTTProvenance.addNativeId(b, nativeId);
   return DTTProvenance.endDTTProvenance(b);
 }
 
 /** One $DTT HEADER record (no mesh) for one address of a plan, finished size-prefixed. */
 export function planHeader(plan, address) {
-  const { DTT, DTTPayloadRef, dttTilingScheme, dttSourceClass, dttWaterMask } = DTT_LIB;
+  const { DTT, DTTPayloadRef, dttTilingScheme, dttSourceClass, dttWaterMask, dttVerticalDatum } = DTT_LIB;
   const b = new flatbuffers.Builder(1024);
   const tileset = b.createString(plan.tilesetId ?? "");
   const datum = plan.verticalDatumName ? b.createString(plan.verticalDatumName) : 0;
+  // A body other than Earth (GEOGRAPHIC_TWO_ROOT_BODY): its name, radii, datums and remarks.
+  const center = plan.centerName ? b.createString(plan.centerName) : 0;
+  const radii = plan.referenceRadiiM ? DTT.createReferenceRadiiMVector(b, plan.referenceRadiiM) : 0;
+  const horizontal = plan.horizontalDatumName ? b.createString(plan.horizontalDatumName) : 0;
+  const remarks = plan.remarks ? b.createString(plan.remarks) : 0;
   const provenance = provenanceOf(b, plan.provenance);
   const water = plan.waterMask;
   const waterProvenance = water?.provenance ? provenanceOf(b, water.provenance) : 0;
@@ -94,6 +101,11 @@ export function planHeader(plan, address) {
   DTT.addMaxLevel(b, plan.maxLevel ?? 0);
   DTT.addSourceClass(b, enumOrdinal(dttSourceClass, plan.sourceClass, 99));
   DTT.addProvenance(b, provenance);
+  if (plan.verticalDatum) DTT.addVerticalDatum(b, enumOrdinal(dttVerticalDatum, plan.verticalDatum, 99));
+  if (center) DTT.addCenterName(b, center);
+  if (radii) DTT.addReferenceRadiiM(b, radii);
+  if (horizontal) DTT.addHorizontalDatumName(b, horizontal);
+  if (remarks) DTT.addRemarks(b, remarks);
   DTT.finishSizePrefixedDTTBuffer(b, DTT.endDTT(b));
   return b.asUint8Array().slice();
 }
@@ -109,7 +121,7 @@ export function planInputs(plan) {
   for (const p of parts) { stream.set(p, at); at += p.length; }
   const inputs = [{ portId: "plan", typeRef: TYPE.DTT, payload: stream }];
   const options = {};
-  for (const key of ["maxGridSize", "minGridSize", "measureAccuracy", "skipOceanTiles"]) {
+  for (const key of ["maxGridSize", "minGridSize", "measureAccuracy", "skipOceanTiles", "levelZeroErrorM", "errorMetric"]) {
     if (plan[key] !== undefined) options[key] = plan[key];
   }
   if (Object.keys(options).length) inputs.push({ portId: "options", typeRef: TYPE.MCFG, payload: encodeModuleConfig(options) });

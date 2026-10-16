@@ -32,6 +32,22 @@ function inlineGeneratedHeader(source) {
 
 
 
+// The module's own headers under src/ (body_shape.hpp, pds_img.hpp, oct_normals.hpp) are inlined where the
+// implementation includes them, recursively, so the compiler still sees ONE translation unit and each header lands
+// after the definitions it uses.
+async function inlineLocalIncludes(source, seen = new Set()) {
+  const pattern = /^#include "([a-z_]+\.hpp)"\s*$/m;
+  let out = source;
+  for (let match = out.match(pattern); match; match = out.match(pattern)) {
+    const name = match[1];
+    if (seen.has(name)) throw new Error(`src/${name} is included twice`);
+    seen.add(name);
+    const body = await inlineLocalIncludes(await fs.readFile(path.join(packageRoot, "src", name), "utf8"), seen);
+    out = out.replace(match[0], () => `// ---- src/${name} ----\n${body}\n// ---- end src/${name} ----`);
+  }
+  return out;
+}
+
 export { packageRoot, sdsPackageVersion };
 
 export async function composeTerrainSource() {
@@ -40,11 +56,12 @@ export async function composeTerrainSource() {
   // schema file: DTT table + DTTPayloadRef + DTTProvenance + enums), no include
   // graph to order. TRN remains the terrain CONFIG standard and is not emitted
   // by this module.
-  const inlineStandards = ["DTT", "FSO", "FSB"];
+  // $PNM names the files `pack` writes (the Moon lane's publication record).
+  const inlineStandards = ["DTT", "FSO", "FSB", "PNM"];
   const headers = await Promise.all(
     inlineStandards.map((standard) => readSdsHeader(standard, import.meta.url)),
   );
-  const implementationSource = await fs.readFile(sourcePath, "utf8");
+  const implementationSource = await inlineLocalIncludes(await fs.readFile(sourcePath, "utf8"));
 
   // SDK-owned HTTP envelope ABI headers ($HTQ declares the shared HttpHeader
   // table; $HTR includes it). layer_json emits the canonical $HTR HttpResponse

@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-source",
   "name": "Terrain Tile Source Nodes",
-  "version": "0.2.0",
-  "description": "The PURE half of the terrain serving lane: it decodes source DEM GeoTIFF granules into quantized-mesh-1.0 tiles wrapped in $DTT records, renders the tileset's layer.json, and serves the mount (route / respond), and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations. Every DEM byte it decodes was fetched by com.digitalarsenal.hostcap.http-request and every record it emits is persisted downstream; scheduling and pyramid orchestration live in the sibling terrain-ingest module, exactly as geonames-source / geonames-ingest are split. The source granules are DEFLATE-compressed Cloud-Optimized GeoTIFFs and there is no host inflate capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) - the same vendored copy geonames-source and cell-tower-source use. A minimal little-endian TIFF/BigTIFF reader (tiled or strip layout, DEFLATE via tinfl, predictor 1 and floating-point predictor 3) lives in-guest for the same reason. Heights are redistributed on the source dataset's own vertical datum (a geoid), stated verbatim in VERTICAL_DATUM/VERTICAL_DATUM_NAME, never silently converted. TYPED CONTRACTS 1.0: FlatBuffers only - the tile plan is $DTT header records with ModuleConfig encoder options, granules arrive as HttpResponse (HRSP) frames, the encode report is a FlowNotice, the store query is a FlatSQL $FSO answered as $FSB chunks plus an $FSO status, the serve context and layer plan are the routed $HTQ itself, and node config is the SDS $PIV plugin.getConfig (ConfigEntry list) or an optional ModuleConfig frame. No JSON, no base64 between modules.",
+  "version": "0.3.0",
+  "description": "The PURE half of the terrain serving lane: it decodes source DEM GeoTIFF granules into quantized-mesh-1.0 tiles wrapped in $DTT records, renders the tileset's layer.json, serves the mount (route / respond), and for a body other than Earth (GEOGRAPHIC_TWO_ROOT_BODY on a reference sphere) decodes PDS LOLA-style products by whole-line ranges and packs the records into the files the body's tileset is published as (pack), and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations. Every DEM byte it decodes was fetched by com.digitalarsenal.hostcap.http-request and every record it emits is persisted downstream; scheduling and pyramid orchestration live in the sibling terrain-ingest module, exactly as geonames-source / geonames-ingest are split. The source granules are DEFLATE-compressed Cloud-Optimized GeoTIFFs and there is no host inflate capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) - the same vendored copy geonames-source and cell-tower-source use. A minimal little-endian TIFF/BigTIFF reader (tiled or strip layout, DEFLATE via tinfl, predictor 1 and floating-point predictor 3) lives in-guest for the same reason. Heights are redistributed on the source dataset's own vertical datum (a geoid), stated verbatim in VERTICAL_DATUM/VERTICAL_DATUM_NAME, never silently converted. TYPED CONTRACTS 1.0: FlatBuffers only - the tile plan is $DTT header records with ModuleConfig encoder options, granules arrive as HttpResponse (HRSP) frames, the encode report is a FlowNotice, the store query is a FlatSQL $FSO answered as $FSB chunks plus an $FSO status, the serve context and layer plan are the routed $HTQ itself, and node config is the SDS $PIV plugin.getConfig (ConfigEntry list) or an optional ModuleConfig frame. No JSON, no base64 between modules.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -86,7 +86,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $DTT stream of HEADER records, one per address to build (PAYLOAD present and empty): TILESET_ID, TILING_SCHEME GEOGRAPHIC_WGS84 (UNSPECIFIED reads as it), LEVEL/X/Y, ROW_ORIGIN_NORTH false, GRID_WIDTH = gridSize (0 = 65), MAX_LEVEL, CHILD_AVAILABILITY, SOURCE_CLASS, VERTICAL_DATUM_NAME, PROVENANCE (DATASET_ID, DATASET_EPOCH, RETRIEVED_AT, LICENSE required and never defaulted; DATASET_NAME, LICENSE_URL, ATTRIBUTION, SOURCE_URL) and the water-mask DIRECTIVE as WATER_MASK_KIND (NONE = none) + WATER_MASK_WIDTH/HEIGHT (0 = 256) + WATER_MASK_PROVENANCE - never raster bytes. The block's shared fields come from the first header; every header names the same tileset."
+              "description": "A size-prefixed $DTT stream of HEADER records, one per address to build (PAYLOAD present and empty): TILESET_ID, TILING_SCHEME GEOGRAPHIC_WGS84 (UNSPECIFIED reads as it), LEVEL/X/Y, ROW_ORIGIN_NORTH false, GRID_WIDTH = gridSize (0 = 65), MAX_LEVEL, CHILD_AVAILABILITY, SOURCE_CLASS, VERTICAL_DATUM_NAME, PROVENANCE (DATASET_ID, DATASET_EPOCH, RETRIEVED_AT, LICENSE required and never defaulted; DATASET_NAME, LICENSE_URL, ATTRIBUTION, SOURCE_URL) and the water-mask DIRECTIVE as WATER_MASK_KIND (NONE = none) + WATER_MASK_WIDTH/HEIGHT (0 = 256) + WATER_MASK_PROVENANCE - never raster bytes. The block's shared fields come from the first header; every header names the same tileset. A BODY other than Earth is TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY with CENTER_NAME (never EARTH), REFERENCE_RADII_M holding ONE radius (a reference sphere; two or three radii are refused, unsupported-reference-body), VERTICAL_DATUM REFERENCE_SPHERE (or UNSPECIFIED) and optionally HORIZONTAL_DATUM_NAME and REMARKS; PROVENANCE.NATIVE_ID is carried when stated."
             }
           ],
           "minStreams": 1,
@@ -107,7 +107,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "OPTIONAL encoder options as a ModuleConfig (MCFG): maxGridSize (top of the density ladder; default gridSize, at most 511), minGridSize (ladder floor, default 5), measureAccuracy (bool or number; default true) and skipOceanTiles (bool; default false). Absent: the defaults."
+              "description": "OPTIONAL encoder options as a ModuleConfig (MCFG): maxGridSize (top of the density ladder; default gridSize, at most 511), minGridSize (ladder floor, default 5), measureAccuracy (bool or number; default true) and skipOceanTiles (bool; default false). levelZeroErrorM (the level-0 error target in metres, halved per level; default the Earth figure 2 x 77067) and errorMetric (\"max\", the default, or \"rms\": a candidate density is judged by its RMS departure from the source posts instead of its worst). Absent: the defaults."
             }
           ],
           "minStreams": 0,
@@ -128,7 +128,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "hostcap/http-request responses (HttpResponse, HRSP) carrying the source DEM GeoTIFF granules intersecting the plan's union extent, BODY verbatim. 404 = the dataset publishes no granule there (open ocean): sea level, never an error; STATUS 0 (connector failure) or any other non-2xx is refused."
+              "description": "hostcap/http-request responses (HttpResponse, HRSP) carrying the source DEM GeoTIFF granules intersecting the plan's union extent, BODY verbatim. 404 = the dataset publishes no granule there (open ocean): sea level, never an error; STATUS 0 (connector failure) or any other non-2xx is refused. For a body plan: frame 0 is the product's PDS3 label and frames 1..3 whole-line byte ranges of its float32 image (Content-Range; LOLA GDR SIMPLE CYLINDRICAL 0..360 E pixel-registered, or POLAR STEREOGRAPHIC on the reference sphere), every one a 2xx; a label that departs from those conventions, a sphere that is not the plan's, a range that is not whole lines or a needed line no range carries is refused."
             }
           ],
           "minStreams": 1,
@@ -202,7 +202,7 @@
           "description": "Encode summary for this block."
         }
       ],
-      "description": "Decodes the source granules covering the plan's extent and encodes quantized-mesh-1.0 tiles of the GEOGRAPHIC_WGS84 pyramid (two root tiles, TMS row origin south): ECEF header with bounding sphere and horizon occlusion point, zigzag-delta 16-bit vertex arrays, high-water-mark index encoding, edge index lists, and the watermask extension (id 2). AMORTIZED: a plan ($DTT header stream) may address ONE tile or a BLOCK of them, and a block decodes its granule set ONCE over the union extent and emits every tile the set covers - the per-tile re-decode it replaces spent about 97% of its time inflating the same bytes again. WINDOWED: only the internal chunks intersecting the extent are inflated, so resident memory is proportional to the OUTPUT, not to the granule; a named 256 MiB in-guest decode budget is checked before every raster allocation and against the running total across granules, refusing with \"decode-budget-exceeded\" rather than trapping a pooled flow instance. WATER MASK: classified from the water-body granules on ONE GLOBAL POST LATTICE per level, so the posts two adjacent tiles share are the same global posts and their bytes are equal by construction; 256x256 at every level, row 0 the NORTH edge, 255 water and 0 land, reduced to a single uniform byte where the whole tile agrees. WATER_MASK is set together with its width and height, and carries WATER_MASK_PROVENANCE when the mask's licence differs from the elevation dataset's. The tile bytes ride INLINE in DTTPayloadRef.BYTES (gzip via the vendored deflate, CONTENT_ENCODING \"gzip\"); SIZE_BYTES and DIGEST are stated over those GZIPPED bytes and the record's ETAG is that digest, so a cache revalidates against the bytes it actually holds. A tile past the 32 KiB gzipped per-tile serving ceiling is REFUSED at encode time. HEIGHTS ARE NOT CONVERTED: the source dataset publishes geoid-referenced heights and the record states VERTICAL_DATUM GEOID with the model named verbatim - a consumer that renders them as ellipsoidal accepts a stated, bounded error and the record and report both say so. A granule the dataset does not publish (HTTP 404, open ocean) decodes to height 0 with WATER_MASK_KIND UNIFORM_WATER unless the plan's directive states otherwise; the source NO_DATA value (-32767) decodes to 0 and is counted in DATA_COVERAGE_FRACTION rather than hidden. A plan that cannot state the dataset identity, epoch, retrieval time and licence is REFUSED, never defaulted. TYPED CONTRACTS 1.0: no JSON, no base64 and no $HRB side lane - the plan is $DTT header records, the options a ModuleConfig, the granules HttpResponse frames, the report a FlowNotice. BATCHING: the plan and options ports are single-stream and the dem and water ports carry at most four frames each, ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely declarative in the compiled flow runtime, which drains a node's queue port-blind, so any surplus is refused with error code \"batched-input-frames\" rather than silently destroyed.",
+      "description": "Decodes the source granules covering the plan's extent and encodes quantized-mesh-1.0 tiles of the GEOGRAPHIC_WGS84 pyramid (two root tiles, TMS row origin south): ECEF header with bounding sphere and horizon occlusion point, zigzag-delta 16-bit vertex arrays, high-water-mark index encoding, edge index lists, and the watermask extension (id 2). AMORTIZED: a plan ($DTT header stream) may address ONE tile or a BLOCK of them, and a block decodes its granule set ONCE over the union extent and emits every tile the set covers - the per-tile re-decode it replaces spent about 97% of its time inflating the same bytes again. WINDOWED: only the internal chunks intersecting the extent are inflated, so resident memory is proportional to the OUTPUT, not to the granule; a named 256 MiB in-guest decode budget is checked before every raster allocation and against the running total across granules, refusing with \"decode-budget-exceeded\" rather than trapping a pooled flow instance. WATER MASK: classified from the water-body granules on ONE GLOBAL POST LATTICE per level, so the posts two adjacent tiles share are the same global posts and their bytes are equal by construction; 256x256 at every level, row 0 the NORTH edge, 255 water and 0 land, reduced to a single uniform byte where the whole tile agrees. WATER_MASK is set together with its width and height, and carries WATER_MASK_PROVENANCE when the mask's licence differs from the elevation dataset's. The tile bytes ride INLINE in DTTPayloadRef.BYTES (gzip via the vendored deflate, CONTENT_ENCODING \"gzip\"); SIZE_BYTES and DIGEST are stated over those GZIPPED bytes and the record's ETAG is that digest, so a cache revalidates against the bytes it actually holds. A tile past the 32 KiB gzipped per-tile serving ceiling is REFUSED at encode time. HEIGHTS ARE NOT CONVERTED: the source dataset publishes geoid-referenced heights and the record states VERTICAL_DATUM GEOID with the model named verbatim - a consumer that renders them as ellipsoidal accepts a stated, bounded error and the record and report both say so. A granule the dataset does not publish (HTTP 404, open ocean) decodes to height 0 with WATER_MASK_KIND UNIFORM_WATER unless the plan's directive states otherwise; the source NO_DATA value (-32767) decodes to 0 and is counted in DATA_COVERAGE_FRACTION rather than hidden. A plan that cannot state the dataset identity, epoch, retrieval time and licence is REFUSED, never defaulted. TYPED CONTRACTS 1.0: no JSON, no base64 and no $HRB side lane - the plan is $DTT header records, the options a ModuleConfig, the granules HttpResponse frames, the report a FlowNotice. BATCHING: the plan and options ports are single-stream and the dem and water ports carry at most four frames each, ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely declarative in the compiled flow runtime, which drains a node's queue port-blind, so any surplus is refused with error code \"batched-input-frames\" rather than silently destroyed. BODIES: a GEOGRAPHIC_TWO_ROOT_BODY plan is cut on the body's reference sphere (same two-root addressing; ECEF header, bounding sphere and horizon occlusion point scaled by the body's radius), reads a PDS product by whole-line ranges (pds_img.hpp), closes the poles of a cylindrical product with the mean of its edge line, carries oct-encoded vertex normals (extension 1, area-weighted over the global lattice with a one-post halo, so adjacent tiles agree on every shared post) and no water mask, states the body (CENTER_NAME, REFERENCE_RADII_M, HORIZONTAL_DATUM_NAME, VERTICAL_DATUM REFERENCE_SPHERE) on every record, and reports each tile's RMS, residual histogram and whether the 32 KiB ceiling left it over its error target (overCap). An Earth plan's bytes are unchanged.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -532,6 +532,101 @@
       "description": "Reassembles the store's $FSB chunks and walks the aligned size-prefixed $DTT stream (zero-length prefixes are alignment padding; size-prefixed verify first, plain-anchored fallback - the foundation/omm-json framing contract) and serves the FIRST record: 200 with the payload BYTES, content-type from the record, cache-control public max-age=86400, x-content-type-options nosniff, vary accept-encoding, and a strong ETag (record ETAG verbatim, else the payload DIGEST quoted, else a weak address+size tag). THE ENCODING IS NEGOTIATED: the stored bytes are gzipped and route reads Accept-Encoding, so a client that refused gzip gets the bytes DECODED in-guest and served identity under its OWN strong ETag - two representations are two entity tags, or a shared cache holding one answers the other's revalidation with 304. It used to state content-encoding: gzip unconditionally with no vary at all. An If-None-Match match answers 304 with no body. An EMPTY stream is answered by the address's position in the PUBLISHED AVAILABILITY, which respond decides from the routed request and the config with route's own functions. OUTSIDE it: a cheap CACHEABLE 404 (public, max-age=300) - an unpublished tile is normal traffic, the client's upsampling relies on layer.json availability, and a 404 must never be an error. INSIDE it: the tileset promised the address, so a 404 would be a broken promise the client never asked to handle - the tile is SYNTHESIZED at height 0 by the same encoder that writes stored tiles, served 200 with cache-control public max-age=86400, a strong digest ETag and the header x-terrain-synthesized stating which kind of tile it is (a synthesized tile and a measured one are not the same claim). Its water mask is NOT assumed: only at LEVEL >= terrain_ocean_synth_min_level, the shallowest level the builder actually built, does \"promised but not stored\" mean \"measured all-ocean and skipped\" and the mask read uniform-water; below it, and whenever that key is absent, the synthesized tile is uniform-LAND, because a hemisphere-wide level-0 root claiming water renders every continent as specular ocean once the client upsamples from it. A record whose payload is CID-only (no inline BYTES) is REFUSED loudly rather than served as an empty body that would render as fabricated sea-level terrain - the CID resolution lane is the recorded growth path. A query the store refused or failed (its $FSO status not COMPLETE) is a 503 no-store, never a miss. TYPED CONTRACTS 1.0: no JSON frame crosses a port. BATCHING: status, context and config are single-stream and records carries at most 64 chunks by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "pack",
+      "displayName": "Pack terrain records into the lane's published files",
+      "inputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $DTT record stream (tile's records output): one tileset, whole 4x4 blocks."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The tiles of one plan."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "pathPrefix (required, e.g. terrain/301) and rootMaxLevel (default 2)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Where the files go."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-file",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One frame per file: the file's bytes, itself a size-prefixed $DTT stream ordered by (level, y, x), records copied byte for byte."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "The packed files, in the order \"names\" lists them: root.dtts (levels 0..rootMaxLevel) or one 4x4 same-level block <L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2)."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-file-names",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $PNM stream, one record per file frame in the same order, FILE_NAME <pathPrefix>/root.dtts or <pathPrefix>/<L>/<X>_<Y>.dtts."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The file names."
+        }
+      ],
+      "description": "Groups a $DTT record stream into the files a body's terrain is published as (one $PNM each, fetched by CID): root.dtts for levels 0..rootMaxLevel and one file per 4x4 block of same-level tiles above it. Each file is a size-prefixed $DTT stream, records copied byte for byte and ordered by (level, y, x); duplicate addresses and mixed tilesets are refused. Pure transform, at most 64 files per plan.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "buildArtifacts": [
@@ -558,6 +653,11 @@
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
       "rootTypeName": "FSB"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
     }
   ]
 }

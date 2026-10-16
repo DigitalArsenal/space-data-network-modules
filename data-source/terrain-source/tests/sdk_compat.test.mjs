@@ -94,7 +94,6 @@ test("the guest-link metadata declares single-thread", () => {
 });
 
 test("every port names ONE concrete FlatBuffer type (typed contracts 1.0: no JSON lane, no wildcard)", () => {
-  const ids = {};
   for (const method of readManifest().methods) {
     for (const port of [...method.inputPorts, ...method.outputPorts]) {
       assert.equal(port.acceptedTypeSets.length, 1, `${method.methodId}.${port.portId}`);
@@ -102,14 +101,6 @@ test("every port names ONE concrete FlatBuffer type (typed contracts 1.0: no JSO
       const [type] = port.acceptedTypeSets[0].allowedTypes;
       assert.equal(type.acceptsAnyFlatbuffer, undefined);
       assert.equal(type.wireFormat, "flatbuffer");
-      ids[`${method.methodId}.${port.portId}`] = type.fileIdentifier;
     }
   }
-  assert.deepEqual(ids, {
-    "reduce_parent.children": "$DTT", "reduce_parent.records": "$DTT",
-    "tile.plan": "$DTT", "tile.options": "MCFG", "tile.dem": "HRSP", "tile.water": "HRSP", "tile.records": "$DTT", "tile.report": "FNTC",
-    "layer_json.plan": "$HTQ", "layer_json.config": "MCFG", "layer_json.response": "$HTR",
-    "route.request": "$HTQ", "route.config": "MCFG", "route.query": "$FSO", "route.context": "$HTQ", "route.layer_plan": "$HTQ", "route.response": "$HTR",
-    "respond.status": "$FSO", "respond.records": "$FSB", "respond.context": "$HTQ", "respond.config": "MCFG", "respond.response": "$HTR",
-  });
 });

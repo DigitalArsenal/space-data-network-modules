@@ -566,6 +566,133 @@
     {
       "id": "malformed-stdin",
       "stdinUtf8": "this is not a PIV invoke frame — the trap/error class must match across every lane"
+    },
+    {
+      "id": "moon-tile-cylindrical",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/moon-cyl-plan.dtt",
+            "typeRef": {
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "options",
+            "payloadFile": "parity/moon-cyl-options.mcfg",
+            "typeRef": {
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/moon-cyl-label.hrsp",
+            "typeRef": {
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/moon-cyl-range.hrsp",
+            "typeRef": {
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "moon-tile-polar",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/moon-polar-plan.dtt",
+            "typeRef": {
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "options",
+            "payloadFile": "parity/moon-polar-options.mcfg",
+            "typeRef": {
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/moon-polar-label.hrsp",
+            "typeRef": {
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/moon-polar-range.hrsp",
+            "typeRef": {
+              "schemaName": "HttpResponse.fbs",
+              "fileIdentifier": "HRSP",
+              "rootTypeName": "HttpResponse",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "moon-pack",
+      "expect": "ok",
+      "request": {
+        "methodId": "pack",
+        "inputs": [
+          {
+            "portId": "records",
+            "payloadFile": "parity/moon-records.dtt",
+            "typeRef": {
+              "schemaName": "DTT.fbs",
+              "fileIdentifier": "$DTT",
+              "rootTypeName": "DTT",
+              "wireFormat": "flatbuffer"
+            }
+          },
+          {
+            "portId": "options",
+            "payloadFile": "parity/moon-pack-options.mcfg",
+            "typeRef": {
+              "schemaName": "ModuleConfig.fbs",
+              "fileIdentifier": "MCFG",
+              "rootTypeName": "ModuleConfig",
+              "wireFormat": "flatbuffer"
+            }
+          }
+        ]
+      }
     }
   ]
 }
