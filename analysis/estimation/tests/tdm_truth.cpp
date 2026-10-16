@@ -3,11 +3,11 @@
 // text. Nothing here reads the decoder or the estimator's measurement
 // geometry. The orbit is the analytic Kepler solution in universal variables
 // (Vallado, Fundamentals of Astrodynamics and Applications, 4e, Algorithm 8),
-// not the integrator the estimator is given; the light time is solved on the
-// exact two-way path, transmit instant t_tx -> bounce t_b -> receive t_rx
-// with a fixed station; the angles are the direction to the satellite at the
-// bounce, as seen at the receive instant. With `weather` the one-way range
-// carries the Marini-Murray delay of the pass's weather at the true elevation
+// not the integrator the estimator is given; geometric two-way light time is
+// solved with a fixed station and additive media/Shapiro range corrections
+// (Orekit Range convention). Transmit tags use the total observed round trip;
+// angles give the retarded direction at the receive instant. With `weather`
+// the one-way range carries the Marini-Murray delay of the pass's weather at the true elevation
 // of a geodetic station (the model is the estimator's own, validated against
 // Orekit by native_conformance; the geometry around it is computed here).
 //
@@ -113,7 +113,9 @@ int main(int argc, char** argv) {
     for (int k = -24; k <= 24; ++k) {
       const std::int64_t tx_ns = std::llround((centre + 5.0 * k) * 1e9);
       const double t_tx = tx_ns / 1e9;
-      // Exact two-way path with a fixed station: the bounce is t_tx plus the one-way delay.
+      // R = rho + corrections; t_rx = t_tx + 2R/c and geometric
+      // t_b = t_rx - rho/c imply t_b = t_tx + (R + corrections)/c.
+      // Corrections enter the tag conversion, not the geometric light-time leg.
       double t_b = t_tx + 0.005, one_way = 0.0, delay = 0.0;
       for (int i = 0; i < 100; ++i) {
         const V s = position_at(orbit, t_b);
@@ -130,8 +132,14 @@ int main(int argc, char** argv) {
           media.relative_humidity = passes_weather[pass].percent / 100.0;
           delay = marini_murray_delay_m(media);
         }
-        one_way = range + delay;
-        const double next = t_tx + one_way / kC;
+        // IERS Conventions 2010, section 11: Earth Shapiro range delay.
+        // Both legs have the same fixed-station geometry, so their mean is
+        // this one-leg correction, added alongside the weather delay.
+        const double radii = norm(station) + norm(s);
+        const double shapiro = (2.0 * kMu / (kC * kC)) *
+            std::log((radii + range) / (radii - range));
+        one_way = range + delay + shapiro;
+        const double next = t_tx + (one_way + delay + shapiro) / kC;
         const double change = std::abs(next - t_b);
         t_b = next;
         if (change < 1e-16) break;
@@ -177,8 +185,10 @@ int main(int argc, char** argv) {
     label(rx_tai, rx_ns + 37000000000LL);
     label(rx_gps, rx_ns + 18000000000LL);
     label(rx_tt, rx_ns + 69184000000LL);
+    // Preserve the noise-free truth: picosecond TOF rounding adds up to
+    // 75 micrometres of one-way noise, amplified by this single-station fit.
     std::printf("    {\"pass\": %d, \"tx_utc\": \"%s\", \"tx_tai\": \"%s\", \"tx_gps\": \"%s\", \"tx_tt\": \"%s\", \"rx_utc\": \"%s\", \"rx_tai\": \"%s\", \"rx_gps\": \"%s\", \"rx_tt\": \"%s\", "
-                "\"sod\": \"%.9f\", \"tof\": \"%.12f\", \"ra_deg\": \"%.13f\", \"dec_deg\": \"%.13f\"}%s\n",
+                "\"sod\": \"%.9f\", \"tof\": \"%.17g\", \"ra_deg\": \"%.13f\", \"dec_deg\": \"%.13f\"}%s\n",
                 p.pass, utc, tai, gps, tt, rx_utc, rx_tai, rx_gps, rx_tt, p.tx_ns / 1e9, p.tof, p.ra_deg, p.dec_deg, i + 1 < points.size() ? "," : "");
   }
   std::printf("  ]\n}\n");

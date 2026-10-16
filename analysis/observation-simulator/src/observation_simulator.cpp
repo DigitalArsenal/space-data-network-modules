@@ -21,8 +21,10 @@
 // Measurements: at each observation time the host and target are rotated to
 // GCRF (IAU 2006/2000A, CIO based, with the request's EOP) and every error
 // model's measurement is predicted by the estimation module's
-// predict_measurement, the model the estimator inverts: downleg light time,
-// receiver time tag, optional troposphere. A RADAR DOPPLER is the echo's
+// predict_measurement, the model the estimator inverts: two-way inertial light
+// time with Shapiro for laser and monostatic radar, receiver time tag, optional
+// troposphere (Orekit Range/ShapiroModel; IERS 2010, section 11). Other kinds
+// retain their one-way model. A RADAR DOPPLER is the echo's
 // two-way shift of the sensor's TRANSMIT_FREQUENCY_HZ, twice the one-way
 // shift ($RDO DOPPLER, SDS 1.242.0); a PASSIVE_RF one is the one-way shift of
 // the target's emission. Noise per component: a first-order
@@ -88,10 +90,19 @@ struct Random {
   }
 };
 
-// ── time: Julian Date TT (two-part) to UTC text and UT1 ───────────────────
-bool isoUtc(double jdTt, std::string& out) {
+// ── time: wire JD TT to relative seconds, then ERFA two-part dates ────────
+// One wire JD double resolves ~40 us. Use the existing 0.1 ms window grid
+// consistently for all input dates; otherwise whole-second states and windows
+// disagree by tens of microseconds. Preserve day + seconds internally (ERFA's
+// two-part date convention), including the +/-0.5 s frame-derivative offsets.
+double epochDay = 0, epochSeconds = 0;
+double secondsAt(double jd) {
+  return std::round((jd - epochDay) * kDay * 1e4) / 1e4 - epochSeconds;
+}
+double jdAt(double t) { return epochDay + (epochSeconds + t) / kDay; }
+bool isoUtc(double t, std::string& out) {
   double tai1, tai2, utc1, utc2;
-  if (eraTttai(jdTt, 0.0, &tai1, &tai2) != 0 || eraTaiutc(tai1, tai2, &utc1, &utc2) != 0) return false;
+  if (eraTttai(epochDay, (epochSeconds + t) / kDay, &tai1, &tai2) != 0 || eraTaiutc(tai1, tai2, &utc1, &utc2) != 0) return false;
   int ihmsf[4], y, m, d;
   if (eraD2dtf("UTC", 6, utc1, utc2, &y, &m, &d, ihmsf) != 0) return false;
   char buffer[40];
@@ -143,15 +154,15 @@ fr::EarthOrientation eopAt(double mjdUtc) {
   e.dY = a.value.dY + u * (b.value.dY - a.value.dY);
   return e;
 }
-// GCRF -> ITRF at a TT Julian Date (UT1 from the interpolated UT1-UTC).
-bool itrfFromGcrf(double jdTt, fr::Mat3& m) {
+// GCRF -> ITRF at relative seconds (UT1 from the interpolated UT1-UTC).
+bool itrfFromGcrf(double t, fr::Mat3& m) {
   double tai1, tai2, utc1, utc2, ut11, ut12;
-  if (eraTttai(jdTt, 0.0, &tai1, &tai2) != 0 || eraTaiutc(tai1, tai2, &utc1, &utc2) != 0) return false;
+  if (eraTttai(epochDay, (epochSeconds + t) / kDay, &tai1, &tai2) != 0 || eraTaiutc(tai1, tai2, &utc1, &utc2) != 0) return false;
   const fr::EarthOrientation eop = eopAt(utc1 - 2400000.5 + utc2);
   if (eraUtcut1(utc1, utc2, eop.dut1, &ut11, &ut12) != 0) return false;
   fr::Epoch epoch;
-  epoch.tt1 = jdTt;
-  epoch.tt2 = 0.0;
+  epoch.tt1 = epochDay;
+  epoch.tt2 = (epochSeconds + t) / kDay;
   epoch.ut11 = ut11;
   epoch.ut12 = ut12;
   m = fr::gcrfToItrf(epoch, eop);
@@ -164,7 +175,6 @@ struct Series {
   std::vector<std::array<double, 6>> s;
   bool velocity = false;
 };
-double epochJd = 0;
 // Targets always interpolate with their velocities (a geostationary target
 // has zero Earth-fixed velocity); observers and bodies without velocities
 // are interpolated linearly.
@@ -173,7 +183,7 @@ bool loadSeries(const flatbuffers::Vector<flatbuffers::Offset<ACWStateSample>>* 
   for (const ACWStateSample* s : *input) {
     const std::array<double, 6> row{s->POSITION_X_M(), s->POSITION_Y_M(), s->POSITION_Z_M(),
                                     s->VELOCITY_X_MPS(), s->VELOCITY_Y_MPS(), s->VELOCITY_Z_MPS()};
-    const double t = (s->JULIAN_DATE_TT() - epochJd) * kDay;
+    const double t = secondsAt(s->JULIAN_DATE_TT());
     for (double v : row) if (!std::isfinite(v)) { error = std::string(what) + " has a non-finite state."; return false; }
     if (!std::isfinite(t) || (!out.t.empty() && !(t > out.t.back()))) { error = std::string(what) + " epochs must strictly increase."; return false; }
     out.t.push_back(t);
@@ -267,9 +277,8 @@ struct Geometry {
 };
 Vec3 rotT(const fr::Mat3& m, const Vec3& v) { return v3(fr::apply(fr::transpose(m), f3(v))); }
 bool geometryAt(double t, const Host& host, const Target& target, Geometry& g) {
-  const double jd = epochJd + t / kDay;
   fr::Mat3 m, mPlus, mMinus;
-  if (!itrfFromGcrf(jd, m) || !itrfFromGcrf(jd + 0.5 / kDay, mPlus) || !itrfFromGcrf(jd - 0.5 / kDay, mMinus)) {
+  if (!itrfFromGcrf(t, m) || !itrfFromGcrf(t + 0.5, mPlus) || !itrfFromGcrf(t - 0.5, mMinus)) {
     error = "An observation time is outside the leap-second table.";
     return false;
   }
@@ -356,7 +365,7 @@ double deg(double rad) { return rad * kDeg; }
 void emit(const Obs& o) {
   const ACWSensor* s = o.sensor->record;
   std::string when;
-  isoUtc(epochJd + o.t / kDay, when);
+  isoUtc(o.t, when);
   const std::string id = "SIM:" + o.sensor->id + ":" + std::to_string(observationCount);
   const bool uct = o.target == nullptr;
   double lon, lat, height;
@@ -466,6 +475,12 @@ bool measure(Obs& o, const Target& truthLike, Random& random, std::vector<NoiseS
     obs.station_north = o.g.north;
     obs.station_up = o.g.up;
     obs.apply_light_time = rec->APPLY_LIGHT_TIME();
+    const bool radar = o.sensor->record->PHENOMENOLOGY() == acwSensorPhenomenology::RADAR;
+    obs.two_way = obs.apply_light_time &&
+        (model.kind == est::MeasurementKind::LASER_RANGE ||
+         (radar && (model.kind == est::MeasurementKind::RANGE ||
+                    model.kind == est::MeasurementKind::RANGE_RATE ||
+                    model.kind == est::MeasurementKind::DOPPLER)));
     obs.apply_sagnac = false;   // GCRF throughout: Earth's rotation during the light time is in the geometry
     const Vec3 los = est::subtract(o.g.targetP, o.g.hostP);
     obs.media.elevation_rad = std::asin(std::max(-1.0, std::min(1.0, est::dot(los, o.g.up) / est::norm(los))));
@@ -475,7 +490,7 @@ bool measure(Obs& o, const Target& truthLike, Random& random, std::vector<NoiseS
     obs.media.height_m = height;
     // DOPPLER: a monostatic radar measures the echo's shift of its own
     // carrier, out and back; passive RF the one-way shift of the emission.
-    const bool twoWay = model.kind == est::MeasurementKind::DOPPLER && o.sensor->record->PHENOMENOLOGY() == acwSensorPhenomenology::RADAR;
+    const bool twoWay = model.kind == est::MeasurementKind::DOPPLER && radar;
     if (twoWay) obs.media.frequency_hz = o.sensor->record->TRANSMIT_FREQUENCY_HZ();
     else if (model.kind == est::MeasurementKind::DOPPLER && o.target && o.target->frequency > 0) obs.media.frequency_hz = o.target->frequency;
     switch (rec->TROPOSPHERE_MODEL()) {
@@ -488,7 +503,8 @@ bool measure(Obs& o, const Target& truthLike, Random& random, std::vector<NoiseS
     state.value = {o.g.targetP.x, o.g.targetP.y, o.g.targetP.z, o.g.targetV.x, o.g.targetV.y, o.g.targetV.z};
     est::MeasurementPrediction p = est::predict_measurement(obs, state);
     if (p.count == 0) { error = "A measurement type cannot be predicted from this geometry."; return false; }
-    // Two-way: twice the one-way shift, -2 f rdot / c to first order.
+    // The two-way model supplies the mean leg rate: the echo shift is
+    // still -2 f rdot / c. Apply the factor once, including when light time is off.
     if (twoWay) p.value[0] *= 2.0;
     if (addNoise) {
       const double sigma = rec->NOISE_SIGMA(), tau = rec->CORRELATION_TIME_SECONDS();
@@ -516,10 +532,12 @@ bool simulate(const ACW* root, std::vector<uint8_t>& resultBytes) {
   std::vector<flatbuffers::Offset<ACWTrack>> trackOffsets;
 
   // Epoch: the earliest target sample; all times are seconds from it.
-  epochJd = std::numeric_limits<double>::infinity();
+  double epochJd = std::numeric_limits<double>::infinity();
   for (const ACWTarget* t : *request->TARGETS())
     if (t->STATES() && t->STATES()->size()) epochJd = std::min(epochJd, t->STATES()->Get(0)->JULIAN_DATE_TT());
   if (!std::isfinite(epochJd)) { error = "Targets need STATES."; return false; }
+  epochDay = std::floor(epochJd - 0.5) + 0.5;
+  epochSeconds = std::round((epochJd - epochDay) * kDay * 1e4) / 1e4;
 
   std::map<std::string, Target> targets;
   for (const ACWTarget* t : *request->TARGETS()) {
@@ -596,16 +614,14 @@ bool simulate(const ACW* root, std::vector<uint8_t>& resultBytes) {
     const std::string sid = a->SENSOR_ID() ? a->SENSOR_ID()->str() : "", tid = a->TARGET_ID() ? a->TARGET_ID()->str() : "";
     if (!targets.count(tid)) { error = "ACCESS names an unknown target " + tid + "."; return false; }
     if (a->WINDOWS()) for (const ACWAccessWindow* w : *a->WINDOWS()) {
-      // One JD double resolves ~40 us; window bounds are kept to 0.1 ms.
-      const auto seconds = [](double jd) { return std::round((jd - epochJd) * kDay * 1e4) / 1e4; };
-      Window win{seconds(w->START_JULIAN_DATE_TT()), seconds(w->END_JULIAN_DATE_TT())};
+      Window win{secondsAt(w->START_JULIAN_DATE_TT()), secondsAt(w->END_JULIAN_DATE_TT())};
       if (!(win.end >= win.start)) { error = "An access window ends before it starts."; return false; }
       access[{sid, tid}].push_back(win);
     }
   }
   double spanStart = -std::numeric_limits<double>::infinity(), spanEnd = std::numeric_limits<double>::infinity();
-  if (request->START_JULIAN_DATE_TT() > 0) spanStart = (request->START_JULIAN_DATE_TT() - epochJd) * kDay;
-  if (request->END_JULIAN_DATE_TT() > 0) spanEnd = (request->END_JULIAN_DATE_TT() - epochJd) * kDay;
+  if (request->START_JULIAN_DATE_TT() > 0) spanStart = secondsAt(request->START_JULIAN_DATE_TT());
+  if (request->END_JULIAN_DATE_TT() > 0) spanEnd = secondsAt(request->END_JULIAN_DATE_TT());
 
   for (const Sensor& sensor : sensors) {
     const ACWSensor* s = sensor.record;
@@ -735,7 +751,7 @@ bool simulate(const ACW* root, std::vector<uint8_t>& resultBytes) {
         std::string reason;
         for (const auto& [name, count] : losses) reason += (reason.empty() ? "" : ",") + name + ":" + std::to_string(count);
         trackOffsets.push_back(CreateACWTrack(resultBuilder, resultBuilder.CreateString(sensor.id), resultBuilder.CreateString(target.id),
-          epochJd + t / kDay, epochJd + end / kDay, scheduled, detected, resultBuilder.CreateString(reason)));
+          jdAt(t), jdAt(end), scheduled, detected, resultBuilder.CreateString(reason)));
         active.push_back({end, c->target});
         lastEnd[c->target] = end;
       }

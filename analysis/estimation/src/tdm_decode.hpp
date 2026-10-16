@@ -285,6 +285,7 @@ inline bool decode(const Segment& segment, const Row& row, const Row* angle_2, d
   Observation observation;
   observation.id = row.keyword + ":" + row.epoch;
   observation.kind = kind;
+  if (supports_two_way_light_time(kind)) observation.two_way = (legs == 2);
   observation.value_count = count;
   observation.value[0] = row.value;
   observation.media.frequency_hz = segment.carrier_hz > 0.0 ? segment.carrier_hz : 8.4e9;
