@@ -399,6 +399,155 @@ no drag 3.1 cm at 30 s (Sun and Moon 1.5 cm: R2022a reads SPICE ephemerides
 as J2000, which R2026a corrects, GMT-5211), Jacchia-Roberts drag 1.36 m LEO400
 and 18 cm SSO700, within 1.5 m.
 
+## ERFA and SPICE: clock, Earth orientation, TEME axes, Sun and Moon
+
+The frame, time and ephemeris inputs of the reference cases are checked on
+their own, at the 50 hourly sample epochs of
+`tests/evidence/cases/hpop-reference-cases.json` (25 on 2026-08-02 with the
+`eop-2026-08` rows, 25 on 2026-06-10 with `eop-2026-06`). Runner and
+evidence: `tests/evidence/erfa-spice/` (`run-erfa-spice.mjs`,
+`hpop_frames_native.cpp`, `reference.py`, `hpop-frames.json`,
+`reference.json`, `summary-erfa-spice.json`, `tools.json`).
+
+**Method.** HPOP's side: its UTC to TT conversion and TDB - TT
+(`prw_codec.h`), the single-double TDB Julian date its force model receives,
+`EarthRotation::matrix` (GCRF to ITRF from the case's EOP rows), the tides'
+GMST, the no-EOP fallback rotation and the `lib/coords` IAU 1976/1980 pieces,
+compiled natively from the module's sources with the vendored ERFA; the Sun
+and Moon from the shipped WASM's ephemeris operation at that TDB date. The
+references evaluate every quantity with two-part Julian dates from the same
+UTC epochs and EOP rows (linear in TAI between daily rows, the rows'
+interpolation rule). Rotations are compared as the angle of A B^T, split into
+the pole and the spin about it; at the radius of LEO 400 km (6778 km)
+1 mas is 3.3 cm.
+
+**Tools.** pyerfa 2.0.1.5 (ERFA 2.0.1, SOFA 2023-10-11), wheel SHA-256
+`be1aeb70390dd03a34faf96749d5cabc58437410b4aab7213c512323932427df`; SpiceyPy
+8.3.0 (CSPICE N0067), wheel SHA-256
+`94530fe4927ef4d06d7eb4c4ba2036a448313f5b806c65aa7a3943d55e535d31`; NAIF
+`naif0012.tls` (`678e32bd...039b`) and `earth_latest_high_prec.bpc`
+(`earth_000101_270111_261015.bpc`, created 2026-10-15, `16b40c07...1528`);
+the case export's DE440 file. ERFA is the library HPOP vendors for its
+IAU 2006/2000A chain, so the ERFA rows check HPOP's composition, clock and
+interpolation, not the series; SPICE is an independent chain.
+
+**Results.** HPOP 1.3.1 (module SHA-256
+`8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0`); largest
+value over the 50 epochs. Frames and ephemeris reads have no integrator step,
+so one column stands for all three step settings of the trajectory tables.
+
+| Quantity | Reference | Largest difference | Bound | |
+| --- | --- | ---: | ---: | --- |
+| TAI - UTC | ERFA `eraDat`, SPICE `naif0012.tls` | 0 s | 0 | met |
+| TT from UTC | ERFA `eraUtctai`, `eraTaitt` | 5.6 ps | 1 ns | met |
+| GCRF to ITRF at HPOP's own instant | ERFA IERS 2010 CIO chain, full X, Y, s | 0.48 µas (16 µm at LEO radius) | 21 µas | met |
+| GCRF to ITRF at the UTC epoch | the same, at the exact epoch | 0.214 mas (7.0 mm LEO, 4.4 cm GEO) | 22 µas | missed: clock, below |
+| Tides' GMST (`gmst2006`) at HPOP's own UT1, TT | ERFA `eraGmst06` | 0.00 mas | 1 µas | met |
+| GCRF to TEME, SGP4 module (`foundation/frames`) | ERFA `eraPnm06a`, `eraEe06a` | 0.2 nas | 1 µas | met |
+| Sun from the Earth, HPOP's TDB date | SPICE `spkgeo`, same DE440 file | 30 µm | 1 mm | met |
+| Moon from the Earth, HPOP's TDB date | SPICE `spkgeo`, same DE440 file | 15 nm | 1 mm | met |
+| GCRF to ITRF | SPICE J2000 to ITRF93 (high-precision BPC) | 8.90 mas (pole 8.23, spin 3.50) | 5 mas | missed: the kernel's EOP and model, below |
+| IAU 1976 precession, `lib/coords` | ERFA `eraPmat76` | 206 mas (spin 197, pole 60) | 1 µas | missed: defect 1 |
+| IAU 1980 nutation, `lib/coords` | ERFA `eraNutm80` | 49.1 mas | 10 mas | missed: defect 2 |
+| GCRF to TEME, `lib/coords` | ERFA `eraPnm80`, `eraEqeq94` | 212 mas (7.0 m LEO, 43 m GEO) | 10 mas | missed: defects 1 and 2 |
+| GCRF to Earth-fixed, no-EOP fallback | ERFA `eraGmst82` + `eraEqeq94`, `eraNutm80`, `eraPmat76` (UT1 = UTC, no polar motion) | 212 mas (7.0 m LEO) | 10 mas | missed: defects 1 and 2 |
+
+Measured, without a bound:
+
+| Quantity | Reference | Largest difference |
+| --- | --- | ---: |
+| TDB - TT (`tdbMinusTtSeconds`) | ERFA `eraDtdb` at the geocentre | 32.0 µs |
+| TDB - TT, SPICE | ERFA `eraDtdb` | 13.3 µs (reference spread) |
+| TDB date the force model receives | ERFA TT + `eraDtdb` | 46.1 µs |
+| GCRF to ITRF: ERFA at HPOP's instant against ERFA at the epoch | ERFA | 0.214 mas (the clock alone) |
+| GCRF to ITRF: SPICE against ERFA | | 8.86 mas (reference spread) |
+| Tides' GMST at the UTC epoch | ERFA `eraGmst06` at exact UT1, TT | 0.51 mas |
+| No-EOP fallback against the full chain with EOP | ERFA | 607 mas (pole 459: the omitted polar motion; spin 402: UT1 - UTC and defect 1) |
+| SGP4 TEME (IAU 2006/2000A definition) against the FK5 definition | ERFA `eraPnm80`, `eraEqeq94` | 77.7 mas (2.6 m at LEO radius) |
+| Sun from the Earth at the UTC epoch | SPICE at ERFA TDB | 1.35 m |
+| Moon from the Earth at the UTC epoch | SPICE at ERFA TDB | 4.9 cm |
+
+**Findings.**
+
+- **The IERS 2010 chain the reference cases use is exact.** At the instant
+  HPOP evaluates, `EarthRotation` (hourly X, Y, s nodes interpolated
+  linearly, EOP corrections, polar motion and ERA at every call) is within
+  0.48 µas of the full ERFA chain, forty times inside its stated 0.02 mas.
+  The tides' GMST, HPOP's own code, equals `eraGmst06` at the same dates. The
+  SGP4 module's TEME axes equal ERFA's for the definition they state.
+- **Clock (precision limit, not a trajectory error).** The force model
+  receives TDB as one double Julian date, which resolves 40.2 µs.
+  `tdbMinusTtSeconds` (`prw_codec.h`) takes TDB - TT as the difference of two
+  such dates, so it moves in 40.2 µs steps (-764.430 µs at every 2026-08-02
+  sample, +683.963 µs at every 2026-06-10 sample): up to 19.0 µs of rounding
+  on top of the two-term formula's 13.5 µs against `eraDtdb`, 32.0 µs in all.
+  Rounding the TDB date adds up to 14.1 µs (46.1 µs from IAU TDB in all).
+  Earth rotation, evaluated at the TT recovered from that date, is up to
+  14 µs late or early: 0.214 mas about the pole, 7.0 mm at LEO radius. The
+  Sun and Moon are read 1.35 m and 4.9 cm from their positions at IAU TDB.
+  On a trajectory these are far below the tables above: turning the
+  Earth-fixed axes by 0.214 mas moves the EGM2008 70x70 acceleration by at
+  most 2.9e-12 m/s^2 at 400 and 700 km (4000 points), which would be 11 mm in
+  a day only if it held one direction for the whole day; it changes sign with
+  longitude and with the rounding. The Sun and Moon offsets change their
+  tidal accelerations by under 1e-14 m/s^2. Where it does
+  show is in TDB epoch labels: HPOP writes and reads TDB with its own
+  TDB - TT (consistently with itself), and a reader converting those labels
+  with `eraDtdb` places a sample up to 32 µs away, 25 cm along track in LEO.
+  Computing TDB - TT in seconds rather than as a difference of Julian dates
+  removes the 19 µs; a full series (`eraDtdb`) removes the rest.
+- **SPICE's ITRF93 kernel is 8.9 mas from the IERS 2010 chain, and HPOP
+  follows the IERS chain.** HPOP - SPICE (8.90 mas) and ERFA - SPICE
+  (8.86 mas) differ by the clock term alone. The difference is fixed in
+  Earth-fixed axes (pole offset of about 4.4, 3.6 mas in August and 4.9,
+  5.5 mas in June, plus 1.8 to 3.3 mas of spin), which is an
+  Earth-orientation series difference: the kernel is built from JPL's own EOP
+  series (`latest.long`) through IAU 1976/1980 with nutation corrections and
+  degree-20 Chebyshev fits (its comment area, `tools.json`), while the June
+  case rows agree with the current IERS finals to 0.004 mas. The a-priori
+  5 mas bound is missed by the reference, not by HPOP; the kernel states
+  its own accuracy as several microradians.
+- **Defect 1: `lib/coords` IAU 1976 precession.** `coords::precession`
+  states "as ERFA pmat76" but multiplies the Lieske coefficients' T0 terms by
+  T: zeta and z each carry an extra 1.39656 T^2 - 0.000139 T^3 arcsec and
+  theta -0.85330 T^2 - 0.000217 T^3 arcsec (T in centuries from J2000). At
+  2026.6 (T = 0.266) that is 98.7, 98.7 and -60.3 mas, the measured 197 mas
+  of spin and 60 mas of pole; it grows with T^2 (about 0.7 arcsec of spin in
+  2050). For a J2000 start the angles are zeta = 2306.2181 T + 0.30188 T^2 +
+  0.017998 T^3, z = 2306.2181 T + 1.09468 T^2 + 0.018203 T^3, theta =
+  2004.3109 T - 0.42665 T^2 - 0.041833 T^3 (Lieske et al. 1977; `eraPmat76`).
+- **Defect 2: `lib/coords` IAU 1980 nutation table.** In the 63-term table,
+  ten rows carry coefficients that IAU 1980 (`eraNut80`) gives to other
+  argument multipliers: it gives -158 x 0.1 mas to (-1, 0, 2, 0, 2), which
+  IAU 1980 gives to (1, 0, 0, -2, 0), and likewise mispairs (1, 0, 0, -2, 0),
+  (0, 0, 2, -2, 1), (-1, 0, 2, 0, 1), (0, 0, 0, 2, 0), (-1, 0, 2, 2, 2),
+  (-1, 0, 0, 0, 1) and (1, 0, 2, 0, 1), with the obliquity terms of
+  (2, 0, 0, 0, 0) and (0, 0, 2, 0, 0) dropped. One row, (-1, 0, 2, 0, 0), is
+  not an IAU 1980 argument. Delta psi is 49.1 mas off and delta epsilon
+  1.1 mas on 2026-08-02. Truncation alone costs a few mas (ERFA's own first
+  63 rows: 2.4 mas over June to September 2026).
+- **Reach of defects 1 and 2.** They are in `lib/coords` alone: its
+  `gcrfToTeme`, `gcrfToItrf`, `transform` and `getTransformMatrix` (used by
+  `src/hpop_plugin.cpp` for entity input states in TEME or ECEF and its ECEF
+  position batches) and the force model's no-EOP fallback
+  `ForceModel::GcrfToEarthFixed(jd)`: 212 mas, 7.0 m at LEO radius and 43 m
+  at GEO radius, inside the 0.5 arcsec band `environment_conformance.cpp`
+  gates them with. The PRW propagation path and every reference case use
+  `EarthRotation` (a PRW request with an Earth-fixed force and no EOP is
+  refused), and the SGP4 module uses `foundation/frames`; neither is
+  affected. No HPOP code was changed here.
+- **TEME definitions.** SGP4's TEME taken as the IAU 2006/2000A true
+  equator rotated by the equation of the equinoxes (`foundation/frames`)
+  and as the FK5 true equator rotated by `eraEqeq94` differ by 77.7 mas,
+  2.6 m at LEO radius, against SGP4's kilometre-level accuracy.
+- **Existing SPICE and Horizons checks**, not repeated here: HPOP's DE440
+  reads against CSPICE N0067 at one epoch for all planets
+  (`tests/kernel_invoke.test.mjs`, 1 mm; `tests/de440_force.test.mjs`,
+  third-body and SRP accelerations to 1e-18 km/s^2), the DE440 excerpt's
+  CSPICE and Horizons vectors (`files/orbit-products/tests/fixtures/de440/`,
+  `docs/de440-validation.md`), and `propagator/solar-system-bodies`
+  (`tests/cspice_oracle.py`, `tests/parity.mjs`).
+
 ## Not compared, and why
 
 | Tool | Reason |

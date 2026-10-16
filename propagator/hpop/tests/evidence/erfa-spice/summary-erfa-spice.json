@@ -1,0 +1,290 @@
+{
+ "about": "HPOP against ERFA and NAIF SPICE: clock, Earth orientation, TEME axes, Sun and Moon at the 50 hourly sample epochs of the reference cases (run-erfa-spice.mjs). Largest value over the epochs.",
+ "module": {
+  "version": "1.3.1",
+  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+ },
+ "tools": {
+  "pyerfa": "2.0.1.5",
+  "erfa": "2.0.1",
+  "sofa": "20231011",
+  "spiceypy": "8.3.0",
+  "cspice": "CSPICE_N0067",
+  "numpy": "2.5.4",
+  "naifKernels": {
+   "naif0012.tls": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+   "earth_latest_high_prec.bpc": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
+  },
+  "de440": {
+   "path": "files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
+  }
+ },
+ "epochs": 50,
+ "rows": [
+  {
+   "id": "leap",
+   "quantity": "TAI - UTC",
+   "reference": "ERFA eraDat; SPICE naif0012.tls",
+   "max": 0,
+   "unit": "s",
+   "tolerance": 0,
+   "met": true,
+   "note": "37 s at every epoch on all three"
+  },
+  {
+   "id": "tt",
+   "quantity": "TT from UTC",
+   "reference": "ERFA eraUtctai + eraTaitt (two-part)",
+   "max": 5.596578755984183e-12,
+   "unit": "s",
+   "tolerance": 1e-9,
+   "met": true,
+   "note": "HPOP carries TT as whole seconds and their fraction"
+  },
+  {
+   "id": "tdb",
+   "quantity": "TDB - TT",
+   "reference": "ERFA eraDtdb (geocentre)",
+   "max": 0.000031974902372032066,
+   "unit": "s",
+   "tolerance": null,
+   "met": null,
+   "note": "HPOP: 1.658 ms sin M + 14 us sin 2M, the difference taken in one double Julian date (40 us steps)",
+   "at": "2026-06-11T00:00:00.000"
+  },
+  {
+   "id": "tdbSpice",
+   "quantity": "TDB - TT",
+   "reference": "SPICE (deltet: its two-term formula), against ERFA",
+   "max": 0.000013257951813814531,
+   "unit": "s",
+   "tolerance": null,
+   "met": null,
+   "note": "reference spread"
+  },
+  {
+   "id": "forceClock",
+   "quantity": "TDB date the force model receives",
+   "reference": "ERFA TT + eraDtdb",
+   "max": 0.000046133995056152344,
+   "unit": "s",
+   "tolerance": null,
+   "met": null,
+   "note": "one double Julian date (resolution 40 us) of HPOP's TDB"
+  },
+  {
+   "id": "c2tSameInstant",
+   "quantity": "GCRF -> ITRF at HPOP's own instant",
+   "reference": "ERFA, IERS 2010 CIO chain, full X/Y/s series at that instant",
+   "max": 0.0004834815998867627,
+   "unit": "mas",
+   "tolerance": 0.021,
+   "met": true,
+   "note": "HPOP interpolates X, Y and s linearly between whole hours of TT (stated bound 0.02 mas)",
+   "poleMas": 0.0004834815998866007,
+   "spinMas": 2.0795443541814707e-8,
+   "leoM": 0.000015887851062123666,
+   "geoM": 0.00009883217956763972
+  },
+  {
+   "id": "c2tTrue",
+   "quantity": "GCRF -> ITRF at the UTC epoch",
+   "reference": "ERFA, the same chain at the exact epoch",
+   "max": 0.21383133120493777,
+   "unit": "mas",
+   "tolerance": 0.022000000000000002,
+   "met": false,
+   "note": "adds the force model's clock: Earth rotation at the single-double TDB date and HPOP's TDB - TT",
+   "poleMas": 0.0004830953773644265,
+   "spinMas": 0.21383097992443714,
+   "leoM": 0.00702678311521138,
+   "geoM": 0.043710901361672425
+  },
+  {
+   "id": "c2tClock",
+   "quantity": "ERFA at HPOP's instant against ERFA at the epoch",
+   "reference": "ERFA",
+   "max": 0.21383097997257478,
+   "unit": "mas",
+   "tolerance": null,
+   "met": null,
+   "note": "the clock alone (Earth rotation over the instant difference)",
+   "spinMas": 0.2138309799721229,
+   "leoM": 0.007026771573246861
+  },
+  {
+   "id": "c2tSpice",
+   "quantity": "GCRF -> ITRF",
+   "reference": "SPICE J2000 -> ITRF93 (earth_latest_high_prec.bpc)",
+   "max": 8.897115349419236,
+   "unit": "mas",
+   "tolerance": 5,
+   "met": false,
+   "note": "independent chain: IAU 1976/1980 with the BPC's own EOP and nutation corrections, J2000 taken as ICRF",
+   "poleMas": 8.22686573371257,
+   "spinMas": 3.500211574375117,
+   "leoM": 0.29237109248255677
+  },
+  {
+   "id": "c2tSpiceErfa",
+   "quantity": "GCRF -> ITRF, reference spread",
+   "reference": "SPICE ITRF93 against ERFA at the epoch",
+   "max": 8.857128491099663,
+   "unit": "mas",
+   "tolerance": null,
+   "met": null,
+   "note": "reference spread",
+   "poleMas": 8.226602505254432,
+   "spinMas": 3.2873376323065835
+  },
+  {
+   "id": "gmstSame",
+   "quantity": "GMST of the tides (gmst2006) at HPOP's own UT1 and TT",
+   "reference": "ERFA eraGmst06 at the same dates",
+   "max": 0,
+   "unit": "mas",
+   "tolerance": 0.001,
+   "met": true,
+   "note": "HPOP's own ERA + IAU 2006 polynomial (not ERFA)"
+  },
+  {
+   "id": "gmstTrue",
+   "quantity": "GMST of the tides at the UTC epoch",
+   "reference": "ERFA eraGmst06 at the exact UT1 and TT",
+   "max": 0.5083637386895591,
+   "unit": "mas",
+   "tolerance": null,
+   "met": null,
+   "note": "adds the single-double UT1 and TT dates"
+  },
+  {
+   "id": "c2tBuiltIn",
+   "quantity": "GCRF -> Earth-fixed without Earth orientation input",
+   "reference": "ERFA, IERS 2010 chain with the case rows",
+   "max": 607.2940079571098,
+   "unit": "mas",
+   "tolerance": null,
+   "met": null,
+   "note": "HPOP's fallback when no EOP is supplied: IAU 1976/1980, GAST at UTC, no polar motion, no frame bias, as documented (force_models.h); the pole part is the omitted polar motion, the spin part UT1 - UTC. A PRW request with an Earth-fixed force is refused without EOP (eop-data-required), so no reference case reaches it",
+   "poleMas": 459.07107696379944,
+   "spinMas": 401.6795908748876,
+   "leoM": 19.956492142829273
+  },
+  {
+   "id": "coordsPrecession",
+   "quantity": "IAU 1976 precession (lib/coords precession)",
+   "reference": "ERFA eraPmat76 at the same TT",
+   "max": 206.42002410973046,
+   "unit": "mas",
+   "tolerance": 0.001,
+   "met": false,
+   "note": "stated \"as ERFA pmat76\"",
+   "poleMas": 60.3208084625895,
+   "spinMas": 197.4097931205068
+  },
+  {
+   "id": "coordsNutation",
+   "quantity": "IAU 1980 nutation (lib/coords nutationMatrix)",
+   "reference": "ERFA eraNutm80 at the same TT",
+   "max": 49.08322391339125,
+   "unit": "mas",
+   "tolerance": 10,
+   "met": false,
+   "note": "HPOP keeps 63 of the 106 terms (each omitted term under 0.3 mas)",
+   "poleMas": 19.549665285765347,
+   "spinMas": 45.02192195971474
+  },
+  {
+   "id": "coordsTeme",
+   "quantity": "GCRF -> TEME (lib/coords gcrfToTeme)",
+   "reference": "ERFA eraPnm80, eraEqeq94 at the same TT",
+   "max": 211.7954179519075,
+   "unit": "mas",
+   "tolerance": 10,
+   "met": false,
+   "note": "the plugin's coords::transform TEME axes",
+   "leoM": 6.959880286753949,
+   "geoM": 43.29472472898412
+  },
+  {
+   "id": "c2tBuiltInClassical",
+   "quantity": "GCRF -> Earth-fixed without Earth orientation input",
+   "reference": "ERFA eraGmst82 + eraEqeq94, eraNutm80, eraPmat76 (UT1 = UTC, no polar motion) at the same instant",
+   "max": 211.89040799609475,
+   "unit": "mas",
+   "tolerance": 10,
+   "met": false,
+   "note": "the chain the fallback states it implements",
+   "poleMas": 80.5166223966267,
+   "spinMas": 196.31902041141586,
+   "leoM": 6.9630017864651785
+  },
+  {
+   "id": "teme",
+   "quantity": "GCRF -> TEME (SGP4 axes)",
+   "reference": "ERFA eraPnm06a, eraEe06a at the exact epoch",
+   "max": 1.9781138590004087e-7,
+   "unit": "mas",
+   "tolerance": 0.001,
+   "met": true,
+   "note": "the definition propagator/sgp4 uses",
+   "leoM": 6.500346317849946e-9
+  },
+  {
+   "id": "temeFk5",
+   "quantity": "GCRF -> TEME (SGP4 axes)",
+   "reference": "ERFA eraPnm80, eraEqeq94 (the FK5 definition)",
+   "max": 77.65551652550788,
+   "unit": "mas",
+   "tolerance": null,
+   "met": null,
+   "note": "spread between the two published TEME definitions",
+   "poleMas": 50.39137696903956,
+   "spinMas": 59.085432840993704,
+   "leoM": 2.5518639819974918
+  },
+  {
+   "id": "sunSame",
+   "quantity": "Sun relative to the Earth, at HPOP's TDB date",
+   "reference": "SPICE spkgeo, the same DE440 file and date",
+   "max": 0.000029802322387695312,
+   "unit": "m",
+   "tolerance": 0.001,
+   "met": true,
+   "note": "kernel reading and interpolation",
+   "velocityMS": 3.688882027804963e-12
+  },
+  {
+   "id": "sunTrue",
+   "quantity": "Sun relative to the Earth, at the UTC epoch",
+   "reference": "SPICE spkgeo at TDB = ERFA TT + eraDtdb",
+   "max": 1.3536361104859906,
+   "unit": "m",
+   "tolerance": null,
+   "met": null,
+   "note": "adds HPOP's TDB clock"
+  },
+  {
+   "id": "moonSame",
+   "quantity": "Moon relative to the Earth, at HPOP's TDB date",
+   "reference": "SPICE spkgeo, the same DE440 file and date",
+   "max": 1.4779288903810084e-8,
+   "unit": "m",
+   "tolerance": 0.001,
+   "met": true,
+   "note": "kernel reading and interpolation",
+   "velocityMS": 2.2207170832518412e-13
+  },
+  {
+   "id": "moonTrue",
+   "quantity": "Moon relative to the Earth, at the UTC epoch",
+   "reference": "SPICE spkgeo at TDB = ERFA TT + eraDtdb",
+   "max": 0.04887484587072784,
+   "unit": "m",
+   "tolerance": null,
+   "met": null,
+   "note": "adds HPOP's TDB clock"
+  }
+ ]
+}

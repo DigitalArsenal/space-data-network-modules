@@ -760,6 +760,32 @@ Cd scaled by that share is within 3.3 cm and 12 cm
 HPOP's to 4.6e-10 (field, Sun, Moon in LEO) and 2.6e-5 where GMAT leaves terms
 out of its variational equations (shadow function, relativity, thrust).
 
+### Agreement with ERFA and SPICE
+
+`tests/evidence/erfa-spice/run-erfa-spice.mjs` checks the clock, Earth
+orientation, TEME axes and Sun and Moon reads at the 50 hourly sample epochs
+of the reference cases against pyerfa 2.0.1.5 (ERFA 2.0.1) and SpiceyPy 8.3.0
+(CSPICE N0067) (`tests/evidence/erfa-spice/summary-erfa-spice.json`; method,
+checksums and findings in `docs/cross-validation.md`):
+
+| Quantity | Reference | Largest difference |
+| --- | --- | ---: |
+| TAI - UTC, TT from UTC | ERFA, SPICE | 0 s, 5.6 ps |
+| GCRF to ITRF (`EarthRotation`) at HPOP's own instant | ERFA IERS 2010 CIO chain | 0.48 µas |
+| The same at the UTC epoch | ERFA | 0.214 mas (7.0 mm at LEO radius): the force model's TDB date in one double |
+| GCRF to ITRF | SPICE ITRF93 high-precision kernel | 8.90 mas (ERFA - SPICE 8.86 mas: the kernel's own EOP series and model) |
+| Tides' GMST at HPOP's UT1 and TT | ERFA `eraGmst06` | 0.00 mas |
+| Sun and Moon from DE440 at HPOP's TDB date | SPICE, same file | 30 µm, 15 nm |
+| TDB - TT | ERFA `eraDtdb` | 32.0 µs (two-term formula, and a difference of Julian dates in 40.2 µs steps) |
+| `lib/coords` IAU 1976 precession, IAU 1980 nutation | ERFA `eraPmat76`, `eraNutm80` | 206 mas, 49.1 mas |
+
+The last row is two defects in `lib/coords` (the T0 terms of the IAU 1976
+angles multiplied by T, and mispaired rows of the nutation table). They reach
+`coords::transform`/`getTransformMatrix` (the plugin's TEME and ECEF entity
+states, 7.0 m at LEO radius) and the no-EOP fallback
+`ForceModel::GcrfToEarthFixed(jd)`; the PRW path and the reference cases use
+`EarthRotation` and are unaffected.
+
 ## License
 
 UNLICENSED — Proprietary. All rights reserved by DigitalArsenal.io, Inc.
