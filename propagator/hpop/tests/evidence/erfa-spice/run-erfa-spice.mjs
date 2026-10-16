@@ -24,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
-import { composeErfaTranslationUnit } from '../../../../../foundation/frames/erfa-amalgamation.mjs';
+import { buildHpopFrames, eopStream } from './hpop-frames-native.mjs';
 import { requestFor, decodeResult } from '../../lib/prwCodec.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -48,36 +48,10 @@ for (const c of CASES.cases) if (!sets.has(c.earthOrientation)) sets.set(c.earth
 // 1. HPOP's clock and rotations (native, HPOP's sources).
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hpop-erfa-spice-'));
 try {
-  const erfa = await composeErfaTranslationUnit();
-  const erfaUnit = path.join(work, 'erfa-amalgamation.cpp');
-  fs.writeFileSync(erfaUnit, erfa.source);
-  const bin = path.join(work, 'hpop-frames');
-  const inc = [path.join(hpop, 'lib'), path.join(hpop, 'src'), path.join(hpop, 'src/cpp/include'), path.join(hpop, 'src/cpp/generated'),
-    path.join(hpop, 'src/cpp/generated/sds'), path.join(repo, 'foundation/frames/src'), path.join(repo, 'higherpop/third_party/erfa'), o.flatbuffers];
-  // force_models.cpp is compiled inside the harness's translation unit (it
-  // includes it for the file-local gmst2006); the rest of lib/ as the native
-  // tests link it (tests/environment_conformance.test.mjs).
-  const nrl = path.join(repo, 'third_party/nrlmsise00'), hwm = path.join(repo, 'third_party/hwm14');
-  const objects = ['nrlmsise-00.c', 'nrlmsise-00_data.c'].map((c) => {
-    const obj = path.join(work, `${c}.o`);
-    execFileSync('cc', ['-std=c11', '-O2', '-c', path.join(nrl, c), '-o', obj], { stdio: 'inherit' });
-    return obj;
-  });
-  execFileSync('c++', ['-std=c++17', '-O2', ...inc.flatMap((d) => ['-I', d]), '-I', nrl, '-I', hwm, path.join(here, 'hpop_frames_native.cpp'),
-    ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'atmosphere_winds', 'integrators', 'nrlmsise00', 'time_convert', 'us76', 'atmosphere_plugin']
-      .map((f) => path.join(hpop, 'lib', `${f}.cpp`)),
-    path.join(hwm, 'hwm14.cpp'), path.join(hwm, 'hwm14_data.cpp'), ...objects, erfaUnit, '-o', bin], { stdio: 'inherit' });
-
+  const frames = await buildHpopFrames(work, o.flatbuffers);
   const epochs = [];
   for (const [id, utcs] of sets) {
-    const eop = CASES.earthOrientation[id].fixture;
-    const fixturePath = path.join(repo, eop.path);
-    if (sha256(fixturePath) !== eop.sha256) throw new Error(`${id}: EOP fixture does not match the case export`);
-    // The size-prefixed $EOP stream the reference requests carry (tests/lib/orekitCases.mjs eopRows).
-    const eopBin = path.join(work, `${id}.bin`);
-    fs.writeFileSync(eopBin, Buffer.from(JSON.parse(fs.readFileSync(fixturePath, 'utf8')).payloadBase64, 'base64'));
-    const text = execFileSync(bin, [eopBin], { input: utcs.join('\n') + '\n', encoding: 'utf8' });
-    for (const line of text.trim().split('\n')) epochs.push({ earthOrientation: id, ...JSON.parse(line) });
+    for (const e of frames.at(eopStream(work, CASES, id), utcs)) epochs.push({ earthOrientation: id, ...e });
   }
 
   // 2. Sun and Moon from the shipped WASM at the TDB date the force model reads.
@@ -104,7 +78,7 @@ try {
     sources: Object.fromEntries(['propagator/hpop/src/cpp/include/hpop/prw_environment.h', 'propagator/hpop/src/cpp/include/hpop/prw_codec.h',
       'propagator/hpop/lib/time_convert.cpp', 'propagator/hpop/lib/coords.cpp', 'propagator/hpop/lib/force_models.cpp',
       'foundation/frames/src/axis_engine.hpp', 'foundation/frames/src/eop_series.hpp'].map((f) => [f, sha256(path.join(repo, f))])),
-    erfaSourceFiles: erfa.fileCount }, epochs);
+    erfaSourceFiles: frames.erfaFileCount }, epochs);
 
   // 3. ERFA and SPICE.
   const ref = execFileSync(o.python, ['-I', path.join(here, 'reference.py'), CASES_PATH, hpopFile, o.naif, DE440],
