@@ -14,7 +14,7 @@ const cases = JSON.parse(fs.readFileSync(path.join(here, '../cases/hpop-referenc
 const epochs = [...new Set(cases.cases.flatMap((c) => [c.epochUtc, ...c.sampleEpochsUtc]))].sort();
 const jd = (s) => Date.parse(s + 'Z') / 86400000 + 2440587.5;
 const TLIST = epochs.map((e) => jd(e).toFixed(8));
-const BODIES = [['sun', '10'], ['moon', '301'], ['venus', '299'], ['jupiter', '599'], ['jwst', '-170']];
+const BODIES = [['sun', '10'], ['moon', '301'], ['venus', '299'], ['jupiter', '5'], ['jwst', '-170']];
 const index = { fetched: new Date().toISOString(), epochsUtc: epochs, bodies: {} };
 for (const [name, id] of BODIES) {
   const q = new URLSearchParams({ format: 'json', COMMAND: `'${id}'`, OBJ_DATA: 'NO', MAKE_EPHEM: 'YES', EPHEM_TYPE: 'VECTORS', CENTER: "'500@399'",

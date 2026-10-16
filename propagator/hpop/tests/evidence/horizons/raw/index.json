@@ -1,5 +1,5 @@
 {
- "fetched": "2026-10-16T17:44:23.390Z",
+ "fetched": "2026-10-16T18:05:49.266Z",
  "epochsUtc": [
   "2026-06-10T00:00:00.000",
   "2026-06-10T01:00:00.000",
@@ -56,35 +56,35 @@
   "sun": {
    "command": "10",
    "status": 200,
-   "sha256": "0de56c259cb117b5de66c0f4349f23ed801b110a15680fa6c8bea0efdd0c9713",
+   "sha256": "ea17c2e867544d61a20040e8087537de378c5077836fd16217e4d70e6422721c",
    "version": "1.2",
    "resultBytes": 15233
   },
   "moon": {
    "command": "301",
    "status": 200,
-   "sha256": "0955c3c6966050319a089daf334646c43cd94e29d816f9286ed6a509d5cfe16a",
+   "sha256": "dba05030349de06eda074be84d168aebc86070e8a9beb7dd8e2a75fa30e70941",
    "version": "1.2",
    "resultBytes": 15233
   },
   "venus": {
    "command": "299",
    "status": 200,
-   "sha256": "e294f6f71f662212dd51a29597afe48ff5b95350a94f76e0ee64face9b5044c0",
+   "sha256": "ce0740066200ede197a5c2a498f3e4f8fcaf4ded9469302296b67d6c81d00329",
    "version": "1.2",
    "resultBytes": 15233
   },
   "jupiter": {
-   "command": "599",
+   "command": "5",
    "status": 200,
-   "sha256": "087584d09a996a4729e071ba689e701c9568e9d8760a0438952620bb7d887ab5",
+   "sha256": "2dc1e366567d1a7e53fb9e2d66b90271e087f4e7f635765f0e823fb8a12b4745",
    "version": "1.2",
-   "resultBytes": 15241
+   "resultBytes": 15233
   },
   "jwst": {
    "command": "-170",
    "status": 200,
-   "sha256": "d59a3e25f6f066a3d5882bec3ef6d95f9005c1dd811ac2088329d9de6657c6c5",
+   "sha256": "6723faa3fc86dd71100f34a37f120ef2ec57557bae0cfbf68c9caca5c3445693",
    "version": "1.2",
    "resultBytes": 15254
   }
