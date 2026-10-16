@@ -1,0 +1,36 @@
+{
+  "historyPaths": [
+    "CHANGELOG*",
+    "graph/events.log",
+    "graph/gauntlet/receipts/**",
+    "graph/evidence/**",
+    "graph/tasks/**",
+    "graph/programs/**",
+    "docs/archive/**",
+    "docs/superpowers/**",
+    "docs/tmpl-lane-*",
+    "docs/evidence/**",
+    "packages/python-astro/docs/evidence/**",
+    "**/tests/evidence/**/*.log",
+    "results/**",
+    "H\u0050OP_tasks.md",
+    "h\u0070op_workplan_tasks.md",
+    "h\u0070op_discontiuity_innaccurate.md",
+    ".claude/{loop,todo,completed}/**",
+    "tmp/**",
+    "docs/private/**",
+    "docs/js/**",
+    "deployment/ut-austin-core/evidence/**",
+    "sdn-server/spacedatanetwork-edge*",
+    "sdn-server/registry-builder",
+    "packages/sdn-updater-module/dist/**"
+  ],
+  "coincidentalPaths": [
+    "scalar.standalone.js",
+    "**/embedded/dashboard.html",
+    "geocoder-places.json"
+  ],
+  "coincidentalPatterns": [
+    "bafy[a-z2-7]*h\u0070op"
+  ]
+}
