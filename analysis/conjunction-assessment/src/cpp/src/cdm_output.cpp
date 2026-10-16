@@ -7,6 +7,7 @@
 
 #include "conjunction/conjunction_assessment.h"
 #include "conjunction/conjunction_engine.h"
+#include "conjunction/encounter_geometry.h"
 #ifdef SING
 #undef SING
 #endif
@@ -746,7 +747,8 @@ static std::string cdm_probability_failure(const CDM* cdm) {
     };
     auto reason = covariance_failure_reason(object_has_covariance(cdm->OBJECT1()),
         object_has_covariance(cdm->OBJECT2()), psd(cdm->OBJECT1()), psd(cdm->OBJECT2()));
-    if (reason.empty() && flatbuffer_string(cdm->COLLISION_PROBABILITY_METHOD()) == "ALFANO-MAXPROB")
+    const auto method = flatbuffer_string(cdm->COLLISION_PROBABILITY_METHOD());
+    if (reason.empty() && (method == "ALFANO-MAXPROB" || method == "ALFANO-SPHERICAL-SMALL-HBR-MAX"))
         reason = "Collision probability unavailable: only the Alfano maximum was requested.";
     return reason;
 }
@@ -1138,10 +1140,13 @@ int32_t conjunction_to_cdm(
         covariance_is_positive_semidefinite(event.cov6_rtn2.data(), event.cov6_rtn2.size()));
     if (probability_comment.empty()) probability_comment = event.probability_failure;
     const bool has_pc = event.has_covariance && probability_comment.empty() &&
-        !event.probability_method.empty() && event.probability_method != "ALFANO-MAXPROB";
+        !event.probability_method.empty() && event.probability_method != "ALFANO-MAXPROB" &&
+        event.probability_method != "ALFANO-SPHERICAL-SMALL-HBR-MAX";
     flatbuffers::Offset<flatbuffers::String> prob_method;
     if (has_pc) prob_method = builder.CreateString(event.probability_method);
 
+    if (!event.probability_note.empty())
+        probability_comment += (probability_comment.empty() ? "" : " ") + event.probability_note;
     // Build object entries
     auto obj1 = build_cdm_object(builder, event.obj1, event.state1, event,
                                   1, event.cov_r1, event.cov_t1, event.cov_n1, reference_frame, probability_comment);
@@ -1497,6 +1502,9 @@ PcResult compute_pc_from_cdm(
         return {};
     }
 
+    if (cdm->TCA()) {
+        state1.epoch_jd = state2.epoch_jd = iso_to_jd(cdm->TCA()->str());
+    }
     std::string method = method_override;
     if (method.empty() && cdm->COLLISION_PROBABILITY_METHOD()) {
         method = cdm->COLLISION_PROBABILITY_METHOD()->str();
@@ -1507,6 +1515,14 @@ PcResult compute_pc_from_cdm(
 
     ConjunctionEngine engine;
     engine.set_pc_method(method);
+    if (cdm->OBJECT1()->COVARIANCE()->size() >= 21 && cdm->OBJECT2()->COVARIANCE()->size() >= 21) {
+        std::array<double, 21> full1{}, full2{};
+        for (unsigned i=0; i<21; ++i) {
+            full1[i]=cdm->OBJECT1()->COVARIANCE()->Get(i);
+            full2[i]=cdm->OBJECT2()->COVARIANCE()->Get(i);
+        }
+        return engine.compute_pc(make_pc_encounter(state1,state2,full1,full2,combined_radius_km)).pc;
+    }
     return engine.compute_pc(state1, state2, cov1, cov2, combined_radius_km).pc;
 }
 

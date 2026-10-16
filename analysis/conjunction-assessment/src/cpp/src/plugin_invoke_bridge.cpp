@@ -30,6 +30,7 @@
 extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 #include "conjunction/conjunction_assessment.h"
 #include "conjunction/conjunction_engine.h"
+#include "conjunction/encounter_geometry.h"
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/error_status.h"
 #include "conjunction/gp_json.h"
@@ -484,17 +485,18 @@ SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, 
     e.probability_failure = "Collision probability unavailable: only the Alfano maximum was requested.";
     return out;
   }
-  auto computed = engine.compute_pc(e.state1, e.state2, position_block(c1), position_block(c2),
-                                    e.combined_radius_km);
+  auto computed = engine.compute_pc(make_pc_encounter(e.state1, e.state2, c1, c2,
+                                    e.combined_radius_km));
   if (has_error() || !computed.pc.converged || !isFinite(computed.pc.probability) ||
       computed.pc.probability < 0 || computed.pc.probability > 1 ||
-      computed.pc.method.empty() || computed.pc.method == "ALFANO-MAXPROB") {
-    e.probability_failure = "Collision probability calculation failed.";
+      computed.pc.method.empty() || computed.pc.method == "ALFANO-SPHERICAL-SMALL-HBR-MAX") {
+    e.probability_failure = "Collision probability calculation failed: " + computed.pc.failure_reason;
     if (has_error()) e.probability_failure += std::string(" ") + error_message();
     clear_error();
     return out;
   }
   e.pc = computed.pc;
+  e.usage = computed.usage;
   e.bplane = computed.bplane;
   e.cov1 = computed.cov1;
   e.cov2 = computed.cov2;
@@ -512,7 +514,8 @@ SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, 
 }
 // Labels an event whose probability came from the sources' covariance.
 void covarianceLabels(CQREventT &o, const SuppliedCovariance &c) {
-  if (!c.used || !o.PROBABILITY)
+  if (!c.used || !o.PROBABILITY ||
+      o.PROBABILITY->ALGORITHM == cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
     return;
   o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::SOURCE_EPHEMERIS;
   o.PROBABILITY->CALIBRATION =
@@ -886,10 +889,12 @@ probability(const PcResult &p, cqrProbabilityAlgorithm a,
   if (!p.method.empty()) {
     const auto actual = algorithmEnum(p.method);
     if (actual == cqrProbabilityAlgorithm::UNSPECIFIED)
-      set_error("Probability evaluator returned an unregistered algorithm.");
+      set_error("SDS CQR cannot represent actual Pc method " + p.method + ": " + p.usage_reason + "; " + p.failure_reason);
     else
       a = actual;
   }
+  if (!p.converged)
+    set_error("Pc calculation did not converge: " + p.failure_reason + "; " + p.usage_reason);
   o->ALGORITHM = a;
   o->CONVERGED = p.converged;
   o->ITERATIONS = std::max(0, p.iterations);
@@ -897,8 +902,10 @@ probability(const PcResult &p, cqrProbabilityAlgorithm a,
   bool maximum = a == cqrProbabilityAlgorithm::ALFANO_MAXIMUM ||
                  a == cqrProbabilityAlgorithm::ALFRIEND_1999_MAXIMUM;
   o->PROBABILITY = maximum ? 0 : p.probability;
-  o->MAXIMUM_PROBABILITY = p.max_probability;
-  o->HAS_MAXIMUM_PROBABILITY = true;
+  // Ordinary Pc results carry a labelled spherical diagnostic internally;
+  // CQR has no field for that label, so never export it as a general bound.
+  o->MAXIMUM_PROBABILITY = maximum ? p.max_probability : 0;
+  o->HAS_MAXIMUM_PROBABILITY = maximum;
   o->MAHALANOBIS_SQUARED = p.mahalanobis_2d * p.mahalanobis_2d;
   o->HAS_MAHALANOBIS_SQUARED = !maximum;
   if (maximum)
@@ -1003,6 +1010,17 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
   auto o = event(legacy(e), axes);
   if (!e.has_covariance)
     return o;
+  // The SDS CQR algorithm enum has no value for the 2D-Nc, 3D-Nc or Monte
+  // Carlo fallbacks. A violating encounter is never exported under another
+  // method's name: the CQR event keeps the labelled maximum-only result and the
+  // CDM (probability method string and comment) carries the fallback value.
+  if (!e.pc.method.empty() &&
+      algorithmEnum(e.pc.method) == cqrProbabilityAlgorithm::UNSPECIFIED) {
+    o->PRIMARY_COVARIANCE_BASIS = o->SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::NONE;
+    o->PRIMARY_SIGMA_RTN_M.reset();
+    o->SECONDARY_SIGMA_RTN_M.reset();
+    return o;
+  }
   o->HAS_DILUTION_THRESHOLD_M = false;
   o->PROBABILITY =
       probability(e.pc, a, cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
@@ -1144,8 +1162,8 @@ EmpiricalUse empiricalPc(const EmpiricalModel &m, const GPElement *g1, const GPE
   ConjunctionEngine engine;
   engine.set_pc_method(algorithm(alg));
   engine.set_combined_radius_m(radius1_m, radius2_m);
-  u.computed = engine.compute_pc(s1, s2, position_block(a->cov), position_block(b->cov),
-                                 (radius1_m + radius2_m) / 1000.);
+  u.computed = engine.compute_pc(make_pc_encounter(s1, s2, a->cov, b->cov,
+                                 (radius1_m + radius2_m) / 1000.));
   u.used = true;
   u.cov1 = a->cov;
   u.cov2 = b->cov;
@@ -1427,13 +1445,18 @@ extern "C" int compute_pc() {
       return error("invalid-geometry",
                    "All plane geometry values must be finite."),
              400;
-  if (!positive(g->COMBINED_RADIUS_M()) || !positive(g->VARIANCE_XI_M2()) ||
-      !positive(g->VARIANCE_ZETA_M2()) ||
+  const bool foster_repair = p->ALGORITHM() == cqrProbabilityAlgorithm::FOSTER;
+  const bool finite_covariance = isFinite(g->VARIANCE_XI_M2()) &&
+      isFinite(g->VARIANCE_ZETA_M2()) && isFinite(g->COVARIANCE_XI_ZETA_M2());
+  const bool positive_covariance = positive(g->VARIANCE_XI_M2()) &&
+      positive(g->VARIANCE_ZETA_M2()) &&
       std::abs(g->COVARIANCE_XI_ZETA_M2() / std::sqrt(g->VARIANCE_XI_M2()) /
-               std::sqrt(g->VARIANCE_ZETA_M2())) >= 1.0)
+               std::sqrt(g->VARIANCE_ZETA_M2())) < 1.0;
+  if (!positive(g->COMBINED_RADIUS_M()) || !finite_covariance ||
+      (!foster_repair && !positive_covariance))
     return error("invalid-covariance",
-                 "Encounter-plane covariance must be positive definite and "
-                 "radius positive."),
+                 "Finite covariance and positive radius required; this method "
+                 "requires positive-definite covariance unless Foster repair is selected."),
            400;
   BPlaneGeometry bp;
   bp.xi = g->XI_M() / 1000.;
@@ -1663,6 +1686,26 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.has_covariance1 = e.has_covariance1;
   l.has_covariance2 = e.has_covariance2;
   l.probability_failure = e.probability_failure;
+  l.probability_note = e.pc.usage_reason;
+  if (e.pc.usage_violation)
+    l.probability_note = "2D_USAGE_VIOLATION; method=" + e.pc.method + "; " + l.probability_note;
+  if (e.pc.cross_correlation_applied) {
+    char delta[96];
+    std::snprintf(delta, sizeof(delta), "; CROSS_CORRELATION_APPLIED; Pc_change=%.17g", e.pc.decorrelation_probability_change);
+    l.probability_note += delta;
+  }
+  if (e.pc.sample_count) {
+    char diagnostics[256];
+    std::snprintf(diagnostics, sizeof(diagnostics),
+        "; MC samples=%llu hits=%llu initial=%llu entries=%llu; 95%% Wilson interval lower %.17g upper %.17g",
+        static_cast<unsigned long long>(e.pc.sample_count),
+        static_cast<unsigned long long>(e.pc.collision_count),
+        static_cast<unsigned long long>(e.pc.initial_overlap_count),
+        static_cast<unsigned long long>(e.pc.entry_collision_count),
+        e.pc.lower_probability, e.pc.upper_probability);
+    l.probability_note += diagnostics;
+  }
+  if (e.pc.covariance_remediated) l.probability_note += "; COVARIANCE_REMEDIATED";
   l.cov6_rtn1 = e.cov6_rtn1;
   l.cov6_rtn2 = e.cov6_rtn2;
   l.radius1_m = e.radius1_m;

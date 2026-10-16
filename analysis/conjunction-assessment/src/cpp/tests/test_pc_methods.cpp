@@ -4,7 +4,7 @@
  * Strategy:
  *   1. Known analytical cases (head-on, zero miss, large miss)
  *   2. Cross-method consistency (all methods should agree within bounds)
- *   3. Alfano always ≥ all other methods (it's the maximum)
+ *   3. Spherical approximation comparison in one specified standard geometry
  *   4. Convergence: high-resolution methods match each other
  *   5. Edge cases: degenerate covariance, circular covariance
  */
@@ -86,7 +86,7 @@ void test_standard_case() {
     printf("  Chan:     %.6e\n", r_cha.probability);
     printf("  Alfriend: %.6e\n", r_afr.probability);
 
-    // Alfano must be >= all others (it's the maximum probability)
+    // For this geometry only, the spherical diagnostic exceeds the actual Pc.
     CHECK(r_alf.probability >= r_fos.probability * 0.99, "Alfano ≥ Foster");
     CHECK(r_alf.probability >= r_pat.probability * 0.99, "Alfano ≥ Patera");
     CHECK(r_alf.probability >= r_cha.probability * 0.99, "Alfano ≥ Chan");
@@ -538,7 +538,7 @@ void test_factory() {
     printf("\n=== Test 12: Method Factory ===\n");
 
     auto m1 = create_pc_method("alfano");
-    CHECK(m1->name() == "ALFANO-MAXPROB", "Factory: alfano");
+    CHECK(m1->name() == "ALFANO-SPHERICAL-SMALL-HBR-MAX", "Factory: alfano");
 
     auto m2 = create_pc_method("foster");
     CHECK(m2->name() == "FOSTER-2D", "Factory: foster");

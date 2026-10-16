@@ -24,6 +24,25 @@ test('CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral'
   assert.ok(Math.abs(result.PROBABILITY - 0.00498752080731768) <= 1e-12, `Pc=${result.PROBABILITY}`);
 });
 
+// Same closed-form oracle as above, with R=100 m and sigma=50 m.
+// This deliberately exercises sigma < HBR: the retired approximation clamps
+// to one, whereas the actual disk integral is 0.8646647167633873.
+test('CQR Foster computes the full disk integral when HBR exceeds sigma', async (t) => {
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness();
+  t.after(() => harness.destroy());
+  const payload = encodeCqr(flatc, { PROBABILITY_REQUEST: { GEOMETRY: {
+    XI_M: 0, ZETA_M: 0, VARIANCE_XI_M2: 2500, COVARIANCE_XI_ZETA_M2: 0,
+    VARIANCE_ZETA_M2: 2500, COMBINED_RADIUS_M: 100 }, ALGORITHM: 'FOSTER' } });
+  const response = await harness.invoke({ methodId: 'compute_pc', inputs: [{ portId: 'request', payload }] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const result = decodeCqr(flatc, response.outputs[0].payload).PROBABILITY_RESULT;
+  assert.equal(result.ALGORITHM, 'FOSTER');
+  assert.equal(result.CONVERGED, true);
+  assert.ok(Math.abs(result.PROBABILITY - 0.8646647167633873) <= 1e-12);
+  assert.equal(result.HAS_MAXIMUM_PROBABILITY, false);
+});
+
 test('CQR rejects singular encounter covariance and the retired JSON method', async (t) => {
   const flatc = await initCqrFlatc();
   const harness = await createConjunctionCommandHarness({ surface: 'direct' });

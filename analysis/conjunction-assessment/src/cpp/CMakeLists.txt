@@ -63,8 +63,22 @@ set(CA_SOURCES
     src/cdm_output.cpp
     src/csm_output.cpp
     src/pc_method.cpp
+    src/pc_orekit.cpp
+    src/pc_approx.cpp
+    src/pc_integral.cpp
+    src/pc_foster.cpp
+    src/pc_maxpc.cpp
+    src/pc_maximum.cpp
+    src/pc_usage.cpp
+    src/pc_dynamics.cpp
+    src/pc_equinoctial.cpp
+    src/pc_hall.cpp
+    src/pc_fallbacks.cpp
+    src/pc_monte_carlo.cpp
+    src/pc_engine.cpp
     src/ephemeris_source.cpp
     src/conjunction_engine.cpp
+    src/encounter_geometry.cpp
 )
 
 add_library(conjunction_assessment STATIC ${CA_SOURCES})
@@ -142,8 +156,25 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
         target_include_directories(test_csm_output PRIVATE include "${SGP4_DIR}")
     endif()
 
+    foreach(pc_test pc_maximum pc_cara pc_engine pc_fallbacks pc_monte_carlo pc_hall_extra)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_${pc_test}.cpp")
+            add_executable(test_${pc_test} tests/test_${pc_test}.cpp)
+            target_link_libraries(test_${pc_test} conjunction_assessment)
+            target_compile_definitions(test_${pc_test} PRIVATE
+                CONJUNCTION_TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
+        endif()
+    endforeach()
+
     enable_testing()
+    foreach(pc_test pc_maximum pc_cara pc_engine pc_fallbacks pc_monte_carlo pc_hall_extra)
+        if(TARGET test_${pc_test})
+            add_test(NAME ${pc_test} COMMAND test_${pc_test})
+        endif()
+    endforeach()
     add_test(NAME trajectory_bounds COMMAND test_trajectory_bounds)
+    if(TARGET test_pc_fallbacks)
+        add_test(NAME pc_hall COMMAND test_pc_fallbacks --hall)
+    endif()
     if(TARGET test_socrates)
         add_test(NAME socrates COMMAND test_socrates)
         set_tests_properties(socrates PROPERTIES SKIP_RETURN_CODE 77)
