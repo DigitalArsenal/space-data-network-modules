@@ -33,7 +33,7 @@ Cite “FFM-1” and the `FFM-1 sha256=<hex>` printed by the check. The SHA-256 
 
 ## Conforming implementations
 
-FFM-1 is the model, not a module. An implementation conforms to FFM-1 when its default full-force request decodes to this profile and `tests/ffm-profile-check.mjs` passes against it: the standard module `propagator/ffm` and the fast implementation `propagator/ffm-fast` (the same forces to the same degree and order, computed differently) both cite FFM-1. A result cites the profile and the implementation that produced it.
+FFM-1 is the force model: the force, frame and time rows above. The integrator rows are the standard implementation's settings; every conforming implementation declares its own integrator and tolerances and cites them with its results. An implementation conforms to FFM-1 when its default full-force request decodes to the force, frame and time rows of this profile and `tests/ffm-profile-check.mjs` passes against it: the standard module `propagator/ffm` and the fast implementation `propagator/ffm-fast` (the same forces to the same degree and order, computed differently, with its own integrator) both cite FFM-1. A result cites the profile, the implementation and the integrator that produced it.
 
 ## Where it is enforced
 
@@ -41,4 +41,4 @@ Run `node tests/ffm-profile-check.mjs`. It compares decoded PRW defaults and mod
 
 ## Versioning
 
-Any force or integrator change requires a new profile id. Old profile ids and their definitions remain available.
+Any force, frame or time change requires a new profile id; an implementation's integrator change is its own version, not a new profile. Old profile ids and their definitions remain available.
