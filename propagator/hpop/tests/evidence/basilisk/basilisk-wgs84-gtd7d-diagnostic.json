@@ -1,0 +1,6046 @@
+{
+ "about": "Independent Basilisk 2.12.0 spacecraft oracle; state-only, SI units, GCRF, hourly samples. No HPOP numerical implementation is linked.",
+ "caseExportSha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9",
+ "tool": {
+  "name": "Basilisk (AVS Lab)",
+  "version": "2.12.0",
+  "license": "ISC",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "numpy": "2.4.6",
+  "pyerfa": "2.0.1.5",
+  "erfa": "2.0.1",
+  "buildInfo": {
+   "schemaVersion": 4,
+   "artifact": {
+    "basiliskVersion": "2.12.0",
+    "sourceRevision": "611665f742999951453d4e128c8540c761de8a4f",
+    "sourceDirty": false,
+    "extensionAbiVersion": 2
+   },
+   "features": {
+    "vizInterface": true,
+    "opNav": false,
+    "mujoco": true,
+    "rustModules": true
+   },
+   "diagnostics": {
+    "target": {
+     "system": "Darwin",
+     "processor": "arm64",
+     "pointerSizeBytes": 8,
+     "osxArchitectures": "arm64",
+     "osxDeploymentTarget": "11.0"
+    },
+    "build": {
+     "configuration": "Release",
+     "multiConfig": false,
+     "availableConfigurations": [],
+     "generator": "Ninja",
+     "generatorPlatform": "",
+     "generatorToolset": "",
+     "pythonLimitedApi": "0x03090000"
+    },
+    "compilers": {
+     "c": {
+      "id": "AppleClang",
+      "version": "21.0.0.21000101",
+      "executable": "cc",
+      "launcher": "sccache",
+      "frontendVariant": "GNU",
+      "simulatedId": "",
+      "simulatedVersion": "",
+      "target": "",
+      "standard": "",
+      "extensions": ""
+     },
+     "cxx": {
+      "id": "AppleClang",
+      "version": "21.0.0.21000101",
+      "executable": "c++",
+      "launcher": "sccache",
+      "frontendVariant": "GNU",
+      "simulatedId": "",
+      "simulatedVersion": "",
+      "target": "",
+      "standard": "17",
+      "extensions": "OFF"
+     },
+     "rust": {
+      "id": "rustc",
+      "version": "1.98.1",
+      "executable": "rustc",
+      "launcher": "",
+      "target": "aarch64-apple-darwin"
+     }
+    },
+    "conanSettings": {
+     "buildType": "Release",
+     "cxxStandard": "17",
+     "cxxStandardLibrary": "libc++",
+     "compilerRuntime": "",
+     "compilerRuntimeType": ""
+    },
+    "tools": {
+     "cmake": "4.3.2",
+     "conan": "2.28.1",
+     "swig": "4.5.0",
+     "python": "3.9.13",
+     "cargo": "1.98.1",
+     "corrosion": "0.6.1"
+    }
+   }
+  }
+ },
+ "settings": {
+  "integrator": "native Basilisk RKF78",
+  "maximumStepS": 8.0,
+  "convergenceLimitM": 0.0003,
+  "variant": "wgs84-gtd7d",
+  "threads": 1,
+  "earthOrientation": "Exported EOP, pinned ERFA IAU 2006/2000A CIO GCRF-to-ITRF; orthogonal midpoint rotation held over each step, refined with the integration step",
+  "ephemeris": "SpiceInterface with the exported DE440; geometric Earth-centred J2000 (ICRF) states",
+  "stm": "Unavailable: Basilisk spacecraft has no variational equations"
+ },
+ "inputFiles": [
+  {
+   "path": "../cases/hpop-reference-cases.json",
+   "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
+  },
+  {
+   "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
+  },
+  {
+   "path": "../../../../../../../../../../opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14",
+   "sha256": "87d4df53fd91304be5bac391fb204643c36b7df2023c04a0953bcbc7d4fdf634"
+  },
+  {
+   "path": "run-basilisk.py",
+   "sha256": "eab6ef3abd1299a092d7bb5699e683451012dda2d3335677a45944d6fb2bd625"
+  },
+  {
+   "path": "basilisk-backend.py",
+   "sha256": "d04a8382b5108701de89965e64575434736fec34b96aee6c9351421cd0b965cd"
+  },
+  {
+   "path": "investigate-basilisk.py",
+   "sha256": "13aa96d4b61ab7867c784c935aa477e4b6011e1a58d83a253d58ace817a84cc9"
+  },
+  {
+   "path": "../erfa-spice/reference.py",
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+  },
+  {
+   "path": "../erfa-spice/tools.json",
+   "sha256": "a38f3d2f56f108982473d8af2e4f48b59902d4c807425c12758f100991005ed3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/erfa-spice/lib/python3.14/site-packages/erfa/ufunc.abi3.so",
+   "sha256": "7a6d8767e8d6caceb4fcf3ed56aa055a61d5216f57aa0c022d7dae273a1a2127"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/__init__.py",
+   "sha256": "92a46f791e453926d3292af2582b89995a289475f0eaaea71a949823200b838a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/_buildInfoData.py",
+   "sha256": "f1328185672ba9b734448a030ee7ded4dc49dbc632e8bdfe3bb9814f0e20b08c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/_buildAbiData.py",
+   "sha256": "c74532882c0a6bb9ecbf5844fe929d6430d0ff0e2ca60608b0cfc8a5b428a0fb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/bsk-2.12.0.dist-info/METADATA",
+   "sha256": "463c674c34681f60b85a17fe7e7c86050b6e8ed99b43a7b99f6f1233ccb254ce"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/bsk-2.12.0.dist-info/WHEEL",
+   "sha256": "7f56e8b3379a834fcd946d5ddfdbc91e16baf4646e601574ff43f3ae0ee58634"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/bsk-2.12.0.dist-info/RECORD",
+   "sha256": "0575b31c671e2cd5837196bd6c9c1b030d4225bdbd7eab2c967dfae362c38821"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraft.so",
+   "sha256": "523c000e9be8966f6a7bc64827a8415bba6aee27543967ceb45cd44412cff9f0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/spacecraft.py",
+   "sha256": "a11b5862d9b55f234dccced7db991975ca05d4083f440bc09c9f802c5e8eed1d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_svIntegrators.so",
+   "sha256": "f2fb8ea19a30f74b686fa3ff338f0aafa360a80347a3244fc3fa02576377a61e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/svIntegrators.py",
+   "sha256": "2a2b6cd6c53494e1f9af7ab711a09dba644efa7ccb2ddb0a2da59cba5f84c226"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_gravityEffector.so",
+   "sha256": "5e697a8b3b62dbb4164b4ccbe5e552a186002149cfb9a572c558f1c7b1925f59"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/gravityEffector.py",
+   "sha256": "d2434a155a32e9a3a572d95bce1c36824c6947026563d09dd398abbbd23efe57"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spiceInterface.so",
+   "sha256": "9948ea834da68195a0520ef706170251144002c859161c051db93b48aea6a448"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/spiceInterface.py",
+   "sha256": "9251fb22988bcc04722863067de40a27b05ed00aaee27007f259806f5c4eb54c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_radiationPressure.so",
+   "sha256": "613f2068715938672c81ecae36d19f3b74ce02c8bd77dbf1b3dc0013b42ed672"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/radiationPressure.py",
+   "sha256": "644c9f61e5f75903e556d709751de473d1c6bb5623dc2401301834a714553964"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_eclipse.so",
+   "sha256": "cf45c18003fee55a198bcad8bd7c8d7631d70fcfaf0d0fec56f0ee9252a35cc7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/eclipse.py",
+   "sha256": "e0273c09268073b6b866758ba67786ef55525a983b8cef3332a45b4b4eb5b453"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_msisAtmosphere.so",
+   "sha256": "5af7671f881207d90164b8555692a41922bedd324ddbd0e5a336abb4738dbfa7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/msisAtmosphere.py",
+   "sha256": "e04187c58a47c073f43acc66e74165c18d2c7db802a316b960ec554a727b1cb0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dragDynamicEffector.so",
+   "sha256": "861ad41f54345bb3acbb48582159a6958d31bbb7a0f72199600b9be91dbb776f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/dragDynamicEffector.py",
+   "sha256": "29eb2927d68eac16bb8a988291b47ffcc3aa2097c9aea180364f77242f4c9989"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_BSpline.so",
+   "sha256": "66172d56c73777c43bb7aac390db073335a920d3276a8e12ba7bc342469e86d6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_alg_contain.so",
+   "sha256": "079a1f20d572a2824565060a79451bb30f8b9d5a1ff4d24fe062a39c81986046"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_astroConstants.so",
+   "sha256": "83491a9056a9d00db53162063545dcc2478daf379374f777d664fe87ec5160c3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_avsLibrarySelfCheck.so",
+   "sha256": "2e869e734126cea098b3fe6ede34c0f1b1afff1c184c4d2957f49b5d96462b20"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_bskLogging.so",
+   "sha256": "0f48c62e013503995805cbc15f809fc0164e247eed1fb3ec11ce6e4b2183714f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_bskUtilities.so",
+   "sha256": "41c3355e20e810b33f280b9073f977de68f88d8483af6131bd91459f3b4e1b7a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_keplerianOrbit.so",
+   "sha256": "6dafc5e5671dd5d42fad03a65be0bbb39fa93f8fcf213603f0966ecc6b77da49"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_messagingBase.so",
+   "sha256": "ef73551fd8a35324058bdf539716357f240e660fc2824c17040d3f20dc1e5b26"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_moduleIdGenerator.so",
+   "sha256": "5155bf7ddb06e825c7349f3598e4238ba298ecb8df884041de649d68cb83af93"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_numbaModel.so",
+   "sha256": "fccfcbfedd177693952e00dbe16852b1f6e5787af7920267a4025d23a23cba6c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_py_sys_model.so",
+   "sha256": "66787bfdcce74f367b2d69c79b36ca388c792db7445aa78cd5e2ec670dce9021"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_sim_model.so",
+   "sha256": "6df4e49b2d5483524426b48c404f16851964abd2ff69846baa199554510d7903"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swigDeprecatedCheck.so",
+   "sha256": "40b9cd75c5732cb8384622331ea625c08687e11fa67c6f002f758764b9b8393b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swigEigenCheck.so",
+   "sha256": "5f426650cd26d02127088ba2611281e7769d3db28af45705f7d01359ff48df02"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_c_wrap.so",
+   "sha256": "062bd4d45fea801ec37b3b83cf90626183b1e89e0832fd84d80b57ddf2778a99"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_common_model.so",
+   "sha256": "5ef292c7d5cb3306540cb78353b2d5572490e0f45b059fa26c951b348dee40ae"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_conly_data.so",
+   "sha256": "e0dfd9b124fb523433509a763b69f71f3cb31ee4c443207ca560ea3f0e1fc060"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_deprecated.so",
+   "sha256": "564cb93ce4ef49fdd6efd0c2e365163fdbff4685d9675cfc0891d16773ef87b2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_eigen.so",
+   "sha256": "6b720287861259dbac4c4ef605746209107f297ea828fd2d855c4d90d633938c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_swig_std_array.so",
+   "sha256": "65a7d762e52d11f572c10d2010efc65fa0e6e832017be08080f9fe35f20142ad"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_sys_model.so",
+   "sha256": "154907d87996bf2c9c1cf73aee1a94b351a3d468a24ed9c4ccfaedf791895b60"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/_sys_model_task.so",
+   "sha256": "52cf1d0e835e34562745cd6e7879b71936a227a34f27eb21e5c1105cd2d3d216"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AccDataMsgPayload.so",
+   "sha256": "54361d23dfaea4695aefff5a33c28d7e65f1daee429a4490a56b66df27222fbb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AccPktDataMsgPayload.so",
+   "sha256": "4dc7725b6dcfe7410430c7c79efc00c5c8be0f5f0a58a92bad53883d1399d902"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AccessMsgPayload.so",
+   "sha256": "7d59e2c5f00a3af7bc0c60c1bf70fe08873d57309648f489f709c235236686f9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AlbedoMsgPayload.so",
+   "sha256": "1573e2b2b617b2c368eae0cc6f3c031c24c21b887281ff0b68f2814f2abaa6b7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AntennaLogMsgPayload.so",
+   "sha256": "3df0d29bb4d5895a61d8bd1b6c4efc8d19c22fc9bab002c3b6a475378ce5cd28"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AntennaStateMsgPayload.so",
+   "sha256": "a913622c8b6751a818b7c2dccc314f4f731ddac8781a3cfa7172bd4f26b1d278"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ArrayEffectorLockMsgPayload.so",
+   "sha256": "8c9e42cb9e56b1e12287f706db88ce8a81cfdd5be9c6e723c30d5bb1a2a3cde3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ArrayMotorForceMsgPayload.so",
+   "sha256": "58092a3374185021a4bb2fdb84f4f8a5a9ccfec764e20c46ff4c30420a9a08f5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ArrayMotorTorqueMsgPayload.so",
+   "sha256": "2e86a71547d9e743c86bd9930d7a0f4171f0e0f1a90462d0368e84a995e1c96c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ArrayMotorVoltageMsgPayload.so",
+   "sha256": "40d995b58c3a1223695665f0cc33f8f58af7326ce472b34ba2cf56a0a14858c5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AtmoPropsMsgPayload.so",
+   "sha256": "81cb622c63032a7235b97368c499a82ab05287241640ef63b5599e1ecbbb2643"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AttGuidMsgPayload.so",
+   "sha256": "6678a99ec35f184e3293cb8deb268fdd4a437824577e4b692d76c75a144c1d65"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AttRefMsgPayload.so",
+   "sha256": "ab0fa9ca62c401270851540a6f320cc3b66005d453bdf11adcdab3d23a348052"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_AttStateMsgPayload.so",
+   "sha256": "3b7427c892e953c6c6728a7f89ef9cf29f566c76115a79d3aee2ede09c9cecb7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_BodyHeadingMsgPayload.so",
+   "sha256": "befb2810d75ffc90fe7006e6eb20c36d486679bc34ee56e686637ca4eee29788"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_BoreAngleMsgPayload.so",
+   "sha256": "8b9182c2da90eb7d33515ec9f5485c79b1d3cdd0125b7caf6a7d9fb2dd8dc81d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CMEstDataMsgPayload.so",
+   "sha256": "44555f82ea620c496656788f6e96511b96642a9f56a0e45983ef64a1516cefe9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CModuleTemplateMsgPayload.so",
+   "sha256": "17a2fb268dc7db269e102b7243891ba92fcf17a6e348e48b7371a9fe84cba5fc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CSSArraySensorMsgPayload.so",
+   "sha256": "49e3c30f982d408a860249713ab65f3841c288f207a96eaf4c77adda0b680ae9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CSSConfigLogMsgPayload.so",
+   "sha256": "dcb7ab457887731f36ed2ff5fb9aad0965ec1e72c87d61cb105781c7c06de4d5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CSSConfigMsgPayload.so",
+   "sha256": "e8c22321ab921690a3d890810d67824f2951c3342b33cc675fb4d5c1d0e28101"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CSSRawDataMsgPayload.so",
+   "sha256": "0d7e1990ee13b8ca30d1aab039af4f64d2bdff9d3371145e3c1436176c0a5ae1"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CSSUnitConfigMsgPayload.so",
+   "sha256": "d8faf19ec4ff5627e5b95b5b95c734415e530c452c93ac5e97ad2c1b388bc23b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CameraConfigMsgPayload.so",
+   "sha256": "56501ffe7abc9450f1d8381b40967f8af9ad97b6210fe488daffd4eb5ccaa41d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CameraImageMsgPayload.so",
+   "sha256": "207166155f13adca9a8efa60445b40dbb8f185e4d4f341b0af3da5d943dd9e7f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ChargeMsmMsgPayload.so",
+   "sha256": "5679516fe2d3a360b943caea5f55a1ef145abd26ce0ac7a3cb84d0754f843294"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ClassicElementsMsgPayload.so",
+   "sha256": "dc88c1f87e7d29ff5ad91cdbcb551e5e7159bb25d8b6ec1456fa473cf77051c9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CmdForceBodyMsgPayload.so",
+   "sha256": "56d960f493da1e367deccbfa3c4ac9252957ee7adcef0381f4b627e8bc30f4bc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CmdForceInertialMsgPayload.so",
+   "sha256": "12a9e3d27d375f895797bf782edb621520252727ee9f536a1494735a4fb9a24b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CmdTorqueBodyMsgPayload.so",
+   "sha256": "3c04627ae9669d643e9564b812ccf6b0a9c4c90812f08a6134e6d121691060bd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ColorMsgPayload.so",
+   "sha256": "4a940e0f6a08e15d5e62f6e7bee78d5eb46d2cd6165fc166cabd1e3d0010c8b2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ConstDynEffectorMsgPayload.so",
+   "sha256": "70cd287c1550c473c8f72f21961a09b4bc8a64454c674a0a8bf2b015375a8a46"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_CurrentMsgPayload.so",
+   "sha256": "18b953d35533ba20e7c472e251629bec58d814980279e9255db6beaa9491b3ba"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DataNodeUsageMsgPayload.so",
+   "sha256": "22be0e4f1ee09e808edda24dfd610273db85e37404635b58255654fcde9e4efe"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DataStorageStatusMsgPayload.so",
+   "sha256": "d7370b4afdcdfae04d82621d757e6d3b0608720adb152212e227af17662a2608"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DesiredVelocityMsgPayload.so",
+   "sha256": "dc571f78c7724e673807fe357fc1e1eaf419a7b57367667b5d550333f7178a35"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DeviceCmdMsgPayload.so",
+   "sha256": "fc9053a3f0dbf672f9b9a20c0b6aba54a20e5dfa37c0f33e74c3740a02b13331"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DeviceStatusMsgPayload.so",
+   "sha256": "d9fd7c7f43406b1cfef3cb59b54c1a5c2bff71a131fa7d0c6e0e8a665478527e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DipoleRequestBodyMsgPayload.so",
+   "sha256": "7eebf9dab2101aaa6c93a295722f88040a410352ec899aef4b9348a5ece76a1d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DownlinkHandlingMsgPayload.so",
+   "sha256": "8cc1972ca11bccae2847d4c085b45a95a4caa0b6144eefe0972be17918b5656b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DragGeometryMsgPayload.so",
+   "sha256": "94713beef2cff50e91f67030e7bf570aa0116145b80562613bb769c4da65ab45"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DvBurnCmdMsgPayload.so",
+   "sha256": "a09f8fff0f070a4b9974c0bee6ece0822d2877c446b3e1dddab050a3c75ef868"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_DvExecutionDataMsgPayload.so",
+   "sha256": "9235d236cfaf9c33dd7cf4d050e1aaf0c26e4e4dad91959a05bcda2b46e4c5d9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_EarthRadiationMsgPayload.so",
+   "sha256": "6dc959e4db3b9ae85cc3f6d3f4ffaffddc7b9fa10b972b3e7ae883b4bc412a9f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_EclipseMsgPayload.so",
+   "sha256": "983908f4565d3f1bb94b99742b8f7c6c379930640278cde4483d81779a8a5497"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ElectronBeamMsgPayload.so",
+   "sha256": "339b3c4059b7f54d07b09cb9a4f0073c66f39b3addce9c25d4850baaa7119ad6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_EphemerisMsgPayload.so",
+   "sha256": "bc5220bb2d79288fc674e3876717dda9716a217b81da53a15694ec3c004cd7f2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_EpochMsgPayload.so",
+   "sha256": "b7bc18502562e3607f9301bca4243102a69de2ffabfb95d7a8482c172e19f53f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_FacetElementBodyMsgPayload.so",
+   "sha256": "861c3885647690f0bd5ddd7a2489d018c05d0661bf3246538cb76745e8cfa0c5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_FacetElementMsgPayload.so",
+   "sha256": "06e86162dc98dc3181b9e842ccfbb5412998e6ef92e7d6cbe89a9a0ecb1fbecf"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ForceAtSiteMsgPayload.so",
+   "sha256": "2d0e7a94d983f4687aee48ce8415748795750ae1826bdf04f18d9f233125b629"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_FuelTankMsgPayload.so",
+   "sha256": "48a78c65d892874b5465c94c08f6c5740225cc766f4292f033bc293e52a94984"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_GravityGradientMsgPayload.so",
+   "sha256": "f5ecb602e392665b9e50f3bfbb958268ab41a56b48f15c2a4394d01ec249c8e3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_GroundStateMsgPayload.so",
+   "sha256": "522b949b7794ca6a88ffbe7f64475cf93fcc5a2709e8f899744a5e983c9fe3c6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_HeadingFilterMsgPayload.so",
+   "sha256": "5ee07c46331abc9ee6f484c605e0ab8cc79cad798357e46611142f47d61a1725"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_HillRelStateMsgPayload.so",
+   "sha256": "9a8c82e5127c69e702af61f7aa8ab45ff39ff4199480b2ba6bfa426998711e49"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_HingedRigidBodyMsgPayload.so",
+   "sha256": "88587f4cb238b123af640574ba67387f49122b19ebf7149d2ae6e4b16c451580"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_IMUSensorBodyMsgPayload.so",
+   "sha256": "acf0da740f7fa6d28543fa70dc0f147b266e117f22a69430cf8385ac1b0f6e18"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_IMUSensorMsgPayload.so",
+   "sha256": "10cbd61bc2109f58468e58779dd2b36fb6c1c04b3cc9f9087fc3953d4b914920"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_InertialFilterMsgPayload.so",
+   "sha256": "12d568ed813c3ec8113076088e456a0811f04813d5822da1592c89fde19c9e95"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_InertialHeadingMsgPayload.so",
+   "sha256": "c923cb77a177d622bb683b093ff594758abdd587221b44dad255c7732abbb9de"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_JointArrayStateMsgPayload.so",
+   "sha256": "56112265d9d35efa9f50713c609828f581f094125c133e6062f58607ade9cd95"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LambertPerformanceMsgPayload.so",
+   "sha256": "89c36dddff27568668f419f59b601ed2edfb81cb47cb287b62f1f9c11f4cf792"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LambertProblemMsgPayload.so",
+   "sha256": "f625879818c451c977ea1174a64b6f04c7b34d97891c6c26a0250930e98bd4aa"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LambertSolutionMsgPayload.so",
+   "sha256": "37fc8e494614aebd5ef58ecdb0b985b8e6beb36dca695767a4e81340dab2011c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LambertValidatorMsgPayload.so",
+   "sha256": "7b37b42b4689a029aca75a4710a080c61b0f4406676d1e2ed6b983bb12bff9d5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LandmarkMsgPayload.so",
+   "sha256": "1e424a7eb14cb846fc2df240e67c50d13d13012744df1ba8597760c6b7cdd8ae"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LinearTranslationRigidBodyMsgPayload.so",
+   "sha256": "f90952f18aa74649aa74d22353046b49ce589eef25e022a125988be785aebcab"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_LinkBudgetMsgPayload.so",
+   "sha256": "2bc28e58defe4a1fc7b66be42de2659735b05fcf6190d74eaa3680ce71da3a17"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MJJointReactionsMsgPayload.so",
+   "sha256": "8a4403730fcec22761c1bff939fb9000530359d330c9e26e4c5cdf602218ab7e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MJSceneStateMsgPayload.so",
+   "sha256": "38740849ac2a254a671b32cbfe6074bea12378bd2bae9b96f705f19e998cae9c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MJSysMassMatrixMsgPayload.so",
+   "sha256": "46fd87dae9a4c98cd0758214c1788fc90f92a83e3fe7eee1e4f499fbc5943a41"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MTBArrayConfigMsgPayload.so",
+   "sha256": "be2f99f868b6f822ccee0c5b07bbd69b6f90e97910c940b9258cdd36b8218dbd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MTBCmdMsgPayload.so",
+   "sha256": "a4c95f2295410939efa38e10e2612aa237870ed5666990b6a0c0974c76b038fc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MTBMsgPayload.so",
+   "sha256": "2a4ff341e594229bebeadf47df672de88dda99ed5efefdd2c708f632440d0f8a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MagneticFieldMsgPayload.so",
+   "sha256": "0385dfabda6c90bb84a5c6121f3a5251c521f2321542e08831d43ecf71a41483"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MassFlowRateMsgPayload.so",
+   "sha256": "1c0095c394776747c56799ef678208db02b044d8882f079ecc03d280c0334f7f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_MotorStepCommandMsgPayload.so",
+   "sha256": "db304d775c8c6db197df679374e14bd6d0d478ab472dfe761ccef0a7f70641e4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_NavAttMsgPayload.so",
+   "sha256": "d21c9381cf6b43fe18329c7489b2b4eb907b27ec42dded35795c686827508101"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_NavTransMsgPayload.so",
+   "sha256": "2068de484679b4c5b3092581aba0cb546244053b6de80ba8e2eb2ee0bb1810ca"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_OpNavCirclesMsgPayload.so",
+   "sha256": "c773ed35ec715ebce78cd0a0ff9b1f1722d4a40f8fb1b2c9480d2b37834cde95"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_OpNavFilterMsgPayload.so",
+   "sha256": "754736cdd5b4080f66ee39e2d989c3b9bcd2067146f8df1a7fb77c9696612cbf"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_OpNavLimbMsgPayload.so",
+   "sha256": "f0e43d1003c8738292cbb6a95e4dae9dba2593e770718bceba278c7131ebe819"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_OpNavMsgPayload.so",
+   "sha256": "a9f67db04895d7e6b25c4c50826dfdeebdb9aed09489b153ac00fe25bb92b918"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PixelLineFilterMsgPayload.so",
+   "sha256": "5851d6950d036e58d84a28167960df5ff0779bef433af4e1dab14694f14a34c2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PlasmaFluxMsgPayload.so",
+   "sha256": "f5991967fce0a9489813e1936060baa02f85ed2dea03cee387317d792fec6b5b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PowerNodeStatusMsgPayload.so",
+   "sha256": "7cc54492473737068d058206e1e531f49a0996ee6e9bae9dfc5161d422d75200"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PowerNodeUsageMsgPayload.so",
+   "sha256": "2a2a9405d6e494f796745bb37250a85847dd2b6984c5104488b302a2191ce708"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PowerStorageFaultMsgPayload.so",
+   "sha256": "37773bd1b67448533d8a48b6431ca5115ea24c2488d530d4559656d60c85b185"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PowerStorageStatusMsgPayload.so",
+   "sha256": "0ab8e0f8b01736c89f8b2fca8bd9af29116b7513809ff3360ead7feb5930f5ef"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PrescribedMotionMsgPayload.so",
+   "sha256": "241a570d755b5f85acef618ad11199e66568414034e54576c110fd92e1f09675"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PrescribedRotationMsgPayload.so",
+   "sha256": "ecf2f9229ffe650c195d72a4ae45149f8c94e00eb018ba8d7b3a5fb9bafd7499"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PrescribedTranslationMsgPayload.so",
+   "sha256": "7f941ec77e77b0564b3ecad42feb4acb03f8a480d6e9493e47238cad41858da4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ProjectedAreaMsgPayload.so",
+   "sha256": "5e401d342216de9ad2f0c12c73c78d9bc6e2c4d6e6686bd047d05910b0ada002"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_PyBatteryMsgPayload.so",
+   "sha256": "706af70a05b86d329b72916aff2e9f6cc324181070bb2b8e0ae452956bba6108"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWArrayConfigMsgPayload.so",
+   "sha256": "08182e9a16294dc45d1e767b39fce875d044182563dd7122dad2fb346595bb85"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWAvailabilityMsgPayload.so",
+   "sha256": "4066cdf6f3baf52119494926f1c6605a18b8109b7f8a1ebf282541ea9255fb51"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWCmdMsgPayload.so",
+   "sha256": "9c677bfa06593de5e20233c12a688dfcb4eb960361f760752036c2249f26dc8f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWConfigElementMsgPayload.so",
+   "sha256": "8a40694ec11350e12b5dc9b9d26c0594336e9093630f676065c7a4a92c8ed17d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWConfigLogMsgPayload.so",
+   "sha256": "b1d63ec8f1070fe3c949826e31bd95f5fb7f0e37bb52e8b7bb576e2a56ae6b67"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWConstellationMsgPayload.so",
+   "sha256": "c0a92e3748703a8da90c3068747dca5fb85c9697f74ec3eb30a6589a5674293d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RWSpeedMsgPayload.so",
+   "sha256": "b898bde071b87f98c647ac78887679fe296258b2f277feff27d1334747610a29"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RateCmdMsgPayload.so",
+   "sha256": "f771cc8ef7aaf92da09fc1c813c4c83fa79424a07d829574f2c82de5118e2d40"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_RealTimeFactorMsgPayload.so",
+   "sha256": "274f6d9ea10814158410eb2c6c83b8ce3d0ba6fb8bd8059f21ef720c035ee2f7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ReconfigBurnArrayInfoMsgPayload.so",
+   "sha256": "d3e0f068ade36d01c7f31ec1529e6d7a94be0814f0337500592b1116c33fe0a7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ReconfigBurnInfoMsgPayload.so",
+   "sha256": "8a05ed943765242661551a2a73c5ca0fbe185ba4a83e7d5dd7b2009ada89997e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SCEnergyMomentumMsgPayload.so",
+   "sha256": "6e0dd711d5bb12ae73966518f87efc6cd23c394afe45f3e423d1d4987cf73e52"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SCMassPropsMsgPayload.so",
+   "sha256": "f89977b7de690b1b0ae798757d90c39a0d6ea03eddc3c1ff50514ef3a08ef9dd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SCStatesMsgPayload.so",
+   "sha256": "cff258d0a89fa917c620bfe37892c969df084ba2ea604a213f6ab1d117f24765"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_STAttMsgPayload.so",
+   "sha256": "6176f71e5ab141547b2b49d29758858e87ad57d64197d4eeb9a5cac9c6f742b7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_STSensorMsgPayload.so",
+   "sha256": "8630143d6b3538e930eebe74c36e9a09b7754365de70ac87b6c2f22e238b4c59"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ScChargingCurrentsMsgPayload.so",
+   "sha256": "fa8f08e98a2afa7581c55cf454ed5581f9cac10dd064671b7ba73236e3ea1f27"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ScSunlitFacetAreaMsgPayload.so",
+   "sha256": "1f3afdfe128e99206b90c0370b127edf5a9e0edc6444c0884efff60dddcc56fd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_ScalarJointStateMsgPayload.so",
+   "sha256": "4ab2f98b5868122cf7610c908ec0bd392445310c15424e4bbcdb07ac92ba997c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SingleActuatorMsgPayload.so",
+   "sha256": "0a9b703e9bd7fb960bd3ea503e621e1d3aaa60ee0ee87e38d8e1daa14d492e27"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SmallBodyNavMsgPayload.so",
+   "sha256": "949c2fdd87b72e090d51fb14dc30083853750a4891567df302121bf9b62f9504"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SmallBodyNavUKFMsgPayload.so",
+   "sha256": "02d56f0c388ff375e690859f93258ca13158209fd654e7f5394d4cea607e4fd1"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SolarFluxMsgPayload.so",
+   "sha256": "49a8b305f8239af18a6222398bd1ba53244a863182a451d9f5acabe58e386fe6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SpicePlanetStateMsgPayload.so",
+   "sha256": "b4a3fc7c3a711e3fb2f41eac7892fc9a6622298fb41c8a4355f23a8ccddc746b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SpiceTimeMsgPayload.so",
+   "sha256": "bfab269658d9f900c4c691366b83468da7d72feaf040067d3023d46bbb270e53"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_StepperMotorMsgPayload.so",
+   "sha256": "a01e2e4b4827c1e5d158199f8fd676e6c314747fccce3906a777cc27c85d2408"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_StripStateMsgPayload.so",
+   "sha256": "be300c7137ba38d31426582998f3917ed494ef370d86cf20ce10bf13b51cbc0f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SunlineFilterMsgPayload.so",
+   "sha256": "221b94a885d05f09765e3ffe58cb57916818c5ef22e4544fa7f3fdf3a386b092"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SwDataMsgPayload.so",
+   "sha256": "084fedd371323678d115a4e85b694c6773b163fdb6a15b3bb3b3f7c303929eac"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_SynchClockMsgPayload.so",
+   "sha256": "115e0b2ce2f1ec29f97e0c3337f5619e24e0cd9b56590ccc4b12b24ec9814ff1"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TAMSensorBodyMsgPayload.so",
+   "sha256": "4c706ffc95b6acded6845d63c870867b17297750b1c1646db960a4140eda3588"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TAMSensorMsgPayload.so",
+   "sha256": "08b725b6445969b96f61943a21cd7499500725be7ec4fb126f83d4380d810893"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TDBVehicleClockCorrelationMsgPayload.so",
+   "sha256": "76312eb26139bb6c448591cdedc59ff4042e81fc102e3aacea669d155cd87ea7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THRArmConfigMsgPayload.so",
+   "sha256": "6ab534c8d53c3d191c325c8c5955def426d3a96c1a2fbecd75159c246635a023"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THRArrayCmdForceMsgPayload.so",
+   "sha256": "cc31ac4c9da8fe4198e25bec7aba33b9ec7aa7ae3a8717675b9401accb2b40f9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THRArrayConfigMsgPayload.so",
+   "sha256": "95a229273d95623f45760e7fd6b9aaa9c190ee9bd7c30590ad2f7f035d62a1a3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THRArrayOnTimeCmdMsgPayload.so",
+   "sha256": "cca1cd84c9447b019029d881000c5371782bbb22c9ce615dc73d9b5530160989"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THRConfigMsgPayload.so",
+   "sha256": "d29fd5d7622025dc22804ada08949839bbbe6a33a89d90f35ee9cad1ef5ab89d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_THROutputMsgPayload.so",
+   "sha256": "4a1d97d5d751ffc07377ae2203b92b5240121e6de4cefa0b39d8ba3d9f0063ee"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TemperatureMsgPayload.so",
+   "sha256": "7fc041797bc79e6a8bd3a75b3b91ba41853cf4f94d68163a740b2e3e84c7455f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TorqueAtSiteMsgPayload.so",
+   "sha256": "e529a53e85eca506353ac18e0aeb8677301c012d390ecaeb34a24936bf3a313f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TransRefMsgPayload.so",
+   "sha256": "7ebe6497989783d41c678515ec7dd9e19330847e183fa8142e806800c764f6ac"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_TypesTestMsgPayload.so",
+   "sha256": "16f7c0936ccfd85a09c3d97969f505379c7d9943081ad42578755ebae0997cae"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGArrayConfigMsgPayload.so",
+   "sha256": "af14e5b3a641ac47acce8f641c3a045e57866315e6c89bee4a4eec4833f194cf"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGArrayTorqueMsgPayload.so",
+   "sha256": "712f24b5be48b4af265cfeddfe5e1ddb5e99015664700271b42be67b1de15522"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGCmdMsgPayload.so",
+   "sha256": "f182260ae5aae1cdc2f9793e246120990592df7d992dfe0c2157c6dee2a7d2cd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGConfigElementMsgPayload.so",
+   "sha256": "97790decea5f6b13257b556d434b2be91ac9bfbf3d246a067dae3c686b538f51"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGConfigMsgPayload.so",
+   "sha256": "1a3413c087306d9692d77768251a9de59507c7cb53e21a6557b75f214a26bcd7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGRefStatesMsgPayload.so",
+   "sha256": "d3125d3d844c0b9aa60084e240c130d9a70fb86d22758084c74209cfff6b7a9c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VSCMGSpeedMsgPayload.so",
+   "sha256": "2e503e19542493a2f1b0d70cc97b0e674edda81c5ff602def6a3892a53eef130"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VehicleConfigMsgPayload.so",
+   "sha256": "2c05825fb3584b9301ccc03f2993971ee9c46cddc2d9b8540ed6e6bede5e1e79"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VizUserInputMsgPayload.so",
+   "sha256": "4f393de2f536f02fa3f3b503937caa073b81ecdc66e090f3721d5d584c56e51d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_VoltMsgPayload.so",
+   "sha256": "3bf48b4abe80fb10155b90c3db0cee303761d7e05dc007836844b9d79915336d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_WindMsgPayload.so",
+   "sha256": "7a6d978eaf0b851e7c2c680aaebf82eb63be86b65e9ce2a77e8470b30c2cc00d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/architecture/messaging/_messagingSupport.so",
+   "sha256": "16e25c75e459bce5862fa9f9c16517727558a6b65ff7038336b15eca2534b3b5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_attRefCorrection.so",
+   "sha256": "24f32c2243712be38ae5d895e258559dc7216d002b14a6328932cea9c28fcd3d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_attTrackingError.so",
+   "sha256": "e528634ec66c77729c8e10fc169731b44bb867ef773f12c23943cf39519f272c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_celestialTwoBodyPoint.so",
+   "sha256": "2a18e0628f36e595763c535a1c0d9cb0f5af0303abf85897d8d1239630223081"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_chebyPosEphem.so",
+   "sha256": "5fd379128ce0b815c31f198e59203634bec91d677ac9706834cb3d28c38ac468"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_constrainedAttitudeManeuver.so",
+   "sha256": "4f3496eccd866ad07cb080ad342da6bcb81c39c38406782d54b9990edd723020"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_cssComm.so",
+   "sha256": "45c72fb853d68bd96243b4d30fb4bedabe1950428f6d10c3b51fa05b40a194ec"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_cssWlsEst.so",
+   "sha256": "841754528f236f5ee61e744e99388954a58638d211b26e3fc706f7a1e535ab08"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_dipoleMapping.so",
+   "sha256": "bddbb0af11ba9c48ce27f79c69abf8d6dc94180d8f5ada8813596763d6a053a5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_dvAccumulation.so",
+   "sha256": "9713e26ee4582275607b6ab724e1beeed588847c4c25cac54dcaee24b3c92226"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_dvAttEffect.so",
+   "sha256": "eaed23b5819b3cbc561aaa981d4b3b27a631a7c7696a6302e4605cc96866ff2a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_dvExecuteGuidance.so",
+   "sha256": "2c8b3ddc6d28827f79318e07fe9673858db6aff266d66a25a27ddd07c20f38b6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_dvGuidance.so",
+   "sha256": "dab5d86e7b38697fe34eec2553de2c7f7ebaedcf83ab64c29cacf3582532d850"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_ephemDifference.so",
+   "sha256": "ae61fd79e7a69e4dc114ac6f068bd5d0b1fadd1643381be2e7d1789e38d5d8e8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_ephemNavConverter.so",
+   "sha256": "62410bae8592a0a2dab987737129d38cdc4a8cb1cfd06d4308276d3d4aabedfb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_etSphericalControl.so",
+   "sha256": "e10458b390647228ef499e35691eab1e8424620df6fe286a5e00034b2bbe1eb9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_eulerRotation.so",
+   "sha256": "d7ba6a2acb7bbabc076c4acc48efeff9c66d7e543b58ae3737a358e3e4f979c1"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_faultDetection.so",
+   "sha256": "cfb497e9bdbc2ff10ab55d1b13bb0c2506432c5dc8e3c5dbfd667ee97da47998"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_forceTorqueThrForceMapping.so",
+   "sha256": "aeab50cb25283b383cbf81f3e5cf3cf25188c9463b3d907f0b471c2ab2ee85c3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_formationBarycenter.so",
+   "sha256": "887618cc98a6e89cc6c46260eb4df88caada50575e79fb757392e39655be2f53"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_headingSuKF.so",
+   "sha256": "2f9278925094539f5982580d6962dca53727e835a28a91c4230f8c2ea6571bff"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hillFrameRelativeControl.so",
+   "sha256": "6b061fd2ae67851cd7d2b06226bccf9e7c52006a810e2af6581b932c15115a17"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hillPoint.so",
+   "sha256": "5bcb73144da4df4676ea10c4f6d4cce34205996bc53c521cd2d87e47b3b96889"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hillStateConverter.so",
+   "sha256": "4d6f76ad5da35909100051b71722a3157b04a0261c5b7f88737c6c255ef8fc12"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hillToAttRef.so",
+   "sha256": "64d9eb0a43f0e2e3215fed7cddab21c37a73e3948eb860d4f2d2f91bc60ba849"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hingedJointArrayMotor.so",
+   "sha256": "2849fe54d98c7d8db214b1ea9e4f1740576075584d8789e6d090a1773b394ca8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_hingedRigidBodyPIDMotor.so",
+   "sha256": "944c6aa91c5a46c784700e2725b01b6cce97be0b3b07227cfd3a31933aa91399"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_horizonOpNav.so",
+   "sha256": "9667674b32c8073f47b557b4c49de65ee2e61cec349398cd4971978f84fce553"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_imuComm.so",
+   "sha256": "16f1b33ec2ba8ce36bf7dce852f09674fe70db8b4462ba824500830a23aa45b8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_inertial3D.so",
+   "sha256": "5eaace277f60018f999e1fd5a851f531c69b4ad65ea31a959ea5649bf595fc92"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_inertial3DSpin.so",
+   "sha256": "5d50d10279b9622532895939b6843257e0eec0ed445e29143f3ed7dbd544f7c4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_inertialCartFeedback.so",
+   "sha256": "34f34d7f6870ce944b13a0b83c255431b42134e227edcb788a177f97087fcb08"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_inertialUKF.so",
+   "sha256": "6c72fe051a8d8c72282029cf835993f5db409482638518b9733eb59d0bc7c566"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_jointMotionCompensator.so",
+   "sha256": "f76300cf00f53b6452a03e050f3b7902bf5969ec3269c2348bb407d657dab9e0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lambertPlanner.so",
+   "sha256": "7f64177a21678b7d028532f7a4e5f0369defcc265e2187d296bddcefc50b0d40"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lambertSecondDV.so",
+   "sha256": "c8b1df15c2562b1ade7650c8e11634bd262699f9c1365f615e4c23d00ac3c220"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lambertSolver.so",
+   "sha256": "3befc7d578ef8691307e3e959902e894a840bf2d554413e8ee20647f40dd7acc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lambertSurfaceRelativeVelocity.so",
+   "sha256": "183d186a135d3986bfd343ae8964a161cb1f5ee9f49defe4243cdbb658026306"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lambertValidator.so",
+   "sha256": "178f51d4f9efcf21ae0742593bd5351f0741fca7571cfde891e4d3ef10d13c15"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_locationPointing.so",
+   "sha256": "8405d2c5325564af778e21e49894c395a5fe0b6eacd8ba1e6becc08d9b41295e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_lowPassFilterTorqueCommand.so",
+   "sha256": "f0c4936ae0904af0586d68e495e0402653f344186b1ba5ec5c403ecb68d2af82"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_meanOEFeedback.so",
+   "sha256": "f9fa90adb2f7a64ea4db2d7d49cb1819c05c1b033c5caf840c4a55b46908ef28"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mrpFeedback.so",
+   "sha256": "e2c05cd0409adb36b9a85b399bb0b668abb8fb0c86768daaddaf365d5124aa23"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mrpPD.so",
+   "sha256": "c1cdd3ef81d158fa2e11ab5bcc2dd8a70f0fec0808d973e8a238f72221f20aa7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mrpPDRust.so",
+   "sha256": "f1bf0982c914a4c11880eaac70cdccb5e27dcc6413fcbdad4db26f8e5546db7a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mrpRotation.so",
+   "sha256": "5f9bde1010fedb6bc6660ab467b1774a2e40a677240e51ca6105cff8b7d42ce4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mrpSteering.so",
+   "sha256": "4dcfb563ca2dcf9149c4c3aed0a66d068b18b82c7eab500baf3f5e178f65c24f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mtbFeedforward.so",
+   "sha256": "717cafe935238936b0c78e3ff24cb41f074e7a9b3bdaee38da1fd5eebb5b3c26"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mtbMomentumManagement.so",
+   "sha256": "6ed5056a9438f08ab80cbd60123eb5416cde3cc4f5ca35e17f4daee8de24085a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_mtbMomentumManagementSimple.so",
+   "sha256": "6f95b7090fd651f5632f59930423961039e195f7b32b06994484bc246e871fd8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_navAggregate.so",
+   "sha256": "fe46e9152db5c0bccaef52803980be580b67335cb369dcd80bc5181330b7262d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_oeStateEphem.so",
+   "sha256": "11fb343bacd336989bba0128f7250278a68a70fe121aa0b80614dbda9cb6be31"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_okeefeEKF.so",
+   "sha256": "2d9c5720c5fe9676a769914b9d1967f3d37da7059acf3fdb8d43986292ef3111"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_oneAxisSolarArrayPoint.so",
+   "sha256": "9c515b4af23ba9333aeee7f1a7bd47ca314868f01ab09f974f16024a6daef6a4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_opNavPoint.so",
+   "sha256": "a5d89038a3c94e13a1f0951687530b3caa701dfbeaa9cbcf43aa6ba58f76c6d2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_orbElemOffset.so",
+   "sha256": "c4e60f1f94da8253a17528544d1b0d14ed756b0864e07e7932ae4e9745e7f5dc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_pixelLineBiasUKF.so",
+   "sha256": "862c4d48eff3235f32bae98a540a4462a85e41149ea6c0af5f067c42d79ea6b9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_pixelLineConverter.so",
+   "sha256": "1ae5d4c3ff6b2e64ce4852fde52116df54dcb7065d57408a912b0cd8e67fae31"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_prescribedRot2DOF.so",
+   "sha256": "da15fe4f67cba7f0b4d4e0ab0d573d02b1a379688d58888de9e2579350b6fd0d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_prvSteering.so",
+   "sha256": "7d126312d4418986b9a560b7ad929501fcc497cb9f7fa6a0f36203df0cd5c45a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rasterManager.so",
+   "sha256": "f08ce2cf1fadd0cc33a4b429bd0243b35e1624eff17ff262977e397575588940"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rateMsgConverter.so",
+   "sha256": "5173602b9ddb2cae7de6ae2241c2f3818546562abd81ccfb8cf5e76511d62898"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rateServoFullNonlinear.so",
+   "sha256": "09bc8353163735f4b197548baf40ca970db1d7063491782c549a9a2003ea8a98"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_relativeODuKF.so",
+   "sha256": "cb51ba1dc3eb1797b0d9243d85906a4ffb4b9c1cde897a40dafbe08f4ddc8614"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rwConfigData.so",
+   "sha256": "03270e9ff5321bff46bf77eb7fa133efd56a9ec1715f2f71f4be74390fcd44ea"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rwMotorTorque.so",
+   "sha256": "645b818f9a2077285617e22668f33ccee43b9c5a9436ae17e90fd23b06e7f2ee"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rwMotorVoltage.so",
+   "sha256": "f70c9893e9a043a40367a72d77180123204c20673cd1b232c1fcdf937a33704e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_rwNullSpace.so",
+   "sha256": "c317a72d05689833dedbbcbdd162a4143dd955abe421923028b153d4f256ed61"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_scanningInstrumentController.so",
+   "sha256": "a50f63f8e04054035ef6c93052cfbab84c9a7b0b16e615a0e4faf96c73b16edd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_simpleDeadband.so",
+   "sha256": "fd62e3dd31e46a8eeade9171e3b204c608f7c09b7d7df140e3a0da4db69d8b94"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_simpleInstrumentController.so",
+   "sha256": "1e6034c589ea68ed48afec38de50e4be73c4cc52e9e0edb88950a92e48baf4b3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_smallBodyNavEKF.so",
+   "sha256": "8a3cdbfbd4aaeec4ca8447ffb6a3cefb40ce7589169f10bf5ea86cb228750f7e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_smallBodyNavUKF.so",
+   "sha256": "f21df1ea6d26554ee3b444281715d39c709ab499d421964d4aa67fb926174e16"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_smallBodyWaypointFeedback.so",
+   "sha256": "14d0109159b1f19f4aba8cef6dbf8e752b47280a93e23e127e9a293cd38a2c2c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_solarArrayReference.so",
+   "sha256": "b58a22ac6058dcc2de64b66f112c9e2525c745b9d77042c3d0982bf208e1d929"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_spacecraftPointing.so",
+   "sha256": "b0b69e11e6de255c347356a3527c66c62e2f5d1a402351d98d0270b0a26180a3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_spacecraftReconfig.so",
+   "sha256": "53ea43d21db69c364fa8fe6a1d336ab1f8e0d90b69ca92ebf17d18f4a4b3ef6d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_stComm.so",
+   "sha256": "e9e79d7be4153155ffd4afbfac4ff45d0a16d55c701d4dee32fb17a8b1bb6d2b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunSafeACS.so",
+   "sha256": "8ed56cd62349b75ae101065c80558bc95d90db6cb17cefaa108444045b78701b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunSafePoint.so",
+   "sha256": "afadb4d85ecfab974cc9e3b435228e6f8b223bce4136e07d41240da0658d4814"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunlineEKF.so",
+   "sha256": "26c128869ddd20481fb3c0574be8ce621df6bb28ef2bc6b3c6543f1e9725a2a5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunlineEphem.so",
+   "sha256": "37c4f77c7efffcf1c1616e91a9eca9125f5aff015a22c3c1694bbca0fbfb23f6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunlineSEKF.so",
+   "sha256": "1a1d5f84839511aa65a7dc4d8be40fdb9c17b07ddebcf96767908e2e08f9ae8e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunlineSuKF.so",
+   "sha256": "e5b36c946ed19a605e5b7bbed1f51270c33ba33dca921bc04d4fa94ef04cbe3a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_sunlineUKF.so",
+   "sha256": "da269c92e866c9acadedfac5c6b210d24c8d2b809e924eb65d57609dd3381883"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_tamComm.so",
+   "sha256": "13eaa8b32a7b9ed8f0e30d9dd562bfea4ec51c75c54c8beb8e583f55450aa780"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrFiringRemainder.so",
+   "sha256": "1b64f533dd51e306bc371cdcecd7a37a9095a39cf2ea50c5c56a1e9fa58b1212"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrFiringSchmitt.so",
+   "sha256": "974b429446c9f5b4efda5d8d5c7d3cd48f021aec8693118b0a7c95f8eda1215a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrForceMapping.so",
+   "sha256": "8b18c73251343a80af0292526f89dffe6fecba2d59599a076836a6d9e4053488"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrJointCompensation.so",
+   "sha256": "2d444d7675727bc292ca5711f442c163a85371f4e54305054b05947565c6db91"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrMomentumDumping.so",
+   "sha256": "233bfa392aa0c3bbd57de12b5cda3ba400bb5fb307e02e180b0a318c0191ef16"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrMomentumManagement.so",
+   "sha256": "5677ebf2ea4f49719dbeb51adaf0ba6c86e21be66a48c4cffc8ca85f31482a96"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrustCMEstimation.so",
+   "sha256": "b4a9d38c93da65a3896207bfb4f4dce9019b02784a6f534f3f011a2c05c9051b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrustRWDesat.so",
+   "sha256": "0d6ac252a436d5c7f72862e6fe7cb8d01e590fd26f3c0162a27898ce18161e2e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrusterPlatformReference.so",
+   "sha256": "b2e2bfa8d3231ef4d8e47c8e46b3ca7d46a654b91799410a9c00aba6cad14925"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_thrusterPlatformState.so",
+   "sha256": "e9cf8b1d07967b42bd38996c58a2c2a605eaae8f247852985848d1f9e4cf983e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_torque2Dipole.so",
+   "sha256": "c50476861bbe42680d1d388ab2873d2ad5a1d667bdf7b88d78434ee26c9b4e2a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_torqueScheduler.so",
+   "sha256": "9c8ee9af2b1101566600149f18552a30b4818e773c05af1669b99ca5d7ee4553"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_vehicleConfigData.so",
+   "sha256": "e0130c3d3eac6bb0608e072604b9d52715872366bd6875cde09d50e99871fb89"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_velocityPoint.so",
+   "sha256": "24b922d68d2d99016cee850247592b8ac431190c595f7c6b15646da732d6cbca"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_vscmgGimbalRateServo.so",
+   "sha256": "87db63b667847d5880c43c5c7d75197dc62eeed44c5b980266cead0452c6b183"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_vscmgVelocitySteering.so",
+   "sha256": "1cd0cd93a167c07e95d9bb07099a550dc88af92ef62a94ed819137f2cacd4b6a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/fswAlgorithms/_waypointReference.so",
+   "sha256": "b39ff04ead601c5126bc6538c7e3752e43be97a1ee85e65b3b9318df52b53641"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/moduleTemplates/_autoCModule.so",
+   "sha256": "2bb69a9b5bad58c2874c722a9bd0cb2f86b1265a7a736dabf6de892d7aa92091"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/moduleTemplates/_autoCppModule.so",
+   "sha256": "0af0ffab723c880932882be2ed4c243486f17cd0f7b3918874669e60af9467a5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/moduleTemplates/_cModuleTemplate.so",
+   "sha256": "41a1e64b955e30f6425dd9422aaf94c9976b7d340d5b0f9e21854e33fdca3a6e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/moduleTemplates/_cppModuleTemplate.so",
+   "sha256": "b916859ce4f9b50e61d0be3acc93afcc101cba2518fd68d371b9627c9dfaf713"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/moduleTemplates/_rustModuleTemplate.so",
+   "sha256": "2d33cd3da90e0d24613632cfe2b2a2d174c3407b1cb97081934241791f55e151"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_ExtPulsedTorque.so",
+   "sha256": "0fe9e9d797e24da3bbf566ad4e4f9f135a66026c6353b70a20ba6e221971af5c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_GravityGradientEffector.so",
+   "sha256": "a49dc7b6541a0733d3f0d0fd590b57d2153a6f63c5b836447fef024359215d19"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_JointPIDController.so",
+   "sha256": "82889fc32e2d395cdf8a654e96e00d28a937dec60981fbfa6e11128320a26655"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_MJJointReactionForces.so",
+   "sha256": "052b2c6a1829d79a847b0b09d0049ee76407c6776bf230e0d44f6384ad93302a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_MJSystemCoM.so",
+   "sha256": "4a5d0076d30651c47bbba4b98f830ca7fdab3e32e65692a77592837667ebd7c6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_MJSystemMassMatrix.so",
+   "sha256": "299c4a11b9c1a6e1526e32b0bf12e42a25199f46ea042284172b140258f8b8ff"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_MtbEffector.so",
+   "sha256": "da91a3075d615b00c24662d773d30a7aa8ce13bacc889365939c7488fe9a38a4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_NBodyGravity.so",
+   "sha256": "31a85c42a4235e6e8db7f1a599f8ae5da99451e0cb3d5bc50e13deea2e9ef0c2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_RWConfigPayload.so",
+   "sha256": "cfa02ec83806d7431e0ff0e3309f9fb97bd763b8e36cd2bf3ce622cb61b6b043"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_ReactionWheelPower.so",
+   "sha256": "0ae30946e17906f9d5e3dd3c8c9da5b407cf4ac7c5993c66919d8a6f3677ecf0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_StatefulSysModel.so",
+   "sha256": "cd7c4c7fbc3faf5ef088fcac9359e00b579589055e7aba2da5a74312331c69d3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_THRSimConfig.so",
+   "sha256": "641fd04ae3763b39891a5f86e3339b4d1100fa0d9572cd59954260be26df76f0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_albedo.so",
+   "sha256": "2eea81f60e75fc65e872be9cb48f029b20ff3dd787c3d6a41b0ce80bb69f4d3a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_antennaPower.so",
+   "sha256": "6d8ed5c15c850ec557caacbcf62e69d58065379f86698a618bbe573ca834849a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_arrayMotorTorqueToSingleActuators.so",
+   "sha256": "4bf056a5da40a8b4dd4b590d972c51e80ac319b1c18c38b14121826dc4f87d77"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_boreAngCalc.so",
+   "sha256": "76c7151341acc660fa864872c755765b70f758d40751a2d83f4fb2b3d1089afc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_cannonballDrag.so",
+   "sha256": "a5a086c77b5030ef438283f5751168a9d5685f211db1141e4fd7f3db7a41bb39"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_cmdForceInertialToForceAtSite.so",
+   "sha256": "c81dc6eb05728ef942f9873945b6ea77b2f64e5f0e873fcce608ae8a4dbf1529"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_coarseSunSensor.so",
+   "sha256": "6baca83b74feca373fcf71aba402e1717370f933fee89a5748d6275cfa1ac17c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_constraintDynamicEffector.so",
+   "sha256": "4ffe8afad5e002a98968927631fa4a1f90f8e57a9af8d17dcd7b852adb7d542b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dataFileToViz.so",
+   "sha256": "34227f5ef26f97968ef55b5929f3886312a2723e546440c629d08d7385e8d6d7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dentonFluxModel.so",
+   "sha256": "d8dda30eac24f52b1dbd5f8d9100133ceb5ec6bd686716a47ac7245d497ee1b6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_downlinkHandling.so",
+   "sha256": "9b5cfd1f9829515c22886041bf29733e3773692120e1d2e71802b41757a01fe7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dualHingedRigidBodyStateEffector.so",
+   "sha256": "86a56ff0e96a4409685e56cf03a4555994d116774fb850e8ecc92167756fceab"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dynParamManager.so",
+   "sha256": "9a4b3b26f5e468de72e4aa87453768596d18876af7609a17417b7f2a29964e7e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_dynamicObject.so",
+   "sha256": "fd1f954fa3b38e555f248f346adb8ab22a1a825718aa2d9234e25cd19e08c772"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_earthRadiationModel.so",
+   "sha256": "480f15008d516540f4247fcc005cf9a642cb5cecc04ee0448a151347410be93e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_encoder.so",
+   "sha256": "d8a649f59425083af2206a9f80d96c4e26b247b988b6ce91c7c850a0b91116f0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_ephemerisConverter.so",
+   "sha256": "a04d738a4ffbc665b2a2245b3c7cc57c4ef8967c544551240d347fb42a09e23c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_exponentialAtmosphere.so",
+   "sha256": "ac33180e31ec6f9f8cf8883b5e7fbbb0b4170f7bfe9d4a703e43aa33f41a6061"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_extForceTorque.so",
+   "sha256": "7ef962f8cb5e066d03a1c395f35ace6d0a2aaad736a22f5b474eed638902cd7a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_facetDragDynamicEffector.so",
+   "sha256": "5e43f8c7f8c149083f98ae0ec8be700ccaa89a8b81e8f65a656f916cf4c8f4d4"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_facetSRPDynamicEffector.so",
+   "sha256": "3289917ee3eeed4905f216988120a9c0d7283bb228514b471c03f43ac0750382"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_facetedSRPEffector.so",
+   "sha256": "bc702312208921f0a0badea9a36513030195407e829e8da87322acaeb76f0582"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_facetedSpacecraftModel.so",
+   "sha256": "ae20979e9d094e4cc795f0f62f17eefa94e9d2a91f40f958a91d63c697ab6547"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_facetedSpacecraftProjectedArea.so",
+   "sha256": "32556a57167a57e539f7ea8df67aeb678d68de4124c0efec13d1c570ae568119"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_fuelTank.so",
+   "sha256": "c009fdef23ddc80ffa29b5e4262447f86bff616880c88bbea5e0f4a7f27e5fcb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_gravityModel.so",
+   "sha256": "221495c85cc688dd9358611f6f0478aaf6ecb0f674d12126fa38aac59a118196"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_groundLocation.so",
+   "sha256": "8eb754d3c3afaccd295c86c1cc5f6d267539486bf310a00d8a1c45681aceae42"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_groundMapping.so",
+   "sha256": "4ac3e29c24ce54ba06c21042049700693e568813798c745534ff49e6a6086d9a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_hingedBodyLinearProfiler.so",
+   "sha256": "b77567f4a5547d564909fe6a6f5443862aee67d5fc207788cd26ddf991d78b51"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_hingedRigidBodyMotor.so",
+   "sha256": "c7633a31b3dee52a7f41e9beb7a5369a3c82f1bed00e0596f43270eeadaa68bb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_hingedRigidBodyMotorSensor.so",
+   "sha256": "f286d65925423f1172e48e84e1957b34615a7e6dcf35bfe45eb35548bd2e3495"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_hingedRigidBodyStateEffector.so",
+   "sha256": "760bfbbcfae794de5df5c6d25ddc8cd2f67f754dfddc4588f598ce97a6468399"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_igbmAtmDensity.so",
+   "sha256": "d73a60a5a02e6d1f2ed05906573be882a0449959e4ebbd3cffc5c28f7ae1155a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_igbmNoiseStateEffector.so",
+   "sha256": "6b3c2b0c1c14bfe72cfaa88870abead37960996259fd544057dc54057ccdb009"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_imuSensor.so",
+   "sha256": "fb9d3a0332c9e3158df0d06a9f23a478d6df523323ac778f48999322ec1173ae"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_inhomogeneousGeometricBrownianMotion.so",
+   "sha256": "b06519a764379b79d056c1521082ad26fe52395f77cb59dc3150b4d87274e55f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_jointArrayRefProfiler.so",
+   "sha256": "3ff52f4def1fdf2cffd0b7947602f3adad187d5b818001774123bfbd844d9235"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_linearSpringMassDamper.so",
+   "sha256": "16e64270430939372fd26f8df3ccb523849fa1d9c65ecf042e9aaaf2a419996e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_linearTimeInvariantSystem.so",
+   "sha256": "53ef0a8ea3f3e5598da87f9f45b48bb9eceb20f8d2e8e1f03d477c95c2b99eb9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_linearTranslationNDOFStateEffector.so",
+   "sha256": "25d78e89fb1ade413e00cf0665e1257301cd3439029feb444a796aab001fe601"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_linearTranslationOneDOFStateEffector.so",
+   "sha256": "32d4ac02402c5748c2c3c6b87e28118d064622f2c346cc61c4e43dbb12248e54"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_linkBudget.so",
+   "sha256": "50a0ce9a1aa7976cc1e819cd8b6781f081699931040b27250d03a60936062920"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_magneticFieldCenteredDipole.so",
+   "sha256": "c470f9ac2dc038166da8dc6860849a68b585b803addb24115ed25f8986d56483"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_magneticFieldWMM.so",
+   "sha256": "35f2f4ae10a6c52c9d67f4c2f67a556d2adcf7ebc8b8b13686b9d667b5f7f246"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_magnetometer.so",
+   "sha256": "5179e62e8dfdfb4376bae2819f782ff33f01ff0db86319f456bb279f21e17dda"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_mappingInstrument.so",
+   "sha256": "b007c35fef2f4ad0a5a6a51be274f9823f07edf1191cb9a7619b4f45cb8cf2c5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_meanRevertingNoise.so",
+   "sha256": "398a02acdb87b13d57f8a565fae5994fcce6b07145cd14dd1321eaed66c19bb9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_meanRevertingNoiseStateEffector.so",
+   "sha256": "ed035e548bd40d0761c0e3ac63839e4546d7bf6363fdd63638a7a456745217be"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_motorThermal.so",
+   "sha256": "7dcec911d246c03a2f2c4d53fc5958f8eca3b9b6a21de18b573c0e413a96b8a0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_motorVoltageInterface.so",
+   "sha256": "3df3d17b1f724708db28fa521583ddb73c7530c7a06dd2938ae06934f7b92985"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_msmForceTorque.so",
+   "sha256": "facde0ed0a45a0ecbbccabf2fca58a51b0a6ad99024128566e6bc827b5d945f0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_mujoco.so",
+   "sha256": "5e95a44ee40df275b12eb628dc3bc5d1722148d63420c881c95119a62a50d94b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_nHingedRigidBodyStateEffector.so",
+   "sha256": "95929c91825759810b5339e483bf3baeb47ccc23f852153e9ec94bee2e7acb6d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_orbElemConvert.so",
+   "sha256": "b25b7c5572f04118dbe868cc37649097043dff6d83e7e2cd3b872ef819a320fe"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_partitionedStorageUnit.so",
+   "sha256": "2ae662e8f9f187a621b6d900073f8c72d148ac084424e1595a44a01fb270b2e5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_pinholeCamera.so",
+   "sha256": "adf554b8340372e8d7e273522ab62dff51051d74e0cb865605ef633b5ea8264f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_planetEphemeris.so",
+   "sha256": "f8ab2153ed10566a438f6592a2bea42cc6a1752f248af2963cb9336b87850581"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_planetHeading.so",
+   "sha256": "0b72c59c19b5faf5bb4793f8fc725f115bb887d1eef67bb4a24fa2461d3d3d57"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_planetNav.so",
+   "sha256": "fd6dec897ae7d71362cac38d9659fb0ebf4166d5dbeab4189da78476c35503f6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_pointMassGravityModel.so",
+   "sha256": "3cec796c16fec3fe9f5787c6bede9f904f2fa9b3c40076964f381346b0c63c8c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_polyhedralGravityModel.so",
+   "sha256": "6223de96d92dfea130ee42e690fd7f3bd0ea5c098b47c733f8f15e40e875a5ce"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_prescribedLinearTranslation.so",
+   "sha256": "e53b9079228e525b1bf9c2c19441912e0fd46fd737d7225cca1a23073843a60c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_prescribedMotionStateEffector.so",
+   "sha256": "0acfc541e6d4a27c3db2583c2128b8c9d0adf1d98b3d2a41f9e7670d06a7520b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_prescribedRotation1DOF.so",
+   "sha256": "97d12470afd618a9f4d3880f741da263dae8200e7c309d123685014153e9ac5b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_pyStatefulNumbaModel.so",
+   "sha256": "b698a2d81a713ceedccc9399dc3591eb982c65b5cbfc80d190fb0b4c03e6d340"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_reactionWheelStateEffector.so",
+   "sha256": "af1e381aae5794d00e1b07562d61e170dbaede52a75518fc5ed730489a4f4e8f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_saturationSingleActuator.so",
+   "sha256": "4cb8f23949fa9c96e7690fabc9eeb8fa5fe339c5dd92be3c4557e0e36ef4fc7e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_scalarJointStatesToRWSpeed.so",
+   "sha256": "3856e06d89e4895d6025af7d145896592b25945264b38320874c651835001976"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_sensorThermal.so",
+   "sha256": "19f167ed7c08aa2c1b784e8fd4d4f12b4b0d4d6a9b5d871d73e3d268a3832801"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simSynch.so",
+   "sha256": "6c4b39de325f39261714b2c5a89e4090171d68a58ee1cb853b2c8343e437d40b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleAntenna.so",
+   "sha256": "29a5c372864390a264db546d20672cec9d0413183d92459e213bd1cee0b92468"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleBattery.so",
+   "sha256": "82ea7b77f379a479656c3f695c780e23f20fb4841e783dd378189dd107996786"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleInstrument.so",
+   "sha256": "7aa1ce757325236036030d5cc0ceba51f87c26e99a625ee72efc02d1f8c358da"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleMassProps.so",
+   "sha256": "6eef83d041308768aed1a45d74d1b16e0faedbbbbb5ab3ae2a1aaf0b9b9a002c"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleNav.so",
+   "sha256": "15a13ae80a6d19f52286b7c351a46fe5736b54a69f8426f1cfe803c717c9547e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simplePowerMonitor.so",
+   "sha256": "12f34705acacda3ec690bf393cf0eb98e56b02e9c3914b27fb7968499099bc81"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simplePowerSink.so",
+   "sha256": "a52eb4c8b05e4c1fcbdd57e0bfd48006177241c277f99e5806ce3b0451beac8d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleSolarPanel.so",
+   "sha256": "48b3b354a46da9e757a54e3cb95c15c89e11c75b1ae1a3f3f74029d01eb0eaff"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleStorageUnit.so",
+   "sha256": "281e501c3e5a06a850bc06aa6a46ecdb9b65f8e0b823c07fa994e0ad03d810e7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleTransmitter.so",
+   "sha256": "66ce58f5437469d1d0ce0f2a199c00653b866444e7888323a9ca0a915cbf3a9f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_simpleVoltEstimator.so",
+   "sha256": "674dee0451cd4da7837f83a280f6796b81c73276c938c5f119b3227b43d4f1f7"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_solarFlux.so",
+   "sha256": "0858e7ea83100eb4353d42bec9a28a94d509eb1253444b14380702d139315773"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spaceToGroundTransmitter.so",
+   "sha256": "1a716a8a5396a9844590e7cabb0028bc7ae684f4f331e10f1244d6b405a44891"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spaceWeatherData.so",
+   "sha256": "0b0659efbc4bed6f1cab40150cbcf57045ef444c53bbed737ccb30e58bfb87be"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraftChargingDynamics.so",
+   "sha256": "77ee3877804239c35747f05ff7167048ebb8d3fc5e3c5a29c8b7144a3654c336"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraftChargingEquilibrium.so",
+   "sha256": "6f4864608599ca5365d93f8f411f5365de95f85201b8753222a25e3ccbabeb1d"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraftLocation.so",
+   "sha256": "7642defcb0a6eca25ca17929fa38d3d4357d313977c8160e550148bd82d2abbd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraftSystem.so",
+   "sha256": "0d8a0fb47d2d1c439a304413a47fcdcc9a59e1e9459015e309cac7c4ff26c93a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_sphericalHarmonicsGravityModel.so",
+   "sha256": "2a33f905c5e025feb80b58c5fd0f5f8c14aa6f791798bc061e08d7b1870fcaf6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_sphericalPendulum.so",
+   "sha256": "b9a5b4b990278b480dd54e9809151af2197f2f91101fed1e84f131fd9a8dba71"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spinningBodyNDOFStateEffector.so",
+   "sha256": "6015089273214cd54875bba022b1f0312a03f8a7be8b3a95809ee5e7cb1e7920"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spinningBodyOneDOFStateEffector.so",
+   "sha256": "d1a21560075bed3f744fd43e57b1a9fc66ece79f023acdf252de1da580386224"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spinningBodyTwoDOFStateEffector.so",
+   "sha256": "fda9de9688652d86f94e6e19d2f0653b4ef070f2562128ef9acfd92265ead665"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_starTracker.so",
+   "sha256": "44b259f504b74fe0ca600fe91c1b75e9a24bb8b4d69a3869248ea9ab2a75ecc8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_stateArchitecture.so",
+   "sha256": "bba64038ecbfeb20d7a034aef2bab65ece411cde9fa52c2c11b2de342a9c1a05"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_stepperMotor.so",
+   "sha256": "dd08e76a850b0f440666df3bb8ba2c9ef14e878fae6380c7539da597ec1ce545"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_stochasticAtmDensity.so",
+   "sha256": "f2553335760c9330264268c61a7eb210b3a3cadc0e5961cdea598a8133377029"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_stochasticDragCoeff.so",
+   "sha256": "56fb97387383ecb9ddfb7b60eca4bdd23a8c31229c2030b53f49afda9ce0f646"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_stripLocation.so",
+   "sha256": "f4b9db821634caca50a1a1edac83aba4f521e9291d7885ee3b50c1603826d977"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_tabularAtmosphere.so",
+   "sha256": "663789f05e3774a6b363da0c79ffb24dabcf99e5740edf053ce1cddd5886c003"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_tempMeasurement.so",
+   "sha256": "beec50512cf558780d4c6265755be461bf500d26491a9b3885439860adb61d75"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_thrOnTimeToForce.so",
+   "sha256": "c313674b895bb0194dbe422094fc79fadc9142416706a6079a2bb32562ab72c8"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_thrusterDynamicEffector.so",
+   "sha256": "4cefcb355e38f7c9fc23eccd9348a6f9cf2e5c797d54ba4a727178c6bee69d97"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_thrusterStateEffector.so",
+   "sha256": "1052c183c3fec40d0cbd9b76120d89b2f83d22694ec984856814070c1b7e6218"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_twoHingeDamper.so",
+   "sha256": "3e7355653d55f98f0cae478dcb3730f6de7a2c306a50a5b495ee762f5db62e90"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_vizInterface.so",
+   "sha256": "05c28ba3f5adb969c4addb799cd93937574ea903f6ac700f8c5727bc2584cd29"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_vscmgStateEffector.so",
+   "sha256": "f12f747d1c2b9d34b11dde797ab31cf0534fd0e875798c3862f7b4e9f7006918"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_zeroWindModel.so",
+   "sha256": "2077afa959df1e020156e8f1ba421aee2dfcaf12806abb2f3fec62d318cfcb0b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/topLevelModules/_pyswice.so",
+   "sha256": "5ab18faca2e81a12aaaec9ed735822290596c31c7b551fa30c4362728b068e5e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libModuleIdGenerator.dylib",
+   "sha256": "8b591ea26891f609a2265792e4d5e6b1c83da71ca5e400842fe2ba417a4766b9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libarchitectureLib.dylib",
+   "sha256": "d3dc3e967f1dd95f98c9d9728175afef0b14ca84b4beb34b6170a1360ab710eb"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libdynamicsLib.dylib",
+   "sha256": "bdc970bc56a0efa97470dfc2ee300170d047e423da54355c5fe0e72bae7b87da"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libeffectorInterfacesLib.dylib",
+   "sha256": "5058f26f840234372ed325791b9e3a2b3bbf8bc21cae653a29a606b08da8b472"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libenvironmentLib.dylib",
+   "sha256": "8781b7e21c657e757b14c3b4bd242e231e20f1b20398b6696cc0b26185b21753"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libmujoco.3.11.0.dylib",
+   "sha256": "a8679deb26b56a0fbc74cb825e10d586f21a6678785c20db259ae64c9c173ecd"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libmujocoDynamicsLib.dylib",
+   "sha256": "b3d50c9ecd084a13fde227b89bad94cc5eee027ed42859c3c417021e98676d79"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libonboardDataHandlingLib.dylib",
+   "sha256": "2be57f44568d3e8f7098f751acdf571413da61901901a886c3fc555e9f33992f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libpowerLib.dylib",
+   "sha256": "93c3c7abab06f638216e2b880af76f6ecf9574dd5fb6d5837908524f2ed93e52"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libprotobuf.3.21.12.0.dylib",
+   "sha256": "20debaaeec12cbb8f91c7cf09553fe61d18a7c42f22ef79fe30a2fa2b791f335"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libprotoc.3.21.12.0.dylib",
+   "sha256": "deb175b7e19691f63b3bc3ac60305ee842086e78c011da6bef02f04fb6c336ed"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/.dylibs/libtransDeterminationLib.dylib",
+   "sha256": "b5c273a3b31af5049b5ef3058390b8d025a98a052a643574cb415099c6f6880a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_multiarray_tests.cpython-314-darwin.so",
+   "sha256": "525ee917b352406d570fd5a10f01aceb8f0b20c53c56a011820b2d8dc8e1ba28"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_multiarray_umath.cpython-314-darwin.so",
+   "sha256": "e664840dbcf7c8e93478a52510af177b6c538d0f410d493a16caaf6a61b8fc71"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_operand_flag_tests.cpython-314-darwin.so",
+   "sha256": "a7e8d0bad77e4959e68ba68735acc3ddde9eb0ce44bcc6b7f89887e537a1eedc"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_rational_tests.cpython-314-darwin.so",
+   "sha256": "ab88b3f9211fe86681d912699d03483d3a7d4d88b2e12de2c2e40f92579ec12b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_simd.cpython-314-darwin.so",
+   "sha256": "ad701a32a2a01db90376e2662537d2ca86c2bc147d0a314d8559ee2b1bbbbf6b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_struct_ufunc_tests.cpython-314-darwin.so",
+   "sha256": "133088973cc7fe102003b92584cd652abcd118dba71b10ab25619258af613b47"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/_core/_umath_tests.cpython-314-darwin.so",
+   "sha256": "80cce06cae49bd6ff4bc306371e5a52bcc91d67828e0c146fad3fca4dd0cac2a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/fft/_pocketfft_umath.cpython-314-darwin.so",
+   "sha256": "617beb0a629167cb7951762bec9237af45e4246d98bb144955a7994f438f68a5"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/linalg/_umath_linalg.cpython-314-darwin.so",
+   "sha256": "5a8c1ceb8eeb0fecd6086baf0a7482c107273f6597cfdb8e41c9079f89089af3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/linalg/lapack_lite.cpython-314-darwin.so",
+   "sha256": "d3d5f67ac794645f2b85c75bcd1050a67542681a89c2e5b1928a20cce40b182f"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_bounded_integers.cpython-314-darwin.so",
+   "sha256": "c0a434748f30a816842e43ca04565cfc078deccd958527a5ebf684f70f167af6"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_common.cpython-314-darwin.so",
+   "sha256": "7048111631dbd8157fd6b4bbef0faaf006ed4e32283320bfa651d3b6d4a7bf56"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_generator.cpython-314-darwin.so",
+   "sha256": "5b736a2de82edc20f030aaa860b705f7f40c07f698bf3933f6ba57c44248b4c3"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_mt19937.cpython-314-darwin.so",
+   "sha256": "efd673e1e9b512010e63ec9865cbf0a8cfa6fa96123436792cae33209a45443a"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_pcg64.cpython-314-darwin.so",
+   "sha256": "c105f8939a604582ff50fcfc6567d453356f50c86e114df6b64d64163dc9c6d0"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_philox.cpython-314-darwin.so",
+   "sha256": "f4d52b42b28f9ad0ad1ee690040292e698ba7595d353da80396d99c0bac338e9"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/_sfc64.cpython-314-darwin.so",
+   "sha256": "803721a7b84d096a91382066e1a9f9a27282635b999edd5fea31d211010e07af"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/bit_generator.cpython-314-darwin.so",
+   "sha256": "ed01fc14018fc46846e365b6ed6a45d534467a31b0abc44819beb40ed10aaf59"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/numpy/random/mtrand.cpython-314-darwin.so",
+   "sha256": "1be9a8d68fac08189fa82a4f2815b5ff1b9b88ed431051bdc627998843065b1e"
+  },
+  {
+   "path": "../../../../../../../tools/xval/erfa-spice/lib/python3.14/site-packages/erfa/core.py",
+   "sha256": "1e07ca928accb0eaff3caf6d8a38f48ba38dcc26d96425213017044ddd31c119"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-data/supportData/EphemerisData/naif0012.tls",
+   "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-data/supportData/EphemerisData/de-403-masses.tpc",
+   "sha256": "5cd68fcd3f59ddc21ed8bbad3a341126b8e092a29ac8f0ae585db718af8e7468"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-data/supportData/EphemerisData/pck00010.tpc",
+   "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-data/supportData/LocalGravData/GGM03S.txt",
+   "sha256": "71f8736f98c5d8c972d0f6d56a2389302f72b8ac7517c605d312162ca446a3a1"
+  },
+  {
+   "path": "../../../../../../../tools/xval/bsk-data/supportData/AtmosphereData/NRLMSISE00Nominal.txt",
+   "sha256": "1a4b6a755b594c32745a1bf1c18c34cec69c0ad931a64cfd95add69a39e17ba2"
+  },
+  {
+   "path": "../../../lib/egm2008_data.h",
+   "sha256": "f4f49756761e4e391131a2ce12a25290948670bf889d467a13869a4c4c661250"
+  },
+  {
+   "path": "../../../lib/egm96_data.h",
+   "sha256": "4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4"
+  },
+  {
+   "path": ".work/fields/EGM2008-20z-20t-0o.csv",
+   "sha256": "c6234938d83dde8d555f8b08865d8c4275ac195dc16c54c2208d5a73ef4d71a9"
+  },
+  {
+   "path": ".work/fields/EGM2008-20z-20t-20o.csv",
+   "sha256": "1cc8937b08f85f079a5280d8f9249ef2c6ac5810c2dc36202ec731c77a9602f2"
+  }
+ ],
+ "provenance": {
+  "recipeSha256": "00da3a244a0ae95d79ec4084b279f2723d5c2e3511642fb3b128fc48bba937b4",
+  "supportData": "/Users/tj/software/tools/xval/bsk-data/supportData",
+  "kernelSelection": "DE430 is neither loaded nor used; the export's SHA-256-authenticated DE440 replaces it"
+ },
+ "cases": [
+  {
+   "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forceSet": "Z3-zonal20-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448374.624282222,
+     -3440866.4630908007,
+     -5297565.219230348,
+     6497.472538070389,
+     4055.658910025898,
+     372.1551053627519
+    ],
+    [
+     7200,
+     -6082298.504978885,
+     -824668.8314023911,
+     2877979.709277999,
+     -1643.4874803881219,
+     -5531.181725147068,
+     -5050.375631247958
+    ],
+    [
+     10800,
+     4787750.2149225455,
+     4407078.87529112,
+     1884346.334335057,
+     -4558.52547114154,
+     2547.6235294794888,
+     5623.737568706067
+    ],
+    [
+     14400,
+     375644.94598253065,
+     -4432690.2829674315,
+     -5110945.448795,
+     7074.265184617875,
+     2474.336752215275,
+     -1620.411124968053
+    ],
+    [
+     18000,
+     -5258104.38273204,
+     886361.1974014699,
+     4184201.8324851226,
+     -3873.1073759167966,
+     -5487.69074489259,
+     -3697.5718277227456
+    ],
+    [
+     21600,
+     5882726.049176271,
+     3356380.9642465943,
+     146639.36120995716,
+     -2475.293342495173,
+     4076.338980441747,
+     6014.076305052015
+    ],
+    [
+     25200,
+     -1753656.1824461594,
+     -4886161.220542659,
+     -4356601.749332891,
+     6829.15450201438,
+     615.8899394968579,
+     -3432.025916880228
+    ],
+    [
+     28800,
+     -3815565.315213698,
+     2472935.1887328797,
+     5024783.080492449,
+     -5663.055164702953,
+     -4792.0271214130125,
+     -1936.0989458925817
+    ],
+    [
+     32400,
+     6295728.689619094,
+     1916432.3485007836,
+     -1606342.9786471827,
+     -89.2722625453127,
+     5101.521564902115,
+     5733.632574692503
+    ],
+    [
+     36000,
+     -3691339.921705294,
+     -4753298.690102164,
+     -3119096.551810795,
+     5786.16906072192,
+     -1296.4697985823625,
+     -4862.541635839157
+    ],
+    [
+     39600,
+     -1920322.225593485,
+     3747986.8712021643,
+     5307638.940963792,
+     -6804.114152711127,
+     -3534.691831289905,
+     38.40204183021983
+    ],
+    [
+     43200,
+     5975530.854612791,
+     263591.05291162414,
+     -3179384.579455651,
+     2319.768528612862,
+     5505.9914605283275,
+     4815.388681915506
+    ],
+    [
+     46800,
+     -5210507.944572773,
+     -4056226.3055870607,
+     -1536317.6390827552,
+     4062.2076509841045,
+     -3034.772473383336,
+     -5753.444782710363
+    ],
+    [
+     50400,
+     209106.89256217759,
+     4563584.487359348,
+     5002445.179351464,
+     -7161.349707428693,
+     -1870.5300008455442,
+     2008.2785550682995
+    ],
+    [
+     54000,
+     4956983.41865705,
+     -1402547.3229563967,
+     -4398221.979118808,
+     4469.610129255112,
+     5249.518034542754,
+     3364.201708806258
+    ],
+    [
+     57600,
+     -6132191.66603963,
+     -2884007.6131712534,
+     215759.51371619044,
+     1854.9500045320872,
+     -4393.39156631596,
+     -6006.0074329739455
+    ],
+    [
+     61200,
+     2326306.7141712033,
+     4827695.658240521,
+     4143620.677672569,
+     -6688.858936523879,
+     -0.29208325876550667,
+     3756.6785858352323
+    ],
+    [
+     64800,
+     3356538.925990793,
+     -2883575.248005977,
+     -5128905.112376634,
+     6109.631183277428,
+     4371.7285237498845,
+     1543.2810764657665
+    ],
+    [
+     68400,
+     -6346650.491216795,
+     -1381405.656410749,
+     1942759.0616099292,
+     -579.849374382604,
+     -5214.200159943909,
+     -5593.137951495002
+    ],
+    [
+     72000,
+     4185102.2735371105,
+     4514460.2664891025,
+     2826549.4246384017,
+     -5435.851633925931,
+     1852.2831557653476,
+     5090.308326700645
+    ],
+    [
+     75600,
+     1358203.6844101953,
+     -4005835.9618046586,
+     -5292131.723384186,
+     7049.257852800411,
+     2984.9107359023947,
+     -445.31099724431516
+    ],
+    [
+     79200,
+     -5826439.332179559,
+     269142.7024300513,
+     3453761.684583848,
+     -2959.2127920859934,
+     -5405.727208925007,
+     -4562.473002986746
+    ],
+    [
+     82800,
+     5568062.071395001,
+     3666868.9923160668,
+     1197280.0457775327,
+     -3542.9564514236645,
+     3466.419573796928,
+     5860.7631644233725
+    ],
+    [
+     86400,
+     -807940.9849089626,
+     -4640378.859993974,
+     -4871308.646966733,
+     7178.370341362162,
+     1259.0596911294947,
+     -2382.9429574407122
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448374.624276158,
+     -3440866.4630950117,
+     -5297565.2192310495,
+     6497.472538072429,
+     4055.6589100226042,
+     372.15510535773694
+    ],
+    [
+     7200,
+     -6082298.504979883,
+     -824668.8313974546,
+     2877979.7092839587,
+     -1643.4874803960868,
+     -5531.18172514648,
+     -5050.375631241975
+    ],
+    [
+     10800,
+     4787750.214922198,
+     4407078.875286711,
+     1884346.334330556,
+     -4558.525471138659,
+     2547.6235294838943,
+     5623.7375687108415
+    ],
+    [
+     14400,
+     375644.9459848767,
+     -4432690.282963303,
+     -5110945.448793942,
+     7074.2651846176395,
+     2474.3367522227613,
+     -1620.4111249619136
+    ],
+    [
+     18000,
+     -5258104.382757826,
+     886361.1973635991,
+     4184201.8324612053,
+     -3873.1073758753014,
+     -5487.69074489769,
+     -3697.5718277536034
+    ],
+    [
+     21600,
+     5882726.049141608,
+     3356380.9642772404,
+     146639.36126325815,
+     -2475.2933425662527,
+     4076.3389804078856,
+     6014.076305060983
+    ],
+    [
+     25200,
+     -1753656.1823623881,
+     -4886161.22053346,
+     -4356601.749374275,
+     6829.154502042398,
+     615.8899395797097,
+     -3432.025916807845
+    ],
+    [
+     28800,
+     -3815565.3153244536,
+     2472935.1886385637,
+     5024783.080455582,
+     -5663.055164610778,
+     -4792.027121470181,
+     -1936.0989460103867
+    ],
+    [
+     32400,
+     6295728.689608284,
+     1916432.3485954157,
+     -1606342.9785360284,
+     -89.27226269924628,
+     5101.5215648620815,
+     5733.632574739553
+    ],
+    [
+     36000,
+     -3691339.921608726,
+     -4753298.690129065,
+     -3119096.551897111,
+     5786.169060803091,
+     -1296.4697984700433,
+     -4862.541635761935
+    ],
+    [
+     39600,
+     -1920322.2257284962,
+     3747986.8711359245,
+     5307638.940968344,
+     -6804.114152660228,
+     -3534.6918313770057,
+     38.40204170263597
+    ],
+    [
+     43200,
+     5975530.854647544,
+     263591.0530030376,
+     -3179384.5793718244,
+     2319.768528487732,
+     5505.991460528438,
+     4815.388681987764
+    ],
+    [
+     46800,
+     -5210507.944527505,
+     -4056226.305627917,
+     -1536317.6391553427,
+     4062.207651070469,
+     -3034.7724733128107,
+     -5753.444782679444
+    ],
+    [
+     50400,
+     209106.89246159865,
+     4563584.487340545,
+     5002445.179385579,
+     -7161.3497074253055,
+     -1870.5300009168086,
+     2008.2785549838545
+    ],
+    [
+     54000,
+     4956983.4186792085,
+     -1402547.3229238503,
+     -4398221.979092585,
+     4469.610129217987,
+     5249.518034562964,
+     3364.2017088490043
+    ],
+    [
+     57600,
+     -6132191.6660498725,
+     -2884007.6131891976,
+     215759.51370133553,
+     1854.9500045547065,
+     -4393.391566295994,
+     -6006.007432961231
+    ],
+    [
+     61200,
+     2326306.7141254987,
+     4827695.658238391,
+     4143620.6776946676,
+     -6688.858936541534,
+     -0.292083288103572,
+     3756.678585811907
+    ],
+    [
+     64800,
+     3356538.9259814564,
+     -2883575.248004849,
+     -5128905.1123698605,
+     6109.631183281322,
+     4371.728523761046,
+     1543.281076474714
+    ],
+    [
+     68400,
+     -6346650.491229665,
+     -1381405.6564371963,
+     1942759.0615882901,
+     -579.8493743441529,
+     -5214.200159925648,
+     -5593.137951496101
+    ],
+    [
+     72000,
+     4185102.273471263,
+     4514460.266501822,
+     2826549.4246888068,
+     -5435.8516339820935,
+     1852.2831557141135,
+     5090.308326674699
+    ],
+    [
+     75600,
+     1358203.6844549503,
+     -4005835.9617797905,
+     -5292131.723380118,
+     7049.257852794604,
+     2984.910735948403,
+     -445.3109971887753
+    ],
+    [
+     79200,
+     -5826439.332226704,
+     269142.70237461984,
+     3453761.6845451603,
+     -2959.2127920034295,
+     -5405.727208914966,
+     -4562.4730030184655
+    ],
+    [
+     82800,
+     5568062.071341652,
+     3666868.9923509117,
+     1197280.0458447852,
+     -3542.9564515061365,
+     3466.419573757308,
+     5860.763164419138
+    ],
+    [
+     86400,
+     -807940.9849100151,
+     -4640378.859998094,
+     -4871308.646968029,
+     7178.370341362429,
+     1259.0596911460484,
+     -2382.942957422017
+    ]
+   ],
+   "maxStepS": 2.0,
+   "fineStepS": 1.0,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.005177041364295589
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0035778449601348876
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 11.0,
+     "sampleCount": 24,
+     "worstM": 0.00015045426293587477
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 2.0,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 43201,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -13122.530103826779,
+     "max": -2.367433626204729e-05
+    },
+    "hourlyNativeDensityKgM3": [
+     2.7951346035729718e-12,
+     2.086553530322695e-12,
+     4.797911778648856e-12,
+     2.4597191584129392e-12,
+     2.1140532131161673e-12,
+     4.6252819017921584e-12,
+     2.4482801854110235e-12,
+     2.647826995634874e-12,
+     4.375898792083344e-12,
+     2.4454856818496866e-12,
+     3.5231951253545876e-12,
+     4.021488959592012e-12,
+     2.1854155096317585e-12,
+     4.309511255802022e-12,
+     3.480193474779395e-12,
+     2.202548402198582e-12,
+     4.814460801653786e-12,
+     2.941447097450217e-12,
+     2.3413478998366556e-12,
+     5.00355586419037e-12,
+     2.5870830949823504e-12,
+     2.1769474396393775e-12,
+     4.861958226664446e-12,
+     2.4080952922365783e-12,
+     2.2906246848401297e-12
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "id": "LEO400 F6-field-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forceSet": "F6-field-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448046.113388709,
+     -3441192.351199081,
+     -5297668.043837831,
+     6497.575691970751,
+     4055.3348764589623,
+     371.8108695872802
+    ],
+    [
+     7200,
+     -6082245.302414087,
+     -824116.1210114995,
+     2878476.067775469,
+     -1644.2967356498355,
+     -5531.192003903838,
+     -5049.967469330188
+    ],
+    [
+     10800,
+     4788337.449174156,
+     4406666.365227271,
+     1883638.0674732216,
+     -4557.708930451314,
+     2548.328458302034,
+     5624.160676803482
+    ],
+    [
+     14400,
+     374172.70878917177,
+     -4433093.400274559,
+     -5110783.03262097,
+     7074.291667866854,
+     2473.270140689996,
+     -1621.6118904623645
+    ],
+    [
+     18000,
+     -5257410.18039608,
+     887165.5723298263,
+     4185038.9833473167,
+     -3874.3570021085793,
+     -5487.358340416436,
+     -3696.633312579099
+    ],
+    [
+     21600,
+     5883164.306672399,
+     3355508.652492091,
+     145370.65544781776,
+     -2473.588894344905,
+     4077.0421033705416,
+     6014.449501150085
+    ],
+    [
+     25200,
+     -1755216.4902970977,
+     -4886096.326850835,
+     -4356037.116268875,
+     6828.580881719908,
+     614.9414240139629,
+     -3433.3427077876113
+    ],
+    [
+     28800,
+     -3814666.2935407856,
+     2473340.573083012,
+     5025364.790184722,
+     -5663.6978986889,
+     -4791.452885190179,
+     -1935.1266573077037
+    ],
+    [
+     32400,
+     6295560.252369685,
+     1915810.8409925988,
+     -1607097.6872305076,
+     -88.07953374474137,
+     5101.81233498439,
+     5733.6642363318315
+    ],
+    [
+     36000,
+     -3692475.6068722596,
+     -4753028.235095733,
+     -3118243.7287295274,
+     5785.351324292923,
+     -1297.4404179254223,
+     -4863.2150634993095
+    ],
+    [
+     39600,
+     -1919137.9324942417,
+     3748744.7638194496,
+     5307756.054099589,
+     -6804.531693738108,
+     -3533.6076736664595,
+     39.5253582562115
+    ],
+    [
+     43200,
+     5975174.826992777,
+     261871.9896177604,
+     -3180535.8424515226,
+     2321.9092367636285,
+     5505.846739838402,
+     4814.245654482253
+    ],
+    [
+     46800,
+     -5211735.394468298,
+     -4054982.325066199,
+     -1534816.782204369,
+     4060.2953797427667,
+     -3036.5335755169494,
+     -5754.031243916561
+    ],
+    [
+     50400,
+     212342.95145293043,
+     4564300.75174879,
+     5001776.952253941,
+     -7161.276827909337,
+     -1867.811109841798,
+     2010.625421313686
+    ],
+    [
+     54000,
+     4955680.451360055,
+     -1404266.7258362332,
+     -4399382.141403943,
+     4471.9105655220765,
+     5248.453241085323,
+     3362.440843291849
+    ],
+    [
+     57600,
+     -6132761.887523555,
+     -2881973.2405398022,
+     217842.42412762032,
+     1851.9659804479734,
+     -4394.731748012847,
+     -6006.374294989836
+    ],
+    [
+     61200,
+     2329193.9555577766,
+     4827470.297352167,
+     4142541.302825385,
+     -6687.5302255478755,
+     1.9709907609276875,
+     3758.5948984228016
+    ],
+    [
+     64800,
+     3354724.1326139383,
+     -2884576.8825119156,
+     -5129481.489147091,
+     6111.04533898278,
+     4370.451971230376,
+     1541.4672065599402
+    ],
+    [
+     68400,
+     -6346333.26944583,
+     -1379429.083407622,
+     1944865.1194790541,
+     -582.9604006633984,
+     -5214.66441972687,
+     -5592.515354526765
+    ],
+    [
+     72000,
+     4187215.6781787775,
+     4513722.768085529,
+     2824833.9884443264,
+     -5433.832071247174,
+     1854.2133482380466,
+     5091.657564168981
+    ],
+    [
+     75600,
+     1355544.4412126893,
+     -4006744.700404403,
+     -5292231.959675868,
+     7049.87507961591,
+     2982.931502558705,
+     -447.8124011212671
+    ],
+    [
+     79200,
+     -5825309.818189881,
+     270842.9081117872,
+     3455271.509853384,
+     -2961.881765400953,
+     -5405.580387020673,
+     -4561.146031553091
+    ],
+    [
+     82800,
+     5569322.758722916,
+     3665653.714958504,
+     1195200.2974184952,
+     -3540.4064135399203,
+     3467.9476753248528,
+     5861.359088619533
+    ],
+    [
+     86400,
+     -810694.1510912075,
+     -4640971.3087044945,
+     -4870498.735299723,
+     7177.849479912845,
+     1256.7205128081107,
+     -2385.271277572502
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448046.1133829276,
+     -3441192.351204369,
+     -5297668.043839329,
+     6497.57569197271,
+     4055.334876454144,
+     371.8108695809787
+    ],
+    [
+     7200,
+     -6082245.302413264,
+     -824116.1210043309,
+     2878476.0677818623,
+     -1644.296735660098,
+     -5531.19200390502,
+     -5049.967469324778
+    ],
+    [
+     10800,
+     4788337.449184996,
+     4406666.365220969,
+     1883638.0674600373,
+     -4557.70893043857,
+     2548.328458315052,
+     5624.16067680899
+    ],
+    [
+     14400,
+     374172.70876638213,
+     -4433093.400284112,
+     -5110783.0326171,
+     7074.2916678668125,
+     2473.270140671014,
+     -1621.611890482413
+    ],
+    [
+     18000,
+     -5257410.180383409,
+     887165.5723497301,
+     4185038.9833606696,
+     -3874.3570021328715,
+     -5487.358340412388,
+     -3696.6333125596216
+    ],
+    [
+     21600,
+     5883164.306685137,
+     3355508.65247119,
+     145370.65541755914,
+     -2473.588894308058,
+     4077.0421033930365,
+     6014.449501151206
+    ],
+    [
+     25200,
+     -1755216.4903365078,
+     -4886096.326856058,
+     -4356037.11625066,
+     6828.580881705585,
+     614.9414239780941,
+     -3433.3427078176082
+    ],
+    [
+     28800,
+     -3814666.2935067234,
+     2473340.573112904,
+     5025364.790196581,
+     -5663.697898719238,
+     -4791.452885170185,
+     -1935.1266572677353
+    ],
+    [
+     32400,
+     6295560.252370825,
+     1915810.8409538707,
+     -1607097.6872733864,
+     -88.07953368571397,
+     5101.812335004934,
+     5733.664236317049
+    ],
+    [
+     36000,
+     -3692475.6069208127,
+     -4753028.235086956,
+     -3118243.7286909646,
+     5785.3513242524305,
+     -1297.440417975248,
+     -4863.215063530283
+    ],
+    [
+     39600,
+     -1919137.9324344476,
+     3748744.7638514815,
+     5307756.054099281,
+     -6804.531693760192,
+     -3533.607673623364,
+     39.5253583170497
+    ],
+    [
+     43200,
+     5975174.826969617,
+     261871.98955979355,
+     -3180535.842501575,
+     2321.909236842193,
+     5505.846739841673,
+     4814.245654439715
+    ],
+    [
+     46800,
+     -5211735.394514457,
+     -4054982.325034262,
+     -1534816.7821421616,
+     4060.2953796692814,
+     -3036.5335755730894,
+     -5754.0312439359905
+    ],
+    [
+     50400,
+     212342.95153800564,
+     4564300.7517717015,
+     5001776.952230178,
+     -7161.27682790571,
+     -1867.8111097709098,
+     2010.6254213901857
+    ],
+    [
+     54000,
+     4955680.451300676,
+     -1404266.7259080862,
+     -4399382.141449845,
+     4471.910565607172,
+     5248.453241061094,
+     3362.440843215401
+    ],
+    [
+     57600,
+     -6132761.887552124,
+     -2881973.240478478,
+     217842.42421222862,
+     1851.965980337246,
+     -4394.73174806435,
+     -6006.374294984013
+    ],
+    [
+     61200,
+     2329193.955660369,
+     4827470.297352375,
+     4142541.302767877,
+     -6687.530225502566,
+     1.9709908562955851,
+     3758.5948985041546
+    ],
+    [
+     64800,
+     3354724.1325114337,
+     -2884576.882587005,
+     -5129481.489174066,
+     6111.045339053612,
+     4370.451971167826,
+     1541.4672064501463
+    ],
+    [
+     68400,
+     -6346333.269438085,
+     -1379429.0833172428,
+     1944865.119576376,
+     -582.9604008061496,
+     -5214.664419756879,
+     -5592.515354481273
+    ],
+    [
+     72000,
+     4187215.6782798916,
+     4513722.768050981,
+     2824833.9883494624,
+     -5433.8320711481365,
+     1854.2133483462612,
+     5091.657564236552
+    ],
+    [
+     75600,
+     1355544.4410715378,
+     -4006744.7004659423,
+     -5292231.95966807,
+     7049.8750796493,
+     2982.9315024555367,
+     -447.81240125627346
+    ],
+    [
+     79200,
+     -5825309.818130903,
+     270842.9082237545,
+     3455271.5099481265,
+     -2961.8817655547728,
+     -5405.580387013178,
+     -4561.14603145956
+    ],
+    [
+     82800,
+     5569322.758801217,
+     3665653.7148819617,
+     1195200.297289257,
+     -3540.406413381847,
+     3467.947675430531,
+     5861.359088654279
+    ],
+    [
+     86400,
+     -810694.1512604547,
+     -4640971.308735942,
+     -4870498.73524469,
+     7177.849479886992,
+     1256.7205126687027,
+     -2385.271277717155
+    ]
+   ],
+   "maxStepS": 0.5,
+   "fineStepS": 0.25,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.04041497286137496
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.011245679383284014
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0034391411861032107
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0005209145350954318
+    },
+    {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.00018072665310480066
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 0.5,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 172801,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -13123.7693403936,
+     "max": -1.1641532182693481e-10
+    },
+    "hourlyNativeDensityKgM3": [
+     2.7951346035729718e-12,
+     2.0816753501744877e-12,
+     4.7913134672727155e-12,
+     2.462442815359264e-12,
+     2.111304558246934e-12,
+     4.619673805990191e-12,
+     2.4519387065496712e-12,
+     2.6467966292608e-12,
+     4.371306006980867e-12,
+     2.453201779288181e-12,
+     3.5194593647628613e-12,
+     4.010806515273091e-12,
+     2.178969317562473e-12,
+     4.3182906449765585e-12,
+     3.4755202038232484e-12,
+     2.195980170447141e-12,
+     4.8350910067521206e-12,
+     2.9332463337995705e-12,
+     2.3428199805743894e-12,
+     5.0106561073637506e-12,
+     2.5826570256509157e-12,
+     2.17370698425991e-12,
+     4.872147046037769e-12,
+     2.4074959326927765e-12,
+     2.2835719009761224e-12
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+   "orbit": "LEO400",
+   "forceSet": "B1-field-sun-moon-srp-drag-bdot",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448046.1438133693,
+     -3441192.294187048,
+     -5297667.999172206,
+     6497.575678876,
+     4055.3349451811278,
+     371.81095335069574
+    ],
+    [
+     7200,
+     -6082245.309562439,
+     -824116.5983009323,
+     2878475.5455791745,
+     -1644.2959933330083,
+     -5531.191947778088,
+     -5049.967867363117
+    ],
+    [
+     10800,
+     4788335.451031652,
+     4406666.9920424875,
+     1883639.9932199614,
+     -4557.711344027398,
+     2548.3264990857133,
+     5624.160001596252
+    ],
+    [
+     14400,
+     374178.28584838967,
+     -4433090.8564363485,
+     -5110783.640173682,
+     7074.2917725904845,
+     2473.2749942758323,
+     -1621.6065798181066
+    ],
+    [
+     18000,
+     -5257415.756385159,
+     887156.4804847572,
+     4185032.3121254924,
+     -3874.3461448555954,
+     -5487.360506886758,
+     -3696.6423493741254
+    ],
+    [
+     21600,
+     5883155.302389846,
+     3355519.5480405698,
+     145388.21092638109,
+     -2473.6112977664734,
+     4077.030290727258,
+     6014.449971189119
+    ],
+    [
+     25200,
+     -1755185.722693106,
+     -4886091.768017,
+     -4356050.583537002,
+     6828.592305069614,
+     614.9696083041367,
+     -3433.3182100098306
+    ],
+    [
+     28800,
+     -3814703.757747703,
+     2473306.7355317106,
+     5025349.518069149,
+     -5663.665359537846,
+     -4791.475240086265,
+     -1935.1711067166807
+    ],
+    [
+     32400,
+     6295554.894014982,
+     1915859.532107344,
+     -1607040.149419255,
+     -88.1588344767493,
+     5101.79037566878,
+     5733.686903683333
+    ],
+    [
+     36000,
+     -3692397.2678945838,
+     -4753041.756837052,
+     -3118305.117024902,
+     5785.415946119253,
+     -1297.3603397353752,
+     -4863.163594903731
+    ],
+    [
+     39600,
+     -1919259.4316786716,
+     3748678.0564882476,
+     5307752.589054601,
+     -6804.4899031421255,
+     -3533.694841614029,
+     39.40300945905479
+    ],
+    [
+     43200,
+     5975221.037896254,
+     261999.52360702248,
+     -3180419.6098307394,
+     2321.732724607669,
+     5505.843154896749,
+     4814.344571213711
+    ],
+    [
+     46800,
+     -5211611.217239104,
+     -4055066.1010384737,
+     -1534982.8192938333,
+     4060.4935380506718,
+     -3036.3825992856205,
+     -5753.976008601908
+    ],
+    [
+     50400,
+     212074.11424763422,
+     4564224.519097813,
+     5001845.492289452,
+     -7161.291600540683,
+     -1868.0296767866341,
+     2010.3873137406958
+    ],
+    [
+     54000,
+     4955873.507397161,
+     -1404025.668903144,
+     -4399220.174465693,
+     4471.626896916624,
+     5248.541299190618,
+     3362.7023916938765
+    ],
+    [
+     57600,
+     -6132650.33688355,
+     -2882209.787993988,
+     217511.77596034762,
+     1852.4009869267027,
+     -4394.530825318562,
+     -6006.393457827919
+    ],
+    [
+     61200,
+     2328738.352614442,
+     4827459.788941872,
+     4142785.561264529,
+     -6687.737649581879,
+     1.5570453293117366,
+     3758.2420857688403
+    ],
+    [
+     64800,
+     3355194.8698427207,
+     -2884225.3242891203,
+     -5129345.291785817,
+     6110.716907930494,
+     4370.749932738798,
+     1541.9893607544716
+    ],
+    [
+     68400,
+     -6346373.662625648,
+     -1379909.6680609905,
+     1944341.1993251883,
+     -582.2048985359329,
+     -5214.504359226373,
+     -5592.752260787348
+    ],
+    [
+     72000,
+     4186605.4504944626,
+     4513911.389175445,
+     2825384.3218923705,
+     -5434.429088310394,
+     1853.5838700144438,
+     5091.268477049461
+    ],
+    [
+     75600,
+     1356420.716738256,
+     -4006356.9463538285,
+     -5292267.883848931,
+     7049.672291292986,
+     2983.580040057191,
+     -446.9607297083887
+    ],
+    [
+     79200,
+     -5825722.6139291,
+     270058.8991655779,
+     3454599.2845563353,
+     -2960.804106638587,
+     -5405.6360835213145,
+     -4561.794234355122
+    ],
+    [
+     82800,
+     5568706.783604973,
+     3666215.167318618,
+     1196173.9266034747,
+     -3541.605838904506,
+     3467.1735268391803,
+     5861.117237217154
+    ],
+    [
+     86400,
+     -809348.9658636228,
+     -4640714.852383356,
+     -4870922.0415907465,
+     7178.061610857993,
+     1257.836090903184,
+     -2384.103856147067
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448046.143807923,
+     -3441192.2941920864,
+     -5297667.999173562,
+     6497.575678877805,
+     4055.334945176616,
+     371.81095334480534
+    ],
+    [
+     7200,
+     -6082245.309561881,
+     -824116.5982943652,
+     2878475.5455850703,
+     -1644.295993342418,
+     -5531.191947779103,
+     -5049.967867357982
+    ],
+    [
+     10800,
+     4788335.451041725,
+     4406666.992036407,
+     1883639.993207482,
+     -4557.711344015603,
+     2548.32649909801,
+     5624.160001601505
+    ],
+    [
+     14400,
+     374178.2858275786,
+     -4433090.856445238,
+     -5110783.640170164,
+     7074.291772590345,
+     2473.2749942584114,
+     -1621.6065798364098
+    ],
+    [
+     18000,
+     -5257415.756373413,
+     887156.4805032156,
+     4185032.312137829,
+     -3874.3461448780213,
+     -5487.360506883076,
+     -3696.6423493562042
+    ],
+    [
+     21600,
+     5883155.302401418,
+     3355519.548021379,
+     145388.21089870695,
+     -2473.6112977328207,
+     4077.0302907479336,
+     6014.449971190192
+    ],
+    [
+     25200,
+     -1755185.7227288294,
+     -4886091.768021843,
+     -4356050.583520618,
+     6828.592305056459,
+     614.9696082715435,
+     -3433.3182100369445
+    ],
+    [
+     28800,
+     -3814703.7577161505,
+     2473306.7355594854,
+     5025349.518080214,
+     -5663.665359565943,
+     -4791.475240067743,
+     -1935.1711066795851
+    ],
+    [
+     32400,
+     6295554.894016386,
+     1915859.5320707355,
+     -1607040.1494600766,
+     -88.15883442066603,
+     5101.790375688216,
+     5733.6869036690505
+    ],
+    [
+     36000,
+     -3692397.267941395,
+     -4753041.756828713,
+     -3118305.116987735,
+     5785.415946080077,
+     -1297.36033978354,
+     -4863.163594933724
+    ],
+    [
+     39600,
+     -1919259.4316187568,
+     3748678.056520652,
+     5307752.589054578,
+     -6804.4899031640225,
+     -3533.694841570837,
+     39.40300952007841
+    ],
+    [
+     43200,
+     5975221.037872981,
+     261999.52354725896,
+     -3180419.6098828767,
+     2321.7327246888804,
+     5505.8431548998005,
+     4814.344571169226
+    ],
+    [
+     46800,
+     -5211611.2172888,
+     -4055066.1010041703,
+     -1534982.8192268065,
+     4060.493537971639,
+     -3036.382599346093,
+     -5753.976008623047
+    ],
+    [
+     50400,
+     212074.11434144943,
+     4564224.51912331,
+     5001845.492263438,
+     -7161.29160053644,
+     -1868.0296767089092,
+     2010.3873138247839
+    ],
+    [
+     54000,
+     4955873.507332749,
+     -1404025.6689811673,
+     -4399220.174515692,
+     4471.6268970091805,
+     5248.54129916424,
+     3362.702391610413
+    ],
+    [
+     57600,
+     -6132650.336913857,
+     -2882209.7879270525,
+     217511.77605252154,
+     1852.4009868065384,
+     -4394.530825375034,
+     -6006.393457822153
+    ],
+    [
+     61200,
+     2328738.3527251747,
+     4827459.788942442,
+     4142785.5612025885,
+     -6687.737649532657,
+     1.5570454318457763,
+     3758.242085856314
+    ],
+    [
+     64800,
+     3355194.869734311,
+     -2884225.3243683903,
+     -5129345.2918142155,
+     6110.71690800579,
+     4370.749932672689,
+     1541.9893606377198
+    ],
+    [
+     68400,
+     -6346373.662616784,
+     -1379909.6679640643,
+     1944341.1994296329,
+     -582.2048986884965,
+     -5214.504359258944,
+     -5592.752260739087
+    ],
+    [
+     72000,
+     4186605.450602725,
+     4513911.389139143,
+     2825384.321791271,
+     -5434.4290882042,
+     1853.5838701296225,
+     5091.268477121181
+    ],
+    [
+     75600,
+     1356420.7165886087,
+     -4006356.946418931,
+     -5292267.883840429,
+     7049.672291328639,
+     2983.580039947846,
+     -446.9607298520451
+    ],
+    [
+     79200,
+     -5825722.613866103,
+     270058.8992841903,
+     3454599.2846565912,
+     -2960.80410680154,
+     -5405.636083513831,
+     -4561.79423425635
+    ],
+    [
+     82800,
+     5568706.783686942,
+     3666215.1672387416,
+     1196173.92646816,
+     -3541.605838739054,
+     3467.1735269495584,
+     5861.117237253316
+    ],
+    [
+     86400,
+     -809348.9660385501,
+     -4640714.852415787,
+     -4870922.041533673,
+     7178.061610831325,
+     1257.8360907589758,
+     -2384.1038562971935
+    ]
+   ],
+   "maxStepS": 0.5,
+   "fineStepS": 0.25,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.040643913614718113
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.011388407056256841
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.003417292506788843
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0005110587199486036
+    },
+    {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.00018683875141554016
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 0.5,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 172801,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -13123.76909535157,
+     "max": -1.5454133972525597e-07
+    },
+    "hourlyNativeDensityKgM3": [
+     2.7951346035729718e-12,
+     2.081677480345196e-12,
+     4.79132496335398e-12,
+     2.462465363971414e-12,
+     2.1113396077357975e-12,
+     4.619746601506354e-12,
+     2.4520378643931564e-12,
+     2.6469056278245584e-12,
+     4.371498090924972e-12,
+     2.4534424470004548e-12,
+     3.5197062968075627e-12,
+     4.011175615164986e-12,
+     2.1793710664930533e-12,
+     4.318757419428239e-12,
+     3.4761183568078974e-12,
+     2.196532618030656e-12,
+     4.835837154100709e-12,
+     2.9340844765858693e-12,
+     2.3436315455266366e-12,
+     5.011771461579089e-12,
+     2.583807229476876e-12,
+     2.174784369173749e-12,
+     4.873756042899605e-12,
+     2.408938921510382e-12,
+     2.2845622158023213e-12
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "LEO400",
+   "forceSet": "W1-field-sun-moon-srp-drag-cssi",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448035.382972148,
+     -3441205.520945257,
+     -5297675.885548931,
+     6497.578333397019,
+     4055.320520531204,
+     371.79342900327663
+    ],
+    [
+     7200,
+     -6082237.8379881475,
+     -824062.3990606602,
+     2878530.631814368,
+     -1644.376019586986,
+     -5531.20000851965,
+     -5049.926992318518
+    ],
+    [
+     10800,
+     4788462.640032704,
+     4406617.768105889,
+     1883507.0376739795,
+     -4557.554084209158,
+     2548.4597456036363,
+     5624.2099254989025
+    ],
+    [
+     14400,
+     373890.4440879011,
+     -4433211.243015087,
+     -5110739.864650187,
+     7074.294593001525,
+     2473.0331387947,
+     -1621.8760639258276
+    ],
+    [
+     18000,
+     -5257181.6643011235,
+     887520.2918615182,
+     4185292.3016242217,
+     -3874.7832010932893,
+     -5487.277485540223,
+     -3696.282968217339
+    ],
+    [
+     21600,
+     5883432.391007708,
+     3355148.5511754504,
+     144808.32171493975,
+     -2472.8770488338773,
+     4077.428522672131,
+     6014.446358751788
+    ],
+    [
+     25200,
+     -1756068.9594774598,
+     -4886205.615671859,
+     -4355644.568666723,
+     6828.277096540724,
+     614.1635663051528,
+     -3434.0253992164107
+    ],
+    [
+     28800,
+     -3813761.5814989232,
+     2474140.5426395903,
+     5025713.95736894,
+     -5664.480535730135,
+     -4790.924340731677,
+     -1934.0675471110894
+    ],
+    [
+     32400,
+     6295638.641964396,
+     1914771.9550159858,
+     -1608303.773823452,
+     -86.40604106513813,
+     5102.293122577126,
+     5733.204530242447
+    ],
+    [
+     36000,
+     -3693962.511327224,
+     -4752746.535596598,
+     -3117050.0517827803,
+     5784.1296754825225,
+     -1298.9709313155638,
+     -4864.205997857487
+    ],
+    [
+     39600,
+     -1917051.2178039502,
+     3749869.817628109,
+     5307791.703264196,
+     -6805.26007518853,
+     -3532.1191051736837,
+     41.62334235220676
+    ],
+    [
+     43200,
+     5974402.029689115,
+     259863.05297152916,
+     -3182340.115139787,
+     2324.6930655739993,
+     5505.928446200357,
+     4812.712999920357
+    ],
+    [
+     46800,
+     -5213517.777742689,
+     -4053739.1714257593,
+     -1532387.4940237857,
+     4057.4252388546574,
+     -3038.731857173537,
+     -5754.8431723175245
+    ],
+    [
+     50400,
+     215923.73983607016,
+     4565288.274803819,
+     5000831.743302632,
+     -7161.099236344615,
+     -1864.8959074162424,
+     2013.8120663419527
+    ],
+    [
+     54000,
+     4953215.219357483,
+     -1407272.6241375573,
+     -4401367.9476658795,
+     4475.479620979297,
+     5247.38166756457,
+     3359.19036591246
+    ],
+    [
+     57600,
+     -6134033.309758832,
+     -2879181.0892404485,
+     221719.707991469,
+     1846.8774895020713,
+     -4397.090497504274,
+     -6006.158361642548
+    ],
+    [
+     61200,
+     2334147.5254046232,
+     4827543.636017968,
+     4139838.3081431584,
+     -6685.287407725384,
+     6.501221268285624,
+     3762.470596416015
+    ],
+    [
+     64800,
+     3349792.6149724494,
+     -2888200.371506869,
+     -5130839.601805339,
+     6114.486429409108,
+     4367.3875312504515,
+     1536.0611049703516
+    ],
+    [
+     68400,
+     -6345893.044318182,
+     -1374704.2793344532,
+     1949991.7126446746,
+     -590.3667865693344,
+     -5216.240218096598,
+     -5590.199012999527
+    ],
+    [
+     72000,
+     4192817.7788268905,
+     4511925.319072885,
+     2819705.9543089964,
+     -5428.323715270357,
+     1860.0626178813648,
+     5095.293312333567
+    ],
+    [
+     75600,
+     1347737.1610854066,
+     -4010143.109653081,
+     -5291846.147727374,
+     7051.711884407758,
+     2977.197132474027,
+     -455.3668350920312
+    ],
+    [
+     79200,
+     -5821777.650648766,
+     277458.3613111845,
+     3460916.312897707,
+     -2970.980906115133,
+     -5405.116070888316,
+     -4555.678355289482
+    ],
+    [
+     82800,
+     5574201.257551173,
+     3661081.2793543916,
+     1187344.7794744829,
+     -3530.762751942654,
+     3474.2105630697356,
+     5863.345924983292
+    ],
+    [
+     86400,
+     -821136.1323149191,
+     -4642902.457014027,
+     -4867142.872144639,
+     7176.23795235573,
+     1248.0784192388012,
+     -2394.331319418406
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     3141998.69088,
+     4937414.642995,
+     3412768.730079,
+     -6096.35952626,
+     695.765598668,
+     4606.075488545
+    ],
+    [
+     3600,
+     2448035.3829662977,
+     -3441205.5209506103,
+     -5297675.885550437,
+     6497.57833339894,
+     4055.320520526332,
+     371.7934289969903
+    ],
+    [
+     7200,
+     -6082237.837987549,
+     -824062.3990539112,
+     2878530.6318204366,
+     -1644.3760195968553,
+     -5531.200008520659,
+     -5049.926992313245
+    ],
+    [
+     10800,
+     4788462.640043138,
+     4406617.768099381,
+     1883507.0376608346,
+     -4557.554084196913,
+     2548.4597456165266,
+     5624.209925504517
+    ],
+    [
+     14400,
+     373890.4440673158,
+     -4433211.24302381,
+     -5110739.864646763,
+     7074.294593001304,
+     2473.0331387774413,
+     -1621.876063943813
+    ],
+    [
+     18000,
+     -5257181.664289931,
+     887520.2918792017,
+     4185292.3016360058,
+     -3874.783201114894,
+     -5487.277485536575,
+     -3696.2829682000943
+    ],
+    [
+     21600,
+     5883432.391019019,
+     3355148.5511567765,
+     144808.32168819744,
+     -2472.877048801161,
+     4077.428522692324,
+     6014.446358752873
+    ],
+    [
+     25200,
+     -1756068.9595139977,
+     -4886205.615676706,
+     -4355644.568650022,
+     6828.277096527456,
+     614.1635662720474,
+     -3434.025399243849
+    ],
+    [
+     28800,
+     -3813761.5814678133,
+     2474140.542667047,
+     5025713.957379942,
+     -5664.480535758011,
+     -4790.9243407130425,
+     -1934.067547074384
+    ],
+    [
+     32400,
+     6295638.6419654535,
+     1914771.9549793235,
+     -1608303.773863943,
+     -86.40604100939498,
+     5102.293122596576,
+     5733.204530228653
+    ],
+    [
+     36000,
+     -3693962.5113727604,
+     -4752746.535588264,
+     -3117050.0517467596,
+     5784.129675444464,
+     -1298.9709313622159,
+     -4864.205997886502
+    ],
+    [
+     39600,
+     -1917051.2177494601,
+     3749869.8176569045,
+     5307791.703263671,
+     -6805.26007520899,
+     -3532.119105134456,
+     41.62334240767092
+    ],
+    [
+     43200,
+     5974402.029667879,
+     259863.05291921078,
+     -3182340.1151847616,
+     2324.6930656447976,
+     5505.928446203328,
+     4812.712999882403
+    ],
+    [
+     46800,
+     -5213517.777783588,
+     -4053739.1713976203,
+     -1532387.493969132,
+     4057.4252387896513,
+     -3038.7318572227337,
+     -5754.843172334436
+    ],
+    [
+     50400,
+     215923.73990963612,
+     4565288.274822962,
+     5000831.743281631,
+     -7161.099236341916,
+     -1864.8959073549372,
+     2013.8120664082671
+    ],
+    [
+     54000,
+     4953215.219306974,
+     -1407272.6241983457,
+     -4401367.947704526,
+     4475.479621051316,
+     5247.381667544042,
+     3359.190365848003
+    ],
+    [
+     57600,
+     -6134033.309781731,
+     -2879181.0891902316,
+     221719.70806016974,
+     1846.8774894121007,
+     -4397.090497546108,
+     -6006.158361637926
+    ],
+    [
+     61200,
+     2334147.5254843202,
+     4827543.63601728,
+     4139838.3080979306,
+     -6685.287407690549,
+     6.501221342711315,
+     3762.4705964797645
+    ],
+    [
+     64800,
+     3349792.614893558,
+     -2888200.3715643967,
+     -5130839.601825935,
+     6114.486429463305,
+     4367.387531202366,
+     1536.0611048864819
+    ],
+    [
+     68400,
+     -6345893.044312367,
+     -1374704.2792665998,
+     1949991.712717514,
+     -590.366786676945,
+     -5216.240218118861,
+     -5590.199012965276
+    ],
+    [
+     72000,
+     4192817.7789018345,
+     4511925.3190465,
+     2819705.9542381787,
+     -5428.323715196945,
+     1860.062617961985,
+     5095.2933123841585
+    ],
+    [
+     75600,
+     1347737.1609801664,
+     -4010143.1096988167,
+     -5291846.14772157,
+     7051.711884432263,
+     2977.197132397143,
+     -455.36683519209924
+    ],
+    [
+     79200,
+     -5821777.650606108,
+     277458.36139215843,
+     3460916.3129660343,
+     -2970.9809062267614,
+     -5405.116070882649,
+     -4555.678355221403
+    ],
+    [
+     82800,
+     5574201.257606876,
+     3661081.2792983777,
+     1187344.7793811446,
+     -3530.7627518286677,
+     3474.210563146463,
+     5863.345925009126
+    ],
+    [
+     86400,
+     -821136.1324361251,
+     -4642902.45703646,
+     -4867142.872105444,
+     7176.237952336626,
+     1248.0784191390821,
+     -2394.3313195211836
+    ]
+   ],
+   "maxStepS": 0.5,
+   "fineStepS": 0.25,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.03722300324157829
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.010229250958587809
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0031115914860106453
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.000854960026136473
+    },
+    {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.0001293457827866407
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 0.5,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 172801,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -13123.77402882895,
+     "max": -1.150183379650116e-07
+    },
+    "hourlyNativeDensityKgM3": [
+     2.0702602464248533e-12,
+     1.4319564603434384e-12,
+     3.72250660522767e-12,
+     1.790102331222609e-12,
+     1.5268275039338366e-12,
+     3.5273243305279495e-12,
+     1.7045179155290996e-12,
+     1.9688978662171726e-12,
+     3.3011339356198895e-12,
+     1.7270297805422685e-12,
+     2.6691489961465218e-12,
+     3.0243513365059273e-12,
+     1.5907156501688315e-12,
+     3.3245192477870233e-12,
+     2.5944128036247826e-12,
+     1.6328811330247373e-12,
+     3.761691609512078e-12,
+     2.1596426895383796e-12,
+     1.6913099594054781e-12,
+     3.903764602781131e-12,
+     1.8784349127854566e-12,
+     1.4960830939227127e-12,
+     3.775025129749112e-12,
+     1.713487667378795e-12,
+     1.6485289279157034e-12
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forceSet": "Z3-zonal20-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1588009.071618452,
+     5068609.125509818,
+     -4720142.369145963,
+     -95.1673643578525,
+     5074.503683633525,
+     5494.729494904267
+    ],
+    [
+     7200,
+     1301307.066009434,
+     -6953655.840233497,
+     446628.3711793552,
+     -962.9862541914141,
+     -676.0661084285099,
+     -7409.8846163763255
+    ],
+    [
+     10800,
+     -480524.32707833685,
+     5893036.514449143,
+     3901745.588285422,
+     1609.4921064750724,
+     -3972.3941523359927,
+     6160.15339011764
+    ],
+    [
+     14400,
+     -567814.1177253682,
+     -2304097.1674955445,
+     -6698532.147627198,
+     -1575.850981731367,
+     6947.549950501344,
+     -2263.6112910886595
+    ],
+    [
+     18000,
+     1363636.12476896,
+     -2232592.6182784103,
+     6570072.557879591,
+     886.4135926581041,
+     -7006.860447455561,
+     -2558.6809163477355
+    ],
+    [
+     21600,
+     -1599537.599804106,
+     5826918.07453791,
+     -3735642.461379147,
+     184.72305003396554,
+     4063.3746449364344,
+     6281.676531831732
+    ],
+    [
+     25200,
+     1145430.669359042,
+     -6953953.975845385,
+     -789856.6321567552,
+     -1191.9515294752946,
+     622.3576320590912,
+     -7377.582468003045
+    ],
+    [
+     28800,
+     -223809.94484720152,
+     5141400.911340965,
+     4863043.418189523,
+     1691.176009179308,
+     -5000.737651786088,
+     5336.71938060233
+    ],
+    [
+     32400,
+     -816673.7418669605,
+     -1118944.6165798653,
+     -6971178.7432604525,
+     -1472.7339910928124,
+     7258.437686099028,
+     -997.3341611560545
+    ],
+    [
+     36000,
+     1501134.120290955,
+     -3355478.0711607337,
+     6042870.786986525,
+     641.1094396444612,
+     -6479.718275449909,
+     -3745.5483214851824
+    ],
+    [
+     39600,
+     -1566409.3693185172,
+     6405749.56983005,
+     -2635623.423934473,
+     466.92491031878023,
+     2926.932224417263,
+     6875.793722597516
+    ],
+    [
+     43200,
+     953268.0343424048,
+     -6739631.94285766,
+     -2001759.7187327088,
+     -1392.5049868877952,
+     1897.900416232103,
+     -7115.8584640274385
+    ],
+    [
+     46800,
+     45634.19010761169,
+     4231678.594469615,
+     5672731.552977135,
+     1726.8806410055681,
+     -5873.478477986076,
+     4346.5515126720275
+    ],
+    [
+     50400,
+     -1048846.1815926891,
+     98843.23015039226,
+     -7029607.748179872,
+     -1325.987718682934,
+     7347.704901151783,
+     298.7896123944766
+    ],
+    [
+     54000,
+     1599310.602687341,
+     -4373073.9545042515,
+     5326909.765154412,
+     371.4130812239293,
+     -5752.360497182702,
+     -4815.732463368408
+    ],
+    [
+     57600,
+     -1488242.3549212578,
+     6787183.676056339,
+     -1453920.4974703449,
+     743.446269876901,
+     1699.8287562165547,
+     7257.901718104197
+    ],
+    [
+     61200,
+     729371.1459980676,
+     -6317941.776594043,
+     -3151463.4261378865,
+     -1558.212656604171,
+     3111.017150096329,
+     -6633.716233206732
+    ],
+    [
+     64800,
+     320428.19384694047,
+     3192175.245098604,
+     6305494.592570892,
+     1714.2909505856387,
+     -6563.590757173482,
+     3220.571666135147
+    ],
+    [
+     68400,
+     -1257327.33813175,
+     1312100.9951303059,
+     -6872088.741410458,
+     -1138.4945803743642,
+     7213.112840827087,
+     1585.6587874909453
+    ],
+    [
+     72000,
+     1654256.1754936222,
+     -5253934.745118105,
+     4444511.380315506,
+     84.44629190355958,
+     -4847.5988248136655,
+     -5735.594106443403
+    ],
+    [
+     75600,
+     -1365952.3108714293,
+     6959350.861489903,
+     -227042.0038981885,
+     1006.1391825570688,
+     419.82859079266984,
+     7415.2943579569865
+    ],
+    [
+     79200,
+     479330.2594256127,
+     -5702534.171992879,
+     -4203434.241918575,
+     -1683.5319995300142,
+     4224.529278409553,
+     -5947.049321273076
+    ],
+    [
+     82800,
+     592810.6544833415,
+     2055210.8849946267,
+     6741541.023605963,
+     1652.440137914654,
+     -7049.830143724929,
+     1993.9269803132213
+    ],
+    [
+     86400,
+     -1435563.8987198535,
+     2483850.1466661273,
+     -6503402.568654851,
+     -914.323513977107,
+     6858.8767851740395,
+     2824.4433599731187
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1588009.0716184222,
+     5068609.125509332,
+     -4720142.369146957,
+     -95.167364358073,
+     5074.503683633934,
+     5494.729494903411
+    ],
+    [
+     7200,
+     1301307.066009386,
+     -6953655.84023344,
+     446628.37117938633,
+     -962.9862541912506,
+     -676.0661084289886,
+     -7409.884616376412
+    ],
+    [
+     10800,
+     -480524.3270786314,
+     5893036.5144497,
+     3901745.58828356,
+     1609.4921064748926,
+     -3972.3941523352287,
+     6160.153390118727
+    ],
+    [
+     14400,
+     -567814.11772562,
+     -2304097.1674945937,
+     -6698532.147628186,
+     -1575.8509817309332,
+     6947.549950500958,
+     -2263.611291087664
+    ],
+    [
+     18000,
+     1363636.1247687864,
+     -2232592.6182812704,
+     6570072.557876734,
+     886.4135926573426,
+     -7006.860447456019,
+     -2558.680916351538
+    ],
+    [
+     21600,
+     -1599537.5998035562,
+     5826918.074540217,
+     -3735642.4613762023,
+     184.7230500352626,
+     4063.374644931713,
+     6281.676531833938
+    ],
+    [
+     25200,
+     1145430.6693559915,
+     -6953953.975843096,
+     -789856.6321712431,
+     -1191.9515294774903,
+     622.3576320731077,
+     -7377.582468002146
+    ],
+    [
+     28800,
+     -223809.94484325586,
+     5141400.911328875,
+     4863043.418199052,
+     1691.1760091796993,
+     -5000.737651800587,
+     5336.719380591184
+    ],
+    [
+     32400,
+     -816673.7418723013,
+     -1118944.6165535378,
+     -6971178.743264256,
+     -1472.7339910886103,
+     7258.437686102589,
+     -997.334161128419
+    ],
+    [
+     36000,
+     1501134.1202929497,
+     -3355478.071191278,
+     6042870.786965269,
+     641.1094396359202,
+     -6479.718275434026,
+     -3745.548321519367
+    ],
+    [
+     39600,
+     -1566409.3693147632,
+     6405749.569846365,
+     -2635623.4238934033,
+     466.92491032968485,
+     2926.932224374115,
+     6875.793722615715
+    ],
+    [
+     43200,
+     953268.0343302563,
+     -6739631.942841047,
+     -2001759.7187885907,
+     -1392.5049868961155,
+     1897.9004162913086,
+     -7115.858464010549
+    ],
+    [
+     46800,
+     45634.190124108994,
+     4231678.594413933,
+     5672731.55301531,
+     1726.8806410049021,
+     -5873.478478031343,
+     4346.55151261401
+    ],
+    [
+     50400,
+     -1048846.1816068601,
+     98843.23022916388,
+     -7029607.748174502,
+     -1325.9877186698825,
+     7347.704901152018,
+     298.7896124785019
+    ],
+    [
+     54000,
+     1599310.6026914096,
+     -4373073.954574454,
+     5326909.76509425,
+     371.4130812011197,
+     -5752.360497122763,
+     -4815.7324634421375
+    ],
+    [
+     57600,
+     -1488242.354909822,
+     6787183.676077769,
+     -1453920.4973686764,
+     743.4462699005996,
+     1699.828756112392,
+     7257.901718128361
+    ],
+    [
+     61200,
+     729371.1459743335,
+     -6317941.776547299,
+     -3151463.4262339845,
+     -1558.2126566164748,
+     3111.0171502008275,
+     -6633.716233155311
+    ],
+    [
+     64800,
+     320428.1938758895,
+     3192175.244990304,
+     6305494.5926236855,
+     1714.2909505793905,
+     -6563.590757231555,
+     3220.5716660193584
+    ],
+    [
+     68400,
+     -1257327.3381510018,
+     1312100.9952523531,
+     -6872088.74138071,
+     -1138.4945803505427,
+     7213.112840804882,
+     1585.658787621113
+    ],
+    [
+     72000,
+     1654256.1754952841,
+     -5253934.745203756,
+     4444511.380215131,
+     84.44629187015016,
+     -4847.598824708753,
+     -5735.594106531011
+    ],
+    [
+     75600,
+     -1365952.3108521663,
+     6959350.861496814,
+     -227042.00375928378,
+     1006.1391825858772,
+     419.8285906489693,
+     7415.294357962436
+    ],
+    [
+     79200,
+     479330.2593946325,
+     -5702534.171915459,
+     -4203434.242026313,
+     -1683.5319995401567,
+     4224.529278526366,
+     -5947.049321187573
+    ],
+    [
+     82800,
+     592810.6545146595,
+     2055210.8848634264,
+     6741541.023644443,
+     1652.4401379019873,
+     -7049.83014376647,
+     1993.9269801718308
+    ],
+    [
+     86400,
+     -1435563.8987367947,
+     2483850.1467919205,
+     -6503402.56860247,
+     -914.323513948116,
+     6858.8767851244775,
+     2824.443360105386
+    ]
+   ],
+   "maxStepS": 1.0,
+   "fineStepS": 0.5,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.03738147259124807
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.010910108623900319
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.00034422529733509104
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 21.0,
+     "sampleCount": 24,
+     "worstM": 0.0001404042020067674
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 1.0,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 86401,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -20966.813660502667,
+     "max": -6.39123609289527e-05
+    },
+    "hourlyNativeDensityKgM3": [
+     4.073003364940934e-14,
+     3.0930135015792864e-14,
+     1.832063319513977e-14,
+     4.131418562040411e-14,
+     1.8622081187206744e-14,
+     3.698349900672494e-14,
+     3.1096067864990775e-14,
+     1.901859160914308e-14,
+     4.4368766011549295e-14,
+     2.699753540163328e-14,
+     2.8751888913826404e-14,
+     3.037850855809004e-14,
+     1.9191110471070944e-14,
+     5.085751988459971e-14,
+     2.5007077933692882e-14,
+     2.3278433474255885e-14,
+     3.2557329606465697e-14,
+     1.8671977638247796e-14,
+     5.0479235405685247e-14,
+     2.1897842322995984e-14,
+     2.047661725510831e-14,
+     3.620736508289429e-14,
+     1.599341175379503e-14,
+     4.635099833185528e-14,
+     2.5144997576815956e-14
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "id": "SSO700 F6-field-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forceSet": "F6-field-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1587952.5982607272,
+     5068975.220734192,
+     -4719780.039145621,
+     -95.1115650864604,
+     5074.193086754921,
+     5494.971735502166
+    ],
+    [
+     7200,
+     1301237.895342432,
+     -6953558.0108524375,
+     446131.84439125354,
+     -962.7933239858285,
+     -675.5231936837002,
+     -7410.095462197768
+    ],
+    [
+     10800,
+     -480656.8673627207,
+     5893014.054016707,
+     3902100.826990042,
+     1609.0719997044196,
+     -3972.6284798865695,
+     6159.847682165551
+    ],
+    [
+     14400,
+     -567383.319561539,
+     -2303801.924947678,
+     -6698588.3874851735,
+     -1575.6980700479035,
+     6947.69161386764,
+     -2263.554910217968
+    ],
+    [
+     18000,
+     1363132.01865303,
+     -2231860.194496964,
+     6570599.438743807,
+     886.6626557635186,
+     -7006.916872344699,
+     -2557.919312264063
+    ],
+    [
+     21600,
+     -1599194.2431961405,
+     5826771.846065335,
+     -3736100.2363582943,
+     184.26275377158265,
+     4063.8378141002445,
+     6281.3521169051055
+    ],
+    [
+     25200,
+     1145550.509787497,
+     -6953955.178229447,
+     -788672.740471651,
+     -1191.503904196919,
+     621.2959462360905,
+     -7377.856585782347
+    ],
+    [
+     28800,
+     -224078.07650624728,
+     5142127.426190021,
+     4862412.423753768,
+     1690.9178533909355,
+     -4999.988844712099,
+     5337.389615214933
+    ],
+    [
+     32400,
+     -816545.401704766,
+     -1119332.046517876,
+     -6971037.555914601,
+     -1472.7485631696227,
+     7258.412324366282,
+     -997.9685644809076
+    ],
+    [
+     36000,
+     1501016.7434333144,
+     -3354917.7964363894,
+     6043012.638140569,
+     641.1950324340935,
+     -6480.063140254341,
+     -3745.262410190307
+    ],
+    [
+     39600,
+     -1566458.6261178837,
+     6405932.918825797,
+     -2635546.8802920734,
+     466.93247386888766,
+     2926.770231003179,
+     6875.6775808133125
+    ],
+    [
+     43200,
+     953009.9658082421,
+     -6739205.578551133,
+     -2002473.8711866005,
+     -1392.607220276503,
+     1898.6945404707776,
+     -7115.923790638509
+    ],
+    [
+     46800,
+     45599.828504287514,
+     4231515.457997698,
+     5672975.985972475,
+     1726.6824026511022,
+     -5873.710250272788,
+     4346.132203282053
+    ],
+    [
+     50400,
+     -1048799.5087543044,
+     100222.58103251661,
+     -7029564.244974959,
+     -1325.7558586047812,
+     7347.750851618131,
+     299.9227360863846
+    ],
+    [
+     54000,
+     1599096.270532012,
+     -4373413.673923914,
+     5326619.057336581,
+     371.3766838925121,
+     -5751.998820579308,
+     -4816.233997126139
+    ],
+    [
+     57600,
+     -1488197.326386431,
+     6787448.055392609,
+     -1453234.1364593788,
+     743.1548240276659,
+     1699.0196187711636,
+     7258.013489792441
+    ],
+    [
+     61200,
+     729592.6502937179,
+     -6317811.618694087,
+     -3151803.3359521152,
+     -1557.9067628643904,
+     3111.2423289331145,
+     -6633.606247391599
+    ],
+    [
+     64800,
+     320017.61964899243,
+     3191965.1270527807,
+     6305581.551949375,
+     1714.305380927189,
+     -6563.664135675147,
+     3220.508386962235
+    ],
+    [
+     68400,
+     -1257024.8063305013,
+     1311803.3212565763,
+     -6872205.661170343,
+     -1138.7366145545943,
+     7213.101297986673,
+     1585.4809591313624
+    ],
+    [
+     72000,
+     1654244.8994381987,
+     -5254060.349733105,
+     4444494.331288156,
+     84.67839093789445,
+     -4847.50767953506,
+     -5735.576178893522
+    ],
+    [
+     75600,
+     -1366007.7481411493,
+     6959205.941722535,
+     -226940.82428996917,
+     1006.042284153792,
+     419.7505522674566,
+     7415.461170161774
+    ],
+    [
+     79200,
+     479381.9447183315,
+     -5702504.43960604,
+     -4203499.0622081235,
+     -1683.5049829940706,
+     4224.668250518267,
+     -5946.933077865192
+    ],
+    [
+     82800,
+     592955.2565163859,
+     2054565.9104428052,
+     6741720.241623842,
+     1652.4236171916293,
+     -7049.982208424237,
+     1993.3147520006073
+    ],
+    [
+     86400,
+     -1435588.642269812,
+     2484636.665211571,
+     -6502961.787610622,
+     -914.1247260672234,
+     6858.645666464506,
+     2825.288694760242
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1587952.5982599996,
+     5068975.220732337,
+     -4719780.039147948,
+     -95.11156508681104,
+     5074.19308675673,
+     5494.971735498643
+    ],
+    [
+     7200,
+     1301237.8953416871,
+     -6953558.01085295,
+     446131.8443922546,
+     -962.7933239873178,
+     -675.5231936828011,
+     -7410.095462198284
+    ],
+    [
+     10800,
+     -480656.86736246763,
+     5893014.054017333,
+     3902100.826987562,
+     1609.0719997057327,
+     -3972.628479885564,
+     6159.847682167512
+    ],
+    [
+     14400,
+     -567383.3195613506,
+     -2303801.9249497666,
+     -6698588.387484955,
+     -1575.6980700471904,
+     6947.691613866524,
+     -2263.5549102202613
+    ],
+    [
+     18000,
+     1363132.0186526042,
+     -2231860.194498827,
+     6570599.438742308,
+     886.6626557607934,
+     -7006.9168723461235,
+     -2557.919312264425
+    ],
+    [
+     21600,
+     -1599194.2431945384,
+     5826771.8460677145,
+     -3736100.2363521364,
+     184.26275377328216,
+     4063.8378140947484,
+     6281.352116910036
+    ],
+    [
+     25200,
+     1145550.5097844652,
+     -6953955.178228658,
+     -788672.7404823364,
+     -1191.5039041992168,
+     621.2959462487163,
+     -7377.856585779528
+    ],
+    [
+     28800,
+     -224078.07650079828,
+     5142127.426175786,
+     4862412.423767538,
+     1690.9178533904244,
+     -4999.9888447279345,
+     5337.389615201545
+    ],
+    [
+     32400,
+     -816545.4017089048,
+     -1119332.0464980851,
+     -6971037.555914955,
+     -1472.7485631669228,
+     7258.412324372191,
+     -997.9685644583943
+    ],
+    [
+     36000,
+     1501016.7434357249,
+     -3354917.796462629,
+     6043012.6381269125,
+     641.1950324269299,
+     -6480.063140238668,
+     -3745.2624102148193
+    ],
+    [
+     39600,
+     -1566458.6261137722,
+     6405932.918837499,
+     -2635546.8802564833,
+     466.9324738773791,
+     2926.770230970445,
+     6875.677580829864
+    ],
+    [
+     43200,
+     953009.965799878,
+     -6739205.578541407,
+     -2002473.8712227705,
+     -1392.6072202801975,
+     1898.6945405110491,
+     -7115.923790625032
+    ],
+    [
+     46800,
+     45599.82851798997,
+     4231515.4579518745,
+     5672975.986004767,
+     1726.6824026496142,
+     -5873.710250306436,
+     4346.132203238276
+    ],
+    [
+     50400,
+     -1048799.508764067,
+     100222.58109168294,
+     -7029564.244968108,
+     -1325.7558585940378,
+     7347.750851620701,
+     299.92273615065955
+    ],
+    [
+     54000,
+     1599096.270535617,
+     -4373413.673983322,
+     5326619.057288055,
+     371.37668387206423,
+     -5751.99882052889,
+     -4816.23399718294
+    ],
+    [
+     57600,
+     -1488197.3263747361,
+     6787448.055409517,
+     -1453234.1363658388,
+     743.1548240511404,
+     1699.019618679255,
+     7258.013489816006
+    ],
+    [
+     61200,
+     729592.650271955,
+     -6317811.618653123,
+     -3151803.3360356903,
+     -1557.9067628753992,
+     3111.2423290280276,
+     -6633.606247344287
+    ],
+    [
+     64800,
+     320017.6196790685,
+     3191965.126944663,
+     6305581.552002677,
+     1714.305380919828,
+     -6563.664135731372,
+     3220.508386847121
+    ],
+    [
+     68400,
+     -1257024.8063490915,
+     1311803.3213750832,
+     -6872205.661137987,
+     -1138.7366145305905,
+     7213.101297967782,
+     1585.4809592595152
+    ],
+    [
+     72000,
+     1654244.8994402208,
+     -5254060.349821741,
+     4444494.33118714,
+     84.67839090399089,
+     -4847.507679425207,
+     -5735.576178981042
+    ],
+    [
+     75600,
+     -1366007.7481193296,
+     6959205.941727981,
+     -226940.82413953575,
+     1006.042284184928,
+     419.7505521144488,
+     7415.461170168807
+    ],
+    [
+     79200,
+     479381.94468558714,
+     -5702504.439525099,
+     -4203499.062320121,
+     -1683.5049830044456,
+     4224.668250642837,
+     -5946.933077774835
+    ],
+    [
+     82800,
+     592955.2565520633,
+     2054565.9102946592,
+     6741720.241667996,
+     1652.423617176419,
+     -7049.982208469976,
+     1993.314751843123
+    ],
+    [
+     86400,
+     -1435588.6422876776,
+     2484636.6653495873,
+     -6502961.787550568,
+     -914.1247260344137,
+     6858.645666411927,
+     2825.2886949082854
+    ]
+   ],
+   "maxStepS": 1.0,
+   "fineStepS": 0.5,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.03842027526251891
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.011810428124650286
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.00035623008665886283
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 23.0,
+     "sampleCount": 24,
+     "worstM": 0.00015864952015093845
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 1.0,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 86401,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -20967.185053546564,
+     "max": -5.504116415977478e-07
+    },
+    "hourlyNativeDensityKgM3": [
+     4.073003364940934e-14,
+     3.092792529274675e-14,
+     1.835519032467665e-14,
+     4.121644077681039e-14,
+     1.8636616223558883e-14,
+     3.6915863772217804e-14,
+     3.1079450113882734e-14,
+     1.904492249947494e-14,
+     4.4310839435662246e-14,
+     2.702373482135049e-14,
+     2.881620499079575e-14,
+     3.0327768361251303e-14,
+     1.9247253328092406e-14,
+     5.079668580591945e-14,
+     2.5014045660800712e-14,
+     2.3296966446934658e-14,
+     3.251850348991073e-14,
+     1.8658873372839153e-14,
+     5.050322900320498e-14,
+     2.189660830676288e-14,
+     2.0454268209766037e-14,
+     3.626730835434541e-14,
+     1.5990138922952246e-14,
+     4.635213876185204e-14,
+     2.5177428364260066e-14
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "SSO700",
+   "forceSet": "W1-field-sun-moon-srp-drag-cssi",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "samples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1587952.6164682305,
+     5068975.156624356,
+     -4719780.238774224,
+     -95.11161240567057,
+     5074.193203320402,
+     5494.97154500678
+    ],
+    [
+     7200,
+     1301238.0371481671,
+     -6953558.119769487,
+     446132.68493077037,
+     -962.7931383489556,
+     -675.5241267155907,
+     -7410.095303586902
+    ],
+    [
+     10800,
+     -480657.3647541168,
+     5893015.433736806,
+     3902099.084775648,
+     1609.0718229937409,
+     -3972.6264540726206,
+     6159.848922547908
+    ],
+    [
+     14400,
+     -567382.5097576765,
+     -2303805.836927591,
+     -6698587.599897941,
+     -1575.69834976391,
+     6947.68995275444,
+     -2263.558859730524
+    ],
+    [
+     18000,
+     1363131.361331013,
+     -2231854.4897076916,
+     6570601.916055468,
+     886.6639270134759,
+     -7006.9188505972015,
+     -2557.913012088846
+    ],
+    [
+     21600,
+     -1599194.6126074358,
+     5826767.096213905,
+     -3736108.613614276,
+     184.26049920330777,
+     4063.845861731612,
+     6281.346564775679
+    ],
+    [
+     25200,
+     1145552.6231628389,
+     -6953956.959971285,
+     -788660.4667291536,
+     -1191.501667687099,
+     621.2826945871856,
+     -7377.857649017305
+    ],
+    [
+     28800,
+     -224081.92020954032,
+     5142139.190261734,
+     4862400.706433266,
+     1690.9172441719327,
+     -4999.97565785019,
+     5337.401834540056
+    ],
+    [
+     32400,
+     -816541.2801336613,
+     -1119353.1993705635,
+     -6971035.712492161,
+     -1472.7510304787884,
+     7258.40810932422,
+     -997.9907467561814
+    ],
+    [
+     36000,
+     1501014.682328514,
+     -3354895.4762652055,
+     6043026.474590464,
+     641.2009455033616,
+     -6480.076139994656,
+     -3745.238176392034
+    ],
+    [
+     39600,
+     -1566460.9026737171,
+     6405920.974218242,
+     -2635577.4816039586,
+     466.9248491642275,
+     2926.8011521501794,
+     6875.664256173416
+    ],
+    [
+     43200,
+     953017.2597707177,
+     -6739216.58830361,
+     -2002437.8517408227,
+     -1392.6016040504337,
+     1898.655588023236,
+     -7115.934543283689
+    ],
+    [
+     46800,
+     45589.34358170412,
+     4231551.783243561,
+     5672950.274698232,
+     1726.6826428010709,
+     -5873.681112212404,
+     4346.170825268135
+    ],
+    [
+     50400,
+     -1048790.3277073165,
+     100170.27490021617,
+     -7029567.987329606,
+     -1325.763890588434,
+     7347.750654378387,
+     299.8674361424219
+    ],
+    [
+     54000,
+     1599093.5941468328,
+     -4373368.253825164,
+     5326658.7739023445,
+     371.39114756059723,
+     -5752.038050778527,
+     -4816.18508471183
+    ],
+    [
+     57600,
+     -1488204.5671313128,
+     6787433.488723537,
+     -1453302.3707934013,
+     743.1393227723455,
+     1699.0899928167978,
+     7257.997692599398
+    ],
+    [
+     61200,
+     729609.0533675667,
+     -6317845.797180722,
+     -3151735.1319055,
+     -1557.8980254919272,
+     3111.168240281259,
+     -6633.641944313419
+    ],
+    [
+     64800,
+     319997.6019644054,
+     3192042.6963695567,
+     6305544.907692911,
+     1714.3094888555145,
+     -6563.62173811547,
+     3220.5914196969447
+    ],
+    [
+     68400,
+     -1257010.196331451,
+     1311708.610087815,
+     -6872228.643509532,
+     -1138.754633070804,
+     7213.119080729066,
+     1585.3806621529336
+    ],
+    [
+     72000,
+     1654244.1162335807,
+     -5253992.043656152,
+     4444577.936338321,
+     84.70517057717085,
+     -4847.59228785716,
+     -5735.503179830222
+    ],
+    [
+     75600,
+     -1366024.2705277184,
+     6959200.860718499,
+     -227060.41686897844,
+     1006.0177047278145,
+     419.8753875641632,
+     7415.4563250112005
+    ],
+    [
+     79200,
+     479411.5505519938,
+     -5702580.516052494,
+     -4203396.514902417,
+     -1683.4952685798048,
+     4224.5560752705005,
+     -5947.013952479646
+    ],
+    [
+     82800,
+     592923.8149134391,
+     2054701.2776311664,
+     6741683.624874635,
+     1652.4362194725152,
+     -7049.937557509635,
+     1993.4598466489604
+    ],
+    [
+     86400,
+     -1435569.9752157528,
+     2484493.3731729845,
+     -6503023.605763827,
+     -914.1577444934434,
+     6858.701781783346,
+     2825.137045060742
+    ]
+   ],
+   "fineSamples": [
+    [
+     0,
+     1191723.56144,
+     -1039163.182513,
+     6892121.012669,
+     1101.135586361,
+     -7317.289816814,
+     -1292.327097408
+    ],
+    [
+     3600,
+     -1587952.6164675222,
+     5068975.1566225765,
+     -4719780.238776493,
+     -95.11161240600903,
+     5074.193203322165,
+     5494.971545003293
+    ],
+    [
+     7200,
+     1301238.0371474493,
+     -6953558.119769978,
+     446132.68493189546,
+     -962.7931383504483,
+     -675.5241267148108,
+     -7410.09530358745
+    ],
+    [
+     10800,
+     -480657.3647539785,
+     5893015.43373777,
+     3902099.0847728094,
+     1609.0718229950312,
+     -3972.626454071192,
+     6159.848922550063
+    ],
+    [
+     14400,
+     -567382.5097573037,
+     -2303805.836930737,
+     -6698587.599897677,
+     -1575.6983497632752,
+     6947.689952752724,
+     -2263.558859733893
+    ],
+    [
+     18000,
+     1363131.3613303304,
+     -2231854.48970724,
+     6570601.91605495,
+     886.6639270112839,
+     -7006.918850599494,
+     -2557.913012086696
+    ],
+    [
+     21600,
+     -1599194.6126060672,
+     5826767.096214097,
+     -3736108.613612227,
+     184.2604992039297,
+     4063.8458617298593,
+     6281.346564777877
+    ],
+    [
+     25200,
+     1145552.6231607771,
+     -6953956.959971203,
+     -788660.4667342528,
+     -1191.5016676884022,
+     621.2826945937584,
+     -7377.85764901505
+    ],
+    [
+     28800,
+     -224081.92020574285,
+     5142139.190252455,
+     4862400.7064419035,
+     1690.9172441712126,
+     -4999.975657860483,
+     5337.40183453191
+    ],
+    [
+     32400,
+     -816541.2801362592,
+     -1119353.1993587366,
+     -6971035.712491808,
+     -1472.7510304770567,
+     7258.408109328497,
+     -997.9907467420956
+    ],
+    [
+     36000,
+     1501014.6823301713,
+     -3354895.476283518,
+     6043026.474581363,
+     641.2009454983,
+     -6480.076139983728,
+     -3745.2381764082534
+    ],
+    [
+     39600,
+     -1566460.9026704545,
+     6405920.974226132,
+     -2635577.481578707,
+     466.9248491701432,
+     2926.8011521277604,
+     6875.664256185299
+    ],
+    [
+     43200,
+     953017.259764821,
+     -6739216.588297384,
+     -2002437.851764771,
+     -1392.6016040522902,
+     1898.6555880504168,
+     -7115.934543274041
+    ],
+    [
+     46800,
+     45589.34359196074,
+     4231551.783209592,
+     5672950.274722169,
+     1726.6826427996898,
+     -5873.681112236499,
+     4346.170825236873
+    ],
+    [
+     50400,
+     -1048790.3277142448,
+     100170.27494334613,
+     -7029567.987323653,
+     -1325.763890580254,
+     7347.750654381083,
+     299.8674361896763
+    ],
+    [
+     54000,
+     1599093.5941496487,
+     -4373368.253870673,
+     5326658.773866001,
+     371.3911475445781,
+     -5752.038050739926,
+     -4816.185084753723
+    ],
+    [
+     57600,
+     -1488204.567121756,
+     6787433.488736206,
+     -1453302.3707195597,
+     743.1393227912821,
+     1699.0899927453804,
+     7257.997692618347
+    ],
+    [
+     61200,
+     729609.0533506391,
+     -6317845.79714956,
+     -3151735.1319691124,
+     -1557.8980255004487,
+     3111.168240354685,
+     -6633.641944276637
+    ],
+    [
+     64800,
+     319997.6019887656,
+     3192042.6962834597,
+     6305544.9077358,
+     1714.309488849381,
+     -6563.621738159609,
+     3220.5914196053427
+    ],
+    [
+     68400,
+     -1257010.1963459847,
+     1311708.610180216,
+     -6872228.643483391,
+     -1138.7546330518721,
+     7213.119080715147,
+     1585.3806622534235
+    ],
+    [
+     72000,
+     1654244.1162354266,
+     -5253992.04372604,
+     4444577.936260198,
+     84.70517055068589,
+     -4847.592287770474,
+     -5735.503179897777
+    ],
+    [
+     75600,
+     -1366024.2705104921,
+     6959200.860722639,
+     -227060.4167511285,
+     1006.0177047521863,
+     419.87538744526563,
+     7415.456325016894
+    ],
+    [
+     79200,
+     479411.55052762927,
+     -5702580.515992831,
+     -4203396.514985714,
+     -1683.4952685874925,
+     4224.556075363772,
+     -5947.013952411872
+    ],
+    [
+     82800,
+     592923.8149403782,
+     2054701.2775203045,
+     6741683.624908739,
+     1652.4362194608439,
+     -7049.937557542977,
+     1993.4598465315648
+    ],
+    [
+     86400,
+     -1435569.9752284172,
+     2484493.3732716613,
+     -6503023.605720393,
+     -914.1577444697974,
+     6858.701781746287,
+     2825.137045167469
+    ]
+   ],
+   "maxStepS": 1.0,
+   "fineStepS": 0.5,
+   "convergenceAttempts": [
+    {
+     "maxStepS": 8.0,
+     "fineStepS": 4.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.038594620483198804
+    },
+    {
+     "maxStepS": 4.0,
+     "fineStepS": 2.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.011861531254691315
+    },
+    {
+     "maxStepS": 2.0,
+     "fineStepS": 1.0,
+     "atHour": 24.0,
+     "sampleCount": 24,
+     "worstM": 0.00036411125867907894
+    },
+    {
+     "maxStepS": 1.0,
+     "fineStepS": 0.5,
+     "atHour": 21.0,
+     "sampleCount": 24,
+     "worstM": 0.00011917418862387129
+    }
+   ],
+   "diagnostics": {
+    "environmentStepS": 1.0,
+    "integrator": "Basilisk svIntegratorRKF78",
+    "relativeTolerance": 1e-14,
+    "absoluteTolerance": 1e-12,
+    "environmentUpdates": 86401,
+    "nativeSunRadiusM": 695000000.0,
+    "variant": "wgs84-gtd7d",
+    "orientationEvaluation": "memoized exact pinned ERFA",
+    "orientationCacheLimit": 800000,
+    "densityModel": "native wheel gtd7d at every altitude",
+    "sphericalMinusWgs84AltitudeM": {
+     "min": -20967.185057074763,
+     "max": -6.142072379589081e-07
+    },
+    "hourlyNativeDensityKgM3": [
+     2.3308358073482484e-14,
+     2.2185200126858944e-14,
+     1.084118652155268e-14,
+     2.533698237677393e-14,
+     1.2818833903126273e-14,
+     1.9822970311119366e-14,
+     2.1261459178064538e-14,
+     1.1254080767904801e-14,
+     2.6456543364036556e-14,
+     1.5886565569567244e-14,
+     1.545177549734121e-14,
+     1.9946203337675844e-14,
+     1.201340630711162e-14,
+     2.965469215532473e-14,
+     1.5733741102200128e-14,
+     1.326665305327977e-14,
+     2.0492446449260714e-14,
+     1.205945454576676e-14,
+     2.9076175921373585e-14,
+     1.6673027423257545e-14,
+     1.194810370866405e-14,
+     2.2469680526791974e-14,
+     1.0480155295427761e-14,
+     2.6916745184198983e-14,
+     1.8688087728791445e-14
+    ],
+    "hourlyShadowFactor": [
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0,
+     0.0,
+     1.0,
+     0.0,
+     1.0,
+     1.0
+    ]
+   }
+  }
+ ],
+ "skipped": [
+  {
+   "id": "LEO400 R1-field-sun-moon-schwarzschild",
+   "reason": "Basilisk spacecraft has no matching schwarzschild relativistic acceleration"
+  },
+  {
+   "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
+   "reason": "Basilisk spacecraft has no matching iers2010 relativistic acceleration"
+  },
+  {
+   "id": "LEO400 T1-field-sun-moon-solid-tides",
+   "reason": "no matching IERS 2010 frequency-dependent solid Earth gravity tides"
+  },
+  {
+   "id": "LEO400 I1-field-sun-moon-in-track",
+   "reason": "exported continuous in-track acceleration is not a native configured Basilisk thrust model"
+  },
+  {
+   "id": "LEO400 E1-field-sun-moon-eme2000",
+   "reason": "EME2000 axes are not configured in this Basilisk GCRF evidence adapter"
+  },
+  {
+   "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "reason": "exported continuous in-track acceleration is not a native configured Basilisk thrust model; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
+  },
+  {
+   "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
+   "reason": "Basilisk does not supply JB2008 atmosphere"
+  },
+  {
+   "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
+   "reason": "Basilisk does not supply JB2008 atmosphere"
+  },
+  {
+   "id": "GPS R1-field-sun-moon-schwarzschild",
+   "reason": "Basilisk spacecraft has no matching schwarzschild relativistic acceleration"
+  },
+  {
+   "id": "GPS R2-field-sun-moon-relativity-iers2010",
+   "reason": "Basilisk spacecraft has no matching iers2010 relativistic acceleration"
+  },
+  {
+   "id": "GPS T1-field-sun-moon-solid-tides",
+   "reason": "no matching IERS 2010 frequency-dependent solid Earth gravity tides"
+  },
+  {
+   "id": "GPS E1-field-sun-moon-eme2000",
+   "reason": "EME2000 axes are not configured in this Basilisk GCRF evidence adapter"
+  },
+  {
+   "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
+   "reason": "exported continuous in-track acceleration is not a native configured Basilisk thrust model; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
+  },
+  {
+   "id": "LEO400 A1-field-sun-moon-srp-knocke",
+   "reason": "no matching Knocke albedo/infrared 15-degree quadrature"
+  },
+  {
+   "id": "SSO700 A1-field-sun-moon-srp-knocke",
+   "reason": "no matching Knocke albedo/infrared 15-degree quadrature"
+  },
+  {
+   "id": "GPS A1-field-sun-moon-srp-knocke",
+   "reason": "no matching Knocke albedo/infrared 15-degree quadrature"
+  },
+  {
+   "id": "LEO400 O1-field-sun-moon-ocean-tides30",
+   "reason": "no matching exported FES2004 ocean gravity tide model"
+  },
+  {
+   "id": "SSO700 O1-field-sun-moon-ocean-tides30",
+   "reason": "no matching exported FES2004 ocean gravity tide model"
+  },
+  {
+   "id": "GPS O1-field-sun-moon-ocean-tides30",
+   "reason": "no matching exported FES2004 ocean gravity tide model"
+  },
+  {
+   "id": "LEO400 O2-field-sun-moon-ocean-tides50",
+   "reason": "no matching exported FES2004 ocean gravity tide model"
+  },
+  {
+   "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "reason": "no matching IERS 2010 frequency-dependent solid Earth gravity tides; no matching exported FES2004 ocean gravity tide model; no matching Knocke albedo/infrared 15-degree quadrature; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
+  },
+  {
+   "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
+   "reason": "no matching exported FES2004 ocean gravity tide model; no matching Knocke albedo/infrared 15-degree quadrature; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+.work/
+.check-basilisk-*/
+.score-basilisk-*/
+__pycache__/

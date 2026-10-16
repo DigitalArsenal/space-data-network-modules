@@ -1,0 +1,1060 @@
+{
+ "about": "Measured causes for all nominal and diagnostic tolerance failures. No tolerance is relaxed and nominal native results are retained.",
+ "protocol": {
+  "source": {
+   "path": "../cases/hpop-reference-cases.json",
+   "section": "protocol",
+   "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
+  },
+  "units": {
+   "position": "m",
+   "velocity": "m/s"
+  },
+  "frames": [
+   "GCRF"
+  ],
+  "frameRule": "Geocentric GCRF; the ERFA IAU 2006/2000A chain driven by exported EOP supplies GCRF-to-ITRF gravity orientation.",
+  "epochTimeScale": "UTC",
+  "epochsUtc": [
+   "2026-08-02T00:00:00.000"
+  ],
+  "arcS": 86400,
+  "sampleStepS": 3600,
+  "sampleCountIncludingInitial": 25,
+  "dynamicsClock": "TT",
+  "ephemerisClock": "TDB",
+  "metric": "Maximum 3D position separation over the 24 propagated hourly samples; the common initial state is stored but excluded from reduction.",
+  "tolerancesM": {
+   "pointMass": 0.001,
+   "gravity": 0.05,
+   "srp": 0.1,
+   "drag": 0.1
+  },
+  "toleranceRationale": "Unchanged shared protocol: 1 mm point mass, 5 cm gravity/rotation, 0.1 m SRP and drag. Each prescribed class is independent of the observed discrepancies; GMAT allowances do not apply.",
+  "nativeConvergenceLimitM": 0.0003,
+  "convergenceRationale": "Halving the Basilisk maximum step must change each reported trajectory by less than 0.3 mm, below the strictest 1 mm comparison limit.",
+  "replayTolerance": 0,
+  "replayRationale": "Identical stored state bytes and the shared C++ reducer must reproduce every score exactly; one fresh run uses identical shipped HPOP WASM and suite request settings.",
+  "verdictSetting": "suite",
+  "stmTolerance": null,
+  "stmToleranceRationale": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped."
+ },
+ "classification": "Basilisk native model-setting limitations",
+ "inputFiles": [
+  {
+   "path": "basilisk-2.12.0.json",
+   "sha256": "cbf9a8bd63cb31a60f3b5459e496b83d8095a463a78ceb687fc05480a6d6a1ed"
+  },
+  {
+   "path": "basilisk-wgs84-diagnostic.json",
+   "sha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96"
+  },
+  {
+   "path": "basilisk-wgs84-gtd7d-diagnostic.json",
+   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+  },
+  {
+   "path": "hpop-basilisk-2.12.0.json",
+   "sha256": "4d742430c4f1a952a8b39e2f9d7b3b3af0b82268fb60d980c8fde26da1edef80"
+  },
+  {
+   "path": "model-probes.json",
+   "sha256": "f0a810ea8cd39f635d367c9d2af3bba12bd39bf7ee47acda0317f4bbcdbdcef4"
+  },
+  {
+   "path": "lst-probes.json",
+   "sha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6"
+  },
+  {
+   "path": "../cases/hpop-reference-cases.json",
+   "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
+  },
+  {
+   "path": "../nyx/score-metrics.cpp",
+   "sha256": "c44c9e3526b5070454f13be7a518d08204b60f591183807d8d0e701d521b1563"
+  }
+ ],
+ "localSolarTimeDensitySummary": {
+  "states": 350,
+  "statesRequiringWrap": 108,
+  "maximumAbsoluteDensityDifferenceKgM3": 2.576262781468033e-17,
+  "maximumAbsoluteRelativeDifference": 1.3015226041856777e-05
+ },
+ "residualQualification": "Same-state LST density differences are measured, but their propagated contribution is not isolated. All WGS84+gtd7d trajectory residuals are below the unchanged tolerance. These data do not establish an HPOP defect.",
+ "cases": [
+  {
+   "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/HPOP use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometre-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the metre-scale residual and passes every unchanged HPOP tolerance. This is a measured native model-setting limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 5250.628341230262,
+       "steps30": 5250.645822722185,
+       "finest": 5250.645899225305
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5250.649889025366
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00020288695402411057,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 2.3152425245500674,
+       "steps30": 2.2977613115277276,
+       "finest": 2.2976848085828565
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.2936950096884634
+      },
+      "stepHalving": {
+       "maxStepS": 2,
+       "fineStepS": 1,
+       "atHour": 8,
+       "sampleCount": 24,
+       "worstM": 0.00013943685330777597,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.025839778670238362,
+       "steps30": 0.04332105358103384,
+       "finest": 0.04339755457254959
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.047387242859726626
+      },
+      "stepHalving": {
+       "maxStepS": 2,
+       "fineStepS": 1,
+       "atHour": 11,
+       "sampleCount": 24,
+       "worstM": 0.00015045426293587477,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5252.943565505551
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 2.341080172541303
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5250.602502485088
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -13122.526789692638,
+      "max": -1.909211277961731e-07
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   },
+   "diagnostics": {
+    "wgs84": {
+     "cause": {
+      "classification": "model-setting mismatch",
+      "statement": "WGS84 coordinates are already matched in this diagnostic. The remaining failure is the native MsisAtmosphere choice of gtd7 below 500 km, omitting anomalous oxygen included by the exported gtd7d density. Supplying only the installed wheel's native gtd7d density produces the recorded direct trajectory change and brings suite, steps30 and finest below the unchanged 0.1 m tolerance. The remaining sub-tolerance residual is not assigned solely to local-solar-time wrapping.",
+      "evidence": {
+       "epochUtc": "2026-08-02T00:00:00.000",
+       "units": "m",
+       "frame": "GCRF",
+       "toleranceM": 0.1,
+       "before": {
+        "trajectory": "basilisk-wgs84-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 2.3152425245500674,
+         "steps30": 2.2977613115277276,
+         "finest": 2.2976848085828565
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 2.2936950096884634
+        },
+        "stepHalving": {
+         "maxStepS": 2,
+         "fineStepS": 1,
+         "atHour": 8,
+         "sampleCount": 24,
+         "worstM": 0.00013943685330777597,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "after": {
+        "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 0.025839778670238362,
+         "steps30": 0.04332105358103384,
+         "finest": 0.04339755457254959
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.047387242859726626
+        },
+        "stepHalving": {
+         "maxStepS": 2,
+         "fineStepS": 1,
+         "atHour": 11,
+         "sampleCount": 24,
+         "worstM": 0.00015045426293587477,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "directGtd7dEffect": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.341080172541303
+       },
+       "nativeSpeciesEvidence": "model-probes.json: equator-400km and pole-radius-a-plus-400km rows; native module matches gtd7 rather than gtd7d.",
+       "remainingResidualQualification": "Local solar time remains unwrapped as in Basilisk; lst-probes.json measures its density effect only. No claim of a propagated attribution is made."
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "LEO400 F6-field-sun-moon-srp-drag",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/HPOP use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometre-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the metre-scale residual and passes every unchanged HPOP tolerance. This is a measured native model-setting limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 5248.297751095421,
+       "steps30": 5248.315302392317,
+       "finest": 5248.315424081673
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5248.319477717685
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0002410659205923833,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 2.317000398890711,
+       "steps30": 2.2994493818688215,
+       "finest": 2.2993276961792133
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.2952740697415317
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00014010087025295687,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.025857021485853393,
+       "steps30": 0.043408096196171975,
+       "finest": 0.043529787350276544
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.047583320193358244
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00018072665310480066,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5250.614733241735
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 2.3428552676596874
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5248.271895122785
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -13123.768528132758,
+      "max": -1.882319338619709e-06
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   },
+   "diagnostics": {
+    "wgs84": {
+     "cause": {
+      "classification": "model-setting mismatch",
+      "statement": "WGS84 coordinates are already matched in this diagnostic. The remaining failure is the native MsisAtmosphere choice of gtd7 below 500 km, omitting anomalous oxygen included by the exported gtd7d density. Supplying only the installed wheel's native gtd7d density produces the recorded direct trajectory change and brings suite, steps30 and finest below the unchanged 0.1 m tolerance. The remaining sub-tolerance residual is not assigned solely to local-solar-time wrapping.",
+      "evidence": {
+       "epochUtc": "2026-08-02T00:00:00.000",
+       "units": "m",
+       "frame": "GCRF",
+       "toleranceM": 0.1,
+       "before": {
+        "trajectory": "basilisk-wgs84-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 2.317000398890711,
+         "steps30": 2.2994493818688215,
+         "finest": 2.2993276961792133
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 2.2952740697415317
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.00014010087025295687,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "after": {
+        "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 0.025857021485853393,
+         "steps30": 0.043408096196171975,
+         "finest": 0.043529787350276544
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.047583320193358244
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.00018072665310480066,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "directGtd7dEffect": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.3428552676596874
+       },
+       "nativeSpeciesEvidence": "model-probes.json: equator-400km and pole-radius-a-plus-400km rows; native module matches gtd7 rather than gtd7d.",
+       "remainingResidualQualification": "Local solar time remains unwrapped as in Basilisk; lst-probes.json measures its density effect only. No claim of a propagated attribution is made."
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/HPOP use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometre-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the metre-scale residual and passes every unchanged HPOP tolerance. This is a measured native model-setting limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 5418.749489372931,
+       "steps30": 5418.766915460155,
+       "finest": 5418.767018113159
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5418.770622154647
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00019337003836653995,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 2.3908966491135972,
+       "steps30": 2.3734708693883837,
+       "finest": 2.3733682172069424
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.369764173530043
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00020076441861582744,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.026553229596714814,
+       "steps30": 0.04397917080154745,
+       "finest": 0.04408182189332814
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.04768576041001922
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.00018683875141554016,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5421.140366684161
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 2.41744785221881
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 5418.722937080509
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -13123.767363351362,
+      "max": -3.463355824351311e-08
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   },
+   "diagnostics": {
+    "wgs84": {
+     "cause": {
+      "classification": "model-setting mismatch",
+      "statement": "WGS84 coordinates are already matched in this diagnostic. The remaining failure is the native MsisAtmosphere choice of gtd7 below 500 km, omitting anomalous oxygen included by the exported gtd7d density. Supplying only the installed wheel's native gtd7d density produces the recorded direct trajectory change and brings suite, steps30 and finest below the unchanged 0.1 m tolerance. The remaining sub-tolerance residual is not assigned solely to local-solar-time wrapping.",
+      "evidence": {
+       "epochUtc": "2026-08-02T00:00:00.000",
+       "units": "m",
+       "frame": "GCRF",
+       "toleranceM": 0.1,
+       "before": {
+        "trajectory": "basilisk-wgs84-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 2.3908966491135972,
+         "steps30": 2.3734708693883837,
+         "finest": 2.3733682172069424
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 2.369764173530043
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.00020076441861582744,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "after": {
+        "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 0.026553229596714814,
+         "steps30": 0.04397917080154745,
+         "finest": 0.04408182189332814
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.04768576041001922
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.00018683875141554016,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "directGtd7dEffect": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.41744785221881
+       },
+       "nativeSpeciesEvidence": "model-probes.json: equator-400km and pole-radius-a-plus-400km rows; native module matches gtd7 rather than gtd7d.",
+       "remainingResidualQualification": "Local solar time remains unwrapped as in Basilisk; lst-probes.json measures its density effect only. No claim of a propagated attribution is made."
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/HPOP use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometre-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the metre-scale residual and passes every unchanged HPOP tolerance. This is a measured native model-setting limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 4094.0136844565595,
+       "steps30": 4094.0312107589953,
+       "finest": 4094.031311537179
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 4094.035187508141
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 6.626020064067274e-05,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 1.5590041072566911,
+       "steps30": 1.541478121834412,
+       "finest": 1.541377345107848
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 1.5375013493011922
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 18,
+       "sampleCount": 24,
+       "worstM": 7.927686585303935e-05,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.01710381659500539,
+       "steps30": 0.03462971905349554,
+       "finest": 0.034730495563645394
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.038606297077565244
+      },
+      "stepHalving": {
+       "maxStepS": 0.5,
+       "fineStepS": 0.25,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0001293457827866407,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 4095.5726741043422
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 1.5761056714534798
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 4093.99658187383
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -13123.772999245673,
+      "max": -3.8958387449383736e-07
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   },
+   "diagnostics": {
+    "wgs84": {
+     "cause": {
+      "classification": "model-setting mismatch",
+      "statement": "WGS84 coordinates are already matched in this diagnostic. The remaining failure is the native MsisAtmosphere choice of gtd7 below 500 km, omitting anomalous oxygen included by the exported gtd7d density. Supplying only the installed wheel's native gtd7d density produces the recorded direct trajectory change and brings suite, steps30 and finest below the unchanged 0.1 m tolerance. The remaining sub-tolerance residual is not assigned solely to local-solar-time wrapping.",
+      "evidence": {
+       "epochUtc": "2026-08-02T00:00:00.000",
+       "units": "m",
+       "frame": "GCRF",
+       "toleranceM": 0.1,
+       "before": {
+        "trajectory": "basilisk-wgs84-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 1.5590041072566911,
+         "steps30": 1.541478121834412,
+         "finest": 1.541377345107848
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 1.5375013493011922
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 18,
+         "sampleCount": 24,
+         "worstM": 7.927686585303935e-05,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "after": {
+        "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+        "hpopWorstM": {
+         "suite": 0.01710381659500539,
+         "steps30": 0.03462971905349554,
+         "finest": 0.034730495563645394
+        },
+        "orekitMinusBasilisk": {
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.038606297077565244
+        },
+        "stepHalving": {
+         "maxStepS": 0.5,
+         "fineStepS": 0.25,
+         "atHour": 24,
+         "sampleCount": 24,
+         "worstM": 0.0001293457827866407,
+         "limitM": 0.0003,
+         "met": true
+        }
+       },
+       "directGtd7dEffect": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 1.5761056714534798
+       },
+       "nativeSpeciesEvidence": "model-probes.json: equator-400km and pole-radius-a-plus-400km rows; native module matches gtd7 rather than gtd7d.",
+       "remainingResidualQualification": "Local solar time remains unwrapped as in Basilisk; lst-probes.json measures its density effect only. No claim of a propagated attribution is made."
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every HPOP setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 58.128445315240306,
+       "steps30": 58.14392634083757,
+       "finest": 58.14360933550511
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.14257962122024
+      },
+      "stepHalving": {
+       "maxStepS": 2,
+       "fineStepS": 1,
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0002842117576465992,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.014880833189093473,
+       "steps30": 0.0006002898038775884,
+       "finest": 0.0002832937109287522
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0007469313330466536
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 21,
+       "sampleCount": 24,
+       "worstM": 0.0001404042020067674,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.014880833189093473,
+       "steps30": 0.0006002898038775884,
+       "finest": 0.0002832937109287522
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0007469313330466536
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 21,
+       "sampleCount": 24,
+       "worstM": 0.0001404042020067674,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 58.14332605613738
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 1,
+      "sampleCount": 24,
+      "worstM": 0
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 58.14332605613738
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -20966.814123925753,
+      "max": 1.1641532182693481e-10
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   }
+  },
+  {
+   "id": "SSO700 F6-field-sun-moon-srp-drag",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every HPOP setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 58.11304582242233,
+       "steps30": 58.12851115262754,
+       "finest": 58.1281965582678
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.12727087004967
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 23,
+       "sampleCount": 24,
+       "worstM": 0.00012087102452486651,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.014840312083447485,
+       "steps30": 0.0006251037767070275,
+       "finest": 0.00031050963833815414
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0006160926198361819
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 23,
+       "sampleCount": 24,
+       "worstM": 0.00015864952015093845,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.014840312083447485,
+       "steps30": 0.0006251037767070275,
+       "finest": 0.00031050963833815414
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0006160926198361819
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 23,
+       "sampleCount": 24,
+       "worstM": 0.00015864952015093845,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 58.12788604925722
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 1,
+      "sampleCount": 24,
+      "worstM": 0
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 58.12788604925722
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -20967.18505136273,
+      "max": -5.291076377034187e-07
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   }
+  },
+  {
+   "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+   "cause": {
+    "classification": "model-setting mismatch",
+    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every HPOP setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an HPOP defect.",
+    "evidence": {
+     "epochUtc": "2026-08-02T00:00:00.000",
+     "units": "m for position/altitude; s for steps",
+     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+     "toleranceM": 0.1,
+     "nominal": {
+      "trajectory": "basilisk-2.12.0.json",
+      "hpopWorstM": {
+       "suite": 34.796182528506684,
+       "steps30": 34.8116646876731,
+       "finest": 34.811360093034004
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 34.81059817160838
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 23,
+       "sampleCount": 24,
+       "worstM": 0.00013367420652487283,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84Only": {
+      "trajectory": "basilisk-wgs84-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.015210049037568556,
+       "steps30": 0.00027220750741083525,
+       "finest": 4.212841058274773e-05
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0007949855574971713
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 21,
+       "sampleCount": 24,
+       "worstM": 0.00011917418862387129,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "wgs84AndGtd7d": {
+      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+      "hpopWorstM": {
+       "suite": 0.015210049037568556,
+       "steps30": 0.00027220750741083525,
+       "finest": 4.212841058274773e-05
+      },
+      "orekitMinusBasilisk": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 0.0007949855574971713
+      },
+      "stepHalving": {
+       "maxStepS": 1,
+       "fineStepS": 0.5,
+       "atHour": 21,
+       "sampleCount": 24,
+       "worstM": 0.00011917418862387129,
+       "limitM": 0.0003,
+       "met": true
+      }
+     },
+     "coordinateChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 34.81139248090623
+     },
+     "gtd7dChangeDirectPositionDifference": {
+      "atHour": 1,
+      "sampleCount": 24,
+      "worstM": 0
+     },
+     "combinedChangeDirectPositionDifference": {
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 34.81139248090623
+     },
+     "sphericalMinusWgs84AltitudeM": {
+      "min": -20967.18505576742,
+      "max": -6.009358912706375e-07
+     },
+     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+     "matchedDiagnosticMeetsAllSettings": true,
+     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+    }
+   }
+  }
+ ]
+}

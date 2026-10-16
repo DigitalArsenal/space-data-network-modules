@@ -1,0 +1,159 @@
+{
+  "about": "Measured native Basilisk 2.12.0 model behavior; diagnostic evidence only.",
+  "protocol": {
+    "source": "Installed AVS Lab Basilisk 2.12.0 MSIS/drag modules and bundled native NRLMSISE gtd7/gtd7d; ERFA 2.0.1 gc2gd WGS84 conversion",
+    "units": {
+      "position": "m",
+      "velocity": "m/s",
+      "density": "kg/m^3",
+      "force": "N",
+      "AU": "km",
+      "REQ_SUN": "km",
+      "REQ_EARTH": "km",
+      "SPEED_LIGHT": "m/s",
+      "SOLAR_FLUX_EARTH": "W/m^2"
+    },
+    "tolerance": null,
+    "rationale": "These are same-state diagnostic measurements with no pass/fail threshold. The sole E2E applies the unchanged exported trajectory tolerances and 0.3 mm convergence bound."
+  },
+  "basiliskVersion": "2.12.0",
+  "pythonVersion": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "nativeMsisLibrary": {
+    "path": "/Users/tj/software/tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_msisAtmosphere.so",
+    "sha256": "5af7671f881207d90164b8555692a41922bedd324ddbd0e5a336abb4738dbfa7"
+  },
+  "nativeConstants": {
+    "AU": 149597870.693,
+    "SPEED_LIGHT": 299792458,
+    "SOLAR_FLUX_EARTH": 1361.0,
+    "REQ_SUN": 695000.0,
+    "REQ_EARTH": 6378.1366
+  },
+  "msis": {
+    "epochUtc": "2026-08-02T00:00:00Z",
+    "frame": "Earth fixed, identity orientation",
+    "weather": {
+      "f107": 150,
+      "f107a": 150,
+      "dailyAp": 15
+    },
+    "switches": "all 1: SI density, daily Ap, all variations enabled",
+    "rows": [
+      {
+        "id": "equator-400km",
+        "positionM": [
+          6778137.0,
+          0.0,
+          0.0
+        ],
+        "secondsSinceEpoch": 0.0,
+        "sphericalAltitudeKm": 400.0,
+        "latitudeDeg": 0.0,
+        "nativeErfaWgs84AltitudeM": 400000.0000000001,
+        "nativeErfaWgs84LatitudeDeg": 0.0,
+        "basiliskModuleDensityKgM3": 2.582150001384736e-12,
+        "nativeGtd7KgM3": 2.582150001384736e-12,
+        "nativeGtd7dKgM3": 2.5822290993216605e-12,
+        "nativeGtd7dWgs84KgM3": 2.582229099321653e-12
+      },
+      {
+        "id": "pole-radius-a-plus-400km",
+        "positionM": [
+          0.0,
+          0.0,
+          6778137.0
+        ],
+        "secondsSinceEpoch": 0.0,
+        "sphericalAltitudeKm": 400.0,
+        "latitudeDeg": 90.0,
+        "nativeErfaWgs84AltitudeM": 421384.6857548207,
+        "nativeErfaWgs84LatitudeDeg": 90.0,
+        "basiliskModuleDensityKgM3": 3.777223739561855e-12,
+        "nativeGtd7KgM3": 3.777223739561855e-12,
+        "nativeGtd7dKgM3": 3.778105466471058e-12,
+        "nativeGtd7dWgs84KgM3": 2.64451310032856e-12
+      },
+      {
+        "id": "equator-600km",
+        "positionM": [
+          6978137.0,
+          0.0,
+          0.0
+        ],
+        "secondsSinceEpoch": 0.0,
+        "sphericalAltitudeKm": 600.0,
+        "latitudeDeg": 0.0,
+        "nativeErfaWgs84AltitudeM": 600000.0000000005,
+        "nativeErfaWgs84LatitudeDeg": 0.0,
+        "basiliskModuleDensityKgM3": 8.481456345764892e-14,
+        "nativeGtd7KgM3": 8.454835543183063e-14,
+        "nativeGtd7dKgM3": 8.481456345764892e-14,
+        "nativeGtd7dWgs84KgM3": 8.481456345764838e-14
+      },
+      {
+        "id": "equator-400km-fractional-second",
+        "positionM": [
+          6778137.0,
+          0.0,
+          0.0
+        ],
+        "secondsSinceEpoch": 0.3125,
+        "sphericalAltitudeKm": 400.0,
+        "latitudeDeg": 0.0,
+        "nativeErfaWgs84AltitudeM": 400000.0000000001,
+        "nativeErfaWgs84LatitudeDeg": 0.0,
+        "basiliskModuleDensityKgM3": 2.582151338844292e-12,
+        "nativeGtd7KgM3": 2.582151338844292e-12,
+        "nativeGtd7dKgM3": 2.5822304367812166e-12,
+        "nativeGtd7dWgs84KgM3": 2.582230436781212e-12
+      }
+    ]
+  },
+  "dragAirVelocity": {
+    "frame": "inertial N, body aligned with N",
+    "velocityMS": [
+      0,
+      7500,
+      0
+    ],
+    "densityKgM3": 1e-12,
+    "cd": 2.2,
+    "areaM2": 20,
+    "rows": [
+      {
+        "airVelocityMS": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "nativeRelativeVelocityMS": [
+          0.0,
+          7500.0,
+          0.0
+        ],
+        "nativeForceN": [
+          -0.0,
+          -0.0012375000000000003,
+          -0.0
+        ]
+      },
+      {
+        "airVelocityMS": [
+          0.0,
+          500.0,
+          0.0
+        ],
+        "nativeRelativeVelocityMS": [
+          0.0,
+          7000.0,
+          0.0
+        ],
+        "nativeForceN": [
+          -0.0,
+          -0.0010780000000000002,
+          -0.0
+        ]
+      }
+    ]
+  }
+}
