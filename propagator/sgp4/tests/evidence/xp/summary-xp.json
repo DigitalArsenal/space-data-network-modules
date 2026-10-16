@@ -1,0 +1,32 @@
+{
+ "about": "SGP4-XP (US Space Force Sgp4Prop 9.1.1.0) against the module propagator/sgp4-xp: exact agreement with the library run by its own runtime, plus the Tier B anchors. No independent public reference exists for the XP theory.",
+ "module": {
+  "name": "@digitalarsenal/sdn-module-propagator-sgp4-xp",
+  "version": "0.1.1"
+ },
+ "hashes": {
+  "dist/isomorphic/module.wasm": "f61b15c4fd658817e3e43c7818da18c4d08d453ad28e9d704b0cd11b616b7deb",
+  "third_party/ussf-sgp4/Sgp4Prop.xp.wasm": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
+  "third_party/ussf-sgp4/Sgp4Prop.xp.js": "0d9848bb0ed7ce6eadd85e22f5325e81492ef03355bab85a580eb421c7f22707",
+  "vectors/vectors.json": "2093adf2ec8d56179f33f0b3429bcd02d34c865bb69d3b1df4967431a0afc907",
+  "tests/ussf_parity.test.mjs": "d9bcf30e5f9427e7cf3fb5eee853ca802e4a2cec3b50ff31e43829e9c4a16890"
+ },
+ "parity": {
+  "test": "tests/ussf_parity.test.mjs",
+  "title": "the module returns the Space Force library's states exactly, SGP4 and SGP4-XP, on 640 sets across the library's restorations",
+  "sets": 640,
+  "times": 7,
+  "comparison": "exact (same doubles)",
+  "pass": 1,
+  "fail": 0,
+  "met": true
+ },
+ "anchors": {
+  "cases": 15,
+  "tolerancePolicy": "fail <=> |observed - expected| > abs + rel * |expected|",
+  "bandPositionM": 0.5,
+  "bandVelocityMS": 0.0005,
+  "source": "sgp4-xp/vectors/PROVENANCE.md"
+ },
+ "verdict": "The module returns the Space Force library's states exactly on 640 SGP4 and SGP4-XP sets at seven times each. The XP theory itself has no public reference outside the library; agreement with the library is the available check."
+}
