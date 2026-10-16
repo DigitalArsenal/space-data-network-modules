@@ -162,6 +162,14 @@ public:
   void set_pc_method(std::unique_ptr<PcMethod> method);
   void set_pc_method(const std::string &name);
 
+  /// Reference (default) preserves the authoritative calculations. Screening
+  /// uses bounded disk quadrature, guarded quadratic-time Hall flux or 1e-2
+  /// Nc convergence, and adaptive seeded MC
+  /// (32768 minimum samples, 30-hit target, default cap 49152). An explicit
+  /// sample budget supplied through set_pc_fallback is retained. The grade and
+  /// actual Screening numerical policy are included in the usage_reason.
+  void set_pc_grade(PcGrade grade) { pc_grade_ = grade; }
+
   /// Set default hard-body radii (meters)
   void set_combined_radius_m(double radius1, double radius2);
 
@@ -217,12 +225,16 @@ public:
   /// Fallback policy for usage violations. Floors apply only to Automatic;
   /// explicit fallback selections retain their existing forced behavior.
   enum class Fallback { Automatic, TwoDimensionalNc, ThreeDimensionalNc, MonteCarlo };
-  void set_pc_fallback(Fallback method, const PcFallbackOptions &options = {}) {
-    fallback_ = method; fallback_options_ = options;
+  void set_pc_fallback(Fallback method) {
+    fallback_ = method; fallback_options_ = {}; fallback_options_configured_ = false;
+  }
+  void set_pc_fallback(Fallback method, const PcFallbackOptions &options) {
+    fallback_ = method; fallback_options_ = options; fallback_options_configured_ = true;
   }
 
-  /// Set dimensionless probability floors with 0 <= reporting <= Monte Carlo
-  /// <= 1. Returns false for invalid values and preserves the previous options.
+  /// Set finite dimensionless floors with 0 <= reporting <= 1 and reporting
+  /// <= Monte Carlo. A Monte Carlo floor > 1 disables direct MC; Nc's own
+  /// applicability still requires MC. Invalid values preserve prior options.
   bool set_pc_tier_options(const PcTierOptions &options);
 
   /// Screen multiple objects
@@ -237,8 +249,10 @@ public:
 
 private:
   std::unique_ptr<PcMethod> pc_method_;
+  PcGrade pc_grade_ = PcGrade::Reference;
+  bool fallback_options_configured_ = false;
   Fallback fallback_ = Fallback::Automatic;
-  // Automatic screening starts with fewer quadrature nodes, while retaining
+  // Automatic Reference routing starts with fewer quadrature nodes, retaining
   // the same 1e-4 convergence budget and adaptive refinement. Explicit
   // set_pc_fallback calls preserve the caller's options (including {} defaults).
   PcFallbackOptions fallback_options_ = [] {

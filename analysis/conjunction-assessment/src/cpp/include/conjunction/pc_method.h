@@ -39,6 +39,10 @@
 
 namespace conjunction {
 
+// Reference preserves the authoritative numerical algorithms and settings.
+// Screening uses explicitly reported convergence/sample budgets for catalogs.
+enum class PcGrade { Reference, Screening };
+
 // ── B-plane Geometry (input to all Pc methods) ──
 
 struct BPlaneGeometry {
@@ -184,6 +188,10 @@ public:
     PcResult compute(const BPlaneGeometry& bplane) const override;
     std::string name() const override { return "FOSTER-2D"; }
 };
+
+// The same Gaussian disk integral, using a bounded fixed quadrature when the
+// density is smooth over the HBR disk, otherwise the Reference integrator.
+PcResult screening_foster_2d(const BPlaneGeometry& bplane);
 
 // Explicit constant-density, small-HBR approximation (legacy default formula).
 class SmallHbrApprox : public PcMethod {

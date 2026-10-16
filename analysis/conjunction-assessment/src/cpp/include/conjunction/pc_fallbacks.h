@@ -7,7 +7,10 @@
 
 namespace conjunction {
 
+inline constexpr std::uint64_t kDefaultScreeningPcSampleCap = 49152;
+
 struct PcFallbackOptions {
+    PcGrade grade = PcGrade::Reference;
     // Finite observation interval, seconds from the supplied common epoch.
     // Both zero selects the CARA duration estimate; if no duration exists,
     // uses +/- half the shorter orbital period (or +/-3600s when unbound).
@@ -16,6 +19,10 @@ struct PcFallbackOptions {
     unsigned angular_order = 32;
     unsigned time_intervals = 128;
     std::uint64_t samples = 65536;
+    // Screening only: deterministic sample-prefix stopping after both the
+    // minimum sample count and hit target; samples remains the hard cap.
+    std::uint64_t minimum_samples = 32768;
+    std::uint64_t target_hits = 30;
     std::uint64_t seed = 0x53444e5043ULL;
     bool two_body = true;
     // Total finite-window collision probability includes overlap at t_start.

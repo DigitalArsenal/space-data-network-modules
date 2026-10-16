@@ -75,6 +75,7 @@ const nativeAcceptance = String.raw`
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 using namespace conjunction;
 namespace {
@@ -148,6 +149,223 @@ void optimized_hall_oracle() {
   require(count == 12, "all twelve CARA Hall cases checked at optimized startup");
   std::printf("Optimized Hall CARA: %u cases passed, startup=16/128, relative_tolerance=1e-4, max_relative_error=%.12g\n",
     count, maximum_relative_error);
+}
+void screening_disk_oracle() {
+  // Independent SciPy dblquad values: static encounter-plane geometry in km
+  // and km^2, no epoch. Preserve each original 1e-4 relative/absolute bound;
+  // its rationale is binary64 quadrature agreement, as in fixture NOTICE.
+  std::ifstream input(std::string(CONJUNCTION_TEST_FIXTURE_DIR) + "/pc_dblquad.csv");
+  require(bool(input), "Screening dblquad fixture available");
+  std::string line;
+  std::getline(input, line);
+  unsigned count = 0, fixed_quadrature = 0;
+  double maximum = 0;
+  while (std::getline(input, line)) {
+    if (line.empty()) continue;
+    std::stringstream stream(line);
+    std::vector<std::string> row;
+    for (std::string value; std::getline(stream, value, ',');) row.push_back(value);
+    require(row.size() == 13, "Screening dblquad fixture columns");
+    BPlaneGeometry geometry;
+    geometry.xi = std::stod(row[1]); geometry.zeta = std::stod(row[2]);
+    geometry.sigma_xx = std::stod(row[3]); geometry.sigma_xz = std::stod(row[4]);
+    geometry.sigma_zz = std::stod(row[5]); geometry.combined_radius = std::stod(row[6]);
+    const double expected = std::stod(row[7]), tolerance = std::stod(row[8]), absolute = std::stod(row[9]);
+    const auto actual = screening_foster_2d(geometry);
+    fixed_quadrature += actual.iterations == 48;
+    const double error = std::abs(actual.probability - expected);
+    maximum = std::max(maximum, expected ? error / expected : 0);
+    require(actual.method == "FOSTER-2D" && actual.converged && std::isfinite(actual.probability) &&
+      error <= std::max(absolute, tolerance * std::abs(expected)), "Screening Foster original dblquad tolerance");
+    if (std::stoi(row[10])) require(actual.covariance_remediated, "Screening preserves oracle covariance remediation");
+    ++count;
+  }
+  require(count == 20, "all twenty Screening dblquad geometries checked");
+  require(fixed_quadrature > 0, "Screening bounded Foster quadrature exercised by independent oracle");
+  std::printf("Screening 20-geometry dblquad comparison: %u cases; max_relative_error=%.12e; fixed_quadrature=%u\n",
+    count, maximum, fixed_quadrature);
+}
+void screening_cara_agreement() {
+  // Synthetic variants of ALL twelve public CARA Alfano geometries, never
+  // catalog records: states/covariances are ECI km, km/s and corresponding
+  // covariance units at each published TCA. Hall uses a physical 0.01 km
+  // combined HBR and the fixture's finite interval; MC uses the original HBR over
+  // +/-30 SI seconds from TCA. Three further LEO crossing-orbit variants
+  // (Alfano05/06/07) rotate
+  // the secondary's tangential velocity by 30 degrees about its radial axis,
+  // preserving orbit energy/angular-momentum magnitude. Isotropic position
+  // sigma=0.2 km per object gives R/sigma_combined=0.03536; relative velocity
+  // uncertainty=0.007 represents the real sample's median, without
+  // embedding any licensed encounter. These use +/-3 SI seconds (over sixteen
+  // encounter-width sigmas), keeping the Hall linearization local. Screening's
+  // acceptance is median<=1%, p99<=10% vs Reference Hall, and >=90% of MC
+  // estimates inside Reference's 95% Wilson interval, per catalog contract.
+  std::ifstream input(std::string(CONJUNCTION_TEST_FIXTURE_DIR) + "/cara_hall.csv");
+  require(bool(input), "Screening CARA geometry fixture available");
+  std::string line;
+  std::getline(input, line);
+  std::vector<double> differences, quadratic_differences, sphere_differences;
+  unsigned count = 0, inside = 0, reduced = 0, applicability_handoffs = 0;
+  std::uint64_t reference_samples = 0, screening_samples = 0;
+  while (std::getline(input, line)) {
+    if (line.empty()) continue;
+    std::stringstream stream(line);
+    std::vector<std::string> row;
+    for (std::string value; std::getline(stream, value, ',');) row.push_back(value);
+    require(row.size() >= 90, "Screening CARA geometry fixture columns");
+    PcEncounter encounter; encounter.has_velocity_covariance = true;
+    unsigned column = 1;
+    for (double& value : encounter.primary) value = std::stod(row[column++]);
+    for (double& value : encounter.secondary) value = std::stod(row[column++]);
+    for (double& value : encounter.covariance_primary) value = std::stod(row[column++]);
+    for (double& value : encounter.covariance_secondary) value = std::stod(row[column++]);
+    const double radius = std::stod(row[column++]);
+    column += 2; // Published unmodified Pc and tolerance remain checked above.
+    PcFallbackOptions reference;
+    reference.angular_order = 16;
+    reference.time_start = std::stod(row[column++]); reference.time_end = std::stod(row[column++]);
+    auto screening = reference; screening.grade = PcGrade::Screening;
+    screening.relative_tolerance = 1e-2; screening.angular_order = 8; screening.time_intervals = 16;
+    encounter.combined_radius = .01;
+    const auto hall_reference = pc_3d_nc_hall(encounter, reference);
+    const auto hall_screening = pc_3d_nc_hall(encounter, screening);
+    if (!hall_screening.pc.converged && hall_screening.requires_monte_carlo) {
+      require(hall_reference.requires_monte_carlo,
+        "Screening early Nc applicability decision agrees with Reference full integration");
+      ConjunctionEngine routed;
+      auto route_options = screening; route_options.samples = route_options.minimum_samples = 32;
+      routed.set_pc_grade(PcGrade::Screening);
+      routed.set_pc_fallback(ConjunctionEngine::Fallback::ThreeDimensionalNc, route_options);
+      const auto routed_result = routed.compute_pc(encounter);
+      if (routed_result.pc.usage_violation)
+        require(routed_result.pc.converged && routed_result.pc.method == "SDMC-TWO-BODY" &&
+          routed_result.pc.tier == "usage-violation, Monte Carlo" && routed_result.pc.sample_count == 32,
+          "Screening early Nc applicability handoff reaches engine Monte Carlo");
+      else require(routed_result.pc.converged && routed_result.pc.tier == "FOSTER-2D",
+        "valid two-dimensional CARA geometry retains engine Foster routing");
+      ++applicability_handoffs;
+    } else {
+      require(hall_reference.pc.converged && hall_screening.pc.converged &&
+        std::isfinite(hall_reference.pc.probability) && std::isfinite(hall_screening.pc.probability),
+        "synthetic CARA Hall Reference and Screening converge");
+      const double relative = hall_reference.pc.probability ?
+        std::abs(hall_screening.pc.probability / hall_reference.pc.probability - 1) :
+        (hall_screening.pc.probability == 0 ? 0 : std::numeric_limits<double>::infinity());
+      differences.push_back(relative);
+      (hall_screening.pc.method == "3D-NC-HALL-QUADRATIC-TIME" ? quadratic_differences : sphere_differences).push_back(relative);
+    }
+    require(hall_screening.limitation.find("Screening") != std::string::npos,
+      "Screening Hall exposes grade and quadrature policy");
+    if (count == 4 || count == 5 || count == 6) {
+      auto synthetic = encounter;
+      double radial[3], tangent[3], normal[3], distance = 0, radial_speed = 0;
+      for (unsigned j = 0; j < 3; ++j) distance += synthetic.secondary[j] * synthetic.secondary[j];
+      distance = std::sqrt(distance);
+      for (unsigned j = 0; j < 3; ++j) {
+        radial[j] = synthetic.secondary[j] / distance;
+        radial_speed += radial[j] * synthetic.secondary[j + 3];
+      }
+      for (unsigned j = 0; j < 3; ++j) tangent[j] = synthetic.secondary[j + 3] - radial_speed * radial[j];
+      for (unsigned j = 0; j < 3; ++j) normal[j] = radial[(j + 1) % 3] * tangent[(j + 2) % 3] -
+        radial[(j + 2) % 3] * tangent[(j + 1) % 3];
+      double relative_speed_squared = 0;
+      for (unsigned j = 0; j < 3; ++j) {
+        synthetic.secondary[j + 3] = radial_speed * radial[j] + .8660254037844386 * tangent[j] + .5 * normal[j];
+        const double speed = synthetic.secondary[j + 3] - synthetic.primary[j + 3];
+        relative_speed_squared += speed * speed;
+      }
+      synthetic.covariance_primary.fill(0); synthetic.covariance_secondary.fill(0);
+      for (unsigned j = 0; j < 6; ++j) synthetic.covariance_primary[j * 6 + j] =
+        synthetic.covariance_secondary[j * 6 + j] = j < 3 ? .04 : .007 * .007 * relative_speed_squared / 6;
+      auto short_reference = reference, short_screening = screening;
+      short_reference.time_start = short_screening.time_start = -3;
+      short_reference.time_end = short_screening.time_end = 3;
+      const auto a = pc_3d_nc_hall(synthetic, short_reference), b = pc_3d_nc_hall(synthetic, short_screening);
+      require(a.usage.time_sigma > 0 && std::isfinite(a.usage.time_sigma) &&
+        std::abs(a.usage.time_center) + 8.304785425194112 * a.usage.time_sigma < 3,
+        "synthetic Hall window covers the full CARA 8.304785-sigma overlap extent");
+      if (!a.pc.converged || !b.pc.converged || a.requires_monte_carlo || b.requires_monte_carlo ||
+          !(a.pc.probability > 0) || !std::isfinite(b.pc.probability)) std::fprintf(stderr,
+        "Synthetic Hall %s: Reference p=%.12g converged=%d requires_mc=%d reason=%s; Screening p=%.12g converged=%d requires_mc=%d method=%s reason=%s\n",
+        row[0].c_str(), a.pc.probability, a.pc.converged, a.requires_monte_carlo, a.limitation.c_str(),
+        b.pc.probability, b.pc.converged, b.requires_monte_carlo, b.pc.method.c_str(), b.limitation.c_str());
+      require(a.pc.converged && b.pc.converged && !a.requires_monte_carlo && !b.requires_monte_carlo &&
+        a.pc.probability > 0 && std::isfinite(b.pc.probability), "physical small-sphere synthetic Hall remains applicable");
+      const double difference = std::abs(b.pc.probability / a.pc.probability - 1);
+      differences.push_back(difference);
+      (b.pc.method == "3D-NC-HALL-QUADRATIC-TIME" ? quadratic_differences : sphere_differences).push_back(difference);
+    }
+    encounter.combined_radius = radius;
+    reference.time_start = -30; reference.time_end = 30; reference.samples = 2048;
+    reference.seed = 12345 + count;
+    screening = reference; screening.grade = PcGrade::Screening;
+    screening.minimum_samples = reference.samples;
+    const auto exact_reference = pc_monte_carlo(encounter, reference);
+    const auto exact_screening = pc_monte_carlo(encounter, screening);
+    require(exact_reference.pc.converged && exact_screening.pc.converged &&
+      exact_reference.hits == exact_screening.hits && exact_reference.initial_hits == exact_screening.initial_hits &&
+      exact_reference.entry_hits == exact_screening.entry_hits && exact_reference.samples == exact_screening.samples &&
+      exact_reference.pc.probability == exact_screening.pc.probability &&
+      exact_reference.pc.lower_probability == exact_screening.pc.lower_probability &&
+      exact_reference.pc.upper_probability == exact_screening.pc.upper_probability,
+      "Screening exact trajectory rejection preserves all fixed-sample MC hits and Wilson interval");
+    reference.samples = 65536;
+    screening = reference; screening.grade = PcGrade::Screening;
+    screening.samples = kDefaultScreeningPcSampleCap;
+    const auto mc_reference = pc_monte_carlo(encounter, reference);
+    const auto mc_screening = pc_monte_carlo(encounter, screening);
+    if (!mc_reference.pc.converged || !mc_screening.pc.converged ||
+        mc_screening.samples < screening.minimum_samples || mc_screening.samples > reference.samples ||
+        !(mc_screening.pc.lower_probability <= mc_screening.pc.probability) ||
+        !(mc_screening.pc.upper_probability >= mc_screening.pc.probability)) std::fprintf(stderr,
+      "Synthetic MC %s: Reference converged=%d n=%llu hits=%llu p=%.17g CI=[%.17g,%.17g] reason=%s; Screening converged=%d n=%llu min=%llu cap=%llu hits=%llu p=%.17g CI=[%.17g,%.17g] reason=%s\n",
+      row[0].c_str(), mc_reference.pc.converged, static_cast<unsigned long long>(mc_reference.samples),
+      static_cast<unsigned long long>(mc_reference.hits), mc_reference.pc.probability,
+      mc_reference.pc.lower_probability, mc_reference.pc.upper_probability, mc_reference.limitation.c_str(),
+      mc_screening.pc.converged, static_cast<unsigned long long>(mc_screening.samples),
+      static_cast<unsigned long long>(screening.minimum_samples), static_cast<unsigned long long>(screening.samples),
+      static_cast<unsigned long long>(mc_screening.hits), mc_screening.pc.probability,
+      mc_screening.pc.lower_probability, mc_screening.pc.upper_probability, mc_screening.limitation.c_str());
+    require(mc_reference.pc.converged && mc_screening.pc.converged &&
+      mc_screening.samples >= screening.minimum_samples && mc_screening.samples <= reference.samples &&
+      mc_screening.pc.lower_probability <= mc_screening.pc.probability &&
+      mc_screening.pc.upper_probability >= mc_screening.pc.probability,
+      "Screening adaptive MC reports realized sample count and Wilson interval");
+    require(mc_screening.limitation.find("Screening grade") != std::string::npos &&
+      mc_screening.limitation.find("target_hits=") != std::string::npos,
+      "Screening MC exposes grade and adaptive stop rule");
+    const bool covered = mc_screening.pc.probability >= mc_reference.pc.lower_probability &&
+      mc_screening.pc.probability <= mc_reference.pc.upper_probability;
+    if (covered) ++inside;
+    else std::printf("Screening MC outside Reference interval: %s estimate=%.12g Reference95%%=[%.12g,%.12g]\n",
+      row[0].c_str(), mc_screening.pc.probability, mc_reference.pc.lower_probability, mc_reference.pc.upper_probability);
+    reduced += mc_screening.samples < mc_reference.samples;
+    reference_samples += mc_reference.samples; screening_samples += mc_screening.samples;
+    ++count;
+  }
+  require(count == 12, "all twelve public synthetic CARA geometries checked");
+  require(differences.size() + applicability_handoffs == 15, "all fifteen Hall accuracy/applicability cases checked");
+  require(!quadratic_differences.empty(), "physical synthetic CARA geometry exercises guarded quadratic-time Hall");
+  std::sort(differences.begin(), differences.end());
+  const double median = (differences[differences.size() / 2] + differences[(differences.size() - 1) / 2]) / 2;
+  const double p99 = differences[static_cast<std::size_t>(std::ceil(.99 * differences.size())) - 1];
+  require(median <= .01 && p99 <= .1, "Screening synthetic Hall median/p99 agreement contract");
+  require(inside * 10 >= count * 9, "Screening MC >=90% inside Reference 95% Wilson intervals");
+  require(reduced > 0, "Screening MC adaptive rule reduces sample count on public geometries");
+  std::printf("Screening synthetic CARA Hall: %zu comparisons, %u matching MC handoffs; median_relative_difference=%.12g; p99=%.12g; max=%.12g\n",
+    differences.size(), applicability_handoffs, median, p99, differences.back());
+  for (auto group : {std::make_pair("quadratic-time", quadratic_differences), std::make_pair("sphere-flux", sphere_differences)}) {
+    auto& errors = group.second;
+    if (errors.empty()) continue;
+    std::sort(errors.begin(), errors.end());
+    const double group_median = (errors[errors.size() / 2] + errors[(errors.size() - 1) / 2]) / 2;
+    const double group_p99 = errors[static_cast<std::size_t>(std::ceil(.99 * errors.size())) - 1];
+    require(group_median <= .01 && group_p99 <= .1, "each Screening Hall method satisfies agreement contract");
+    std::printf("Screening synthetic CARA %s: %zu cases; median_relative_difference=%.12g; p99=%.12g; max=%.12g\n",
+      group.first, errors.size(), group_median, group_p99, errors.back());
+  }
+  std::printf("Screening synthetic CARA MC: %u/%u inside Reference 95%% Wilson; exact-hit rejection %u/%u; samples=%llu/%llu\n",
+    inside, count, count, count, static_cast<unsigned long long>(screening_samples), static_cast<unsigned long long>(reference_samples));
 }
 }
 int main() {
@@ -249,7 +467,30 @@ int main() {
     const auto reversed = engine.compute_pc_batch(inputs, 4);
     for (unsigned i = 0; i < reversed.size(); ++i) equal(reversed[i], serial[serial.size() - 1 - i]);
     require(engine.compute_pc_batch({}, 27).empty(), "empty batch remains empty");
+    engine.set_pc_grade(PcGrade::Reference);
+    for (unsigned i = 0; i < inputs.size(); ++i) equal(engine.compute_pc(inputs[i]), serial[serial.size() - 1 - i]);
+    engine.set_pc_grade(PcGrade::Screening);
+    const auto screening_serial = engine.compute_pc_batch(inputs, 1);
+    for (unsigned threads : {4u, 27u}) {
+      const auto batch = engine.compute_pc_batch(inputs, threads);
+      require(batch.size() == screening_serial.size(), "Screening batch preserves result count");
+      for (unsigned i = 0; i < batch.size(); ++i) equal(batch[i], screening_serial[i]);
+    }
+    ConjunctionEngine screening_budget;
+    screening_budget.set_pc_grade(PcGrade::Screening);
+    screening_budget.set_pc_fallback(ConjunctionEngine::Fallback::MonteCarlo);
+    const auto default_budget = screening_budget.compute_pc(moderate);
+    require(default_budget.pc.converged && default_budget.pc.method == "SDMC-RECTILINEAR" &&
+      default_budget.pc.sample_count == kDefaultScreeningPcSampleCap,
+      "Screening method-only fallback keeps the default screening sample cap");
+    PcFallbackOptions explicit_budget; explicit_budget.samples = 4096;
+    screening_budget.set_pc_fallback(ConjunctionEngine::Fallback::MonteCarlo, explicit_budget);
+    const auto custom_budget = screening_budget.compute_pc(moderate);
+    require(custom_budget.pc.converged && custom_budget.pc.sample_count == explicit_budget.samples,
+      "Screening explicit fallback options preserve the caller sample budget");
     optimized_hall_oracle();
+    screening_disk_oracle();
+    screening_cara_agreement();
     std::printf("Tiered engine E2E: %u assertions passed; four tiers, forced fallbacks, unavailable covariance, batch threads 1/4/27 and reordered inputs\n", passed);
     std::printf("Tier evidence: valid=%s; below=%s; moderate=%s; high=%s; Pc2D=%.12g; shape_max=%.12g\n",
       ordinary.pc.tier.c_str(), below.pc.tier.c_str(), nc.pc.tier.c_str(), mc.pc.tier.c_str(), below.pc.probability, shape.probability);
@@ -286,7 +527,7 @@ async function native() {
   const built = await run('cmake', ['--build', build, '--target', ...targets, '-j6'], { echo: false });
   fs.writeFileSync(path.join(build, 'pc_tiered_screen_build.log'), built);
   console.log('Native build PASS');
-  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Tiered engine E2E:|Tier evidence:)/;
+  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Screening synthetic CARA|Screening MC outside|Tiered engine E2E:|Tier evidence:)/;
   async function checkedBinary(target, args = []) {
     const output = await run(path.join(build, target), args, { echo: false });
     fs.writeFileSync(path.join(build, `pc_tiered_screen_${target}${args.length ? '_hall' : ''}.log`), output);
@@ -381,7 +622,7 @@ function verifyScreen(summary, label) {
     assert.deepEqual(counts, Object.fromEntries(Object.entries(actual).sort(([a], [b]) => a.localeCompare(b))), `${label}: ${field} event agreement`);
   }
   const tiers = new Set(['FOSTER-2D', 'usage-violation, below floor', 'usage-violation, 3D-Nc', 'usage-violation, Monte Carlo', 'maximum-only']);
-  const methods = new Set(['FOSTER-2D', '3D-NC-HALL', '3D-NC-CARTESIAN', 'SDMC-TWO-BODY', 'SDMC-RECTILINEAR', 'ALFANO-SPHERICAL-SMALL-HBR-MAX']);
+  const methods = new Set(['FOSTER-2D', '3D-NC-HALL', '3D-NC-HALL-QUADRATIC-TIME', '3D-NC-CARTESIAN', 'SDMC-TWO-BODY', 'SDMC-RECTILINEAR', 'ALFANO-SPHERICAL-SMALL-HBR-MAX']);
   for (const event of summary.events) {
     assert(!event.error && !event.errorCode && !event.errorMessage, `${label}: event error`);
     assert(methods.has(event.method) && tiers.has(event.tier), `${label}: unavailable or unknown Pc result ${event.method} / ${event.tier}`);

@@ -54,6 +54,7 @@ PcUsageResult assess_pc_usage(const PcEncounter& e,PcUsageEvaluation evaluation)
     }
     if(evaluation==PcUsageEvaluation::StopOnRectilinearViolation &&
        e.gravitational_parameter>0 && out.relative_velocity_uncertainty>0.1) {
+        out.curvature_skipped=true;
         // This safeguard is independent of the curvilinear correction: no Q(t)
         // refinement can change the violating classification. Do not claim a
         // curvature value or convergence that was never evaluated. Fallbacks

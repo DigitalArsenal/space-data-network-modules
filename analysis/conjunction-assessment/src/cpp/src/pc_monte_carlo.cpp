@@ -19,13 +19,13 @@ public:
     }
 };
 struct SamplePoint {
-    V3 relative{};
+    V3 relative{},relative_velocity{};
     double distance_squared=0,derivative=0;
 };
 bool distance_at(const V6& a,const V6& b,double t,double mu,SamplePoint& point) {
     V6 x{},y{};if(!propagate(a,t,mu,x)||!propagate(b,t,mu,y))return false;
     V3 r=sub(position(y),position(x)),v=sub(velocity(y),velocity(x));
-    point.relative=r;point.distance_squared=dot(r,r);point.derivative=dot(r,v);
+    point.relative=r;point.relative_velocity=v;point.distance_squared=dot(r,r);point.derivative=dot(r,v);
     return std::isfinite(point.distance_squared);
 }
 double acceleration_bound(const V6& state,double mu) {
@@ -77,8 +77,47 @@ bool chord_excludes_collision(const SamplePoint& a,const SamplePoint& b,double d
     const double clearance=radius+acceleration*duration*duration/8+roundoff;
     return std::isfinite(distance)&&std::isfinite(clearance)&&distance>clearance;
 }
+double relative_gravity_bound(const V3& relative,const V3& speed,double extent,
+    double mu,double acceleration_a,double acceleration_b,double roundoff) {
+    // Each orbital radius is at least its pericenter, bounded below by
+    // sqrt(mu / acceleration_bound). While separation D is below that lower
+    // radial bound r, a segment joining bodies separated by at most D stays
+    // outside r-D/2. Gravity's Jacobian norm is at most L=2*mu/(r-D/2)^3.
+    // Gronwall gives separation <= d*cosh(sqrt(L)*T)+v*sinh(sqrt(L)*T)/sqrt(L).
+    // A bound below the assumed separation cap establishes that premise by
+    // continuity over the full interval. For short times the cheaper bound
+    // (d+v*T)/(1-L*T^2/2) suffices. Return a bound on relative acceleration;
+    // unresolved samples still use the original full Kepler search.
+    constexpr double eps=std::numeric_limits<double>::epsilon();
+    const double unavailable=std::numeric_limits<double>::infinity();
+    const double largest_acceleration=std::max(acceleration_a,acceleration_b);
+    if(!(largest_acceleration>0)||!std::isfinite(largest_acceleration))return unavailable;
+    const double radial=std::sqrt(mu/largest_acceleration)*(1-64*eps);
+    if(!(radial>0)||!std::isfinite(radial)||!(extent>0)||!std::isfinite(extent))return unavailable;
+    const double distance=norm(relative)+roundoff,velocity=norm(speed);
+    const double linear_extent=(distance+velocity*extent)*(1+64*eps);
+    for(double fraction:{1.0/64,1.0/16,1.0/4,1.0}) {
+        const double cap=radial*fraction,segment_radius=radial-cap/2;
+        if(!(linear_extent<cap))continue;
+        const double rate=2*mu/(segment_radius*segment_radius*segment_radius)*(1+128*eps);
+        const double q=0.5*rate*extent*extent*(1+16*eps);
+        if(!(rate>0)||!std::isfinite(rate)||!(q>0)||!std::isfinite(q))continue;
+        double separation;
+        if(q<.25)separation=linear_extent/(1-q)*(1+64*eps);
+        else {
+            const double argument=std::sqrt(rate)*extent*(1+32*eps);
+            if(!(argument>0)||argument>700)continue;
+            separation=(distance*std::cosh(argument)+velocity*extent*std::sinh(argument)/argument)*(1+512*eps);
+        }
+        if(!std::isfinite(separation)||!(separation<cap))continue;
+        const double bound=rate*separation*(1+128*eps);
+        if(bound>0&&std::isfinite(bound))return bound;
+    }
+    return unavailable;
+}
 bool collision(const V6& a,const V6& b,double lo,double hi,double radius,double mu,
-    const SamplePoint& start,double acceleration,double roundoff,bool& valid) {
+    const SamplePoint& start,double acceleration,double acceleration_a,double acceleration_b,
+    double roundoff,bool screening,bool& valid) {
     valid=true;
     if(mu<=0) {
         V3 r=sub(position(b),position(a)),v=sub(velocity(b),velocity(a));
@@ -99,12 +138,35 @@ bool collision(const V6& a,const V6& b,double lo,double hi,double radius,double 
     unsigned intervals=std::max(16u,static_cast<unsigned>(needed));
     if(start.distance_squared<=radius*radius)return true;
     double prev_t=lo;SamplePoint previous=start;
+    unsigned next_jump=intervals;
     for(unsigned i=1;i<=intervals;++i) {
+        bool certified=false;
+        if(screening) {
+            // Jump only across certified collision-free spans and land on
+            // the original subdivision grid. If a span is not certified,
+            // keep the original one-interval derivative/minimum search.
+            // Pericenter bounds remain valid at every propagated endpoint.
+            unsigned accepted_jump=1;
+            for(unsigned jump=std::min(next_jump,intervals-i+1);jump>1;jump/=2) {
+                const unsigned endpoint=i+jump-1;
+                const double end=lo+(hi-lo)*endpoint/intervals,span=end-prev_t;
+                const double local_acceleration=std::min(acceleration,relative_gravity_bound(
+                    previous.relative,previous.relative_velocity,span,mu,acceleration_a,acceleration_b,roundoff));
+                const double clearance=radius+0.5*local_acceleration*span*span+roundoff;
+                const double distance=linear_minimum(previous.relative,previous.relative_velocity,0,span);
+                if(std::isfinite(distance)&&std::isfinite(clearance)&&distance>clearance) {
+                    i=endpoint;accepted_jump=jump;certified=true;break;
+                }
+            }
+            // Grow gradually after a successful certificate rather than
+            // repeatedly retrying the same unresolved long observation span.
+            next_jump=std::min(intervals,2*accepted_jump);
+        }
         double t=lo+(hi-lo)*i/intervals;
         SamplePoint point;
         if(!distance_at(a,b,t,mu,point)){valid=false;return false;}
         if(point.distance_squared<=radius*radius)return true;
-        if(previous.derivative<0&&point.derivative>=0) {
+        if(!certified&&previous.derivative<0&&point.derivative>=0) {
             double left=prev_t,right=t;
             SamplePoint left_point=previous,right_point=point;
             // Root of r.v brackets every resolved local minimum; bisection
@@ -133,6 +195,10 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
     result.usage=usage?*usage:assess_pc_usage(e);
     auto bounds=time_bounds(e,options,result.usage);result.time_start=bounds.first;result.time_end=bounds.second;
     result.limitation="Finite-window Monte Carlo; probability resolution and 95% Wilson interval depend on sample count.";
+    const bool screening=options.grade==PcGrade::Screening;
+    if(screening)result.limitation+=" Screening grade: deterministic adaptive sampling, minimum="+
+        std::to_string(std::min(options.minimum_samples,options.samples))+", target_hits="+
+        std::to_string(options.target_hits)+", sample_cap="+std::to_string(options.samples)+".";
     if(!e.has_velocity_covariance)result.limitation+=" Velocity covariance unavailable; supplied position uncertainty only.";
     std::array<double,144> joint{},vectors{};std::array<double,12> values{};
     for(int i=0;i<6;++i)for(int j=0;j<6;++j) {
@@ -151,13 +217,17 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
     NormalStream random(options.seed);result.samples=options.samples;
     double mu=options.two_body?e.gravitational_parameter:0;
     for(std::uint64_t k=0;k<options.samples;++k) {
+        if(screening&&options.target_hits>0&&k>=options.minimum_samples&&result.hits>=options.target_hits) {
+            result.samples=k;break;
+        }
         std::array<double,12> z{},delta{};for(double& value:z)value=random.normal();
         for(int i=0;i<12;++i)for(int j=0;j<12;++j)delta[i]+=vectors[i*12+j]*z[j];
         V6 a=e.primary,b=e.secondary;
         for(int i=0;i<6;++i){a[i]+=delta[i];b[i]+=delta[i+6];}
-        double acceleration=0,roundoff=0;
+        double acceleration=0,acceleration_a=0,acceleration_b=0,roundoff=0;
         if(mu>0) {
-            acceleration=(acceleration_bound(a,mu)+acceleration_bound(b,mu))*(1+16*std::numeric_limits<double>::epsilon());
+            acceleration_a=acceleration_bound(a,mu);acceleration_b=acceleration_bound(b,mu);
+            acceleration=(acceleration_a+acceleration_b)*(1+16*std::numeric_limits<double>::epsilon());
             const double extent=std::max(std::abs(bounds.first),std::abs(bounds.second));
             // Keep marginal cases on the original propagation path, with a
             // conservative guard for state subtraction and Kepler roundoff.
@@ -170,6 +240,12 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
             const double distance=linear_minimum(sub(position(b),position(a)),sub(velocity(b),velocity(a)),bounds.first,bounds.second);
             const double clearance=e.combined_radius+0.5*acceleration*extent*extent+roundoff;
             if(std::isfinite(distance)&&std::isfinite(clearance)&&distance>clearance)continue;
+            if(screening) {
+                acceleration=std::min(acceleration,relative_gravity_bound(sub(position(b),position(a)),sub(velocity(b),velocity(a)),extent,
+                    mu,acceleration_a,acceleration_b,roundoff));
+                const double tighter_clearance=e.combined_radius+0.5*acceleration*extent*extent+roundoff;
+                if(std::isfinite(distance)&&std::isfinite(tighter_clearance)&&distance>tighter_clearance)continue;
+            }
         }
         bool valid=false;SamplePoint start;
         if(!distance_at(a,b,bounds.first,mu,start)){
@@ -177,7 +253,8 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
         }
         if(start.distance_squared<=e.combined_radius*e.combined_radius){
             ++result.initial_hits;valid=true;if(options.include_initial_overlap)++result.hits;
-        } else if(collision(a,b,bounds.first,bounds.second,e.combined_radius,mu,start,acceleration,roundoff,valid)){
+        } else if(collision(a,b,bounds.first,bounds.second,e.combined_radius,mu,start,acceleration,
+            acceleration_a,acceleration_b,roundoff,screening,valid)){
             ++result.entry_hits;++result.hits;
         }
         if(!valid){result.pc.converged=false;result.limitation="A sampled trajectory failed to propagate; Pc is unavailable.";return result;}
@@ -186,7 +263,15 @@ PcFallbackResult pc_monte_carlo(const PcEncounter& e,const PcFallbackOptions& op
     constexpr double z=1.959963984540054;double z2=z*z,den=1+z2/n;
     double center=(p+z2/(2*n))/den,half=z*std::sqrt(p*(1-p)/n+z2/(4*n*n))/den;
     result.pc.probability=p;result.pc.lower_probability=std::max(0.0,center-half);
-    result.pc.upper_probability=std::min(1.0,center+half);result.pc.iterations=static_cast<int>(std::min<std::uint64_t>(result.samples,2147483647));
+    result.pc.upper_probability=std::min(1.0,center+half);
+    // Wilson's zero/all-hit endpoints are exactly 0/1. Non-power-of-two
+    // adaptive counts can otherwise leave a tiny cancellation residual.
+    // Preserve the Reference arithmetic and expose the exact Screening bounds.
+    if(screening) {
+        if(result.hits==0)result.pc.lower_probability=0;
+        if(result.hits==result.samples)result.pc.upper_probability=1;
+    }
+    result.pc.iterations=static_cast<int>(std::min<std::uint64_t>(result.samples,2147483647));
     return result;
 }
 } // namespace conjunction

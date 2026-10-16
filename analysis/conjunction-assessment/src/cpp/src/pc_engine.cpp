@@ -60,11 +60,24 @@ PcFallbackOptions event_options(const PcEncounter& input, const PcFallbackOption
     if(input.apply_cross_correlation)for(double value:input.cross_covariance)add(value);
     return out;
 }
+PcFallbackOptions grade_options(const PcFallbackOptions& configured, PcGrade grade,
+    bool explicit_sample_budget) {
+    auto options=configured;
+    options.grade=grade;
+    if(grade==PcGrade::Screening) {
+        options.relative_tolerance=1e-2;
+        options.angular_order=8;
+        options.time_intervals=16;
+        if(!explicit_sample_budget)options.samples=kDefaultScreeningPcSampleCap;
+    }
+    return options;
+}
 PcFallbackResult evaluate_fallback(const PcEncounter& input,
     const PcUsageResult& usage, ConjunctionEngine::Fallback policy, bool direct_monte_carlo,
     const PcFallbackOptions& configured_options) {
     const auto options=event_options(input,configured_options);
-    const auto* prepared_usage=usage.fully_evaluated ? &usage : nullptr;
+    const auto* prepared_usage=(usage.fully_evaluated ||
+        (options.grade==PcGrade::Screening && !usage.curvature_skipped)) ? &usage : nullptr;
     PcFallbackResult fallback;
     if(policy==ConjunctionEngine::Fallback::MonteCarlo || direct_monte_carlo)
         fallback=pc_monte_carlo(input,options,prepared_usage);
@@ -172,7 +185,7 @@ ConjunctionEvent2 ConjunctionEngine::compute_pc(const PcEncounter& encounter) co
 
 bool ConjunctionEngine::set_pc_tier_options(const PcTierOptions& options) {
     if(!std::isfinite(options.reporting_floor) || !std::isfinite(options.monte_carlo_floor) ||
-       options.reporting_floor<0 || options.monte_carlo_floor>1 ||
+       options.reporting_floor<0 || options.reporting_floor>1 ||
        options.reporting_floor>options.monte_carlo_floor)return false;
     tier_options_=options;
     return true;
@@ -230,6 +243,7 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
             "Collision probability calculation failed: invalid encounter state or covariance");
         event.usage.violated=event.pc.usage_violation=true;
         event.usage.reason=event.pc.usage_reason="INVALID_ENCOUNTER";
+        if(pc_grade_==PcGrade::Screening)event.pc.usage_reason+="; grade=Screening; invalid encounter";
         event.probability_failure=event.pc.failure_reason;
         return event;
     }
@@ -267,9 +281,19 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
     } else {
         // A zero-speed encounter has no plane. Foster's covariance remediation
         // must never manufacture a plane or a probability for that case.
-        const auto pc2d=event.usage.low_relative_speed
+        auto pc2d=event.usage.low_relative_speed
             ? pc_engine_detail::unavailable("No encounter plane at low relative speed")
-            : Foster2D().compute(event.bplane);
+            : pc_grade_==PcGrade::Screening ? screening_foster_2d(event.bplane)
+                                          : Foster2D().compute(event.bplane);
+        if(pc_grade_==PcGrade::Screening && fallback_==Fallback::Automatic &&
+           pc2d.converged && pc2d.iterations==48) {
+            // A faster quadrature must not move an encounter across a tier
+            // boundary when its bounded numerical uncertainty overlaps it.
+            for(double floor:{tier_options_.reporting_floor,tier_options_.monte_carlo_floor})
+                if(std::abs(pc2d.probability-floor)<=1e-5*std::max(pc2d.probability,floor)) {
+                    pc2d=Foster2D().compute(event.bplane);break;
+                }
+        }
         const bool has_pc2d=pc_engine_detail::usable_probability(pc2d);
         if(!event.usage.violated) {
             event.pc=pc_method_->name()=="FOSTER-2D" ? pc2d : pc_method_->compute(event.bplane);
@@ -290,7 +314,8 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
                 const bool direct_monte_carlo=fallback_==Fallback::Automatic &&
                     gate>=tier_options_.monte_carlo_floor;
                 const auto fallback=pc_engine_detail::evaluate_fallback(
-                    input,event.usage,fallback_,direct_monte_carlo,fallback_options_);
+                    input,event.usage,fallback_,direct_monte_carlo,
+                    pc_engine_detail::grade_options(fallback_options_,pc_grade_,fallback_options_configured_));
                 // A fallback evaluates full curvature for its bounds. Preserve
                 // those complete diagnostics now that their cost has been paid.
                 if(!fallback.invalid_inputs)event.usage=fallback.usage;
@@ -308,6 +333,9 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
     if(!event.usage.reason.empty())
         event.pc.usage_reason=pc_engine_detail::usage_reason(event.usage) +
             (event.pc.usage_reason.empty()?"":"; "+event.pc.usage_reason);
+    if(pc_grade_==PcGrade::Screening)
+        event.pc.usage_reason+=(event.pc.usage_reason.empty()?"":"; ")+
+            std::string("grade=Screening; Foster disk relative error budget=1e-5");
     event.pc.cross_correlation_applied=input.apply_cross_correlation;
     event.mahalanobis_2d=event.pc.mahalanobis_2d;
     event.has_covariance=pc_engine_detail::usable_probability(event.pc);

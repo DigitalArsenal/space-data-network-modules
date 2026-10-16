@@ -112,36 +112,166 @@ void mark_count_applicability(PcFallbackResult& result,const PcEncounter& e) {
     }
 }
 bool close(double a,double b,double tolerance) {return std::abs(a-b)<=std::max(1e-15,tolerance*std::max(std::abs(a),std::abs(b)));}
+
+// Partition the observation interval independently from the surface rule.
+// Reference retains its original dense grid, including the exact insertion
+// order. Screening uses peak-width knots; Simpson's embedded refinement still
+// checks every interval, and the full finite observation interval is retained.
+std::set<double> nc3_time_knots(const PcFallbackOptions& o,const PcFallbackResult& result,bool expanded_screening_grid) {
+    std::set<double> knots{result.time_start,result.time_end};
+    const double span=result.time_end-result.time_start;
+    const double sigma=result.usage.time_sigma,center=result.usage.time_center;
+    if(o.grade==PcGrade::Screening && std::isfinite(sigma)&&sigma>0) {
+        auto insert=[&](double offset) {
+            const double t=center+offset*sigma;
+            if(t>result.time_start&&t<result.time_end)knots.insert(t);
+        };
+        if(expanded_screening_grid)for(double offset:{-8.0,-4.0,-2.0,-1.0,0.0,1.0,2.0,4.0,8.0})insert(offset);
+        else for(double offset:{-2.0,0.0,2.0})insert(offset);
+        if(!expanded_screening_grid&&span>20*sigma)for(double t:{center-8*sigma,center+8*sigma})
+            if(t>result.time_start&&t<result.time_end)knots.insert(t);
+        for(double width=16*sigma;width<2*span;width*=2)
+            for(double t:{center-width,center+width})if(t>result.time_start&&t<result.time_end)knots.insert(t);
+    } else {
+        unsigned intervals=std::clamp(o.time_intervals,16u,1024u);
+        for(unsigned i=1;i<intervals;++i)knots.insert(result.time_start+span*i/intervals);
+        if(std::isfinite(sigma)&&sigma>0) {
+            for(int i=-16;i<=16;++i){double t=center+i*sigma/2;if(t>result.time_start&&t<result.time_end)knots.insert(t);}
+            for(double width=8*sigma;width<2*span;width*=2)
+                for(double t:{center-width,center+width})if(t>result.time_start&&t<result.time_end)knots.insert(t);
+        }
+    }
+    return knots;
 }
 
-static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall,const PcUsageResult* usage) {
+// The finite-sphere angular rule and analytic quadratic-Q time integral are
+// shared by explicit 2D-Nc and Screening's guarded time approximation. Keep
+// the established 2D-Nc arithmetic and refinement order in one place.
+bool quadratic_flux(PcFallbackResult& result,const PcEncounter& e,const PcFallbackOptions& o,
+                    const Kernel& km,const Kernel& k0,const Kernel& kp,double center,double width) {
+    unsigned order=std::clamp(o.angular_order,8u,128u);double previous=-1,current=0;
+    for(int refinement=0;refinement<5;++refinement) {
+        auto points=sphere(order,k0.v);double sum=0;bool valid=true;
+        for(const auto& point:points) {
+            double q0=k0.q(point.normal,e.combined_radius),qm=km.q(point.normal,e.combined_radius),qp=kp.q(point.normal,e.combined_radius);
+            double qdot=(qp-qm)/(2*width),qddot=(qp-2*q0+qm)/(width*width);
+            if(!(qddot>0)){valid=false;break;}
+            double sigma=std::sqrt(2/qddot),shift=-qdot/qddot,qstar=q0-0.5*qdot*qdot/qddot;
+            double lo=(result.time_start-center-shift)/(sigma*std::sqrt(2.0)),hi=(result.time_end-center-shift)/(sigma*std::sqrt(2.0));
+            double fraction=0.5*(std::erf(hi)-std::erf(lo));
+            sum+=point.weight*k0.inward(point.normal,e.combined_radius)*sigma*std::exp(-0.5*qstar)*fraction;
+        }
+        if(!valid)return false;
+        current=e.combined_radius*e.combined_radius*sum/(2*pi);result.pc.iterations+=points.size();
+        if(previous>=0&&close(current,previous,o.relative_tolerance)){result.pc.converged=true;break;}
+        if(order>=512)break;
+        previous=current;order=std::min(512u,order*2);
+    }
+    result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
+    return true;
+}
+
+bool screening_quadratic_flux(PcFallbackResult& result,const PcEncounter& e,
+                             const PcFallbackOptions& o,const HallModel* hall,const Kernel& k0) {
+    if(!hall||o.grade!=PcGrade::Screening||!result.usage.fully_evaluated)return false;
+    const double center=result.usage.time_center,width=result.usage.time_sigma,radius=e.combined_radius;
+    const double orbit=std::min(period(e.primary,e.gravitational_parameter),period(e.secondary,e.gravitational_parameter));
+    if(!(width>0)||!std::isfinite(width)||!std::isfinite(orbit)||!(result.time_end-result.time_start<0.02*orbit)||
+       !(center-2*width>result.time_start&&center+2*width<result.time_end))return false;
+    auto small_sphere=[&](const Kernel& k) {
+        double squared_norm=0;for(double a:k.inverse)squared_norm+=a*a;
+        const double inverse_bound=std::sqrt(squared_norm);
+        // Frobenius norm bounds the largest inverse-covariance eigenvalue.
+        // The second bound limits directional density variation on the sphere.
+        return std::isfinite(inverse_bound)&&radius*std::sqrt(inverse_bound)<=0.1&&
+            radius*norm(mul(k.inverse,k.r))+0.5*radius*radius*inverse_bound<=0.2;
+    };
+    if(!small_sphere(k0))return false;
+    Kernel km,kp,kmm,kpp;bool repaired=result.covariance_repaired;
+    if(!kernel(e,center-width,o.two_body,km,repaired,hall)||
+       !kernel(e,center+width,o.two_body,kp,repaired,hall)||
+       !kernel(e,center-2*width,o.two_body,kmm,repaired,hall)||
+       !kernel(e,center+2*width,o.two_body,kpp,repaired,hall))return false;
+    for(const Kernel* k:{&km,&kp,&kmm,&kpp})if(!small_sphere(*k))return false;
+    const V3 zero{};
+    auto temporal_residual=[&](const Kernel& outer,const Kernel& near,const Kernel& far) {
+        // q(t,n) is quadratic in surface normal n. This coefficient bound
+        // checks every direction at +/-2 sigma, rather than selected normals.
+        double matrix_squared=0;V3 linear{};
+        const auto a=mul(outer.inverse,outer.r),b=mul(near.inverse,near.r),
+                   c=mul(far.inverse,far.r),d=mul(k0.inverse,k0.r);
+        for(int i=0;i<3;++i)linear[i]=a[i]-3*b[i]-c[i]+3*d[i];
+        for(int i=0;i<9;++i){const double value=outer.inverse[i]-3*near.inverse[i]-far.inverse[i]+3*k0.inverse[i];matrix_squared+=value*value;}
+        const double constant=outer.q(zero,radius)-3*near.q(zero,radius)-far.q(zero,radius)+3*k0.q(zero,radius);
+        return std::abs(constant)+2*radius*norm(linear)+radius*radius*std::sqrt(matrix_squared);
+    };
+    const double residual_minus=temporal_residual(kmm,km,kp),residual_plus=temporal_residual(kpp,kp,km);
+    if(!std::isfinite(residual_minus)||!std::isfinite(residual_plus)||residual_minus>0.1||residual_plus>0.1)return false;
+    const auto points=sphere(8,k0.v);
+    double inward0=0;std::array<double,4> changes{};
+    for(const auto& point:points) {
+        const double base=k0.inward(point.normal,radius);inward0+=point.weight*base;
+        size_t i=0;for(const Kernel* k:{&km,&kp,&kmm,&kpp})
+            changes[i++]+=point.weight*std::abs(k->inward(point.normal,radius)-base);
+    }
+    if(!(inward0>0)||!std::isfinite(inward0))return false;
+    for(double change:changes)if(!std::isfinite(change)||change>0.05*inward0)return false;
+    auto approximation=result;approximation.pc.converged=false;
+    if(!quadratic_flux(approximation,e,o,km,k0,kp,center,width)||!approximation.pc.converged)return false;
+    approximation.covariance_repaired=repaired;
+    approximation.pc.method="3D-NC-HALL-QUADRATIC-TIME";
+    approximation.limitation="Screening grade: Hall finite-sphere flux with analytic quadratic-Q time approximation; R/sigma_min<=0.1, log-density variation<=0.2, full-sphere Q fit residual at +/-2 sigma<=0.1, conditional inward-flux variation at +/-sigma and +/-2 sigma<=0.05, observation interval<0.02 orbital period; angular relative tolerance="+
+        std::to_string(o.relative_tolerance)+". Nc equals Pc only for an isolated encounter without recrossings or initial occupancy.";
+    mark_count_applicability(approximation,e);
+    Kernel start;
+    if(!kernel(e,approximation.time_start,o.two_body,start,approximation.covariance_repaired,hall)||
+       initial_occupancy_upper(start,radius)>std::max(1e-12,std::min(1e-4,o.relative_tolerance)*approximation.expected_collisions)) {
+        approximation.requires_monte_carlo=true;
+        approximation.limitation+=" INITIAL_OCCUPANCY_REQUIRES_MC: collision-sphere entry flux cannot represent already-overlapping trajectories at the observation interval start.";
+    }
+    result=std::move(approximation);return true;
+}
+}
+
+static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall,const PcUsageResult* usage,bool expanded_screening_grid=false,bool screening_recovery=false) {
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"3D-NC-HALL":"3D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
     auto result=initialize(e,o,hall?"3D-NC-HALL":"3D-NC-CARTESIAN",usage);
     if(hall)result.limitation="Hall equinoctial peak-overlap sphere flux; Nc equals Pc for an isolated encounter without recrossings or initial occupancy.";
+    const bool global_time_budget=o.grade==PcGrade::Screening&&!expanded_screening_grid;
+    const bool stop_on_invalid=o.grade==PcGrade::Screening||screening_recovery;
+    if(o.grade==PcGrade::Screening)result.limitation+=std::string(" Screening grade: adaptive peak-width time quadrature with ")+
+        (global_time_budget?"global time-error target=0.1*relative tolerance":"expanded peak grid and local relative time-error target")+", relative tolerance="+
+        std::to_string(o.relative_tolerance)+", angular order="+std::to_string(o.angular_order)+", at most one angular refinement.";
     if(!(e.combined_radius>0)||!(result.time_end>result.time_start)){result.pc.converged=false;return result;}
+    if(o.grade==PcGrade::Screening) {
+        // The finite observation window alone can establish repeated-entry
+        // ambiguity. Computing an entry count cannot make that count into Pc.
+        mark_count_applicability(result,e);
+        if(result.requires_monte_carlo) {
+            result.pc.converged=false;
+            result.limitation+=" Entry flux not evaluated because the observation interval already requires Monte Carlo.";
+            return result;
+        }
+    }
     Kernel initial;
     if(!kernel(e,result.usage.time_center,o.two_body,initial,result.covariance_repaired,hall)){result.pc.converged=false;return result;}
+    if(!expanded_screening_grid&&screening_quadratic_flux(result,e,o,hall,initial))return result;
     // Include both a coarse full-window grid and a grid tied to the peak's
     // time width. A days-wide user limit must not erase a subsecond peak.
-    std::set<double> knots{result.time_start,result.time_end};
-    unsigned intervals=std::clamp(o.time_intervals,16u,1024u);
-    for(unsigned i=1;i<intervals;++i)knots.insert(result.time_start+(result.time_end-result.time_start)*i/intervals);
-    double sigma=result.usage.time_sigma,center=result.usage.time_center;
-    if(std::isfinite(sigma)&&sigma>0) {
-        for(int i=-16;i<=16;++i){double t=center+i*sigma/2;if(t>result.time_start&&t<result.time_end)knots.insert(t);}
-        for(double width=8*sigma;width<2*(result.time_end-result.time_start);width*=2)
-            for(double t:{center-width,center+width})if(t>result.time_start&&t<result.time_end)knots.insert(t);
-    }
+    const auto knots=nc3_time_knots(o,result,expanded_screening_grid);
     unsigned order=std::clamp(o.angular_order,8u,128u);if(order%2)++order;
     double current=0;result.pc.converged=false;
     // Angular refinement changes only the surface rule. Preserve the costly
     // propagated Gaussian kernels at time nodes already visited.
     std::map<double,Kernel> kernels;
-    for(int refinement=0;refinement<6;++refinement) {
+    if(o.grade==PcGrade::Screening)kernels.emplace(result.usage.time_center,initial);
+    const int refinements=o.grade==PcGrade::Screening?2:6;
+    for(int refinement=0;refinement<refinements;++refinement) {
         auto points=sphere(order,initial.v),coarse_points=sphere(order/2,initial.v);
         struct Rates {double fine=0,coarse=0;};
         std::map<double,Rates> cache;bool valid=true,temporal_ok=true;
         auto evaluate=[&](double t) {
+            if(stop_on_invalid&&!valid)return Rates{};
             auto found=cache.find(t);if(found!=cache.end())return found->second;
             auto entry=kernels.find(t);Rates value;
             if(entry==kernels.end()) {
@@ -158,20 +288,49 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         auto simpson=[](double a,double b,Rates fa,Rates fm,Rates fb) {
             return Rates{(b-a)*(fa.fine+4*fm.fine+fb.fine)/6,(b-a)*(fa.coarse+4*fm.coarse+fb.coarse)/6};
         };
-        std::function<Rates(double,double,Rates,Rates,Rates,Rates,int)> integrate;
-        integrate=[&](double a,double b,Rates fa,Rates fm,Rates fb,Rates whole,int depth)->Rates {
+        std::function<Rates(double,double,Rates,Rates,Rates,Rates,int,double)> integrate;
+        integrate=[&](double a,double b,Rates fa,Rates fm,Rates fb,Rates whole,int depth,double absolute_budget)->Rates {
+            if(stop_on_invalid&&!valid)return Rates{};
             double mid=(a+b)/2;auto fl=evaluate((a+mid)/2),fr=evaluate((mid+b)/2);
+            if(stop_on_invalid&&!valid)return Rates{};
             auto left=simpson(a,mid,fa,fl,fm),right=simpson(mid,b,fm,fr,fb);
             Rates sum{left.fine+right.fine,left.coarse+right.coarse};
-            if(close(sum.fine,whole.fine,15*o.relative_tolerance))return sum;
+            if(global_time_budget?
+               std::abs(sum.fine-whole.fine)<=15*absolute_budget:
+               close(sum.fine,whole.fine,15*o.relative_tolerance))return sum;
             if(depth==0){temporal_ok=false;return sum;}
-            left=integrate(a,mid,fa,fl,fm,left,depth-1);right=integrate(mid,b,fm,fr,fb,right,depth-1);
+            left=integrate(a,mid,fa,fl,fm,left,depth-1,absolute_budget/2);right=integrate(mid,b,fm,fr,fb,right,depth-1,absolute_budget/2);
             return {left.fine+right.fine,left.coarse+right.coarse};
         };
         Rates total;auto it=knots.begin();double previous=*it++;
-        for(;it!=knots.end();++it){double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
-            auto part=integrate(previous,next,fa,fm,fb,simpson(previous,next,fa,fm,fb),16);
-            total.fine+=part.fine;total.coarse+=part.coarse;previous=next;}
+        if(global_time_budget) {
+            struct Interval {double a,b;Rates fa,fm,fb,whole;};
+            std::vector<Interval> intervals;double estimate=0;
+            for(;it!=knots.end();++it) {
+                const double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
+                if(!valid)return result;
+                const auto whole=simpson(previous,next,fa,fm,fb);
+                intervals.push_back({previous,next,fa,fm,fb,whole});estimate+=whole.fine;previous=next;
+            }
+            // Positive rates cannot cancel. Allocate one global absolute
+            // Simpson error budget, rather than requiring relative precision
+            // independently in tails that contribute negligibly to Nc. Both
+            // the sampled whole-window estimate and peak-width scale bound
+            // the budget conservatively; subdivision halves its allocation.
+            const double sigma=result.usage.time_sigma;
+            if(std::isfinite(sigma)&&sigma>0)estimate=std::min(estimate,
+                evaluate(result.usage.time_center).fine*sigma*std::sqrt(2*pi));
+            const double budget=std::max(1e-15,0.1*o.relative_tolerance*std::max(0.0,estimate))/intervals.size();
+            for(const auto& interval:intervals) {
+                const auto part=integrate(interval.a,interval.b,interval.fa,interval.fm,interval.fb,interval.whole,16,budget);
+                total.fine+=part.fine;total.coarse+=part.coarse;
+            }
+        } else {
+            for(;it!=knots.end();++it){double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
+                auto part=integrate(previous,next,fa,fm,fb,simpson(previous,next,fa,fm,fb),16,0);
+                if(stop_on_invalid&&!valid)break;
+                total.fine+=part.fine;total.coarse+=part.coarse;previous=next;}
+        }
         current=total.fine;result.pc.iterations+=cache.size();
         if(!valid)return result;
         if(temporal_ok&&close(total.fine,total.coarse,o.relative_tolerance)){result.pc.converged=true;break;}
@@ -181,8 +340,12 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
     result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
     mark_count_applicability(result,e);
     Kernel start;
+    // The grade controls numerical effort, not whether an expected entry
+    // count can be interpreted as total Pc. Retain Reference's occupancy
+    // applicability threshold when Screening relaxes quadrature tolerance.
+    const double occupancy_tolerance=o.grade==PcGrade::Screening?std::min(1e-4,o.relative_tolerance):o.relative_tolerance;
     if(!kernel(e,result.time_start,o.two_body,start,result.covariance_repaired,hall)||
-       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,o.relative_tolerance*current)) {
+       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,occupancy_tolerance*current)) {
         result.requires_monte_carlo=true;
         result.limitation+=" INITIAL_OCCUPANCY_REQUIRES_MC: collision-sphere entry flux cannot represent already-overlapping trajectories at the observation interval start.";
     }
@@ -193,9 +356,13 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"2D-NC-HALL":"2D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
     auto result=initialize(e,o,hall?"2D-NC-HALL":"2D-NC-CARTESIAN",usage);result.pc.converged=false;
     if(hall)result.limitation="Hall equinoctial peak-overlap model with quadratic time integration; requires an isolated Gaussian-shaped collision-rate peak.";
+    const std::string screening_settings=o.grade==PcGrade::Screening?
+        " Screening grade: quadratic time integration, relative tolerance="+std::to_string(o.relative_tolerance)+
+        ", initial angular order="+std::to_string(o.angular_order)+".":"";
+    result.limitation+=screening_settings;
     if(hall&&!result.usage.fully_evaluated){
         result.requires_monte_carlo=true;
-        result.limitation="CURVATURE_ANALYSIS_UNCONVERGED_REQUIRES_MC: a reliable quadratic collision-rate peak was not established.";
+        result.limitation="CURVATURE_ANALYSIS_UNCONVERGED_REQUIRES_MC: a reliable quadratic collision-rate peak was not established."+screening_settings;
         return result;
     }
     double center=result.usage.time_center,width=result.usage.time_sigma;
@@ -204,36 +371,44 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
     if(!kernel(e,center-width,o.two_body,km,result.covariance_repaired,hall)||
        !kernel(e,center,o.two_body,k0,result.covariance_repaired,hall)||
        !kernel(e,center+width,o.two_body,kp,result.covariance_repaired,hall))return result;
-    unsigned order=std::clamp(o.angular_order,8u,128u);double previous=-1,current=0;
-    for(int refinement=0;refinement<5;++refinement) {
-        auto points=sphere(order,k0.v);double sum=0;bool valid=true;
-        for(const auto& point:points) {
-            double q0=k0.q(point.normal,e.combined_radius),qm=km.q(point.normal,e.combined_radius),qp=kp.q(point.normal,e.combined_radius);
-            double qdot=(qp-qm)/(2*width),qddot=(qp-2*q0+qm)/(width*width);
-            if(!(qddot>0)){valid=false;break;}
-            double sigma=std::sqrt(2/qddot),shift=-qdot/qddot,qstar=q0-0.5*qdot*qdot/qddot;
-            double lo=(result.time_start-center-shift)/(sigma*std::sqrt(2.0)),hi=(result.time_end-center-shift)/(sigma*std::sqrt(2.0));
-            double fraction=0.5*(std::erf(hi)-std::erf(lo));
-            sum+=point.weight*k0.inward(point.normal,e.combined_radius)*sigma*std::exp(-0.5*qstar)*fraction;
-        }
-        if(!valid)return result;
-        current=e.combined_radius*e.combined_radius*sum/(2*pi);result.pc.iterations+=points.size();
-        if(previous>=0&&close(current,previous,o.relative_tolerance)){result.pc.converged=true;break;}
-        if(order>=512)break;
-        previous=current;order=std::min(512u,order*2);
-    }
-    result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
+    if(!quadratic_flux(result,e,o,km,k0,kp,center,width))return result;
     mark_count_applicability(result,e);
     Kernel start;
+    const double occupancy_tolerance=o.grade==PcGrade::Screening?std::min(1e-4,o.relative_tolerance):o.relative_tolerance;
     if(!kernel(e,result.time_start,o.two_body,start,result.covariance_repaired,hall)||
-       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,o.relative_tolerance*current)) {
+       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,occupancy_tolerance*result.expected_collisions)) {
         result.requires_monte_carlo=true;
         result.limitation+=" INITIAL_OCCUPANCY_REQUIRES_MC: collision-sphere entry flux cannot represent already-overlapping trajectories at the observation interval start.";
     }
     return result;
 }
-PcFallbackResult pc_3d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){return compute_nc3(e,o,nullptr,usage);}
+static PcFallbackResult compute_nc3_for_grade(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall,const PcUsageResult* usage) {
+    auto result=compute_nc3(e,o,hall,usage);
+    if(o.grade==PcGrade::Screening && !result.pc.converged && !result.invalid_inputs && !result.requires_monte_carlo) {
+        // Hall's iterative peak model can fail at an isolated time node. The
+        // independently refined expanded grid often resolves the same full
+        // interval without the far more costly Reference angular/time rules.
+        auto expanded=compute_nc3(e,o,hall,&result.usage,true);
+        expanded.limitation+=" Screening compact quadrature unavailable; expanded peak-grid recovery used.";
+        if(expanded.pc.converged||expanded.invalid_inputs||expanded.requires_monte_carlo)return expanded;
+        // A sparse time node or the bounded angular refinement can fail even
+        // when Reference quadrature resolves this encounter. Recover with the
+        // established Reference rule before requesting a different Pc model.
+        // Applicability failures still go directly to Monte Carlo as before.
+        auto reference=o;reference.grade=PcGrade::Reference;
+        reference.relative_tolerance=1e-4;reference.angular_order=16;reference.time_intervals=128;
+        // This is part of a Screening call: after a failed Gaussian kernel,
+        // further nodes cannot repair that quadrature. Valid Reference-rule
+        // results retain the same arithmetic; ordinary Reference calls keep
+        // their original execution path as well as their original result.
+        auto recovered=compute_nc3(e,reference,hall,&result.usage,false,true);
+        recovered.limitation+=" Screening quadrature unavailable; Reference recovery used relative tolerance=0.0001, angular order=16, time intervals=128.";
+        return recovered;
+    }
+    return result;
+}
+PcFallbackResult pc_3d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){return compute_nc3_for_grade(e,o,nullptr,usage);}
 PcFallbackResult pc_2d_nc_cartesian(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){return compute_nc2(e,o,nullptr,usage);}
-PcFallbackResult pc_3d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){HallModel model(e);return compute_nc3(e,o,&model,usage);}
+PcFallbackResult pc_3d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){HallModel model(e);return compute_nc3_for_grade(e,o,&model,usage);}
 PcFallbackResult pc_2d_nc_hall(const PcEncounter& e,const PcFallbackOptions& o,const PcUsageResult* usage){HallModel model(e);return compute_nc2(e,o,&model,usage);}
 } // namespace conjunction

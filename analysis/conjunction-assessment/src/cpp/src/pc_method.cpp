@@ -6,6 +6,55 @@
 
 namespace conjunction {
 
+PcResult screening_foster_2d(const BPlaneGeometry& bp) {
+    // Positive disk quadrature: three Gauss-Legendre nodes in s=r^2/R^2
+    // and sixteen equispaced angles. It integrates every polynomial of total
+    // degree <= 8 exactly (the surviving angular averages have s-degree <= 4).
+    // For a Gaussian, write density(x)=density(0)*exp(L(x)+Q(x)). If |L+Q|
+    // <= T, the fourth Taylor polynomial is degree 8. Positivity of the rule
+    // bounds relative quadrature error by 2*exp(2T)*T^5/5!, <8e-6 at T<=0.2.
+    // This is the Foster disk integral with a bounded cheaper quadrature, not
+    // a constant-density small-HBR probability or a replacement tier gate.
+    const double radius=bp.combined_radius;
+    for(double value:{bp.xi,bp.zeta,bp.sigma_xx,bp.sigma_xz,bp.sigma_zz,radius})
+        if(!std::isfinite(value))return Foster2D().compute(bp);
+    if(!(radius>0))return Foster2D().compute(bp);
+    double high=0,low=0;bp.eigenvalues(high,low);
+    if(!std::isfinite(high)||!std::isfinite(low))return Foster2D().compute(bp);
+    const double floor=(1e-4*radius)*(1e-4*radius);
+    const bool remediated=high<floor||low<floor;
+    high=std::max(high,floor);low=std::max(low,floor);
+    if(!(low>0))return Foster2D().compute(bp);
+    double mx=0,my=0;bp.rotated_miss(mx,my);
+    const double sx=std::sqrt(high),sy=std::sqrt(low),rho=radius/sy;
+    const double variation=radius*std::hypot(mx/high,my/low)+0.5*rho*rho;
+    if(!(variation<=0.2))return Foster2D().compute(bp);
+    constexpr double nodes[]={0.11270166537925831148,0.5,0.88729833462074168852};
+    constexpr double weights[]={5.0/18,4.0/9,5.0/18};
+    constexpr double cosine[]={1,0.92387953251128675613,0.70710678118654752440,
+        0.38268343236508977173,0,-0.38268343236508977173,-0.70710678118654752440,
+        -0.92387953251128675613,-1,-0.92387953251128675613,-0.70710678118654752440,
+        -0.38268343236508977173,0,0.38268343236508977173,0.70710678118654752440,
+        0.92387953251128675613};
+    const double ux=mx/sx,uy=my/sy;
+    const double logscale=2*std::log(radius)-std::log(2.0)-std::log(sx)-std::log(sy)-
+        0.5*(ux*ux+uy*uy);
+    PcResult result;result.method="FOSTER-2D";
+    for(unsigned radial=0;radial<3;++radial) {
+        const double distance=radius*std::sqrt(nodes[radial]);
+        for(unsigned angle=0;angle<16;++angle) {
+            const double x=distance*cosine[angle]/sx,y=distance*cosine[(angle+12)%16]/sy;
+            // Combine logs before exponentiation to retain subnormal tails.
+            result.probability+=weights[radial]/16*std::exp(logscale+x*ux+y*uy-0.5*(x*x+y*y));
+        }
+    }
+    result.probability=std::clamp(result.probability,0.0,1.0);
+    result.mahalanobis_2d=std::hypot(ux,uy);
+    result.covariance_remediated=remediated;result.iterations=48;
+    result.max_probability=AlfanoMaxPc().compute(bp).probability;
+    return result;
+}
+
 std::unique_ptr<PcMethod> create_pc_method(const std::string& name) {
     if (name == "alfano" || name == "ALFANO-MAXPROB" || name == "ALFANO-SPHERICAL-SMALL-HBR-MAX") return std::make_unique<AlfanoMaxPc>();
     if (name == "foster" || name == "FOSTER-2D") return std::make_unique<Foster2D>();

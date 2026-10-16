@@ -23,6 +23,10 @@ struct PcEncounter {
 struct PcUsageResult {
     bool violated = false;
     bool fully_evaluated = false; // False when engine routing skips curvature.
+    // Distinguish a deliberately omitted analysis from a completed attempt
+    // that could not establish a peak. Fallbacks can reuse the latter's
+    // reported original time bounds without repeating the failed analysis.
+    bool curvature_skipped = false;
     bool low_relative_speed = false;
     bool covariance_repaired = false;
     bool cross_correlation_applied = false;
