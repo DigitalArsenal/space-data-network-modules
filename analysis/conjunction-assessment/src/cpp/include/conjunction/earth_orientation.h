@@ -13,6 +13,10 @@ bool earth_orientation_at(const std::vector<EarthOrientation> &, double,
                           EarthOrientation &);
 bool itrf_to_inertial(double jd, const EarthOrientation &, bool eme2000,
                       double jacobian[6][6], double epoch_rounding_seconds = 0);
+// Conventional TEME -> mean equator/equinox J2000 (EME2000), UTC Julian date.
+// Instantaneous rotation of position and osculating inertial velocity vectors;
+// preserves the velocity-defined RTN basis and its covariance.
+bool teme_to_eme2000(double jd, double jacobian[6][6]);
 void transform_ephemeris_point(EphemerisPoint &, const double jacobian[6][6]);
 void transform_ephemeris_covariance(std::array<double, 21> &,
                                     const double jacobian[6][6]);

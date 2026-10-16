@@ -1,0 +1,50 @@
+{
+ "fetched": "2026-10-16",
+ "source": "https://sanaregistry.org/r/",
+ "CATALOG_NAME": {
+  "registry": "cdm_catalog",
+  "values": [
+   "ALMANAC",
+   "COMSPOC",
+   "ESA_ESAC",
+   "ISON",
+   "LEOLABS",
+   "NASA_DSN",
+   "RUSSIA",
+   "SATCAT",
+   "UNOOSA"
+  ]
+ },
+ "COLLISION_PROBABILITY_METHOD": {
+  "registry": "cdm_cpm",
+  "values": [
+   "AKELLAALFRIEND-2000",
+   "ALFANO-2005",
+   "ALFANO-MAX-PROBABILITY",
+   "ALFANO-PARAL-2007",
+   "ALFANO-TUBES-2007",
+   "ALFANO-VOXELS-2006",
+   "ALFRIEND-1999",
+   "CHAN-1997",
+   "CHAN-2003",
+   "COPPOLA-2012",
+   "FOSTER-1992",
+   "MCKINLEY-2006",
+   "PATERA-2001",
+   "PATERA-2003",
+   "PATERA-2005"
+  ]
+ },
+ "ORIGINATOR": {
+  "registry": "cdm_originator",
+  "values": [
+   "ESA_ESAC",
+   "GNOSE",
+   "JSPOC",
+   "NASA_GSFC",
+   "NASA_JPL",
+   "NASA_JSC",
+   "SDC"
+  ]
+ }
+}

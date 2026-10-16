@@ -1,0 +1,512 @@
+{
+ "-31": [
+  {
+   "label": "Jupiter flyby",
+   "tca_tdb": "1979-03-05T12:05:26",
+   "half_width_h": 72,
+   "terminal": false
+  },
+  {
+   "label": "Saturn flyby",
+   "tca_tdb": "1980-11-12T23:46:29",
+   "half_width_h": 72,
+   "terminal": false
+  }
+ ],
+ "-32": [
+  {
+   "label": "Jupiter flyby",
+   "tca_tdb": "1979-07-09T22:29:51",
+   "half_width_h": 72,
+   "terminal": false
+  },
+  {
+   "label": "Saturn flyby",
+   "tca_tdb": "1981-08-26T03:24:57",
+   "half_width_h": 72,
+   "terminal": false
+  },
+  {
+   "label": "Uranus flyby",
+   "tca_tdb": "1986-01-24T17:59:47",
+   "half_width_h": 72,
+   "terminal": false
+  },
+  {
+   "label": "Neptune flyby",
+   "tca_tdb": "1989-08-25T03:56:36",
+   "half_width_h": 72,
+   "terminal": false
+  }
+ ],
+ "-23": [
+  {
+   "label": "Jupiter flyby",
+   "tca_tdb": "1973-12-04T02:26:08",
+   "half_width_h": 72,
+   "terminal": false
+  }
+ ],
+ "-24": [
+  {
+   "label": "Jupiter flyby",
+   "tca_tdb": "1974-12-03T05:22:15",
+   "half_width_h": 72,
+   "terminal": false
+  },
+  {
+   "label": "Saturn flyby",
+   "tca_tdb": "1979-09-01T16:30:24",
+   "half_width_h": 72,
+   "terminal": false
+  }
+ ],
+ "-98": [
+  {
+   "label": "Jupiter flyby",
+   "tca_tdb": "2007-02-28T05:44:45",
+   "half_width_h": 48,
+   "terminal": false
+  },
+  {
+   "label": "Pluto flyby",
+   "tca_tdb": "2015-07-14T11:49:37",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Arrokoth flyby",
+   "tca_tdb": "2019-01-01T05:59:11",
+   "half_width_h": 24,
+   "terminal": false
+  }
+ ],
+ "-96": [
+  {
+   "label": "Venus flyby 1",
+   "tca_tdb": "2018-10-03T08:45:37",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 1",
+   "tca_tdb": "2018-11-06T03:29:00",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 2",
+   "tca_tdb": "2019-04-04T22:41:05",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 3",
+   "tca_tdb": "2019-09-01T17:51:27",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 2",
+   "tca_tdb": "2019-12-26T18:15:55",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 4",
+   "tca_tdb": "2020-01-29T09:38:51",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 5",
+   "tca_tdb": "2020-06-07T08:24:13",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 3",
+   "tca_tdb": "2020-07-11T03:24:50",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 6",
+   "tca_tdb": "2020-09-27T09:17:11",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 7",
+   "tca_tdb": "2021-01-17T17:40:27",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 4",
+   "tca_tdb": "2021-02-20T20:06:54",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 8",
+   "tca_tdb": "2021-04-29T08:48:01",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 9",
+   "tca_tdb": "2021-08-09T19:11:41",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 5",
+   "tca_tdb": "2021-10-16T09:31:59",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 10",
+   "tca_tdb": "2021-11-21T08:26:33",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 11",
+   "tca_tdb": "2022-02-25T15:37:01",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 12",
+   "tca_tdb": "2022-06-01T22:51:15",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 13",
+   "tca_tdb": "2022-09-06T06:04:44",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 14",
+   "tca_tdb": "2022-12-11T13:16:58",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 15",
+   "tca_tdb": "2023-03-17T20:31:43",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 16",
+   "tca_tdb": "2023-06-22T03:47:04",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 6",
+   "tca_tdb": "2023-08-21T12:04:03",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 17",
+   "tca_tdb": "2023-09-27T23:29:36",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 18",
+   "tca_tdb": "2023-12-29T00:56:15",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 19",
+   "tca_tdb": "2024-03-30T02:22:33",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 20",
+   "tca_tdb": "2024-06-30T03:48:24",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 21",
+   "tca_tdb": "2024-09-30T05:15:59",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Venus flyby 7",
+   "tca_tdb": "2024-11-06T18:44:50",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 22",
+   "tca_tdb": "2024-12-24T11:42:06",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 23",
+   "tca_tdb": "2025-03-22T22:26:04",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 24",
+   "tca_tdb": "2025-06-19T09:09:18",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 25",
+   "tca_tdb": "2025-09-15T20:17:22",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 26",
+   "tca_tdb": "2025-12-13T07:03:12",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 27",
+   "tca_tdb": "2026-03-11T18:05:07",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 28",
+   "tca_tdb": "2026-06-08T04:19:21",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 29",
+   "tca_tdb": "2026-09-04T14:32:42",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 30",
+   "tca_tdb": "2026-12-02T00:45:31",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 31",
+   "tca_tdb": "2027-02-28T11:01:00",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 32",
+   "tca_tdb": "2027-05-27T21:13:35",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 33",
+   "tca_tdb": "2027-08-24T07:16:43",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 34",
+   "tca_tdb": "2027-11-20T17:18:33",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 35",
+   "tca_tdb": "2028-02-17T03:21:00",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 36",
+   "tca_tdb": "2028-05-15T13:23:27",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 37",
+   "tca_tdb": "2028-08-11T23:23:43",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 38",
+   "tca_tdb": "2028-11-08T09:19:33",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 39",
+   "tca_tdb": "2029-02-04T19:14:03",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 40",
+   "tca_tdb": "2029-05-04T05:09:52",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 41",
+   "tca_tdb": "2029-07-31T15:04:39",
+   "half_width_h": 120,
+   "terminal": false
+  },
+  {
+   "label": "Perihelion 42",
+   "tca_tdb": "2029-10-28T00:57:10",
+   "half_width_h": 120,
+   "terminal": false
+  }
+ ],
+ "-61": [
+  {
+   "label": "Earth flyby",
+   "tca_tdb": "2013-10-09T19:22:32",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Jupiter orbit insertion",
+   "tca_tdb": "2016-07-05T02:48:40",
+   "half_width_h": 72,
+   "terminal": true
+  }
+ ],
+ "-159": [
+  {
+   "label": "Mars flyby",
+   "tca_tdb": "2025-03-01T17:58:03",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby",
+   "tca_tdb": "2026-12-03T20:15:21",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Jupiter arrival",
+   "tca_tdb": "2030-04-11T08:24:38",
+   "half_width_h": 72,
+   "terminal": true
+  }
+ ],
+ "-49": [
+  {
+   "label": "Earth flyby 1",
+   "tca_tdb": "2022-10-16T11:05:40",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 2",
+   "tca_tdb": "2024-12-13T04:16:55",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Donaldjohanson flyby",
+   "tca_tdb": "2025-04-20T17:52:24",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Eurybates flyby",
+   "tca_tdb": "2027-08-11T19:42:28",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Polymele flyby",
+   "tca_tdb": "2027-09-15T03:13:13",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Leucus flyby",
+   "tca_tdb": "2028-04-18T19:34:16",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Orus flyby",
+   "tca_tdb": "2028-11-11T20:50:56",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 3",
+   "tca_tdb": "2030-12-27T00:37:19",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Patroclus flyby",
+   "tca_tdb": "2033-03-03T17:27:25",
+   "half_width_h": 24,
+   "terminal": false
+  }
+ ],
+ "-255": [
+  {
+   "label": "Mars flyby",
+   "tca_tdb": "2026-05-15T19:29:12",
+   "half_width_h": 24,
+   "terminal": false
+  }
+ ],
+ "-64": [
+  {
+   "label": "Earth flyby 1",
+   "tca_tdb": "2017-09-22T16:52:56",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 2",
+   "tca_tdb": "2023-09-24T14:45:57",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 3",
+   "tca_tdb": "2025-09-23T17:01:12",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 4",
+   "tca_tdb": "2027-03-16T03:30:42",
+   "half_width_h": 24,
+   "terminal": false
+  },
+  {
+   "label": "Earth flyby 5 and Apophis encounter",
+   "tca_tdb": "2029-04-13T23:03:24",
+   "half_width_h": 72,
+   "terminal": false
+  }
+ ],
+ "-143205": [],
+ "-170": []
+}

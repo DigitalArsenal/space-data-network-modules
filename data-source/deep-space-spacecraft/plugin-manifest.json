@@ -1,0 +1,299 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
+  "name": "Notable deep-space spacecraft (Horizons)",
+  "version": "0.1.0",
+  "description": "Retrieves 13 notable spacecraft from NASA/JPL Horizons VECTORS as Sun-centred ICRF trajectories in TDB. Coverage probes, paged daily samples and 10-minute departure and encounter windows are planned and parsed in C++/WASM. The host HTTP connector executes requests. Emits one size-prefixed OEM per craft on OEM.fbs, provider deep-space-spacecraft, source horizons, and evaluates its declared interpolation with the shared ephemeris evaluator.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic Horizons request planning, CSV parsing, OEM construction and interpolation over supplied frames. No host calls, threads or network access."
+  },
+  "schemasUsed": [
+    {"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}
+  ],
+  "methods": [
+    {
+      "methodId": "plan_horizons",
+      "displayName": "Plan Horizons coverage probes",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [{
+            "setId": "config-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Source configuration from the host adapter (access anonymous)."
+            }
+          }],
+          "minStreams": 0, "maxStreams": 1, "required": false,
+          "description": "Optional anonymous access, selected catalogue ids, TDB coverage limits and page_rows."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{
+            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "hostcap/http-request descriptors: two Horizons coverage probes per craft, raw-body-v1."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 26, "required": true,
+          "description": "GET requests for the lower and upper Horizons coverage bounds, in craft order."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [{
+            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The retrieval state for the next stage: objects and the pending request list."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Deterministic retrieval state for the next stage."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [{
+            "setId": "status-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The selected craft catalogue and request status; never a data record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Catalogue identities, aliases, attribution and window counts."
+        }
+      ],
+      "maxBatch": 1, "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "advance",
+      "displayName": "Absorb Horizons responses and plan the next pages",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [{
+            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The retrieval state emitted by the previous stage."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The retrieval state emitted by the previous stage."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [{
+            "setId": "response-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "foreign-wire-format", "mediaType": "application/vnd.sdn.http-raw-body-v1",
+              "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the response bytes."
+            }
+          }],
+          "minStreams": 0, "maxStreams": 60, "required": false,
+          "description": "Coverage probe or vector page responses in pending-request order."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{
+            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The next stage's Horizons vector requests: daily pages followed by merged 10-minute window pages."
+            }
+          }],
+          "minStreams": 0, "maxStreams": 60, "required": false,
+          "description": "At most 60 GET requests; no frames when all pages are fetched."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [{
+            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The retrieval state after this stage's responses."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The pending plan and compact parsed state rows."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [{
+            "setId": "status-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The retrieval stage and request status; never a data record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Progress for this retrieval stage."
+        }
+      ],
+      "maxBatch": 1, "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "build_oem",
+      "displayName": "Build one OEM per spacecraft",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [{
+            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "The retrieval state after the third advance stage."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The retrieval state after the third advance stage."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [{
+            "setId": "response-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "foreign-wire-format", "mediaType": "application/vnd.sdn.http-raw-body-v1",
+              "detail": "raw-body-v1 final vector pages, one per planned request, in planned order."
+            }
+          }],
+          "minStreams": 0, "maxStreams": 60, "required": false,
+          "description": "Responses to any remaining vector requests."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [{
+            "setId": "receipt-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Authenticated host receipt: integer retrieved_at_ms."
+            }
+          }],
+          "minStreams": 0, "maxStreams": 1, "required": false,
+          "description": "Optional retrieval time for OEM CREATION_DATE, expressed as Unix milliseconds."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [{
+            "setId": "records-records",
+            "allowedTypes": [{"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}]
+          }],
+          "minStreams": 1, "maxStreams": 13, "required": true,
+          "description": "One size-prefixed $OEM frame per selected craft, in craft order."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [{
+            "setId": "meta-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Attribution metadata (provider deep-space-spacecraft, source horizons, licence, credit) for generic storage.ingest_with_source."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "OEM.fbs lane identity, licence and credit."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [{
+            "setId": "report-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Per-craft output block, window, row and byte counts; never a dataset record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 13, "required": true,
+          "description": "Per-craft build counts."
+        }
+      ],
+      "maxBatch": 1, "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "evaluate_oem",
+      "displayName": "Evaluate an OEM at JD TDB epochs",
+      "inputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [{
+            "setId": "oem-records",
+            "allowedTypes": [{"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}]
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "One size-prefixed $OEM frame with compact ephemeris blocks."
+        },
+        {
+          "portId": "epochs",
+          "acceptedTypeSets": [{
+            "setId": "epochs-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Evaluation request containing a jd_tdb array of epochs; never a dataset record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Requested Julian dates on the TDB time scale."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "states",
+          "acceptedTypeSets": [{
+            "setId": "states-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Evaluation response containing jd_tdb, block and Cartesian position and velocity; never an ingest dataset record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Evaluated states in km and km/s, ICRF, using each block's centre and declared interpolation."
+        }
+      ],
+      "maxBatch": 1, "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "reconcile_id",
+      "displayName": "Reconcile mission kernel and Horizons ids",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{
+            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Mission name and integer kernel_id to reconcile; never a dataset record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "mission artemis-ii or an empty string, and kernel_id."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [{
+            "setId": "result-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
+            "wildcardJustification": {
+              "kind": "intra-flow-control-frame", "mediaType": "application/json",
+              "detail": "Resolved Horizons id and object name; never a dataset record."
+            }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Artemis II kernel -24 maps to Horizons -1024; other ids map to themselves."
+        }
+      ],
+      "maxBatch": 1, "drainPolicy": "single-shot"
+    }
+  ]
+}
