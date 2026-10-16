@@ -1,0 +1,4 @@
+.work/
+.check-tudat-*/
+.score-tudat-*/
+__pycache__/
