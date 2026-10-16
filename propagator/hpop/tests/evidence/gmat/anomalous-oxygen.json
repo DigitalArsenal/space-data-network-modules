@@ -1,0 +1,102 @@
+{
+ "about": "NRLMSISE-00 total mass density with (gtd7d: HPOP, Orekit) and without (gtd7: GMAT R2026a) anomalous oxygen, along GMAT's trajectory every 60 s, from HPOP's PRW atmosphere diagnostic; and HPOP (steps <= 30 s) against GMAT with Cd and with Cd x (1 + eps). tests/evidence/gmat/anomalous-oxygen.mjs.",
+ "gmatSettings": "run-gmat.mjs defaults (RK89 1e-14, steps <= 30 s); W1 with the drivers HPOP reads as constants",
+ "rows": [
+  {
+   "id": "LEO400 F6-field-sun-moon-srp-drag",
+   "drivers": {
+    "f107": 150,
+    "f107a": 150,
+    "ap": 15
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 3.3129832843739586e-12,
+   "meanDensityGtd7dKgM3": 3.3131572110436803e-12,
+   "eps": 0.00005249850506094944,
+   "dragEffectM": 43791.86632299737,
+   "epsTimesDragEffectM": 2.2990075157862986,
+   "hpopMinusGmatM": 2.3195701733521235,
+   "hpopMinusGmatCdScaledM": 0.026513818089225247
+  },
+  {
+   "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "drivers": {
+    "f107": 150,
+    "f107a": 150,
+    "ap": 15
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 3.313926183414861e-12,
+   "meanDensityGtd7dKgM3": 3.3141000119172208e-12,
+   "eps": 0.000052453945181385464,
+   "dragEffectM": 43812.1082855002,
+   "epsTimesDragEffectM": 2.2981179262885516,
+   "hpopMinusGmatM": 2.314765918894618,
+   "hpopMinusGmatCdScaledM": 0.0333837492431298
+  },
+  {
+   "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "drivers": {
+    "f107": 139.8,
+    "f107a": 136,
+    "ap": 6
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 2.4714783059198515e-12,
+   "meanDensityGtd7dKgM3": 2.471595343160476e-12,
+   "eps": 0.00004735515595832851,
+   "dragEffectM": 32655.217725603314,
+   "epsTimesDragEffectM": 1.5463929282491184,
+   "hpopMinusGmatM": 1.5277612553694557,
+   "hpopMinusGmatCdScaledM": 0.01653174378689603
+  },
+  {
+   "id": "SSO700 F6-field-sun-moon-srp-drag",
+   "drivers": {
+    "f107": 150,
+    "f107a": 150,
+    "ap": 15
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 2.8492836415095334e-14,
+   "meanDensityGtd7dKgM3": 2.905229205716205e-14,
+   "eps": 0.019634957851031087,
+   "dragEffectM": 412.9995072518732,
+   "epsTimesDragEffectM": 8.109227917387138,
+   "hpopMinusGmatM": 7.9344872770436705,
+   "hpopMinusGmatCdScaledM": 0.1058506051188806
+  },
+  {
+   "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "drivers": {
+    "f107": 150,
+    "f107a": 150,
+    "ap": 15
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 2.849662738135624e-14,
+   "meanDensityGtd7dKgM3": 2.905609622076139e-14,
+   "eps": 0.01963280889061214,
+   "dragEffectM": 413.1350852945854,
+   "epsTimesDragEffectM": 8.111002175595342,
+   "hpopMinusGmatM": 7.9499301647300396,
+   "hpopMinusGmatCdScaledM": 0.12282118631899008
+  },
+  {
+   "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+   "drivers": {
+    "f107": 139.8,
+    "f107a": 136,
+    "ap": 6
+   },
+   "samples": 1441,
+   "meanDensityGtd7KgM3": 1.760827370460082e-14,
+   "meanDensityGtd7dKgM3": 1.8053391577921595e-14,
+   "eps": 0.025278904723321505,
+   "dragEffectM": 255.82940181861494,
+   "epsTimesDragEffectM": 6.4670870739971,
+   "hpopMinusGmatM": 6.296104882808252,
+   "hpopMinusGmatCdScaledM": 0.12275754998974234
+  }
+ ]
+}

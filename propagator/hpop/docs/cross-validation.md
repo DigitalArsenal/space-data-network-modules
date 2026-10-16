@@ -250,6 +250,155 @@ was also run with Jacchia-Roberts.
   to 1.8e-6 (it was up to 124 % off), and the GMAT drag cases are 1.38 m and
   0.17 m from GMAT, the axes difference above.
 
+## GMAT R2026a on the 72 reference cases
+
+GMAT runs every case of `tests/evidence/cases/hpop-reference-cases.json` whose
+forces it models (57 of 72), from the case export's initial states, constants,
+EOP rows, space weather, DE440 kernel and HPOP's embedded coefficients. HPOP
+runs at the three integrator settings of the Orekit table. Runner, scorer and
+evidence: `tests/evidence/gmat/` (`run-gmat.mjs`, `score-gmat.mjs`,
+`anomalous-oxygen.mjs`, `variants.mjs`).
+
+**Tool.** GMAT R2026a, `gmat-mac-x64-R2026a-signed.dmg` from SourceForge (SHA-1
+`5dcbf29f34a7dbdf2633974d05ee32cf0b9b8ce9` and MD5
+`94763b2599e4e71c4ceb917464433855` as published; SHA-256
+`8a81d22ce2d39504eadc875d71494321adb49f60da92d266fdbe660de0f771d2`), copied
+to user space. GmatConsole built 2026-03-26 (universal binary, run natively on
+arm64), SHA-256 `1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2`;
+`libGmatBase.R2026a.dylib` `e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26`.
+R2022a (GmatConsole built 2023-01-11, x86_64 under Rosetta, SHA-256
+`c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655`) is the second row.
+
+**Settings that match HPOP** (each also in `run-gmat.mjs`'s header and in the
+trajectory file):
+
+| Item | GMAT setting |
+| --- | --- |
+| Integrator | RungeKutta89, accuracy 1e-14, steps <= 30 s, RSSStep. Cases without radiation pressure move under 0.06 mm against PrinceDormand78 at 1e-13 with steps <= 10 s |
+| Gravity | `.cof` written from `lib/egm2008_data.h` / `lib/egm96_data.h`; degree and order per case; G2's terms of order >= 1 above degree 24 written as zero |
+| Earth | GM 398600.4415 km^3/s^2; radius 6378.137 km and WGS84 flattening (shadow, geodetic height); nutation at every call |
+| Earth orientation | FK5 (IAU 1976/1980) with the case export's pole and UT1-UTC rows in GMAT's C04 file. The state is given in GMAT's ICRF axes, which it ties to the Earth-fixed frame by IAU 2006/2000A, and the samples are rotated out of its integration axes by the epoch's fixed rotation; EME2000 cases through the IERS 2003 frame bias |
+| Sun, Moon | SPICE, the case export's DE440 kernel at TDB; DE440 header GMs; Sun radius 695 700 km |
+| Radiation pressure | Spherical, 1361 W/m^2 at 1 au, conical shadow |
+| Drag | NRLMSISE-00 (R2026a; R2022a has none, so Jacchia-Roberts with HPOP asked for the same); constant F10.7 = F10.7a = 150, Kp 3 (GMAT's table gives Ap 15) |
+| W1 space weather | the drivers HPOP reads from the CSSI rows on the arc's day, as constants: F10.7 139.8 (observed, previous day), F10.7a 136, Kp 5/3 (Ap 6) |
+| Solid tides (T1) | `SolidAndPole` (IERS steps 1 and 2 with solid and ocean pole tides) with GMAT's own pole-tide increments (C21 -2.2608e-10, S21 -1.4519e-10 at mid-arc) subtracted from the `.cof`, leaving steps 1 and 2 without pole tide, as HPOP's T1 |
+| Relativity (R2) | `RelativisticCorrection = On` (Schwarzschild, Lense-Thirring, de Sitter) |
+| In-track thrust (I1) | a thruster on LVLH axes (y along-track, the S axis of QSW), C1 = a * m, no mass decrement |
+
+Not run (no GMAT model): R1 (Schwarzschild alone), B1 (Cd*A/m rate), J1
+(JB2008), A1 (Knocke), O1 and O2 (ocean tides), and C1 LEO400 and both C2
+cases, which combine them. GPS C1 (radiation pressure and in-track thrust) is
+run.
+
+**Results.** HPOP 1.3.1, module SHA-256
+`8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0`; the largest
+3D difference over 24 h, hourly samples (`tests/evidence/gmat/summary-gmat-R2026a.json`):
+
+| Force set | Cases | Steps of at most 300 s (the suite's request) | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s | Orekit 13.1 - GMAT |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Point mass | 5 | 0.32 mm | 0.07 mm | 0.01 mm | 0.58 mm |
+| Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
+| With drag | 6 | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
+| With drag, GMAT's Cd x (1 + anomalous-oxygen share) | 6 | | 12 cm | | |
+
+| Orbit | Row | 300 s | 30 s | 10 s, 1e-15 | Orekit - GMAT |
+| --- | --- | ---: | ---: | ---: | ---: |
+| LEO 400 km | Point mass | 0.32 mm | 0.07 mm | 0.01 mm | 0.16 mm |
+| LEO 400 km | No drag | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
+| LEO 400 km | With drag | 2.34 m | 2.32 m | 2.32 m | 2.32 m |
+| SSO 700 km | Point mass | 0.29 mm | 0.04 mm | 0.01 mm | 0.19 mm |
+| SSO 700 km | No drag | 1.9 cm | 1.1 cm | 1.1 cm | 1.1 cm |
+| SSO 700 km | With drag | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
+| GPS | Point mass | 0.02 mm | 0.00 mm | 0.01 mm | 0.16 mm |
+| GPS | No drag | 1.52 mm | 1.50 mm | 1.50 mm | 1.66 mm |
+| GEO | Point mass | 0.00 mm | 0.00 mm | 0.00 mm | 0.04 mm |
+| GEO | No drag | 0.15 mm | 0.15 mm | 0.15 mm | 0.12 mm |
+| Molniya | Point mass | 0.01 mm | 0.02 mm | 0.01 mm | 0.58 mm |
+| Molniya | No drag | 5.12 mm | 4.99 mm | 4.95 mm | 1.2 cm |
+
+| Force family | 300 s | 30 s | 10 s, 1e-15 | Orekit - GMAT |
+| --- | ---: | ---: | ---: | ---: |
+| Geopotential, EGM2008 (F1 F2 F3) | 1.8 cm | 1.69 mm | 1.71 mm | 1.2 cm |
+| Geopotential, EGM96 and 36Z,24T (G1 G2) | 1.8 cm | 0.77 mm | 0.71 mm | 0.98 mm |
+| Sun and Moon (F4 Z1) | 1.8 cm | 1.93 mm | 1.96 mm | 1.2 cm |
+| Radiation pressure (F5 Z2) | 3.5 cm | 2.2 cm | 2.2 cm | 2.2 cm |
+| EME2000 (E1) | 1.8 cm | 0.76 mm | 0.68 mm | 0.98 mm |
+| Solid tides (T1) | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
+| Relativity (R2) | 2.3 cm | 5.45 mm | 5.38 mm | 5.23 mm |
+| In-track thrust (I1) | 1.8 cm | 0.77 mm | 0.71 mm | 0.98 mm |
+| Drag (F6 Z3 W1) | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
+
+The per-case table, with limits, is in the summary file. At the suite's
+request the LEO rows are mostly HPOP's own integration error (Agreement with
+Orekit 13.1, README.md).
+
+**State-transition matrix** (GMAT's `OrbitSTM`, 6x6, against HPOP's analytic
+STM at the suite's request; largest relative column difference, position and
+velocity rows apart, all 57 cases): point mass 8.5e-12; field, Sun and Moon
+4.6e-10 (LEO) and 2.0e-9 (Molniya); in-track thrust 6.1e-7; relativity
+1.0e-5 (LEO); radiation pressure on eclipsing orbits 2.6e-5, drag cases 2.1e-5.
+The last three are terms GMAT leaves out of its variational equations:
+`RelativisticCorrection` and `FiniteThrust` add no partials, and
+`SolarRadiationPressure` differentiates the Sun-direction term without the
+shadow function. GMAT has no Cd or Cr columns in `OrbitSTM`. The STM file
+(1.2 MB) stays out of git; its SHA-256 is in the summary.
+
+**Tolerances** (the case export's GMAT limits: point mass 1 cm, gravity 5 cm,
+radiation pressure 10 cm, drag 1.5 m): all 51 cases without drag are within
+them at all three settings (largest 4.5 cm, LEO400 T1 at 300 s). The six
+NRLMSISE-00 cases are not (LEO400 2.3 m, W1 1.53 m; SSO700 7.9 m, W1 6.3 m).
+
+**Cause of the drag gap: anomalous oxygen** (`tests/evidence/gmat/anomalous-oxygen.json`).
+GMAT's NRLMSISE-00 plugin takes the total mass density of `gtd7`, which
+leaves anomalous oxygen out (`NRLMsise00Atmosphere::Density`); HPOP, like
+Orekit, takes `gtd7d`'s, which includes it (Picone et al. 2002 give `gtd7d`
+for drag). Along GMAT's trajectory, every 60 s, HPOP's diagnostic gives both
+densities; the mean share and its effect:
+
+| Case | Anomalous-oxygen share of the mean density | Drag effect over the day | HPOP - GMAT | HPOP - GMAT, GMAT with Cd x (1 + share) |
+| --- | ---: | ---: | ---: | ---: |
+| LEO400 F6 | 0.0052 % | 43.8 km | 2.32 m | 2.7 cm |
+| LEO400 Z3 | 0.0052 % | 43.8 km | 2.31 m | 3.3 cm |
+| LEO400 W1 | 0.0047 % | 32.7 km | 1.53 m | 1.7 cm |
+| SSO700 F6 | 1.9635 % | 413 m | 7.93 m | 11 cm |
+| SSO700 Z3 | 1.9633 % | 413 m | 7.95 m | 12 cm |
+| SSO700 W1 | 2.5279 % | 256 m | 6.30 m | 12 cm |
+
+Share times drag effect predicts the gap (2.30 m, 8.11 m, 1.55 m, 6.47 m), and
+scaling GMAT's Cd by the mean share closes it to the share's variation along
+the orbit. GMAT's drag is otherwise HPOP's: mean local solar time, geodetic
+heights on WGS84, the same constant drivers. No HPOP defect.
+
+**What the other settings are worth** (`tests/evidence/gmat/variants.json`,
+HPOP with steps <= 30 s):
+
+| GMAT setting | Case | HPOP - GMAT | Orekit - GMAT |
+| --- | --- | ---: | ---: |
+| PrinceDormand78, 1e-13, steps <= 60 s (the 2026-10-09 runner) | point mass LEO400 / Molniya | 3.0 mm / 1.4 cm | 2.9 mm / 1.3 cm |
+| Tide `Solid` (step 1 only) | T1 LEO400 / GPS | 2.12 m / 8.9 cm | 2.12 m / 8.9 cm |
+| Tide `SolidAndPole` (steps 1 and 2, pole tides) | T1 LEO400 / GPS | 61 cm / 1.05 cm | 61 cm / 1.05 cm |
+| CSSI file read by GMAT, as published | W1 LEO400 / SSO700 | 210 m / 9.25 m | 210 m / 9.26 m |
+| CSSI file read by GMAT, all rows observed | W1 LEO400 / SSO700 | 105 m / 8.07 m | 105 m / 8.07 m |
+| RungeKutta89, steps <= 5 / 2 / 1 s | radiation pressure, LEO400 | 2.3 / 1.4 / 1.6 cm | 2.4 / 1.3 / 1.7 cm |
+
+- Step 2 of IERS 2010 section 6.2 (the frequency dependence of k2, notably
+  the K1 band) is 2.1 m in LEO400 over the day.
+- GMAT reads CSSI rows by its own conventions (`SolarFluxReader`): F10.7
+  taken as measured at 20 h UT and interpolated in time, and for
+  daily-predicted rows the current day's record looked up one day early.
+  HPOP and Orekit take each day's values as published (F10.7 of the previous
+  day, centred average and daily Ap of the day).
+- GMAT's radiation-pressure trajectories in LEO and Molniya move by 1-2 cm
+  with its step size while its other cases move under 0.06 mm; HPOP and
+  Orekit agree to 9.3 mm on them. The 30 s setting is the one used.
+
+**R2022a** (`summary-gmat-R2022a.json`, 55 cases: W1 is not run with
+Jacchia-Roberts, whose drivers HPOP reads three-hourly): point mass 0.07 mm,
+no drag 3.1 cm at 30 s (Sun and Moon 1.5 cm: R2022a reads SPICE ephemerides
+as J2000, which R2026a corrects, GMT-5211), Jacchia-Roberts drag 1.36 m LEO400
+and 18 cm SSO700, within 1.5 m.
+
 ## Not compared, and why
 
 | Tool | Reason |

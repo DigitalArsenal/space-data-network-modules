@@ -738,6 +738,28 @@ LEO 400 km with converged steps; 1.3.0 interpolates the CIP coordinates
 between whole hours and evaluates polar motion at every call, as a function of
 time alone, and leaves 1.1 mm.
 
+### Agreement with GMAT R2026a
+
+`tests/evidence/gmat/` runs NASA GMAT R2026a (GmatConsole built 2026-03-26) on
+the 57 of the 72 cases whose forces it models, from the tool-neutral case
+export, and scores HPOP at the same three settings
+(`tests/evidence/gmat/summary-gmat-R2026a.json`; method, settings and checksums
+in `docs/cross-validation.md`):
+
+| Force set | Cases | Steps of at most 300 s | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |
+| --- | ---: | ---: | ---: | ---: |
+| Point mass | 5 | 0.32 mm | 0.07 mm | 0.01 mm |
+| Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 4.5 cm | 3.1 cm | 3.0 cm |
+| With drag (NRLMSISE-00) | 6 | 7.97 m | 7.95 m | 7.95 m |
+
+The drag rows are the anomalous oxygen GMAT's NRLMSISE-00 leaves out of its
+total density (`gtd7`; HPOP and Orekit use `gtd7d`): 0.005 % of the density at
+400 km and 2.0-2.5 % at 700 km, 2.3 m and 7.9 m over the day; GMAT with its
+Cd scaled by that share is within 3.3 cm and 12 cm
+(`tests/evidence/gmat/anomalous-oxygen.json`). GMAT's 6x6 STM agrees with
+HPOP's to 4.6e-10 (field, Sun, Moon in LEO) and 2.6e-5 where GMAT leaves terms
+out of its variational equations (shadow function, relativity, thrust).
+
 ## License
 
 UNLICENSED — Proprietary. All rights reserved by DigitalArsenal.io, Inc.

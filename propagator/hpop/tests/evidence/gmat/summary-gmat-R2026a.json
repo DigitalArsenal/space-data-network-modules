@@ -1,0 +1,1955 @@
+{
+ "note": "HPOP against NASA GMAT (tests/evidence/gmat/score-gmat.mjs): the largest 3D position difference over 24 h, hourly samples, by case, HPOP at three integrator settings; Orekit 13.1 against GMAT beside it; STM: largest relative column difference at the suite's request.",
+ "module": {
+  "version": "1.3.1",
+  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+ },
+ "gmat": {
+  "file": "gmat-R2026a.json",
+  "sha256": "03558a6c21133de98b79f2f9bd0eee04f43a1b10f3cca1a01c48875d43abb1fe",
+  "tool": {
+   "name": "GMAT (NASA GSFC, Apache-2.0), GmatConsole",
+   "version": "Build Date: Mar 26 2026  19:40:07",
+   "install": "gmat-R2026a",
+   "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
+   "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
+  },
+  "settings": {
+   "integrator": "RungeKutta89",
+   "accuracy": 1e-14,
+   "maxStepS": 30,
+   "errorControl": "RSSStep",
+   "atmosphere": "NRLMSISE00",
+   "stm": false,
+   "solidTideModel": "SolidStep2",
+   "cssiRows": "constant",
+   "eopOffsets": "zero dPsi, dEps",
+   "earthOrientation": "GMAT IAU 1976/1980 (FK5) with the case export pole and UT1-UTC rows; NutationUpdateInterval 0",
+   "axes": "initial state in EarthICRF; samples from EarthMJ2000Eq (integration axes) by the epoch's fixed rotation to GCRF; EME2000 cases through the IERS 2003 frame bias",
+   "ephemeris": "SPICE, the case export DE440 kernel, TDB"
+  },
+  "stmFile": "gmat-R2026a-stm.json",
+  "stmSha256": "6c0e1a1c898a5dcc92489b5c4d2ef9a583fefae73a1c5fb1def035cad0caf29e"
+ },
+ "node": "v25.4.0",
+ "host": "Apple M3 Ultra, 28 cores",
+ "settings": [
+  {
+   "id": "suite",
+   "maxStep": 300,
+   "label": "steps <= 300 s (the suite's request)"
+  },
+  {
+   "id": "steps30",
+   "maxStep": 30,
+   "label": "steps <= 30 s"
+  },
+  {
+   "id": "finest",
+   "maxStep": 10,
+   "tolerance": 1e-15,
+   "label": "tolerance 1e-15, steps <= 10 s"
+  }
+ ],
+ "tolerancesM": {
+  "pointMass": 0.01,
+  "gravity": 0.05,
+  "srp": 0.1,
+  "drag": 1.5,
+  "dragNote": "GMAT evaluates the atmosphere with the Sun and spacecraft in J2000 (MJ2000Eq) axes; HPOP uses the true equator of date and keeps it (owner 2026-10-09)"
+ },
+ "cases": [
+  {
+   "id": "LEO400 F0-point-mass",
+   "orbit": "LEO400",
+   "forceSet": "F0-point-mass",
+   "row": "pointMass",
+   "toleranceClass": "pointMass",
+   "toleranceM": 0.01,
+   "icrfDriftM": 0.004893,
+   "orekitMinusGmat": {
+    "worstM": 0.00015720657127435964,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.00032166102901668136,
+    "atHour": 24,
+    "steps": 2346
+   },
+   "steps30": {
+    "worstM": 0.00007219137801756055,
+    "atHour": 24,
+    "steps": 2903
+   },
+   "finest": {
+    "worstM": 0.000005309067145205363,
+    "atHour": 24,
+    "steps": 8608
+   },
+   "stm": {
+    "worst": 6.859995686673342e-12,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F1-J2",
+   "orbit": "LEO400",
+   "forceSet": "F1-J2",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004877,
+   "orekitMinusGmat": {
+    "worstM": 0.0009717324627401161,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.018228313746675252,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.000732958938499774,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0006761425459914827,
+    "atHour": 24,
+    "steps": 8612
+   },
+   "stm": {
+    "worst": 4.4040535963657886e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F2-zonal20",
+   "orbit": "LEO400",
+   "forceSet": "F2-zonal20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.0009738753841338002,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.018229972566619332,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0007368669060810418,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0006700678086331973,
+    "atHour": 24,
+    "steps": 8611
+   },
+   "stm": {
+    "worst": 4.4060430769683933e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 Z1-zonal20-sun-moon",
+   "orbit": "LEO400",
+   "forceSet": "Z1-zonal20-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.000969356974414848,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.018337165621485955,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.00074243917214364,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0006815864876928983,
+    "atHour": 24,
+    "steps": 8606
+   },
+   "stm": {
+    "worst": 4.412131858513454e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 Z2-zonal20-sun-moon-srp",
+   "orbit": "LEO400",
+   "forceSet": "Z2-zonal20-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.022001684544722767,
+    "atHour": 16
+   },
+   "suite": {
+    "worstM": 0.035011993917428805,
+    "atHour": 21,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.022147201442729327,
+    "atHour": 16,
+    "steps": 2961
+   },
+   "finest": {
+    "worstM": 0.02210748604668902,
+    "atHour": 16,
+    "steps": 8641
+   },
+   "stm": {
+    "worst": 0.000019630209657078946,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forceSet": "Z3-zonal20-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.004872,
+   "orekitMinusGmat": {
+    "worstM": 2.310699614878205,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 2.332247146266163,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 2.314765918894618,
+    "atHour": 24,
+    "steps": 2958
+   },
+   "finest": {
+    "worstM": 2.3146894160566482,
+    "atHour": 24,
+    "steps": 8635
+   },
+   "stm": {
+    "worst": 0.000019949855705727588,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F3-field20x20",
+   "orbit": "LEO400",
+   "forceSet": "F3-field20x20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.000980862879909666,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.01826532582553225,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0007842059692175217,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0007040680241743731,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 4.591860964390897e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F4-field-sun-moon",
+   "orbit": "LEO400",
+   "forceSet": "F4-field-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.0009781619606632384,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.018326466438802546,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0007769237507162188,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000700739675694874,
+    "atHour": 24,
+    "steps": 8611
+   },
+   "stm": {
+    "worst": 4.487077440182095e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F5-field-sun-moon-srp",
+   "orbit": "LEO400",
+   "forceSet": "F5-field-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.005448969600911022,
+    "atHour": 2
+   },
+   "suite": {
+    "worstM": 0.01724646616387734,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.005090525185296724,
+    "atHour": 2,
+    "steps": 2958
+   },
+   "finest": {
+    "worstM": 0.005090171001356809,
+    "atHour": 2,
+    "steps": 8640
+   },
+   "stm": {
+    "worst": 0.000019629403392080205,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 F6-field-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forceSet": "F6-field-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.004873,
+   "orekitMinusGmat": {
+    "worstM": 2.315394858793735,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 2.3371212074862644,
+    "atHour": 24,
+    "steps": 1412
+   },
+   "steps30": {
+    "worstM": 2.3195701733521235,
+    "atHour": 24,
+    "steps": 2959
+   },
+   "finest": {
+    "worstM": 2.319448487479835,
+    "atHour": 24,
+    "steps": 8636
+   },
+   "stm": {
+    "worst": 0.000021239934016526605,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
+   "orbit": "LEO400",
+   "forceSet": "R2-field-sun-moon-relativity-iers2010",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.005229080670120061,
+    "atHour": 23
+   },
+   "suite": {
+    "worstM": 0.02275725744330402,
+    "atHour": 24,
+    "steps": 1341
+   },
+   "steps30": {
+    "worstM": 0.005453610195599449,
+    "atHour": 23,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.005383909652176372,
+    "atHour": 23,
+    "steps": 8607
+   },
+   "stm": {
+    "worst": 0.000010156405636575484,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 T1-field-sun-moon-solid-tides",
+   "orbit": "LEO400",
+   "forceSet": "T1-field-sun-moon-solid-tides",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.03028901660560068,
+    "atHour": 23
+   },
+   "suite": {
+    "worstM": 0.045193019780766695,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.030551847220688384,
+    "atHour": 23,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.03049380321097583,
+    "atHour": 23,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 4.883139383510661e-9,
+    "atHour": 23
+   }
+  },
+  {
+   "id": "LEO400 I1-field-sun-moon-in-track",
+   "orbit": "LEO400",
+   "forceSet": "I1-field-sun-moon-in-track",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.000977368634867337,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.01833096907821679,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0007717662421415479,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0007095819216883424,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 6.141407045763331e-7,
+    "atHour": 23
+   }
+  },
+  {
+   "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "LEO400",
+   "forceSet": "W1-field-sun-moon-srp-drag-cssi",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.004874,
+   "orekitMinusGmat": {
+    "worstM": 1.5237844825395874,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 1.5452872201939853,
+    "atHour": 24,
+    "steps": 1416
+   },
+   "steps30": {
+    "worstM": 1.5277612553694557,
+    "atHour": 24,
+    "steps": 2959
+   },
+   "finest": {
+    "worstM": 1.52766047861097,
+    "atHour": 24,
+    "steps": 8637
+   },
+   "stm": {
+    "worst": 0.00001473850519892895,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 E1-field-sun-moon-eme2000",
+   "orbit": "LEO400",
+   "forceSet": "E1-field-sun-moon-eme2000",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.0009819019799500556,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.018235926085646958,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.000758268378661447,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0006753617185033872,
+    "atHour": 24,
+    "steps": 8608
+   },
+   "stm": {
+    "worst": 4.3941457921202777e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 G1-egm96-36x36-sun-moon",
+   "orbit": "LEO400",
+   "forceSet": "G1-egm96-36x36-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.0009765765779004313,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.017375008456608994,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0007572210862665987,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0007075797323309749,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 4.51289844616585e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "LEO400 G2-egm2008-36z24t-sun-moon",
+   "orbit": "LEO400",
+   "forceSet": "G2-egm2008-36z24t-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.004878,
+   "orekitMinusGmat": {
+    "worstM": 0.000979512682570208,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.01833851056495996,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.0007668635734102165,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000702412694460567,
+    "atHour": 24,
+    "steps": 8607
+   },
+   "stm": {
+    "worst": 4.544712348460486e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F0-point-mass",
+   "orbit": "SSO700",
+   "forceSet": "F0-point-mass",
+   "row": "pointMass",
+   "toleranceClass": "pointMass",
+   "toleranceM": 0.01,
+   "icrfDriftM": 0.005005,
+   "orekitMinusGmat": {
+    "worstM": 0.00018949617270981256,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.00029185589504137233,
+    "atHour": 24,
+    "steps": 2196
+   },
+   "steps30": {
+    "worstM": 0.00003599701136110363,
+    "atHour": 24,
+    "steps": 2902
+   },
+   "finest": {
+    "worstM": 0.00001107568210228092,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 3.966576122423573e-12,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F1-J2",
+   "orbit": "SSO700",
+   "forceSet": "F1-J2",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.0017123598879190455,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.016209708789918068,
+    "atHour": 24,
+    "steps": 1258
+   },
+   "steps30": {
+    "worstM": 0.0004952431918996883,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00047289335600535736,
+    "atHour": 22,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 3.4570738846321034e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F2-zonal20",
+   "orbit": "SSO700",
+   "forceSet": "F2-zonal20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.0016874213365930702,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.01623377252704332,
+    "atHour": 24,
+    "steps": 1256
+   },
+   "steps30": {
+    "worstM": 0.0004873813653427636,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00045819538882321305,
+    "atHour": 21,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 3.445511723446513e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 Z1-zonal20-sun-moon",
+   "orbit": "SSO700",
+   "forceSet": "Z1-zonal20-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.0017054751470571127,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.01616975431357639,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.00048290360615216207,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0004662914497286966,
+    "atHour": 21,
+    "steps": 8606
+   },
+   "stm": {
+    "worst": 3.447087850387919e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 Z2-zonal20-sun-moon-srp",
+   "orbit": "SSO700",
+   "forceSet": "Z2-zonal20-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.01141710925394227,
+    "atHour": 17
+   },
+   "suite": {
+    "worstM": 0.01940040526373958,
+    "atHour": 24,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 0.010604913494612485,
+    "atHour": 17,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.010768255623817087,
+    "atHour": 17,
+    "steps": 8676
+   },
+   "stm": {
+    "worst": 0.000013813143109231291,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forceSet": "Z3-zonal20-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 7.951276808862888,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 7.965410758895273,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 7.9499301647300396,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 7.950247164157759,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "stm": {
+    "worst": 0.000014127316681564824,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F3-field20x20",
+   "orbit": "SSO700",
+   "forceSet": "F3-field20x20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.0017183393099989015,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.016197066684202566,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.00046265535532635224,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0004374116494900543,
+    "atHour": 21,
+    "steps": 8609
+   },
+   "stm": {
+    "worst": 3.3970017390885523e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F4-field-sun-moon",
+   "orbit": "SSO700",
+   "forceSet": "F4-field-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.00173933125702834,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.016370971410603223,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.00046816656713938814,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00044409903286613884,
+    "atHour": 21,
+    "steps": 8607
+   },
+   "stm": {
+    "worst": 3.4552608750134896e-10,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F5-field-sun-moon-srp",
+   "orbit": "SSO700",
+   "forceSet": "F5-field-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 0.006143454452559658,
+    "atHour": 7
+   },
+   "suite": {
+    "worstM": 0.00990072461223558,
+    "atHour": 21,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 0.006793993335267867,
+    "atHour": 19,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0066042750639668584,
+    "atHour": 19,
+    "steps": 8677
+   },
+   "stm": {
+    "worst": 0.000013813241471900677,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 F6-field-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forceSet": "F6-field-sun-moon-srp-drag",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 7.935727474277247,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 7.949952168472333,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 7.9344872770436705,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 7.9348018655507495,
+    "atHour": 24,
+    "steps": 8673
+   },
+   "stm": {
+    "worst": 0.000014046096732703288,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "SSO700",
+   "forceSet": "W1-field-sun-moon-srp-drag-cssi",
+   "row": "drag",
+   "toleranceClass": "drag",
+   "toleranceM": 1.5,
+   "atmosphere": "NRLMSISE00",
+   "icrfDriftM": 0.005034,
+   "orekitMinusGmat": {
+    "worstM": 6.297171319353564,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 6.3115865420890005,
+    "atHour": 24,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 6.296104882808252,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 6.296409470229125,
+    "atHour": 24,
+    "steps": 8678
+   },
+   "stm": {
+    "worst": 0.000013843308765454832,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GPS F0-point-mass",
+   "orbit": "GPS",
+   "forceSet": "F0-point-mass",
+   "row": "pointMass",
+   "toleranceClass": "pointMass",
+   "toleranceM": 0.01,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.00016449599101037,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.000024496055114074634,
+    "atHour": 24,
+    "steps": 342
+   },
+   "steps30": {
+    "worstM": 0.000003964075284418302,
+    "atHour": 21,
+    "steps": 2883
+   },
+   "finest": {
+    "worstM": 0.0000059174510473025505,
+    "atHour": 21,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 6.147455775831384e-13,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS F1-J2",
+   "orbit": "GPS",
+   "forceSet": "F1-J2",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.00021101075527739792,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.000018131525293891572,
+    "atHour": 24,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.0000118204733987277,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000012853797288933727,
+    "atHour": 24,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 2.0512243958579815e-12,
+    "atHour": 18
+   }
+  },
+  {
+   "id": "GPS F2-zonal20",
+   "orbit": "GPS",
+   "forceSet": "F2-zonal20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.00020856945550870638,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.000014937223804808388,
+    "atHour": 24,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.000015269254484130518,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000016778545930973213,
+    "atHour": 24,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 1.8245500943140093e-12,
+    "atHour": 18
+   }
+  },
+  {
+   "id": "GPS Z1-zonal20-sun-moon",
+   "orbit": "GPS",
+   "forceSet": "Z1-zonal20-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002611361280465399,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00011108317764343643,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00009347408810727559,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00009228027404870169,
+    "atHour": 21,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 1.688760444216072e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS Z2-zonal20-sun-moon-srp",
+   "orbit": "GPS",
+   "forceSet": "Z2-zonal20-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002664675074905357,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00011455983147244951,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00009682697478321947,
+    "atHour": 20,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00009827333671650185,
+    "atHour": 20,
+    "steps": 8597
+   },
+   "stm": {
+    "worst": 1.76054087725572e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS F3-field20x20",
+   "orbit": "GPS",
+   "forceSet": "F3-field20x20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002052247014080925,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.000013698744141640457,
+    "atHour": 24,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00001616208502213789,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00001887208756176204,
+    "atHour": 24,
+    "steps": 8595
+   },
+   "stm": {
+    "worst": 2.235824730318709e-12,
+    "atHour": 18
+   }
+  },
+  {
+   "id": "GPS F4-field-sun-moon",
+   "orbit": "GPS",
+   "forceSet": "F4-field-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.00026694174275905096,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00011772363486827878,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00009860184098481098,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00009731343184374075,
+    "atHour": 21,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 1.7423126767653343e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS F5-field-sun-moon-srp",
+   "orbit": "GPS",
+   "forceSet": "F5-field-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.00026646820650404635,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00011426416451238687,
+    "atHour": 21,
+    "steps": 337
+   },
+   "steps30": {
+    "worstM": 0.00009726636135866031,
+    "atHour": 20,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00009869454439889844,
+    "atHour": 20,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 1.7450236438477495e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS R2-field-sun-moon-relativity-iers2010",
+   "orbit": "GPS",
+   "forceSet": "R2-field-sun-moon-relativity-iers2010",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0005547207152712456,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.0004036375466654574,
+    "atHour": 22,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00038379588966861464,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000382687922546902,
+    "atHour": 21,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 5.937871805736177e-8,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GPS T1-field-sun-moon-solid-tides",
+   "orbit": "GPS",
+   "forceSet": "T1-field-sun-moon-solid-tides",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0016622643986238083,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.0015223389587964078,
+    "atHour": 23,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.001500699827788598,
+    "atHour": 23,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001499669872800301,
+    "atHour": 23,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 2.8213144817376567e-10,
+    "atHour": 18
+   }
+  },
+  {
+   "id": "GPS E1-field-sun-moon-eme2000",
+   "orbit": "GPS",
+   "forceSet": "E1-field-sun-moon-eme2000",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002737910014479806,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00012325870700032293,
+    "atHour": 23,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00010357271836645134,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00010312156986048884,
+    "atHour": 21,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 1.7669823195765226e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS G1-egm96-70x70-sun-moon",
+   "orbit": "GPS",
+   "forceSet": "G1-egm96-70x70-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002796141208096696,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00012884304185913,
+    "atHour": 24,
+    "steps": 337
+   },
+   "steps30": {
+    "worstM": 0.00010627112239924108,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00010801286294047756,
+    "atHour": 21,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 1.815250197995468e-11,
+    "atHour": 19
+   }
+  },
+  {
+   "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
+   "orbit": "GPS",
+   "forceSet": "C1-field-sun-moon-srp-intrack-jacobians",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.01869,
+   "orekitMinusGmat": {
+    "worstM": 0.0002693961621608384,
+    "atHour": 22
+   },
+   "suite": {
+    "worstM": 0.00011735098666445463,
+    "atHour": 21,
+    "steps": 337
+   },
+   "steps30": {
+    "worstM": 0.00009984508913761362,
+    "atHour": 20,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0001019745559079856,
+    "atHour": 21,
+    "steps": 8641
+   },
+   "stm": {
+    "worst": 0.0000017843117550897383,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GEO F0-point-mass",
+   "orbit": "GEO",
+   "forceSet": "F0-point-mass",
+   "row": "pointMass",
+   "toleranceClass": "pointMass",
+   "toleranceM": 0.01,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.000035679892058948535,
+    "atHour": 17
+   },
+   "suite": {
+    "worstM": 0.0000010471211519907129,
+    "atHour": 23,
+    "steps": 337
+   },
+   "steps30": {
+    "worstM": 0.000002052013803214292,
+    "atHour": 20,
+    "steps": 2882
+   },
+   "finest": {
+    "worstM": 0.000002687117181052205,
+    "atHour": 23,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 2.0973579183844367e-12,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GEO F1-J2",
+   "orbit": "GEO",
+   "forceSet": "F1-J2",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.00003502848897565565,
+    "atHour": 16
+   },
+   "suite": {
+    "worstM": 0.0000058691523592664835,
+    "atHour": 24,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.000006677727650464349,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000006998054924655684,
+    "atHour": 24,
+    "steps": 8592
+   },
+   "stm": {
+    "worst": 4.382686987619476e-11,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GEO F2-zonal20",
+   "orbit": "GEO",
+   "forceSet": "F2-zonal20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.00003277134331994404,
+    "atHour": 15
+   },
+   "suite": {
+    "worstM": 0.000007600612041878889,
+    "atHour": 24,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.000008322738805640995,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000007651365414319885,
+    "atHour": 24,
+    "steps": 8593
+   },
+   "stm": {
+    "worst": 4.43528017834233e-11,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GEO Z1-zonal20-sun-moon",
+   "orbit": "GEO",
+   "forceSet": "Z1-zonal20-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.00011548088181450119,
+    "atHour": 12
+   },
+   "suite": {
+    "worstM": 0.0001380087557043216,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.0001374522267345526,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00013857404478790128,
+    "atHour": 21,
+    "steps": 8592
+   },
+   "stm": {
+    "worst": 4.851620186309297e-10,
+    "atHour": 12
+   }
+  },
+  {
+   "id": "GEO Z2-zonal20-sun-moon-srp",
+   "orbit": "GEO",
+   "forceSet": "Z2-zonal20-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.00011232657480109174,
+    "atHour": 12
+   },
+   "suite": {
+    "worstM": 0.00015018411037106503,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00014921285235429627,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00014807454588493558,
+    "atHour": 21,
+    "steps": 8593
+   },
+   "stm": {
+    "worst": 4.773408977906634e-10,
+    "atHour": 12
+   }
+  },
+  {
+   "id": "GEO F3-field20x20",
+   "orbit": "GEO",
+   "forceSet": "F3-field20x20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.000044599678073806,
+    "atHour": 19
+   },
+   "suite": {
+    "worstM": 0.000008051274278522604,
+    "atHour": 22,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.000007473439934541277,
+    "atHour": 22,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.000005227443138613092,
+    "atHour": 22,
+    "steps": 8592
+   },
+   "stm": {
+    "worst": 4.4159589655980684e-11,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "GEO F4-field-sun-moon",
+   "orbit": "GEO",
+   "forceSet": "F4-field-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.0001155233254974482,
+    "atHour": 12
+   },
+   "suite": {
+    "worstM": 0.00014154627025714977,
+    "atHour": 21,
+    "steps": 336
+   },
+   "steps30": {
+    "worstM": 0.00014150832363312352,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0001403587811398068,
+    "atHour": 21,
+    "steps": 8592
+   },
+   "stm": {
+    "worst": 4.820331229830719e-10,
+    "atHour": 12
+   }
+  },
+  {
+   "id": "GEO F5-field-sun-moon-srp",
+   "orbit": "GEO",
+   "forceSet": "F5-field-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.02683,
+   "orekitMinusGmat": {
+    "worstM": 0.00011236331406900075,
+    "atHour": 12
+   },
+   "suite": {
+    "worstM": 0.00014556829602098808,
+    "atHour": 21,
+    "steps": 337
+   },
+   "steps30": {
+    "worstM": 0.00014250712186949233,
+    "atHour": 21,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0001455180423568109,
+    "atHour": 21,
+    "steps": 8592
+   },
+   "stm": {
+    "worst": 4.804128174219242e-10,
+    "atHour": 12
+   }
+  },
+  {
+   "id": "MOLNIYA F0-point-mass",
+   "orbit": "MOLNIYA",
+   "forceSet": "F0-point-mass",
+   "row": "pointMass",
+   "toleranceClass": "pointMass",
+   "toleranceM": 0.01,
+   "icrfDriftM": 0.02454,
+   "orekitMinusGmat": {
+    "worstM": 0.0005754832824293074,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.000012700960620900763,
+    "atHour": 12,
+    "steps": 553
+   },
+   "steps30": {
+    "worstM": 0.00001795517832464923,
+    "atHour": 24,
+    "steps": 2886
+   },
+   "finest": {
+    "worstM": 0.000005609489836007947,
+    "atHour": 12,
+    "steps": 8594
+   },
+   "stm": {
+    "worst": 8.464370878488408e-12,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA F1-J2",
+   "orbit": "MOLNIYA",
+   "forceSet": "F1-J2",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.011545336909821393,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.0006458273738583863,
+    "atHour": 12,
+    "steps": 417
+   },
+   "steps30": {
+    "worstM": 0.0016862570191633307,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0017058546421375531,
+    "atHour": 24,
+    "steps": 8595
+   },
+   "stm": {
+    "worst": 1.394072539710401e-9,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA F2-zonal20",
+   "orbit": "MOLNIYA",
+   "forceSet": "F2-zonal20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.011505302172039102,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.0006210265527818337,
+    "atHour": 12,
+    "steps": 416
+   },
+   "steps30": {
+    "worstM": 0.0016361901005438545,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0016829183306955662,
+    "atHour": 24,
+    "steps": 8598
+   },
+   "stm": {
+    "worst": 1.393272692671388e-9,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA Z1-zonal20-sun-moon",
+   "orbit": "MOLNIYA",
+   "forceSet": "Z1-zonal20-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.011672279817158284,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.0008093510323745274,
+    "atHour": 24,
+    "steps": 417
+   },
+   "steps30": {
+    "worstM": 0.0019228508933729618,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001964970624271566,
+    "atHour": 24,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 1.9323386223684224e-9,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
+   "orbit": "MOLNIYA",
+   "forceSet": "Z2-zonal20-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.008524618786080466,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.005116353639065046,
+    "atHour": 12,
+    "steps": 430
+   },
+   "steps30": {
+    "worstM": 0.004987246216329648,
+    "atHour": 12,
+    "steps": 2896
+   },
+   "finest": {
+    "worstM": 0.004953042739509919,
+    "atHour": 12,
+    "steps": 8605
+   },
+   "stm": {
+    "worst": 0.000025621044215289884,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA F3-field20x20",
+   "orbit": "MOLNIYA",
+   "forceSet": "F3-field20x20",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.01152578567884908,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.0006463225123499611,
+    "atHour": 12,
+    "steps": 416
+   },
+   "steps30": {
+    "worstM": 0.0016644804048296217,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001687846576748391,
+    "atHour": 24,
+    "steps": 8595
+   },
+   "stm": {
+    "worst": 1.4308005245749053e-9,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA F4-field-sun-moon",
+   "orbit": "MOLNIYA",
+   "forceSet": "F4-field-sun-moon",
+   "row": "fullNoDrag",
+   "toleranceClass": "gravity",
+   "toleranceM": 0.05,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.011657248963919384,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.0006688686468126496,
+    "atHour": 12,
+    "steps": 416
+   },
+   "steps30": {
+    "worstM": 0.0019338795395535033,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0019520089498380265,
+    "atHour": 24,
+    "steps": 8596
+   },
+   "stm": {
+    "worst": 2.0009053026877245e-9,
+    "atHour": 24
+   }
+  },
+  {
+   "id": "MOLNIYA F5-field-sun-moon-srp",
+   "orbit": "MOLNIYA",
+   "forceSet": "F5-field-sun-moon-srp",
+   "row": "fullNoDrag",
+   "toleranceClass": "srp",
+   "toleranceM": 0.1,
+   "icrfDriftM": 0.02476,
+   "orekitMinusGmat": {
+    "worstM": 0.007444152448907646,
+    "atHour": 24
+   },
+   "suite": {
+    "worstM": 0.003082837298617128,
+    "atHour": 24,
+    "steps": 429
+   },
+   "steps30": {
+    "worstM": 0.00247478539990637,
+    "atHour": 11,
+    "steps": 2896
+   },
+   "finest": {
+    "worstM": 0.0024884447346838322,
+    "atHour": 11,
+    "steps": 8602
+   },
+   "stm": {
+    "worst": 0.00002590718301820299,
+    "atHour": 24
+   }
+  }
+ ],
+ "skipped": [
+  {
+   "id": "LEO400 R1-field-sun-moon-schwarzschild",
+   "reason": "Schwarzschild alone: GMAT's RelativisticCorrection always adds Lense-Thirring and de Sitter"
+  },
+  {
+   "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+   "reason": "drag-area rate: no GMAT equivalent"
+  },
+  {
+   "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "reason": "drag-area rate: no GMAT equivalent"
+  },
+  {
+   "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
+   "reason": "JB2008: not among GMAT's atmospheres"
+  },
+  {
+   "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
+   "reason": "JB2008: not among GMAT's atmospheres"
+  },
+  {
+   "id": "GPS R1-field-sun-moon-schwarzschild",
+   "reason": "Schwarzschild alone: GMAT's RelativisticCorrection always adds Lense-Thirring and de Sitter"
+  },
+  {
+   "id": "LEO400 A1-field-sun-moon-srp-knocke",
+   "reason": "Knocke Earth radiation: not modelled by GMAT"
+  },
+  {
+   "id": "SSO700 A1-field-sun-moon-srp-knocke",
+   "reason": "Knocke Earth radiation: not modelled by GMAT"
+  },
+  {
+   "id": "GPS A1-field-sun-moon-srp-knocke",
+   "reason": "Knocke Earth radiation: not modelled by GMAT"
+  },
+  {
+   "id": "LEO400 O1-field-sun-moon-ocean-tides30",
+   "reason": "ocean tides: not modelled by GMAT"
+  },
+  {
+   "id": "SSO700 O1-field-sun-moon-ocean-tides30",
+   "reason": "ocean tides: not modelled by GMAT"
+  },
+  {
+   "id": "GPS O1-field-sun-moon-ocean-tides30",
+   "reason": "ocean tides: not modelled by GMAT"
+  },
+  {
+   "id": "LEO400 O2-field-sun-moon-ocean-tides50",
+   "reason": "ocean tides: not modelled by GMAT"
+  },
+  {
+   "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "reason": "Knocke Earth radiation: not modelled by GMAT"
+  },
+  {
+   "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
+   "reason": "Knocke Earth radiation: not modelled by GMAT"
+  }
+ ]
+}
