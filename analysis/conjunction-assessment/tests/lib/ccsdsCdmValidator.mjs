@@ -84,6 +84,10 @@ export function parseKvn(text) {
 /** Everything wrong with a CDM in KVN, against the standard's tables. */
 export function checkKvn(text) {
   const errors = [];
+  for (const raw of text.split(/\r?\n/)) {
+    if (raw.length > 254) errors.push(`6.2.2.1: line longer than 254 characters: ${raw.slice(0, 40)}...`);
+    if (/[^\x20-\x7e]/.test(raw)) errors.push(`6.2.2.2: non-printable or non-ASCII character in: ${raw.slice(0, 60)}`);
+  }
   const lines = parseKvn(text);
   for (const l of lines) if (l.key === null) errors.push(`unparseable line: ${l.raw}`);
   const body = lines.filter((l) => l.key !== null);
@@ -116,6 +120,10 @@ export function checkKvn(text) {
       if (ENUMS[key] && !ENUMS[key].includes(value)) errors.push(`${name}: ${key} = ${value}, allowed ${ENUMS[key].join('|')}`);
       if (EPOCH_KEYS.has(key) && !EPOCH.test(value)) errors.push(`${name}: ${key} = ${value} is not a CCSDS epoch`);
       if (NUMERIC.has(key) && !Number.isFinite(Number(value))) errors.push(`${name}: ${key} = ${value} is not a finite number`);
+      if (key !== 'COMMENT' && !NUMERIC.has(key) && !EPOCH_KEYS.has(key) && key !== 'CCSDS_CDM_VERS' && value !== value.toUpperCase()) errors.push(`${name}: ${key} = ${value}: 6.2.3.3 text values are all uppercase`);
+      if (key === 'INTERNATIONAL_DESIGNATOR' && !/^(\d{4}-\d{3}[A-Z]{1,3}|UNKNOWN)$/.test(value)) errors.push(`${name}: INTERNATIONAL_DESIGNATOR ${value} is not YYYY-NNNP{PP} or UNKNOWN`);
+      if (NUMERIC.has(key) && !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(value)) errors.push(`${name}: ${key} = ${value} is not a 6.3.2 number`);
+      if (NUMERIC.has(key) && (value.replace(/[eE].*$/, '').replace(/\D/g, '').replace(/^0+/, '').length > 16)) errors.push(`${name}: ${key} = ${value} has more than 16 digits`);
       if (TOKEN_KEYS.has(key) && !/^[A-Za-z0-9_-]+$/.test(value)) errors.push(`${name}: ${key} = ${value}: 5.2.9 allows alphanumeric text, '_' and '-' only`);
       if (key === 'CATALOG_NAME' && !REGISTRIES.CATALOG_NAME.values.includes(value)) errors.push(`${name}: CATALOG_NAME ${value} is not in the SANA cdm_catalog registry (${REGISTRIES.CATALOG_NAME.values.join(', ')})`);
       if (key === 'REF_FRAME') seenFrames.push(value);
@@ -143,6 +151,8 @@ export function checkProbabilityMethod(text) {
 /** Flat key map of a CDM in XML, matching parseKvn: {header: {...}, objects: [{...}, {...}]}. */
 export function flattenXml(xml) {
   const out = { shared: {}, objects: [{}, {}] };
+  const version = /<cdm\b[^>]*\bversion="([^"]*)"/.exec(xml)?.[1];
+  if (version !== undefined) out.shared.CCSDS_CDM_VERS = { value: version, unit: null };
   let segment = -1;
   for (const m of xml.matchAll(/<(\/?)(\w+)([^>]*?)(\/?)>([^<]*)/g)) {
     const [, close, tag, attrs, , text] = m;

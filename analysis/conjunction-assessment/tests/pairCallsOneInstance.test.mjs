@@ -13,7 +13,9 @@
 // STARLINK-4714 (NORAD 53704), which pass within 5 km of each other twice on
 // 2026-07-06. Requests: 24 one-hour windows of that day, 60 s coarse step,
 // 1 ms refinement tolerance, 5 m radii, ALFANO_MAXIMUM. Calls cycle
-// find_tca, assess_conjunction and emit_cdm over the windows.
+// find_tca and assess_conjunction over the windows. (emit_cdm is not repeated
+// byte for byte: each CDM carries its creation time and a unique MESSAGE_ID,
+// CCSDS 508.0-B-1.)
 //
 // Exact assertions only: every call succeeds, and every output is
 // byte-identical to the first output of the same method and window (the
@@ -35,7 +37,7 @@ const SECONDARY = GP.find((g) => g.NORAD_CAT_ID === 53704);
 const START_JD = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;
 const WINDOWS = 24;
 const CALLS = 10000;
-const METHODS = [['find_tca', 'result'], ['assess_conjunction', 'result'], ['emit_cdm', 'cdm']];
+const METHODS = [['find_tca', 'result'], ['assess_conjunction', 'result']];
 
 test('one instance answers 10,000 pair calls, each request encoded as it is sent', { timeout: 1800000, skip: GP_SKIP }, async (t) => {
   const flatc = await initCqrFlatc();
@@ -61,6 +63,5 @@ test('one instance answers 10,000 pair calls, each request encoded as it is sent
     const tca = decodeCqr(flatc, first.get(`find_tca ${window}`)).TCA_RESULT.JULIAN_DATE;
     const event = decodeCqr(flatc, first.get(`assess_conjunction ${window}`)).EVENT_RESULT;
     assert.equal(event.TCA.JULIAN_DATE, tca, `window ${window}: assess_conjunction evaluates find_tca's TCA`);
-    assert.equal(first.get(`emit_cdm ${window}`).subarray(4, 8).toString('latin1'), '$CDM');
   }
 });

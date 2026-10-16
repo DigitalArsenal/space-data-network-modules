@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -125,6 +125,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "erm-model",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources: one $ERM whose MODEL arm gives the regimes and age bins (STRATA_SETTINGS) and per stratum the RTN position-velocity covariance (CLIPPED.COVARIANCE, else COVARIANCE, Lower21 km and km/s), with CALIBRATION and CALIBRATION_REFERENCE (analysis/gp-error-model; scripts/uncertainty-model.mjs from the model JSON). With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the stratum is Calibrated; absent, or outside the model, events keep the Alfano maximum."
         },
         {
           "portId": "earth_orientation",
