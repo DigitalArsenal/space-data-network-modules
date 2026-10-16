@@ -14,16 +14,15 @@
  * Validation target: CelesTrak SOCRATES Plus
  *   https://celestrak.org/SOCRATES/
  *   Method: SGP4 propagator, 5km threshold, 7-day lookahead
- *   Default RTN covariance: 100m R, 300m T, 100m N
+ *   Covariance is supplied by the source or an explicitly requested model.
  *
  * Covariance source:
- *   - Default: SOCRATES-style fixed RTN (100m, 300m, 100m)
- *   - OD from OEM: via Tudat's OrbitDeterminationManager + fitOrbitToEphemeris
- *     Source: DigitalArsenal/tudat-wasm
- *     Files: src/tudatpy_wasm/estimation/estimation_analysis/
- *   - Propagated: via Tudat's propagateCovarianceRsw()
+ *   - Supplied OEM/OCM covariance, with its source and calibration evidence.
+ *   - An explicitly supplied empirical model, labelled as synthesized.
+ *   - No covariance is invented when neither source is available.
  */
 
+#include "conjunction/cdm_metadata.h"
 #include "sgp4_propagator.h"
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
@@ -54,7 +53,7 @@ struct ConjunctionEvent {
     double min_range_km = 0.0;
     double rel_speed_kms = 0.0;
 
-    // States at TCA (TEME)
+    // States at TCA in the evaluation frame (CDM conversion does not alter them).
     StateVector state1;
     StateVector state2;
 
@@ -87,6 +86,7 @@ struct ConjunctionEvent {
     // With has_covariance1/2: each object's position-velocity covariance at TCA
     // in its RTN axes, 21-element lower triangle (km², km²/s, km²/s²).
     std::array<double, 21> cov6_rtn1{}, cov6_rtn2{};
+    CdmObjectMetadata cdm_metadata1, cdm_metadata2;
 
     // Days since epoch for each object
     double dse1 = 0.0, dse2 = 0.0;

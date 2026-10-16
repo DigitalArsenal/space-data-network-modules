@@ -29,6 +29,8 @@
 #include "space_data_module_invoke.h"
 extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 #include "conjunction/conjunction_assessment.h"
+#include "conjunction/cdm_builder.h"
+#include "conjunction/cdm_metadata.h"
 #include "conjunction/conjunction_engine.h"
 #include "conjunction/encounter_geometry.h"
 #include "conjunction/ephemeris_source.h"
@@ -399,10 +401,29 @@ struct Source {
   cqrHardBodyRadiusBasis radius_basis = cqrHardBodyRadiusBasis::UNSPECIFIED;
   // The covariance the source's message supplied (OEM, OCM); empty if none.
   CovarianceSeries covariance;
+  CdmObjectMetadata cdm_metadata;
+  std::string ephemeris_kind;
   std::vector<int> covariance_frames; // OEM per-row: 0=RTN, otherwise sourceFrame code.
   bool uploaded_oem = false;
   std::vector<double> sample_epoch_remainders, covariance_epoch_remainders;
 };
+// CDM source facts belong to the bridge, alongside the engine's physics result.
+struct CdmEventMetadata {
+  CdmObjectMetadata cdm_metadata1, cdm_metadata2;
+};
+struct BridgeEvent : ConjunctionEvent2, CdmEventMetadata {};
+// Prefer an externally supplied source name. Anonymous inline records receive
+// a stable descriptive identifier (provider, object, source epoch), not an
+// invented external filename or the conjunction's TCA.
+void completeSourceCdmMetadata(Source& source) {
+  if (!source.cdm_metadata.ephemeris_name.empty() || !source.provider) return;
+  const auto id = source.provider->norad_id() > 0 ? std::to_string(source.provider->norad_id()) :
+      source.cdm_metadata.catalog_number ? std::to_string(source.cdm_metadata.catalog_number) : source.provider->object_id();
+  source.cdm_metadata.ephemeris_name = source.ephemeris_kind;
+  if (!id.empty()) source.cdm_metadata.ephemeris_name += "_" + id;
+  if (isFinite(source.provider->epoch_jd()) && source.provider->epoch_jd() > 0)
+    source.cdm_metadata.ephemeris_name += "_" + jd_to_iso(source.provider->epoch_jd());
+}
 // The axes of a source's covariance: RTN (RSW), or the source's own state
 // frame. Anything else would need a transform the guest does not perform.
 bool covarianceAxes(const RFM *f, int state_axes, CovarianceSeries::Axes &axes) {
@@ -463,14 +484,29 @@ struct SuppliedCovariance {
   bool used = false;
   bool calibrated = false;
   std::string reference;
+  cqrCovarianceBasis basis1 = cqrCovarianceBasis::SOURCE_EPHEMERIS;
+  cqrCovarianceBasis basis2 = cqrCovarianceBasis::SOURCE_EPHEMERIS;
 };
 // A covariance method's probability from the sources' own covariance, when a
 // covariance method was requested and both sources cover the TCA; the event
 // keeps the Alfano maximum otherwise.
-SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, const Source &b,
+SuppliedCovariance applySourceCovariance(BridgeEvent &e, const Source &a, const Source &b,
                                          const ConjunctionEngine &engine,
                                          cqrProbabilityAlgorithm alg) {
   SuppliedCovariance out;
+  e.cdm_metadata1 = a.cdm_metadata;
+  e.cdm_metadata2 = b.cdm_metadata;
+  e.cdm_metadata1.calibrated = a.covariance.calibrated;
+  e.cdm_metadata2.calibrated = b.covariance.calibrated;
+  e.cdm_metadata1.calibration_reference = a.covariance.calibration_reference;
+  e.cdm_metadata2.calibration_reference = b.covariance.calibration_reference;
+  auto basis = [](const CdmObjectMetadata& metadata) {
+    using Origin = CdmObjectMetadata::CovarianceOrigin;
+    return metadata.covariance_origin == Origin::OrbitDetermination ? cqrCovarianceBasis::ORBIT_DETERMINATION :
+        metadata.covariance_origin == Origin::ConjunctionMessage ? cqrCovarianceBasis::CONJUNCTION_MESSAGE :
+        cqrCovarianceBasis::SOURCE_EPHEMERIS;
+  };
+  out.basis1 = basis(e.cdm_metadata1); out.basis2 = basis(e.cdm_metadata2);
   if (has_error()) return out;
   e.has_covariance1 = covariance_rtn_at(a.covariance, e.tca_jd, e.state1, e.cov6_rtn1);
   e.has_covariance2 = covariance_rtn_at(b.covariance, e.tca_jd, e.state2, e.cov6_rtn2);
@@ -517,7 +553,8 @@ void covarianceLabels(CQREventT &o, const SuppliedCovariance &c) {
   if (!c.used || !o.PROBABILITY ||
       o.PROBABILITY->ALGORITHM == cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
     return;
-  o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::SOURCE_EPHEMERIS;
+  o.PRIMARY_COVARIANCE_BASIS = c.basis1;
+  o.SECONDARY_COVARIANCE_BASIS = c.basis2;
   o.PROBABILITY->CALIBRATION =
       c.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
   o.PROBABILITY->CALIBRATION_REFERENCE = c.calibrated ? c.reference : std::string();
@@ -562,6 +599,8 @@ double epochRemainder(const std::string& iso, double nominal_jd) {
 }
 bool points(const OEM *r, Source &o) {
   o.uploaded_oem = true;
+  o.ephemeris_kind = "OEM";
+  if (o.cdm_metadata.ephemeris_name.empty() && r) o.cdm_metadata.ephemeris_name = text(r->MESSAGE_ID());
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
       r->EPHEMERIS_DATA_BLOCK()->size() == 0)
     return error("invalid-source", "OEM needs ephemeris blocks.");
@@ -645,6 +684,28 @@ bool points(const OEM *r, Source &o) {
 bool comprehensive(const OCM *r, Source &o) {
   if (!r || !r->METADATA())
     return error("invalid-source", "OCM needs metadata.");
+  o.ephemeris_kind = "OCM";
+  if (o.cdm_metadata.ephemeris_name.empty() && r->HEADER())
+    o.cdm_metadata.ephemeris_name = text(r->HEADER()->MESSAGE_ID());
+  if (const auto* od = r->ORBIT_DETERMINATION()) {
+    auto& m = o.cdm_metadata;
+    m.covariance_origin = CdmObjectMetadata::CovarianceOrigin::OrbitDetermination;
+    m.ephemeris_name = "NONE";
+    if (isFinite(od->RECOMMENDED_OD_SPAN())) m.recommended_od_span = od->RECOMMENDED_OD_SPAN();
+    if (isFinite(od->ACTUAL_OD_SPAN())) m.actual_od_span = od->ACTUAL_OD_SPAN();
+    m.obs_available = od->OBS_AVAILABLE();
+    if (od->OD_OBSERVATIONS_USED() > 0) m.obs_used = od->OD_OBSERVATIONS_USED();
+    m.tracks_available = od->TRACKS_AVAILABLE();
+    if (od->OD_TRACKS_USED() > 0) m.tracks_used = od->OD_TRACKS_USED();
+    m.weighted_rms = od->WEIGHTED_RMS();
+    if (!text(od->OD_EPOCH()).empty()) {
+      const double epoch_jd = iso_to_jd(text(od->OD_EPOCH()));
+      // CCSDS TIME_LASTOB_* bounds the last accepted observation, not the
+      // whole observation arc. A known exact last-observation time has zero span.
+      if (isFinite(od->DAYS_SINCE_LAST_OBS()) && od->DAYS_SINCE_LAST_OBS() != 0)
+        m.time_lastob_start = m.time_lastob_end = jd_to_iso(epoch_jd - od->DAYS_SINCE_LAST_OBS());
+    }
+  }
   if (r->TRAJ_TYPE() != trajectoryType::CARTESIAN_PV && r->TRAJ_TYPE() != trajectoryType::CARTESIAN_PVA)
     return error("unsupported-source", "OCM sources must carry Cartesian states (CARTESIAN_PV or _PVA).");
   if (text(r->METADATA()->TIME_SYSTEM()) != "UTC")
@@ -794,6 +855,28 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
                  "the source handle counts as one); arbitrary external handles "
                  "cannot be resolved by this instance.");
   o.handle = r->SOURCE_HANDLE();
+  // Preserve the source's unsigned catalog number even if a legacy provider
+  // identity narrows it to signed int. Explicit source identity wins over CAT.
+  o.cdm_metadata.catalog_number = r->NORAD_CATALOG_ID();
+  o.cdm_metadata.covariance_origin = CdmObjectMetadata::CovarianceOrigin::SourceEphemeris;
+  if (const auto* provenance = r->PROVENANCE()) {
+    o.cdm_metadata.ephemeris_name = text(provenance->SOURCE_ID());
+    if (provenance->ORIGIN_CLASS() == cqrDataOrigin::CDM_RECORD)
+      o.cdm_metadata.covariance_origin = CdmObjectMetadata::CovarianceOrigin::ConjunctionMessage;
+  }
+  if (const auto* catalog = r->CATALOG_ENTRY()) {
+    if (!o.cdm_metadata.catalog_number) o.cdm_metadata.catalog_number = catalog->NORAD_CAT_ID();
+    o.cdm_metadata.catalog_object_name = text(catalog->OBJECT_NAME());
+    o.cdm_metadata.international_designator = text(catalog->OBJECT_ID());
+    o.cdm_metadata.object_type = static_cast<uint8_t>(catalog->OBJECT_TYPE());
+    // CAT's legacy boolean cannot distinguish absent from NO; only YES is evidence.
+    if (catalog->MANEUVERABLE()) {
+      o.cdm_metadata.maneuverable_known = true;
+      o.cdm_metadata.maneuverable = true;
+    }
+  }
+  if (r->MEAN_ELEMENTS() || r->TLE_LINES()) o.ephemeris_kind = "SGP4";
+  if (trajectory || r->POLYNOMIAL_EPHEMERIS()) o.ephemeris_kind = "PPE";
   if (!hardBodyRadius(r, o))
     return false;
   if (trajectory) {
@@ -803,6 +886,7 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
     o.polynomial->id = text(r->OBJECT_ID());
     o.polynomial->norad = r->NORAD_CATALOG_ID();
     o.provider = o.polynomial;
+    completeSourceCdmMetadata(o);
     return true;
   }
   if (r->MEAN_ELEMENTS() || r->TLE_LINES()) {
@@ -857,6 +941,7 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
         o.samples, text(r->OBJECT_NAME()), text(r->OBJECT_ID()),
         r->NORAD_CATALOG_ID());
   }
+  completeSourceCdmMetadata(o);
   if (r->SOURCE_EPOCH()) {
     double declared = 0;
     if (!epoch(r->SOURCE_EPOCH(), declared))
@@ -1000,12 +1085,15 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
       state(e.state1, e.tca_jd, o->PRIMARY_ID, o->PRIMARY_NORAD_ID, axes);
   o->SECONDARY_STATE =
       state(e.state2, e.tca_jd, o->SECONDARY_ID, o->SECONDARY_NORAD_ID, axes);
+  if (e.has_covariance1 || e.has_covariance2)
+    o->CONJUNCTION_MESSAGE = build_conjunction_cdm(e, axes == 1 ? "TEME" : axes == 2 ? "GCRF" : "EME2000");
   return o;
 }
 ConjunctionEvent legacy(const ConjunctionEvent2 &e);
+ConjunctionEvent legacy(const BridgeEvent &e);
 // Without supplied covariance the engine reports only the Alfano maximum, and
 // the event says so; the requested covariance method is not applied.
-std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
+std::unique_ptr<CQREventT> event(const BridgeEvent &e,
                                  cqrProbabilityAlgorithm a, int axes = 1) {
   auto o = event(legacy(e), axes);
   if (!e.has_covariance)
@@ -1145,6 +1233,7 @@ struct EmpiricalUse {
   std::string reference;
   ConjunctionEvent2 computed;
   std::array<double, 21> cov1{}, cov2{};
+  CdmObjectMetadata metadata1, metadata2;
 };
 // A covariance method's probability from the empirical model, when a
 // covariance method was requested, both objects are element sets and both
@@ -1167,13 +1256,41 @@ EmpiricalUse empiricalPc(const EmpiricalModel &m, const GPElement *g1, const GPE
   u.used = true;
   u.cov1 = a->cov;
   u.cov2 = b->cov;
+  u.metadata1.covariance_origin = u.metadata2.covariance_origin = CdmObjectMetadata::CovarianceOrigin::EmpiricalModel;
+  u.metadata1.calibrated = a->calibrated;
+  u.metadata2.calibrated = b->calibrated;
+  u.metadata1.calibration_reference = a->reference;
+  u.metadata2.calibration_reference = b->reference;
   u.calibrated = a->calibrated && b->calibrated;
   if (u.calibrated)
     u.reference = a == b || a->reference == b->reference ? a->reference : a->reference + "; " + b->reference;
   return u;
 }
+// Apply the exact same model covariance and provenance before either CDM
+// delivery path. The encounter geometry remains in its evaluation frame.
+void applyEmpiricalCovariance(ConjunctionEvent& e, const EmpiricalUse& u) {
+  if (!u.used) return;
+  const auto computed = legacy(u.computed);
+  e.has_covariance1 = e.has_covariance2 = true;
+  e.has_covariance = u.computed.has_covariance;
+  e.cov6_rtn1 = u.cov1; e.cov6_rtn2 = u.cov2;
+  e.covariance_probability = u.computed.pc.probability;
+  e.probability_method = u.computed.pc.method;
+  e.probability_failure = u.computed.probability_failure;
+  e.probability_note = computed.probability_note;
+  auto metadata = [](CdmObjectMetadata& target, const CdmObjectMetadata& model) {
+    target.covariance_origin = model.covariance_origin;
+    target.calibrated = model.calibrated;
+    target.calibration_reference = model.calibration_reference;
+    if (target.ephemeris_name.empty()) target.ephemeris_name = "SGP4";
+  };
+  metadata(e.cdm_metadata1, u.metadata1); metadata(e.cdm_metadata2, u.metadata2);
+  e.cov_r1 = std::sqrt(u.cov1[0]) * 1000.; e.cov_t1 = std::sqrt(u.cov1[2]) * 1000.; e.cov_n1 = std::sqrt(u.cov1[5]) * 1000.;
+  e.cov_r2 = std::sqrt(u.cov2[0]) * 1000.; e.cov_t2 = std::sqrt(u.cov2[2]) * 1000.; e.cov_n2 = std::sqrt(u.cov2[5]) * 1000.;
+}
 // Labels an event whose probability came from the empirical model.
-void empiricalLabels(CQREventT &o, const EmpiricalUse &u, cqrProbabilityAlgorithm alg) {
+void empiricalLabels(CQREventT &o, const EmpiricalUse &u, cqrProbabilityAlgorithm alg,
+                     const ConjunctionEvent& base, int axes = 1) {
   if (!u.used)
     return;
   o.PROBABILITY = probability(u.computed.pc, alg, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
@@ -1189,29 +1306,68 @@ void empiricalLabels(CQREventT &o, const EmpiricalUse &u, cqrProbabilityAlgorith
   o.PROBABILITY->CALIBRATION = u.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
   o.PROBABILITY->CALIBRATION_REFERENCE = u.calibrated ? u.reference : std::string();
   o.PROBABILITY->CROSS_CORRELATION = cqrCovarianceCorrelation::INDEPENDENT;
+  auto complete = base;
+  applyEmpiricalCovariance(complete, u);
+  o.CONJUNCTION_MESSAGE = build_conjunction_cdm(complete, axes == 1 ? "TEME" : axes == 2 ? "GCRF" : "EME2000");
 }
-// Element sets by catalog number, for events that carry only identities; a
-// number with two different element sets resolves to none.
-void addElements(std::map<int, const GPElement *> &out, const std::vector<Source> &sources) {
-  for (const auto &s : sources) {
-    if (!s.mean || s.gp.norad_cat_id <= 0)
-      continue;
-    auto [it, fresh] = out.emplace(s.gp.norad_cat_id, &s.gp);
-    if (!fresh && (!it->second || it->second->epoch_jd != s.gp.epoch_jd))
+// Retain the whole source when materializing a screened encounter: covariance,
+// provenance and source frame are as important as its element set.
+using ScreenSourceLookup = std::map<std::pair<std::string, int>, const Source*>;
+void addScreenSources(ScreenSourceLookup& out, const std::vector<Source>& sources) {
+  for (const auto& source : sources) {
+    const auto key = std::make_pair(source.provider->object_id(), source.provider->norad_id());
+    auto [it, fresh] = out.emplace(key, &source);
+    if (!fresh && (!it->second || it->second->provider->epoch_jd() != source.provider->epoch_jd()))
       it->second = nullptr;
   }
 }
-// A screened event (element-set screens) as a CQR event, with the empirical
-// model's probability when it applies.
-std::unique_ptr<CQREventT> screenedEvent(const ConjunctionEvent &e, const EmpiricalModel &m,
-                                         const std::map<int, const GPElement *> &gp,
-                                         cqrProbabilityAlgorithm alg, int axes = 1) {
-  auto o = event(e, axes);
-  auto find = [&](int norad) { auto it = gp.find(norad); return it == gp.end() ? nullptr : it->second; };
-  empiricalLabels(*o, empiricalPc(m, find(e.obj1.norad_cat_id), find(e.obj2.norad_cat_id), e.dse1, e.dse2,
-                                  e.state1, e.state2, e.radius1_m, e.radius2_m, alg),
-                  alg);
-  return o;
+// Adapt an already solved encounter without propagating or changing its frame.
+BridgeEvent screenedEncounter(const ConjunctionEvent& e) {
+  BridgeEvent out;
+  out.obj1_name = e.obj1.name; out.obj2_name = e.obj2.name;
+  out.obj1_id = e.obj1.object_id; out.obj2_id = e.obj2.object_id;
+  out.obj1_norad = e.obj1.norad_cat_id; out.obj2_norad = e.obj2.norad_cat_id;
+  out.tca_jd = e.tca_jd; out.tca_iso = e.tca_iso;
+  out.state1 = e.state1; out.state2 = e.state2;
+  out.miss_distance_km = e.min_range_km; out.relative_speed_kms = e.rel_speed_kms;
+  out.rel_r = e.rel_pos_r; out.rel_t = e.rel_pos_t; out.rel_n = e.rel_pos_n;
+  out.rel_vr = e.rel_vel_r; out.rel_vt = e.rel_vel_t; out.rel_vn = e.rel_vel_n;
+  out.dse1 = e.dse1; out.dse2 = e.dse2;
+  out.radius1_m = e.radius1_m; out.radius2_m = e.radius2_m;
+  out.combined_radius_km = (e.radius1_m + e.radius2_m) / 1000.;
+  out.dilution_threshold_km = e.dilution_threshold_km;
+  out.pc.max_probability = e.max_probability;
+  out.pc.probability = e.has_covariance ? e.covariance_probability : e.max_probability;
+  out.pc.method = e.probability_method;
+  out.pc.converged = true;
+  out.has_covariance = e.has_covariance;
+  out.has_covariance1 = e.has_covariance1; out.has_covariance2 = e.has_covariance2;
+  out.cov6_rtn1 = e.cov6_rtn1; out.cov6_rtn2 = e.cov6_rtn2;
+  out.cdm_metadata1 = e.cdm_metadata1; out.cdm_metadata2 = e.cdm_metadata2;
+  out.probability_failure = e.probability_failure;
+  return out;
+}
+std::unique_ptr<CQREventT> screenedEvent(const ConjunctionEvent& e, const EmpiricalModel& model,
+    const ScreenSourceLookup& sources, cqrProbabilityAlgorithm alg, int axes = 1) {
+  auto find = [&](const ObjectIdentity& id) {
+    const auto it = sources.find({id.object_id, id.norad_cat_id});
+    return it == sources.end() ? nullptr : it->second;
+  };
+  const Source* a = find(e.obj1), *b = find(e.obj2);
+  if (!a || !b) return event(e, axes);
+  auto assessed = screenedEncounter(e);
+  ConjunctionEngine engine;
+  engine.set_pc_method(algorithm(alg));
+  engine.set_combined_radius_m(e.radius1_m, e.radius2_m);
+  const auto supplied = applySourceCovariance(assessed, *a, *b, engine, alg);
+  auto out = event(assessed, alg, axes);
+  out->PRIMARY_RADIUS_BASIS = static_cast<cqrHardBodyRadiusBasis>(e.radius_basis1);
+  out->SECONDARY_RADIUS_BASIS = static_cast<cqrHardBodyRadiusBasis>(e.radius_basis2);
+  covarianceLabels(*out, supplied);
+  if (!supplied.used && !has_error())
+    empiricalLabels(*out, empiricalPc(model, a->mean ? &a->gp : nullptr, b->mean ? &b->gp : nullptr,
+        e.dse1, e.dse2, e.state1, e.state2, e.radius1_m, e.radius2_m, alg), alg, legacy(assessed), axes);
+  return out;
 }
 // TOTAL_OBJECTS counts the objects the screening covered: the catalog less
 // the objects excluded because they cannot be propagated over the window
@@ -1371,6 +1527,8 @@ bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
                    const ScreeningStats &s, const std::string &method,
                    std::vector<std::vector<uint8_t>> excluded = {},
                    size_t eventsPerChunk = kEventsPerChunk) {
+  // Do not retain an event whose required CDM attachment failed to build.
+  if (has_error()) return error("evaluation-failed", error_message());
   size_t retainedEvents = events.size();
   size_t retainedRequestBytes = 0;
   for (const auto &entry : pending) {
@@ -1565,8 +1723,10 @@ extern "C" int assess_conjunction() {
     e.set_pc_method(algorithm(alg));
     e.set_combined_radius_m(q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
                             q->PAIR_REQUEST()->SECONDARY_RADIUS_M());
-    auto assessed = e.assess(*a.provider, *b.provider, c.start_jd, c.duration_days,
-                             nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+    BridgeEvent assessed;
+    static_cast<ConjunctionEvent2&>(assessed) = e.assess(
+        *a.provider, *b.provider, c.start_jd, c.duration_days,
+        nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
     const auto supplied = applySourceCovariance(assessed, a, b, e, alg);
     out.EVENT_RESULT = event(assessed, alg, a.axes);
     covarianceLabels(*out.EVENT_RESULT, supplied);
@@ -1578,7 +1738,7 @@ extern "C" int assess_conjunction() {
                       empiricalPc(model, a.mean ? &a.gp : nullptr, b.mean ? &b.gp : nullptr, assessed.dse1,
                                   assessed.dse2, assessed.state1, assessed.state2,
                                   q->PAIR_REQUEST()->PRIMARY_RADIUS_M(), q->PAIR_REQUEST()->SECONDARY_RADIUS_M(), alg),
-                      alg);
+                      alg, legacy(assessed), a.axes);
   }
   if (!isFinite(out.EVENT_RESULT->MISS_DISTANCE_M) ||
       !isFinite(out.EVENT_RESULT->TCA->JULIAN_DATE))
@@ -1649,12 +1809,13 @@ bool document(bool xml, bool write) {
     if (n == -2)
       data.resize(data.size() * 2);
   }
-  if (n < 0 || has_error())
-    return error(
-        "invalid-native-document",
-        has_error()
-            ? error_message()
-            : "CDM conversion failed or exceeds bounded document size.");
+  if (n < 0 || has_error()) {
+    const std::string detail = has_error() ? error_message() : "CDM conversion failed or exceeds bounded document size.";
+    const auto separator = detail.find(": ");
+    const std::string code = write && detail.rfind("cdm-", 0) == 0 && separator != std::string::npos
+        ? detail.substr(0, separator) : "invalid-native-document";
+    return error(code.c_str(), detail);
+  }
   data.resize(n);
   if (!write)
     return pushBytes("cdm", "CDM.fbs", "$CDM", "CDM", data.data(), data.size());
@@ -1731,6 +1892,12 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.cov_n2 = std::sqrt(std::max(0., c2.data[8])) * 1000.;
   return l;
 }
+ConjunctionEvent legacy(const BridgeEvent &e) {
+  auto l = legacy(static_cast<const ConjunctionEvent2&>(e));
+  l.cdm_metadata1 = e.cdm_metadata1;
+  l.cdm_metadata2 = e.cdm_metadata2;
+  return l;
+}
 bool emit(bool csm) {
   auto q = request();
   Source a, b;
@@ -1750,14 +1917,24 @@ bool emit(bool csm) {
     engine.set_pc_method(algorithm(alg));
     engine.set_combined_radius_m(p->PRIMARY_RADIUS_M(),
                                  p->SECONDARY_RADIUS_M());
-    auto assessed = engine.assess(*a.provider, *b.provider, c.start_jd,
-                                  c.duration_days, nullptr, nullptr,
-                                  c.coarse_step_sec, c.fine_tol_sec);
+    BridgeEvent assessed;
+    static_cast<ConjunctionEvent2&>(assessed) = engine.assess(
+        *a.provider, *b.provider, c.start_jd, c.duration_days,
+        nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
     applySourceCovariance(assessed, a, b, engine, alg);
     e = legacy(assessed);
   }
   if (has_error())
     return error("pair-evaluation-failed", error_message());
+  if (e.cdm_metadata1.ephemeris_name.empty()) e.cdm_metadata1 = a.cdm_metadata;
+  if (e.cdm_metadata2.ephemeris_name.empty()) e.cdm_metadata2 = b.cdm_metadata;
+  if (!csm) {
+    EmpiricalModel model;
+    if (!empiricalModel(model)) return false;
+    if (!e.has_covariance)
+      applyEmpiricalCovariance(e, empiricalPc(model, a.mean ? &a.gp : nullptr, b.mean ? &b.gp : nullptr,
+          e.dse1, e.dse2, e.state1, e.state2, p->PRIMARY_RADIUS_M(), p->SECONDARY_RADIUS_M(), alg));
+  }
   std::vector<uint8_t> data(8192);
   int n = -2;
   while (n == -2 && data.size() <= kMaximumDocumentBytes) {
@@ -1803,11 +1980,11 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     stats = screener.stats();
     if (has_error())
       return error("screening-failed", error_message());
-    std::map<int, const GPElement *> gp;
-    addElements(gp, p);
-    addElements(gp, s);
+    ScreenSourceLookup sources;
+    addScreenSources(sources, p);
+    addScreenSources(sources, s);
     for (auto &e : results)
-      events.push_back(screenedEvent(e, model, gp, alg));
+      events.push_back(screenedEvent(e, model, sources, alg));
     for (const auto &x : stats.excluded_objects) {
       const auto &list = x.input_list == 1 ? s : p;
       if (x.input_list < 0 || x.input_index >= list.size())
@@ -1865,7 +2042,9 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         for (const auto &solution : solutions) {
           if (!(solution.tca_jd >= c.start_jd && solution.tca_jd < end_jd))
             continue;
-          auto result = e.assess_at(*p[i].provider, *b.provider, solution.tca_jd);
+          BridgeEvent result;
+          static_cast<ConjunctionEvent2&>(result) = e.assess_at(
+              *p[i].provider, *b.provider, solution.tca_jd);
           const auto supplied = has_error() ? SuppliedCovariance{} : applySourceCovariance(result, p[i], b, e, alg);
           if (has_error() || !isFinite(result.miss_distance_km) ||
               !isFinite(result.tca_jd)) {
@@ -1882,7 +2061,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
                             empiricalPc(model, p[i].mean ? &p[i].gp : nullptr, b.mean ? &b.gp : nullptr,
                                         result.dse1, result.dse2, result.state1, result.state2, radius1.first,
                                         radius2.first, alg),
-                            alg);
+                            alg, legacy(result), p[i].axes);
           // Serialization also validates probability metadata. A worker-local
           // failure must not disappear when the next pair clears its status.
           if (has_error()) {
@@ -1955,8 +2134,11 @@ bool catalogFrames(const ScreeningConfig &c, int f, std::vector<Source> &catalog
     }
     v.tle = gp_to_tle(v.gp);
     v.mean = true;
+    v.cdm_metadata.covariance_origin = CdmObjectMetadata::CovarianceOrigin::SourceEphemeris;
+    v.ephemeris_kind = "SGP4";
     v.axes = 1;
     v.provider = std::make_shared<GPEphemerisSource>(v.gp);
+    completeSourceCdmMetadata(v);
     if (!window(v, c, f))
       return false;
     catalog.push_back(std::move(v));
@@ -2372,11 +2554,11 @@ bool screenWindow(const char *method) {
                      "Excluded object has no resident source.");
       excluded.push_back(excludedRecord(*found, x));
     }
-    std::map<int, const GPElement *> gp;
-    addElements(gp, i->sources);
+    ScreenSourceLookup sources;
+    addScreenSources(sources, i->sources);
     std::vector<std::unique_ptr<CQREventT>> out;
     for (auto &e : events)
-      out.push_back(screenedEvent(e, model, gp, alg));
+      out.push_back(screenedEvent(e, model, sources, alg, i->axes));
     return catalogOutput(std::move(out), stats, method, std::move(excluded));
   }
   ScreeningStats stats;
@@ -2411,10 +2593,11 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
   if (!f || f != t.index->axes)
     return error("frame-mismatch", "Window evaluation frame differs from the resident index.");
   // The grid and the candidate search are geometry; only refinement reports a
-  // probability, and a covariance method needs the uncertainty_model there.
+  // probability, and a covariance method needs supplied covariance or a model.
   if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM &&
-      std::strcmp(method, "refine_candidates") == 0 && !input("uncertainty_model"))
-    return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, or a covariance method with an uncertainty_model.");
+      std::strcmp(method, "refine_candidates") == 0 && !input("uncertainty_model") &&
+      std::none_of(t.index->sources.begin(), t.index->sources.end(), [](const Source& source) { return !source.covariance.empty(); }))
+    return error("unsupported-algorithm", std::string(method) + " requires supplied covariance or an uncertainty_model for a covariance method.");
   if (!t.index->primaries.empty())
     return error("unsupported-index", std::string(method) + " screens every source against every other; the index names primaries.");
   // Sampling needs one source (the rows of one updated object); pairs need two.
@@ -2712,13 +2895,13 @@ extern "C" int refine_candidates() {
   auto events = screen_tight_candidates(t.refs, c, cr ? &candidates : nullptr, std::move(excluded), stats);
   if (conjunction::has_error())
     return error("screening-failed", conjunction::error_message()), 422;
-  std::map<int, const GPElement *> gp;
-  addElements(gp, t.index->sources);
+  ScreenSourceLookup sources;
+  addScreenSources(sources, t.index->sources);
   const auto alg = request()->WINDOW_REQUEST() ? request()->WINDOW_REQUEST()->CONTROLS()->ALGORITHM()
                                                : cqrProbabilityAlgorithm::ALFANO_MAXIMUM;
   std::vector<std::unique_ptr<CQREventT>> out;
   for (auto &e : events)
-    out.push_back(screenedEvent(e, model, gp, alg));
+    out.push_back(screenedEvent(e, model, sources, alg, t.index->axes));
   std::vector<std::vector<uint8_t>> excludedRecords;
   for (const auto &x : stats.excluded_objects)
     excludedRecords.push_back(excludedRecord(t.index->sources[x.index], x));

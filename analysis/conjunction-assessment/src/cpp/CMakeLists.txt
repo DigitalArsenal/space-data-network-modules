@@ -60,6 +60,9 @@ set(CA_SOURCES
     src/time_scales.cpp
     src/earth_orientation.cpp
     src/ephemeris_upload.cpp
+    src/cdm_builder.cpp
+    src/cdm_parse.cpp
+    src/cdm_text.cpp
     src/cdm_output.cpp
     src/csm_output.cpp
     src/pc_method.cpp

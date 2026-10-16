@@ -232,6 +232,13 @@ sample counts and 95% Wilson intervals. CSM has only its historical unlabeled
 rather than losing their meaning. No-covariance CSM output retains its legacy
 spherical statistic.
 
+CDM export uses SANA names where the algorithms match: `ALFANO-MAX-PROBABILITY`,
+`CHAN-1997`, `ALFANO-2005`, `FOSTER-1992`, and `ALFRIEND-1999`.
+The legacy polar Patera implementation is exported as `PATERA-LEGACY-POLAR`,
+not the registered contour-method name `PATERA-2001`. Unregistered names,
+including `LAAS-2015` and `ALFRIEND-2D`, carry an explicit relative-metadata
+COMMENT. Existing probability-input aliases remain accepted.
+
 ## Offline verification and integrator checks
 
 Run from the worktree root:
@@ -250,11 +257,11 @@ checkout and invokes the independent Frisbee and dblquad references. Build
 products and full validation logs belong in ignored `.oracle/`, never in the
 source or fixture directories.
 
-The offline lane does not execute `build.mjs`: it invokes `git` to discover
-toolchains, which this lane forbids. Its source list includes all split files.
-A native syntax check of the single-translation-unit source assembly verifies
-that the split introduces no duplicate symbols or namespace collisions. This
-is not a WASM build or runtime parity verification.
+`build.mjs` accepts the repo-local toolchain through `SDN_LOCAL_EMSDK_DIR`
+without git discovery. Its source list includes all split files. The native
+reference checks above are distinct from the WASM CDM conformance E2E:
+`node tests/cdmCcsdsConformance.e2e.mjs` validates the rebuilt artifact against
+CCSDS XML schemas, the standard's KVN tables, SANA names and Orekit.
 
 `tests/cqrAuthoritative.test.mjs` adds a Foster high-Pc closed-form regression;
 its existing `FOSTER`, `LAAS_2015` and other CQR enum spellings remain unchanged.
