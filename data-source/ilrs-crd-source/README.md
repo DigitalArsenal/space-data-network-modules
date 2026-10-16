@@ -54,10 +54,12 @@ fit's covariance is rule 2 of `analysis/gp-error-model`: the formal covariance t
 cutoff 0 d: mean d²/3 17.04, 95 % coverage 0.17; 16.0 to 21.2 over cutoffs 0 to 7 d). The rows are `UNCALIBRATED`: the scaled covariance
 has not itself been tested.
 
-`analysis/estimation` turns a `$TDM` epoch into seconds from its request epoch in one double (about 0.24 microseconds at present-day
-Unix time) and its sequential filter takes a precomputed propagator sample only within 1e-8 s of that epoch. A host that precomputes
-samples builds their epochs the same way, or runs the propagation round trip at the epochs the estimator asks for;
-`flows/source-products/tests/source-chain.test.mjs` shows the first.
+`analysis/estimation` reads the `$TDM` epochs as UTC (`TIME_SYSTEM`), converts them to TAI, the scale of its request epoch, and moves a
+`TRANSMIT`-tagged normal point forward by its round trip to the receive instant its range model uses (`analysis/estimation` README,
+"Tracking data"). Its sequential filter takes a precomputed propagator sample only within 1e-8 s of that epoch. A host that
+precomputes samples builds their epochs the same way, or runs the propagation round trip at the epochs the estimator asks for;
+`flows/source-products/tests/source-chain.test.mjs` shows the first, and `analysis/estimation/tests/tdm_decode.test.mjs` runs this
+module's `$TDM` through `fit_batch`.
 
 ## Build and test
 

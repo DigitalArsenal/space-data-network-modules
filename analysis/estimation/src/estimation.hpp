@@ -105,6 +105,9 @@ struct MediaEnvironment {
   double total_electron_content{0.0};
   double total_electron_content_rate_per_second{0.0};
   double frequency_hz{8.4e9};
+  // When set, the model takes latitude, height and elevation from the station
+  // position and the signal direction (WGS-84), not from the fields above.
+  bool geometry_from_station{false};
 };
 
 struct Observation {

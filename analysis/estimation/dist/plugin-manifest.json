@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo. Extension v3 adds the Epistemic Support-Point Filter (ESPF_2025 and ESPF_2026), an ellipsoidal set-membership filter (ELLIPSOIDAL_SET_MEMBERSHIP) and evaluate_teag (the TEAG primitives); docs/espf-spec.md. Extension v4 is fit_batch version 2: bounded and logarithmic parameters, Levenberg-Marquardt damping, measurement and consider parameters, covariance blocks with regularization, RTN output and error models; version-1 requests give version-1 bytes.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
@@ -116,6 +116,22 @@
           "maxStreams": 1,
           "required": true,
           "description": "Batch-fit request, replayed unchanged with the answers."
+        },
+        {
+          "portId": "tracking_data",
+          "acceptedTypeSets": [{"setId": "tracking-data", "allowedTypes": [{"schemaName": "TDM.fbs", "fileIdentifier": "$TDM", "rootTypeName": "TDM"}], "description": "Tracking observations in the published tracking-data record."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional tracking-data record decoded into the batch observations (instead of request observations): epochs from TIME_SYSTEM and TIMETAG_REF, angles from degrees, PATH, integration interval, weather rows."
+        },
+        {
+          "portId": "laser_tracking",
+          "acceptedTypeSets": [{"setId": "laser-tracking", "allowedTypes": [{"schemaName": "CRD.fbs", "fileIdentifier": "$CRD", "rootTypeName": "CRD"}], "description": "Laser-ranging coordinate record."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional station coordinates for laser-range observations."
         }
       ],
       "outputPorts": [{"portId": "result", "acceptedTypeSets": [{"setId": "batch-fit-result", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "NEEDS_PROPAGATION queries, or the estimate with its formal and chi-square-scaled covariance over state and parameters."}], "minStreams": 0, "maxStreams": 1, "required": false, "description": "Batch-fit result wire."}],

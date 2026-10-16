@@ -454,6 +454,31 @@ double ionosphere_group_delay_rate_mps(const MediaEnvironment& environment) {
          (environment.frequency_hz * environment.frequency_hz);
 }
 
+// Geodetic latitude and height of a station (WGS-84, Bowring iteration) and the
+// elevation of the signal direction above its local horizon. Latitude, height
+// and elevation do not change with a rotation about the polar axis, so the
+// station position may be in the request frame or fixed to the Earth.
+void station_media_geometry(const Vec3& station, const Vec3& to_satellite, MediaEnvironment* media) {
+  constexpr double a = 6378137.0;
+  constexpr double f = 1.0 / 298.257223563;
+  constexpr double e2 = f * (2.0 - f);
+  const double p = std::sqrt(station.x * station.x + station.y * station.y);
+  double latitude = std::atan2(station.z, p * (1.0 - e2));
+  double height = 0.0;
+  for (int iteration = 0; iteration < 8; ++iteration) {
+    const double s = std::sin(latitude);
+    const double n = a / std::sqrt(1.0 - e2 * s * s);
+    height = p / std::max(std::cos(latitude), 1.0e-12) - n;
+    latitude = std::atan2(station.z, p * (1.0 - e2 * n / (n + height)));
+  }
+  const double longitude = std::atan2(station.y, station.x);
+  const Vec3 up{std::cos(latitude) * std::cos(longitude), std::cos(latitude) * std::sin(longitude), std::sin(latitude)};
+  const double length = std::max(norm(to_satellite), 1.0e-9);
+  media->latitude_rad = latitude;
+  media->height_m = height;
+  media->elevation_rad = std::asin(std::max(-1.0, std::min(1.0, dot(up, to_satellite) / length)));
+}
+
 MeasurementPrediction predict_measurement(const Observation& observation,
                                           const CartesianState& state) {
   MeasurementPrediction prediction{};
@@ -496,13 +521,15 @@ MeasurementPrediction predict_measurement(const Observation& observation,
     prediction.sagnac_m = kEarthRotationRate / kSpeedOfLight *
         (observation.station_position_m.x * r.y - observation.station_position_m.y * r.x);
   }
+  MediaEnvironment media = observation.media;
+  if (media.geometry_from_station) station_media_geometry(observation.station_position_m, signal_relative, &media);
   if (observation.troposphere == TroposphereModel::HOPFIELD_SAASTAMOINEN) {
-    prediction.troposphere_m = saastamoinen_hopfield_delay_m(observation.media);
+    prediction.troposphere_m = saastamoinen_hopfield_delay_m(media);
   } else if (observation.troposphere == TroposphereModel::MARINI) {
-    prediction.troposphere_m = marini_murray_delay_m(observation.media);
+    prediction.troposphere_m = marini_murray_delay_m(media);
   }
   if (observation.ionosphere != IonosphereModel::NONE) {
-    prediction.ionosphere_m = ionosphere_group_delay_m(observation.media);
+    prediction.ionosphere_m = ionosphere_group_delay_m(media);
   }
 
   auto range_jacobian = [&]() {

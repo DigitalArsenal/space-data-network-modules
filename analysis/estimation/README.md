@@ -232,6 +232,26 @@ Authority ([batch_fit_v2.test.mjs](tests/batch_fit_v2.test.mjs),
 | B, eleven ECOM2 terms and in-track at once | the simulating truth (HPOP, full force) | d² 15.9 (19), every term within 0.7 σ |
 | Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (HPOP truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
 
+## Tracking data (`$TDM`) on `tracking_data`
+
+`run_estimation` and `fit_batch` (0.4.0) read the optional `tracking_data` record (and `laser_tracking`, the station's `$CRD`) into
+observations. The rules are in [src/tdm_decode.hpp](src/tdm_decode.hpp) (CCSDS 503.0-B-2); anything the decoder cannot read exactly
+is refused with the error code `bad-tdm` and the reason, never read with a default.
+
+| Record | Estimator |
+| --- | --- |
+| `TIME_SYSTEM` UTC, TAI, GPS, TT (segment, else record) | Epochs become TAI, the scale of the request epoch: UTC through the leap-second table (TAI − UTC through 37 s from 2017-01-01; a UTC epoch from 2027-06-30 is refused until the table is extended), GPS + 19 s, TT − 32.184 s. Other systems and a missing one are refused. |
+| `TIMETAG_REF` RECEIVE | The epoch is the observation epoch. |
+| `TIMETAG_REF` TRANSMIT (ranges only) | The estimator evaluates a range at the receive instant (its light-time model looks back from there), so the epoch moves forward by the travel time, legs × range / c: 2R/c for a two-way laser range. Other kinds tagged TRANSMIT, and a missing tag, are refused. |
+| `PATH` `a,b` or `a,b,a` | One or two legs. A transmit-tagged range and a Doppler need it (a laser range without it is two-way); a Doppler's turnaround ratio is multiplied by the legs, so a two-way count is −2 ṙ f / c. Other paths are refused. |
+| `INTEGRATION_INTERVAL` and `INTEGRATION_REF` START, MIDDLE, END (Doppler, range rate) | The count is placed at the middle of its interval. An interval without a reference is refused. |
+| `ANGLE_1`, `ANGLE_2` | Degrees in the record, radians in the estimator. An `ANGLE_1` without its `ANGLE_2` at the same epoch is refused. |
+| `TRANSMIT_FREQ_1` | A Doppler without it is refused (no 8.4 GHz default); a laser range takes its wavelength as c / frequency. |
+| `PRESSURE` (hPa), `TEMPERATURE` (K), `RHUMIDITY` (percent) rows | Each observation takes the row nearest in time (rows of every segment of the record). The troposphere model (`error_models[].troposphere`) takes the station's latitude and height from its position and the elevation from the signal direction. |
+
+A single fixed station measuring ranges cannot see a rotation of the orbit about its own vertical; a campaign needs a second kind of
+observation (angles) or more stations. The station of an observation is the record's `OBSERVER_X/Y/Z`; a `$CRD` replaces it for laser ranges.
+
 ## Admissible sets: ESPF, set-membership filter and TEAG primitives (extension v3)
 
 Implemented from the papers, independently of their authors' code; every step,
@@ -348,6 +368,7 @@ node tests/build-provider.mjs
 node --test tests/depth.test.mjs tests/sequential.test.mjs tests/depth-invoke.test.mjs
 node --test tests/teag.test.mjs tests/mvee.test.mjs tests/espf.test.mjs
 node --test tests/batch_fit.test.mjs tests/batch_fit_v2.test.mjs tests/measurement_parameters.test.mjs
+node --test tests/tdm_decode.test.mjs
 node --test tests/sdk_compat.test.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 node tests/refresh-evidence.mjs
