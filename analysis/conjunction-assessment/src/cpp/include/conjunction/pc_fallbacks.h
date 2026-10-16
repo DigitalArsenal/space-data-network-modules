@@ -1,0 +1,58 @@
+#ifndef CONJUNCTION_PC_FALLBACKS_H
+#define CONJUNCTION_PC_FALLBACKS_H
+
+#include "conjunction/pc_method.h"
+#include "conjunction/pc_usage.h"
+#include <cstdint>
+
+namespace conjunction {
+
+struct PcFallbackOptions {
+    // Finite observation interval, seconds from the supplied common epoch.
+    // Both zero selects the CARA duration estimate; if no duration exists,
+    // uses +/- half the shorter orbital period (or +/-3600s when unbound).
+    double time_start = 0, time_end = 0;
+    double relative_tolerance = 1e-4;
+    unsigned angular_order = 32;
+    unsigned time_intervals = 128;
+    std::uint64_t samples = 65536;
+    std::uint64_t seed = 0x53444e5043ULL;
+    bool two_body = true;
+    // Total finite-window collision probability includes overlap at t_start.
+    // False exposes the first-entry convention used by CARA's published MC.
+    bool include_initial_overlap = true;
+};
+
+struct PcFallbackResult {
+    PcResult pc;
+    PcUsageResult usage;
+    std::uint64_t samples = 0, hits = 0;
+    std::uint64_t initial_hits = 0, entry_hits = 0;
+    double time_start = 0, time_end = 0;
+    double expected_collisions = 0;
+    bool covariance_repaired = false;
+    bool invalid_inputs = false;
+    // Numerical Nc convergence is distinct from applicability as a total
+    // collision probability (initial occupancy / possible repeated entries).
+    bool requires_monte_carlo = false;
+    std::string limitation;
+};
+
+// Hall/Coppola collision-sphere inward flux, with Cartesian Gaussian
+// covariance propagation. Honest names distinguish the model from CARA's
+// equinoctial peak-overlap Hall implementation.
+PcFallbackResult pc_3d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {});
+PcFallbackResult pc_2d_nc_cartesian(const PcEncounter&, const PcFallbackOptions& = {});
+// Equinoctial Gaussian propagation and iterative peak-overlap linearization
+// following Hall/CARA, validated against all 12 published Alfano 3D cases.
+// Check requires_monte_carlo before interpreting Nc as total finite-window Pc.
+PcFallbackResult pc_3d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {});
+PcFallbackResult pc_2d_nc_hall(const PcEncounter&, const PcFallbackOptions& = {});
+
+// SDMC-style sampling of full correlated position/velocity states, including
+// optional between-object covariance. Explicit SplitMix64 + Box-Muller gives
+// a reproducible stream independent of C++ standard-library RNG distribution.
+PcFallbackResult pc_monte_carlo(const PcEncounter&, const PcFallbackOptions& = {});
+
+} // namespace conjunction
+#endif

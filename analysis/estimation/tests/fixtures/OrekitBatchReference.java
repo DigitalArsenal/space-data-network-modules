@@ -17,6 +17,8 @@
 //
 // Run (single-file source launch):
 //   java -cp "<jars>/*" OrekitBatchReference.java <orekit-data dir> <gfc dir> <out.json>
+// Light-time mode (no gravity-field file required):
+//   java -cp "<jars>/*" OrekitBatchReference.java --light-time <orekit-data dir> <out.json>
 // <gfc dir> holds EGM2008-hpop.gfc written by
 // propagator/hpop/tests/fixtures/orekit/make-gfc.mjs <dir>/EGM2008-hpop.gfc 70 3.986004415e14 6378136.3
 import java.io.File;
@@ -38,14 +40,22 @@ import org.hipparchus.optim.nonlinear.vector.leastsquares.GaussNewtonOptimizer;
 import org.orekit.bodies.CelestialBody;
 import org.orekit.bodies.CelestialBodyFactory;
 import org.orekit.bodies.OneAxisEllipsoid;
+import org.orekit.bodies.GeodeticPoint;
 import org.orekit.data.DataContext;
 import org.orekit.data.DirectoryCrawler;
 import org.orekit.estimation.leastsquares.BatchLSEstimator;
 import org.orekit.estimation.measurements.ObservableSatellite;
+import org.orekit.estimation.measurements.GroundStation;
+import org.orekit.estimation.measurements.Range;
+import org.orekit.estimation.measurements.modifiers.ShapiroRangeModifier;
 import org.orekit.estimation.measurements.ObservedMeasurement;
 import org.orekit.estimation.measurements.PV;
 import org.orekit.estimation.measurements.Position;
 import org.orekit.frames.LOFType;
+import org.orekit.frames.TopocentricFrame;
+import org.orekit.frames.EOPEntry;
+import org.orekit.frames.EOPHistory;
+import org.orekit.frames.ITRFVersion;
 import org.orekit.forces.ForceModel;
 import org.orekit.forces.drag.DragForce;
 import org.orekit.forces.drag.DragSensitive;
@@ -70,18 +80,21 @@ import org.orekit.orbits.OrbitType;
 import org.orekit.orbits.PositionAngleType;
 import org.orekit.propagation.Propagator;
 import org.orekit.propagation.SpacecraftState;
+import org.orekit.propagation.analytical.KeplerianPropagator;
 import org.orekit.propagation.conversion.DormandPrince853IntegratorBuilder;
 import org.orekit.propagation.conversion.NumericalPropagatorBuilder;
 import org.orekit.propagation.numerical.NumericalPropagator;
 import org.orekit.time.AbsoluteDate;
 import org.orekit.time.FieldAbsoluteDate;
 import org.orekit.time.TimeScale;
+import org.orekit.time.UTCScale;
 import org.orekit.time.TimeScalesFactory;
 import org.orekit.utils.Constants;
 import org.orekit.utils.ExtendedPositionProvider;
 import org.orekit.utils.IERSConventions;
 import org.orekit.utils.PVCoordinates;
 import org.orekit.utils.ParameterDriver;
+import org.orekit.utils.TimeStampedPVCoordinates;
 
 public class OrekitBatchReference {
     // propagator/hpop's Orekit constants (OrekitReference.java).
@@ -153,8 +166,224 @@ public class OrekitBatchReference {
         return s.append("]").toString();
     }
 
+    // Independent light-time oracle: Orekit 13.1 Range and ShapiroRangeModifier,
+    // in GCRF metres/metres per second, receive dates measured in TAI seconds
+    // from 2026-10-11T00:00:00 UTC. This mode needs no gravity-field or Sun data.
+    static final double LIGHT_TIME_GM = 3.986004418e14;
+    static final String[] LIGHT_TIME_STATION_NAMES = {"Graz", "Yarragadee", "Greenbelt"};
+    static final double[][] LIGHT_TIME_STATION_GEODETIC = {
+        {47.067, 15.493, 539}, {-29.047, 115.347, 244}, {39.02, -76.84, 19}
+    };
+
+    static double[] pvArray(PVCoordinates pv) {
+        Vector3D p = pv.getPosition(), v = pv.getVelocity();
+        return new double[] {p.getX(), p.getY(), p.getZ(), v.getX(), v.getY(), v.getZ()};
+    }
+
+    static GroundStation lightTimeStation(OneAxisEllipsoid earth, AbsoluteDate epoch,
+                                          String name, double lat, double lon, double height) {
+        GroundStation station = new GroundStation(new TopocentricFrame(earth,
+            new GeodeticPoint(Math.toRadians(lat), Math.toRadians(lon), height), name));
+        // The station clock/offset values remain zero; Earth-orientation drift
+        // drivers still require a reference date even when they are not fitted.
+        for (ParameterDriver driver : List.of(station.getPrimeMeridianOffsetDriver(),
+             station.getPrimeMeridianDriftDriver(), station.getPolarOffsetXDriver(),
+             station.getPolarDriftXDriver(), station.getPolarOffsetYDriver(), station.getPolarDriftYDriver())) {
+            driver.setReferenceDate(epoch);
+        }
+        station.getClockOffsetDriver().setSelected(true);
+        return station;
+    }
+
+    static List<GroundStation> lightTimeStations(OneAxisEllipsoid earth, AbsoluteDate epoch) {
+        List<GroundStation> stations = new ArrayList<>();
+        for (int i = 0; i < LIGHT_TIME_STATION_NAMES.length; ++i) {
+            double[] coordinates = LIGHT_TIME_STATION_GEODETIC[i];
+            stations.add(lightTimeStation(earth, epoch, LIGHT_TIME_STATION_NAMES[i],
+                coordinates[0], coordinates[1], coordinates[2]));
+        }
+        return stations;
+    }
+
+    static KeplerianOrbit lightTimeOrbit(double[] elements, double meanAnomaly,
+                                         Frame frame, AbsoluteDate epoch) {
+        return new KeplerianOrbit(elements[0], elements[1], Math.toRadians(elements[2]),
+            Math.toRadians(elements[3]), Math.toRadians(elements[4]), Math.toRadians(meanAnomaly),
+            PositionAngleType.MEAN, frame, epoch, LIGHT_TIME_GM);
+    }
+
+    static boolean lightTimeVisible(GroundStation station, SpacecraftState state) {
+        return station.getBaseFrame().getElevation(state.getPosition(), state.getFrame(), state.getDate()) > Math.toRadians(10);
+    }
+
+    static double lightTimeRange(GroundStation station, ObservableSatellite satellite,
+                                  SpacecraftState state, boolean shapiro) {
+        return lightTimeRange(station, satellite, state, true, shapiro);
+    }
+
+    static double lightTimeRange(GroundStation station, ObservableSatellite satellite,
+                                  SpacecraftState state, boolean twoWay, boolean shapiro) {
+        Range range = new Range(station, twoWay, state.getDate(), 0.0, 1.0, 1.0, satellite);
+        if (shapiro) range.addModifier(new ShapiroRangeModifier(LIGHT_TIME_GM));
+        return range.estimateWithoutDerivatives(0, 0, new SpacecraftState[] {state}).getEstimatedValue()[0];
+    }
+
+    static double lightTimeRangeDerivative(GroundStation station, ObservableSatellite satellite, SpacecraftState state) {
+        // A positive station clock offset moves the true receive date backwards.
+        // Negating Orekit's automatic derivative gives dRange/dReceiveDate,
+        // without subtracting nearly equal ranges or introducing finite-step bias.
+        Range range = new Range(station, true, state.getDate(), 0.0, 1.0, 1.0, satellite);
+        return -range.estimate(0, 0, new SpacecraftState[] {state})
+            .getParameterDerivatives(station.getClockOffsetDriver(), state.getDate())[0];
+    }
+
+    static double julianDate(AbsoluteDate date, TimeScale scale) {
+        var components = date.getComponents(scale);
+        return components.getDate().getMJD() + 2400000.5 + components.getTime().getSecondsInLocalDay() / 86400.0;
+    }
+
+    static String simulatorReference(AbsoluteDate epoch, UTCScale utc, Frame gcrf) {
+        // This separate ~622 km, 97.8-degree arc gives each station eight
+        // minutes above 10 degrees in six hours. Even using Earth's polar
+        // radius, its 10-degree slant range is below 2030 km: staying below
+        // 2048 km bounds float32-kilometre EOO rounding by 0.0611 m. RAAN and
+        // phase were selected only for visibility, not individual wire errors.
+        final int spanSeconds = 21600;
+        KeplerianOrbit orbit = lightTimeOrbit(new double[] {7000000, 0, 97.8, 0, 130}, 270, gcrf, epoch);
+        // An independent history leaves the real-EOP Stage A frame untouched.
+        // Explicit daily zeros cover the interpolation stencil: UT1=UTC, no
+        // polar motion, length-of-day change, or celestial-pole corrections.
+        List<EOPEntry> zeroEntries = new ArrayList<>();
+        for (int day = -4; day <= 4; ++day) {
+            AbsoluteDate date = epoch.shiftedBy(day * 86400.0);
+            zeroEntries.add(new EOPEntry(date.getComponents(utc).getDate().getMJD(),
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ITRFVersion.ITRF_2020, date));
+        }
+        EOPHistory zeroHistory = new EOPHistory(IERSConventions.IERS_2010,
+            EOPHistory.DEFAULT_INTERPOLATION_DEGREE, zeroEntries, true, DataContext.getDefault().getTimeScales());
+        Frame itrf = FramesFactory.buildUncachedITRF(zeroHistory, utc);
+        OneAxisEllipsoid earth = new OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS,
+            Constants.WGS84_EARTH_FLATTENING, itrf);
+        List<GroundStation> stations = lightTimeStations(earth, epoch);
+        KeplerianPropagator truth = new KeplerianPropagator(orbit);
+        ObservableSatellite satellite = new ObservableSatellite(0);
+        StringBuilder stationJson = new StringBuilder(), samples = new StringBuilder(), pairs = new StringBuilder(), intervals = new StringBuilder();
+        int[] intervalStart = {-1, -1, -1}, pairCounts = {0, 0, 0};
+        int pairCount = 0;
+        for (int i = 0; i < stations.size(); ++i) {
+            double[] coordinates = LIGHT_TIME_STATION_GEODETIC[i];
+            Vector3D position = stations.get(i).getBaseFrame().getCartesianPoint();
+            if (i > 0) stationJson.append(",\n");
+            stationJson.append(String.format("      {\"name\": \"%s\", \"latitudeDeg\": %.17g, \"longitudeDeg\": %.17g, \"heightM\": %.17g, \"positionItrf\": %s}",
+                LIGHT_TIME_STATION_NAMES[i], coordinates[0], coordinates[1], coordinates[2], vec(position.toArray())));
+        }
+        // Truth is evaluated at exact UTC seconds. jdTt is the wire timestamp;
+        // it is not round-tripped back into the independent truth trajectory.
+        for (int seconds = 0; seconds <= spanSeconds + 1; ++seconds) {
+            AbsoluteDate date = epoch.shiftedBy(seconds);
+            SpacecraftState state = seconds <= spanSeconds ? truth.propagate(date) : null;
+            if (state != null) {
+                if (seconds > 0) samples.append(",\n");
+                samples.append(String.format("      {\"seconds\": %d, \"jdTt\": %.17g, \"gcrf\": %s, \"itrf\": %s}",
+                    seconds, julianDate(date, TimeScalesFactory.getTT()), vec(pvArray(state.getPVCoordinates(gcrf))), vec(pvArray(state.getPVCoordinates(itrf)))));
+            }
+            for (int i = 0; i < stations.size(); ++i) {
+                GroundStation station = stations.get(i);
+                boolean visible = state != null && lightTimeVisible(station, state);
+                if (visible) {
+                    if (intervalStart[i] < 0) intervalStart[i] = seconds;
+                    PVCoordinates stationPV = station.getOffsetToInertial(gcrf, date, false)
+                        .transformPVCoordinates(new TimeStampedPVCoordinates(date, PVCoordinates.ZERO));
+                    double plain = lightTimeRange(station, satellite, state, false);
+                    double corrected = lightTimeRange(station, satellite, state, true);
+                    double oneWay = lightTimeRange(station, satellite, state, false, true);
+                    if (pairCount++ > 0) pairs.append(",\n");
+                    ++pairCounts[i];
+                    pairs.append(String.format("      {\"seconds\": %d, \"utc\": \"%s\", \"station\": \"%s\", \"satellite\": %s, \"stationPV\": %s, \"rangeM\": %.17g, \"rangeWithoutShapiroM\": %.17g, \"shapiroM\": %.17g, \"rangeDerivativeAutomaticMps\": %.17g, \"oneWayRangeM\": %.17g}",
+                        seconds, date.toString(utc), station.getBaseFrame().getName(), vec(pvArray(state.getPVCoordinates(gcrf))), vec(pvArray(stationPV)),
+                        corrected, plain, corrected - plain, lightTimeRangeDerivative(station, satellite, state), oneWay));
+                } else if (intervalStart[i] >= 0) {
+                    if (intervals.length() > 0) intervals.append(",\n");
+                    intervals.append(String.format("      {\"station\": \"%s\", \"startSeconds\": %d, \"endSeconds\": %d}",
+                        station.getBaseFrame().getName(), intervalStart[i], seconds - 1));
+                    intervalStart[i] = -1;
+                }
+            }
+        }
+        for (int i = 0; i < stations.size(); ++i) {
+            if (pairCounts[i] < 480) throw new IllegalStateException(LIGHT_TIME_STATION_NAMES[i] + " has fewer than 480 visible simulator pairs");
+            System.out.printf("Orekit simulator %s: %d visible pairs on 1 s grid%n", LIGHT_TIME_STATION_NAMES[i], pairCounts[i]);
+        }
+        return String.format("  \"simulator\": {\n    \"source\": \"Orekit 13.1 ordinary GroundStation, independent zero EOPHistory, IERS_2010 simpleEOP=true; Range with Shapiro and automatic receive-time derivative; exact UTC second grid\",\n    \"frame\": \"GCRF\", \"terrestrialFrame\": \"ITRF\", \"stepSeconds\": 1, \"spanSeconds\": %d, \"epochJdTt\": %.17g, \"pairCount\": %d, \"truth\": %s,\n    \"orbit\": {\"aM\": %.17g, \"e\": %.17g, \"iDeg\": %.17g, \"argpDeg\": %.17g, \"raanDeg\": %.17g, \"mDeg\": %.17g},\n    \"stations\": [\n%s\n    ],\n    \"samples\": [\n%s\n    ],\n    \"pairs\": [\n%s\n    ],\n    \"intervals\": [\n%s\n    ]\n  }",
+            spanSeconds, julianDate(epoch, TimeScalesFactory.getTT()), pairCount, vec(pvArray(orbit.getPVCoordinates(gcrf))),
+            orbit.getA(), orbit.getE(), Math.toDegrees(orbit.getI()), Math.toDegrees(orbit.getPerigeeArgument()),
+            Math.toDegrees(orbit.getRightAscensionOfAscendingNode()), Math.toDegrees(orbit.getMeanAnomaly()), stationJson, samples, pairs, intervals);
+    }
+
+    static void lightTimeReference(String dataDirectory, String outputFile) throws Exception {
+        DataContext.getDefault().getDataProvidersManager().addProvider(new DirectoryCrawler(new File(dataDirectory)));
+        UTCScale utc = TimeScalesFactory.getUTC();
+        AbsoluteDate epoch = new AbsoluteDate(2026, 10, 11, 0, 0, 0.0, utc);
+        Frame gcrf = FramesFactory.getGCRF();
+        Frame itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, true);
+        OneAxisEllipsoid earth = new OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS,
+            Constants.WGS84_EARTH_FLATTENING, itrf);
+        List<GroundStation> stations = lightTimeStations(earth, epoch);
+        String[] names = {"LEO", "MEO", "GEO"};
+        // a [m], e, i [deg], argument of perigee [deg], ascending node [deg].
+        double[][] elements = {{7178137, 0, 98, 0, 150}, {26559700, .005, 55, 30, 200}, {42164200, 0, 5, 0, 0}};
+        StringBuilder out = new StringBuilder();
+        out.append("{\n  \"source\": \"Orekit 13.1 Range(twoWay=true), ShapiroRangeModifier, KeplerianPropagator; WGS-84 GroundStation/ITRF IERS_2010 simpleEOP=true\",\n");
+        out.append(String.format("  \"epochUtc\": \"%s\", \"epochJdDay\": %.1f, \"frame\": \"GCRF\", \"timeScale\": \"TAI durations from epoch\", \"gm\": %.17g,\n",
+            epoch.toString(utc), epoch.getComponents(utc).getDate().getJ2000Day() + 2451544.5, LIGHT_TIME_GM));
+        out.append("  \"rangeToleranceM\": 0.0001, \"rateToleranceMps\": 0.00001,\n");
+        out.append("  \"rateReferenceNote\": \"rangeDerivativeAutomaticMps is the negative clock-offset parameter derivative of Orekit two-way Range, with Shapiro excluded.\",\n");
+        out.append("  \"toleranceRationale\": \"0.1 mm resolves moving-station and Shapiro range terms; 10 micrometres/s accommodates the local trajectory approximation against Orekit automatic differentiation.\",\n  \"regimes\": [\n");
+        for (int regime = 0; regime < names.length; ++regime) {
+            double step = regime == 0 ? 60 : 600, span = regime == 0 ? 10800 : 21600;
+            // Fixed phases selected with Orekit visibility scans: 36/44/74
+            // usable LEO/MEO/GEO pairs above 10 degrees on this epoch/grid.
+            double phase = new double[] {240, 30, 0}[regime];
+            double selectedNode = elements[regime][4];
+            KeplerianOrbit orbit = lightTimeOrbit(elements[regime], phase, gcrf, epoch);
+            KeplerianPropagator truth = new KeplerianPropagator(orbit);
+            ObservableSatellite satellite = new ObservableSatellite(0);
+            StringBuilder pairs = new StringBuilder();
+            int count = 0;
+            for (double t = 0; t <= span; t += step) {
+                AbsoluteDate date = epoch.shiftedBy(t);
+                SpacecraftState state = truth.propagate(date);
+                for (GroundStation station : stations) {
+                    if (!lightTimeVisible(station, state)) continue;
+                    PVCoordinates stationPV = station.getOffsetToInertial(gcrf, date, false)
+                        .transformPVCoordinates(new TimeStampedPVCoordinates(date, PVCoordinates.ZERO));
+                    double plain = lightTimeRange(station, satellite, state, false);
+                    double corrected = lightTimeRange(station, satellite, state, true);
+                    double derivative = lightTimeRangeDerivative(station, satellite, state);
+                    if (count++ > 0) pairs.append(",\n");
+                    pairs.append(String.format("      {\"seconds\": %.17g, \"station\": \"%s\", \"satellite\": %s, \"stationPV\": %s, \"rangeM\": %.17g, \"rangeWithoutShapiroM\": %.17g, \"shapiroM\": %.17g, \"rangeDerivativeAutomaticMps\": %.17g}",
+                        date.durationFrom(epoch), station.getBaseFrame().getName(), vec(pvArray(state.getPVCoordinates(gcrf))), vec(pvArray(stationPV)),
+                        corrected, plain, corrected - plain, derivative));
+                }
+            }
+            if (count < 30) throw new IllegalStateException(names[regime] + " has only " + count + " visible pairs");
+            if (regime > 0) out.append(",\n");
+            out.append(String.format("    {\"name\": \"%s\", \"pairCount\": %d, \"truth\": %s, \"orbit\": {\"aM\": %.17g, \"e\": %.17g, \"iDeg\": %.17g, \"argpDeg\": %.17g, \"raanDeg\": %.17g, \"mDeg\": %.17g}, \"pairs\": [\n%s\n    ]}",
+                names[regime], count, vec(pvArray(orbit.getPVCoordinates())), elements[regime][0], elements[regime][1], elements[regime][2], elements[regime][3], elements[regime][4], phase, pairs));
+            System.out.printf("Orekit %s: %d visible pairs, mean anomaly %.0f deg, ascending node %.0f deg%n", names[regime], count, phase, selectedNode);
+        }
+        out.append("\n  ],\n");
+        out.append(simulatorReference(epoch, utc, gcrf)).append("\n}\n");
+        try (PrintWriter writer = new PrintWriter(outputFile)) { writer.print(out); }
+    }
+
     public static void main(String[] args) throws Exception {
         Locale.setDefault(Locale.ROOT);
+        if (args.length > 0 && args[0].equals("--light-time")) {
+            if (args.length != 3) throw new IllegalArgumentException("--light-time <orekit-data-dir> <out.json>");
+            lightTimeReference(args[1], args[2]);
+            return;
+        }
         DataContext.getDefault().getDataProvidersManager().addProvider(new DirectoryCrawler(new File(args[0])));
         DataContext.getDefault().getDataProvidersManager().addProvider(new DirectoryCrawler(new File(args[1])));
         GravityFieldFactory.clearPotentialCoefficientsReaders();

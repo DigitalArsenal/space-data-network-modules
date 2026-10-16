@@ -9,14 +9,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import { createBrowserModuleHarness } from 'space-data-module-sdk/testing/browser';
 import { harness } from './batch-fit-fixtures.mjs';
 import { hpopRun, isoOf } from './batch-fit-v2-lib.mjs';
 
 const sdsRoot = path.dirname(createRequire(new URL('../../association/package.json', import.meta.url)).resolve('spacedatastandards.org/package.json'));
 const req = createRequire(path.join(sdsRoot, 'package.json'));
 const flatbuffers = req('flatbuffers');
+// The association module reads its options from the node configuration (plugin.getConfig), not from an input port.
+const associationHarness = () => createBrowserModuleHarness({
+  wasmSource: fs.readFileSync(new URL('../../association/dist/isomorphic/module.wasm', import.meta.url)),
+  manifest: JSON.parse(fs.readFileSync(new URL('../../association/plugin-manifest.json', import.meta.url), 'utf8')),
+  surface: 'direct', hostOptions: { config: { geometry: false, scan: 'observation' } } });
 const lib = async (code) => import(pathToFileURL(path.join(sdsRoot, `lib/js/${code}/main.js`)));
-const [ACW, RDO, RFO, OEM, FRM] = await Promise.all(['ACW', 'RDO', 'RFO', 'OEM', 'FRM'].map(lib));
+const [ACW, RDO, RFO, OEM, FRM, ASG] = await Promise.all(['ACW', 'RDO', 'RFO', 'OEM', 'FRM', 'ASG'].map(lib));
 
 const EOP_FIXTURE = JSON.parse(fs.readFileSync(new URL('../../../propagator/hpop/tests/fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
 const EOP_STREAM = Buffer.from(EOP_FIXTURE.payloadBase64, 'base64');
@@ -73,7 +79,7 @@ const sample = (seconds, s) => Object.assign(new ACW.ACWStateSampleT(), { JULIAN
 // `edit(records)` has changed the records (time tags, values).
 export async function campaign({ hpop, truth, hours, step = 30, stations, sensors, emitterHz, seed, edit }) {
   const [frames, access, simulator, association] = await Promise.all([
-    harness('../../../foundation/frames/'), harness('../../access/'), harness('../../observation-simulator/'), harness('../../association/'),
+    harness('../../../foundation/frames/'), harness('../../access/'), harness('../../observation-simulator/'), associationHarness(),
   ]);
   try {
     const seconds = Array.from({ length: Math.round((hours * 3600) / step) + 1 }, (_, k) => k * step);
@@ -124,11 +130,10 @@ export async function campaign({ hpop, truth, hours, step = 30, stations, sensor
       ...records.radar.map((r) => ({ portId: 'radar_observations', typeRef: typeRef('RDO'), payload: finish(Object.assign(new RDO.RDOT(), r), '$RDO') })),
       ...records.rf.map((r) => ({ portId: 'rf_observations', typeRef: typeRef('RFO'), payload: finish(Object.assign(new RFO.RFOT(), r), '$RFO') })),
       { portId: 'earth_orientation', typeRef: EOP_TYPE, payload: EOP_STREAM },
-      { portId: 'options', typeRef: { schemaName: 'application/json' }, payload: Buffer.from(JSON.stringify({ geometry: false, scan: 'observation' })) },
     ] });
     if (reportResponse.statusCode !== 0) throw new Error(`association: ${reportResponse.errorMessage}`);
-    const report = JSON.parse(Buffer.from(reportResponse.outputs.find((f) => f.portId === 'report').payload).toString());
-    const geometry = new Map(report.observations.map((o) => [o.id, { position: o.sensor_gcrf_km.map((v) => v * 1e3), velocity: o.sensor_velocity_gcrf_km_s.map((v) => v * 1e3) }]));
+    const report = ASG.ASG.getRootAsASG(new flatbuffers.ByteBuffer(new Uint8Array(reportResponse.outputs.find((f) => f.portId === 'report').payload))).unpack().ASSOCIATION_REPORT;
+    const geometry = new Map(report.OBSERVATIONS.map((o) => [o.ID, { position: o.SENSOR_POSITION_GCRF_KM.map((v) => v * 1e3), velocity: o.SENSOR_VELOCITY_GCRF_KM_S.map((v) => v * 1e3) }]));
     return { ...records, geometry, truthAt: (t) => gcrf[Math.round(t / step)] };
   } finally {
     for (const h of [frames, access, simulator, association]) h.destroy?.();

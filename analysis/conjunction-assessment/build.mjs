@@ -17,15 +17,8 @@ const {version, provenance} = await generateSdsHeaders();
 
 // Reuse a repo-local LLVM toolchain via the SDK's public compiler hook, as in
 // the HPOP PRW build. Outputs stay in this worktree. No emcc is invoked.
-const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-  {cwd:packageRoot, encoding:'utf8'}).trim();
-let configuredWorktree = '';
-try { configuredWorktree = execFileSync('git', ['config', '--get', 'core.worktree'],
-  {cwd:packageRoot, encoding:'utf8'}).trim(); } catch {}
-const originalRoot = configuredWorktree ? path.resolve(common, configuredWorktree) : path.dirname(common);
 const toolchainRoots = [process.env.SDN_LOCAL_EMSDK_DIR, path.join(packageRoot,'deps/emsdk'),
-  path.join(originalRoot,'analysis/conjunction-assessment/deps/emsdk'),
-  path.join(originalRoot,'propagator/hpop/deps/emsdk')].filter(Boolean);
+  path.resolve(packageRoot,'../../propagator/hpop/deps/emsdk')].filter(Boolean);
 const llvmRoot = toolchainRoots.find(root => fsSync.existsSync(path.join(root,'upstream/bin/clang++')));
 const compiler = process.env.SDN_WASI_CLANGXX || (llvmRoot && path.join(llvmRoot,'upstream/bin/clang++'));
 if (!compiler) throw new Error('Set SDN_LOCAL_EMSDK_DIR or SDN_WASI_CLANGXX to a local LLVM/WASI SDK compiler.');
@@ -60,8 +53,8 @@ async function sourceWithIncludes(file) {
 }
 const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
   'resident_screening_index.cpp','screening_internal.cpp','screening.cpp','screening_tight.cpp',
-  'cdm_output.cpp','csm_output.cpp','pc_method.cpp','ephemeris_source.cpp',
-  'conjunction_engine.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp',
+  'cdm_builder.cpp','cdm_parse.cpp','cdm_text.cpp','cdm_output.cpp','csm_output.cpp','pc_method.cpp','pc_orekit.cpp','pc_approx.cpp','pc_integral.cpp','pc_foster.cpp','pc_maxpc.cpp','pc_maximum.cpp','pc_usage.cpp','pc_dynamics.cpp','pc_equinoctial.cpp','pc_hall.cpp','pc_fallbacks.cpp','pc_monte_carlo.cpp','pc_engine.cpp','ephemeris_source.cpp',
+  'conjunction_engine.cpp','encounter_geometry.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp',
   'possibility_screening.cpp'];
 // sgp4_propagator.cpp is the unused alternate implementation: the historical
 // static archive selected conjunction_assessment.cpp for those same symbols.

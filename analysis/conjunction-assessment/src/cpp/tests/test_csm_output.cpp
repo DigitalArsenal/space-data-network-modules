@@ -6,6 +6,7 @@
  */
 
 #include "conjunction/conjunction_assessment.h"
+#include "conjunction/error_status.h"
 #ifdef SING
 #undef SING
 #endif
@@ -116,6 +117,16 @@ int main() {
 
     test_single_csm_output();
     test_buffer_too_small();
+    ConjunctionEvent covariance_event;
+    covariance_event.has_covariance = true;
+    covariance_event.probability_method = "SDMC-TWO-BODY";
+    covariance_event.probability_note = "LOW_RELATIVE_SPEED; 95% Wilson interval=[0,1e-4]";
+    uint8_t output[4096];
+    clear_error();
+    CHECK(conjunction_to_csm(covariance_event, output, sizeof(output)) == -1,
+          "CSM refuses to discard a covariance method and its uncertainty diagnostics");
+    CHECK(has_error(), "CSM refusal explains its unsupported metadata");
+    clear_error();
 
     std::cout << "\n=== Summary: " << tests_passed << " passed, "
               << tests_failed << " failed ===" << std::endl;

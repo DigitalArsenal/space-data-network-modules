@@ -31,10 +31,11 @@
  *
  * Products (nwp_products; the world-clouds display's, as its reference fetchers choose them): gfs-1p00-motion (UGRD,
  * VGRD and, to nwp_motion_heights_to, HGT at 1000-200 hPa), gefs-0p50-spread (the ensemble's wind spread at those
- * levels, every other point), gfs-0p50-clouds (total/low/middle/high cloud cover, instantaneous), each lead 0 ..
- * nwp_max_lead by nwp_lead_step; gfs-0p25-physics (2 m temperature and dew point, 10 m wind, boundary-layer height,
- * CAPE, surface height, cloud layers, and temperature/height/wind/humidity/vertical velocity on 21 levels plus the
- * tropopause) at nwp_physics_leads; gfs-0p25-sea (10 m wind, 2 m temperature and dew point, boundary-layer height, surface
+ * levels, every other point), gfs-0p50-clouds (total/low/middle/high cloud cover, instantaneous, and the surface fields
+ * the node's 1° world-clouds kernel samples from the 0.5° grid: 2 m temperature and dew point, 10 m wind,
+ * boundary-layer height, CAPE and surface height), each lead 0 .. nwp_max_lead by nwp_lead_step; gfs-0p25-physics
+ * (2 m temperature and dew point, 10 m wind, boundary-layer height, CAPE, surface height, cloud layers, and
+ * temperature/height/wind/humidity/vertical velocity on 21 levels plus the tropopause) at nwp_physics_leads; gfs-0p25-sea (10 m wind, 2 m temperature and dew point, boundary-layer height, surface
  * height, the instantaneous precipitation rate, visibility and the cloud ceiling's height) each lead, cut by the parser
  * into 11.25° tiles, one batch a tile a lead (gfs:<run>:f<LLL>:s4:<x>:<y>, x from 180 W, y from the north pole).
  *
@@ -351,6 +352,12 @@ const Product* product_named(const std::string& id) {
     return nullptr;
 }
 
+bool surface_field(const std::string& var, const std::string& level) {
+    return ((var == "TMP" || var == "DPT") && level == "2 m above ground") ||
+           ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") ||
+           ((var == "HPBL" || var == "CAPE" || var == "HGT") && level == "surface");
+}
+
 // Whether an inventory line's message is one the product publishes (lead: hours; heights_to: the last motion lead with
 // geopotential height).
 bool wanted(const Product& p, const std::string& var, const std::string& level, const std::string& fcst, int lead, int heights_to) {
@@ -359,7 +366,7 @@ bool wanted(const Product& p, const std::string& var, const std::string& level, 
     if (id == "gfs-1p00-motion") return level_in(level, kMotionLevels, 9) && (var == "UGRD" || var == "VGRD" || (var == "HGT" && lead <= heights_to));
     if (id == "gefs-0p50-spread") return level_in(level, kMotionLevels, 9) && (var == "UGRD" || var == "VGRD");
     if (id == "gfs-0p50-clouds")
-        return (var == "TCDC" && level == "entire atmosphere") || (var == "LCDC" && level == "low cloud layer") ||
+        return surface_field(var, level) || (var == "TCDC" && level == "entire atmosphere") || (var == "LCDC" && level == "low cloud layer") ||
                (var == "MCDC" && level == "middle cloud layer") || (var == "HCDC" && level == "high cloud layer");
     if (id == "gfs-0p25-sea") {
         if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
@@ -368,9 +375,7 @@ bool wanted(const Product& p, const std::string& var, const std::string& level, 
         return var == "HGT" && level == "cloud ceiling";
     }
     if (id == "gfs-0p25-physics") {
-        if ((var == "TMP" || var == "DPT") && level == "2 m above ground") return true;
-        if ((var == "UGRD" || var == "VGRD") && level == "10 m above ground") return true;
-        if ((var == "HPBL" || var == "CAPE" || var == "HGT") && level == "surface") return true;
+        if (surface_field(var, level)) return true;
         if ((var == "LCDC" && level == "low cloud layer") || (var == "MCDC" && level == "middle cloud layer") || (var == "HCDC" && level == "high cloud layer")) return true;
         if ((var == "TMP" || var == "HGT" || var == "UGRD" || var == "VGRD" || var == "RH" || var == "VVEL") && level_in(level, kProfileLevels, 21)) return true;
         if ((var == "TMP" || var == "HGT" || var == "UGRD" || var == "VGRD") && level == "tropopause") return true;

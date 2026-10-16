@@ -1,4 +1,5 @@
 #include "conjunction/conjunction_assessment.h"
+#include "conjunction/error_status.h"
 
 #ifdef SING
 #undef SING
@@ -51,6 +52,10 @@ int32_t conjunction_to_csm(
     uint32_t output_capacity)
 {
     if (!output || output_capacity == 0u) return -2;
+    if (event.has_covariance || !event.probability_note.empty() || !event.probability_failure.empty()) {
+        set_error("CSM has no actual-method, usage-reason or confidence fields; use CDM for this covariance event.");
+        return -1;
+    }
         flatbuffers::FlatBufferBuilder builder(1024);
 
         const auto object_1 = build_csm_cat(builder, event.obj1);

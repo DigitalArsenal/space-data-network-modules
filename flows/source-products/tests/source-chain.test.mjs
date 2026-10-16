@@ -28,6 +28,7 @@ const DETECTOR = `${detectorManifest.pluginId} ${detectorManifest.version}`;
 // What hostcap/http-request answers: an HttpResponse whose BODY is the provider's text verbatim.
 const responsePort = (url, text) => ({ portId: 'response', payload: encodeHttpResponse({ url, status: 200, headers: {}, body: new TextEncoder().encode(text), retrievedMs: Date.UTC(2026, 9, 11) }),
   typeRef: { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeName: 'HttpResponse', wireFormat: 'flatbuffer' } });
+const TAI_MINUS_UTC = 37;  // seconds, 2017-01-01 onward
 const attribute = (meta, name) => meta.provenance.attributes.find((a) => a.name === name)?.value;
 
 // The designed history, written as the provider writes it.
@@ -155,17 +156,18 @@ test('ilrs-crd through data-source/ilrs-crd-source: a real LAGEOS-1 pass (EDC, 2
   assert.equal(printed.length, 9);
   const ranges = printed.map((t) => Number(t) * 299792458 / 2);
 
-  // analysis/estimation reads a TDM epoch as seconds in one double and takes a precomputed sample only within 1e-8 s of it, so the
-  // samples' epochs are built the way it reads them (the registry says so in the limits of ilrs-crd).
+  // analysis/estimation takes a precomputed sample only within 1e-8 s of the epoch it reads, so the samples' epochs are built the
+  // way it reads them: the request epoch is TAI; the file's epochs are UTC (TIME_SYSTEM), 37 s behind TAI in 2026, and the
+  // normal points are tagged TRANSMIT (TIMETAG_REF), so each is received a round trip (the printed time of flight) later.
   const rows = unpackTdm(svel).SEGMENTS[0].OBSERVATIONS.filter((o) => o.KEYWORD === 'LASER_RANGE');
   assert.equal(rows.length, 9);
   rows.forEach((row, i) => assert.ok(Math.abs(row.VALUE - ranges[i]) < 1e-6, `range ${i}: ${row.VALUE} against ${ranges[i]}`));
   const days = (iso) => Date.UTC(...iso.slice(0, 10).split('-').map((x, k) => (k === 1 ? Number(x) - 1 : Number(x)))) / 86400000;
   const secondOfDay = (iso) => Number(iso.slice(11, 13)) * 3600 + Number(iso.slice(14, 16)) * 60 + Number(iso.slice(17));
-  const unixSeconds = (iso) => days(iso) * 86400.0 + Number(iso.slice(11, 13)) * 3600.0 + Number(iso.slice(14, 16)) * 60.0 + Number(iso.slice(17));
+  // Seconds after the first normal point's midnight, kept small: a Unix-second double would round to 0.24 microseconds.
+  const sinceMidnight = (iso) => (days(iso) - days(rows[0].EPOCH)) * 86400.0 + secondOfDay(iso);
   const jdDay = 2440587.5 + days(rows[0].EPOCH);
   const reference = secondOfDay(rows[0].EPOCH) - 1; // the request epoch, a second before the first normal point
-  const referenceUnix = days(rows[0].EPOCH) * 86400.0 + reference;
   const identity = Array.from({ length: 36 }, (_, i) => (i % 7 === 0 ? 1 : 0));
   const estimate = (tdm) => moduleAt('analysis/estimation')('run_estimation', [
     { portId: 'request', typeRef: estimationType, payload: encode({ request: {
@@ -178,7 +180,7 @@ test('ilrs-crd through data-source/ilrs-crd-source: a real LAGEOS-1 pass (EDC, 2
         measurement_kind: 'LASER_RANGE', troposphere: 'NONE', ionosphere: 'NONE', flags: 3 }],
       propagator_port_id: 'reference-provider', propagator_capability: 'plugin_propagate plugin_compute_stm', trace_id: 'ilrs-crd' } }) },
     { portId: 'propagator_samples', typeRef: estimationType, payload: encode({ propagator_samples: rows.map((row, i) => ({
-      epoch: { jd_day: jdDay, seconds: reference + (unixSeconds(row.EPOCH) - referenceUnix) }, state: [ranges[i], 0, 0, 0, 0, 0], stm: identity })) }) },
+      epoch: { jd_day: jdDay, seconds: sinceMidnight(row.EPOCH) + TAI_MINUS_UTC + 2 * ranges[i] / 299792458 }, state: [ranges[i], 0, 0, 0, 0, 0], stm: identity })) }) },
     ...(tdm ? [{ portId: 'tracking_data', typeRef: { schemaName: 'TDM.fbs', fileIdentifier: '$TDM', rootTypeName: 'TDM', wireFormat: 'flatbuffer' }, payload: tdm }] : []),
   ]);
 

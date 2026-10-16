@@ -35,8 +35,10 @@ work products as `$SCR` (block, grid, roles, candidates, exclusions, search
 report, possibility request and result) and the empirical model as `$ERM`. The
 former JSON `invoke` operation envelope, Emscripten JSON exports and the
 module-local tagged frames (CAU1, CAB1, CAG1, CAR1, CAC1, CAX1, CPQ1, CPR1) and
-JSON reports are retired. `assess_conjunction` and `screen_catalog` no longer
-advertise a `cdm` output they never wrote: a pair's CDM is `emit_cdm`'s.
+JSON reports are retired. `emit_cdm` returns a standalone `$CDM`.
+Covariance-bearing events from pair assessment and catalog/window/refinement
+screens carry the same builder's CDM in `CQREvent.CONJUNCTION_MESSAGE`.
+Events without covariance leave that field empty.
 
 OMM/TLE sources select the built-in SGP4 provider explicitly. OEM compact arrays,
 OEM explicit samples and Cartesian Chebyshev PPE use native track evaluation.
@@ -60,9 +62,17 @@ See [ports, options, validation codes and EOP conventions](docs/ephemeris-input.
 
 ### Uncertainty and probability
 
+The covariance-based default `FOSTER-2D` is the adaptive Gaussian disk integral.
+The former constant-density formula is explicit-only as
+`PC2D-SMALL-HBR-APPROX`. See [Pc methods and validation](docs/pc-methods.md)
+for covariance repair, shape-conditioned maxima, Frisbee, usage diagnostics,
+full-state fallbacks, and output-format limits. The historical no-covariance
+spherical value is an approximation, not a bound for arbitrary covariance
+shapes.
+
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
-- events report the Alfano maximum probability (`ALFANO_MAXIMUM`,
+- events report the historical spherical small-HBR statistic (`ALFANO_MAXIMUM`,
   `MAXIMUM_PROBABILITY_ONLY`) and its dilution threshold, and no RTN sigmas,
   unless both sources supplied covariance;
 - a covariance method (Foster, Patera, Chan, Alfriend, Alfano 2005, Laas) runs
@@ -72,23 +82,40 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   source's state frame; OEM ITRF covariance can also be transformed with EOP.
   Other unsupported combinations fail with `covariance-frame-mismatch`.
   Each element is interpolated linearly to the TCA between the bracketing
-  epochs; a TCA outside them leaves the Alfano maximum. Such events state
+  epochs; a TCA outside them leaves that spherical statistic. Such events state
   `SOURCE_EPHEMERIS`, `INDEPENDENT` errors, and `CALIBRATION` `Calibrated`
   (with both references) only if both OCMs say `COV_CALIBRATION Calibrated`;
 - CDMs in ITRF are evaluated in the non-rotating frame aligned with ITRF at
   TCA (v + w x r); the probability is invariant under the common rotation, so
-  no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9;
-- CDMs retain each source's supplied covariance. Missing covariance blocks are
-  omitted. Missing or non-PSD covariance, or a failed Pc calculation, leaves Pc
-  absent with a COMMENT explaining why. A computed Pc of zero is written.
-  `compute_pc_from_cdm` refuses missing covariance (`covariance-unavailable`).
+  no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9
+  (`test_pc_methods`);
+- FlatBuffer CDMs retain each source's supplied covariance. Missing covariance
+  blocks are omitted. Missing or non-PSD covariance, or a failed Pc calculation,
+  leaves Pc absent with a COMMENT explaining why. A computed Pc of zero is
+  written. `compute_pc_from_cdm` refuses missing covariance
+  (`covariance-unavailable`).
+- The KVN/XML writers enforce CCSDS 508.0-B-1. They refuse missing covariance
+  (`cdm-covariance-required`) and uncatalogued objects
+  (`cdm-object-uncatalogued`), returning no document. A NORAD identifier or an
+  all-digit source `OBJECT_ID` supplies the SATCAT designator. CDM states from
+  TEME evaluation are transformed to EME2000 in C++ with ERFA; event states
+  retain TEME. GCRF and EME2000 evaluations retain their frames in the CDM.
+  The TEME conversion rotates position and osculating inertial velocity as
+  vectors at TCA, preserving the RTN covariance and relative RTN data. The
+  E2E compares both vectors against Orekit (200 m and 0.2 m/s tolerances).
+  Text uses uppercase values, UTC creation time, unique message identifiers,
+  standard keyword order and units, and available OD quality fields.
+  Covariance provenance and calibration appear in each object's metadata
+  comments; model covariance is `DEFAULT`, source covariance `CALCULATED`.
+  Partial object covariance remains available internally, but cannot be
+  exported as conformant text until both covariance blocks are available.
 - **Empirical model.** Element sets can take covariance from an empirical
   prediction-error model: `analysis/gp-error-model`, scaled and gated by its
   calibration. `scripts/uncertainty-model.mjs` writes the model as the
   `uncertainty_model` record (`$ERM`, MODEL arm: regimes and age bins, and per
   stratum the RTN covariance with its CALIBRATION and reference). An `$ERM`
   model gp-error-model emits is passed through.
-  - **Where:** `assess_conjunction`, `screen_catalog`, `screen_window`,
+  - **Where:** `emit_cdm`, `assess_conjunction`, `screen_catalog`, `screen_window`,
     `screen_segment_window` and `refine_candidates`, with a covariance
     `ALGORITHM`.
   - **How:** for an event between two element sets with no supplied
@@ -100,10 +127,11 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
     reference, only when both strata passed the calibration gate; otherwise
     it is `Uncalibrated`.
   - **Fallback:** outside the model (a negative or too-old age, or a stratum
-    it lacks), the event keeps the Alfano maximum.
+    it lacks), the event keeps the spherical small-HBR statistic.
   - **Fast paths:** with the frame, the element-set screens (fast catalog
     path, resident index, refinement) accept a covariance method.
-  - **Cost:** the 3-day full-catalog CPU screen (32,514 objects, Node, 27
+  - **Historical cost, before the adaptive-integral default:** the 3-day
+    full-catalog CPU screen (32,514 objects, Node, 27
     threads) found the same 294,544 conjunctions.
     - Refinement took 7.8 s instead of 7.0 s; the run took 19.6 s end to end
       instead of 18.5 s.

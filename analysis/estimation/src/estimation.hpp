@@ -9,6 +9,7 @@
 namespace sdn::estimation {
 
 constexpr double kSpeedOfLight = 299792458.0;
+constexpr double kEarthGravitationalParameter = 3.986004418e14;
 constexpr double kEarthRotationRate = 7.292115146706979e-5;
 
 using Vector6 = std::array<double, 6>;
@@ -51,6 +52,20 @@ enum class MeasurementKind : std::uint16_t {
   PSEUDORANGE = 22,
   LINEAR = 23,
 };
+
+// Monostatic observables whose wire/decoder two-way flag has a meaning.
+inline bool supports_two_way_light_time(MeasurementKind kind) {
+  switch (kind) {
+    case MeasurementKind::RANGE:
+    case MeasurementKind::SEQUENTIAL_RANGE:
+    case MeasurementKind::PSEUDONOISE_RANGE:
+    case MeasurementKind::LASER_RANGE:
+    case MeasurementKind::SKIN_RANGE:
+    case MeasurementKind::RANGE_RATE:
+    case MeasurementKind::DOPPLER: return true;
+    default: return false;
+  }
+}
 
 enum class TroposphereModel : std::uint8_t {
   NONE = 0,
@@ -105,6 +120,9 @@ struct MediaEnvironment {
   double total_electron_content{0.0};
   double total_electron_content_rate_per_second{0.0};
   double frequency_hz{8.4e9};
+  // When set, the model takes latitude, height and elevation from the station
+  // position and the signal direction (WGS-84), not from the fields above.
+  bool geometry_from_station{false};
 };
 
 struct Observation {
@@ -127,6 +145,7 @@ struct Observation {
   IonosphereModel ionosphere{IonosphereModel::NONE};
   bool apply_light_time{true};
   bool apply_sagnac{true};
+  bool two_way{false};
   std::uint32_t transmitter_index{0};
   std::uint32_t receiver_index{0};
   std::vector<double> linear_matrix;
@@ -146,6 +165,7 @@ struct MeasurementPrediction {
   double geometric_range_m{0.0};
   double light_time_m{0.0};
   double sagnac_m{0.0};
+  double shapiro_m{0.0};
   double troposphere_m{0.0};
   double ionosphere_m{0.0};
   double hardware_m{0.0};

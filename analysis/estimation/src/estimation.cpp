@@ -454,8 +454,130 @@ double ionosphere_group_delay_rate_mps(const MediaEnvironment& environment) {
          (environment.frequency_hz * environment.frequency_hz);
 }
 
-MeasurementPrediction predict_measurement(const Observation& observation,
-                                          const CartesianState& state) {
+// Geodetic latitude and height of a station (WGS-84, Bowring iteration) and the
+// elevation of the signal direction above its local horizon. Latitude, height
+// and elevation do not change with a rotation about the polar axis, so the
+// station position may be in the request frame or fixed to the Earth.
+void station_media_geometry(const Vec3& station, const Vec3& to_satellite, MediaEnvironment* media) {
+  constexpr double a = 6378137.0;
+  constexpr double f = 1.0 / 298.257223563;
+  constexpr double e2 = f * (2.0 - f);
+  const double p = std::sqrt(station.x * station.x + station.y * station.y);
+  double latitude = std::atan2(station.z, p * (1.0 - e2));
+  double height = 0.0;
+  for (int iteration = 0; iteration < 8; ++iteration) {
+    const double s = std::sin(latitude);
+    const double n = a / std::sqrt(1.0 - e2 * s * s);
+    height = p / std::max(std::cos(latitude), 1.0e-12) - n;
+    latitude = std::atan2(station.z, p * (1.0 - e2 * n / (n + height)));
+  }
+  const double longitude = std::atan2(station.y, station.x);
+  const Vec3 up{std::cos(latitude) * std::cos(longitude), std::cos(latitude) * std::sin(longitude), std::sin(latitude)};
+  const double length = std::max(norm(to_satellite), 1.0e-9);
+  media->latitude_rad = latitude;
+  media->height_m = height;
+  media->elevation_rad = std::asin(std::max(-1.0, std::min(1.0, dot(up, to_satellite) / length)));
+}
+
+namespace {
+
+struct SignalPV { Vec3 position, velocity; };
+
+SignalPV satellite_signal_pv(const CartesianState& state, double dt) {
+  const Vec3 r = position(state), v = velocity(state);
+  const double radius = std::max(norm(r), 1.0);
+  const double gravity = -kEarthGravitationalParameter / (radius * radius * radius);
+  const Vec3 a = scale(r, gravity);
+  const Vec3 jerk = scale(subtract(v, scale(r, 3.0 * dot(r, v) / (radius * radius))), gravity);
+  // Cubic two-body expansion at reception, with its exact local derivative.
+  // The omitted snap term is <1e-8 m over visible Earth-station LEO--GEO
+  // links: GEO |snap| ~1.2e-9 m/s^4 and |dt| ~0.12 s give <2e-14 m;
+  // LEO snap is larger (~1e-5 m/s^4), but its light time is <0.02 s.
+  return {add(add(add(r, scale(v, dt)), scale(a, 0.5 * dt * dt)),
+              scale(jerk, dt * dt * dt / 6.0)),
+          add(add(v, scale(a, dt)), scale(jerk, 0.5 * dt * dt))};
+}
+
+SignalPV station_signal_pv(const Observation& observation, double dt) {
+  const Vec3 s = observation.station_position_m, w = observation.station_velocity_mps;
+  const Vec3 rotating{-kEarthRotationRate * s.y, kEarthRotationRate * s.x, 0.0};
+  const double speed = norm(rotating);
+  // The wire supplies no station acceleration. Preserve its GCRF velocity
+  // exactly, while retaining the ~1 mm GEO centripetal displacement. For an
+  // Earth-fixed site, the omitted fourth-order term is <1e-8 m for |dt|<=0.25 s;
+  // approximating the rotation axis by inertial z contributes about 3e-6 m.
+  if (speed > 1.0 && norm(subtract(w, rotating)) <= 0.01 * speed) {
+    const double omega2 = kEarthRotationRate * kEarthRotationRate;
+    const Vec3 acceleration{-omega2 * s.x, -omega2 * s.y, 0.0};
+    const Vec3 jerk{-omega2 * w.x, -omega2 * w.y, 0.0};
+    return {add(add(add(s, scale(w, dt)), scale(acceleration, 0.5 * dt * dt)),
+                scale(jerk, dt * dt * dt / 6.0)),
+            add(add(w, scale(acceleration, dt)), scale(jerk, 0.5 * dt * dt))};
+  }
+  return {add(s, scale(w, dt)), w};
+}
+
+double shapiro_delay_m(Vec3 a, Vec3 b) {
+  // Orekit 13.1 ShapiroModel; IERS Conventions 2010, section 11.
+  // Geocentric inertial endpoints; a range correction, never a geometry iterate.
+  const double radii = norm(a) + norm(b), distance = norm(subtract(a, b));
+  return (2.0 * kEarthGravitationalParameter / (kSpeedOfLight * kSpeedOfLight)) *
+      std::log((radii + distance) / (radii - distance));
+}
+
+struct TwoWaySignal {
+  double down_range, up_range, range_rate, shapiro;
+  Vec3 down_direction;
+};
+
+TwoWaySignal solve_two_way_signal(const Observation& observation, const CartesianState& state) {
+  // Orekit 13.1 Range: solve the downlink to the bounce, then the uplink to
+  // station transmission. Fixed-point contraction is v/c; 30 is a safety cap.
+  double down = norm(subtract(position(state), observation.station_position_m)) / kSpeedOfLight;
+  for (int i = 0; i < 30; ++i) {
+    const double next = norm(subtract(satellite_signal_pv(state, -down).position,
+                                      observation.station_position_m)) / kSpeedOfLight;
+    const double change = std::abs(next - down);
+    down = next;
+    if (change < 1e-15) break;
+  }
+  const SignalPV bounce = satellite_signal_pv(state, -down);
+  double up = down;
+  for (int i = 0; i < 30; ++i) {
+    const double next = norm(subtract(bounce.position,
+        station_signal_pv(observation, -(down + up)).position)) / kSpeedOfLight;
+    const double change = std::abs(next - up);
+    up = next;
+    if (change < 1e-15) break;
+  }
+  const SignalPV transmit = station_signal_pv(observation, -(down + up));
+  const Vec3 down_direction = subtract(bounce.position, observation.station_position_m);
+  const Vec3 up_direction = subtract(bounce.position, transmit.position);
+  const double rd = norm(down_direction), ru = norm(up_direction);
+  const Vec3 ud = scale(down_direction, 1.0 / std::max(rd, 1e-9));
+  const Vec3 uu = scale(up_direction, 1.0 / std::max(ru, 1e-9));
+  // Differentiate the implicit geometric light-time equations with respect
+  // to reception time; each trajectory supplies its local position derivative.
+  const double rd_dot = dot(ud, subtract(bounce.velocity, observation.station_velocity_mps)) /
+                        (1.0 + dot(ud, bounce.velocity) / kSpeedOfLight);
+  const double ru_dot = dot(uu, subtract(bounce.velocity, transmit.velocity)) *
+                       (1.0 - rd_dot / kSpeedOfLight) /
+                       (1.0 - dot(uu, transmit.velocity) / kSpeedOfLight);
+  return {rd, ru, 0.5 * (rd_dot + ru_dot),
+          0.5 * (shapiro_delay_m(transmit.position, bounce.position) +
+                 shapiro_delay_m(bounce.position, observation.station_position_m)),
+          down_direction};
+}
+
+bool uses_two_way_signal(const Observation& observation) {
+  return observation.two_way && observation.apply_light_time &&
+         supports_two_way_light_time(observation.kind);
+}
+
+}  // namespace
+
+static MeasurementPrediction measurement_values(const Observation& observation,
+                                                const CartesianState& state) {
   MeasurementPrediction prediction{};
   if (observation.kind == MeasurementKind::POSITION_VELOCITY) {
     prediction.count = 6;
@@ -476,8 +598,14 @@ MeasurementPrediction predict_measurement(const Observation& observation,
   const Vec3 relative = subtract(r, observation.station_position_m);
   const Vec3 relative_velocity = subtract(v, observation.station_velocity_mps);
   const double geometric_range = std::max(norm(relative), 1.0e-9);
+  const bool two_way = uses_two_way_signal(observation);
+  TwoWaySignal signal{};
   Vec3 signal_relative = relative;
-  if (observation.apply_light_time) {
+  if (two_way) {
+    signal = solve_two_way_signal(observation, state);
+    signal_relative = signal.down_direction;
+    prediction.shapiro_m = signal.shapiro;
+  } else if (observation.apply_light_time) {
     double delay = geometric_range / kSpeedOfLight;
     for (int iteration = 0; iteration < 4; ++iteration) {
       signal_relative = subtract(relative, scale(v, delay));
@@ -486,23 +614,26 @@ MeasurementPrediction predict_measurement(const Observation& observation,
   }
   const double range = std::max(norm(signal_relative), 1.0e-9);
   const Vec3 unit = scale(signal_relative, 1.0 / range);
-  const double range_rate = dot(unit, relative_velocity);
+  const double range_rate = two_way ? signal.range_rate : dot(unit, relative_velocity);
   prediction.geometric_range_m = geometric_range;
   prediction.hardware_m = kSpeedOfLight *
       (observation.hardware.transmitter_delay_seconds + observation.hardware.receiver_delay_seconds +
        observation.hardware.transponder_delay_seconds);
-  if (observation.apply_light_time) prediction.light_time_m = range - geometric_range;
-  if (observation.apply_sagnac) {
+  if (observation.apply_light_time) prediction.light_time_m =
+      (two_way ? 0.5 * (signal.up_range + signal.down_range) : range) - geometric_range;
+  if (observation.apply_sagnac && !two_way) {
     prediction.sagnac_m = kEarthRotationRate / kSpeedOfLight *
         (observation.station_position_m.x * r.y - observation.station_position_m.y * r.x);
   }
+  MediaEnvironment media = observation.media;
+  if (media.geometry_from_station) station_media_geometry(observation.station_position_m, signal_relative, &media);
   if (observation.troposphere == TroposphereModel::HOPFIELD_SAASTAMOINEN) {
-    prediction.troposphere_m = saastamoinen_hopfield_delay_m(observation.media);
+    prediction.troposphere_m = saastamoinen_hopfield_delay_m(media);
   } else if (observation.troposphere == TroposphereModel::MARINI) {
-    prediction.troposphere_m = marini_murray_delay_m(observation.media);
+    prediction.troposphere_m = marini_murray_delay_m(media);
   }
   if (observation.ionosphere != IonosphereModel::NONE) {
-    prediction.ionosphere_m = ionosphere_group_delay_m(observation.media);
+    prediction.ionosphere_m = ionosphere_group_delay_m(media);
   }
 
   auto range_jacobian = [&]() {
@@ -524,8 +655,11 @@ MeasurementPrediction predict_measurement(const Observation& observation,
     return h;
   };
 
-  const double corrected_range = geometric_range + prediction.light_time_m + prediction.sagnac_m +
-      prediction.troposphere_m + prediction.ionosphere_m + prediction.hardware_m;
+  const double corrected_range = two_way
+      ? geometric_range + prediction.light_time_m + prediction.shapiro_m +
+        prediction.troposphere_m + prediction.ionosphere_m + prediction.hardware_m
+      : geometric_range + prediction.light_time_m + prediction.sagnac_m +
+        prediction.troposphere_m + prediction.ionosphere_m + prediction.hardware_m;
 
   if (is_range_like(observation.kind)) {
     prediction.count = 1;
@@ -706,6 +840,30 @@ MeasurementPrediction predict_measurement(const Observation& observation,
     }
   }
   return prediction;
+}
+
+// Keep value evaluation separate so measurement derivatives can use the very
+// same corrected observable without recursively differentiating themselves.
+MeasurementPrediction predict_measurement(const Observation& observation,
+                                          const CartesianState& state) {
+  MeasurementPrediction result = measurement_values(observation, state);
+  if (uses_two_way_signal(observation)) {
+    // Central differences of the same complete observable (including media and
+    // hardware) cannot drift from the model used for residuals. Keep legacy
+    // analytic Jacobians unchanged; 1 m and 1e-3 m/s balance cancellation and
+    // truncation at Earth-orbit distances. All differentiation is guest C++.
+    for (int column = 0; column < 6; ++column) {
+      const double step = column < 3 ? 1.0 : 1e-3;
+      CartesianState plus = state, minus = state;
+      plus.value[column] += step;
+      minus.value[column] -= step;
+      const auto high = measurement_values(observation, plus);
+      const auto low = measurement_values(observation, minus);
+      for (int row = 0; row < result.count; ++row)
+        result.jacobian[row][column] = (high.value[row] - low.value[row]) / (2.0 * step);
+    }
+  }
+  return result;
 }
 
 BatchResult batch_weighted_least_squares(const BatchConfig& config,

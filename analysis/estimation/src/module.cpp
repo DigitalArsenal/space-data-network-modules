@@ -1,6 +1,7 @@
 #include "space_data_module_invoke.h"
 #include "estimation.hpp"
 #include "teag.hpp"
+#include "tdm_decode.hpp"
 #include "Estimation_generated.h"
 #include "ODR_generated.h"
 #include "OCM_generated.h"
@@ -113,8 +114,10 @@ core::Observation observation_from_wire(const wire::EstimationObservation& sourc
   out.media.total_electron_content = source.total_electron_content();
   out.media.total_electron_content_rate_per_second = source.total_electron_content_rate_per_second();
   out.media.frequency_hz = source.frequency_hz() > 0.0 ? source.frequency_hz() : 8.4e9;
+  // Flags: 0x01 disables light time; 0x02 disables Sagnac; 0x04 opts into two-way light time.
   out.apply_light_time = (source.flags() & 0x01u) == 0;
   out.apply_sagnac = (source.flags() & 0x02u) == 0;
+  out.two_way = (source.flags() & 0x04u) != 0;
   out.transmitter_index = source.transmitter_index();
   out.receiver_index = source.receiver_index();
   return out;
@@ -147,8 +150,10 @@ void apply_error_models(const wire::EstimationRequest* request,
           observation.sigma[i] = source->noise_sigma();
         }
       }
+      // Same flags as observations: 0x01/0x02 disable; 0x04 enables two-way light time.
       if ((source->flags() & 0x01u) != 0) observation.apply_light_time = false;
       if ((source->flags() & 0x02u) != 0) observation.apply_sagnac = false;
+      if ((source->flags() & 0x04u) != 0) observation.two_way = true;
     }
   }
 }
@@ -273,123 +278,103 @@ bool apply_crd_station(const plugin_input_frame_t* frame,
   return true;
 }
 
-// Howard Hinnant's civil-date transform, used only to align authoritative TDM
-// epochs with the request epoch. No orbit or measurement physics lives here.
-std::int64_t days_from_civil(int year, unsigned month, unsigned day) {
-  year -= month <= 2;
-  const int era = (year >= 0 ? year : year - 399) / 400;
-  const unsigned yoe = static_cast<unsigned>(year - era * 400);
-  const unsigned doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
-  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-  return static_cast<std::int64_t>(era) * 146097 + static_cast<int>(doe) - 719468;
+std::string tdm_text(const ::flatbuffers::String* segment, const ::flatbuffers::String* record) {
+  if (segment != nullptr && segment->size() > 0) return segment->str();
+  return record == nullptr ? std::string() : record->str();
 }
 
-bool iso_seconds(const char* text, double* result) {
-  if (text == nullptr || result == nullptr) return false;
-  int year = 0, month = 0, day = 0, hour = 0, minute = 0;
-  double second = 0.0;
-  if (std::sscanf(text, "%d-%d-%dT%d:%d:%lf", &year, &month, &day, &hour, &minute,
-                  &second) != 6) return false;
-  *result = static_cast<double>(days_from_civil(year, static_cast<unsigned>(month),
-                                                static_cast<unsigned>(day))) * 86400.0 +
-            hour * 3600.0 + minute * 60.0 + second;
-  return true;
-}
-
-bool tdm_kind(const char* keyword, const char* angle_type, const char* range_mode,
-              core::MeasurementKind* kind, std::uint8_t* count) {
-  if (keyword == nullptr) return false;
-  const std::string key(keyword);
-  const std::string angle = angle_type == nullptr ? "" : angle_type;
-  const std::string mode = range_mode == nullptr ? "" : range_mode;
-  *count = 1;
-  if (key == "RANGE") {
-    *kind = mode.find("PN") != std::string::npos ? core::MeasurementKind::PSEUDONOISE_RANGE
-           : mode.find("SEQUENTIAL") != std::string::npos ? core::MeasurementKind::SEQUENTIAL_RANGE
-           : core::MeasurementKind::RANGE;
-  } else if (key == "RANGE_RATE") *kind = core::MeasurementKind::RANGE_RATE;
-  else if (key.find("DOPPLER") != std::string::npos) *kind = core::MeasurementKind::DOPPLER;
-  else if (key.find("TRANSMIT_PHASE_CT") != std::string::npos) *kind = core::MeasurementKind::TIME_CORRELATED_PHASE;
-  else if (key == "TDOA" || key == "VLBI_DELAY") *kind = core::MeasurementKind::TIME_DIFFERENCE_OF_ARRIVAL;
-  else if (key == "FDOA") *kind = core::MeasurementKind::FREQUENCY_DIFFERENCE_OF_ARRIVAL;
-  else if (key == "LASER_RANGE" || key == "SLR_RANGE") *kind = core::MeasurementKind::LASER_RANGE;
-  else if (key == "CROSSLINK_RANGE") *kind = core::MeasurementKind::CROSSLINK_RANGE;
-  else if (key == "CROSSLINK_RANGE_RATE") *kind = core::MeasurementKind::CROSSLINK_RANGE_RATE;
-  else if (key == "BISTATIC_RANGE") *kind = core::MeasurementKind::BISTATIC_RANGE;
-  else if (key == "SKIN_RANGE") *kind = core::MeasurementKind::SKIN_RANGE;
-  else if (key == "ANGLE_1") {
-    *count = 2;
-    if (angle == "RADEC") *kind = core::MeasurementKind::RIGHT_ASCENSION_DECLINATION;
-    else if (angle == "XEYN") *kind = core::MeasurementKind::X_EAST_Y_NORTH;
-    else if (angle == "XSYE") *kind = core::MeasurementKind::X_SOUTH_Y_EAST;
-    else *kind = core::MeasurementKind::AZIMUTH_ELEVATION;
-  } else return false;
-  return true;
-}
-
-void append_tdm_observations(const plugin_input_frame_t* frame,
+// The $TDM into observations (the rules are in tdm_decode.hpp), on the request
+// epoch's time axis. The station is the record's OBSERVER_*; a $CRD overrides it.
+bool append_tdm_observations(const plugin_input_frame_t* frame,
                              const wire::EstimationEpoch& reference,
-                             std::vector<core::Observation>* output) {
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length == 0 ||
-      !TDMBufferHasIdentifier(frame->payload)) return;
+                             std::vector<core::Observation>* output,
+                             std::string* error) {
+  namespace tdm = ::sdn::estimation::tdm;
+  const auto invalid = [&]() { *error = "tracking_data must be a valid $TDM record"; return false; };
+  if (frame == nullptr) return true;
+  if (frame->payload == nullptr || frame->payload_length == 0 || !TDMBufferHasIdentifier(frame->payload)) return invalid();
   ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyTDMBuffer(verifier)) return;
-  const TDM* tdm = GetTDM(frame->payload);
-  if (tdm == nullptr || tdm->SEGMENTS() == nullptr) return;
-  const core::Vec3 station{tdm->OBSERVER_X(), tdm->OBSERVER_Y(), tdm->OBSERVER_Z()};
-  const core::Vec3 station_velocity{tdm->OBSERVER_VX(), tdm->OBSERVER_VY(), tdm->OBSERVER_VZ()};
-  const double reference_unix = (reference.jd_day() - 2440587.5) * 86400.0 + reference.seconds();
-  for (const TDMSegment* segment : *tdm->SEGMENTS()) {
+  if (!VerifyTDMBuffer(verifier)) return invalid();
+  const TDM* record = GetTDM(frame->payload);
+  if (record == nullptr) return invalid();
+  if (record->SEGMENTS() == nullptr || record->SEGMENTS()->size() == 0) {
+    if (record->OBSERVATIONS() != nullptr && record->OBSERVATIONS()->size() > 0) {
+      *error = "observations outside a segment are not read";
+      return false;
+    }
+    return true;
+  }
+  const core::Vec3 station{record->OBSERVER_X(), record->OBSERVER_Y(), record->OBSERVER_Z()};
+  const core::Vec3 station_velocity{record->OBSERVER_VX(), record->OBSERVER_VY(), record->OBSERVER_VZ()};
+
+  std::vector<tdm::Segment> segments;
+  for (const TDMSegment* segment : *record->SEGMENTS()) {
+    tdm::Segment meta;
+    if (segment != nullptr) {
+      meta.time_system = tdm_text(segment->TIME_SYSTEM(), record->TIME_SYSTEM());
+      meta.timetag_ref = tdm_text(segment->TIMETAG_REF(), record->TIMETAG_REF());
+      meta.path = tdm_text(segment->PATH(), record->PATH());
+      meta.angle_type = tdm_text(segment->ANGLE_TYPE(), record->ANGLE_TYPE());
+      meta.range_mode = tdm_text(segment->RANGE_MODE(), record->RANGE_MODE());
+      meta.range_units = tdm_text(segment->RANGE_UNITS(), record->RANGE_UNITS());
+      meta.integration_ref = tdm_text(segment->INTEGRATION_REF(), record->INTEGRATION_REF());
+      meta.integration_interval = segment->INTEGRATION_INTERVAL() > 0.0
+          ? segment->INTEGRATION_INTERVAL() : static_cast<double>(record->INTEGRATION_INTERVAL());
+      meta.carrier_hz = segment->TRANSMIT_FREQ_1() > 0.0 ? segment->TRANSMIT_FREQ_1() : record->TRANSMIT_FREQ_1();
+      meta.transmit_delay_s = segment->TRANSMIT_DELAY_1();
+      meta.receive_delay_s = segment->RECEIVE_DELAY_1();
+      meta.turnaround_numerator = segment->TURNAROUND_NUMERATOR();
+      meta.turnaround_denominator = segment->TURNAROUND_DENOMINATOR();
+    }
+    segments.push_back(meta);
+  }
+  const auto row_of = [](const TDMObservation* source) {
+    tdm::Row row;
+    if (source != nullptr && source->KEYWORD() != nullptr) row.keyword = source->KEYWORD()->str();
+    if (source != nullptr && source->EPOCH() != nullptr) row.epoch = source->EPOCH()->str();
+    if (source != nullptr) row.value = source->VALUE();
+    return row;
+  };
+
+  // The weather of the whole record serves every segment: a pass with two
+  // wavelengths carries it once.
+  tdm::Weather weather;
+  std::size_t segment_index = 0;
+  for (const TDMSegment* segment : *record->SEGMENTS()) {
+    const tdm::Segment& meta = segments[segment_index++];
+    if (segment == nullptr || segment->OBSERVATIONS() == nullptr) continue;
+    for (const TDMObservation* source : *segment->OBSERVATIONS()) {
+      if (!tdm::add_weather(meta, row_of(source), reference.jd_day(), reference.seconds(), &weather, error)) return false;
+    }
+  }
+
+  segment_index = 0;
+  for (const TDMSegment* segment : *record->SEGMENTS()) {
+    const tdm::Segment& meta = segments[segment_index++];
     if (segment == nullptr || segment->OBSERVATIONS() == nullptr) continue;
     const auto* rows = segment->OBSERVATIONS();
     for (std::size_t index = 0; index < rows->size(); ++index) {
-      const TDMObservation* row = rows->Get(static_cast<::flatbuffers::uoffset_t>(index));
-      if (row == nullptr || row->KEYWORD() == nullptr || row->EPOCH() == nullptr) continue;
+      const tdm::Row row = row_of(rows->Get(static_cast<::flatbuffers::uoffset_t>(index)));
       core::MeasurementKind kind{};
       std::uint8_t count = 0;
-      if (!tdm_kind(row->KEYWORD()->c_str(),
-                    segment->ANGLE_TYPE() == nullptr ? nullptr : segment->ANGLE_TYPE()->c_str(),
-                    segment->RANGE_MODE() == nullptr ? nullptr : segment->RANGE_MODE()->c_str(),
-                    &kind, &count)) continue;
-      double unix_time = 0.0;
-      if (!iso_seconds(row->EPOCH()->c_str(), &unix_time)) continue;
-      core::Observation observation;
-      observation.id = row->KEYWORD()->str() + ":" + row->EPOCH()->str();
-      observation.epoch_seconds = unix_time - reference_unix;
-      observation.kind = kind;
-      observation.value_count = count;
-      observation.value[0] = row->VALUE();
-      observation.station_position_m = station;
-      observation.station_velocity_mps = station_velocity;
-      observation.media.frequency_hz = segment->TRANSMIT_FREQ_1() > 0.0
-                                           ? segment->TRANSMIT_FREQ_1() : 8.4e9;
-      observation.hardware.transmitter_delay_seconds = segment->TRANSMIT_DELAY_1();
-      observation.hardware.receiver_delay_seconds = segment->RECEIVE_DELAY_1();
-      observation.hardware.turnaround_numerator = segment->TURNAROUND_NUMERATOR() > 0
-          ? static_cast<std::uint32_t>(segment->TURNAROUND_NUMERATOR()) : 1;
-      observation.hardware.turnaround_denominator = segment->TURNAROUND_DENOMINATOR() > 0
-          ? static_cast<std::uint32_t>(segment->TURNAROUND_DENOMINATOR()) : 1;
-      if (kind == core::MeasurementKind::RANGE ||
-          kind == core::MeasurementKind::SEQUENTIAL_RANGE ||
-          kind == core::MeasurementKind::PSEUDONOISE_RANGE) {
-        const std::string units = segment->RANGE_UNITS() == nullptr ? "km" : segment->RANGE_UNITS()->str();
-        if (units == "km") observation.value[0] *= 1000.0;
-        else if (units == "s") observation.value[0] *= core::kSpeedOfLight;
-      }
+      if (row.epoch.empty() || !tdm::kind_of(row.keyword, meta, &kind, &count)) continue;
+      tdm::Row companion;
+      bool paired = false;
       if (count == 2) {
-        for (std::size_t next = index + 1; next < rows->size(); ++next) {
-          const TDMObservation* companion = rows->Get(static_cast<::flatbuffers::uoffset_t>(next));
-          if (companion != nullptr && companion->KEYWORD() != nullptr &&
-              companion->EPOCH() != nullptr && companion->KEYWORD()->str() == "ANGLE_2" &&
-              companion->EPOCH()->str() == row->EPOCH()->str()) {
-            observation.value[1] = companion->VALUE();
-            break;
-          }
+        for (std::size_t next = index + 1; next < rows->size() && !paired; ++next) {
+          companion = row_of(rows->Get(static_cast<::flatbuffers::uoffset_t>(next)));
+          paired = companion.keyword == "ANGLE_2" && companion.epoch == row.epoch;
         }
       }
+      core::Observation observation;
+      if (!tdm::decode(meta, row, paired ? &companion : nullptr, reference.jd_day(), reference.seconds(), weather, &observation, error))
+        return false;
+      observation.station_position_m = station;
+      observation.station_velocity_mps = station_velocity;
       output->push_back(observation);
     }
   }
+  return true;
 }
 
 bool decode_request(const plugin_input_frame_t* frame,
@@ -692,7 +677,11 @@ extern "C" int run_estimation(void) {
       observations.push_back(o);
     }
   }
-  append_tdm_observations(input("tracking_data"), request->config()->initial_epoch(), &observations);
+  {
+    std::string tdm_error_text;
+    if (!append_tdm_observations(input("tracking_data"), request->config()->initial_epoch(), &observations, &tdm_error_text))
+      return fail("bad-tdm", tdm_error_text.c_str());
+  }
   if (!apply_crd_station(input("laser_tracking"), &observations)) {
     return fail("bad-crd", "laser_tracking must be a valid $CRD station-coordinate record");
   }
@@ -981,8 +970,10 @@ extern "C" int fit_batch(void) {
   const bool legacy = request->observations() && request->observations()->size();
   if (request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES || request->options())
     return fail("bad-estimation-request", "fit_batch takes a BATCH_WEIGHTED_LEAST_SQUARES configuration without sequential options");
-  if (extended == legacy)
-    return fail("bad-estimation-request", "fit_batch takes either legacy or extended observations");
+  const bool tracking = input("tracking_data") != nullptr;
+  if (tracking ? (extended || legacy) : extended == legacy)
+    return fail("bad-estimation-request", tracking ? "fit_batch takes tracking_data or request observations, not both"
+                                                    : "fit_batch takes either legacy or extended observations");
   const auto kinds_size = options->parameter_kinds() ? options->parameter_kinds()->size() : 0;
   const auto values_size = options->parameter_values() ? options->parameter_values()->size() : 0;
   if (kinds_size != values_size) return fail("bad-estimation-request", "parameter_kinds and parameter_values differ in length");
@@ -997,7 +988,7 @@ extern "C" int fit_batch(void) {
       observations.push_back(observation_from_wire(*source, reference, true));
       epochs.push_back(source->epoch());
     }
-  } else {
+  } else if (extended) {
     for (const auto* source : *request->extended_observations()) {
       if (!source || !source->observation() || !source->values() || !source->sigmas())
         return fail("bad-estimation-request", "extended observation is incomplete");
@@ -1009,7 +1000,15 @@ extern "C" int fit_batch(void) {
       observations.push_back(o);
       epochs.push_back(source->observation()->epoch());
     }
+  } else {
+    std::string tdm_error_text;
+    if (!append_tdm_observations(input("tracking_data"), reference, &observations, &tdm_error_text))
+      return fail("bad-tdm", tdm_error_text.c_str());
+    if (observations.empty()) return fail("bad-tdm", "tracking_data holds no observation this module reads");
+    for (const core::Observation& o : observations) epochs.push_back(absolute_epoch(o.epoch_seconds, reference));
   }
+  if (!apply_crd_station(input("laser_tracking"), &observations))
+    return fail("bad-crd", "laser_tracking must be a valid $CRD station-coordinate record");
 
   // The request's error models select media delays, sigmas and the
   // light-time and Sagnac flags exactly as they do in run_estimation.

@@ -1,0 +1,129 @@
+{
+ "url": "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos/gfs.t00z.pgrb2.0p50.f024",
+ "inventory": "../gfs.t00z.pgrb2.0p50.f024.idx",
+ "recorded": "2026-10-16, by HTTP Range from NOAA Open Data Dissemination (public bucket noaa-gfs-bdp-pds, GFS 2026-10-06 00 UTC, 0.5 deg, lead 24 h), the byte ranges its .idx names; unchanged. The four cloud records are the nwp-grib2-parser fixture's (byte-identical).",
+ "licence": "NOAA/NCEP model output via NODD, open to the public (https://www.weather.gov/disclaimer)",
+ "records": [
+  {
+   "line": 562,
+   "var": "HGT",
+   "level": "surface",
+   "fcst": "24 hour fcst",
+   "offset": 119635781,
+   "length": 148445,
+   "sha256": "e91dd9bfa9f6a19e06ee35352a66fb85a4d70fc4d6af3091f40d5ee21ce1eb0b",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 0
+  },
+  {
+   "line": 581,
+   "var": "TMP",
+   "level": "2 m above ground",
+   "fcst": "24 hour fcst",
+   "offset": 121748060,
+   "length": 157918,
+   "sha256": "9da6b3417705f1d1832f71aa96aba047a06dc98c487e0c738c43916c6428642a",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 148445
+  },
+  {
+   "line": 583,
+   "var": "DPT",
+   "level": "2 m above ground",
+   "fcst": "24 hour fcst",
+   "offset": 122253397,
+   "length": 169204,
+   "sha256": "e64ce2de4fbc63675fb8f5f2fc53612b1384334068f6c2f50de4b2174137b525",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 306363
+  },
+  {
+   "line": 588,
+   "var": "UGRD",
+   "level": "10 m above ground",
+   "fcst": "24 hour fcst",
+   "offset": 123142731,
+   "length": 282940,
+   "sha256": "9eafbb46dee0912c36458f10b0d50d1481ff1c5346512312feb8190f8bdee10f",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 475567
+  },
+  {
+   "line": 589,
+   "var": "VGRD",
+   "level": "10 m above ground",
+   "fcst": "24 hour fcst",
+   "offset": 123425671,
+   "length": 280960,
+   "sha256": "d6927b6d2c7eb5143164fa7009225049d6467f2160f0181f9b6cef9d50bc2000",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 758507
+  },
+  {
+   "line": 624,
+   "var": "CAPE",
+   "level": "surface",
+   "fcst": "24 hour fcst",
+   "offset": 127765255,
+   "length": 166644,
+   "sha256": "5978e7dcc95262b664ad30b5bd0d51e4fae90ac7eeb96490656b207cdd0730de",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 1039467
+  },
+  {
+   "line": 630,
+   "var": "LCDC",
+   "level": "low cloud layer",
+   "fcst": "24 hour fcst",
+   "offset": 129076065,
+   "length": 239660,
+   "sha256": "047d7c8eb935cdaa5fcf5301ac9e30b0e7afbad54fb9e749378a806e2f2ba00c",
+   "file": "../../../../nwp-grib2-parser/tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
+   "fileOffset": 0
+  },
+  {
+   "line": 632,
+   "var": "MCDC",
+   "level": "middle cloud layer",
+   "fcst": "24 hour fcst",
+   "offset": 129565443,
+   "length": 183414,
+   "sha256": "79aeec08ded08687cbe051578a202d02639112dbc2f3c0b86e22ecbe35088e36",
+   "file": "../../../../nwp-grib2-parser/tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
+   "fileOffset": 239660
+  },
+  {
+   "line": 634,
+   "var": "HCDC",
+   "level": "high cloud layer",
+   "fcst": "24 hour fcst",
+   "offset": 129949529,
+   "length": 217647,
+   "sha256": "8b1fe44b799bd4799a8dedf83e4f5cfdfcce04efa5101b0b1fe7fc7287fa690c",
+   "file": "../../../../nwp-grib2-parser/tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
+   "fileOffset": 423074
+  },
+  {
+   "line": 636,
+   "var": "TCDC",
+   "level": "entire atmosphere",
+   "fcst": "24 hour fcst",
+   "offset": 130408831,
+   "length": 245871,
+   "sha256": "e5e6ab3c8accaf7fc0d259ec4dec5523b6aa430323c99adee42ce73fa3412d86",
+   "file": "../../../../nwp-grib2-parser/tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
+   "fileOffset": 640721
+  },
+  {
+   "line": 712,
+   "var": "HPBL",
+   "level": "surface",
+   "fcst": "24 hour fcst",
+   "offset": 150874288,
+   "length": 406546,
+   "sha256": "7ae3d009e5428ba87c6c60ff77c9238a0217ffce99c84e3d064176240bad706b",
+   "file": "gfs-0p50-surface.grib2",
+   "fileOffset": 1206111
+  }
+ ]
+}

@@ -4,6 +4,56 @@ C++ WASM estimation through the SDK's `dist/isomorphic/module.wasm`. The caller
 selects the propagator; the estimator contains no force model. JavaScript only
 routes FlatBuffer messages. The build pins SDK **0.8.25** and SDS **1.232.0**.
 
+## Two-way light time
+
+Observation/error-model `flags` bit `0x04` enables two-way light time for
+`RANGE`, `SEQUENTIAL_RANGE`, `PSEUDONOISE_RANGE`, `LASER_RANGE`, `SKIN_RANGE`,
+`RANGE_RATE` and `DOPPLER` when light time is enabled (`0x01` clear). PV inputs
+are geocentric inertial SI values at reception. TDM two-leg paths select this
+model; laser defaults to two legs unless PATH specifies one. Other kinds and
+the legacy path retain their existing behavior.
+
+C++ solves uplink/downlink geometry to `1e-15 s`, using cubic satellite and
+station trajectories with one velocity per trajectory point. Earth-fixed
+stations satisfy `|w - omega_E z cross s| <= 0.01 |omega_E z cross s|`, with
+rotation speed above 1 m/s; their supplied velocity is preserved, with
+`a_c = -omega_E^2 (s_x,s_y,0)` and `j_c = -omega_E^2 (w_x,w_y,0)`.
+Other stations move linearly. Satellite truncation is below `1e-8 m` for
+visible LEO–GEO links; station truncation is below `1e-8 m` through 0.25 s,
+with about `3e-6 m` from the inertial-z axis approximation.
+
+Range adds the mean Earth Shapiro delay to the mean geometric legs, then
+existing media/hardware corrections (Orekit 13.1; IERS Conventions 2010,
+section 11). Media use the downlink direction; Sagnac is already represented
+by station motion. Rate differentiates the geometric light-time equations,
+excluding Shapiro. Central differences of the complete observable supply
+Jacobians (1 m position, 1e-3 m/s velocity).
+
+After `node build.mjs`, run:
+
+```sh
+node tests/build-provider.mjs && node tests/two-way-light-time.mjs
+```
+
+Measured 2026-10-16 against Orekit 13.1, GCRF, epoch 2026-10-11T00:00:00 UTC:
+
+| Regime | Pairs | Max range error (m) | Max rate error (m/s) | Fit position error (m) |
+| --- | ---: | ---: | ---: | ---: |
+| LEO | 36 | 4.656613e-9 | 6.220489e-7 | 2.449436e-7 |
+| MEO | 44 | 4.395843e-7 | 5.509050e-6 | 1.119735e-6 |
+| GEO | 74 | 1.005828e-6 | 7.325305e-6 | Not requested |
+
+All 0.1 mm range, 0.01 mm/s rate and fit gates pass. The rate oracle is
+Orekit Range's negative automatic clock-offset derivative; predicted-EOP
+velocity without LOD accounts for differences of a few micrometres/s.
+The rate gate is 30x below DORIS Doppler noise of 0.3–0.5 mm/s. Legacy LEO
+error is 8.239 mm; disabling corrections increases it to 45.943 m.
+The nine existing TDM/batch regressions pass; TDM epoch-position errors are
+0.4023 mm (plain) and 0.3993 mm (weather).
+The observation simulator uses this same model: its zero-EOP Orekit E2E
+measured 1.280569e-8 m radar range error, 4.098592e-7 m/s rate error, and
+1.531794e-7 m / 2.208263e-10 m/s recovery through `fit_batch`.
+
 ## Sequential estimators
 
 | Selector | Behavior |
@@ -232,6 +282,26 @@ Authority ([batch_fit_v2.test.mjs](tests/batch_fit_v2.test.mjs),
 | B, eleven ECOM2 terms and in-track at once | the simulating truth (HPOP, full force) | d² 15.9 (19), every term within 0.7 σ |
 | Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (HPOP truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
 
+## Tracking data (`$TDM`) on `tracking_data`
+
+`run_estimation` and `fit_batch` (0.4.0) read the optional `tracking_data` record (and `laser_tracking`, the station's `$CRD`) into
+observations. The rules are in [src/tdm_decode.hpp](src/tdm_decode.hpp) (CCSDS 503.0-B-2); anything the decoder cannot read exactly
+is refused with the error code `bad-tdm` and the reason, never read with a default.
+
+| Record | Estimator |
+| --- | --- |
+| `TIME_SYSTEM` UTC, TAI, GPS, TT (segment, else record) | Epochs become TAI, the scale of the request epoch: UTC through the leap-second table (TAI − UTC through 37 s from 2017-01-01; a UTC epoch from 2027-06-30 is refused until the table is extended), GPS + 19 s, TT − 32.184 s. Other systems and a missing one are refused. |
+| `TIMETAG_REF` RECEIVE | The epoch is the observation epoch. |
+| `TIMETAG_REF` TRANSMIT (ranges only) | The estimator evaluates a range at the receive instant (its light-time model looks back from there), so the epoch moves forward by the travel time, legs × range / c: 2R/c for a two-way laser range. Other kinds tagged TRANSMIT, and a missing tag, are refused. |
+| `PATH` `a,b` or `a,b,a` | One or two legs. A transmit-tagged range and a Doppler need it (a laser range without it is two-way); a Doppler's turnaround ratio is multiplied by the legs, so a two-way count is −2 ṙ f / c. A two-leg path (and a laser range without one) sets the two-way light-time model, see "Two-way light time" above (0.4.1). Other paths are refused. |
+| `INTEGRATION_INTERVAL` and `INTEGRATION_REF` START, MIDDLE, END (Doppler, range rate) | The count is placed at the middle of its interval. An interval without a reference is refused. |
+| `ANGLE_1`, `ANGLE_2` | Degrees in the record, radians in the estimator. An `ANGLE_1` without its `ANGLE_2` at the same epoch is refused. |
+| `TRANSMIT_FREQ_1` | A Doppler without it is refused (no 8.4 GHz default); a laser range takes its wavelength as c / frequency. |
+| `PRESSURE` (hPa), `TEMPERATURE` (K), `RHUMIDITY` (percent) rows | Each observation takes the row nearest in time (rows of every segment of the record). The troposphere model (`error_models[].troposphere`) takes the station's latitude and height from its position and the elevation from the signal direction. |
+
+A single fixed station measuring ranges cannot see a rotation of the orbit about its own vertical; a campaign needs a second kind of
+observation (angles) or more stations. The station of an observation is the record's `OBSERVER_X/Y/Z`; a `$CRD` replaces it for laser ranges.
+
 ## Admissible sets: ESPF, set-membership filter and TEAG primitives (extension v3)
 
 Implemented from the papers, independently of their authors' code; every step,
@@ -348,6 +418,7 @@ node tests/build-provider.mjs
 node --test tests/depth.test.mjs tests/sequential.test.mjs tests/depth-invoke.test.mjs
 node --test tests/teag.test.mjs tests/mvee.test.mjs tests/espf.test.mjs
 node --test tests/batch_fit.test.mjs tests/batch_fit_v2.test.mjs tests/measurement_parameters.test.mjs
+node --test tests/tdm_decode.test.mjs
 node --test tests/sdk_compat.test.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 node tests/refresh-evidence.mjs

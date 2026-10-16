@@ -34,21 +34,25 @@ The module needs no propagator and computes no visibility:
 - **Frames and time.** Each observation instant goes from Earth-fixed to
   GCRF by the `foundation/frames` IAU 2006/2000A CIO chain (ERFA), using the
   request's `EARTH_ORIENTATION`, interpolated linearly in MJD. UTC time tags
-  come from ERFA's leap-second table.
+  come from ERFA's leap-second table. Input JD dates use a consistent 0.1 ms
+  grid; split TT day/seconds preserve schedule times and frame derivatives.
 - **Measurements.** Each sensor's `ERROR_MODELS` list what an observation
   carries: `RANGE`, `RANGE_RATE`, `DOPPLER`, `AZIMUTH_ELEVATION`,
   `RIGHT_ASCENSION_DECLINATION` or `LASER_RANGE`. Each value is predicted by
   `analysis/estimation`'s `predict_measurement`, the same model the
   estimator inverts:
   - GCRF geometry;
-  - downleg light time when `APPLY_LIGHT_TIME`, with the time tag at
-    reception;
+  - when `APPLY_LIGHT_TIME`, two-way inertial light time with moving
+    station and Earth Shapiro delay for `LASER_RANGE` and radar `RANGE`,
+    `RANGE_RATE`, `DOPPLER` (Orekit Range/ShapiroModel; IERS 2010, section 11);
+    other kinds keep their one-way model, and all time tags remain reception;
   - troposphere when `TROPOSPHERE_MODEL` is set, at the true elevation
     under a standard atmosphere.
   Azimuth is measured from north through east. RA/Dec are topocentric GCRF.
   Radar `DOPPLER` is two-way, as `$RDO` defines it: the echo's shift of the
-  sensor's `TRANSMIT_FREQUENCY_HZ`, twice the one-way shift, -2 f rdot / c
-  to first order. Each `$RDO` carries it with `DOPPLER_FREQUENCY` = f and
+  sensor's `TRANSMIT_FREQUENCY_HZ`: -2 f rdot / c, where rdot is the mean
+  of the two geometric leg rates when light time is enabled. Each `$RDO`
+  carries it with `DOPPLER_FREQUENCY` = f and
   `DOPPLER_UNC`, so rdot = -c `DOPPLER` / (2 `DOPPLER_FREQUENCY`). A radar
   `DOPPLER` model without `TRANSMIT_FREQUENCY_HZ` is refused.
 - **Errors, per model and component.** The error is one bias for the run
@@ -115,22 +119,29 @@ The module needs no propagator and computes no visibility:
   and a revisit gap.
 - Seed reproducibility, the Poisson false-alarm count, and refusals.
 
+The shared E2E is `analysis/estimation/tests/two-way-light-time.mjs` (build both
+modules first, then run it after `tests/build-provider.mjs` in estimation).
+Against Orekit 13.1 with zero EOP, a six-hour, 622 km orbit gives over eight
+minutes of visibility at each of Graz, Yarragadee and Greenbelt. Its slant
+ranges stay below 2,048 km, keeping EOO float rounding below 0.062 m.
+Measured 2026-10-16: 156 radar and 52 laser observations, exact whole-second
+UTC tags, maximum radar range/rate differences of **1.280569e-8 m** /
+**4.098592e-7 m/s**, and laser float difference **0.05994681 m**. The radar
+Doppler factor check passes; the one-way control differs by **1.226830 m**.
+Feeding the simulated radar ranges into `fit_batch` recovers the epoch state
+to **1.531794e-7 m** and **2.208263e-10 m/s**. The 1 mm radar, 1e-5 m/s rate,
+0.1 m laser and 5 mm / 1e-5 m/s fit gates all pass.
+
 ## Limits
 
-- One-way light time with a reception time tag, as the estimator models.
-  Monostatic radar and laser ranging report two-way ranges tagged at
-  transmit. The difference is metre-level for LEO (station motion over the
-  flight time); simulate with `APPLY_LIGHT_TIME` false to remove it. The
-  two-way Doppler is likewise twice the down-leg shift, not the sum of the
-  up- and down-leg shifts.
 - Troposphere uses a standard atmosphere, not station weather. There is no
   ionosphere, as `ACW` carries no TEC.
 - Radar detection is a deterministic SNR threshold: no Swerling fluctuation,
   probability of detection or RCS scintillation. Reported `SNR` is the mean.
 - Optical: a diffuse sphere only, with no specular term, attitude or sky
   background. A penumbral target is not dimmed.
-- One JD double per instant resolves about 20 us; window bounds are kept to
-  0.1 ms.
+- Input JD doubles resolve about 40 us and are rounded to a 0.1 ms grid.
+  Internal times retain their seconds offset; UTC output tags resolve 1 us.
 - Measurement types outside the six above are refused.
 
 ## Build

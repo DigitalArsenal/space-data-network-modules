@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-nwp-field-source",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
