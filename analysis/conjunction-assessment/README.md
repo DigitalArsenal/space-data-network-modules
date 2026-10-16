@@ -60,9 +60,17 @@ See [ports, options, validation codes and EOP conventions](docs/ephemeris-input.
 
 ### Uncertainty and probability
 
+The covariance-based default `FOSTER-2D` is the adaptive Gaussian disk integral.
+The former constant-density formula is explicit-only as
+`PC2D-SMALL-HBR-APPROX`. See [Pc methods and validation](docs/pc-methods.md)
+for covariance repair, shape-conditioned maxima, Frisbee, usage diagnostics,
+full-state fallbacks, and output-format limits. The historical no-covariance
+spherical value is an approximation, not a bound for arbitrary covariance
+shapes.
+
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
-- events report the Alfano maximum probability (`ALFANO_MAXIMUM`,
+- events report the historical spherical small-HBR statistic (`ALFANO_MAXIMUM`,
   `MAXIMUM_PROBABILITY_ONLY`) and its dilution threshold, and no RTN sigmas,
   unless both sources supplied covariance;
 - a covariance method (Foster, Patera, Chan, Alfriend, Alfano 2005, Laas) runs
@@ -72,12 +80,13 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   source's state frame; OEM ITRF covariance can also be transformed with EOP.
   Other unsupported combinations fail with `covariance-frame-mismatch`.
   Each element is interpolated linearly to the TCA between the bracketing
-  epochs; a TCA outside them leaves the Alfano maximum. Such events state
+  epochs; a TCA outside them leaves that spherical statistic. Such events state
   `SOURCE_EPHEMERIS`, `INDEPENDENT` errors, and `CALIBRATION` `Calibrated`
   (with both references) only if both OCMs say `COV_CALIBRATION Calibrated`;
 - CDMs in ITRF are evaluated in the non-rotating frame aligned with ITRF at
   TCA (v + w x r); the probability is invariant under the common rotation, so
-  no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9;
+  no EOP enters. Existing real-CDM runtime tests must be rerun after rebuilding
+  the artifact with the corrected methods;
 - CDMs retain each source's supplied covariance. Missing covariance blocks are
   omitted. Missing or non-PSD covariance, or a failed Pc calculation, leaves Pc
   absent with a COMMENT explaining why. A computed Pc of zero is written.
@@ -100,10 +109,11 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
     reference, only when both strata passed the calibration gate; otherwise
     it is `Uncalibrated`.
   - **Fallback:** outside the model (a negative or too-old age, or a stratum
-    it lacks), the event keeps the Alfano maximum.
+    it lacks), the event keeps the spherical small-HBR statistic.
   - **Fast paths:** with the frame, the element-set screens (fast catalog
     path, resident index, refinement) accept a covariance method.
-  - **Cost:** the 3-day full-catalog CPU screen (32,514 objects, Node, 27
+  - **Historical cost, before the adaptive-integral default:** the 3-day
+    full-catalog CPU screen (32,514 objects, Node, 27
     threads) found the same 294,544 conjunctions.
     - Refinement took 7.8 s instead of 7.0 s; the run took 19.6 s end to end
       instead of 18.5 s.

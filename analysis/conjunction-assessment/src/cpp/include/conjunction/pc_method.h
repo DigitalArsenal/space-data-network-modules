@@ -8,9 +8,9 @@
  * The conjunction assessor is method-agnostic.
  *
  * Implementations:
- *   AlfanoMaxPc       — Maximum probability bound (AAS 03-548)
+ *   AlfanoMaxPc       — Spherical small-HBR maximum approximation
  *   Foster2D          — Foster-Estes short-encounter (1992), 2D Gaussian
- *   Patera2001        — Patera single-integral method (2001)
+ *   Patera2001        — Legacy polar midpoint disk quadrature
  *   Chan1997          — Chan zeroth-order analytical expression
  *   Alfriend1999      — Alfriend-Akella constant-density approximation
  *   Alfriend1999Max   — Alfriend-Akella covariance-scaled maximum Pc
@@ -34,6 +34,7 @@
 #include <cmath>
 #include <memory>
 #include <algorithm>
+#include <cstdint>
 
 namespace conjunction {
 
@@ -132,7 +133,17 @@ struct PcResult {
     std::string method;
     bool converged = true;
     int iterations = 0;          // for iterative methods
-    double max_probability = 0;  // Alfano upper bound (always computed)
+    double max_probability = 0;  // Method-specific maximum; see max_method.
+    std::string max_method = "ALFANO-SPHERICAL-SMALL-HBR-MAX";
+    bool covariance_remediated = false; // CARA eigenvalue clipping was applied.
+    std::string failure_reason;
+    bool usage_violation = false;
+    bool usage_checked = false; // Full position/velocity covariance was available.
+    std::string usage_reason;
+    bool cross_correlation_applied = false;
+    double decorrelation_probability_change = 0;
+    std::uint64_t sample_count = 0, collision_count = 0;
+    std::uint64_t initial_overlap_count = 0, entry_collision_count = 0;
     double mahalanobis_2d = 0;   // Mahalanobis distance in encounter plane
     double lower_probability = 0; // lower Pc bound when a method provides one
     double upper_probability = 0; // upper Pc bound when a method provides one
@@ -156,16 +167,12 @@ public:
 class AlfanoMaxPc : public PcMethod {
 public:
     PcResult compute(const BPlaneGeometry& bplane) const override;
-    std::string name() const override { return "ALFANO-MAXPROB"; }
+    std::string name() const override { return "ALFANO-SPHERICAL-SMALL-HBR-MAX"; }
 };
 
 // ── Foster-Estes 2D (1992) ──
-// Short-encounter approximation: 2D Gaussian integration over hard-body disk.
-// Industry standard for CDM Pc values. Accurate when encounter duration
-// is short relative to covariance evolution.
-//
-// P_c = (R²/2σ₁σ₂) × exp(-½(u²/σ₁² + v²/σ₂²))
-// where u,v are miss components along covariance eigenvectors
+// Adaptive integral of the bivariate Gaussian over the hard-body disk.
+// CARA eigenvalue clipping floor: (1e-4 * HBR)^2.
 
 class Foster2D : public PcMethod {
 public:
@@ -173,14 +180,15 @@ public:
     std::string name() const override { return "FOSTER-2D"; }
 };
 
-// ── Patera 2001 (single integral) ──
-// Reduces the 2D probability integral to a 1D integral along the
-// miss-distance azimuth. More accurate than Foster for highly
-// elliptical covariance.
-//
-// Ref: Patera, "General Method for Calculating Satellite Collision Probability"
-// JGCD 24(4), 2001
+// Explicit constant-density, small-HBR approximation (legacy default formula).
+class SmallHbrApprox : public PcMethod {
+public:
+    PcResult compute(const BPlaneGeometry& bplane) const override;
+    std::string name() const override { return "PC2D-SMALL-HBR-APPROX"; }
+};
 
+// Legacy PATERA-2001 API name: fixed polar midpoint disk quadrature.
+// This implementation is not Patera's published contour algorithm.
 class Patera2001 : public PcMethod {
 public:
     explicit Patera2001(int quadrature_points = 64) : n_quad_(quadrature_points) {}

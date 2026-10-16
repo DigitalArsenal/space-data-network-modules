@@ -15,6 +15,7 @@
 
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
+#include "conjunction/pc_fallbacks.h"
 #include <array>
 #include <memory>
 #include <string>
@@ -118,9 +119,10 @@ struct ConjunctionEvent2 {
 
   // Collision probability. With has_covariance, the chosen method's result
   // from the covariance the caller supplied (cov1, cov2, inertial). Without,
-  // only the Alfano maximum (pc.max_probability, pc.method "ALFANO-MAXPROB"):
+  // only the Alfano maximum (pc.max_probability, pc.method "ALFANO-SPHERICAL-SMALL-HBR-MAX"):
   // no covariance is assumed, so no covariance-based probability exists.
   PcResult pc;
+  PcUsageResult usage;
   bool has_covariance = false; // A covariance-based Pc was computed successfully.
     // Source availability is independent of whether Pc can be computed.
     bool has_covariance1 = false, has_covariance2 = false;
@@ -189,6 +191,17 @@ public:
                                const Covariance3x3 &cov2,
                                double combined_radius_km = 0.01) const;
 
+  /// Full inertial 6-state covariance assessment, with optional between-object
+  /// cross covariance. This preserves velocity uncertainty for usage checks.
+  ConjunctionEvent2 compute_pc(const PcEncounter &encounter) const;
+
+  /// Fallback policy for usage violations. Automatic chooses Hall 3D-Nc (Cartesian when mu=0),
+  /// or deterministic Monte Carlo when relative-velocity uncertainty is large.
+  enum class Fallback { Automatic, TwoDimensionalNc, ThreeDimensionalNc, MonteCarlo };
+  void set_pc_fallback(Fallback method, const PcFallbackOptions &options = {}) {
+    fallback_ = method; fallback_options_ = options;
+  }
+
   /// Screen multiple objects
   std::vector<ConjunctionEvent2>
   screen(const std::vector<std::shared_ptr<EphemerisSource>> &primaries,
@@ -201,6 +214,9 @@ public:
 
 private:
   std::unique_ptr<PcMethod> pc_method_;
+  Fallback fallback_ = Fallback::Automatic;
+  PcFallbackOptions fallback_options_;
+  ConjunctionEvent2 evaluate_encounter(const PcEncounter& encounter) const;
   double radius1_m_ = 5.0;
   double radius2_m_ = 5.0;
 

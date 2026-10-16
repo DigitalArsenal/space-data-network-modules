@@ -67,7 +67,7 @@ struct ConjunctionEvent {
     // result from the covariance the sources supplied.
     double max_probability = 0.0;
     double dilution_threshold_km = 0.0;
-    std::string probability_method = "ALFANO-MAXPROB";
+    std::string probability_method = "ALFANO-SPHERICAL-SMALL-HBR-MAX";
     // Each object's hard-body radius (m); their sum gives the probability.
     // The basis codes are the caller's (screening passes them through).
     double radius1_m = 0.0, radius2_m = 0.0;
@@ -76,6 +76,7 @@ struct ConjunctionEvent {
     // Source availability is independent of whether Pc can be computed.
     bool has_covariance1 = false, has_covariance2 = false;
     std::string probability_failure;
+    std::string probability_note; // Method, usage and correlation diagnostics.
     double covariance_probability = 0.0;
 
     // One-sigma RTN position uncertainty (metres) of each object, from the
@@ -210,16 +211,6 @@ struct ProbResult {
     double sigma_star_km;
 };
 ProbResult alfano_max_probability(double miss_distance_km, double combined_radius_km);
-
-/// Compute collision probability with covariance
-/// Full B-plane projection method
-/// pos1, vel1, pos2, vel2: states in same frame (km, km/s)
-/// cov1, cov2: 3x3 position covariance matrices (km²)
-/// combined_radius: hard-body radius (km)
-double collision_probability(
-    const StateVector& state1, const StateVector& state2,
-    const double cov1[9], const double cov2[9],
-    double combined_radius_km);
 
 /// Screen a set of TLEs for conjunctions
 std::vector<ConjunctionEvent> screen_conjunctions(
