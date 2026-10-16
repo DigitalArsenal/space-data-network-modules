@@ -85,8 +85,8 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   (with both references) only if both OCMs say `COV_CALIBRATION Calibrated`;
 - CDMs in ITRF are evaluated in the non-rotating frame aligned with ITRF at
   TCA (v + w x r); the probability is invariant under the common rotation, so
-  no EOP enters. Existing real-CDM runtime tests must be rerun after rebuilding
-  the artifact with the corrected methods;
+  no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9
+  (`test_pc_methods`);
 - CDMs retain each source's supplied covariance. Missing covariance blocks are
   omitted. Missing or non-PSD covariance, or a failed Pc calculation, leaves Pc
   absent with a COMMENT explaining why. A computed Pc of zero is written.

@@ -73,6 +73,14 @@ int main() {
     check(sampled.pc.method.find("MC")!=std::string::npos && sampled.pc.usage_violation,"violating full-state event routed to MC");
     check(sampled.has_covariance && sampled.pc.probability==again.pc.probability,"seeded fallback deterministic");
     check(sampled.pc.upper_probability>sampled.pc.lower_probability,"MC reports sampling interval");
+    // A zero stated position covariance is unusable, never remediated into Pc.
+    PcEncounter nothing=direct;
+    for(int i=0;i<36;++i) nothing.covariance_primary[i]=nothing.covariance_secondary[i]=0;
+    nothing.secondary[4]=1;
+    auto unusable=engine.compute_pc(nothing);
+    check(!unusable.has_covariance && unusable.pc.method=="PC-UNAVAILABLE" &&
+          unusable.probability_failure.find("covariance is zero")!=std::string::npos,
+          "zero position covariance yields no probability");
     std::printf("Engine assertions: %d passed, %d failed\n",passed,failed);
     return failed?1:0;
 }

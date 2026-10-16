@@ -104,7 +104,21 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
     // Both dr and these covariances are inertial; never use input RTN blocks.
     event.mahalanobis_3d=encounter_mahalanobis_3d(dr,combined,zero);
 
-    if(event.usage.violated) {
+    const auto relative=relative_pc_covariance(input);
+    const bool zero_position_covariance=!(relative[0]+relative[7]+relative[14]>0);
+    if(zero_position_covariance) {
+        // Zero stated position uncertainty carries no covariance information;
+        // CARA's NPD remediation must not turn it into a probability.
+        event.pc.method="PC-UNAVAILABLE";
+        event.pc.converged=false;
+        event.pc.failure_reason="Collision probability calculation failed: relative position covariance is zero";
+    } else if(event.usage.violated && event.usage.reason.rfind("INVALID_",0)==0) {
+        // An unusable covariance is not a 2-D validity problem: no fallback may
+        // turn it into a probability.
+        event.pc.method="PC-UNAVAILABLE";
+        event.pc.converged=false;
+        event.pc.failure_reason="Collision probability calculation failed: unusable covariance (" + event.usage.reason + ")";
+    } else if(event.usage.violated) {
         if(!input.has_velocity_covariance) {
             event.pc.method="PC-UNAVAILABLE";
             event.pc.converged=false;

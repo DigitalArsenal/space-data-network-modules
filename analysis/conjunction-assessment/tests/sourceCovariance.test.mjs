@@ -214,9 +214,14 @@ for (const runtimeKind of ['browser', 'wasmedge']) {
         assert.equal(Boolean(o.COVARIANCE?.length), present);
       }
       if (kind === 'zero-pc') {
-        assert.equal(screen.PROBABILITY.ALGORITHM, 'LAAS_2015');
-        assert.equal(screen.PROBABILITY.PROBABILITY, 0);
-        assert.equal(cdm.COLLISION_PROBABILITY_METHOD, 'LAAS-2015');
+        // The 1 m sigma / 100 m miss encounter violates the 2-D validity test
+        // (curvilinear correction), so the requested LAAS value is replaced by
+        // the labelled Monte Carlo fallback. The CQR algorithm enum cannot
+        // name it, so the CQR event keeps the maximum-only result and the CDM
+        // carries the fallback method, value and violation reason.
+        assert.equal(screen.PROBABILITY.ALGORITHM, 'ALFANO_MAXIMUM');
+        assert.equal(cdm.COLLISION_PROBABILITY_METHOD, 'SDMC-TWO-BODY');
+        assert.match(cdm.OBJECT1.COMMENT, /2D_USAGE_VIOLATION/);
         assert.equal(cdm.COLLISION_PROBABILITY, 0);
       } else {
         absentPc(cdm);
@@ -236,7 +241,7 @@ for (const runtimeKind of ['browser', 'wasmedge']) {
             assert.equal(result.record[object].COMMENT, cdm[object].COMMENT);
           }
           if (kind === 'zero-pc') {
-            assert.equal(result.record.COLLISION_PROBABILITY_METHOD, 'LAAS-2015');
+            assert.equal(result.record.COLLISION_PROBABILITY_METHOD, 'SDMC-TWO-BODY');
             assert.equal(result.record.COLLISION_PROBABILITY, 0);
             const value = format === 'kvn' ? /COLLISION_PROBABILITY\s*=\s*([^\s]+)/.exec(result.text)
               : /<COLLISION_PROBABILITY>([^<]+)<\/COLLISION_PROBABILITY>/.exec(result.text);

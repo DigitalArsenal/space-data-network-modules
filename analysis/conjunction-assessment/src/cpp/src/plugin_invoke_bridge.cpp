@@ -514,7 +514,8 @@ SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, 
 }
 // Labels an event whose probability came from the sources' covariance.
 void covarianceLabels(CQREventT &o, const SuppliedCovariance &c) {
-  if (!c.used || !o.PROBABILITY)
+  if (!c.used || !o.PROBABILITY ||
+      o.PROBABILITY->ALGORITHM == cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
     return;
   o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::SOURCE_EPHEMERIS;
   o.PROBABILITY->CALIBRATION =
@@ -1009,6 +1010,17 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
   auto o = event(legacy(e), axes);
   if (!e.has_covariance)
     return o;
+  // The SDS CQR algorithm enum has no value for the 2D-Nc, 3D-Nc or Monte
+  // Carlo fallbacks. A violating encounter is never exported under another
+  // method's name: the CQR event keeps the labelled maximum-only result and the
+  // CDM (probability method string and comment) carries the fallback value.
+  if (!e.pc.method.empty() &&
+      algorithmEnum(e.pc.method) == cqrProbabilityAlgorithm::UNSPECIFIED) {
+    o->PRIMARY_COVARIANCE_BASIS = o->SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::NONE;
+    o->PRIMARY_SIGMA_RTN_M.reset();
+    o->SECONDARY_SIGMA_RTN_M.reset();
+    return o;
+  }
   o->HAS_DILUTION_THRESHOLD_M = false;
   o->PROBABILITY =
       probability(e.pc, a, cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
@@ -1685,7 +1697,7 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   if (e.pc.sample_count) {
     char diagnostics[256];
     std::snprintf(diagnostics, sizeof(diagnostics),
-        "; MC samples=%llu hits=%llu initial=%llu entries=%llu; 95%% Wilson interval=[%.17g,%.17g]",
+        "; MC samples=%llu hits=%llu initial=%llu entries=%llu; 95%% Wilson interval lower %.17g upper %.17g",
         static_cast<unsigned long long>(e.pc.sample_count),
         static_cast<unsigned long long>(e.pc.collision_count),
         static_cast<unsigned long long>(e.pc.initial_overlap_count),
