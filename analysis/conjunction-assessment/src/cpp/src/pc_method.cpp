@@ -3,6 +3,7 @@
 #include <limits>
 #include <cstdint>
 #include <cstring>
+#include <array>
 
 namespace conjunction {
 
@@ -28,7 +29,12 @@ PcResult screening_foster_2d(const BPlaneGeometry& bp) {
     double mx=0,my=0;bp.rotated_miss(mx,my);
     const double sx=std::sqrt(high),sy=std::sqrt(low),rho=radius/sy;
     const double variation=radius*std::hypot(mx/high,my/low)+0.5*rho*rho;
-    if(!(variation<=0.2))return Foster2D().compute(bp);
+    const bool tail_recovery=!(variation<=0.2);
+    if(tail_recovery) {
+        auto reference=Foster2D().compute(bp);
+        if(reference.converged || !(variation<=4.0) ||
+           reference.failure_reason!="Disk quadrature error exceeds relative budget")return reference;
+    }
     constexpr double nodes[]={0.11270166537925831148,0.5,0.88729833462074168852};
     constexpr double weights[]={5.0/18,4.0/9,5.0/18};
     constexpr double cosine[]={1,0.92387953251128675613,0.70710678118654752440,
@@ -40,17 +46,50 @@ PcResult screening_foster_2d(const BPlaneGeometry& bp) {
     const double logscale=2*std::log(radius)-std::log(2.0)-std::log(sx)-std::log(sy)-
         0.5*(ux*ux+uy*uy);
     PcResult result;result.method="FOSTER-2D";
-    for(unsigned radial=0;radial<3;++radial) {
-        const double distance=radius*std::sqrt(nodes[radial]);
-        for(unsigned angle=0;angle<16;++angle) {
-            const double x=distance*cosine[angle]/sx,y=distance*cosine[(angle+12)%16]/sy;
-            // Combine logs before exponentiation to retain subnormal tails.
-            result.probability+=weights[radial]/16*std::exp(logscale+x*ux+y*uy-0.5*(x*x+y*y));
+    if(tail_recovery) {
+        // The Reference integrator's absolute stopping floor can dominate an
+        // otherwise representable far-tail probability. A positive 12x48
+        // disk rule integrates every polynomial of total degree <=46 exactly:
+        // 12-point Gauss-Legendre integrates s-degree <=23, and 48 angles
+        // integrate every nonconstant harmonic of order <48 to zero.
+        // Thus the degree-23 Taylor polynomial of exp(L+Q) is exact, and the
+        // relative remainder is <=2*exp(2*T)*T^24/24! <2.71e-6 for T<=4.
+        constexpr double radial_nodes[]={0.12523340851146891547,0.36783149899818019375,
+            0.58731795428661744730,0.76990267419430468704,0.90411725637047485668,
+            0.98156063424671925069};
+        constexpr double radial_weights[]={0.24914704581340278500,0.23349253653835480876,
+            0.20316742672306592175,0.16007832854334622633,0.10693932599531843096,
+            0.04717533638651182719};
+        static const auto tail_cosine=[] {
+            std::array<double,48> values{};
+            for(unsigned i=0;i<values.size();++i)
+                values[i]=std::cos(6.28318530717958647693*i/values.size());
+            return values;
+        }();
+        for(unsigned radial=0;radial<6;++radial)for(double sign:{-1.,1.}) {
+            const double distance=radius*std::sqrt((1+sign*radial_nodes[radial])/2);
+            for(unsigned angle=0;angle<48;++angle) {
+                const double x=distance*tail_cosine[angle]/sx,y=distance*tail_cosine[(angle+36)%48]/sy;
+                result.probability+=radial_weights[radial]/96*
+                    std::exp(logscale+x*ux+y*uy-0.5*(x*x+y*y));
+            }
         }
+        result.iterations=576;
+        result.usage_reason="Foster positive disk quadrature tail recovery; relative error bound=2.71e-6";
+    } else {
+        for(unsigned radial=0;radial<3;++radial) {
+            const double distance=radius*std::sqrt(nodes[radial]);
+            for(unsigned angle=0;angle<16;++angle) {
+                const double x=distance*cosine[angle]/sx,y=distance*cosine[(angle+12)%16]/sy;
+                // Combine logs before exponentiation to retain subnormal tails.
+                result.probability+=weights[radial]/16*std::exp(logscale+x*ux+y*uy-0.5*(x*x+y*y));
+            }
+        }
+        result.iterations=48;
     }
     result.probability=std::clamp(result.probability,0.0,1.0);
     result.mahalanobis_2d=std::hypot(ux,uy);
-    result.covariance_remediated=remediated;result.iterations=48;
+    result.covariance_remediated=remediated;
     result.max_probability=AlfanoMaxPc().compute(bp).probability;
     return result;
 }

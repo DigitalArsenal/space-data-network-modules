@@ -1,6 +1,6 @@
-// One end-to-end acceptance runner for tiered Pc: the native engine and the
-// four full-catalog screens. All probability mathematics stays in C++/WASM.
-// usage: node tests/pcTieredScreen.e2e.mjs [--only native|screen]
+// One end-to-end acceptance runner for tiered Pc: the native engine, public
+// synthetic screens and four full-catalog screens. All physics stays in C++/WASM.
+// usage: node tests/pcTieredScreen.e2e.mjs [--only native|screen|synthetic]
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,20 +17,40 @@ const repository = path.resolve(root, '../..');
 const build = path.join(root, 'src/cpp/build');
 const data = path.join(root, 'tests/data/ca-retime');
 const { values: options } = parseArgs({ options: { only: { type: 'string' } } });
-assert(!options.only || ['native', 'screen'].includes(options.only), '--only must be native or screen');
+assert(!options.only || ['native', 'screen', 'synthetic'].includes(options.only), '--only must be native, screen or synthetic');
 
-async function run(command, args = [], { echo = true } = {}) {
+async function run(command, args = [], { echo = true, timeoutMs = 20 * 60 * 1000 } = {}) {
   if (echo) console.log(`$ ${[command, ...args].join(' ')}`);
   const temporary = path.join(build, 'tmp');
   fs.mkdirSync(temporary, { recursive: true });
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: root, env: { ...process.env, TMPDIR: temporary }, stdio: ['ignore', 'pipe', 'pipe'] });
-    let output = '';
+    let output = '', failure = '', forceKill;
+    const terminate = (reason) => {
+      if (failure) return;
+      failure = reason;
+      child.kill('SIGTERM');
+      forceKill = setTimeout(() => child.kill('SIGKILL'), 1000);
+      forceKill.unref();
+    };
+    const deadline = setTimeout(() => terminate(`timed out after ${timeoutMs / 1000} seconds`), timeoutMs);
+    deadline.unref();
+    const cleanup = () => { clearTimeout(deadline); clearTimeout(forceKill); };
     child.stdout.on('data', (chunk) => { output += chunk; if (echo) process.stdout.write(chunk); });
-    child.stderr.on('data', (chunk) => { output += chunk; if (echo) process.stderr.write(chunk); });
-    child.on('error', reject);
-    child.on('close', (code, signal) => code === 0 ? resolve(output) :
-      reject(new Error(`${path.basename(command)} ${args.join(' ')} failed (${signal ?? `exit ${code}`})${echo ? '' : `\n${output}`}`)));
+    child.stderr.on('data', (chunk) => {
+      output += chunk; if (echo) process.stderr.write(chunk);
+      // A trapped WASI worker cannot complete pthread_join. Stop this owned
+      // child promptly instead of waiting forever or calling a partial run a pass.
+      if (/\[wasi-thread\][^\n]* trapped:/.test(output)) terminate('WASM worker trapped; its join cannot complete');
+    });
+    child.on('error', (error) => { cleanup(); reject(error); });
+    child.on('close', (code, signal) => {
+      cleanup();
+      if (code === 0 && !failure) return resolve(output);
+      const error = new Error(`${path.basename(command)} ${args.join(' ')} failed (${failure || signal || `exit ${code}`})${echo && !failure ? '' : `\n${output.slice(-8192)}`}`);
+      error.output = output;
+      reject(error);
+    });
   });
 }
 
@@ -184,6 +204,45 @@ void screening_disk_oracle() {
   require(fixed_quadrature > 0, "Screening bounded Foster quadrature exercised by independent oracle");
   std::printf("Screening 20-geometry dblquad comparison: %u cases; max_relative_error=%.12e; fixed_quadrature=%u\n",
     count, maximum, fixed_quadrature);
+}
+void screening_far_tail_oracle() {
+  // Independent closed-form Gaussian polar integral (Rice/Bessel identity):
+  // P=exp(-lambda)*integral_0^a exp(-t)*I0(2*sqrt(lambda*t)) dt.
+  // Expand exp(-t) and I0 and integrate each monomial analytically below;
+  // this uses no production quadrature. Static encounter-plane distances are
+  // km, covariance is identity km^2, and no epoch/time scale applies. The
+  // public synthetic miss is 36.6 sigma and HBR .08 sigma. At these values,
+  // truncating at k=64,j=32 leaves relative series tails below 1e-100; the
+  // 1e-5 tolerance allows Screening's stated bounded-rule error and rounding.
+  BPlaneGeometry geometry;
+  geometry.xi = 36.6;
+  geometry.sigma_xx = geometry.sigma_zz = 1;
+  geometry.combined_radius = .08;
+  const long double miss = geometry.xi, radius = geometry.combined_radius;
+  const long double lambda = miss * miss / 2, a = radius * radius / 2;
+  long double sum = 0, bessel = 1;
+  for (unsigned k = 0; k < 64; ++k) {
+    long double radial = 0, exponential = 1;
+    for (unsigned j = 0; j < 32; ++j) {
+      radial += exponential / (k + j + 1);
+      exponential *= -a / (j + 1);
+    }
+    sum += bessel * radial;
+    bessel *= lambda * a / ((k + 1) * (k + 1));
+  }
+  const long double expected = std::exp(-lambda) * a * sum;
+  const auto reference = Foster2D().compute(geometry);
+  const auto actual = screening_foster_2d(geometry);
+  require(!reference.converged && reference.failure_reason == "Disk quadrature error exceeds relative budget",
+    "public far-tail geometry exercises the unchanged Reference stopping floor");
+  require(actual.converged && actual.method == "FOSTER-2D" && actual.iterations == 576 &&
+    actual.usage_reason.find("relative error bound=2.71e-6") != std::string::npos,
+    "Screening far-tail disk uses its disclosed bounded positive quadrature");
+  const long double relative = std::abs(static_cast<long double>(actual.probability) / expected - 1);
+  require(expected > 0 && std::isfinite(actual.probability) && actual.probability > 0 && relative <= 1e-5L,
+    "Screening far-tail disk agrees with independent analytic Rice/Bessel series");
+  std::printf("Screening far-tail disk: analytic_series=%.17Lg; Pc=%.17g; relative_error=%.12Lg; nodes=%d\n",
+    expected, actual.probability, relative, actual.iterations);
 }
 void screening_cara_agreement() {
   // Synthetic variants of ALL twelve public CARA Alfano geometries, never
@@ -490,6 +549,7 @@ int main() {
       "Screening explicit fallback options preserve the caller sample budget");
     optimized_hall_oracle();
     screening_disk_oracle();
+    screening_far_tail_oracle();
     screening_cara_agreement();
     std::printf("Tiered engine E2E: %u assertions passed; four tiers, forced fallbacks, unavailable covariance, batch threads 1/4/27 and reordered inputs\n", passed);
     std::printf("Tier evidence: valid=%s; below=%s; moderate=%s; high=%s; Pc2D=%.12g; shape_max=%.12g\n",
@@ -527,7 +587,7 @@ async function native() {
   const built = await run('cmake', ['--build', build, '--target', ...targets, '-j6'], { echo: false });
   fs.writeFileSync(path.join(build, 'pc_tiered_screen_build.log'), built);
   console.log('Native build PASS');
-  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Screening synthetic CARA|Screening MC outside|Tiered engine E2E:|Tier evidence:)/;
+  const evidence = /(?:CARA cases:|20-geometry dblquad comparison:|CARA\/oracle assertions:|Engine assertions:|Pc fallback tests:|[Mm]aximum.*(?:passed|error)|[Mm]onte.*(?:passed|failed)|CARA Hall max relative error=|Optimized Hall CARA:|Screening far-tail disk:|Screening synthetic CARA|Screening MC outside|Tiered engine E2E:|Tier evidence:)/;
   async function checkedBinary(target, args = []) {
     const output = await run(path.join(build, target), args, { echo: false });
     fs.writeFileSync(path.join(build, `pc_tiered_screen_${target}${args.length ? '_hall' : ''}.log`), output);
@@ -578,7 +638,7 @@ function verifyIgnoredData() {
 
 async function provision() {
   verifyIgnoredData();
-  const catalog = path.join(data, 'catalog.omm.bin'), model = path.join(data, 'model.erm');
+  const catalog = path.join(data, 'catalog.omm.bin');
   if (!fs.existsSync(catalog)) {
     const gp = path.join(data, 'gp.json');
     if (!fs.existsSync(gp)) {
@@ -588,13 +648,20 @@ async function provision() {
     }
     await run(process.execPath, ['scripts/make-omm-catalog.mjs', gp, catalog]);
   }
+  return { catalog, model: await provisionModel() };
+}
+
+// The synthetic acceptance needs only the public model, never a GP catalog.
+async function provisionModel() {
+  const model = path.join(data, 'model.erm');
   if (!fs.existsSync(model)) {
+    verifyIgnoredData();
     const modelJson = path.resolve(root, '../gp-error-model/docs/model-2026-08-scaled.json');
     const calibration = path.resolve(root, '../gp-error-model/docs/calibration-2026-08.json');
     assert(fs.existsSync(modelJson) && fs.existsSync(calibration), `Offline uncertainty model inputs missing: ${modelJson}, ${calibration}`);
     await run(process.execPath, ['scripts/uncertainty-model.mjs', modelJson, calibration, model]);
   }
-  return { catalog, model };
+  return model;
 }
 
 async function waitForLoad(label) {
@@ -607,40 +674,240 @@ async function waitForLoad(label) {
   console.log(`${label}: uptime ${(await run('uptime', [], { echo: false })).trim()}`);
 }
 
+function collectAssertion(failures, assertion) {
+  try { assertion(); } catch (error) { failures.push(error.message); }
+}
+
 function verifyScreen(summary, label) {
-  assert(Array.isArray(summary.events) && summary.events.length > 0, `${label}: no conjunctions`);
-  assert.equal(summary.conjunctions, summary.events.length, `${label}: conjunction count`);
+  const failures = [];
+  const check = (assertion) => collectAssertion(failures, assertion);
+  check(() => assert(Array.isArray(summary.events) && summary.events.length > 0, `${label}: no conjunctions`));
+  if (!Array.isArray(summary.events)) return failures;
+  check(() => assert.equal(summary.conjunctions, summary.events.length, `${label}: conjunction count`));
   for (const field of ['methodCounts', 'tierCounts']) {
-    const counts = summary[field];
-    assert(counts && typeof counts === 'object' && !Array.isArray(counts), `${label}: ${field} missing`);
-    assert.deepEqual(Object.keys(counts), Object.keys(counts).sort(), `${label}: ${field} must be sorted`);
-    assert(Object.values(counts).every((count) => Number.isInteger(count) && count >= 0), `${label}: invalid ${field}`);
-    assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0), summary.events.length, `${label}: ${field} sum`);
-    const eventField = field === 'methodCounts' ? 'method' : 'tier';
-    const actual = {};
-    for (const event of summary.events) actual[event[eventField]] = (actual[event[eventField]] ?? 0) + 1;
-    assert.deepEqual(counts, Object.fromEntries(Object.entries(actual).sort(([a], [b]) => a.localeCompare(b))), `${label}: ${field} event agreement`);
+    check(() => {
+      const counts = summary[field];
+      assert(counts && typeof counts === 'object' && !Array.isArray(counts), `${label}: ${field} missing`);
+      assert.deepEqual(Object.keys(counts), Object.keys(counts).sort(), `${label}: ${field} must be sorted`);
+      assert(Object.values(counts).every((count) => Number.isInteger(count) && count >= 0), `${label}: invalid ${field}`);
+      assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0), summary.events.length, `${label}: ${field} sum`);
+      const eventField = field === 'methodCounts' ? 'method' : 'tier';
+      const actual = {};
+      for (const event of summary.events) actual[event[eventField]] = (actual[event[eventField]] ?? 0) + 1;
+      assert.deepEqual(counts, Object.fromEntries(Object.entries(actual).sort(([a], [b]) => a.localeCompare(b))), `${label}: ${field} event agreement`);
+    });
   }
   const tiers = new Set(['FOSTER-2D', 'usage-violation, below floor', 'usage-violation, 3D-Nc', 'usage-violation, Monte Carlo', 'maximum-only']);
   const methods = new Set(['FOSTER-2D', '3D-NC-HALL', '3D-NC-HALL-QUADRATIC-TIME', '3D-NC-CARTESIAN', 'SDMC-TWO-BODY', 'SDMC-RECTILINEAR', 'ALFANO-SPHERICAL-SMALL-HBR-MAX']);
-  for (const event of summary.events) {
-    assert(!event.error && !event.errorCode && !event.errorMessage, `${label}: event error`);
-    assert(methods.has(event.method) && tiers.has(event.tier), `${label}: unavailable or unknown Pc result ${event.method} / ${event.tier}`);
-    assert(Number.isFinite(event.pc) && event.pc >= 0 && event.pc <= 1, `${label}: invalid probability`);
-    if (event.tier === 'maximum-only') {
-      assert.equal(event.uncertainty, 'MAXIMUM_PROBABILITY_ONLY', `${label}: maximum-only uncertainty`);
-      assert.equal(event.method, 'ALFANO-SPHERICAL-SMALL-HBR-MAX', `${label}: no-covariance method`);
-    } else if (event.tier === 'FOSTER-2D' || event.tier === 'usage-violation, below floor') {
-      assert.equal(event.method, 'FOSTER-2D', `${label}: disk tier method`);
-    } else if (event.tier === 'usage-violation, 3D-Nc') {
-      assert(event.method.startsWith('3D-NC-'), `${label}: Nc tier method`);
-    } else assert(event.method.startsWith('SDMC-'), `${label}: Monte Carlo tier method`);
+  for (const [index, event] of summary.events.entries()) {
+    check(() => assert(!event.error && !event.errorCode && !event.errorMessage,
+      `${label}: event ${index} error: ${event.error || event.errorCode || event.errorMessage}`));
+    check(() => {
+      assert(methods.has(event.method) && tiers.has(event.tier), `${label}: unavailable or unknown Pc result ${event.method} / ${event.tier}`);
+      assert(Number.isFinite(event.pc) && event.pc >= 0 && event.pc <= 1, `${label}: invalid probability`);
+      if (event.tier === 'maximum-only') {
+        assert.equal(event.uncertainty, 'MAXIMUM_PROBABILITY_ONLY', `${label}: maximum-only uncertainty`);
+        assert.equal(event.method, 'ALFANO-SPHERICAL-SMALL-HBR-MAX', `${label}: no-covariance method`);
+      } else if (event.tier === 'FOSTER-2D' || event.tier === 'usage-violation, below floor') {
+        assert.equal(event.method, 'FOSTER-2D', `${label}: disk tier method`);
+      } else if (event.tier === 'usage-violation, 3D-Nc') {
+        assert(event.method.startsWith('3D-NC-'), `${label}: Nc tier method`);
+      } else assert(event.method.startsWith('SDMC-'), `${label}: Monte Carlo tier method`);
+    });
   }
   for (const value of [summary.wallMs, summary.timings?.loadMs, summary.timings?.gridMs, summary.timings?.refineMs]) {
-    assert(Number.isFinite(value) && value >= 0, `${label}: stage timing missing`);
+    check(() => assert(Number.isFinite(value) && value >= 0, `${label}: stage timing missing`));
   }
-  for (const phase of ['start', 'end']) assert(summary.loadAverage?.[phase]?.length === 3 &&
-    summary.loadAverage[phase].every(Number.isFinite), `${label}: loadAverage.${phase} missing`);
+  for (const phase of ['start', 'end']) check(() => assert(summary.loadAverage?.[phase]?.length === 3 &&
+    summary.loadAverage[phase].every(Number.isFinite), `${label}: loadAverage.${phase} missing`));
+  return failures;
+}
+
+async function synthetic() {
+  const [fb, sds, transport, catalog, helpers, reporting] = await Promise.all([
+    import('flatbuffers'), import('spacedatastandards.org/lib/js/CQR/main.js'),
+    import('./lib/conjunctionCommandHarness.mjs'), import('./lib/syntheticCatalog.mjs'),
+    import('./lib/cqr.mjs'), import('../gpu/catalogScreen.mjs'),
+  ]);
+  const { CQR, CDM, OMM, cqrProbabilityAlgorithm: algorithm, cqrUncertaintyOrigin: uncertainty,
+    cqrCovarianceBasis: basis } = sds;
+  const { encodeCqr, initCqrFlatc, gpRecord, gpSource, publishedSchema, screeningControls, earthFrame } = helpers;
+  const flatc = await initCqrFlatc(), objects = catalog.syntheticGp();
+  assert.equal(objects.length, 241, 'the public fixture has 240 crossing-orbit objects plus SYN-DOWN');
+  const frames = objects.map((g) => ({ portId: 'catalog', payload:
+    flatc.generateBinary(publishedSchema('OMM'), JSON.stringify(gpRecord(g)), { sizePrefix: false }) }));
+  const model = { portId: 'uncertainty_model', payload: new Uint8Array(fs.readFileSync(await provisionModel())) };
+  // Public invented elements, TEME/UTC, 2026-10-02T23:00Z, nearly two days
+  // after their epoch. SYN-5-24/SYN-5-36 exercises the >=1e-4 gate even with
+  // the higher catalog reporting floor. The 100 km admission threshold and
+  // 10 m combined hard-body radius use no licensed encounter data.
+  const controls = (on, workers = 4) => ({ ...screeningControls({ startJd: 2461316.4583333335,
+    durationSeconds: 3600, thresholdKm: 100, combinedRadiusM: 10, coarseStepSec: 60, numThreads: workers }),
+    ALGORITHM: on ? 'FOSTER' : 'ALFANO_MAXIMUM' });
+  const instance = { MODULE_ID: 'conjunction-assessment', INSTANCE_ID: 'tiered-pc-synthetic', GENERATION: 1 };
+  const h = await transport.createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  const port = (response, name) => response.outputs.find((f) => f.portId === name)?.payload;
+  const decode = (bytes) => CQR.getRootAsCQR(new fb.ByteBuffer(bytes)).unpack();
+  const count = (values) => Object.fromEntries([...values.reduce((m, value) => m.set(value, (m.get(value) ?? 0) + 1), new Map())]
+    .sort(([a], [b]) => a.localeCompare(b)));
+  const identity = (event) => [event.PRIMARY_ID, event.SECONDARY_ID, event.TCA.JULIAN_DATE,
+    event.MISS_DISTANCE_M, event.RELATIVE_SPEED_M_S];
+  const comparable = (event) => {
+    const copy = structuredClone(event);
+    // Each emission has its own message identity; scientific fields must agree.
+    if (copy.CONJUNCTION_MESSAGE) {
+      delete copy.CONJUNCTION_MESSAGE.CREATION_DATE;
+      delete copy.CONJUNCTION_MESSAGE.MESSAGE_ID;
+    }
+    return copy;
+  };
+  async function call(methodId, inputs) {
+    const response = await h.invoke({ methodId, inputs });
+    assert.equal(response.statusCode, 0, `${methodId}: ${response.errorCode ?? ''} ${response.errorMessage ?? ''}`);
+    return response;
+  }
+  async function drain(methodId, inputs, label) {
+    await waitForLoad(label);
+    const started = performance.now(), events = [], excluded = [];
+    let chunks = 0;
+    for (;;) {
+      assert(chunks++ < 1000, `${label}: bounded result drain reaches FINAL_CHUNK`);
+      const response = await call(methodId, inputs), bytes = port(response, 'result');
+      assert(bytes, `${label}: result frame present`);
+      const result = decode(bytes).CATALOG_RESULT;
+      assert(result, `${label}: catalog result arm present`);
+      assert.equal(Number(result.OBJECTS_PARSED), objects.length, `${label}: every catalog source accounted for`);
+      assert.equal(Number(result.EVENT_OFFSET), events.length, `${label}: contiguous event chunks`);
+      assert.equal(Number(result.STATISTICS.FAILED_PAIRS), 0, `${label}: no failed pair silently omitted`);
+      events.push(...result.EVENTS);
+      for (const frame of response.outputs.filter((f) => f.portId === 'excluded'))
+        excluded.push(OMM.getRootAsOMM(new fb.ByteBuffer(frame.payload)).unpack());
+      if (result.FINAL_CHUNK) {
+        assert.equal(events.length, Number(result.CONJUNCTIONS_FOUND), `${label}: no dropped output event`);
+        break;
+      }
+    }
+    assert(events.length > 0, `${label}: conjunctions present`);
+    assert.deepEqual(excluded.map((x) => x.OBJECT_NAME), ['SYN-DOWN'], `${label}: refused SGP4 source is explicitly excluded`);
+    assert.match(excluded[0].COMMENT, /Excluded from conjunction screening:.*First failure at .*Satellite has decayed/);
+    const summaries = events.map(reporting.eventSummary);
+    const methodCounts = count(summaries.map((e) => e.method)), tierCounts = count(summaries.map((e) => e.tier));
+    console.log(`${label}: status=200 statusCode=0; objects=${objects.length}; events=${events.length}; chunks=${chunks}; total=${((performance.now() - started) / 1000).toFixed(3)} s`);
+    console.log(`methodCounts=${JSON.stringify(methodCounts)}; tierCounts=${JSON.stringify(tierCounts)}; excluded=${JSON.stringify(excluded.map((x) => ({ name: x.OBJECT_NAME, norad: x.NORAD_CAT_ID, reason: x.COMMENT })))}`);
+    return { events, summaries, excluded };
+  }
+  function checkPair(off, on, label) {
+    assert.deepEqual(on.events.map(identity), off.events.map(identity), `${label}: Pc preserves every event and its input order`);
+    assert.deepEqual(on.excluded, off.excluded, `${label}: Pc preserves exclusion evidence`);
+    const fallbacks = [], unavailable = [];
+    for (const [i, event] of on.events.entries()) {
+      const p = event.PROBABILITY, cdm = event.CONJUNCTION_MESSAGE, summary = on.summaries[i];
+      const comments = [cdm?.COMMENT, cdm?.OBJECT1?.COMMENT, cdm?.OBJECT2?.COMMENT].filter(Boolean).join('\n');
+      assert.equal(event.COMBINED_RADIUS_M, 10, `${label}: requested combined HBR`);
+      assert(Number.isFinite(summary.pc) && summary.pc >= 0 && summary.pc <= 1, `${label}: finite Pc`);
+      assert(!event.error && !event.errorCode && !event.errorMessage, `${label}: no event error`);
+      if (summary.tier.startsWith('usage-violation,')) {
+        assert(cdm, `${label}: usage violation carries a CDM`);
+        assert(comments.includes(summary.tier), `${label}: exact machine tier retained in comment`);
+        assert.match(comments, /grade=Screening/, `${label}: screening numerical grade visible`);
+        assert.match(comments, /(?:tolerance|relative error budget|sample_cap)=/, `${label}: numerical policy visible`);
+        assert.equal(summary.pc, cdm.COLLISION_PROBABILITY, `${label}: consumer reads CDM Pc`);
+      }
+      if (['usage-violation, 3D-Nc', 'usage-violation, Monte Carlo'].includes(summary.tier)) {
+        assert.match(cdm.COLLISION_PROBABILITY_METHOD, /^(?:3D-NC-|SDMC-)/, `${label}: actual fallback method in CDM`);
+        assert.equal(summary.method, cdm.COLLISION_PROBABILITY_METHOD, `${label}: consumer preserves actual method name`);
+        assert.equal(p.ALGORITHM, algorithm.ALFANO_MAXIMUM, `${label}: no fallback masquerades as an SDS method`);
+        assert.equal(p.UNCERTAINTY_SOURCE, uncertainty.MAXIMUM_PROBABILITY_ONLY);
+        assert.equal(p.PROBABILITY, 0, `${label}: absent covariance probability remains the schema default`);
+        assert.equal(p.HAS_MAXIMUM_PROBABILITY, true);
+        assert.equal(p.MAXIMUM_PROBABILITY, off.events[i].PROBABILITY.MAXIMUM_PROBABILITY, `${label}: CQR retains the same Alfano maximum`);
+        for (const side of ['PRIMARY', 'SECONDARY']) {
+          assert.equal(event[`${side}_COVARIANCE_BASIS`], basis.NONE, `${label}: maximum-only covariance basis`);
+          assert.equal(event[`${side}_SIGMA_RTN_M`], null, `${label}: no sigma on maximum-only CQR`);
+        }
+        fallbacks.push({ primary: event.PRIMARY_NAME, secondary: event.SECONDARY_NAME,
+          method: summary.method, tier: summary.tier, pc: summary.pc });
+      } else if (summary.tier !== 'maximum-only') {
+        assert.equal(p.ALGORITHM, algorithm.FOSTER, `${label}: representable Foster stays in CQR`);
+        assert.equal(summary.method, 'FOSTER-2D', `${label}: SANA Foster alias maps to engine method`);
+        assert.equal(p.UNCERTAINTY_SOURCE, uncertainty.SYNTHESIZED_COVARIANCE);
+        assert.equal(summary.pc, p.PROBABILITY, `${label}: representable CQR and CDM agree`);
+      } else {
+        // Far-tail Foster quadrature may be unavailable under its unchanged
+        // error budget. It is a disclosed unavailable result, never a made-up
+        // covariance Pc or a reason to remove the conjunction.
+        assert(!cdm?.COLLISION_PROBABILITY_METHOD, `${label}: unavailable Pc has no invented CDM method`);
+        assert.match(comments, /method=PC-UNAVAILABLE/, `${label}: unavailable covariance Pc identified`);
+        assert.match(comments, /Collision probability calculation failed:/, `${label}: unavailable reason visible`);
+        assert.equal(p.ALGORITHM, algorithm.ALFANO_MAXIMUM);
+        assert.equal(p.UNCERTAINTY_SOURCE, uncertainty.MAXIMUM_PROBABILITY_ONLY);
+        assert.equal(p.MAXIMUM_PROBABILITY, off.events[i].PROBABILITY.MAXIMUM_PROBABILITY);
+        unavailable.push({ primary: event.PRIMARY_NAME, secondary: event.SECONDARY_NAME, reason: cdm.COMMENT });
+      }
+    }
+    assert(fallbacks.length > 0, `${label}: fixture must exercise an unrepresentable Nc/MC fallback`);
+    console.log(`${label}: labelled fallback CDMs=${JSON.stringify(fallbacks)}; all ${on.events.length} events retained`);
+    if (unavailable.length) console.log(`${label}: Pc unavailable, maximum-only retained=${JSON.stringify(unavailable)}`);
+  }
+  let handle;
+  try {
+    const catalogInputs = (on) => [{ portId: 'request', payload: encodeCqr(flatc, { CATALOG_REQUEST: {
+      CONTROLS: controls(on), EVALUATION_FRAME: earthFrame('TEME') } }) }, ...frames, model];
+    const off = await drain('screen_catalog', catalogInputs(false), 'Synthetic screen_catalog Pc off');
+    const on = await drain('screen_catalog', catalogInputs(true), 'Synthetic screen_catalog Pc on');
+    checkPair(off, on, 'Synthetic screen_catalog');
+    const selected = on.events.find((e) => /^(?:3D-NC-|SDMC-)/.test(e.CONJUNCTION_MESSAGE?.COLLISION_PROBABILITY_METHOD ?? ''));
+    const pairControls = { ...controls(true, 1),
+      START_EPOCH: helpers.utcJd(selected.TCA.JULIAN_DATE - 60 / 86400), DURATION_SECONDS: 120 };
+    const pairRequest = { PAIR_REQUEST: {
+      PRIMARY: gpSource(objects.find((g) => g.NORAD_CAT_ID === selected.PRIMARY_NORAD_ID)),
+      SECONDARY: gpSource(objects.find((g) => g.NORAD_CAT_ID === selected.SECONDARY_NORAD_ID)),
+      CONTROLS: pairControls, PRIMARY_RADIUS_M: 5, SECONDARY_RADIUS_M: 5, EVALUATION_FRAME: earthFrame('TEME') } };
+    const pairInputs = [{ portId: 'request', payload: encodeCqr(flatc, pairRequest) }, model];
+    await waitForLoad('Synthetic Reference pair');
+    const assessed = decode(port(await call('assess_conjunction', pairInputs), 'result')).EVENT_RESULT;
+    const emitted = CDM.getRootAsCDM(new fb.ByteBuffer(port(await call('emit_cdm', pairInputs), 'cdm'))).unpack();
+    assert.match(assessed.CONJUNCTION_MESSAGE?.COLLISION_PROBABILITY_METHOD ?? '', /^(?:3D-NC-|SDMC-)/,
+      'Synthetic pair retains a genuine unrepresentable fallback');
+    const message = (cdm) => { const { CREATION_DATE, MESSAGE_ID, ...scientific } = cdm; return scientific; };
+    assert.deepEqual(message(assessed.CONJUNCTION_MESSAGE), message(emitted),
+      'Synthetic Reference pair assess_conjunction and emit_cdm have identical scientific CDM fields');
+    const pairComments = [emitted.COMMENT, emitted.OBJECT1?.COMMENT, emitted.OBJECT2?.COMMENT].filter(Boolean).join('\n');
+    assert(!pairComments.includes('grade=Screening') && !pairComments.includes('Screening grade'),
+      'pair assessments and emit_cdm retain Reference grade');
+    assert.equal(assessed.PROBABILITY.ALGORITHM, algorithm.ALFANO_MAXIMUM);
+    assert.equal(assessed.PROBABILITY.UNCERTAINTY_SOURCE, uncertainty.MAXIMUM_PROBABILITY_ONLY);
+    const maximum = decode(port(await call('alfano_max_probability', [{ portId: 'request', payload: encodeCqr(flatc, {
+      ALFANO_REQUEST: { MISS_DISTANCE_M: assessed.MISS_DISTANCE_M, COMBINED_RADIUS_M: 10 } }) }]), 'result')).ALFANO_RESULT.MAXIMUM_PROBABILITY;
+    // Same native Alfano formula at this pair's assessed miss, with only the
+    // published m/km serialization round trip permitted to change rounding.
+    assert(Math.abs(assessed.PROBABILITY.MAXIMUM_PROBABILITY - maximum) <= 1e-12 * maximum,
+      'Synthetic fallback pair CQR retains the native Alfano maximum, not the fallback value or zero');
+    console.log(`Synthetic Reference pair: status=200 statusCode=0; method=${emitted.COLLISION_PROBABILITY_METHOD}; Pc=${emitted.COLLISION_PROBABILITY}; maximum=${maximum}; assess/emit CDMs agree; Reference grade retained`);
+    const prepared = await call('prepare_screening_index', [{ portId: 'request', payload: encodeCqr(flatc, { INDEX_REQUEST: {
+      INSTANCE: instance, INDEX_CONTENT: 'SOURCE_DESCRIPTIONS', REFINEMENT_MODE: 'EXACT_ONLY',
+      SOURCES: objects.map((g, i) => ({ ...gpSource(g), SOURCE_HANDLE: i + 1 })) } }) }]);
+    handle = decode(port(prepared, 'result')).INDEX_RESULT.SCREENING_INDEX_HANDLE;
+    const windowInputs = (on, workers = 4) => [{ portId: 'request', payload: encodeCqr(flatc, { WINDOW_REQUEST: {
+      INSTANCE: instance, SCREENING_INDEX_HANDLE: handle, CONTROLS: controls(on, workers), EVALUATION_FRAME: earthFrame('TEME') } }) }, model];
+    for (const method of ['screen_window', 'refine_candidates']) {
+      const residentOff = await drain(method, windowInputs(false), `Synthetic ${method} Pc off`);
+      const residentOn = await drain(method, windowInputs(true), `Synthetic ${method} Pc on`);
+      checkPair(residentOff, residentOn, `Synthetic ${method}`);
+      if (method === 'refine_candidates') {
+        const serial = await drain(method, windowInputs(true, 1), 'Synthetic refine_candidates Pc on, one worker');
+        assert.deepEqual(serial.events.map(comparable), residentOn.events.map(comparable),
+          'Synthetic resident refinement: all event scientific fields are independent of worker count');
+        console.log('Synthetic resident refinement: 1/4 workers agree on every event scientific field and output order');
+      }
+    }
+    console.log('Synthetic stage PASS: 241 public objects; no fallback abort; catalog/window/refine preserve events, CDM truth and exclusions');
+  } finally {
+    try {
+      if (handle) await call('destroy_screening_index', [{ portId: 'request', payload: encodeCqr(flatc, { DESTROY_REQUEST: {
+        INSTANCE: instance, SCREENING_INDEX_HANDLE: handle } }) }]);
+    } finally { await h.destroy?.(); }
+  }
 }
 
 async function screens() {
@@ -649,6 +916,7 @@ async function screens() {
   // directory too, never the system temporary directory.
   const scratch = fs.mkdtempSync(path.join(data, 'pc-tiered-screen-'));
   const results = [];
+  const failures = [];
   for (const [index, on] of [false, true, false, true].entries()) {
     const label = `Screen ${index + 1} Pc ${on ? 'on' : 'off'}`;
     await waitForLoad(label);
@@ -657,26 +925,34 @@ async function screens() {
       '--start', '2461314.5', '--days', '3', '--out', output,
       ...(on ? ['--algorithm', 'FOSTER', '--uncertainty-model', model] : [])]);
     const summary = JSON.parse(fs.readFileSync(output, 'utf8'));
-    verifyScreen(summary, label);
+    // Complete all four measurements even when a completed run fails acceptance.
+    // A failed child or trapped WASI worker still rejects immediately above.
+    const runFailures = verifyScreen(summary, label);
+    failures.push(...runFailures);
     results.push(summary);
-    const t = summary.timings, seconds = (ms) => (ms / 1000).toFixed(3);
-    console.log(`${label}: total=${seconds(summary.wallMs)} s load=${seconds(t.loadMs)} s search=${seconds(t.gridMs)} s refine=${seconds(t.refineMs)} s; conjunctions=${summary.events.length}`);
+    const t = summary.timings ?? {}, seconds = (ms) => (ms / 1000).toFixed(3);
+    console.log(`${label}: total=${seconds(summary.wallMs)} s load=${seconds(t.loadMs)} s search=${seconds(t.gridMs)} s refine=${seconds(t.refineMs)} s; conjunctions=${summary.events?.length ?? 'unavailable'}`);
     console.log(`methodCounts=${JSON.stringify(summary.methodCounts)}; tierCounts=${JSON.stringify(summary.tierCounts)}; loadAverage=${JSON.stringify(summary.loadAverage)}`);
+    const eventErrors = (Array.isArray(summary.events) ? summary.events : []).filter((event) => event?.error || event?.errorCode || event?.errorMessage);
+    console.log(`${label}: event errors=${eventErrors.length}; acceptance failures=${runFailures.length}`);
+    for (const event of eventErrors) console.error(`${label}: event error ${JSON.stringify(event)}`);
   }
-  assert.deepEqual(results[1].methodCounts, results[3].methodCounts, 'Pc-on method counts must be schedule independent');
-  assert.deepEqual(results[1].tierCounts, results[3].tierCounts, 'Pc-on tier counts must be schedule independent');
-  for (const result of results) assert.equal(result.conjunctions, results[0].conjunctions, 'Pc must not hide conjunctions');
+  collectAssertion(failures, () => assert.deepEqual(results[1].methodCounts, results[3].methodCounts, 'Pc-on method counts must be schedule independent'));
+  collectAssertion(failures, () => assert.deepEqual(results[1].tierCounts, results[3].tierCounts, 'Pc-on tier counts must be schedule independent'));
+  for (const result of results) collectAssertion(failures, () => assert.equal(result.conjunctions, results[0].conjunctions, 'Pc must not hide conjunctions'));
   const off = (results[0].wallMs + results[2].wallMs) / 2;
   const on = (results[1].wallMs + results[3].wallMs) / 2;
   console.log(`Pc-on/Pc-off mean total ratio=${(on / off).toFixed(4)}; off=${(off / 1000).toFixed(3)} s; on=${(on / 1000).toFixed(3)} s; limit=2.0`);
-  assert(on <= 2 * off, `Pc-on mean total exceeds 2.0 x Pc-off: ${on / off}`);
+  collectAssertion(failures, () => assert(on <= 2 * off, `Pc-on mean total exceeds 2.0 x Pc-off: ${on / off}`));
+  assert.equal(failures.length, 0, `Screen acceptance failures (${failures.length}):\n${failures.join('\n')}`);
   console.log('Screen stage PASS: four completed runs, identical Pc-on counts, no event errors');
 }
 
 try {
-  if (options.only !== 'screen') await native();
-  if (options.only !== 'native') await screens();
-  console.log(`Tiered Pc E2E PASS (${options.only ?? 'native + screen'})`);
+  if (!options.only || options.only === 'native') await native();
+  if (!options.only || options.only === 'synthetic') await synthetic();
+  if (!options.only || options.only === 'screen') await screens();
+  console.log(`Tiered Pc E2E PASS (${options.only ?? 'native + synthetic + screen'})`);
 } catch (error) {
   console.error(`Tiered Pc E2E FAIL: ${error.message}`);
   process.exitCode = 1;

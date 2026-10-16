@@ -40,6 +40,7 @@ off-diagonal terms through an absolute near-axis threshold.
 | `ALFANO-2005`, `LAAS-2015`, `CHAN-1997` | Existing numerical/series methods, now using the corrected covariance principal-axis geometry. |
 | `PATERA-2001`, `ALFRIEND-2D` | Historical names retained for compatibility. These implementations use fixed polar midpoint quadrature. They do not implement Patera's published contour integral or Gauss–Legendre quadrature, and are not the adaptive default. |
 | `2D-NC-HALL`, `3D-NC-HALL` | Expected collision entries using Hall's equinoctial peak-overlap model. The engine checks applicability before treating Nc as Pc. These are full-state fallback APIs, not disk-method factory choices. |
+| `3D-NC-HALL-QUADRATIC-TIME` | Screening-grade Hall finite-sphere flux with a guarded quadratic-time approximation. Failed applicability guards use full sphere-flux integration. |
 | `2D-NC-CARTESIAN`, `3D-NC-CARTESIAN` | Corresponding Cartesian covariance-propagation models, used for rectilinear encounters. Their names distinguish them from the equinoctial Hall model. |
 | `SDMC-TWO-BODY`, `SDMC-RECTILINEAR` | Seeded full-state Monte Carlo over a finite observation interval, including overlap at its start. The explicit `-ENTRY-ONLY` variants exclude initial overlap to reproduce CARA's published counting convention. |
 
@@ -142,8 +143,8 @@ The uncalled alternative `collision_probability()` implementation was removed.
 covariances, HBR, common epoch, and gravitational parameter (km, seconds).
 Position-only callers retain an explicit incomplete usage-check status.
 Relative speeds below 1e-10 km/s are flagged `LOW_RELATIVE_SPEED`; there is no
-invented 1 m sigma. A violating position-only event reports `PC-UNAVAILABLE`
-because a full-state fallback needs velocity uncertainty.
+invented 1 m sigma. A violating position-only event requiring a full-state
+fallback reports `PC-UNAVAILABLE` because it lacks velocity uncertainty.
 
 Between-object cross-correlation is off by default. Enabling
 `apply_cross_correlation` uses the caller's `Cov(primary,secondary)` matrix
@@ -153,15 +154,88 @@ error; it does not set the off-diagonal entries within either object's
 covariance to zero. The CARA fixture cases derive the supplied cross matrix
 from density sensitivity as in `Pc_CovXCorr.m`.
 
-The existing SDS CQR enumeration has no entries for the new maximum,
-Frisbee, Nc, or SDMC method names and no usage-reason/Monte-Carlo confidence
-fields. Native C++ APIs expose these methods. CQR source assessments perform
-the same routing, but fail explicitly if their actual result cannot be
-represented in that enum. They do not report a fallback as `FOSTER`.
-No local schema or exported invoke function was added. An upstream SDS
-extension is required to expose those new choices and diagnostics in CQR.
+The SDS CQR probability enumeration cannot represent every engine method.
+For a covariance event whose actual method is representable, `PROBABILITY`
+keeps that method and value. Otherwise it retains the labelled spherical
+maximum: `ALFANO_MAXIMUM`, `UNCERTAINTY_SOURCE MAXIMUM_PROBABILITY_ONLY`,
+covariance bases `NONE`, and no sigmas. The event's full CDM in
+`CONJUNCTION_MESSAGE` carries the actual `COLLISION_PROBABILITY` and
+`COLLISION_PROBABILITY_METHOD`; a fallback value is never assigned another
+method's enum. CDM comments carry the tier, usage reason, grade, numerical
+policy and available confidence diagnostics. Consumers read the CDM value
+and method when present, otherwise the CQR probability. A no-covariance
+event has only the maximum-only CQR result. No schema extension is needed.
 The cross-correlation matrix option is currently a native C++ API option;
 existing CQR inputs cannot carry it.
+
+### Tiered probability and numerical grades
+
+Every usable covariance is assessed with the Foster disk integral and the
+2-D usage checks. A valid encounter retains `FOSTER-2D`. For a usage
+violation, the gate is the computed Pc2D; only when Pc2D is unavailable does
+the gate use `PC2D-SHAPE-SCALED-MAX`.
+
+| Gate | Calculation | Stable tier label |
+| --- | --- | --- |
+| Below reporting floor | Retain Pc2D and the violation diagnostics | `usage-violation, below floor` |
+| Reporting floor through below Monte Carlo floor | 3D-Nc; Monte Carlo if Nc is inapplicable or unconverged | `usage-violation, 3D-Nc` or `usage-violation, Monte Carlo` |
+| At or above Monte Carlo floor | Monte Carlo | `usage-violation, Monte Carlo` |
+
+`PcTierOptions` and `ConjunctionEngine::set_pc_tier_options` configure the
+floors. Engine defaults are `kDefaultPcReportingFloor = 1e-7` and
+`kDefaultPcMonteCarloFloor = 1e-4`. The floors apply only to
+`Fallback::Automatic`; explicit fallback selections retain their forced
+behavior. `PcResult.probability_2d` preserves Pc2D when a fallback replaces
+the final probability. Unusable covariance stays `PC-UNAVAILABLE`.
+
+Catalog screens use bridge constants `kCatalogPcReportingFloor = 1e-4`
+and `kCatalogPcMonteCarloFloor = 1e-4`. A usage-violating event with
+`1e-7 <= Pc2D < 1e-4` therefore retains Pc2D, its violation diagnostics
+and `usage-violation, below floor`; it is not omitted. Pair assessments
+retain the engine's `1e-7` reporting floor. The full-catalog measurements
+for both floor pairs are recorded in [benchmark measurements](benchmark.md#tiered-pc-2026-10-16).
+With these catalog constants, the rebuilt WASM's two-run means were 80.095 s
+with Pc and 20.527 s without Pc over three days and 294,544 events, a 3.9020
+ratio against the 2.0 cost limit.
+
+`PcGrade::Reference` is the engine default and the grade used by pair
+assessments and `emit_cdm`. It preserves the authoritative calculations and
+their CARA tolerances. Catalog, resident-window and refinement screens use
+`PcGrade::Screening` and `compute_pc_batch` with the request's worker count.
+Results retain input order; Monte Carlo seeds depend on the encounter, not
+the worker or scheduling.
+
+Screening uses bounded 48-point Foster disk quadrature where its relative
+error budget is `1e-5`, with adaptive integration elsewhere and near a tier
+boundary. If adaptive Foster fails only its quadrature error budget and the
+log-density variation bound is at most 4, a positive 12-by-48 disk rule
+recovers the far tail. Polynomial exactness through degree 46 bounds its
+relative error by `2.71e-6`, within the same `1e-5` budget; Reference is
+unchanged. Four catalog tails agreed with doubled 24-by-96 long-double
+quadrature within `1.15e-13` relative. The public isotropic 36.6-sigma miss
+case with radius 0.08 sigma agrees with an independent Bessel-series
+integral within `1.35e-14`.
+
+Hall sphere flux starts with fewer time knots and angular points and a
+relative tolerance of `1e-2`. Its separately named quadratic-time
+approximation requires `R / sigma_min <= 0.1`, log-density variation no
+greater than 0.2, bounded quadratic-fit and inward-flux variation, and an
+observation interval below 0.02 orbital periods. Failed guards retain full
+sphere flux. Applicability checks for initial occupancy and repeated
+entries remain in force. Screening Monte Carlo uses deterministic sample
+prefixes, at least 32,768 samples and a 30-hit stopping target, with a
+default cap of 49,152; the result includes its 95% Wilson interval. An
+explicit sample budget remains authoritative. Grade and numerical-policy
+text accompany the result.
+
+On two seeded samples totaling 6,000 real encounters, Screening Nc differed
+from Reference by a median 0.007%, p99 0.49%, and maximum 0.99%. The
+acceptance limits are median at most 1% and p99 at most 10%. Screening Monte
+Carlo fell inside Reference's 95% Wilson interval for 35 of 36 encounters
+(97.2%; required at least 90%). The native stage of
+`tests/pcTieredScreen.e2e.mjs` guards agreement using public CARA geometries
+and retains all Reference assertions. See [benchmark measurements](benchmark.md)
+for full-catalog timing and screen floor selection.
 
 ### Usage checks and fallback interpretation
 
@@ -179,13 +253,13 @@ Failure to establish a peak is also reported. An additional conservative
 safeguard flags one-sigma relative-velocity uncertainty above 10% of speed;
 this threshold is explicitly separate from CARA's Q-derived indicators.
 
-Automatic routing uses 3D-Nc Hall for moderate orbital violations. Low relative
-speed, velocity uncertainty above 10%, duration/period above 0.5, or
-offset/period above 0.75 selects Monte Carlo directly. Unconverged Nc or an Nc
-applicability failure also selects Monte Carlo; invalid inputs remain errors.
-Callers can request the 2D-Nc fallback or Monte Carlo explicitly. The 2D Hall
-fallback refuses to claim convergence when its curvature analysis cannot
-establish an overlap peak.
+Automatic routing follows the probability floors above. Low relative speed,
+velocity uncertainty, duration and offset remain usage diagnostics; none
+forces Monte Carlo independently of the gate and Nc's own applicability
+check. Hall is used when the gravitational parameter is positive, Cartesian
+propagation otherwise. Callers can request 2D-Nc, 3D-Nc or Monte Carlo
+explicitly. The 2D Hall fallback refuses to claim convergence when its
+curvature analysis cannot establish an overlap peak.
 
 The Hall implementations propagate the full state covariance in equinoctial
 coordinates with iterative peak-overlap linearization. The 3D method
@@ -203,9 +277,9 @@ with minimum-distance searches over the finite window. A pericenter-based
 subdivision limit prevents unresolved long windows from being reported as
 successful estimates. The result includes sample, initial-overlap, entry, and
 total-hit counts plus a 95% Wilson interval. Zero hits still gives a nonzero
-upper confidence bound. The default 65,536 samples cannot establish very small
-Pc precisely; callers must choose a sampling budget appropriate to their
-decision threshold.
+upper confidence bound. Reference's default 65,536 samples cannot establish
+very small Pc precisely; callers must choose a sampling budget appropriate
+to their decision threshold.
 
 Both time bounds zero selects the full CARA duration estimate. When no such
 duration exists, the fallback uses plus/minus half the shorter orbital period,

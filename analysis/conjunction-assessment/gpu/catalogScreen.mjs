@@ -68,8 +68,10 @@ const PC_METHOD_NAMES = {
   FOSTER: 'FOSTER-2D', PATERA: 'PATERA-2001', ALFANO_MAXIMUM: 'ALFANO-SPHERICAL-SMALL-HBR-MAX',
   CHAN: 'CHAN-1997', ALFRIEND_1999: 'ALFRIEND-1999', ALFRIEND_1999_MAXIMUM: 'ALFRIEND-1999-MAX',
   ALFANO_2005: 'ALFANO-2005', LAAS_2015: 'LAAS-2015', ALFRIEND_2D: 'ALFRIEND-2D',
+  'FOSTER-1992': 'FOSTER-2D', 'ALFANO-MAX-PROBABILITY': 'ALFANO-SPHERICAL-SMALL-HBR-MAX',
+  'PATERA-LEGACY-POLAR': 'PATERA-2001',
 };
-const PC_TIERS = ['FOSTER-2D', 'usage-violation, below floor', 'usage-violation, 3D-Nc', 'usage-violation, Monte Carlo'];
+const PC_TIER_LABEL = /\busage-violation, (?:below floor|3D-Nc|Monte Carlo)\b/;
 
 // Keep standards probability metadata decoding separate from event identity.
 // A fallback's actual method/value and tier live in CDM because the CQR enum
@@ -78,16 +80,20 @@ function probabilitySummary(e) {
   const p = e.PROBABILITY, cdm = e.CONJUNCTION_MESSAGE;
   const uncertainty = cqrUncertaintyOrigin[p?.UNCERTAINTY_SOURCE] ?? null;
   const maximumOnly = uncertainty === 'MAXIMUM_PROBABILITY_ONLY';
-  const method = cdm?.COLLISION_PROBABILITY_METHOD || (maximumOnly ? 'ALFANO-SPHERICAL-SMALL-HBR-MAX' :
-    PC_METHOD_NAMES[cqrProbabilityAlgorithm[p?.ALGORITHM]] ?? 'PC-UNAVAILABLE');
-  const comment = cdm?.COMMENT?.trim() ?? '';
-  const tier = PC_TIERS.find((label) => comment.startsWith(label)) ??
-    (cdm?.COLLISION_PROBABILITY_METHOD ? method : maximumOnly ? 'maximum-only' : method);
+  const cdmMethod = cdm?.COLLISION_PROBABILITY_METHOD;
+  const encodedMethod = cdmMethod || (maximumOnly ? 'ALFANO_MAXIMUM' : cqrProbabilityAlgorithm[p?.ALGORITHM]);
+  const method = PC_METHOD_NAMES[encodedMethod] ?? (cdmMethod || 'PC-UNAVAILABLE');
+  // CCSDS diagnostics can occur in relative metadata or either object's
+  // COMMENT, following covariance provenance and method-registration text.
+  const comments = [cdm?.COMMENT, cdm?.OBJECT1?.COMMENT, cdm?.OBJECT2?.COMMENT].filter(Boolean).join('\n');
+  const tier = maximumOnly && !cdmMethod ? 'maximum-only' : comments.match(PC_TIER_LABEL)?.[0] ?? method;
+  const error = comments.match(/Collision probability calculation failed:[^\n]*/)?.[0];
   return {
     probability: p?.PROBABILITY ?? null,
-    pc: cdm?.COLLISION_PROBABILITY ?? p?.PROBABILITY ?? null,
+    pc: cdmMethod ? cdm.COLLISION_PROBABILITY ?? null : p?.PROBABILITY ?? null,
     method, tier, uncertainty,
     calibration: covarianceCalibration[p?.CALIBRATION] ?? null,
+    ...(error ? { error } : {}),
   };
 }
 

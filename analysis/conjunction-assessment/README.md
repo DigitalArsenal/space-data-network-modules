@@ -70,6 +70,14 @@ full-state fallbacks, and output-format limits. The historical no-covariance
 spherical value is an approximation, not a bound for arbitrary covariance
 shapes.
 
+Catalog screens evaluate tiered Pc in parallel at Screening grade; pair
+assessments retain Reference grade. Pc2D and usage diagnostics remain visible
+below the reporting floor, with 3D-Nc or seeded Monte Carlo above it. When a
+fallback has no CQR algorithm enum, the CQR probability stays labelled
+maximum-only and `CONJUNCTION_MESSAGE` carries its actual method, value and
+tier. See [Pc methods](docs/pc-methods.md) for floors and accuracy and
+[benchmarks](docs/benchmark.md) for measured screen cost.
+
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
 - events report the historical spherical small-HBR statistic (`ALFANO_MAXIMUM`,

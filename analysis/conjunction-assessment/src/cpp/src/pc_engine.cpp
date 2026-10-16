@@ -286,7 +286,7 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
             : pc_grade_==PcGrade::Screening ? screening_foster_2d(event.bplane)
                                           : Foster2D().compute(event.bplane);
         if(pc_grade_==PcGrade::Screening && fallback_==Fallback::Automatic &&
-           pc2d.converged && pc2d.iterations==48) {
+           pc2d.converged && (pc2d.iterations==48 || pc2d.iterations==576)) {
             // A faster quadrature must not move an encounter across a tier
             // boundary when its bounded numerical uncertainty overlaps it.
             for(double floor:{tier_options_.reporting_floor,tier_options_.monte_carlo_floor})
