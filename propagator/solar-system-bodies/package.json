@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-propagator-solar-system-bodies",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Ephemerides (NAIF SPK), IAU/MOON_ME orientation, apparent magnitudes and the sky observer for the Sun, planets, moons, dwarf planets and asteroids. Kernels are caller bytes delivered by CID.",
