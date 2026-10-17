@@ -48,7 +48,9 @@
   },
   {
    "path": "basilisk-wgs84-gtd7d-diagnostic.json",
-   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+   "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a",
+   "originalSha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b",
+   "note": "Reference numerical payload unchanged; enclosing trajectory metadata records unavailable historical source versions."
   },
   {
    "path": "basilisk-backend.py",
@@ -60,7 +62,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",
@@ -1860,7 +1865,10 @@
   },
   {
    "path": "../../../lib/astrodynamics.cpp",
-   "sha256": "34038b0e4588b463409437d455a569acfa3b2c7b144114058a1d9882bde9f49e"
+   "sha256": "34038b0e4588b463409437d455a569acfa3b2c7b144114058a1d9882bde9f49e",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../../../../../third_party/nrlmsise00/nrlmsise-00.c",
@@ -10736,5 +10744,11 @@
     }
    ]
   }
- ]
+ ],
+ "provenanceMetadataUpdate": {
+  "scope": "Historical source versions retain their original paths and digests as unavailable informational provenance. No reference states, convergence results, density probes, settings or other payload fields changed.",
+  "originalRecordSha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6",
+  "unchangedPayloadSha256": "518963e45bfa6ea20b710139847e5e29fec4d7e5e81685733d9202028882c876",
+  "payloadEncoding": "UTF-8 JSON, recursively sorted object keys, no insignificant whitespace; excludes inputFiles and provenanceMetadataUpdate."
+ }
 }

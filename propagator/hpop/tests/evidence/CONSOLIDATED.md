@@ -2,7 +2,7 @@
 
 Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/hpop/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report.
 
-HPOP 1.3.1, SHA-256 `8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+HPOP 1.4.0, SHA-256 `eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
 
 ## Protocol and coverage
 
@@ -30,7 +30,7 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | tudatpy | 1.0.0 | 59 | 13 | 59 | 0 | 0 | 0 |
 | Tudat WASM | 1.0.0.dev4 | 27 | 45 | 27 | 0 | 0 | 0 |
 | Basilisk | 2.12.0 | 50 | 22 | 43 | 7 | 0 | 0 |
-| ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 7 | 6 | 10 | 0 |
+| ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
 | Vallado SGP4-VER | python-sgp4 2.27 (Brandon Rhodes; MIT), source distribution; module 1.2.0 | 9 | 0 | 7 | 2 | 0 | 21 |
 | SGP4-XP | 9.1.1.0; module 0.1.1 | 1 | 0 | 1 | 0 | 0 | 0 |
@@ -42,19 +42,19 @@ Maxima across each tool's supported cases, at HPOP's suite setting; the Orekit f
 | Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
-| LEO400 | field + third bodies + SRP (no drag) | 18.897 mm | 45.193 mm | 45.172 mm | 17.772 mm | 18.113 mm | 19.898 mm | 17.745 mm | 1.318 mm |
-| LEO400 | drag | 25.022 mm | 2.337 m | 1.380 m | 12.459 m | 38.838 mm | 33.545 mm | 5418.749 m | 4.054 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 18.875 mm | 45.162 mm | 45.141 mm | 17.729 mm | 18.148 mm | 19.926 mm | 17.671 mm | 1.317 mm |
+| LEO400 | drag | 25.856 mm | 2.337 m | 1.380 m | 12.459 m | 38.864 mm | 33.484 mm | 5418.749 m | 4.077 mm |
 | SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
-| SSO700 | field + third bodies + SRP (no drag) | 14.817 mm | 19.400 mm | 27.703 mm | 15.972 mm | 14.416 mm | 14.264 mm | 15.821 mm | 1.351 mm |
-| SSO700 | drag | 16.929 mm | 7.965 m | 164.692 mm | 45.653 mm | 13.506 mm | 65.290 mm | 58.128 m | 1.096 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 14.595 mm | 19.487 mm | 27.789 mm | 15.879 mm | 14.367 mm | 14.224 mm | 15.880 mm | 1.355 mm |
+| SSO700 | drag | 16.834 mm | 7.965 m | 164.793 mm | 45.604 mm | 13.555 mm | 65.324 mm | 58.128 m | 1.066 mm |
 | GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
-| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.139 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.219 mm |
+| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.140 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.220 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
 | GEO | point mass | 0.035 mm | 0.001 mm | 0.001 mm | 0.002 mm | 9.906e-04 mm | 0.003 mm | 6.219e-04 mm | 0.037 mm |
-| GEO | field + third bodies + SRP (no drag) | 0.066 mm | 0.150 mm | 1.330 mm | 0.153 mm | 0.147 mm | 0.141 mm | 0.148 mm | 0.065 mm |
+| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.148 mm | 0.141 mm | 0.148 mm | 0.065 mm |
 | GEO | drag | — | — | — | — | — | — | — | — |
 | MOLNIYA | point mass | 0.579 mm | 0.013 mm | 0.059 mm | 0.003 mm | 0.007 mm | 0.008 mm | 0.020 mm | 0.572 mm |
-| MOLNIYA | field + third bodies + SRP (no drag) | 11.034 mm | 5.116 mm | 28.313 mm | 1.172 mm | 10.767 mm | 11.221 mm | 1.134 mm | 9.839 mm |
+| MOLNIYA | field + third bodies + SRP (no drag) | 11.206 mm | 5.125 mm | 28.577 mm | 1.361 mm | 10.973 mm | 11.352 mm | 1.225 mm | 9.847 mm |
 | MOLNIYA | drag | — | — | — | — | — | — | — | — |
 
 For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).
@@ -65,12 +65,12 @@ Both columns use HPOP's suite setting and the same supported drag cases per tool
 
 | Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.265 mm | 1.500 m | not met | met |
-| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.955 mm | 1.500 m | not met | met |
-| Nyx | LEO400 | 5 | 12.459 m | 50.136 mm | 100.000 mm | not met | met |
-| Nyx | SSO700 | 3 | 45.653 mm | 14.967 mm | 100.000 mm | met | met |
-| Basilisk | LEO400 | 4 | 5418.749 m | 26.553 mm | 100.000 mm | not met | met |
-| Basilisk | SSO700 | 3 | 58.128 m | 15.210 mm | 100.000 mm | not met | met |
+| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.207 mm | 1.500 m | not met | met |
+| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.950 mm | 1.500 m | not met | met |
+| Nyx | LEO400 | 5 | 12.459 m | 50.162 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 45.604 mm | 15.016 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.749 m | 26.509 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.128 m | 15.259 mm | 100.000 mm | not met | met |
 
 - GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic. [Evidence](gmat/anomalous-oxygen.json).
 - Nyx: Published NRLMSISE-00 formulas + WGS84 shape. [Evidence](nyx/drag-settings-diagnostic.json).
@@ -84,11 +84,11 @@ No STM pass threshold is defined by the export.
 
 | Tool | STM maximum relative column difference | Interpretation |
 | --- | --- | --- |
-| Orekit | 1.78077e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
-| GMAT R2026a | 2.59072e-05 | 57 stored suite STM comparisons; largest relative column difference 2.590718301820299e-5. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol. |
+| Orekit | 1.78057e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
+| GMAT R2026a | 2.5907e-05 | 57 suite STM comparisons; largest relative column difference 0.000025907000492078618. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol. |
 | GMAT R2022a | not exposed | R2022a has no stored STM comparisons; no agreement claim is made. |
 | Nyx | 135.001 | The STM comparison is not usable as an HPOP check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context. |
-| tudatpy | 2.59074e-05 | STM and Cd*A/m, Cr*A/m, Cd*A/m-rate, and in-track-acceleration sensitivity agreement is reported as maximum relative column difference, separately for position and velocity rows. Native aerodynamic state partials use central finite differences at 10 m position and 0.01 m/s velocity perturbations, also used by the time-varying-drag adapter. The native cannonball SRP partial omits the eclipse-attenuation position gradient; its effect is conditional on encountering eclipse transitions, not every SRP case. R2 STM omissions record unavailable native non-Schwarzschild partials. Every exported sensitivity is included where its variational case is supported; the shared export defines no STM pass/fail threshold. |
+| tudatpy | 2.59073e-05 | STM and Cd*A/m, Cr*A/m, Cd*A/m-rate, and in-track-acceleration sensitivity agreement is reported as maximum relative column difference, separately for position and velocity rows. Native aerodynamic state partials use central finite differences at 10 m position and 0.01 m/s velocity perturbations, also used by the time-varying-drag adapter. The native cannonball SRP partial omits the eclipse-attenuation position gradient; its effect is conditional on encountering eclipse transitions, not every SRP case. R2 STM omissions record unavailable native non-Schwarzschild partials. Every exported sensitivity is included where its variational case is supported; the shared export defines no STM pass/fail threshold. |
 | Tudat WASM | not exposed | The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns. |
 | Basilisk | not exposed | Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped. |
 | ERFA / SPICE | not exposed | not exposed |
@@ -102,29 +102,32 @@ No STM pass threshold is defined by the export.
 
 | Row | Maximum difference | Limit | Verdict / role | Cause / note |
 | --- | --- | --- | --- | --- |
-| TAI - UTC | maximum difference: 0 s | maximum difference: ≤ 0 s | met | 37 s at every epoch on all three |
-| TT from UTC | maximum difference: 5.59658e-12 s | maximum difference: ≤ 1e-09 s | met | HPOP carries TT as whole seconds and their fraction |
-| TDB - TT | maximum difference: 3.19749e-05 s | not specified | diagnostic | HPOP: 1.658 ms sin M + 14 us sin 2M, the difference taken in one double Julian date (40 us steps) |
-| TDB - TT | maximum difference: 1.3258e-05 s | not specified | diagnostic | reference spread |
-| TDB date the force model receives | maximum difference: 4.6134e-05 s | not specified | diagnostic | one double Julian date (resolution 40 us) of HPOP's TDB |
-| GCRF -> ITRF at HPOP's own instant | maximum difference: 0.000483482 mas | maximum difference: ≤ 0.021 mas | met | HPOP interpolates X, Y and s linearly between whole hours of TT (stated bound 0.02 mas) |
-| GCRF -> ITRF at the UTC epoch | maximum difference: 0.213831 mas | maximum difference: ≤ 0.022 mas | missed | HPOP precision property |
-| ERFA at HPOP's instant against ERFA at the epoch | maximum difference: 0.213831 mas | not specified | diagnostic | the clock alone (Earth rotation over the instant difference) |
-| GCRF -> ITRF | maximum difference: 8.89712 mas | maximum difference: ≤ 5 mas | missed | reference spread |
-| GCRF -> ITRF, reference spread | maximum difference: 8.85713 mas | not specified | diagnostic | reference spread |
-| GMST of the tides (gmst2006) at HPOP's own UT1 and TT | maximum difference: 0 mas | maximum difference: ≤ 0.001 mas | met | HPOP's own ERA + IAU 2006 polynomial (not ERFA) |
-| GMST of the tides at the UTC epoch | maximum difference: 0.508364 mas | not specified | diagnostic | adds the single-double UT1 and TT dates |
-| GCRF -> Earth-fixed without Earth orientation input | maximum difference: 607.294 mas | not specified | diagnostic | No-EOP fallback: IAU 1976/1980, GAST at UTC, no polar motion or frame bias. Earth-fixed reference cases supply EOP and replace it with the CIO chain. Point-mass plus NRLMSISE00 without EOP is accepted and reaches this fallback. |
-| IAU 1976 precession (lib/coords precession) | maximum difference: 206.42 mas | maximum difference: ≤ 0.001 mas | missed | HPOP defect |
-| IAU 1980 nutation (lib/coords nutationMatrix) | maximum difference: 49.0832 mas | maximum difference: ≤ 10 mas | missed | HPOP defect |
-| GCRF -> TEME (lib/coords gcrfToTeme) | maximum difference: 211.795 mas | maximum difference: ≤ 10 mas | missed | HPOP defect |
-| GCRF -> Earth-fixed without Earth orientation input | maximum difference: 211.89 mas | maximum difference: ≤ 10 mas | missed | HPOP defect |
-| GCRF -> TEME (SGP4 axes) | maximum difference: 1.97811e-07 mas | maximum difference: ≤ 0.001 mas | met | the definition propagator/sgp4 uses |
-| GCRF -> TEME (SGP4 axes) | maximum difference: 77.6555 mas | not specified | diagnostic | spread between the two published TEME definitions |
-| Sun relative to the Earth, at HPOP's TDB date | maximum difference: 0.030 mm | maximum difference: ≤ 1.000 mm | met | kernel reading and interpolation |
-| Sun relative to the Earth, at the UTC epoch | maximum difference: 1.354 m | not specified | diagnostic | adds HPOP's TDB clock |
-| Moon relative to the Earth, at HPOP's TDB date | maximum difference: 1.478e-05 mm | maximum difference: ≤ 1.000 mm | met | kernel reading and interpolation |
-| Moon relative to the Earth, at the UTC epoch | maximum difference: 48.875 mm | not specified | diagnostic | adds HPOP's TDB clock |
+| TAI - UTC | maximum difference: 0 s | maximum difference: ≤ 0 s | met | Leap-second table agreement. |
+| TT from UTC | maximum difference: 5.59658e-12 s | maximum difference: ≤ 1e-09 s | met | PRW whole seconds and fraction construct the two-part TT force instant. |
+| TDB - TT | maximum difference: 1.34726e-05 s | not specified | diagnostic | Existing HPOP two-term model evaluated in seconds. Full ERFA TDB is a different model; no model substitution. |
+| TDB - TT reference spread | maximum difference: 1.3258e-05 s | not specified | diagnostic | Independent reference model spread. |
+| Force ephemeris TDB instant | maximum difference: 1.34706e-05 s | not specified | diagnostic | Two-part TT plus HPOP two-term TDB-TT. Remaining difference includes model spread and binary64 SPK ET representation. |
+| Force GCRF -> ITRF at same instant | maximum difference: 0.000483481 mas | maximum difference: ≤ 0.021 mas | met | Hourly TT interpolation of X/Y/s; exact two-part UT1 at each force evaluation. |
+| Force GCRF -> ITRF at exact epoch | maximum difference: 0.000483481 mas | maximum difference: ≤ 0.022 mas | met | No single-Julian-date force-clock rounding. |
+| Force TT clock contribution | maximum difference: 4.40826e-06 mas | not specified | diagnostic | Same CIO chain, differing only by represented TT. |
+| Force GCRF -> ITRF | maximum difference: 8.85737 mas | maximum difference: ≤ 5 mas | missed | reference spread |
+| Independent terrestrial-frame reference spread | maximum difference: 8.85713 mas | not specified | diagnostic | Recorded reference spread, not an HPOP defect. |
+| Tides GMST at same instant | maximum difference: 0 mas | maximum difference: ≤ 0.001 mas | met | Two-part UT1 and TT. |
+| Tides GMST at exact epoch | maximum difference: 4.3968e-06 mas | not specified | diagnostic | Two-part UT1 and TT. |
+| No-EOP fallback versus CIO | maximum difference: 533.295 mas | not specified | diagnostic | Legacy UT1=UTC, zero polar motion, no frame bias, IAU 1976/1980.. |
+| Classical GCRF/J2000 -> MOD | maximum difference: 0 mas | maximum difference: ≤ 0.001 mas | met | ERFA is the sole implementation. |
+| Classical MOD -> TOD | maximum difference: 0 mas | maximum difference: ≤ 1e-07 mas | met | ERFA is the sole implementation; full IAU 1980 series. |
+| Classical GCRF/J2000 -> TEME | maximum difference: 2.0002e-10 mas | maximum difference: ≤ 1e-07 mas | met | FK5 TEME definition. |
+| No-EOP fallback classical chain | maximum difference: 2.86251e-08 mas | maximum difference: ≤ 1e-07 mas | met | Reevaluated at every call, exact two-part dates, no hourly N*P cache. |
+| SGP4 GCRF -> TEME | maximum difference: 1.97811e-07 mas | maximum difference: ≤ 0.001 mas | met | Separate foundation/frames IAU 2006/2000A TEME definition. |
+| SGP4 versus FK5 TEME definitions | maximum difference: 77.6555 mas | not specified | diagnostic | Definition spread. |
+| Sun relative to Earth at force TDB | maximum difference: 0 mm | maximum difference: ≤ 1.000 mm | met | Native HPOP force API kernel read; km/km/s converted in C++ to metres. |
+| Sun relative to Earth at ERFA TDB | maximum difference: 395.263 mm | not specified | diagnostic | Remaining two-term TDB model spread. |
+| Moon relative to Earth at force TDB | maximum difference: 0 mm | maximum difference: ≤ 1.000 mm | met | Native HPOP force API kernel read. |
+| Moon relative to Earth at ERFA TDB | maximum difference: 14.053 mm | not specified | diagnostic | Remaining two-term TDB model spread. |
+| Public coords UTC-JD ECEF versus CIO | maximum difference: 533.295 mas | not specified | diagnostic | Remaining legacy budget: UT1-UTC, polar motion, frame bias and 1976/1980 versus 2006/2000A. |
+| Public coords UTC-JD ECEF versus SPICE | maximum difference: 525.313 mas | not specified | diagnostic | Legacy coords choices plus independent BPC reference spread. |
+| Neglected full-matrix derivative at GEO | maximum difference: 0.000890341 m/s | not specified | diagnostic | 10,000 epochs, all frame pairs/directions. Precession/nutation/equinox rates omitted by the documented Earth-rotation-only velocity contract. Includes central-difference rounding. |
 
 ### JPL Horizons
 
@@ -193,22 +196,19 @@ Controlled subtractions explain the primary differences. The rows below remain d
 
 ## Findings
 
-| Source defect | LEO bound | GPS bound | GEO bound |
-| --- | --- | --- | --- |
-| propagator/hpop/lib/coords.cpp:273: General-epoch t0 terms incorrectly use T for J2000 precession. | 6.783 m | 26.580 m | 42.196 m |
-| propagator/hpop/lib/coords.cpp:52: Ten erroneous IAU 1980 coefficient rows plus one spurious argument key; actual omissions include a 4.8 mas term. | 1.613 m | 6.320 m | 10.033 m |
+Classical-frame source defects remaining: 0. ERFA is the authoritative IAU 1976/1980 implementation. Before/after measurements and the velocity-axis diagnostic are in [before-after.json](erfa-spice/before-after.json).
 
-| Output state | WASM ECEF − ERFA CIO |
+| Classical ECEF versus CIO | Position bound |
 | --- | --- |
-| LEO | 13.667 m |
-| GPS | 53.553 m |
-| GEO | 85.016 m |
+| LEO | 17.525 m |
+| GPS | 68.671 m |
+| GEO | 109.015 m |
 
-These defect values are orientation-independent bounds. ECEF rows use GCRF positions on the positive x-axis at 2026-08-02T00:00:00.000 UTC. Reference-suite field/drag cases supply EOP and use the CIO force-model chain; the classical defects affect the legacy ECEF exports and no-EOP fallback. Actual ECEF output differences against ERFA CIO include the legacy UTC/TT, UT1, polar-motion and model-chain choices. precessionOnlyEffectM changes only the precession polynomial in a native counterfactual at the identical date and state; the native original matches shipped WASM exactly. Evidence: [erfa-spice/summary-erfa-spice.json](erfa-spice/summary-erfa-spice.json), [erfa-spice/diagnosis.json](erfa-spice/diagnosis.json).
+The remaining classical ECEF budget is UT1 = UTC, zero polar motion, no frame bias and the 1976/1980 model. These values are radius-times-angle bounds over the 50 sample epochs. Reference-suite field/drag cases supply EOP and use the CIO force-model chain.
 
-The force clock maximum is 4.6134e-05 s; its Earth-rotation difference is 0.213831 mas, with clock-plus-interpolation LEO bound 7.043 mm. Maxima occur at different epochs and are not added. Recorded clock representation: one double Julian date (resolution 40 us) of HPOP's TDB. Evidence: [erfa-spice/summary-erfa-spice.json](erfa-spice/summary-erfa-spice.json).
+The force TDB model spread is 1.34706e-05 s; the exact-epoch Earth-rotation difference is 0.000483481 mas, or 0.016 mm at LEO radius. Two-part TT plus HPOP two-term TDB-TT. Remaining difference includes model spread and binary64 SPK ET representation. Evidence: [ERFA/SPICE summary](erfa-spice/summary-erfa-spice.json).
 
-- **Nyx NRLMSISE-00 port:** With the published NRLMSISE-00 formulas and the WGS84 Earth shape, the five missed cases are about 0.05 m from HPOP (0.04195–0.05235 m), all below the unchanged 0.1 m limit. The port defect and the cached runner Earth-shape mismatch are separated in the per-case diagnostics; they do not indicate an HPOP defect. Evidence: [nyx/summary-nyx-2.6.0.json](nyx/summary-nyx-2.6.0.json).
+- **Nyx NRLMSISE-00 port:** With the published NRLMSISE-00 formulas and the WGS84 Earth shape, the five missed cases are about 0.05 m from HPOP, all below the unchanged 0.1 m limit. The exact corrected residuals are recorded per case. The port defect and the cached runner Earth-shape mismatch are separated in the per-case diagnostics; they do not indicate an HPOP defect. Evidence: [nyx/summary-nyx-2.6.0.json](nyx/summary-nyx-2.6.0.json).
 - **Nyx variational equation:** The STM comparison is not usable as an HPOP check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context. Evidence: [nyx/summary-nyx-2.6.0.json](nyx/summary-nyx-2.6.0.json).
 - **GMAT anomalous oxygen:** GMAT gtd7 excludes anomalous oxygen; HPOP and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the metre-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity. Evidence: [gmat/anomalous-oxygen.json](gmat/anomalous-oxygen.json).
 - **Basilisk atmosphere altitude and conventions:** Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/HPOP use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometre-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the metre-scale residual and passes every unchanged HPOP tolerance. This is a measured native model-setting limitation, not evidence of an HPOP defect. Evidence: [basilisk/summary-basilisk-2.12.0.json](basilisk/summary-basilisk-2.12.0.json).
@@ -469,8 +469,8 @@ Step setting: 640 sets × 7 times
 
 ### GMAT R2026a drag diagnostic inputs
 
-- HPOP trajectories at suite / steps30 / finest: `3ea42fa14d96a2c0c032784f9d6e9ead66cabdda438ac32cc9accbfe3f0469c2`.
-- Anomalous-oxygen diagnostic: `6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380`.
+- HPOP trajectories at suite / steps30 / finest: `0d6444429f24b175dd262f0c2eeda698c464e61fbb9e8b002c6f4e494a654238`.
+- Anomalous-oxygen diagnostic: `b824525d6df6c4ef57b64f79defa7390b482ff28baf92941b2154f7de06071d7`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -486,9 +486,9 @@ Step setting: 640 sets × 7 times
 
 ### Nyx drag diagnostic inputs
 
-- HPOP trajectories at suite / steps30 / finest: `3ea42fa14d96a2c0c032784f9d6e9ead66cabdda438ac32cc9accbfe3f0469c2`.
-- Published-formula / WGS84 trajectories: `82f7c9f28da369e1556e1ce7d0e4d6ac530a947573ef15921e488bf05f428688`.
+- HPOP trajectories at suite / steps30 / finest: `0d6444429f24b175dd262f0c2eeda698c464e61fbb9e8b002c6f4e494a654238`.
+- Published-formula / WGS84 trajectories: `277ed931674aff7742b2267a22818e5345ad4092386d8072e4c25ac82f65186a`.
 
 ### Basilisk drag diagnostic inputs
 
-- WGS84 / gtd7d trajectories: `8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b`.
+- WGS84 / gtd7d trajectories: `d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a`.

@@ -2624,8 +2624,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.05054964723320139,
-    "steps": 8635,
+    "worstM": 0.050569388385195924,
+    "steps": 8634,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2649,8 +2649,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.050750267904850134,
-    "steps": 8636,
+    "worstM": 0.05072683557074616,
+    "steps": 8635,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2674,7 +2674,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.05235439740001961,
+    "worstM": 0.052340773584865226,
     "steps": 8636,
     "met": true
    },
@@ -2699,8 +2699,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.041950579240634556,
-    "steps": 8637,
+    "worstM": 0.04194498912511606,
+    "steps": 8631,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2724,8 +2724,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.05212466804011455,
-    "steps": 8731,
+    "worstM": 0.05211418097904907,
+    "steps": 8724,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2749,8 +2749,8 @@
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00034761333616423206,
-    "steps": 8676,
+    "worstM": 0.0003531190057756934,
+    "steps": 8673,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2774,8 +2774,8 @@
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.0004300525417250561,
-    "steps": 8673,
+    "worstM": 0.0004382938606687607,
+    "steps": 8674,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2799,8 +2799,8 @@
    "finest": {
     "atHour": 20,
     "sampleCount": 24,
-    "worstM": 0.00027104623101667784,
-    "steps": 8678,
+    "worstM": 0.00026563178519524075,
+    "steps": 8676,
     "met": true
    },
    "cachedPublishedMinusWgs84": {
@@ -2819,5 +2819,26 @@
     "worstM": 0.000552274697941693
    }
   }
- ]
+ ],
+ "hpopRefresh": {
+  "module": {
+   "version": "1.4.0",
+   "file": "../../../dist/isomorphic/module.wasm",
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
+  },
+  "source": {
+   "path": "../refresh-derived-comparisons.mjs",
+   "sha256": "fc39c15196be42c90039ce34476a31ed317875dddb6eef564931248611844e15"
+  },
+  "reductions": [
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "c44c9e3526b5070454f13be7a518d08204b60f591183807d8d0e701d521b1563"
+   },
+   {
+    "path": "../consolidated-metrics.cpp",
+    "sha256": "34db0f0ce51be47620f2c297d30eaa0f0f016a032ff66b8341f5f50f839cb30c"
+   }
+  ]
+ }
 }

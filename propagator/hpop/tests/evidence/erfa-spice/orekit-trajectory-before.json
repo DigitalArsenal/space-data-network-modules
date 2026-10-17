@@ -1,0 +1,1001 @@
+{
+ "about": "Historical untouched 1.3.1 Orekit trajectory scores for LEO400/SSO700; retain all original suite/steps30/finest worstM values.",
+ "module": {
+  "version": "1.3.1",
+  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+ },
+ "cases": [
+  {
+   "id": "LEO400 F0-point-mass",
+   "orbit": "LEO400",
+   "forces": "F0-point-mass",
+   "toleranceM": 0.001,
+   "suite": {
+    "worstM": 0.0004788669757680982,
+    "met": true,
+    "atHour": 24,
+    "steps": 2346
+   },
+   "steps30": {
+    "worstM": 0.00022939777505017814,
+    "met": true,
+    "atHour": 24,
+    "steps": 2903
+   },
+   "finest": {
+    "worstM": 0.00015190685720620708,
+    "met": true,
+    "atHour": 24,
+    "steps": 8608
+   },
+   "integrationErrorM": 0.0003269618453151545
+  },
+  {
+   "id": "LEO400 F1-J2",
+   "orbit": "LEO400",
+   "forces": "F1-J2",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018058775679633234,
+    "met": true,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.0010528629469421947,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010486405406559738,
+    "met": true,
+    "atHour": 7,
+    "steps": 8612
+   },
+   "integrationErrorM": 0.017609031884811426
+  },
+  {
+   "id": "LEO400 F2-zonal20",
+   "orbit": "LEO400",
+   "forces": "F2-zonal20",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018065862699792764,
+    "met": true,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0010528904126856581,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001045895772702269,
+    "met": true,
+    "atHour": 7,
+    "steps": 8611
+   },
+   "integrationErrorM": 0.01761711617200543
+  },
+  {
+   "id": "LEO400 Z1-zonal20-sun-moon",
+   "orbit": "LEO400",
+   "forces": "Z1-zonal20-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018156535740855434,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010520477276934625,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010457917586457475,
+    "met": true,
+    "atHour": 7,
+    "steps": 8606
+   },
+   "integrationErrorM": 0.017711093941752288
+  },
+  {
+   "id": "LEO400 Z2-zonal20-sun-moon-srp",
+   "orbit": "LEO400",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.01881090111437818,
+    "met": true,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.0014088649934218807,
+    "met": true,
+    "atHour": 24,
+    "steps": 2961
+   },
+   "finest": {
+    "worstM": 0.0013175945971917403,
+    "met": true,
+    "atHour": 24,
+    "steps": 8641
+   },
+   "integrationErrorM": 0.017494047130151576
+  },
+  {
+   "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.021547814520861706,
+    "met": true,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.004066320200733292,
+    "met": true,
+    "atHour": 24,
+    "steps": 2958
+   },
+   "finest": {
+    "worstM": 0.00398981714375153,
+    "met": true,
+    "atHour": 24,
+    "steps": 8635
+   },
+   "integrationErrorM": 0.017558029517884304
+  },
+  {
+   "id": "LEO400 F3-field20x20",
+   "orbit": "LEO400",
+   "forces": "F3-field20x20",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018112741869270137,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010711598493167416,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010657091676758296,
+    "met": true,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017614800110852348
+  },
+  {
+   "id": "LEO400 F4-field-sun-moon",
+   "orbit": "LEO400",
+   "forces": "F4-field-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018169850405994347,
+    "met": true,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0010692145806355108,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010633372947514625,
+    "met": true,
+    "atHour": 7,
+    "steps": 8611
+   },
+   "integrationErrorM": 0.017679056991368885
+  },
+  {
+   "id": "LEO400 F5-field-sun-moon-srp",
+   "orbit": "LEO400",
+   "forces": "F5-field-sun-moon-srp",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.018690958701176583,
+    "met": true,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.001329091161571652,
+    "met": true,
+    "atHour": 24,
+    "steps": 2958
+   },
+   "finest": {
+    "worstM": 0.0012061566363591237,
+    "met": true,
+    "atHour": 24,
+    "steps": 8640
+   },
+   "integrationErrorM": 0.017485584379239374
+  },
+  {
+   "id": "LEO400 F6-field-sun-moon-srp-drag",
+   "orbit": "LEO400",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.021726644142352997,
+    "met": true,
+    "atHour": 24,
+    "steps": 1412
+   },
+   "steps30": {
+    "worstM": 0.004175332950209653,
+    "met": true,
+    "atHour": 24,
+    "steps": 2959
+   },
+   "finest": {
+    "worstM": 0.004053644618324132,
+    "met": true,
+    "atHour": 24,
+    "steps": 8636
+   },
+   "integrationErrorM": 0.017673022439216212
+  },
+  {
+   "id": "LEO400 R1-field-sun-moon-schwarzschild",
+   "orbit": "LEO400",
+   "forces": "R1-field-sun-moon-schwarzschild",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018130149976157483,
+    "met": true,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0010701996940489995,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.00106443822769053,
+    "met": true,
+    "atHour": 7,
+    "steps": 8610
+   },
+   "integrationErrorM": 0.01763663436170615
+  },
+  {
+   "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
+   "orbit": "LEO400",
+   "forces": "R2-field-sun-moon-relativity-iers2010",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018257209171506972,
+    "met": true,
+    "atHour": 24,
+    "steps": 1341
+   },
+   "steps30": {
+    "worstM": 0.0010703532603521153,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010632852156282518,
+    "met": true,
+    "atHour": 7,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.01778038626875514
+  },
+  {
+   "id": "LEO400 T1-field-sun-moon-solid-tides",
+   "orbit": "LEO400",
+   "forces": "T1-field-sun-moon-solid-tides",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.01814607154350264,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010698757355122473,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001063193082561763,
+    "met": true,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017657951581012802
+  },
+  {
+   "id": "LEO400 I1-field-sun-moon-in-track",
+   "orbit": "LEO400",
+   "forces": "I1-field-sun-moon-in-track",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018163410303211003,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010672411550924808,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010621366878879133,
+    "met": true,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017674183132702935
+  },
+  {
+   "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+   "orbit": "LEO400",
+   "forces": "B1-field-sun-moon-srp-drag-bdot",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.021132808188622027,
+    "met": true,
+    "atHour": 24,
+    "steps": 1415
+   },
+   "steps30": {
+    "worstM": 0.0037067070466056127,
+    "met": true,
+    "atHour": 24,
+    "steps": 2959
+   },
+   "finest": {
+    "worstM": 0.003604054129084444,
+    "met": true,
+    "atHour": 24,
+    "steps": 8636
+   },
+   "integrationErrorM": 0.017528787559964926
+  },
+  {
+   "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "LEO400",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.021503062757164498,
+    "met": true,
+    "atHour": 24,
+    "steps": 1416
+   },
+   "steps30": {
+    "worstM": 0.0039767775683247535,
+    "met": true,
+    "atHour": 24,
+    "steps": 2959
+   },
+   "finest": {
+    "worstM": 0.0038760001523409945,
+    "met": true,
+    "atHour": 24,
+    "steps": 8637
+   },
+   "integrationErrorM": 0.017627115552012854
+  },
+  {
+   "id": "LEO400 E1-field-sun-moon-eme2000",
+   "orbit": "LEO400",
+   "forces": "E1-field-sun-moon-eme2000",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018101800362080842,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010689274713898546,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001063038863573092,
+    "met": true,
+    "atHour": 7,
+    "steps": 8608
+   },
+   "integrationErrorM": 0.01761601921707493
+  },
+  {
+   "id": "LEO400 G1-egm96-36x36-sun-moon",
+   "orbit": "LEO400",
+   "forces": "G1-egm96-36x36-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.01721514589856223,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0010647634051002954,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001061777286479021,
+    "met": true,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.01672044202232051
+  },
+  {
+   "id": "LEO400 G2-egm2008-36z24t-sun-moon",
+   "orbit": "LEO400",
+   "forces": "G2-egm2008-36z24t-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018187215487344064,
+    "met": true,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.0010703509954663327,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010647069819474755,
+    "met": true,
+    "atHour": 7,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.017689501551327178
+  },
+  {
+   "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "orbit": "LEO400",
+   "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.0059487221939611735,
+    "met": true,
+    "atHour": 24,
+    "steps": 1894,
+    "jacobians": {
+     "parameters": {
+      "DRAG_AREA_OVER_MASS": 0.000005011540389270335,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000003709044727515105,
+      "IN_TRACK_ACCELERATION": 0.0000050692362201558365,
+      "SRP_AREA_OVER_MASS": 0.0001406165181749034
+     },
+     "stm": 0.000011645075501744101
+    }
+   },
+   "steps30": {
+    "worstM": 0.0037858347651423224,
+    "met": true,
+    "atHour": 24,
+    "steps": 2970
+   },
+   "finest": {
+    "worstM": 0.003959678833248212,
+    "met": true,
+    "atHour": 24,
+    "steps": 8731
+   },
+   "integrationErrorM": 0.0019890516077530787
+  },
+  {
+   "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
+   "orbit": "LEO400",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.025022275929181808,
+    "met": true,
+    "atHour": 24,
+    "steps": 1409
+   },
+   "steps30": {
+    "worstM": 0.0034839849402420048,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.001237102075599719,
+    "met": true,
+    "atHour": 15,
+    "steps": 8638
+   },
+   "integrationErrorM": 0.026208328753908106
+  },
+  {
+   "id": "SSO700 F0-point-mass",
+   "orbit": "SSO700",
+   "forces": "F0-point-mass",
+   "toleranceM": 0.001,
+   "suite": {
+    "worstM": 0.0004813512985516343,
+    "met": true,
+    "atHour": 24,
+    "steps": 2196
+   },
+   "steps30": {
+    "worstM": 0.0002254930543389604,
+    "met": true,
+    "atHour": 24,
+    "steps": 2902
+   },
+   "finest": {
+    "worstM": 0.00017842100191026042,
+    "met": true,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.00030293134064644453
+  },
+  {
+   "id": "SSO700 F1-J2",
+   "orbit": "SSO700",
+   "forces": "F1-J2",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014499386758272084,
+    "met": true,
+    "atHour": 24,
+    "steps": 1258
+   },
+   "steps30": {
+    "worstM": 0.001233727036029402,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0012664672271045217,
+    "met": true,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.01576562368644023
+  },
+  {
+   "id": "SSO700 F2-zonal20",
+   "orbit": "SSO700",
+   "forces": "F2-zonal20",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014548451167729841,
+    "met": true,
+    "atHour": 24,
+    "steps": 1256
+   },
+   "steps30": {
+    "worstM": 0.0012179650194237234,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0012624362822791285,
+    "met": true,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.015810659361431605
+  },
+  {
+   "id": "SSO700 Z1-zonal20-sun-moon",
+   "orbit": "SSO700",
+   "forces": "Z1-zonal20-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014466331952695819,
+    "met": true,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.0012420616480720652,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0012691486039329107,
+    "met": true,
+    "atHour": 24,
+    "steps": 8606
+   },
+   "integrationErrorM": 0.015735242616883947
+  },
+  {
+   "id": "SSO700 Z2-zonal20-sun-moon-srp",
+   "orbit": "SSO700",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.013800850479976553,
+    "met": true,
+    "atHour": 24,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 0.0016707675284160488,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0013513134256392192,
+    "met": true,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.015151909970403672
+  },
+  {
+   "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.01413437906136503,
+    "met": true,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.0013469797806088923,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0010300489316214909,
+    "met": true,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.01516410106732457
+  },
+  {
+   "id": "SSO700 F3-field20x20",
+   "orbit": "SSO700",
+   "forces": "F3-field20x20",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014480437941190192,
+    "met": true,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.0012860116929642347,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001328560434873705,
+    "met": true,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.015808633495811197
+  },
+  {
+   "id": "SSO700 F4-field-sun-moon",
+   "orbit": "SSO700",
+   "forces": "F4-field-sun-moon",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014633392214634599,
+    "met": true,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.001298667914294819,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0013384035789464925,
+    "met": true,
+    "atHour": 24,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.01597143641438444
+  },
+  {
+   "id": "SSO700 F5-field-sun-moon-srp",
+   "orbit": "SSO700",
+   "forces": "F5-field-sun-moon-srp",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.0140172003556535,
+    "met": true,
+    "atHour": 24,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 0.0014239879535624003,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0011214536292794219,
+    "met": true,
+    "atHour": 24,
+    "steps": 8677
+   },
+   "integrationErrorM": 0.01513816190313693
+  },
+  {
+   "id": "SSO700 F6-field-sun-moon-srp-drag",
+   "orbit": "SSO700",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.014225133171,
+    "met": true,
+    "atHour": 24,
+    "steps": 1343
+   },
+   "steps30": {
+    "worstM": 0.0012407552213739102,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0009263142512884917,
+    "met": true,
+    "atHour": 24,
+    "steps": 8673
+   },
+   "integrationErrorM": 0.015150819163975426
+  },
+  {
+   "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+   "orbit": "SSO700",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.014415740763126605,
+    "met": true,
+    "atHour": 24,
+    "steps": 1345
+   },
+   "steps30": {
+    "worstM": 0.0010670319717317927,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0007626359352043803,
+    "met": true,
+    "atHour": 24,
+    "steps": 8678
+   },
+   "integrationErrorM": 0.015177658994471236
+  },
+  {
+   "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
+   "orbit": "SSO700",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.016929295444838434,
+    "met": true,
+    "atHour": 24,
+    "steps": 1325
+   },
+   "steps30": {
+    "worstM": 0.0011524731902717768,
+    "met": true,
+    "atHour": 24,
+    "steps": 2954
+   },
+   "finest": {
+    "worstM": 0.0010964284715388286,
+    "met": true,
+    "atHour": 24,
+    "steps": 8629
+   },
+   "integrationErrorM": 0.01583312597694924
+  },
+  {
+   "id": "LEO400 A1-field-sun-moon-srp-knocke",
+   "orbit": "LEO400",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.018897177786022092,
+    "met": true,
+    "atHour": 24,
+    "steps": 1412
+   },
+   "steps30": {
+    "worstM": 0.0012881268606180654,
+    "met": true,
+    "atHour": 24,
+    "steps": 2958
+   },
+   "finest": {
+    "worstM": 0.001152868852063491,
+    "met": true,
+    "atHour": 24,
+    "steps": 8638
+   },
+   "integrationErrorM": 0.017745238919561156
+  },
+  {
+   "id": "SSO700 A1-field-sun-moon-srp-knocke",
+   "orbit": "SSO700",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.014816666285307851,
+    "met": true,
+    "atHour": 24,
+    "steps": 1342
+   },
+   "steps30": {
+    "worstM": 0.0012800149330265723,
+    "met": true,
+    "atHour": 24,
+    "steps": 2957
+   },
+   "finest": {
+    "worstM": 0.0009473879688935097,
+    "met": true,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.015763450843805062
+  },
+  {
+   "id": "LEO400 O1-field-sun-moon-ocean-tides30",
+   "orbit": "LEO400",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.018091322825213266,
+    "met": true,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.0010719105620525407,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0010654149458321556,
+    "met": true,
+    "atHour": 7,
+    "steps": 8605
+   },
+   "integrationErrorM": 0.01759771246575403
+  },
+  {
+   "id": "SSO700 O1-field-sun-moon-ocean-tides30",
+   "orbit": "SSO700",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.014578696652601586,
+    "met": true,
+    "atHour": 24,
+    "steps": 1257
+   },
+   "steps30": {
+    "worstM": 0.0012752613280758763,
+    "met": true,
+    "atHour": 24,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.0013156370706762027,
+    "met": true,
+    "atHour": 24,
+    "steps": 8612
+   },
+   "integrationErrorM": 0.015893966770457003
+  },
+  {
+   "id": "LEO400 O2-field-sun-moon-ocean-tides50",
+   "orbit": "LEO400",
+   "forces": "O2-field-sun-moon-ocean-tides50",
+   "toleranceM": 0.05,
+   "suite": {
+    "worstM": 0.01815306697903897,
+    "met": true,
+    "atHour": 24,
+    "steps": 1344
+   },
+   "steps30": {
+    "worstM": 0.001068674525228706,
+    "met": true,
+    "atHour": 7,
+    "steps": 2880
+   },
+   "finest": {
+    "worstM": 0.001065299959985141,
+    "met": true,
+    "atHour": 7,
+    "steps": 8605
+   },
+   "integrationErrorM": 0.017659072281385982
+  },
+  {
+   "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "orbit": "LEO400",
+   "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "toleranceM": 0.1,
+   "suite": {
+    "worstM": 0.005847025361321544,
+    "met": true,
+    "atHour": 24,
+    "steps": 1894,
+    "jacobians": {
+     "parameters": {
+      "DRAG_AREA_OVER_MASS": 0.000007541360207977065,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000005512878603562723,
+      "SRP_AREA_OVER_MASS": 0.00002688493586882701
+     },
+     "stm": 0.00001780774241417117
+    }
+   },
+   "steps30": {
+    "worstM": 0.003646776953816705,
+    "met": true,
+    "atHour": 24,
+    "steps": 2969
+   },
+   "finest": {
+    "worstM": 0.003898544551941807,
+    "met": true,
+    "atHour": 24,
+    "steps": 8723
+   },
+   "integrationErrorM": 0.0019485206266754217
+  }
+ ]
+}

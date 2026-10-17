@@ -15,7 +15,7 @@ struct Context {
     ForceModel::ForceModelSet forces;
     const std::vector<FiniteBurn>& burns;
     ForceModel::DensityGradient density;
-    double epoch;
+    timesys::Instant epoch;
     std::vector<int> status;
     std::vector<double> throttle;
     const char* error = nullptr;
@@ -76,7 +76,7 @@ void derivative(double t,const double* y,double* f,void* opaque) {
     if(!(mass>0)||!std::isfinite(mass)){c.error="Finite burn exhausted spacecraft mass.";c.massStageError=true;return;}
     c.forces.drag.mass=mass;c.forces.srp.mass=mass;
     if((c.error=ForceModel::ValidateAccelerationPartials(r,c.forces)))return;
-    const double jd=c.epoch+t/86400.0;
+    const auto jd=c.epoch.plusSeconds(t);
     if(stopAt(y,jd))return;   // reentry.h (f is zero)
     auto a=ForceModel::ComputeAccelerationPartials(r,v,jd,c.forces,c.density);
     double A[7][7]{};
@@ -217,8 +217,8 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
     auto kicks=impulses;std::stable_sort(kicks.begin(),kicks.end(),[](const auto&a,const auto&b){return a.epoch<b.epoch;});
     for(const auto& b:kicks)if(!std::isfinite(b.epoch)||!finite(b.deltaV))return fail("Invalid impulsive maneuver.");
     clearPropagationStop();   // reentry.h: this integration starts without a stop
-    Context c{forces,burns,density,initial.epoch,std::vector<int>(burns.size()),std::vector<double>(burns.size(),1)};
-    if(c.forces.explicitEpochContract)c.forces.integrationEpochTDB=initial.epoch;
+    Context c{forces,burns,density,ForceModel::StateEpoch(forces,initial.epoch),std::vector<int>(burns.size()),std::vector<double>(burns.size(),1)};
+    if(c.forces.explicitEpochContract)c.forces.integrationEpochTT=c.epoch;
     else c.forces.weather.epoch=initial.epoch;
     double y[N]{},next[N],error[N];
     for(int j=0;j<3;++j){y[j]=component(initial.position,j);y[j+3]=component(initial.velocity,j);}y[6]=mass;

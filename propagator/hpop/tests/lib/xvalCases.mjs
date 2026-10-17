@@ -5,6 +5,17 @@
 import fs from 'node:fs';
 import { requestInputs } from './orekitCases.mjs';
 import { decodeResult, sds } from './prwCodec.mjs';
+import { buildMetrics } from '../evidence/orekit/scoring.mjs';
+
+let reducer;
+export function xvalMetrics(input) {
+  if (!reducer) {
+    const work=fs.mkdtempSync(new URL('../evidence/xval/.metrics-',import.meta.url).pathname);
+    process.on('exit',()=>fs.rmSync(work,{recursive:true,force:true}));
+    reducer=buildMetrics(work);
+  }
+  return reducer(input);
+}
 
 const read = (path) => JSON.parse(fs.readFileSync(new URL(`../fixtures/${path}`, import.meta.url), 'utf8'));
 export const CASES = read('xval/xval-cases.json').cases;
@@ -71,16 +82,11 @@ export function hpopInputs(c) {
 
 // {worst, worstAt} between two sample lists ([t, x, y, z, ...], metres).
 export function difference(a, b) {
-  let worst = 0, worstAt = 0;
-  a.forEach((s, i) => {
-    const d = Math.hypot(s[1] - b[i][1], s[2] - b[i][2], s[3] - b[i][3]);
-    if (d > worst) { worst = d; worstAt = s[0]; }
-  });
-  return { worst, worstAt };
+  return xvalMetrics({mode:'sample-difference',a,b});
 }
 
 // HPOP's decoded response as the same sample rows (epoch first).
 export function hpopSamples(c, response) {
   const result = decodeResult(response);
-  return [c.samples[0], ...result.samples.map((s, i) => [c.samples[i + 1][0], ...s.position.map((x) => x * 1000)])];
+  return xvalMetrics({mode:'samples-si',reference:c.samples,positions:result.samples.map(s=>s.position)});
 }

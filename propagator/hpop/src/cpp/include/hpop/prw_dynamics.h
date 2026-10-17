@@ -82,10 +82,10 @@ Vec3 toGcrf(const Execution& e,const Vec3& v);
 // M <- R M R^T for an n x n row-major covariance or STM on [r, v, rest].
 void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest);
 bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error);
-bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error);
+bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error);
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error);
 // The kernel holds every body the force set reads at both ends of the arc.
-bool preflightKernel(const Execution& in,double target,std::string& error);
+bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error);
 double utcJd(const TTEpoch& tt);
 // The space_weather table's change epochs strictly inside the arc (initial,
 // target and samples), ascending.
@@ -104,7 +104,7 @@ bool advance(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error
 // orientation); requestWeather: its force configuration carries WEATHER.
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error);
 // The environment covers the arc [first, last] (TDB Julian dates).
-bool environmentCovers(const Execution& execution,const Environment& environment,double first,double last,std::string& error);
+bool environmentCovers(const Execution& execution,const Environment& environment,timesys::Instant first,timesys::Instant last,std::string& error);
 
 } // namespace dynamics
 } // namespace hpop

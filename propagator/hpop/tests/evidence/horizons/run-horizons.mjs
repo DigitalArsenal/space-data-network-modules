@@ -25,7 +25,7 @@ async function main() {
   const authenticated = authenticateRaw();
   const work = fs.mkdtempSync(path.join(here, '.run-horizons-'));
   try {
-    const metrics = buildMetrics(work, o.flatbuffers);
+    const metrics = await buildMetrics(work, o.flatbuffers);
     const parsed = Object.fromEntries(names.map((name) => [name, parseRaw(metrics, authenticated, name)]));
     const epochs = authenticated.index.epochsUtc;
     const lsk = path.join(o.naif, 'naif0012.tls');

@@ -160,6 +160,36 @@ struct Epoch {
     const char* scaleName() const;
 };
 
+// A force-evaluation instant, stored as an ERFA two-part TT Julian date.
+// The day part stays integral; sub-day arithmetic never forms a full JD.
+// Date is a scale-specific two-part result, not a second instant type.
+struct Instant {
+    struct Date {
+        double jd1, jd2;
+        double jd() const { return jd1 + jd2; } // output/UTC atmosphere boundary only
+        double daysSinceJ2000() const { return (jd1 - J2000_JD) + jd2; }
+        double secondsSinceJ2000() const { return daysSinceJ2000() * SECONDS_PER_DAY; }
+    };
+    double jd1 = J2000_JD;
+    double jd2 = 0.0;
+
+    static Instant fromTTSeconds(double whole, double fraction);
+    static Instant fromTt(double jdTt);
+    static Instant fromTdb(double jdTdb); // legacy single-JD input boundary
+    static Instant fromUtc(double jdUtc); // legacy single-JD input boundary
+    Instant plusSeconds(double seconds) const;
+    double secondsSince(const Instant& other) const {
+        return ((jd1 - other.jd1) + (jd2 - other.jd2)) * SECONDS_PER_DAY;
+    }
+    double daysSinceJ2000() const { return (jd1 - J2000_JD) + jd2; }
+    double tdbMinusTtSeconds() const;
+    Date tdb() const;
+    Date utc() const;
+    Date ut1(double dut1 = 0.0) const;
+    double tt() const { return jd1 + jd2; } // output label only
+    double jdTdb() const { return tdb().jd(); } // output label only
+};
+
 // =============================================================================
 // Leap Second Entry
 // =============================================================================

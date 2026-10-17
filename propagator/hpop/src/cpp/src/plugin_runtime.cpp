@@ -461,8 +461,8 @@ std::string propagate_json(const json& params, std::string& operation_error) {
             {8, forces.useThirdBody && third.includeNeptune},
         };
         for (const auto& body : bodies) if (body.second) {
-            if (!Ephemeris::getKernelState(body.first, 399, epoch_jd).valid ||
-                !Ephemeris::getKernelState(body.first, 399, target_jd).valid) return "{}";
+            if (!Ephemeris::getKernelState(body.first, 399, timesys::Instant::fromTdb(epoch_jd)).valid ||
+                !Ephemeris::getKernelState(body.first, 399, timesys::Instant::fromTdb(target_jd)).valid) return "{}";
         }
     }
 
@@ -786,7 +786,7 @@ std::string dispatch_operation(const std::string& operation, const json& params,
         const int target = params.at("target").get<int>();
         const int center = params.value("center", 399);
 
-        const auto state = getKernelState(target, center, jd);
+        const auto state = getKernelState(target, center, timesys::Instant::fromTdb(jd));
         if (!state.valid) return "{}"; // invoke reports ephemerisError as a named failure.
         return json({{"epochTDBJD", jd}, {"target", target}, {"center", center},
                      {"frame", "ICRF/J2000"}, {"positionUnits", "km"},

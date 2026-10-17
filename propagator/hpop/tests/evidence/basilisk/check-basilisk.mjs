@@ -22,6 +22,7 @@ const digest = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(val
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const verified = new Set();
 const missing = new Set();
+const historical = new Set();
 const checked = new Map();
 
 function verifyFile(file, checksum, label, required = false) {
@@ -38,9 +39,19 @@ function verifyFile(file, checksum, label, required = false) {
   }
 }
 
+function verifyPin(pin, label, required = false) {
+  if (pin?.role === 'historical-source' && pin.availability === 'unavailable') {
+    check(!required, `${label}: required file cannot be an unavailable historical source`);
+    check(nonempty(pin.path) && digest(pin.sha256) && nonempty(pin.reason), `${label}: invalid historical source declaration`);
+    historical.add(`${pin.path}#${pin.sha256}`);
+    return;
+  }
+  verifyFile(pin?.path ?? pin?.file, pin?.sha256, label, required);
+}
+
 function visitPins(value, label) {
   if (!value || typeof value !== 'object') return;
-  if ('sha256' in value && ('path' in value || 'file' in value)) verifyFile(value.path ?? value.file, value.sha256, label);
+  if ('sha256' in value && ('path' in value || 'file' in value)) verifyPin(value, label);
   for (const [key, item] of Object.entries(value)) {
     if (/sha256$/i.test(key) && typeof item === 'string') check(digest(item), `${label}.${key}: invalid SHA-256`);
     else visitPins(item, `${label}.${key}`);
@@ -114,7 +125,7 @@ function inspectSummary(summaryPath, metrics) {
   check(record.tool?.version === '2.12.0', 'Expected Basilisk 2.12.0 version pin');
   check(/3\.14\./.test(JSON.stringify(record.tool)), 'Python 3.14 patch version pin is missing');
   check(Array.isArray(record.inputFiles) && record.inputFiles.length > 0, 'Basilisk input-file pins are missing');
-  for (const entry of summary.fileHashes ?? []) verifyFile(entry.path, entry.sha256, 'fileHashes');
+  for (const entry of summary.fileHashes ?? []) verifyPin(entry, 'fileHashes');
   for (const entry of record.inputFiles ?? []) {
     check((summary.fileHashes ?? []).some((pinned) => path.resolve(here, pinned.path) === path.resolve(here, entry.path)
       && pinned.sha256 === entry.sha256), `Runner input pin is absent from fileHashes: ${entry.path}`);
@@ -130,9 +141,9 @@ function inspectSummary(summaryPath, metrics) {
     ...['.gitignore', 'diagnose-lst.py', 'lst-probes.json'].filter((file) => fs.existsSync(path.join(here, file)))]) {
     const entry = identity.find((item) => nonempty(item.path) && path.resolve(here, item.path) === path.resolve(here, source));
     check(entry, `Required repository source pin is missing: ${source}`);
-    if (entry) verifyFile(entry.path, entry.sha256, `Required source ${source}`, true);
+    if (entry) verifyPin(entry, `Required source ${source}`, true);
   }
-  for (const entry of identity) verifyFile(entry.path, entry.sha256, 'Source identity', true);
+  for (const entry of identity) verifyPin(entry, 'Source identity', true);
   visitPins(summary, 'summary');
   visitPins(record, 'trajectory');
   const probesPin = summary.provenance?.modelProbes;
@@ -163,7 +174,7 @@ function inspectSummary(summaryPath, metrics) {
   const cache = readJson(path.resolve(here, cachePin.path));
   check(same(cache.identity, summary.provenance?.propagationInputs), 'Cached propagation identity differs from summary');
   check(same(cache.identity, propagationIdentity()), 'Cached propagation identity differs from current inputs');
-  for (const item of cache.identity ?? []) verifyFile(item.path, item.sha256, 'HPOP propagation input', true);
+  for (const item of cache.identity ?? []) verifyPin(item, 'HPOP propagation input', true);
 
   const expected = new Set(CASES.cases.map((c) => c.id));
   const rows = summary.cases ?? [];
@@ -234,7 +245,7 @@ function inspectSummary(summaryPath, metrics) {
       && same(diagnosticProvenance?.inputFiles, variant.inputFiles), `${name} diagnostic input pins differ from its source`);
     check(same(diagnosticProvenance?.native, variant.provenance), `${name} native provenance differs from its source`);
     for (const entry of variant.inputFiles ?? []) {
-      verifyFile(entry.path, entry.sha256, `${name} diagnostic input`);
+      verifyPin(entry, `${name} diagnostic input`);
       check((summary.fileHashes ?? []).some((pinned) => path.resolve(here, pinned.path) === path.resolve(here, entry.path)
         && pinned.sha256 === entry.sha256), `${name} input pin is absent from fileHashes: ${entry.path}`);
     }
@@ -284,7 +295,7 @@ async function main() {
     const metrics = buildMetrics(work);
     const summaryPath = path.resolve(process.argv[2] ?? path.join(here, 'summary-basilisk-2.12.0.json'));
     const { summary, record } = inspectSummary(summaryPath, metrics);
-    console.log(`Hashes: ${verified.size} available pinned files verified; ${missing.size} unavailable package/scratch files recorded.`);
+    console.log(`Hashes: ${verified.size} available pinned files verified; ${missing.size} unavailable package/scratch files recorded; ${historical.size} unavailable historical source versions recorded (informational).`);
     const id = 'LEO400 F0-point-mass';
     const source = record.cases.find((c) => c.id === id);
     const expected = summary.cases.find((c) => c.id === id)?.suite;

@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "TMPL lane13 canonical PRW DE440 artifact",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-hpop-gravity-degree-20261014/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
-  "moduleSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-coords-classical-frames-fix-20261016/propagator/hpop/dist/isomorphic/module.wasm",
+  "artifactSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "moduleSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 24,
-      "durationMs": 1305
+      "durationMs": 1484
     },
     {
       "lane": "wasmedge",
       "runs": 24,
-      "durationMs": 2534
+      "durationMs": 3531
     },
     {
       "lane": "docker-wasmedge",
       "runs": 24,
-      "durationMs": 10271
+      "durationMs": 18876
     }
   ],
   "cases": [
@@ -200,7 +200,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -210,7 +210,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -220,7 +220,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -230,7 +230,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -240,7 +240,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -250,7 +250,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -260,7 +260,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -270,7 +270,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -440,7 +440,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -450,7 +450,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -460,7 +460,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -470,7 +470,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -480,7 +480,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -490,7 +490,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -500,7 +500,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -510,7 +510,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -680,7 +680,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -690,7 +690,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -700,7 +700,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -710,7 +710,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "7b6eb2367931dd468612eb6958a052c7007e003764c817c5385d2195be6b5bde",
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
       "stdoutLength": 592
     },
     {
@@ -720,7 +720,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -730,7 +730,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -740,7 +740,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     },
     {
@@ -750,7 +750,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6245f8abd99b0191f14a579e0523371b260a8b4bfe0cf260ed6330c4d0d0cf55",
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
       "stdoutLength": 592
     }
   ]

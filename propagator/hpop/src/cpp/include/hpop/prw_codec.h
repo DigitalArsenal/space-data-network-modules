@@ -92,7 +92,8 @@ inline bool convertEpoch(double jd, timingStandard scale, double& tdb, double& u
 struct TTEpoch {
     double whole = 0;     // integral TT seconds since J2000.0 TT
     double fraction = 0;  // [0, 1) seconds
-    double jdTt() const { return 2451545.0 + (whole + fraction) / 86400.0; }
+    timesys::Instant instant() const { return timesys::Instant::fromTTSeconds(whole,fraction); }
+    double jdTt() const { return instant().tt(); }
 };
 inline double elapsedSeconds(const TTEpoch& from, const TTEpoch& to) {
     return (to.whole - from.whole) + (to.fraction - from.fraction);
@@ -151,7 +152,7 @@ inline bool parseIsoSeconds(const std::string& iso, double& whole, double& fract
     return true;
 }
 // TDB - TT in seconds at a TT Julian date (time_convert's series).
-inline double tdbMinusTtSeconds(double jdTt) { return (timesys::ttToTdb(jdTt) - jdTt) * 86400.0; }
+inline double tdbMinusTtSeconds(double jdTt) { return timesys::Instant::fromTt(jdTt).tdbMinusTtSeconds(); }
 // Seconds of `scale` -> TT epoch.
 inline bool toTT(double whole, double fraction, double jdScale, timingStandard scale, TTEpoch& out, std::string& error) {
     if (!std::isfinite(jdScale) || jdScale < 2305447.5 || jdScale > 5373484.5)
@@ -166,7 +167,7 @@ inline bool toTT(double whole, double fraction, double jdScale, timingStandard s
         case timingStandard::TDB: {
             // TT = TDB - (TDB - TT); the periodic term is evaluated at TT,
             // which differs from the TDB argument by milliseconds (negligible).
-            const double dt = tdbMinusTtSeconds(jdScale);
+            const double dt = timesys::Instant::fromTTSeconds(whole,fraction).tdbMinusTtSeconds();
             out = normalizeTT(whole, fraction - dt); return true;
         }
         default: return prwError(error, "unsupported-time-scale: This profile accepts explicitly tagged UTC, TAI, TT and TDB epochs.");
@@ -214,10 +215,10 @@ inline std::string formatIsoSeconds(const TTEpoch& tdb) {
 // TT epoch <-> TDB seconds since J2000.0 TDB; the periodic TDB - TT is
 // evaluated at the TT date (it differs from the TDB argument by milliseconds).
 inline TTEpoch tdbSecondsOf(const TTEpoch& tt) {
-    return normalizeTT(tt.whole, tt.fraction + tdbMinusTtSeconds(tt.jdTt()));
+    return normalizeTT(tt.whole, tt.fraction + tt.instant().tdbMinusTtSeconds());
 }
 inline TTEpoch ttOfTdbSeconds(const TTEpoch& tdb) {
-    return normalizeTT(tdb.whole, tdb.fraction - tdbMinusTtSeconds(2451545.0 + (tdb.whole + tdb.fraction) / 86400.0));
+    return normalizeTT(tdb.whole, tdb.fraction - tdb.instant().tdbMinusTtSeconds());
 }
 // TT epoch -> ISO8601 text on TDB with nine decimals (the PRW output scale).
 inline std::string formatTdb(const TTEpoch& tt) {

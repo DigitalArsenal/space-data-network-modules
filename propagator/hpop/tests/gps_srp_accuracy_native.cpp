@@ -95,8 +95,8 @@ void run(const Job& job, const std::string& variants, const std::vector<uint8_t>
     for (const char variant : variants) {
         hpop::Execution e;
         if (!hpop::parseExecution(request, true, e, error)) throw std::runtime_error(error);
-        e.forces.earthFixedRotation = [earth](double jd, double m[3][3]) { earth->matrix(jd, m); };
-        e.forces.jdUt1At = [earth](double jd) { return earth->ut1(jd); };
+        e.forces.earthFixedRotation = [earth](const timesys::Instant& jd, double m[3][3]) { earth->matrix(jd, m); };
+        e.forces.jdUt1At = [earth](const timesys::Instant& jd) { return earth->ut1(jd); };
         const bool boxWing = job.block != "III" && (variant == 'B' || variant == 'D');
         if (boxWing) {
             e.forces.srp.model = ForceModel::SRPModelType::GnssBoxWing;

@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
             for (const Sample& s : c.samples) {
                 const double jd = tdbOf(s.utc);
                 const Vec3 r(s.r[0] / 1e3, s.r[1] / 1e3, s.r[2] / 1e3), v(s.v[0] / 1e3, s.v[1] / 1e3, s.v[2] / 1e3);
-                const Vec3 sun = getSunPosition(jd).position;
+                const Vec3 sun = getSunPosition(timesys::Instant::fromTdb(jd)).position;
                 const Vec3 a = ForceModel::SolarRadiation(r, v, sun, f.srp) * 1e3;  // m/s^2
                 const double ref = std::hypot(s.a[0], s.a[1], s.a[2]);
                 const double diff = std::hypot(a.x - s.a[0], a.y - s.a[1], a.z - s.a[2]);

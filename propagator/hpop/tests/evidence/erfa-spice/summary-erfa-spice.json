@@ -1,8 +1,8 @@
 {
- "about": "HPOP against ERFA and NAIF SPICE: clock, Earth orientation, TEME axes, Sun and Moon at the 50 hourly sample epochs of the reference cases (run-erfa-spice.mjs). Largest value over the epochs.",
+ "about": "HPOP classical frames, two-part force clock and ephemeris reads against independent offline ERFA/SPICE references.",
  "module": {
-  "version": "1.3.1",
-  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+  "version": "1.4.0",
+  "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
  },
  "tools": {
   "pyerfa": "2.0.1.5",
@@ -16,8 +16,10 @@
    "earth_latest_high_prec.bpc": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
   },
   "de440": {
+   "name": "JPL DE440 (DE440s records spanning 2026 TDB)",
    "path": "files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
-   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
+   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+   "axes": "ICRF (SPICE J2000)"
   }
  },
  "epochs": 50,
@@ -26,1079 +28,502 @@
    "id": "leap",
    "quantity": "TAI - UTC",
    "reference": "ERFA eraDat; SPICE naif0012.tls",
-   "max": 0,
    "unit": "s",
-   "tolerance": 0,
+   "note": "Leap-second table agreement.",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
    "met": true,
-   "note": "37 s at every epoch on all three"
+   "tolerance": 0
   },
   {
    "id": "tt",
    "quantity": "TT from UTC",
-   "reference": "ERFA eraUtctai + eraTaitt (two-part)",
-   "max": 5.596578755984183e-12,
+   "reference": "ERFA eraUtctai + eraTaitt",
    "unit": "s",
-   "tolerance": 1e-9,
+   "note": "PRW whole seconds and fraction construct the two-part TT force instant.",
+   "max": 5.596578755984183e-12,
+   "maxAt": "2026-08-02T14:00:00.000",
    "met": true,
-   "note": "HPOP carries TT as whole seconds and their fraction"
+   "tolerance": 1e-9
   },
   {
    "id": "tdb",
    "quantity": "TDB - TT",
-   "reference": "ERFA eraDtdb (geocentre)",
-   "max": 0.000031974902372032066,
+   "reference": "ERFA eraDtdb at geocentre",
    "unit": "s",
-   "tolerance": null,
+   "note": "Existing HPOP two-term model evaluated in seconds. Full ERFA TDB is a different model; no model substitution.",
+   "max": 0.000013472597927112278,
+   "maxAt": "2026-06-10T00:00:00.000",
    "met": null,
-   "note": "HPOP: 1.658 ms sin M + 14 us sin 2M, the difference taken in one double Julian date (40 us steps)",
-   "at": "2026-06-11T00:00:00.000"
+   "tolerance": null
   },
   {
    "id": "tdbSpice",
-   "quantity": "TDB - TT",
-   "reference": "SPICE (deltet: its two-term formula), against ERFA",
-   "max": 0.000013257951813814531,
+   "quantity": "TDB - TT reference spread",
+   "reference": "SPICE deltet against ERFA eraDtdb",
    "unit": "s",
-   "tolerance": null,
+   "note": "Independent reference model spread.",
+   "max": 0.000013257951813814531,
+   "maxAt": "2026-06-10T00:00:00.000",
    "met": null,
-   "note": "reference spread"
+   "tolerance": null
   },
   {
    "id": "forceClock",
-   "quantity": "TDB date the force model receives",
+   "quantity": "Force ephemeris TDB instant",
    "reference": "ERFA TT + eraDtdb",
-   "max": 0.000046133995056152344,
    "unit": "s",
-   "tolerance": null,
+   "note": "Two-part TT plus HPOP two-term TDB-TT. Remaining difference includes model spread and binary64 SPK ET representation.",
+   "max": 0.000013470649719238281,
+   "maxAt": "2026-06-10T00:00:00.000",
    "met": null,
-   "note": "one double Julian date (resolution 40 us) of HPOP's TDB"
+   "tolerance": null
   },
   {
    "id": "c2tSameInstant",
-   "quantity": "GCRF -> ITRF at HPOP's own instant",
-   "reference": "ERFA, IERS 2010 CIO chain, full X/Y/s series at that instant",
-   "max": 0.0004834815998867627,
+   "quantity": "Force GCRF -> ITRF at same instant",
+   "reference": "ERFA IERS 2010 CIO full X/Y/s",
    "unit": "mas",
-   "tolerance": 0.021,
+   "note": "Hourly TT interpolation of X/Y/s; exact two-part UT1 at each force evaluation.",
+   "geoM": 0.00009883209136649388,
+   "geoMAt": "2026-06-11T00:00:00.000",
+   "gpsM": 0.00006225618449726574,
+   "gpsMAt": "2026-06-11T00:00:00.000",
+   "leoM": 0.00001588783688327347,
+   "leoMAt": "2026-06-11T00:00:00.000",
+   "max": 0.00048348116841159653,
+   "maxAt": "2026-06-11T00:00:00.000",
    "met": true,
-   "note": "HPOP interpolates X, Y and s linearly between whole hours of TT (stated bound 0.02 mas)",
-   "poleMas": 0.0004834815998866007,
-   "spinMas": 2.0795443541814707e-8,
-   "leoM": 0.000015887851062123666,
-   "geoM": 0.00009883217956763972
+   "poleMas": 0.00048348116841143444,
+   "poleMasAt": "2026-06-11T00:00:00.000",
+   "spinMas": 1.83649224354877e-8,
+   "spinMasAt": "2026-06-10T09:00:00.000",
+   "tolerance": 0.021
   },
   {
    "id": "c2tTrue",
-   "quantity": "GCRF -> ITRF at the UTC epoch",
-   "reference": "ERFA, the same chain at the exact epoch",
-   "max": 0.21383133120493777,
+   "quantity": "Force GCRF -> ITRF at exact epoch",
+   "reference": "ERFA IERS 2010 CIO full X/Y/s",
    "unit": "mas",
-   "tolerance": 0.022000000000000002,
-   "met": false,
-   "note": "adds the force model's clock: Earth rotation at the single-double TDB date and HPOP's TDB - TT",
-   "poleMas": 0.0004830953773644265,
-   "spinMas": 0.21383097992443714,
-   "leoM": 0.00702678311521138,
-   "geoM": 0.043710901361672425,
-   "cause": {
-    "classification": "HPOP precision property",
-    "statement": "A force epoch is carried in one double Julian date, and the two-term TDB-TT approximation is quantized in that representation before its inverse enters Earth rotation. At the worst rotation epoch the signed force-clock error plus ERFA TDB-TT minus the quantized inverse correction is 14.201 us, giving 0.213601 mas at Earth rotation rate; the measured reference rotation is 0.213831 mas (0.000230 mas numerical rotation-evaluation residual). The 46.134 us maximum force-clock error occurs at a different epoch and must not be added as an unsigned maximum. The clock and interpolated pole together bound LEO displacement by 7.043 mm. This measured rotation angle sets the achievable tolerance; the original 0.022 mas limit remains a miss.",
-    "evidence": {
-     "sources": [
-      "propagator/hpop/lib/time_convert.cpp:242",
-      "propagator/hpop/lib/time_convert.cpp:262",
-      "propagator/hpop/src/cpp/include/hpop/prw_codec.h:92",
-      "propagator/hpop/src/cpp/include/hpop/prw_environment.h:63"
-     ],
-     "forceClockRecordedMaxS": 0.000046133995056152344,
-     "forceClockCancellationReducedMaxS": {
-      "utc": "2026-06-11T00:00:00.000",
-      "value": 0.00004617606661658593
-     },
-     "precision": {
-      "allowedTimeErrorAt022MasS": 0.0000014626621727478297,
-      "earthRotationRadS": 0.0000729211514670698,
-      "singleDoubleJdUlpSeconds": 0.00004023313522338867
-     },
-     "clockDecomposition": {
-      "decompositionSumS": 0.000014201166642635599,
-      "erfaTdbMinusTtS": -0.0007483755792872368,
-      "forceTdbErrorS": -0.0000018528233145123727,
-      "measuredClockMas": 0.21383097997257478,
-      "predictedSpinMas": 0.21360070148737406,
-      "rotationEvaluationResidualMas": 0.00023027848520071337,
-      "tdbToTtQuantizedCorrectionS": -0.0007644295692443848,
-      "ttInstantErrorS": 0.000014201166642635599,
-      "utc": "2026-08-02T09:00:00.000"
-     },
-     "clockRowMas": 0.21383097997257478,
-     "clockPositionBound": {
-      "angleMas": 0.21383097997257478,
-      "geoM": 0.04371082956357301,
-      "gpsM": 0.027534269812698773,
-      "leoM": 0.007026771573246861
-     },
-     "clockPlusInterpolationBound": {
-      "angleMas": 0.21431446157246153,
-      "geoM": 0.04380966174314065,
-      "gpsM": 0.02759652605275559,
-      "leoM": 0.007042659424308984
-     },
-     "minimumMeasuredToleranceMas": 0.21383133120493777,
-     "toleranceRationale": "The original limit only budgets the 0.02 mas pole interpolation plus small rounding; its implied time budget is in precision.allowedTimeErrorAt022MasS. It does not cover single-JD Earth rotation."
-    }
-   }
+   "note": "No single-Julian-date force-clock rounding.",
+   "geoM": 0.00009883209136649388,
+   "geoMAt": "2026-06-11T00:00:00.000",
+   "gpsM": 0.00006225618449726574,
+   "gpsMAt": "2026-06-11T00:00:00.000",
+   "leoM": 0.00001588783688327347,
+   "leoMAt": "2026-06-11T00:00:00.000",
+   "max": 0.00048348116841159653,
+   "maxAt": "2026-06-11T00:00:00.000",
+   "met": true,
+   "poleMas": 0.00048348116841143444,
+   "poleMasAt": "2026-06-11T00:00:00.000",
+   "spinMas": 0.0000044133533807640185,
+   "spinMasAt": "2026-06-10T17:00:00.000",
+   "tolerance": 0.022
   },
   {
    "id": "c2tClock",
-   "quantity": "ERFA at HPOP's instant against ERFA at the epoch",
-   "reference": "ERFA",
-   "max": 0.21383097997257478,
+   "quantity": "Force TT clock contribution",
+   "reference": "ERFA at HPOP TT versus exact TT",
    "unit": "mas",
-   "tolerance": null,
+   "note": "Same CIO chain, differing only by represented TT.",
+   "geoM": 9.011269228088527e-7,
+   "geoMAt": "2026-06-10T17:00:00.000",
+   "gpsM": 5.676367178531708e-7,
+   "gpsMAt": "2026-06-10T17:00:00.000",
+   "leoM": 1.448614246927386e-7,
+   "leoMAt": "2026-06-10T17:00:00.000",
+   "max": 0.000004408263464861521,
+   "maxAt": "2026-06-10T17:00:00.000",
    "met": null,
-   "note": "the clock alone (Earth rotation over the instant difference)",
-   "spinMas": 0.2138309799721229,
-   "leoM": 0.007026771573246861
+   "poleMas": 6.325289390242892e-11,
+   "poleMasAt": "2026-06-10T17:00:00.000",
+   "spinMas": 0.000004408263464407721,
+   "spinMasAt": "2026-06-10T17:00:00.000",
+   "tolerance": null
   },
   {
    "id": "c2tSpice",
-   "quantity": "GCRF -> ITRF",
-   "reference": "SPICE J2000 -> ITRF93 (earth_latest_high_prec.bpc)",
-   "max": 8.897115349419236,
+   "quantity": "Force GCRF -> ITRF",
+   "reference": "SPICE J2000 -> ITRF93",
    "unit": "mas",
-   "tolerance": 5,
+   "note": "ITRF93 BPC uses its own EOP and IAU 1976/1980 with corrections; HPOP uses case EOP and IAU 2006/2000A.",
+   "geoM": 1.8106038661773014,
+   "geoMAt": "2026-06-10T14:00:00.000",
+   "gpsM": 1.140533269969956,
+   "gpsMAt": "2026-06-10T14:00:00.000",
+   "leoM": 0.29106516404044985,
+   "leoMAt": "2026-06-10T14:00:00.000",
+   "max": 8.857374772165672,
+   "maxAt": "2026-06-10T14:00:00.000",
    "met": false,
-   "note": "independent chain: IAU 1976/1980 with the BPC's own EOP and nutation corrections, J2000 taken as ICRF",
-   "poleMas": 8.22686573371257,
-   "spinMas": 3.500211574375117,
-   "leoM": 0.29237109248255677,
-   "referenceSpreadBoundMas": 8.857128491099663,
+   "poleMas": 8.226865904195535,
+   "poleMasAt": "2026-06-10T14:00:00.000",
+   "spinMas": 3.2873361647852084,
+   "spinMasAt": "2026-06-10T12:00:00.000",
+   "tolerance": 5,
+   "referenceSpreadBoundMas": 8.857128491099667,
    "cause": {
     "classification": "reference spread",
-    "statement": "SPICE ITRF93 uses the BPC IAU 1976/1980 chain, its own Earth-orientation series and nutation corrections; ERFA uses the shared case EOP with IAU 2006/2000A. The measured SPICE-versus-ERFA spread is the reference bound, 8.857128491 mas. HPOP-versus-SPICE is slightly larger because HPOP also has its measured clock offset. The reference-spread-plus-HPOP-error triangle bound covers it. The original 5 mas limit and met:false are retained.",
+    "statement": "ITRF93 BPC uses its own EOP and IAU 1976/1980 with corrections; HPOP uses case EOP and IAU 2006/2000A.",
     "evidence": {
-     "source": "tools.json:naifKernels.earth_latest_high_prec.bpc.comment; reference.py:c2t_iers2010 and SPICE pxform",
-     "referenceSpreadBoundMas": 8.857128491099663,
-     "hpopSpiceMas": 8.897115349419236,
-     "hpopErfaMas": 0.21383133120493777,
-     "recomputed": {
-      "hpopErfaMas": 0.21383133120493777,
-      "hpopSpiceExcessOverSpreadMas": 0.039986858319572605,
-      "hpopSpiceMas": 8.897115349419238,
-      "spiceErfaMas": 8.857128491099665,
-      "triangleBoundMas": 9.070959822304603
-     }
+     "spiceErfaMas": 8.857128491099667,
+     "hpopErfaMas": 0.00048348116841159653,
+     "source": "tools.json BPC comment; reference.py"
     }
    }
   },
   {
    "id": "c2tSpiceErfa",
-   "quantity": "GCRF -> ITRF, reference spread",
-   "reference": "SPICE ITRF93 against ERFA at the epoch",
-   "max": 8.857128491099663,
+   "quantity": "Independent terrestrial-frame reference spread",
+   "reference": "SPICE ITRF93 versus ERFA CIO",
    "unit": "mas",
-   "tolerance": null,
+   "note": "Recorded reference spread, not an HPOP defect.",
+   "geoM": 1.810553521976932,
+   "geoMAt": "2026-06-10T14:00:00.000",
+   "gpsM": 1.1405015572156956,
+   "gpsMAt": "2026-06-10T14:00:00.000",
+   "leoM": 0.2910570709157125,
+   "leoMAt": "2026-06-10T14:00:00.000",
+   "max": 8.857128491099667,
+   "maxAt": "2026-06-10T14:00:00.000",
    "met": null,
-   "note": "reference spread",
-   "poleMas": 8.226602505254432,
-   "spinMas": 3.2873376323065835
+   "poleMas": 8.226602505254434,
+   "poleMasAt": "2026-06-10T14:00:00.000",
+   "spinMas": 3.287337632306584,
+   "spinMasAt": "2026-06-10T12:00:00.000",
+   "tolerance": null
   },
   {
    "id": "gmstSame",
-   "quantity": "GMST of the tides (gmst2006) at HPOP's own UT1 and TT",
-   "reference": "ERFA eraGmst06 at the same dates",
-   "max": 0,
+   "quantity": "Tides GMST at same instant",
+   "reference": "ERFA eraGmst06",
    "unit": "mas",
-   "tolerance": 0.001,
+   "note": "Two-part UT1 and TT.",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
    "met": true,
-   "note": "HPOP's own ERA + IAU 2006 polynomial (not ERFA)"
+   "tolerance": 0.001
   },
   {
    "id": "gmstTrue",
-   "quantity": "GMST of the tides at the UTC epoch",
-   "reference": "ERFA eraGmst06 at the exact UT1 and TT",
-   "max": 0.5083637386895591,
+   "quantity": "Tides GMST at exact epoch",
+   "reference": "ERFA eraGmst06",
    "unit": "mas",
-   "tolerance": null,
+   "note": "Two-part UT1 and TT.",
+   "max": 0.000004396798791655166,
+   "maxAt": "2026-08-02T20:00:00.000",
    "met": null,
-   "note": "adds the single-double UT1 and TT dates"
+   "tolerance": null
   },
   {
    "id": "c2tBuiltIn",
-   "quantity": "GCRF -> Earth-fixed without Earth orientation input",
-   "reference": "ERFA, IERS 2010 chain with the case rows",
-   "max": 607.2940079571098,
+   "quantity": "No-EOP fallback versus CIO",
+   "reference": "ERFA CIO with case EOP",
    "unit": "mas",
-   "tolerance": null,
+   "note": "Legacy UT1=UTC, zero polar motion, no frame bias, IAU 1976/1980.",
+   "geoM": 109.01493734987478,
+   "geoMAt": "2026-06-10T12:00:00.000",
+   "gpsM": 68.67054980597683,
+   "gpsMAt": "2026-06-10T12:00:00.000",
+   "leoM": 17.524788947674487,
+   "leoMAt": "2026-06-10T12:00:00.000",
+   "max": 533.2950922669952,
+   "maxAt": "2026-06-10T12:00:00.000",
    "met": null,
-   "note": "No-EOP fallback: IAU 1976/1980, GAST at UTC, no polar motion or frame bias. Earth-fixed reference cases supply EOP and replace it with the CIO chain. Point-mass plus NRLMSISE00 without EOP is accepted and reaches this fallback; the earlier overbroad rejection claim is retained as historicalNote.",
-   "poleMas": 459.07107696379944,
-   "spinMas": 401.6795908748876,
-   "leoM": 19.956492142829273,
-   "reachabilityCorrection": "The earlier note overstates rejection: tesseral gravity, JB2008, Jacchia-Roberts and tides require EOP, but point-mass plus NRLMSISE00 drag without EOP is accepted by the shipped WASM and reaches the fallback. The published reference suite supplies EOP for Earth-fixed field or drag cases and uses the CIO callback there. See provenance.reachability and diagnosis.forcePath.",
-   "historicalNote": "HPOP's fallback when no EOP is supplied: IAU 1976/1980, GAST at UTC, no polar motion, no frame bias, as documented (force_models.h); the pole part is the omitted polar motion, the spin part UT1 - UTC. A PRW request with an Earth-fixed force is refused without EOP (eop-data-required), so no reference case reaches it"
+   "poleMas": 493.9938254005729,
+   "poleMasAt": "2026-06-10T12:00:00.000",
+   "spinMas": 207.63903439162016,
+   "spinMasAt": "2026-06-10T00:00:00.000",
+   "tolerance": null
   },
   {
    "id": "coordsPrecession",
-   "quantity": "IAU 1976 precession (lib/coords precession)",
-   "reference": "ERFA eraPmat76 at the same TT",
-   "max": 206.42002410973046,
+   "quantity": "Classical GCRF/J2000 -> MOD",
+   "reference": "ERFA eraPmat76",
    "unit": "mas",
-   "tolerance": 0.001,
-   "met": false,
-   "note": "stated \"as ERFA pmat76\"",
-   "poleMas": 60.3208084625895,
-   "spinMas": 197.4097931205068,
-   "cause": {
-    "classification": "HPOP defect",
-    "statement": "The J2000-to-date function substitutes T for the initial-epoch t0 in the general-epoch IAU 1976 coefficients. For J2000, t0 must be zero. Evaluating both formulae reproduces the 206 mas error; this is not an IAU 1976-versus-2006 reference spread.",
-    "evidence": {
-     "source": "propagator/hpop/lib/coords.cpp:273",
-     "reference": "higherpop/third_party/erfa/prec76.c; pmat76.c (ERFA 2.0.1)",
-     "utc": "2026-08-03T00:00:00.000",
-     "jdTt": 2461255.500800741,
-     "zetaExcessMas": 98.70120901080935,
-     "thetaExcessMas": -60.32026965725744,
-     "zExcessMas": 98.70891339738574,
-     "reproducedMas": 206.42002410970431,
-     "positionErrorBounds": {
-      "angleMas": 206.42002410970431,
-      "geoM": 42.195899272991916,
-      "gpsM": 26.579986863032413,
-      "leoM": 6.783237666258807
-     },
-     "wasmOutput": [
-      {
-       "ecefM": [
-        4380682.878406417,
-        5172276.859480528,
-        17629.477817427898
-       ],
-       "gcrfPositionKm": [
-        6778.137,
-        0,
-        0
-       ],
-       "jdUtc": 2461254.5,
-       "precessionAndNutationEffectM": 5.651601003621977,
-       "precessionOnlyEffectM": 6.781824544870455,
-       "radiusM": 6778137,
-       "utc": "2026-08-02T00:00:00.000",
-       "wasmMinusErfaCioM": 13.666829073665111,
-       "wasmMinusNativeM": 0
-      },
-      {
-       "ecefM": [
-        17165621.947516613,
-        20267467.79945623,
-        69080.7711368013
-       ],
-       "gcrfPositionKm": [
-        26560,
-        0,
-        0
-       ],
-       "jdUtc": 2461254.5,
-       "precessionAndNutationEffectM": 22.14569027961904,
-       "precessionOnlyEffectM": 26.574449578079147,
-       "radiusM": 26560000,
-       "utc": "2026-08-02T00:00:00.000",
-       "wasmMinusErfaCioM": 53.55320793770478,
-       "wasmMinusNativeM": 0
-      },
-      {
-       "ecefM": [
-        27250534.712003823,
-        32174734.855639998,
-        109666.16633822226
-       ],
-       "gcrfPositionKm": [
-        42164.17,
-        0,
-        0
-       ],
-       "jdUtc": 2461254.5,
-       "precessionAndNutationEffectM": 35.15642506186687,
-       "precessionOnlyEffectM": 42.18710879924862,
-       "radiusM": 42164170,
-       "utc": "2026-08-02T00:00:00.000",
-       "wasmMinusErfaCioM": 85.01606037703937,
-       "wasmMinusNativeM": 0
-      }
-     ],
-     "formula": "ERFA J2000: zeta=2306.2181T+0.30188T^2+0.017998T^3; z=2306.2181T+1.09468T^2+0.018203T^3; theta=2004.3109T-0.42665T^2-0.041833T^3, arcsec; T=(JD_TT-2451545)/36525."
-    }
-   }
+   "note": "ERFA is the sole implementation.",
+   "geoM": 0,
+   "geoMAt": "2026-08-02T00:00:00.000",
+   "gpsM": 0,
+   "gpsMAt": "2026-08-02T00:00:00.000",
+   "leoM": 0,
+   "leoMAt": "2026-08-02T00:00:00.000",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
+   "met": true,
+   "poleMas": 0,
+   "poleMasAt": "2026-08-02T00:00:00.000",
+   "spinMas": 0,
+   "spinMasAt": "2026-08-02T00:00:00.000",
+   "tolerance": 0.001
   },
   {
    "id": "coordsNutation",
-   "quantity": "IAU 1980 nutation (lib/coords nutationMatrix)",
-   "reference": "ERFA eraNutm80 at the same TT",
-   "max": 49.08322391339125,
+   "quantity": "Classical MOD -> TOD",
+   "reference": "ERFA eraNutm80",
    "unit": "mas",
-   "tolerance": 10,
-   "met": false,
-   "note": "The 63-row table has 62 ERFA argument keys, ten coefficient mismatches and one spurious key. There are 44 omitted ERFA terms, including a 4.8 mas longitude coefficient. See the measured cause; the historical truncation note is retained separately.",
-   "poleMas": 19.549665285765347,
-   "spinMas": 45.02192195971474,
-   "cause": {
-    "classification": "HPOP defect",
-    "statement": "The 49 mas discrepancy is caused chiefly by erroneous retained coefficient assignments, not precession contamination or eps0. The 63 HPOP rows contain only 62 ERFA argument keys, ten coefficient mismatches and one spurious key; 44 ERFA terms are absent, including a 4.8 mas longitude coefficient. Thus the historical note claiming 43 omissions all below 0.3 mas is incorrect. At the worst epoch, replacing the coefficients changes the matrix by 43.506 mas and restoring omitted terms by 5.582 mas; these rotations combine vectorially to the measured 49.083 mas.",
-    "evidence": {
-     "source": "propagator/hpop/lib/coords.cpp:52",
-     "additionalSource": "propagator/hpop/lib/coords.cpp:68",
-     "reference": "higherpop/third_party/erfa/nut80.c, 106-term IAU 1980 series; obliquity via obl80.c",
-     "utc": "2026-08-02T00:00:00.000",
-     "jdTt": 2461254.500800741,
-     "reproducedMas": 49.083223913406925,
-     "retainedRows": 63,
-     "referenceKeysRetained": 62,
-     "omittedTerms": 44,
-     "maxOmittedCoefficientMas": 4.800000000000001,
-     "coefficientMismatches": [
-      {
-       "erfa": [
-        123,
-        0,
-        -53,
-        0
-       ],
-       "hpop": [
-        -158,
-        0,
-        0,
-        0
-       ],
-       "multipliers": [
-        -1,
-        0,
-        2,
-        0,
-        2
-       ]
-      },
-      {
-       "erfa": [
-        -158,
-        0,
-        -1,
-        0
-       ],
-       "hpop": [
-        129,
-        0.1,
-        -1,
-        0
-       ],
-       "multipliers": [
-        1,
-        0,
-        0,
-        -2,
-        0
-       ]
-      },
-      {
-       "erfa": [
-        129,
-        0.1,
-        -70,
-        0
-       ],
-       "hpop": [
-        123,
-        0,
-        -53,
-        0
-       ],
-       "multipliers": [
-        0,
-        0,
-        2,
-        -2,
-        1
-       ]
-      },
-      {
-       "erfa": [
-        21,
-        0,
-        -10,
-        0
-       ],
-       "hpop": [
-        63,
-        0,
-        -33,
-        0
-       ],
-       "multipliers": [
-        -1,
-        0,
-        2,
-        0,
-        1
-       ]
-      },
-      {
-       "erfa": [
-        63,
-        0,
-        -2,
-        0
-       ],
-       "hpop": [
-        -59,
-        0,
-        0,
-        0
-       ],
-       "multipliers": [
-        0,
-        0,
-        0,
-        2,
-        0
-       ]
-      },
-      {
-       "erfa": [
-        -59,
-        0,
-        26,
-        0
-       ],
-       "hpop": [
-        -58,
-        -0.1,
-        26,
-        0
-       ],
-       "multipliers": [
-        -1,
-        0,
-        2,
-        2,
-        2
-       ]
-      },
-      {
-       "erfa": [
-        -58,
-        -0.1,
-        32,
-        0
-       ],
-       "hpop": [
-        -51,
-        0,
-        27,
-        0
-       ],
-       "multipliers": [
-        -1,
-        0,
-        0,
-        0,
-        1
-       ]
-      },
-      {
-       "erfa": [
-        -51,
-        0,
-        27,
-        0
-       ],
-       "hpop": [
-        48,
-        0,
-        -24,
-        0
-       ],
-       "multipliers": [
-        1,
-        0,
-        2,
-        0,
-        1
-       ]
-      },
-      {
-       "erfa": [
-        29,
-        0,
-        -1,
-        0
-       ],
-       "hpop": [
-        29,
-        0,
-        0,
-        0
-       ],
-       "multipliers": [
-        2,
-        0,
-        0,
-        0,
-        0
-       ]
-      },
-      {
-       "erfa": [
-        26,
-        0,
-        -1,
-        0
-       ],
-       "hpop": [
-        26,
-        0,
-        0,
-        0
-       ],
-       "multipliers": [
-        0,
-        0,
-        2,
-        0,
-        0
-       ]
-      },
-      {
-       "erfa": null,
-       "hpop": [
-        21,
-        0,
-        -10,
-        0
-       ],
-       "multipliers": [
-        -1,
-        0,
-        2,
-        0,
-        0
-       ]
-      }
-     ],
-     "coefficientContributionMas": 43.506282722241565,
-     "omittedContributionMas": 5.582184781486689,
-     "coefficientDpsiMas": -43.48945907061369,
-     "coefficientDepsMas": 1.20978761243356,
-     "omittedDpsiMas": 5.58125720955263,
-     "omittedDepsMas": 0.10175901445096729,
-     "argumentContributionMas": 5.989917141409074e-7,
-     "eps0DifferenceMas": -1.1449996853268659e-8,
-     "fullSeriesReconstructionResidualMas": {
-      "utc": "2026-06-10T23:00:00.000",
-      "value": 7.526870128909082e-12
-     },
-     "positionErrorBounds": {
-      "angleMas": 49.083223913406925,
-      "geoM": 10.033478007652548,
-      "gpsM": 6.32027562461805,
-      "leoM": 1.612940288457143
-     }
-    }
-   },
-   "historicalNote": "HPOP keeps 63 of the 106 terms (each omitted term under 0.3 mas)"
+   "note": "ERFA is the sole implementation; full IAU 1980 series.",
+   "geoM": 0,
+   "geoMAt": "2026-08-02T00:00:00.000",
+   "gpsM": 0,
+   "gpsMAt": "2026-08-02T00:00:00.000",
+   "leoM": 0,
+   "leoMAt": "2026-08-02T00:00:00.000",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
+   "met": true,
+   "poleMas": 0,
+   "poleMasAt": "2026-08-02T00:00:00.000",
+   "spinMas": 0,
+   "spinMasAt": "2026-08-02T00:00:00.000",
+   "tolerance": 1e-7
   },
   {
    "id": "coordsTeme",
-   "quantity": "GCRF -> TEME (lib/coords gcrfToTeme)",
-   "reference": "ERFA eraPnm80, eraEqeq94 at the same TT",
-   "max": 211.7954179519075,
+   "quantity": "Classical GCRF/J2000 -> TEME",
+   "reference": "ERFA R3(eqeq94) pnm80",
    "unit": "mas",
-   "tolerance": 10,
-   "met": false,
-   "note": "the plugin's coords::transform TEME axes",
-   "leoM": 6.959880286753949,
-   "geoM": 43.29472472898412,
-   "cause": {
-    "classification": "HPOP defect",
-    "statement": "The plugin coords TEME chain inherits the erroneous precession and nutation coefficients. Holding the epoch fixed and correcting precession alone reduces the maximum to 19.586 mas. Correcting nutation everywhere, including its equation-of-equinoxes contribution, leaves 1.196 mas from the simplified equation of equinoxes; using eraEqeq94 leaves numerical roundoff. The separate SGP4/foundation TEME chain passes and does not use this function.",
-    "evidence": {
-     "sources": [
-      "propagator/hpop/lib/coords.cpp:352",
-      "propagator/hpop/lib/coords.cpp:370",
-      "propagator/hpop/lib/coords.cpp:229"
-     ],
-     "measuredMas": {
-      "utc": "2026-08-02T00:00:00.000",
-      "value": 211.79541795182035
-     },
-     "correctedPrecessionMas": {
-      "utc": "2026-08-02T00:00:00.000",
-      "value": 19.586025123770142
-     },
-     "correctedPrecessionNutationEqeqMas": {
-      "utc": "2026-08-03T00:00:00.000",
-      "value": 1.1963214743356985
-     },
-     "fullErfaEqeqResidualMas": {
-      "utc": "2026-08-02T09:00:00.000",
-      "value": 5.1349271745666985e-9
-     },
-     "leoM": 6.959880286753949,
-     "geoM": 43.29472472898412
-    }
-   }
+   "note": "FK5 TEME definition.",
+   "geoM": 4.088752947333315e-11,
+   "geoMAt": "2026-08-02T21:00:00.000",
+   "gpsM": 2.5755820233428725e-11,
+   "gpsMAt": "2026-08-02T21:00:00.000",
+   "leoM": 6.5729095666246936e-12,
+   "leoMAt": "2026-08-02T21:00:00.000",
+   "max": 2.0001955083521162e-10,
+   "maxAt": "2026-08-02T21:00:00.000",
+   "met": true,
+   "poleMas": 8.945583026648831e-11,
+   "poleMasAt": "2026-08-02T21:00:00.000",
+   "spinMas": 1.789007410483619e-10,
+   "spinMasAt": "2026-08-02T21:00:00.000",
+   "tolerance": 1e-7
   },
   {
    "id": "c2tBuiltInClassical",
-   "quantity": "GCRF -> Earth-fixed without Earth orientation input",
-   "reference": "ERFA eraGmst82 + eraEqeq94, eraNutm80, eraPmat76 (UT1 = UTC, no polar motion) at the same instant",
-   "max": 211.89040799609475,
+   "quantity": "No-EOP fallback classical chain",
+   "reference": "ERFA R3(gst94(UTC)) nutm80(TT) pmat76(TT)",
    "unit": "mas",
-   "tolerance": 10,
-   "met": false,
-   "note": "the chain the fallback states it implements",
-   "poleMas": 80.5166223966267,
-   "spinMas": 196.31902041141586,
-   "leoM": 6.9630017864651785,
-   "cause": {
-    "classification": "HPOP defect",
-    "statement": "The fallback inherits the same precession and nutation-table defects through N*P. A C++ reconstruction with the same one-hour cache reproduces the stored result to 0.0031 mas (large-angle GMST/compiler arithmetic); correcting P, N and the equation of equinoxes leaves 5.910 mas, including the cache and the single-JD sidereal clock. The original 211.890 mas miss remains recorded.",
-    "evidence": {
-     "source": "propagator/hpop/lib/force_models.cpp:1496",
-     "precessionSource": "propagator/hpop/lib/coords.cpp:273",
-     "nutationSource": "propagator/hpop/lib/coords.cpp:52",
-     "reproducedMas": {
-      "utc": "2026-08-02T00:00:00.000",
-      "value": 211.88901776996957
-     },
-     "storedMatrixReplayResidualMas": {
-      "utc": "2026-06-10T23:00:00.000",
-      "value": 0.0030015465298336677
-     },
-     "correctedPrecessionMas": {
-      "utc": "2026-08-02T01:00:00.000",
-      "value": 21.19054606397402
-     },
-     "correctedPrecessionNutationEqeqMas": {
-      "utc": "2026-06-10T22:00:00.000",
-      "value": 5.9098271354429714
-     },
-     "leoM": 6.9630017864651785,
-     "forcePath": {
-      "differenceM": 0.000022559572022998032,
-      "epochUtc": "2026-08-02T00:00:00.000",
-      "frame": "GCRF",
-      "interpretation": "Total fallback-vs-CIO result, including Earth-orientation/model setting and integration effects; not an isolated precession-defect measurement.",
-      "source": "tests/lib/orekitCases.mjs requestInputs: LEO400 F0-point-mass, override drag=true; keep only first requested sample as target (01:00 UTC). RK78 tolerance 1e-13, maxStep 300 s. Compare identical requests with/without earth_orientation input.",
-      "targetUtc": "2026-08-02T01:00:00.000",
-      "units": "km, km/s",
-      "withEop": {
-       "epochTDBJD": 2461254.5424673986,
-       "positionKm": [
-        2441.81506056769,
-        -3445.051004151088,
-        -5304.643683803278
-       ],
-       "statusCode": 0,
-       "velocityKmS": [
-        6.489269797754353,
-        4.066819250300695,
-        0.34990825021323224
-       ]
-      },
-      "withoutEop": {
-       "epochTDBJD": 2461254.5424673986,
-       "positionKm": [
-        2441.815060587261,
-        -3445.0510041399043,
-        -5304.643683804194
-       ],
-       "statusCode": 0,
-       "velocityKmS": [
-        6.489269797748161,
-        4.066819250306789,
-        0.3499082502253712
-       ]
-      }
-     }
-    }
-   }
+   "note": "Reevaluated at every call, exact two-part dates, no hourly N*P cache.",
+   "geoM": 5.851480829302552e-9,
+   "geoMAt": "2026-06-10T16:00:00.000",
+   "gpsM": 3.685957314617501e-9,
+   "gpsMAt": "2026-06-10T16:00:00.000",
+   "leoM": 9.4065977615322e-10,
+   "leoMAt": "2026-06-10T16:00:00.000",
+   "max": 2.8625123167720123e-8,
+   "maxAt": "2026-06-10T16:00:00.000",
+   "met": true,
+   "poleMas": 1.0001160666432583e-10,
+   "poleMasAt": "2026-08-02T05:00:00.000",
+   "spinMas": 2.862503581144334e-8,
+   "spinMasAt": "2026-06-10T16:00:00.000",
+   "tolerance": 1e-7
   },
   {
    "id": "teme",
-   "quantity": "GCRF -> TEME (SGP4 axes)",
-   "reference": "ERFA eraPnm06a, eraEe06a at the exact epoch",
-   "max": 1.9781138590004087e-7,
+   "quantity": "SGP4 GCRF -> TEME",
+   "reference": "ERFA R3(ee06a) pnm06a",
    "unit": "mas",
-   "tolerance": 0.001,
+   "note": "Separate foundation/frames IAU 2006/2000A TEME definition.",
+   "geoM": 4.0436141554043405e-8,
+   "geoMAt": "2026-06-10T19:00:00.000",
+   "gpsM": 2.5471482533046253e-8,
+   "gpsMAt": "2026-06-10T19:00:00.000",
+   "leoM": 6.5003463178499445e-9,
+   "leoMAt": "2026-06-10T19:00:00.000",
+   "max": 1.9781138590004084e-7,
+   "maxAt": "2026-06-10T19:00:00.000",
    "met": true,
-   "note": "the definition propagator/sgp4 uses",
-   "leoM": 6.500346317849946e-9
+   "poleMas": 2.2055553319622803e-8,
+   "poleMasAt": "2026-08-02T20:00:00.000",
+   "spinMas": 1.9740867842986863e-7,
+   "spinMasAt": "2026-06-10T19:00:00.000",
+   "tolerance": 0.001
   },
   {
    "id": "temeFk5",
-   "quantity": "GCRF -> TEME (SGP4 axes)",
-   "reference": "ERFA eraPnm80, eraEqeq94 (the FK5 definition)",
-   "max": 77.65551652550788,
+   "quantity": "SGP4 versus FK5 TEME definitions",
+   "reference": "ERFA R3(eqeq94) pnm80",
    "unit": "mas",
-   "tolerance": null,
+   "note": "Definition spread.",
+   "geoM": 15.874159338151355,
+   "geoMAt": "2026-08-03T00:00:00.000",
+   "gpsM": 9.999430132771497,
+   "gpsMAt": "2026-08-03T00:00:00.000",
+   "leoM": 2.551863981997492,
+   "leoMAt": "2026-08-03T00:00:00.000",
+   "max": 77.6555165255079,
+   "maxAt": "2026-08-03T00:00:00.000",
    "met": null,
-   "note": "spread between the two published TEME definitions",
-   "poleMas": 50.39137696903956,
-   "spinMas": 59.085432840993704,
-   "leoM": 2.5518639819974918
+   "poleMas": 50.39137696903958,
+   "poleMasAt": "2026-08-03T00:00:00.000",
+   "spinMas": 59.08543284099372,
+   "spinMasAt": "2026-08-03T00:00:00.000",
+   "tolerance": null
   },
   {
    "id": "sunSame",
-   "quantity": "Sun relative to the Earth, at HPOP's TDB date",
-   "reference": "SPICE spkgeo, the same DE440 file and date",
-   "max": 0.000029802322387695312,
+   "quantity": "Sun relative to Earth at force TDB",
+   "reference": "SPICE spkgeo, same DE440 and ET",
    "unit": "m",
-   "tolerance": 0.001,
+   "note": "Native HPOP force API kernel read; km/km/s converted in C++ to metres.",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
    "met": true,
-   "note": "kernel reading and interpolation",
-   "velocityMS": 3.688882027804963e-12
+   "tolerance": 0.001,
+   "velocityMS": 0,
+   "velocityMSAt": "2026-08-02T00:00:00.000"
   },
   {
    "id": "sunTrue",
-   "quantity": "Sun relative to the Earth, at the UTC epoch",
-   "reference": "SPICE spkgeo at TDB = ERFA TT + eraDtdb",
-   "max": 1.3536361104859906,
+   "quantity": "Sun relative to Earth at ERFA TDB",
+   "reference": "SPICE spkgeo, ERFA TT + eraDtdb",
    "unit": "m",
-   "tolerance": null,
+   "note": "Remaining two-term TDB model spread.",
+   "max": 0.39526340911804075,
+   "maxAt": "2026-06-10T01:00:00.000",
    "met": null,
-   "note": "adds HPOP's TDB clock"
+   "tolerance": null
   },
   {
    "id": "moonSame",
-   "quantity": "Moon relative to the Earth, at HPOP's TDB date",
-   "reference": "SPICE spkgeo, the same DE440 file and date",
-   "max": 1.4779288903810084e-8,
+   "quantity": "Moon relative to Earth at force TDB",
+   "reference": "SPICE spkgeo, same DE440 and ET",
    "unit": "m",
-   "tolerance": 0.001,
+   "note": "Native HPOP force API kernel read.",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
    "met": true,
-   "note": "kernel reading and interpolation",
-   "velocityMS": 2.2207170832518412e-13
+   "tolerance": 0.001,
+   "velocityMS": 0,
+   "velocityMSAt": "2026-08-02T00:00:00.000"
   },
   {
    "id": "moonTrue",
-   "quantity": "Moon relative to the Earth, at the UTC epoch",
-   "reference": "SPICE spkgeo at TDB = ERFA TT + eraDtdb",
-   "max": 0.04887484587072784,
+   "quantity": "Moon relative to Earth at ERFA TDB",
+   "reference": "SPICE spkgeo, ERFA TT + eraDtdb",
    "unit": "m",
-   "tolerance": null,
+   "note": "Remaining two-term TDB model spread.",
+   "max": 0.0140529004784751,
+   "maxAt": "2026-06-10T02:00:00.000",
    "met": null,
-   "note": "adds HPOP's TDB clock"
+   "tolerance": null
+  },
+  {
+   "id": "coordsEcefCio",
+   "quantity": "Public coords UTC-JD ECEF versus CIO",
+   "reference": "ERFA CIO with case EOP",
+   "unit": "mas",
+   "note": "Remaining legacy budget: UT1-UTC, polar motion, frame bias and 1976/1980 versus 2006/2000A.",
+   "geoM": 109.01493723742801,
+   "geoMAt": "2026-06-10T12:00:00.000",
+   "gpsM": 68.6705497351445,
+   "gpsMAt": "2026-06-10T12:00:00.000",
+   "leoM": 17.52478892959801,
+   "leoMAt": "2026-06-10T12:00:00.000",
+   "max": 533.2950917169118,
+   "maxAt": "2026-06-10T12:00:00.000",
+   "met": null,
+   "poleMas": 493.99382540053233,
+   "poleMasAt": "2026-06-10T12:00:00.000",
+   "spinMas": 207.63903439162016,
+   "spinMasAt": "2026-06-10T00:00:00.000",
+   "tolerance": null
+  },
+  {
+   "id": "coordsEcefSpice",
+   "quantity": "Public coords UTC-JD ECEF versus SPICE",
+   "reference": "SPICE pxform J2000 -> ITRF93",
+   "unit": "mas",
+   "note": "Legacy coords choices plus independent BPC reference spread.",
+   "geoM": 107.3831642611688,
+   "geoMAt": "2026-06-10T12:00:00.000",
+   "gpsM": 67.64266539046407,
+   "gpsMAt": "2026-06-10T12:00:00.000",
+   "leoM": 17.262471877323943,
+   "leoMAt": "2026-06-10T12:00:00.000",
+   "max": 525.3125478464324,
+   "maxAt": "2026-06-10T12:00:00.000",
+   "met": null,
+   "poleMas": 486.71323878554654,
+   "poleMasAt": "2026-06-10T12:00:00.000",
+   "spinMas": 204.59409769025825,
+   "spinMasAt": "2026-06-10T00:00:00.000",
+   "tolerance": null
+  },
+  {
+   "id": "coordsVelocityRates",
+   "quantity": "Neglected full-matrix derivative at GEO",
+   "reference": "Independent ERFA full-chain central difference, delta=1 s",
+   "unit": "m/s",
+   "note": "10,000 epochs, all frame pairs/directions. Precession/nutation/equinox rates omitted by the documented Earth-rotation-only velocity contract. Includes central-difference rounding.",
+   "gpsMS": 0.0005608426147330108,
+   "gpsMSAt": "",
+   "leoMS": 0.0001431275631814219,
+   "leoMSAt": "",
+   "max": 0.0008903412406192459,
+   "maxAt": "TOD->GCRF",
+   "met": null,
+   "tolerance": null
   }
  ],
  "skipped": [],
  "verdict": {
-  "statement": "The table retains all original scores and limits. Six of 23 rows miss stated limits: four expose two HPOP classical-frame defects, one exposes the single-JD clock precision, and one exceeds a limit smaller than the measured reference spread. Untoleranced rows are diagnostic comparisons, not passes.",
-  "rows": 23,
-  "met": 7,
-  "missed": 6,
-  "untoleranced": 10,
+  "statement": "Classical-frame and force-clock limits are enforced. The unchanged SPICE ITRF93 limit remains a recorded reference-spread miss. Untoleranced rows measure documented model choices.",
+  "rows": 26,
+  "met": 12,
+  "missed": 1,
+  "untoleranced": 13,
   "misses": [
    {
-    "id": "c2tTrue",
-    "classification": "HPOP precision property",
-    "max": 0.21383133120493777,
-    "unit": "mas",
-    "tolerance": 0.022000000000000002
-   },
-   {
     "id": "c2tSpice",
-    "classification": "reference spread",
-    "max": 8.897115349419236,
+    "max": 8.857374772165672,
     "unit": "mas",
-    "tolerance": 5
-   },
-   {
-    "id": "coordsPrecession",
-    "classification": "HPOP defect",
-    "max": 206.42002410973046,
-    "unit": "mas",
-    "tolerance": 0.001
-   },
-   {
-    "id": "coordsNutation",
-    "classification": "HPOP defect",
-    "max": 49.08322391339125,
-    "unit": "mas",
-    "tolerance": 10
-   },
-   {
-    "id": "coordsTeme",
-    "classification": "HPOP defect",
-    "max": 211.7954179519075,
-    "unit": "mas",
-    "tolerance": 10
-   },
-   {
-    "id": "c2tBuiltInClassical",
-    "classification": "HPOP defect",
-    "max": 211.89040799609475,
-    "unit": "mas",
-    "tolerance": 10
+    "tolerance": 5,
+    "classification": "reference spread"
    }
   ],
-  "defects": [
-   {
-    "source": "propagator/hpop/lib/coords.cpp:273",
-    "statement": "General-epoch t0 terms incorrectly use T for J2000 precession.",
-    "effect": {
-     "angleMas": 206.42002410970431,
-     "geoM": 42.195899272991916,
-     "gpsM": 26.579986863032413,
-     "leoM": 6.783237666258807
-    }
-   },
-   {
-    "source": "propagator/hpop/lib/coords.cpp:52",
-    "additionalSource": "propagator/hpop/lib/coords.cpp:68",
-    "statement": "Ten erroneous IAU 1980 coefficient rows plus one spurious argument key; actual omissions include a 4.8 mas term.",
-    "effect": {
-     "angleMas": 49.083223913406925,
-     "geoM": 10.033478007652548,
-     "gpsM": 6.32027562461805,
-     "leoM": 1.612940288457143
-    }
-   }
-  ],
-  "shippedOutput": {
-   "source": "propagator/hpop/src/hpop_plugin.cpp:2135",
-   "request": "plugin_set_state followed by plugin_propagate_path at the same UTC JD; no integration or Chebyshev approximation",
-   "measurements": [
-    {
-     "ecefM": [
-      4380682.878406417,
-      5172276.859480528,
-      17629.477817427898
-     ],
-     "gcrfPositionKm": [
-      6778.137,
-      0,
-      0
-     ],
-     "jdUtc": 2461254.5,
-     "precessionAndNutationEffectM": 5.651601003621977,
-     "precessionOnlyEffectM": 6.781824544870455,
-     "radiusM": 6778137,
-     "utc": "2026-08-02T00:00:00.000",
-     "wasmMinusErfaCioM": 13.666829073665111,
-     "wasmMinusNativeM": 0
-    },
-    {
-     "ecefM": [
-      17165621.947516613,
-      20267467.79945623,
-      69080.7711368013
-     ],
-     "gcrfPositionKm": [
-      26560,
-      0,
-      0
-     ],
-     "jdUtc": 2461254.5,
-     "precessionAndNutationEffectM": 22.14569027961904,
-     "precessionOnlyEffectM": 26.574449578079147,
-     "radiusM": 26560000,
-     "utc": "2026-08-02T00:00:00.000",
-     "wasmMinusErfaCioM": 53.55320793770478,
-     "wasmMinusNativeM": 0
-    },
-    {
-     "ecefM": [
-      27250534.712003823,
-      32174734.855639998,
-      109666.16633822226
-     ],
-     "gcrfPositionKm": [
-      42164.17,
-      0,
-      0
-     ],
-     "jdUtc": 2461254.5,
-     "precessionAndNutationEffectM": 35.15642506186687,
-     "precessionOnlyEffectM": 42.18710879924862,
-     "radiusM": 42164170,
-     "utc": "2026-08-02T00:00:00.000",
-     "wasmMinusErfaCioM": 85.01606037703937,
-     "wasmMinusNativeM": 0
-    }
-   ],
-   "interpretation": "Actual ECEF output differences against ERFA CIO include the legacy UTC/TT, UT1, polar-motion and model-chain choices. precessionOnlyEffectM changes only the precession polynomial in a native counterfactual at the identical date and state; the native original matches shipped WASM exactly."
-  }
+  "defects": []
  },
  "provenance": {
+  "sourceHashes": {
+   "propagator/hpop/src/cpp/include/hpop/prw_environment.h": "f36b8e23e6ce6cd65a9d07c2e62c28fa5696994932950f98b76a1d49613832a6",
+   "propagator/hpop/src/cpp/include/hpop/prw_codec.h": "af239b18032df57a9eb9dbd2af3f5b3e970a5f71aedb938d137609e935907975",
+   "propagator/hpop/lib/time_convert.cpp": "02a82cb7a9bb3f38cbfd3be3b25b32e073cd356df56f3965be0ce5ca0da5b7e6",
+   "propagator/hpop/lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
+   "propagator/hpop/lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
+   "propagator/hpop/lib/coords.h": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5",
+   "propagator/hpop/lib/force_models.cpp": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3",
+   "propagator/hpop/lib/ephemeris.cpp": "ecead63da40c529f633217ef38f9bd3ed976c0ce0bb5d84b30d30d432b2dfa88",
+   "foundation/frames/src/axis_engine.hpp": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a",
+   "foundation/frames/src/eop_series.hpp": "21f469eddb746b8e7ef3c6280e46c404c3b3206e8ba28486cdbe02e6d6c38a62"
+  },
   "measurement": {
-   "file": "diagnosis.json",
-   "sha256": "24c0010de639d7b9051a27d1565e0edad4049a979adfffc3e58355bfa8f46c83",
-   "command": "node tests/evidence/erfa-spice/diagnose-frames.mjs",
-   "units": "angles mas; positions metres; epochs UTC labels with TT for celestial rotations and UT1 for Earth rotation",
+   "command": "node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers /Users/tj/software/main-packages/flatbuffers/include",
+   "units": "angles mas; position differences/bounds metres; rates m/s",
+   "epochs": "50 UTC hourly samples; exact TT/UT1; rates diagnostic spans 1990–2040",
    "radiiM": {
     "LEO": 6778137,
     "GPS": 26560000,
     "GEO": 42164170
    },
-   "toleranceRationale": "Original table limits are unchanged. Diagnostic counterfactuals explain misses and do not replace them; radius*rotation is an orientation-independent upper bound, not every satellite position error."
+   "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometre at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
   },
-  "sourceIdentity": {
-   "erfaVersion": "2.0.1",
-   "sofaVersion": "20231011",
-   "referenceTools": "tools.json (offline wheel and kernel pins)",
-   "hpop": "Shipped WASM for ECEF and force-path effects; original source-built HPOP frames for 50-epoch comparison; source file hashes are pinned below."
-  },
-  "sourceHashes": {
-   "propagator/hpop/src/cpp/include/hpop/prw_environment.h": "0914adc828557945682895c85c453aa5585b8fd4ff186d14c4131da6bab6a722",
-   "propagator/hpop/src/cpp/include/hpop/prw_codec.h": "1b7807cd6cbe2e2e0d415184ac7fb779fcaca1ab7ace120da4fbbedb082f7479",
-   "propagator/hpop/lib/time_convert.cpp": "36dc34ce60062add51178ad4572f8704f673801b686ff8e1805c53401d5aafa7",
-   "propagator/hpop/lib/coords.cpp": "655627cb91fb78ba93edc05ba5b7287fc06da55b328c27e8457365effb81d987",
-   "propagator/hpop/lib/force_models.cpp": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
-   "foundation/frames/src/axis_engine.hpp": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a",
-   "foundation/frames/src/eop_series.hpp": "21f469eddb746b8e7ef3c6280e46c404c3b3206e8ba28486cdbe02e6d6c38a62"
-  },
-  "reachability": [
-   {
-    "source": "propagator/hpop/lib/force_models.cpp:1504",
-    "usesPrecession": true,
-    "chain": "DragAccelerationWith:1593 -> EarthAxesAt:75 -> GcrfToEarthFixed(jd,forceSet):1514; fallback N*P at 1504. Density positions and Sun-relative atmosphere geometry share the force-set axes.",
-    "eopReplacement": "src/cpp/src/prw_dynamics.cpp:648-651 installs EarthRotation::matrix only when EOP is supplied. src/cpp/include/hpop/prw_environment.h:63-81 uses the IAU 2006/2000A CIO chain and never coords::precession. Every reference-suite case with an Earth-fixed field or drag supplies EOP.",
-    "reachableWithoutEop": "NRLMSISE00 + point mass is accepted (parseForces:191; the EOP refusals at 174,198,204 cover other configurations).",
-    "measurement": {
-     "differenceM": 0.000022559572022998032,
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "frame": "GCRF",
-     "interpretation": "Total fallback-vs-CIO result, including Earth-orientation/model setting and integration effects; not an isolated precession-defect measurement.",
-     "source": "tests/lib/orekitCases.mjs requestInputs: LEO400 F0-point-mass, override drag=true; keep only first requested sample as target (01:00 UTC). RK78 tolerance 1e-13, maxStep 300 s. Compare identical requests with/without earth_orientation input.",
-     "targetUtc": "2026-08-02T01:00:00.000",
-     "units": "km, km/s",
-     "withEop": {
-      "epochTDBJD": 2461254.5424673986,
-      "positionKm": [
-       2441.81506056769,
-       -3445.051004151088,
-       -5304.643683803278
-      ],
-      "statusCode": 0,
-      "velocityKmS": [
-       6.489269797754353,
-       4.066819250300695,
-       0.34990825021323224
-      ]
-     },
-     "withoutEop": {
-      "epochTDBJD": 2461254.5424673986,
-      "positionKm": [
-       2441.815060587261,
-       -3445.0510041399043,
-       -5304.643683804194
-      ],
-      "statusCode": 0,
-      "velocityKmS": [
-       6.489269797748161,
-       4.066819250306789,
-       0.3499082502253712
-      ]
-     }
-    }
-   },
-   {
-    "source": "propagator/hpop/src/hpop_plugin.cpp:528",
-    "additionalSources": [
-     "propagator/hpop/src/hpop_plugin.cpp:1196",
-     "propagator/hpop/src/hpop_plugin.cpp:1263",
-     "propagator/hpop/src/hpop_plugin.cpp:1337",
-     "propagator/hpop/src/hpop_plugin.cpp:2135"
-    ],
-    "usesPrecession": true,
-    "eopReplacement": false,
-    "chain": "Legacy diagnostic ECEF exports call coords::transform/getTransformMatrix -> gcrfToItrf:379 -> precession:386. They do not route through the force-set EarthRotation callback.",
-    "measurement": [
-     {
-      "ecefM": [
-       4380682.878406417,
-       5172276.859480528,
-       17629.477817427898
-      ],
-      "gcrfPositionKm": [
-       6778.137,
-       0,
-       0
-      ],
-      "jdUtc": 2461254.5,
-      "precessionAndNutationEffectM": 5.651601003621977,
-      "precessionOnlyEffectM": 6.781824544870455,
-      "radiusM": 6778137,
-      "utc": "2026-08-02T00:00:00.000",
-      "wasmMinusErfaCioM": 13.666829073665111,
-      "wasmMinusNativeM": 0
-     },
-     {
-      "ecefM": [
-       17165621.947516613,
-       20267467.79945623,
-       69080.7711368013
-      ],
-      "gcrfPositionKm": [
-       26560,
-       0,
-       0
-      ],
-      "jdUtc": 2461254.5,
-      "precessionAndNutationEffectM": 22.14569027961904,
-      "precessionOnlyEffectM": 26.574449578079147,
-      "radiusM": 26560000,
-      "utc": "2026-08-02T00:00:00.000",
-      "wasmMinusErfaCioM": 53.55320793770478,
-      "wasmMinusNativeM": 0
-     },
-     {
-      "ecefM": [
-       27250534.712003823,
-       32174734.855639998,
-       109666.16633822226
-      ],
-      "gcrfPositionKm": [
-       42164.17,
-       0,
-       0
-      ],
-      "jdUtc": 2461254.5,
-      "precessionAndNutationEffectM": 35.15642506186687,
-      "precessionOnlyEffectM": 42.18710879924862,
-      "radiusM": 42164170,
-      "utc": "2026-08-02T00:00:00.000",
-      "wasmMinusErfaCioM": 85.01606037703937,
-      "wasmMinusNativeM": 0
-     }
-    ]
-   },
-   {
-    "source": "propagator/hpop/src/cpp/include/hpop/prw_codec.h:245",
-    "additionalSource": "propagator/hpop/src/hpop_plugin.cpp:3346",
-    "usesPrecession": false,
-    "chain": "PRW decodeFrame refuses BODY_FIXED/TEME (eop-data-required); portable resident output requires GCRF. The supported PRW propagation output cannot request legacy ECEF conversion. The C ABI exports above remain present and reachable in the shipped artifact."
-   }
-  ],
   "e2e": {
    "command": "node tests/evidence/erfa-spice/check-erfa-spice.mjs",
-   "row": "teme",
-   "replay": "Rebuild pinned C++ ERFA and foundation/frames offline, evaluate 50 epochs, compare with independently stored reference matrices, and re-score the original pinned matrices.",
-   "storedToleranceMas": 1e-21,
-   "freshToleranceMas": 1e-9,
-   "freshBothToleranceMas": 1e-8,
-   "toleranceRationale": "Original stored-matrix reduction differs only by the final hypot rounding; fresh native compilation can differ by tiny matrix-element contraction/rounding differences. Rebuilding both sides permits 1e-8 mas for C++ versus historical NumPy matrix rounding. These numerical replay tolerances are far below the original 0.001 mas physical limit."
-  },
-  "de440PathBase": "repository root; matching existing file is pinned in fileHashes"
+   "replay": "Rebuild HPOP against final sources and rescore all 50 epochs against pinned reference.json in C++; assert four classical rows, c2tTrue and SGP4 TEME limits."
+  }
  },
  "fileHashes": [
   {
    "path": "hpop-frames.json",
-   "sha256": "c66adf90e72148b39e2326a0660dd1725fa60a029d282b93bcb2851d0d90f622"
+   "sha256": "89e892cb268ad9473a7b868d331caf04936520593bb60ca0423453e9c91d5461"
   },
   {
    "path": "reference.json",
-   "sha256": "fbb6f7fe00d432681c86e03d6338edbd11107685a66f8e08f212e278af2d8cb7"
+   "sha256": "4119cd86d9c769e62ecb82ab931d10ce2c0f88d2253e6644a3a36b126214a7dd"
   },
   {
    "path": "tools.json",
@@ -1106,63 +531,95 @@
   },
   {
    "path": "diagnosis.json",
-   "sha256": "24c0010de639d7b9051a27d1565e0edad4049a979adfffc3e58355bfa8f46c83"
+   "sha256": "0fde3230dec88210a6ea0186872d23185dbefce7191c67913494a7db81debb85"
+  },
+  {
+   "path": "before-after.json",
+   "sha256": "67ece759adf04080884d4dcb060c2dbeabc0bc41025afb569803e6aeed31ee8f"
+  },
+  {
+   "path": "classical-frames-10k.json",
+   "sha256": "c3b2d89b0b4e53ce97ae3741f4d8180df1eb20b3c9b17fd46249ccb4a91a5958"
   },
   {
    "path": "frame-diagnostics.cpp",
-   "sha256": "8f74de73b2d23e4663865610c5caceb8220758eb0c1dcb09be09c2e53a91f963"
+   "sha256": "ffd45925f927263892617af8704dab0ad0419c44a63cfee4cf8f7474d47cb72c"
   },
   {
    "path": "frame-diagnostics.mjs",
-   "sha256": "8bd88763dd6ec5a90eafe29e39ebe93c03cc3f17fa366f0bce4303ea74fd5d49"
+   "sha256": "6d391bfaa8076c02f7855b95505d5b704fc047f0fb0966ac14b572b75535e240"
   },
   {
    "path": "diagnose-frames.mjs",
-   "sha256": "c2a45bc3bc6c40687d53e53eab1b3a45cdc61029bfb73f386f1656f60ca29627"
+   "sha256": "3cd0ec609983864a1bbb0b8ec19204baaa64d5bdfc8be657b824364e735105c2"
   },
   {
    "path": "summarize-erfa-spice.mjs",
-   "sha256": "e8c0f05e9f0c0ac288fe060194b7f83e5acb7848fb3afeb6cd3ac29b9742ab4e"
+   "sha256": "45c45aab083e001c5d9bd19bb9e1c2d0bbce25230c5d3a1e5808d8ffb7e22de0"
   },
   {
    "path": "check-erfa-spice.mjs",
-   "sha256": "e53fbcad8f3f46f7d177cd9c718a2f02709a0b07b724070df40d1f1dcb4fc850"
+   "sha256": "7cd39fcbf893c9e9300f38e5b85e378a089493926f8294202741c66e4588422a"
   },
   {
    "path": "hpop_frames_native.cpp",
-   "sha256": "e0ff129946a01ba02f0b4fa60a791b197129dbbd95c7d9bf77ba056c6054d6ec"
+   "sha256": "a34c2bc03747ab9eba304da27fbae61c1da994f668f4de30eadab041c8d5fee1"
   },
   {
    "path": "hpop-frames-native.mjs",
-   "sha256": "046f5f75280c7e36dbe2dda13afc471ed1a8f322a9be82f1a18b76d140a1af52"
+   "sha256": "4dd85f83ecb53dabde20df1af0f22b607777f3d19dfe1ca28e0b747cda267acc"
   },
   {
    "path": "reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d497ea654f127b05ddb7ad3bd4214bf4ec82b870e7667409e06e73f3e599ca27"
   },
   {
    "path": "run-erfa-spice.mjs",
-   "sha256": "2578abbd9deee1eb9c7675906babfca219ccb122ed010558ce6ecd3d2f4bdc7f"
+   "sha256": "c2b81679256fded0fd07a7e03477abc51549df831f2645c6f8d0662a2828681b"
+  },
+  {
+   "path": "check-classical-frames.mjs",
+   "sha256": "1dcbc2acc242de810b7b980e1f81bac70c3781aed576fc2f5c9e41308c45cbc3"
+  },
+  {
+   "path": "classical-frames.cpp",
+   "sha256": "cc1d3f6ee035268a6d8f9f544ca8918d2a641e26c743ed82cc1cd3509de655e3"
+  },
+  {
+   "path": "classical-frames-reference.py",
+   "sha256": "ea1eb0b6b9e419da580b4b314b56d39b7b00f6af80d87f76902a8fd221385b7f"
   },
   {
    "path": "../../../src/cpp/include/hpop/prw_environment.h",
-   "sha256": "0914adc828557945682895c85c453aa5585b8fd4ff186d14c4131da6bab6a722"
+   "sha256": "f36b8e23e6ce6cd65a9d07c2e62c28fa5696994932950f98b76a1d49613832a6"
   },
   {
    "path": "../../../src/cpp/include/hpop/prw_codec.h",
-   "sha256": "1b7807cd6cbe2e2e0d415184ac7fb779fcaca1ab7ace120da4fbbedb082f7479"
+   "sha256": "af239b18032df57a9eb9dbd2af3f5b3e970a5f71aedb938d137609e935907975"
   },
   {
    "path": "../../../lib/time_convert.cpp",
-   "sha256": "36dc34ce60062add51178ad4572f8704f673801b686ff8e1805c53401d5aafa7"
+   "sha256": "02a82cb7a9bb3f38cbfd3be3b25b32e073cd356df56f3965be0ce5ca0da5b7e6"
+  },
+  {
+   "path": "../../../lib/time_types.h",
+   "sha256": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76"
   },
   {
    "path": "../../../lib/coords.cpp",
-   "sha256": "655627cb91fb78ba93edc05ba5b7287fc06da55b328c27e8457365effb81d987"
+   "sha256": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677"
+  },
+  {
+   "path": "../../../lib/coords.h",
+   "sha256": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5"
   },
   {
    "path": "../../../lib/force_models.cpp",
-   "sha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562"
+   "sha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3"
+  },
+  {
+   "path": "../../../lib/ephemeris.cpp",
+   "sha256": "ecead63da40c529f633217ef38f9bd3ed976c0ce0bb5d84b30d30d432b2dfa88"
   },
   {
    "path": "../../../../../foundation/frames/src/axis_engine.hpp",
@@ -1173,76 +630,24 @@
    "sha256": "21f469eddb746b8e7ef3c6280e46c404c3b3206e8ba28486cdbe02e6d6c38a62"
   },
   {
-   "path": "../../../lib/coords.h",
-   "sha256": "589f653de306645d4aab5d566656f80e339273f1871348e04c12e5b3db5d9339"
-  },
-  {
-   "path": "../../../lib/coords_types.h",
-   "sha256": "097a94db3c2d8ff74adbb11651a2e7f66bbc9e076ba4f343d8e4e798edd7388f"
-  },
-  {
-   "path": "../../../lib/time_convert.h",
-   "sha256": "f694e5f3f540cee2ba11a21150b426c030a10842625d37517acd8848ab825f78"
-  },
-  {
-   "path": "../../../lib/time_types.h",
-   "sha256": "d947d34b4c9fcb5af0fcdfa01fcc617ae9278792804793c07ce8c0696ac9c0ae"
-  },
-  {
-   "path": "../../../src/hpop_plugin.cpp",
-   "sha256": "09c41cbd314fe2bf8c7eba1337fab4813c444fd43f337ad4d16504a4e2281eab"
-  },
-  {
-   "path": "../../../src/cpp/src/prw_dynamics.cpp",
-   "sha256": "c9765e9ecc558a98f0c82aee4c5fb38e9a0b9ffdec92e4ce2feb06dff21c1bc0"
-  },
-  {
-   "path": "../../../src/cpp/include/nlohmann/json.hpp",
-   "sha256": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6"
-  },
-  {
-   "path": "../../../index.js",
-   "sha256": "db8cbbb0781ef94b10801ab23ae074968181a7983049e07172d74be2841cff8b"
-  },
-  {
-   "path": "../../../plugin-manifest.json",
-   "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+   "path": "../../../dist/isomorphic/module.wasm",
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
   },
   {
    "path": "../../../package.json",
-   "sha256": "70593d6ba44980fcaef96f94de08c34d68c2641876e1bdf36ae1db62f89afd29"
+   "sha256": "45601a67b53643d98c642aea072ed25306fabfe222a66c16d9f5200249a51e59"
   },
   {
-   "path": "../../lib/orekitCases.mjs",
-   "sha256": "3851f896a0b0d443b661dbdbdccc8ac970ee16c85b56f3e47a981db32febd020"
+   "path": "../../../plugin-manifest.json",
+   "sha256": "235aec1dc05b16a515fe939dc027ce85d6257f4188f4b2acee7068eb265da39e"
   },
   {
-   "path": "../../lib/prwCodec.mjs",
-   "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
-  },
-  {
-   "path": "../../fixtures/orekit/orekit-reference.json",
-   "sha256": "9c8d444639bd35d33d0fa84e2bfeb719e8b42ddf044198657ed922decb2d5207"
-  },
-  {
-   "path": "../../fixtures/orekit/eop-2026-08.json",
-   "sha256": "772246c35fe1a6e644c4bd6e7690d632450710c06fe8054b726ebdc055720a6a"
+   "path": "../../../index.js",
+   "sha256": "badc1fec9ae5ca23a6a3669f705e6da6745bb0ef803f25b05ec9dfde8d63887c"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
    "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
-  },
-  {
-   "path": "../../../../../foundation/frames/erfa-amalgamation.mjs",
-   "sha256": "ef67a23e0063197becb89137d0c9f5a332c56a0b2a8feccdc885cc18028e6dd4"
-  },
-  {
-   "path": "../../../../../foundation/frames/src/iau_body_models.hpp",
-   "sha256": "15bec30054e560f28ff9c1c21972775b9359f5754c2d17b853f65b6a801fd4c9"
-  },
-  {
-   "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
   },
   {
    "path": "../../../../../higherpop/third_party/erfa/a2af.c",
@@ -2259,18 +1664,6 @@
   {
    "path": "../../../../../../../tools/xval/naif-kernels/earth_latest_high_prec.bpc",
    "sha256": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
-  },
-  {
-   "path": "../../../../../../../tools/xval/wheels-erfa-spice/pyerfa-2.0.1.5-cp39-abi3-macosx_11_0_arm64.whl",
-   "sha256": "be1aeb70390dd03a34faf96749d5cabc58437410b4aab7213c512323932427df"
-  },
-  {
-   "path": "../../../../../../../tools/xval/wheels-erfa-spice/spiceypy-8.3.0-cp314-cp314-macosx_11_0_arm64.whl",
-   "sha256": "94530fe4927ef4d06d7eb4c4ba2036a448313f5b806c65aa7a3943d55e535d31"
-  },
-  {
-   "path": "../../../../../../../tools/xval/wheels-erfa-spice/numpy-2.5.4-cp314-cp314-macosx_14_0_arm64.whl",
-   "sha256": "956555e0603a4d38019ae6925711cb9dc43195c076a928accf7ea5d50bddfe53"
   },
   {
    "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",

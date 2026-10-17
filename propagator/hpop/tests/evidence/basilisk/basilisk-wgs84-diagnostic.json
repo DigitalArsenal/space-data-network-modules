@@ -128,7 +128,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",
@@ -6042,5 +6045,11 @@
    "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
    "reason": "no matching exported FES2004 ocean gravity tide model; no matching Knocke albedo/infrared 15-degree quadrature; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
   }
- ]
+ ],
+ "provenanceMetadataUpdate": {
+  "scope": "Historical source versions retain their original paths and digests as unavailable informational provenance. No reference states, convergence results, density probes, settings or other payload fields changed.",
+  "originalRecordSha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96",
+  "unchangedPayloadSha256": "105976ffc5dd7478971bb6c19ce32b82204fa0d814c6fd30e1da403d12599082",
+  "payloadEncoding": "UTF-8 JSON, recursively sorted object keys, no insignificant whitespace; excludes inputFiles and provenanceMetadataUpdate."
+ }
 }

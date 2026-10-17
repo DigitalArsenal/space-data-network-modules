@@ -415,6 +415,23 @@ int32_t kepler_catalog_state(double et, uint32_t slot, double* out) {
   return small_position(b, et, out, out + 3) ? kOk : kErrNotConverged;
 }
 
+/// The conic drawing a promoted row at `et_osc`, evaluated at any `et`.
+/// Heliocentric ICRF position (m), velocity (m/s), and bound period (s).
+ORBPRO_ABI_EXPORT("kepler_catalog_conic_state")
+int32_t kepler_catalog_conic_state(double et_osc, double et, uint32_t slot, double* out7) {
+  auto* c = small_catalog::g_catalog;
+  if (c == nullptr || out7 == nullptr) return kErrNullOutput;
+  if (slot >= small_catalog::kPromoted) return kErrBadEntityIndex;
+  SmallBody& b = c->promoted[slot];
+  if (!small_in_validity(b, et_osc)) return kErrOutsideValidity;
+  small_rebase(b, et_osc);
+  Conic conic;
+  conic_of(b, conic);
+  if (!small_conic(conic, et, out7, out7 + 3)) return kErrNotConverged;
+  out7[6] = conic.e < 1.0 ? kTwoPi / conic.n : NAN;
+  return kOk;
+}
+
 /// A promoted row's light-time and aberration shift (m, ICRF), the observer
 /// as for kepler_small_snapshot_apparent.
 ORBPRO_ABI_EXPORT("kepler_catalog_apparent_offset")

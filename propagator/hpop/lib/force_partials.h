@@ -29,7 +29,7 @@ const char* ValidateAccelerationPartials(const Vec3& position, const ForceModelS
 /// force derivatives are one-sided on the selected branch at shadow/table
 /// boundaries; a discontinuous force does not have a classical derivative there.
 AccelerationPartials ComputeAccelerationPartials(
-    const Vec3& position, const Vec3& velocity, double jd,
+    const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
     ForceModelSet& forceSet,
     DensityGradient densityGradient = DensityGradient::Neglected);
 
@@ -58,7 +58,7 @@ const char* ValidateParameter(DynamicParameter parameter, const ForceModelSet& f
 /// coefficients: the force at a unit Cd*A/m or Cr*A/m (times t - t0 for the
 /// rate); the in-track acceleration enters along T of RTN.
 Vec3 AccelerationParameterPartial(DynamicParameter parameter, const Vec3& position,
-                                  const Vec3& velocity, double jd, const ForceModelSet& forceSet);
+                                  const Vec3& velocity, const timesys::Instant& jd, const ForceModelSet& forceSet);
 
 /// Adds `delta` (SI) to the parameter in the force set (finite differences).
 void PerturbParameter(ForceModelSet& forceSet, DynamicParameter parameter, double delta);

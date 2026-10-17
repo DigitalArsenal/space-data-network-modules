@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
+import { useHeadlessShell } from './lib/headlessShell.mjs';
 import { REFERENCE, inputs } from './lib/gnssSrpCases.mjs';
 import { sds } from './lib/prwCodec.mjs';
 
@@ -20,6 +21,7 @@ const cases = [
   })) } },
 ];
 const plan = await normalizeParityFixture({ name: 'propagator/hpop PRW GNSS radiation pressure', threadCounts: [1, 2, 4, 8], cases });
+useHeadlessShell();  // the browser lane: Chromium headless shell only
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));
 fs.mkdirSync(new URL('./evidence/gnss-srp/', import.meta.url), { recursive: true });

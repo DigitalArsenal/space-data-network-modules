@@ -586,7 +586,7 @@ static void sectionLabelHonesty() {
     auto dragOnly = [&](ForceModel::DragModelType m) {
         fs.dragModel = m;
         fs.drag.model = m;
-        const Vec3 total = ForceModel::ComputeTotalAcceleration(p, v, 2460000.5, fs);
+        const Vec3 total = ForceModel::ComputeTotalAcceleration(p, v, timesys::Instant::fromTdb(2460000.5), fs);
         return total - ForceModel::PointMass(p, MU_EARTH);
     };
     const Vec3 dExp = dragOnly(ForceModel::DragModelType::Exponential);
@@ -827,7 +827,7 @@ static void sectionContributionPort() {
 
     ForceModel::ForceModelSet builtIn;
     builtIn.gravityMode = ForceModel::GravityMode::J2Only;
-    const Vec3 aBuiltIn = ForceModel::ComputeTotalAcceleration(p, v, 2460000.5, builtIn);
+    const Vec3 aBuiltIn = ForceModel::ComputeTotalAcceleration(p, v, timesys::Instant::fromTdb(2460000.5), builtIn);
 
     ForceModel::ForceModelSet ported;
     ported.gravityMode = ForceModel::GravityMode::PointMass;
@@ -838,7 +838,7 @@ static void sectionContributionPort() {
     ported.contributions.slots[0].p[1] = RE_EARTH;
     ported.contributions.slots[0].p[2] = 2.0;
     ported.contributions.slots[0].p[3] = J2_EARTH;
-    const Vec3 aPorted = ForceModel::ComputeTotalAcceleration(p, v, 2460000.5, ported);
+    const Vec3 aPorted = ForceModel::ComputeTotalAcceleration(p, v, timesys::Instant::fromTdb(2460000.5), ported);
 
     check(relDiff(aBuiltIn, aPorted) <= 1e-12,
           "two-body + registered J2 equals the built-in J2 run",
@@ -846,7 +846,7 @@ static void sectionContributionPort() {
 
     // A disabled slot contributes exactly nothing.
     ported.contributions.slots[0].enabled = false;
-    const Vec3 aDisabled = ForceModel::ComputeTotalAcceleration(p, v, 2460000.5, ported);
+    const Vec3 aDisabled = ForceModel::ComputeTotalAcceleration(p, v, timesys::Instant::fromTdb(2460000.5), ported);
     check(relDiff(aDisabled, ForceModel::PointMass(p, MU_EARTH)) == 0.0,
           "a disabled contribution contributes exactly zero");
 
@@ -858,7 +858,7 @@ static void sectionContributionPort() {
     third.contributions.slots[0].kind = ForceModel::ContributionKind::PointMassAt;
     third.contributions.slots[0].p[0] = MU_MOON;
     third.contributions.slots[0].p[1] = 384400.0;
-    const Vec3 aThird = ForceModel::ComputeTotalAcceleration(p, v, 2460000.5, third);
+    const Vec3 aThird = ForceModel::ComputeTotalAcceleration(p, v, timesys::Instant::fromTdb(2460000.5), third);
     const Vec3 delta = aThird - ForceModel::PointMass(p, MU_EARTH);
     check(delta.magnitude() > 0.0 && delta.magnitude() < 1e-5,
           "a registered point mass contributes a lunar-scale acceleration",
@@ -889,8 +889,8 @@ static void sectionEarthOrientation() {
     const double jdTdb = 2461255.5, jdTt = timesys::tdbToTt(jdTdb);
     const double jdUt = timesys::taiToUtc(timesys::ttToTai(jdTt));
     double field[3][3], itrf[3][3], teme[3][3];
-    ForceModel::GcrfToEarthFixed(jdTdb, field);
-    const coords::Matrix3x3 g = coords::gcrfToItrf(jdUt), t = coords::temeToGcrf(jdTt);
+    ForceModel::GcrfToEarthFixed(timesys::Instant::fromTdb(jdTdb), field);
+    const coords::Matrix3x3 g = coords::gcrfToItrf(jdUt), t = coords::temeToGcrf(jdUt);
     for (int i = 0; i < 3; ++i)
         for (int k = 0; k < 3; ++k) { itrf[i][k] = g.at(i, k); teme[i][k] = t.at(i, k); }
     check(angleArcsec(field, erfaC2t) < 0.5, "the field's GCRF to Earth-fixed rotation matches ERFA c2t06a",

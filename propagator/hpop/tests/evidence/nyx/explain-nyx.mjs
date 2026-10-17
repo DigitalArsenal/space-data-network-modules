@@ -16,6 +16,7 @@ export function explainSummary(summary, scratch) {
   }
   for (const file of ['score-nyx.mjs', 'measure-drag-settings.mjs', 'scoring.mjs', 'score-metrics.cpp', 'explain-nyx.mjs', 'check-nyx.mjs', 'Cargo.lock', 'Cargo.toml', 'src/main.rs', 'run-nyx.mjs', 'nrlmsise00-published.patch', 'make-msis-variant.mjs', 'check-density.mjs', 'itrf-bpc.json', '../../../package.json', '../../../plugin-manifest.json', '../../../src/cpp/include/nlohmann/json.hpp', '../../lib/orekitCases.mjs', '../../lib/prwCodec.mjs', '../../fixtures/orekit/orekit-reference.json', '../../fixtures/orekit/eop-2026-08.json', '../../fixtures/orekit/eop-2026-06.json', '../../fixtures/orekit/spw-2026-08.json', '../../fixtures/orekit/jb2008-2026-06.json', '../erfa-spice/summary-erfa-spice.json']) record(file);
   record('../../../dist/isomorphic/module.wasm', summary.module.sha256);
+  record('../orekit/scoring.mjs'); record('../orekit/score-metrics.cpp'); record('../tudat/scoring.mjs');
   record(summary.nyx.file, summary.nyx.sha256);
   summary.nyx.caseExportSha256 = read(path.resolve(here, summary.nyx.file)).caseExportSha256;
   record('../cases/hpop-reference-cases.json', summary.nyx.caseExportSha256);
@@ -150,7 +151,7 @@ export function explainSummary(summary, scratch) {
     stockNyx: { version: nyx.tool.nyxSpace, met: summary.cases.filter((r) => r.met).length, total: summary.cases.length, missed: misses.length,
       statement: `Stock Nyx ${nyx.tool.nyxSpace} meets tolerance on ${summary.cases.filter((r) => r.met).length} of ${summary.cases.length} cases at the suite setting; the five misses are LEO drag cases affected by the two-line NRLMSISE-00 port defect.` },
     drag: {
-      statement: 'With the published NRLMSISE-00 formulas and the WGS84 Earth shape, the five missed cases are about 0.05 m from HPOP (0.04195–0.05235 m), all below the unchanged 0.1 m limit. The port defect and the cached runner Earth-shape mismatch are separated in the per-case diagnostics; they do not indicate an HPOP defect.',
+      statement: 'With the published NRLMSISE-00 formulas and the WGS84 Earth shape, the five missed cases are about 0.05 m from HPOP, all below the unchanged 0.1 m limit. The exact corrected residuals are recorded per case. The port defect and the cached runner Earth-shape mismatch are separated in the per-case diagnostics; they do not indicate an HPOP defect.',
       correctedCases: misses.map((r) => {
         const c = geometry.cases.find((g) => g.id === r.id);
         return { id: r.id, worstM: c.finest.worstM, toleranceM: r.toleranceM, met: c.finest.met };

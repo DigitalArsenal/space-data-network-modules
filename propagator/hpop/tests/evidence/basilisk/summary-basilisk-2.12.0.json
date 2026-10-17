@@ -1,12 +1,12 @@
 {
  "note": "HPOP shipped WASM against Basilisk: maximum 3D position difference over 24 h at hourly samples, suite/steps30/finest HPOP settings and Orekit-minus-Basilisk. Every numerical reduction uses the shared Nyx C++ helper. Native half-step trajectories are stored inline.",
  "module": {
-  "version": "1.3.1",
-  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+  "version": "1.4.0",
+  "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
  },
  "basilisk": {
   "file": "basilisk-2.12.0.json",
-  "sha256": "cbf9a8bd63cb31a60f3b5459e496b83d8095a463a78ceb687fc05480a6d6a1ed",
+  "sha256": "00a6bb57993b477563f9c74cc2d5bac03a436aad660fa32101eb9c0a90d5d47b",
   "caseExportSha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9",
   "tool": {
    "name": "Basilisk (AVS Lab)",
@@ -135,7 +135,10 @@
    },
    {
     "path": "../erfa-spice/reference.py",
-    "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+    "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+    "role": "historical-source",
+    "availability": "unavailable",
+    "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
    },
    {
     "path": "../erfa-spice/tools.json",
@@ -2103,14 +2106,14 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00006550758210964184,
+    "worstM": 6.550758210964184e-05,
     "steps": 2903,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000011984913529047217,
+    "worstM": 1.1984913529047217e-05,
     "steps": 8608,
     "met": true
    },
@@ -2120,7 +2123,7 @@
     "fineStepS": 4,
     "atHour": 9,
     "sampleCount": 24,
-    "worstM": 0.0000016130722413018523,
+    "worstM": 1.6130722413018523e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -2130,7 +2133,7 @@
      "fineStepS": 4,
      "atHour": 9,
      "sampleCount": 24,
-     "worstM": 0.0000016130722413018523
+     "worstM": 1.6130722413018523e-06
     }
    ],
    "diagnostics": {
@@ -2161,22 +2164,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017643767532090803,
-    "steps": 1342,
+    "worstM": 0.017650415351969553,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00009670081539445347,
+    "worstM": 0.00010227888709191182,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003527186654631968,
-    "steps": 8612,
+    "worstM": 3.623374604184032e-05,
+    "steps": 8611,
     "met": true
    },
    "met": true,
@@ -2185,7 +2188,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000006802941761944844,
+    "worstM": 6.802941761944844e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -2195,7 +2198,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000006802941761944844
+     "worstM": 6.802941761944844e-06
     }
    ],
    "diagnostics": {
@@ -2226,22 +2229,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01764639014954231,
-    "steps": 1344,
+    "worstM": 0.01763437349294147,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00010207621456490472,
+    "worstM": 9.982319223681248e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00002990609551143491,
-    "steps": 8611,
+    "worstM": 2.4163594726314195e-05,
+    "steps": 8612,
     "met": true
    },
    "met": true,
@@ -2250,7 +2253,7 @@
     "fineStepS": 4,
     "atHour": 15,
     "sampleCount": 24,
-    "worstM": 0.000004907283544019136,
+    "worstM": 4.907283544019136e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -2260,7 +2263,7 @@
      "fineStepS": 4,
      "atHour": 15,
      "sampleCount": 24,
-     "worstM": 0.000004907283544019136
+     "worstM": 4.907283544019136e-06
     }
    ],
    "diagnostics": {
@@ -2291,22 +2294,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017745370368679354,
-    "steps": 1343,
+    "worstM": 0.01767056658717902,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00010037483901261771,
+    "worstM": 0.00010020478482235297,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003469055771895191,
-    "steps": 8606,
+    "worstM": 3.260422423904022e-05,
+    "steps": 8610,
     "met": true
    },
    "met": true,
@@ -2315,7 +2318,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000008312021241868434,
+    "worstM": 8.312021241868434e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -2325,7 +2328,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000008312021241868434
+     "worstM": 8.312021241868434e-06
     }
    ],
    "diagnostics": {
@@ -2356,22 +2359,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01741073610206698,
+    "worstM": 0.01746055270350535,
     "steps": 1415,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.000018926003630602375,
-    "steps": 2961,
+    "worstM": 1.8868431414400565e-05,
+    "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00008346557451964231,
-    "steps": 8641,
+    "worstM": 8.442329204010892e-05,
+    "steps": 8638,
     "met": true
    },
    "met": true,
@@ -2469,22 +2472,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.628341230262,
-    "steps": 1415,
+    "worstM": 5250.628243566877,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.645822722185,
+    "worstM": 5250.64582669767,
     "steps": 2958,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.645899225305,
-    "steps": 8635,
+    "worstM": 5250.645918965623,
+    "steps": 8634,
     "met": false
    },
    "met": false,
@@ -2540,7 +2543,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -13122.526789692638,
-     "max": -1.909211277961731e-7
+     "max": -1.909211277961731e-07
     },
     "hourlyNativeDensityKgM3": [
      3.082498308722732e-12,
@@ -2609,9 +2612,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5250.628341230262,
-       "steps30": 5250.645822722185,
-       "finest": 5250.645899225305
+       "suite": 5250.628243566877,
+       "steps30": 5250.64582669767,
+       "finest": 5250.645918965623
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -2631,9 +2634,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.3152425245500674,
-       "steps30": 2.2977613115277276,
-       "finest": 2.2976848085828565
+       "suite": 2.3153401848874315,
+       "steps30": 2.2977573363682957,
+       "finest": 2.297665069262368
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -2653,9 +2656,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.025839778670238362,
-       "steps30": 0.04332105358103384,
-       "finest": 0.04339755457254959
+       "suite": 0.025742114074562374,
+       "steps30": 0.04332502944020785,
+       "finest": 0.04341729580593022
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -2689,7 +2692,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -13122.526789692638,
-      "max": -1.909211277961731e-7
+      "max": -1.909211277961731e-07
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -2713,22 +2716,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01740512865708115,
+    "worstM": 0.01750678882552334,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00012772529365069754,
+    "worstM": 0.00012653009194635827,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0002097054251582394,
-    "steps": 8609,
+    "worstM": 0.00019669155949539915,
+    "steps": 8607,
     "met": true
    },
    "met": true,
@@ -2806,22 +2809,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017494720785657985,
-    "steps": 1344,
+    "worstM": 0.017486587108352377,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00010860497980288633,
+    "worstM": 0.00010915065260299235,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0001843565295351573,
-    "steps": 8611,
+    "worstM": 0.00018795831568072283,
+    "steps": 8608,
     "met": true
    },
    "met": true,
@@ -2899,22 +2902,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017331664696059332,
-    "steps": 1415,
+    "worstM": 0.017395198475822788,
+    "steps": 1414,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00004586116236898828,
+    "worstM": 6.467794671736148e-05,
     "steps": 2958,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015394512934331506,
-    "steps": 8640,
+    "worstM": 0.000143348719057264,
+    "steps": 8638,
     "met": true
    },
    "met": true,
@@ -3019,22 +3022,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.297751095421,
-    "steps": 1412,
+    "worstM": 5248.297821238489,
+    "steps": 1415,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.315302392317,
+    "worstM": 5248.315317837306,
     "steps": 2959,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.315424081673,
-    "steps": 8636,
+    "worstM": 5248.315400636357,
+    "steps": 8635,
     "met": false
    },
    "met": false,
@@ -3097,7 +3100,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -13123.768528132758,
-     "max": -0.000001882319338619709
+     "max": -1.882319338619709e-06
     },
     "hourlyNativeDensityKgM3": [
      3.082498308722732e-12,
@@ -3166,9 +3169,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5248.297751095421,
-       "steps30": 5248.315302392317,
-       "finest": 5248.315424081673
+       "suite": 5248.297821238489,
+       "steps30": 5248.315317837306,
+       "finest": 5248.315400636357
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3188,9 +3191,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.317000398890711,
-       "steps30": 2.2994493818688215,
-       "finest": 2.2993276961792133
+       "suite": 2.316930259795462,
+       "steps30": 2.2994339424428247,
+       "finest": 2.2993511436922622
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3210,9 +3213,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.025857021485853393,
-       "steps30": 0.043408096196171975,
-       "finest": 0.043529787350276544
+       "suite": 0.025927170125828816,
+       "steps30": 0.04342354963664183,
+       "finest": 0.04350634650734576
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3246,7 +3249,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.768528132758,
-      "max": -0.000001882319338619709
+      "max": -1.882319338619709e-06
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -3270,21 +3273,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.749489372931,
+    "worstM": 5418.749444942692,
     "steps": 1415,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.766915460155,
+    "worstM": 5418.766915620047,
     "steps": 2959,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.767018113159,
+    "worstM": 5418.767004472957,
     "steps": 8636,
     "met": false
    },
@@ -3348,7 +3351,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -13123.767363351362,
-     "max": -3.463355824351311e-8
+     "max": -3.463355824351311e-08
     },
     "hourlyNativeDensityKgM3": [
      3.082498308722732e-12,
@@ -3417,9 +3420,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5418.749489372931,
-       "steps30": 5418.766915460155,
-       "finest": 5418.767018113159
+       "suite": 5418.749444942692,
+       "steps30": 5418.766915620047,
+       "finest": 5418.767004472957
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3439,9 +3442,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.3908966491135972,
-       "steps30": 2.3734708693883837,
-       "finest": 2.3733682172069424
+       "suite": 2.3909410887549725,
+       "steps30": 2.3734707130228534,
+       "finest": 2.3733818608401394
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3461,9 +3464,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.026553229596714814,
-       "steps30": 0.04397917080154745,
-       "finest": 0.04408182189332814
+       "suite": 0.026508822241748917,
+       "steps30": 0.04397933624441474,
+       "finest": 0.04406818751664551
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3497,7 +3500,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.767363351362,
-      "max": -3.463355824351311e-8
+      "max": -3.463355824351311e-08
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -3521,22 +3524,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.0136844565595,
-    "steps": 1416,
+    "worstM": 4094.0137077697386,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.0312107589953,
+    "worstM": 4094.0312141942427,
     "steps": 2959,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.031311537179,
-    "steps": 8637,
+    "worstM": 4094.031305933153,
+    "steps": 8631,
     "met": false
    },
    "met": false,
@@ -3545,7 +3548,7 @@
     "fineStepS": 0.25,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00006626020064067274,
+    "worstM": 6.626020064067274e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -3583,7 +3586,7 @@
      "fineStepS": 0.25,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00006626020064067274
+     "worstM": 6.626020064067274e-05
     }
    ],
    "diagnostics": {
@@ -3599,7 +3602,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -13123.772999245673,
-     "max": -3.8958387449383736e-7
+     "max": -3.8958387449383736e-07
     },
     "hourlyNativeDensityKgM3": [
      2.2931542228061035e-12,
@@ -3668,9 +3671,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 4094.0136844565595,
-       "steps30": 4094.0312107589953,
-       "finest": 4094.031311537179
+       "suite": 4094.0137077697386,
+       "steps30": 4094.0312141942427,
+       "finest": 4094.031305933153
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3682,7 +3685,7 @@
        "fineStepS": 0.25,
        "atHour": 24,
        "sampleCount": 24,
-       "worstM": 0.00006626020064067274,
+       "worstM": 6.626020064067274e-05,
        "limitM": 0.0003,
        "met": true
       }
@@ -3690,9 +3693,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 1.5590041072566911,
-       "steps30": 1.541478121834412,
-       "finest": 1.541377345107848
+       "suite": 1.5589807983373387,
+       "steps30": 1.5414746903109726,
+       "finest": 1.54138295256226
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3704,7 +3707,7 @@
        "fineStepS": 0.25,
        "atHour": 18,
        "sampleCount": 24,
-       "worstM": 0.00007927686585303935,
+       "worstM": 7.927686585303935e-05,
        "limitM": 0.0003,
        "met": true
       }
@@ -3712,9 +3715,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.01710381659500539,
-       "steps30": 0.03462971905349554,
-       "finest": 0.034730495563645394
+       "suite": 0.01712714024363571,
+       "steps30": 0.03463316043469457,
+       "finest": 0.034724897546067675
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3748,7 +3751,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.772999245673,
-      "max": -3.8958387449383736e-7
+      "max": -3.8958387449383736e-07
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -3772,22 +3775,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016480373877148125,
+    "worstM": 0.016574854268796055,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000189820500931125,
+    "worstM": 0.00016677092901224095,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00024007915350008295,
-    "steps": 8609,
+    "worstM": 0.00023285790655096198,
+    "steps": 8605,
     "met": true
    },
    "met": true,
@@ -3865,22 +3868,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01753623334470151,
-    "steps": 1342,
+    "worstM": 0.017571557909445236,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "atHour": 23,
+    "atHour": 20,
     "sampleCount": 24,
-    "worstM": 0.00009106534402153863,
+    "worstM": 7.538667528618922e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015472345020442466,
-    "steps": 8607,
+    "worstM": 0.00015016616291578053,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -3965,14 +3968,14 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003658363454627942,
+    "worstM": 3.658363454627942e-05,
     "steps": 2902,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000010489756201591336,
+    "worstM": 1.0489756201591336e-05,
     "steps": 8609,
     "met": true
    },
@@ -3982,7 +3985,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000034434798709606986,
+    "worstM": 3.4434798709606986e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -3992,7 +3995,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0000034434798709606986
+     "worstM": 3.4434798709606986e-06
     }
    ],
    "diagnostics": {
@@ -4023,22 +4026,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01578503022053108,
+    "worstM": 0.015744310520945378,
     "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00005215405815415058,
+    "worstM": 4.378642979406077e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 24,
+    "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.000019411943397444678,
-    "steps": 8609,
+    "worstM": 1.2558548321205588e-05,
+    "steps": 8606,
     "met": true
    },
    "met": true,
@@ -4047,7 +4050,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000761915164783464,
+    "worstM": 7.61915164783464e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -4057,7 +4060,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00000761915164783464
+     "worstM": 7.61915164783464e-06
     }
    ],
    "diagnostics": {
@@ -4088,21 +4091,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01582149621416077,
-    "steps": 1256,
+    "worstM": 0.01575716869430605,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00005531726861007356,
+    "worstM": 4.8760825291079875e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 24,
+    "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.000010843081099238201,
+    "worstM": 1.0286604841510894e-05,
     "steps": 8609,
     "met": true
    },
@@ -4112,7 +4115,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000002154044889897689,
+    "worstM": 2.154044889897689e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -4122,7 +4125,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000002154044889897689
+     "worstM": 2.154044889897689e-06
     }
    ],
    "diagnostics": {
@@ -4153,22 +4156,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015751660381744522,
-    "steps": 1257,
+    "worstM": 0.015880458350052334,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00004351140228171267,
+    "worstM": 4.7993386701931726e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 23,
+    "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.000016631642492812703,
-    "steps": 8606,
+    "worstM": 3.660135761340879e-06,
+    "steps": 8610,
     "met": true
    },
    "met": true,
@@ -4177,7 +4180,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000006000427527907635,
+    "worstM": 6.000427527907635e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -4187,7 +4190,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000006000427527907635
+     "worstM": 6.000427527907635e-06
     }
    ],
    "diagnostics": {
@@ -4218,21 +4221,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015704399726121834,
-    "steps": 1345,
+    "worstM": 0.0157905657884756,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00023300899175486905,
+    "worstM": 0.0002335877629591459,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0005524951558254317,
+    "worstM": 0.0005484414765795616,
     "steps": 8676,
     "met": true
    },
@@ -4331,22 +4334,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.128445315240306,
+    "worstM": 58.128436758262,
     "steps": 1342,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14392634083757,
+    "worstM": 58.143922550409165,
     "steps": 2957,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14360933550511,
-    "steps": 8676,
+    "worstM": 58.143615025958056,
+    "steps": 8673,
     "met": false
    },
    "met": false,
@@ -4464,9 +4467,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 58.128445315240306,
-       "steps30": 58.14392634083757,
-       "finest": 58.14360933550511
+       "suite": 58.128436758262,
+       "steps30": 58.143922550409165,
+       "finest": 58.143615025958056
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -4486,9 +4489,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014880833189093473,
-       "steps30": 0.0006002898038775884,
-       "finest": 0.0002832937109287522
+       "suite": 0.014889388835976805,
+       "steps30": 0.0005964995626314769,
+       "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -4508,9 +4511,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014880833189093473,
-       "steps30": 0.0006002898038775884,
-       "finest": 0.0002832937109287522
+       "suite": 0.014889388835976805,
+       "steps30": 0.0005964995626314769,
+       "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -4568,21 +4571,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015657829496849476,
-    "steps": 1257,
+    "worstM": 0.01568267689652723,
+    "steps": 1255,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.0001233746152441306,
+    "worstM": 0.0001243766395184242,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00015399720917357512,
+    "worstM": 0.00015486710044517737,
     "steps": 8609,
     "met": true
    },
@@ -4640,21 +4643,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015808304446937562,
-    "steps": 1257,
+    "worstM": 0.015651628103567176,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00013254119762997385,
+    "worstM": 0.00012947503640181742,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 24,
+    "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00016491140275894719,
+    "worstM": 0.0001615965843669938,
     "steps": 8607,
     "met": true
    },
@@ -4712,22 +4715,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015633795977942413,
-    "steps": 1345,
+    "worstM": 0.015709288897478895,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00019397722067453406,
+    "worstM": 0.00018716809939672691,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0004956345330977648,
-    "steps": 8677,
+    "worstM": 0.00048792578439501265,
+    "steps": 8673,
     "met": true
    },
    "met": true,
@@ -4825,22 +4828,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.11304582242233,
-    "steps": 1343,
+    "worstM": 58.113011452982775,
+    "steps": 1342,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.12851115262754,
+    "worstM": 58.128507413974646,
     "steps": 2957,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.1281965582678,
-    "steps": 8673,
+    "worstM": 58.12821006651427,
+    "steps": 8674,
     "met": false
    },
    "met": false,
@@ -4896,7 +4899,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -20967.18505136273,
-     "max": -5.291076377034187e-7
+     "max": -5.291076377034187e-07
     },
     "hourlyNativeDensityKgM3": [
      5.195846238730362e-14,
@@ -4965,9 +4968,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 58.11304582242233,
-       "steps30": 58.12851115262754,
-       "finest": 58.1281965582678
+       "suite": 58.113011452982775,
+       "steps30": 58.128507413974646,
+       "finest": 58.12821006651427
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -4987,9 +4990,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014840312083447485,
-       "steps30": 0.0006251037767070275,
-       "finest": 0.00031050963833815414
+       "suite": 0.014874674167929126,
+       "steps30": 0.0006213650660571282,
+       "finest": 0.00032401750875810684
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5009,9 +5012,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014840312083447485,
-       "steps30": 0.0006251037767070275,
-       "finest": 0.00031050963833815414
+       "suite": 0.014874674167929126,
+       "steps30": 0.0006213650660571282,
+       "finest": 0.00032401750875810684
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5045,7 +5048,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -20967.18505136273,
-      "max": -5.291076377034187e-7
+      "max": -5.291076377034187e-07
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -5069,22 +5072,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.796182528506684,
-    "steps": 1345,
+    "worstM": 34.79613363413426,
+    "steps": 1343,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.8116646876731,
+    "worstM": 34.81167450114866,
     "steps": 2957,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.811360093034004,
-    "steps": 8678,
+    "worstM": 34.81135551544844,
+    "steps": 8676,
     "met": false
    },
    "met": false,
@@ -5140,7 +5143,7 @@
     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
     "sphericalMinusWgs84AltitudeM": {
      "min": -20967.18505576742,
-     "max": -6.009358912706375e-7
+     "max": -6.009358912706375e-07
     },
     "hourlyNativeDensityKgM3": [
      3.011852078113541e-14,
@@ -5209,9 +5212,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 34.796182528506684,
-       "steps30": 34.8116646876731,
-       "finest": 34.811360093034004
+       "suite": 34.79613363413426,
+       "steps30": 34.81167450114866,
+       "finest": 34.81135551544844
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5231,9 +5234,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.015210049037568556,
-       "steps30": 0.00027220750741083525,
-       "finest": 0.00004212841058274773
+       "suite": 0.015258935240370025,
+       "steps30": 0.00028202035520363654,
+       "finest": 4.587672595960163e-05
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5253,9 +5256,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.015210049037568556,
-       "steps30": 0.00027220750741083525,
-       "finest": 0.00004212841058274773
+       "suite": 0.015258935240370025,
+       "steps30": 0.00028202035520363654,
+       "finest": 4.587672595960163e-05
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5289,7 +5292,7 @@
      },
      "sphericalMinusWgs84AltitudeM": {
       "min": -20967.18505576742,
-      "max": -6.009358912706375e-7
+      "max": -6.009358912706375e-07
      },
      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
@@ -5313,21 +5316,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000023186758577510182,
+    "worstM": 2.3186758577510182e-05,
     "steps": 342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000001946487069769913,
+    "worstM": 1.946487069769913e-06,
     "steps": 2883,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000003936721033770963,
+    "worstM": 3.936721033770963e-06,
     "steps": 8594,
     "met": true
    },
@@ -5337,7 +5340,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000412949344739457,
+    "worstM": 4.12949344739457e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -5347,7 +5350,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00000412949344739457
+     "worstM": 4.12949344739457e-06
     }
    ],
    "diagnostics": {
@@ -5378,22 +5381,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00001966786413865353,
+    "worstM": 1.9264955748450502e-05,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000038072715307369507,
+    "worstM": 5.551337256218734e-06,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000005465516141664653,
-    "steps": 8594,
+    "worstM": 5.58029501677155e-06,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -5402,7 +5405,7 @@
     "fineStepS": 4,
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.000006356271591049206,
+    "worstM": 6.356271591049206e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -5412,7 +5415,7 @@
      "fineStepS": 4,
      "atHour": 23,
      "sampleCount": 24,
-     "worstM": 0.000006356271591049206
+     "worstM": 6.356271591049206e-06
     }
    ],
    "diagnostics": {
@@ -5443,21 +5446,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000176663755781107,
+    "worstM": 1.7209970782637783e-05,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007557999906738365,
+    "worstM": 7.898615701885783e-06,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000009312753988193681,
+    "worstM": 1.0007885124931375e-05,
     "steps": 8594,
     "met": true
    },
@@ -5467,7 +5470,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 6.9995381935876e-7,
+    "worstM": 6.9995381935876e-07,
     "limitM": 0.0003,
     "met": true
    },
@@ -5477,7 +5480,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 6.9995381935876e-7
+     "worstM": 6.9995381935876e-07
     }
    ],
    "diagnostics": {
@@ -5508,22 +5511,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00012655630487049427,
-    "steps": 336,
+    "worstM": 0.00012763218520012984,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001066825456383946,
+    "worstM": 0.00010675199076327278,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00010548377175643115,
-    "steps": 8594,
+    "worstM": 0.00010576040280429426,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -5532,7 +5535,7 @@
     "fineStepS": 4,
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0000036420938419687535,
+    "worstM": 3.6420938419687535e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -5542,7 +5545,7 @@
      "fineStepS": 4,
      "atHour": 22,
      "sampleCount": 24,
-     "worstM": 0.0000036420938419687535
+     "worstM": 3.6420938419687535e-06
     }
    ],
    "diagnostics": {
@@ -5573,22 +5576,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00012854868401795618,
+    "worstM": 0.0001291045718292953,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00010841623164366901,
+    "worstM": 0.00010856118585623389,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00011011566068791216,
-    "steps": 8597,
+    "worstM": 0.0001076683750385231,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -5597,7 +5600,7 @@
     "fineStepS": 4,
     "atHour": 14,
     "sampleCount": 24,
-    "worstM": 0.0000015610336045916956,
+    "worstM": 1.5610336045916956e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -5607,7 +5610,7 @@
      "fineStepS": 4,
      "atHour": 14,
      "sampleCount": 24,
-     "worstM": 0.0000015610336045916956
+     "worstM": 1.5610336045916956e-06
     }
    ],
    "diagnostics": {
@@ -5665,22 +5668,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00006823227970440271,
+    "worstM": 6.87679211409072e-05,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000043722509466602686,
+    "worstM": 4.312376091139683e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000040582004275162335,
-    "steps": 8595,
+    "worstM": 4.237898669368402e-05,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -5689,7 +5692,7 @@
     "fineStepS": 4,
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.000029657269860908838,
+    "worstM": 2.9657269860908838e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -5699,7 +5702,7 @@
      "fineStepS": 4,
      "atHour": 23,
      "sampleCount": 24,
-     "worstM": 0.000029657269860908838
+     "worstM": 2.9657269860908838e-05
     }
    ],
    "diagnostics": {
@@ -5730,22 +5733,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0001810867054774415,
+    "worstM": 0.00018108992459442685,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015616900236565024,
+    "worstM": 0.0001534952306256572,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0001550164646706455,
-    "steps": 8596,
+    "worstM": 0.0001548005034222281,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -5754,7 +5757,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00005047480693852798,
+    "worstM": 5.047480693852798e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -5764,7 +5767,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00005047480693852798
+     "worstM": 5.047480693852798e-05
     }
    ],
    "diagnostics": {
@@ -5795,21 +5798,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00017358217862169966,
-    "steps": 337,
+    "worstM": 0.00017298617040235423,
+    "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015053316121581587,
+    "worstM": 0.00015036233767238514,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015220095856660352,
+    "worstM": 0.00015309399578288164,
     "steps": 8596,
     "met": true
    },
@@ -5819,7 +5822,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003319892278256433,
+    "worstM": 3.319892278256433e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -5829,7 +5832,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00003319892278256433
+     "worstM": 3.319892278256433e-05
     }
    ],
    "diagnostics": {
@@ -5887,22 +5890,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00017437494783181085,
+    "worstM": 0.00017431418077763964,
     "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0001464623244937939,
+    "worstM": 0.00014961531326666824,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00014931237650509535,
-    "steps": 8596,
+    "worstM": 0.00015032864914782157,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -5911,7 +5914,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000036660949409836255,
+    "worstM": 3.6660949409836255e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -5921,7 +5924,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000036660949409836255
+     "worstM": 3.6660949409836255e-05
     }
    ],
    "diagnostics": {
@@ -5947,26 +5950,26 @@
    "orekitMinusBasilisk": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00003571429462779092
+    "worstM": 3.571429462779092e-05
    },
    "suite": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 6.219298665396974e-7,
+    "worstM": 6.219298665396974e-07,
     "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000002083116917627549,
+    "worstM": 2.083116917627549e-06,
     "steps": 2882,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0000018469383871197034,
+    "worstM": 1.8469383871197034e-06,
     "steps": 8594,
     "met": true
    },
@@ -5976,7 +5979,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007090093011209055,
+    "worstM": 7.090093011209055e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -5986,7 +5989,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000007090093011209055
+     "worstM": 7.090093011209055e-06
     }
    ],
    "diagnostics": {
@@ -6012,27 +6015,27 @@
    "orekitMinusBasilisk": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.000031736934797972424
+    "worstM": 3.1736934797972424e-05
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000793138356501819,
+    "worstM": 7.881249271122396e-06,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000008731207443782738,
+    "worstM": 8.835217292104102e-06,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000008932242944140083,
-    "steps": 8592,
+    "worstM": 9.057613073357771e-06,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -6041,7 +6044,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007821753427632457,
+    "worstM": 7.821753427632457e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -6051,7 +6054,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000007821753427632457
+     "worstM": 7.821753427632457e-06
     }
    ],
    "diagnostics": {
@@ -6077,27 +6080,27 @@
    "orekitMinusBasilisk": {
     "atHour": 15,
     "sampleCount": 24,
-    "worstM": 0.000031859258120246796
+    "worstM": 3.1859258120246796e-05
    },
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.000001748882194124216,
+    "worstM": 1.8082785736640668e-06,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000017583140003677575,
+    "worstM": 1.8189083653552653e-06,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.0000011652779991011213,
-    "steps": 8593,
+    "worstM": 1.1514175318886206e-06,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -6106,7 +6109,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000003751795217034051,
+    "worstM": 3.751795217034051e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -6116,7 +6119,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000003751795217034051
+     "worstM": 3.751795217034051e-06
     }
    ],
    "diagnostics": {
@@ -6147,22 +6150,22 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014780466285988286,
+    "worstM": 0.0001482318623308062,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001472434672367535,
+    "worstM": 0.0001470250260337319,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014837833541977044,
-    "steps": 8592,
+    "worstM": 0.00014890949553697186,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -6171,7 +6174,7 @@
     "fineStepS": 4,
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.000003543611904321493,
+    "worstM": 3.543611904321493e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -6181,7 +6184,7 @@
      "fineStepS": 4,
      "atHour": 17,
      "sampleCount": 24,
-     "worstM": 0.000003543611904321493
+     "worstM": 3.543611904321493e-06
     }
    ],
    "diagnostics": {
@@ -6212,21 +6215,21 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014537935797663873,
+    "worstM": 0.00014603599359568368,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014441251773330765,
+    "worstM": 0.00014557534518823135,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014327421969294625,
+    "worstM": 0.00014476258628107457,
     "steps": 8593,
     "met": true
    },
@@ -6236,7 +6239,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000009904565605632168,
+    "worstM": 9.904565605632168e-06,
     "limitM": 0.0003,
     "met": true
    },
@@ -6246,7 +6249,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000009904565605632168
+     "worstM": 9.904565605632168e-06
     }
    ],
    "diagnostics": {
@@ -6299,27 +6302,27 @@
    "orekitMinusBasilisk": {
     "atHour": 19,
     "sampleCount": 24,
-    "worstM": 0.00006167077727331172
+    "worstM": 6.167077727331172e-05
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000028413624139136316,
+    "worstM": 2.8740869603471987e-05,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000027759329599236955,
+    "worstM": 2.7991072483686866e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00002508648535288204,
-    "steps": 8592,
+    "worstM": 2.5005223424802194e-05,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -6328,7 +6331,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003093377293321607,
+    "worstM": 3.093377293321607e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6338,7 +6341,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00003093377293321607
+     "worstM": 3.093377293321607e-05
     }
    ],
    "diagnostics": {
@@ -6369,22 +6372,22 @@
    "suite": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014166655958315288,
+    "worstM": 0.00014138845639192116,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014137993030498224,
+    "worstM": 0.00014125763518409805,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014200640069313673,
-    "steps": 8592,
+    "worstM": 0.00014178187248177485,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -6393,7 +6396,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00001853104326753506,
+    "worstM": 1.853104326753506e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6403,7 +6406,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00001853104326753506
+     "worstM": 1.853104326753506e-05
     }
    ],
    "diagnostics": {
@@ -6434,21 +6437,21 @@
    "suite": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014491406160139806,
-    "steps": 337,
+    "worstM": 0.00014459658951365315,
+    "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014564225471120693,
+    "worstM": 0.00014542782342331033,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014479150666510596,
+    "worstM": 0.0001444216965554054,
     "steps": 8592,
     "met": true
    },
@@ -6458,7 +6461,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000022821310346693823,
+    "worstM": 2.2821310346693823e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6468,7 +6471,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000022821310346693823
+     "worstM": 2.2821310346693823e-05
     }
    ],
    "diagnostics": {
@@ -6526,21 +6529,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000020324407537718125,
+    "worstM": 2.0324407537718125e-05,
     "steps": 553,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003499052567399164,
+    "worstM": 3.499052567399164e-05,
     "steps": 2886,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000013123102615244655,
+    "worstM": 1.3123102615244655e-05,
     "steps": 8594,
     "met": true
    },
@@ -6550,7 +6553,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000020117647863317217,
+    "worstM": 2.0117647863317217e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6560,7 +6563,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000020117647863317217
+     "worstM": 2.0117647863317217e-05
     }
    ],
    "diagnostics": {
@@ -6591,22 +6594,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0010268565043291468,
-    "steps": 417,
+    "worstM": 0.0010055803288955979,
+    "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00012868836253015917,
+    "worstM": 0.00013057282625403478,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00014828614905057673,
-    "steps": 8595,
+    "worstM": 0.00014461406157224383,
+    "steps": 8597,
     "met": true
    },
    "met": true,
@@ -6615,7 +6618,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000015915018058589406,
+    "worstM": 1.5915018058589406e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6625,7 +6628,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000015915018058589406
+     "worstM": 1.5915018058589406e-05
     }
    ],
    "diagnostics": {
@@ -6656,22 +6659,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0009418682131535278,
-    "steps": 416,
+    "worstM": 0.00118688751501444,
+    "steps": 417,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015021636008751373,
+    "worstM": 0.00015531152037826708,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00019694498635418946,
-    "steps": 8598,
+    "worstM": 0.00019299590221136408,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -6680,7 +6683,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00002011433119755427,
+    "worstM": 2.011433119755427e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6690,7 +6693,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00002011433119755427
+     "worstM": 2.011433119755427e-05
     }
    ],
    "diagnostics": {
@@ -6721,22 +6724,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006858314726372962,
+    "worstM": 0.0004993840844134778,
     "steps": 417,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00042895718458892124,
+    "worstM": 0.0004235723936499975,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00047096775439310965,
-    "steps": 8596,
+    "worstM": 0.00046845512341466103,
+    "steps": 8598,
     "met": true
    },
    "met": true,
@@ -6745,7 +6748,7 @@
     "fineStepS": 4,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00001885462872170816,
+    "worstM": 1.885462872170816e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6755,7 +6758,7 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00001885462872170816
+     "worstM": 1.885462872170816e-05
     }
    ],
    "diagnostics": {
@@ -6786,22 +6789,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006039118239808335,
-    "steps": 430,
+    "worstM": 0.0006376205540599146,
+    "steps": 429,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00030635394158238757,
+    "worstM": 0.0003103536940267404,
     "steps": 2896,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0004015809922581851,
-    "steps": 8605,
+    "worstM": 0.0003736593965351115,
+    "steps": 8606,
     "met": true
    },
    "met": true,
@@ -6810,7 +6813,7 @@
     "fineStepS": 0.5,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000027850588571216646,
+    "worstM": 2.7850588571216646e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6841,7 +6844,7 @@
      "fineStepS": 0.5,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.000027850588571216646
+     "worstM": 2.7850588571216646e-05
     }
    ],
    "diagnostics": {
@@ -6899,22 +6902,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0010941568630784121,
+    "worstM": 0.0012248727261045369,
     "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00004004545724409439,
+    "worstM": 4.100564391557495e-05,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.0000305192196808181,
-    "steps": 8595,
+    "worstM": 3.8244859757639473e-05,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -6923,7 +6926,7 @@
     "fineStepS": 0.5,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00007220071913022671,
+    "worstM": 7.220071913022671e-05,
     "limitM": 0.0003,
     "met": true
    },
@@ -6954,7 +6957,7 @@
      "fineStepS": 0.5,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00007220071913022671
+     "worstM": 7.220071913022671e-05
     }
    ],
    "diagnostics": {
@@ -6985,22 +6988,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001075425836810203,
-    "steps": 416,
+    "worstM": 0.0008148817103564447,
+    "steps": 417,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00023772335043869167,
+    "worstM": 0.0002452392733355565,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0002556962007221691,
-    "steps": 8596,
+    "worstM": 0.0002579275455150397,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -7071,21 +7074,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001133781462550392,
+    "worstM": 0.0008701310567324818,
     "steps": 429,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00011312434872669515,
+    "worstM": 0.00011880940332012194,
     "steps": 2896,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00015770973993900798,
+    "worstM": 0.00017311946629136666,
     "steps": 8602,
     "met": true
    },
@@ -7263,7 +7266,7 @@
  "diagnostics": {
   "wgs84": {
    "file": "basilisk-wgs84-diagnostic.json",
-   "sha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96",
+   "sha256": "584543a94f870a265848d6d32da6df2f0d26730dcb934d64a688c2edb8e3a758",
    "tool": {
     "name": "Basilisk (AVS Lab)",
     "version": "2.12.0",
@@ -7392,7 +7395,10 @@
     },
     {
      "path": "../erfa-spice/reference.py",
-     "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+     "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+     "role": "historical-source",
+     "availability": "unavailable",
+     "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
     },
     {
      "path": "../erfa-spice/tools.json",
@@ -9271,22 +9277,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3152425245500674,
-      "steps": 1415,
+      "worstM": 2.3153401848874315,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2977613115277276,
+      "worstM": 2.2977573363682957,
       "steps": 2958,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2976848085828565,
-      "steps": 8635,
+      "worstM": 2.297665069262368,
+      "steps": 8634,
       "met": false
      },
      "met": false,
@@ -9335,7 +9341,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13122.53010786674,
-       "max": -0.000023702101316303015
+       "max": -2.3702101316303015e-05
       },
       "hourlyNativeDensityKgM3": [
        2.794932734495386e-12,
@@ -9408,9 +9414,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.3152425245500674,
-         "steps30": 2.2977613115277276,
-         "finest": 2.2976848085828565
+         "suite": 2.3153401848874315,
+         "steps30": 2.2977573363682957,
+         "finest": 2.297665069262368
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9430,9 +9436,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.025839778670238362,
-         "steps30": 0.04332105358103384,
-         "finest": 0.04339755457254959
+         "suite": 0.025742114074562374,
+         "steps30": 0.04332502944020785,
+         "finest": 0.04341729580593022
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9474,22 +9480,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.317000398890711,
-      "steps": 1412,
+      "worstM": 2.316930259795462,
+      "steps": 1415,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2994493818688215,
+      "worstM": 2.2994339424428247,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2993276961792133,
-      "steps": 8636,
+      "worstM": 2.2993511436922622,
+      "steps": 8635,
       "met": false
      },
      "met": false,
@@ -9625,9 +9631,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.317000398890711,
-         "steps30": 2.2994493818688215,
-         "finest": 2.2993276961792133
+         "suite": 2.316930259795462,
+         "steps30": 2.2994339424428247,
+         "finest": 2.2993511436922622
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9647,9 +9653,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.025857021485853393,
-         "steps30": 0.043408096196171975,
-         "finest": 0.043529787350276544
+         "suite": 0.025927170125828816,
+         "steps30": 0.04342354963664183,
+         "finest": 0.04350634650734576
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9691,21 +9697,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3908966491135972,
+      "worstM": 2.3909410887549725,
       "steps": 1415,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3734708693883837,
+      "worstM": 2.3734707130228534,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3733682172069424,
+      "worstM": 2.3733818608401394,
       "steps": 8636,
       "met": false
      },
@@ -9769,7 +9775,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13123.769095331838,
-       "max": -1.5401747077703476e-7
+       "max": -1.5401747077703476e-07
       },
       "hourlyNativeDensityKgM3": [
        2.794932734495386e-12,
@@ -9842,9 +9848,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.3908966491135972,
-         "steps30": 2.3734708693883837,
-         "finest": 2.3733682172069424
+         "suite": 2.3909410887549725,
+         "steps30": 2.3734707130228534,
+         "finest": 2.3733818608401394
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9864,9 +9870,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.026553229596714814,
-         "steps30": 0.04397917080154745,
-         "finest": 0.04408182189332814
+         "suite": 0.026508822241748917,
+         "steps30": 0.04397933624441474,
+         "finest": 0.04406818751664551
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9908,22 +9914,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.5590041072566911,
-      "steps": 1416,
+      "worstM": 1.5589807983373387,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.541478121834412,
+      "worstM": 1.5414746903109726,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.541377345107848,
-      "steps": 8637,
+      "worstM": 1.54138295256226,
+      "steps": 8631,
       "met": false
      },
      "met": false,
@@ -9932,7 +9938,7 @@
       "fineStepS": 0.25,
       "atHour": 18,
       "sampleCount": 24,
-      "worstM": 0.00007927686585303935,
+      "worstM": 7.927686585303935e-05,
       "limitM": 0.0003,
       "met": true
      },
@@ -9970,7 +9976,7 @@
        "fineStepS": 0.25,
        "atHour": 18,
        "sampleCount": 24,
-       "worstM": 0.00007927686585303935
+       "worstM": 7.927686585303935e-05
       }
      ],
      "diagnostics": {
@@ -9986,7 +9992,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13123.774029420048,
-       "max": -1.230509951710701e-7
+       "max": -1.230509951710701e-07
       },
       "hourlyNativeDensityKgM3": [
        2.0701367934462493e-12,
@@ -10059,9 +10065,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 1.5590041072566911,
-         "steps30": 1.541478121834412,
-         "finest": 1.541377345107848
+         "suite": 1.5589807983373387,
+         "steps30": 1.5414746903109726,
+         "finest": 1.54138295256226
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -10073,7 +10079,7 @@
          "fineStepS": 0.25,
          "atHour": 18,
          "sampleCount": 24,
-         "worstM": 0.00007927686585303935,
+         "worstM": 7.927686585303935e-05,
          "limitM": 0.0003,
          "met": true
         }
@@ -10081,9 +10087,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.01710381659500539,
-         "steps30": 0.03462971905349554,
-         "finest": 0.034730495563645394
+         "suite": 0.01712714024363571,
+         "steps30": 0.03463316043469457,
+         "finest": 0.034724897546067675
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -10125,22 +10131,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014880833189093473,
+      "worstM": 0.014889388835976805,
       "steps": 1342,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006002898038775884,
+      "worstM": 0.0005964995626314769,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0002832937109287522,
-      "steps": 8676,
+      "worstM": 0.00028898511801456016,
+      "steps": 8673,
       "met": true
      },
      "met": true,
@@ -10196,7 +10202,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20966.813660502667,
-       "max": -0.0000639123609289527
+       "max": -6.39123609289527e-05
       },
       "hourlyNativeDensityKgM3": [
        4.0730033649408795e-14,
@@ -10274,22 +10280,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014840312083447485,
-      "steps": 1343,
+      "worstM": 0.014874674167929126,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006251037767070275,
+      "worstM": 0.0006213650660571282,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00031050963833815414,
-      "steps": 8673,
+      "worstM": 0.00032401750875810684,
+      "steps": 8674,
       "met": true
      },
      "met": true,
@@ -10345,7 +10351,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20967.185053546564,
-       "max": -5.504116415977478e-7
+       "max": -5.504116415977478e-07
       },
       "hourlyNativeDensityKgM3": [
        4.0730033649408795e-14,
@@ -10423,22 +10429,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015210049037568556,
-      "steps": 1345,
+      "worstM": 0.015258935240370025,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00027220750741083525,
+      "worstM": 0.00028202035520363654,
       "steps": 2957,
       "met": true
      },
      "finest": {
-      "atHour": 13,
+      "atHour": 23,
       "sampleCount": 24,
-      "worstM": 0.00004212841058274773,
-      "steps": 8678,
+      "worstM": 4.587672595960163e-05,
+      "steps": 8676,
       "met": true
      },
      "met": true,
@@ -10494,7 +10500,7 @@
       "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20967.185057074763,
-       "max": -6.142072379589081e-7
+       "max": -6.142072379589081e-07
       },
       "hourlyNativeDensityKgM3": [
        2.3308358073482175e-14,
@@ -10561,7 +10567,7 @@
   },
   "wgs84-gtd7d": {
    "file": "basilisk-wgs84-gtd7d-diagnostic.json",
-   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b",
+   "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a",
    "tool": {
     "name": "Basilisk (AVS Lab)",
     "version": "2.12.0",
@@ -10690,7 +10696,10 @@
     },
     {
      "path": "../erfa-spice/reference.py",
-     "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+     "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+     "role": "historical-source",
+     "availability": "unavailable",
+     "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
     },
     {
      "path": "../erfa-spice/tools.json",
@@ -12569,22 +12578,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.025839778670238362,
-      "steps": 1415,
+      "worstM": 0.025742114074562374,
+      "steps": 1414,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04332105358103384,
+      "worstM": 0.04332502944020785,
       "steps": 2958,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04339755457254959,
-      "steps": 8635,
+      "worstM": 0.04341729580593022,
+      "steps": 8634,
       "met": true
      },
      "met": true,
@@ -12633,7 +12642,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13122.530103826779,
-       "max": -0.00002367433626204729
+       "max": -2.367433626204729e-05
       },
       "hourlyNativeDensityKgM3": [
        2.7951346035729718e-12,
@@ -12716,22 +12725,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.025857021485853393,
-      "steps": 1412,
+      "worstM": 0.025927170125828816,
+      "steps": 1415,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.043408096196171975,
+      "worstM": 0.04342354963664183,
       "steps": 2959,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.043529787350276544,
-      "steps": 8636,
+      "worstM": 0.04350634650734576,
+      "steps": 8635,
       "met": true
      },
      "met": true,
@@ -12877,21 +12886,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.026553229596714814,
+      "worstM": 0.026508822241748917,
       "steps": 1415,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04397917080154745,
+      "worstM": 0.04397933624441474,
       "steps": 2959,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04408182189332814,
+      "worstM": 0.04406818751664551,
       "steps": 8636,
       "met": true
      },
@@ -12955,7 +12964,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13123.76909535157,
-       "max": -1.5454133972525597e-7
+       "max": -1.5454133972525597e-07
       },
       "hourlyNativeDensityKgM3": [
        2.7951346035729718e-12,
@@ -13038,22 +13047,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01710381659500539,
-      "steps": 1416,
+      "worstM": 0.01712714024363571,
+      "steps": 1414,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03462971905349554,
+      "worstM": 0.03463316043469457,
       "steps": 2959,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.034730495563645394,
-      "steps": 8637,
+      "worstM": 0.034724897546067675,
+      "steps": 8631,
       "met": true
      },
      "met": true,
@@ -13116,7 +13125,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -13123.77402882895,
-       "max": -1.150183379650116e-7
+       "max": -1.150183379650116e-07
       },
       "hourlyNativeDensityKgM3": [
        2.0702602464248533e-12,
@@ -13199,22 +13208,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014880833189093473,
+      "worstM": 0.014889388835976805,
       "steps": 1342,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006002898038775884,
+      "worstM": 0.0005964995626314769,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0002832937109287522,
-      "steps": 8676,
+      "worstM": 0.00028898511801456016,
+      "steps": 8673,
       "met": true
      },
      "met": true,
@@ -13270,7 +13279,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20966.813660502667,
-       "max": -0.0000639123609289527
+       "max": -6.39123609289527e-05
       },
       "hourlyNativeDensityKgM3": [
        4.073003364940934e-14,
@@ -13353,22 +13362,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014840312083447485,
-      "steps": 1343,
+      "worstM": 0.014874674167929126,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006251037767070275,
+      "worstM": 0.0006213650660571282,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00031050963833815414,
-      "steps": 8673,
+      "worstM": 0.00032401750875810684,
+      "steps": 8674,
       "met": true
      },
      "met": true,
@@ -13424,7 +13433,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20967.185053546564,
-       "max": -5.504116415977478e-7
+       "max": -5.504116415977478e-07
       },
       "hourlyNativeDensityKgM3": [
        4.073003364940934e-14,
@@ -13507,22 +13516,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015210049037568556,
-      "steps": 1345,
+      "worstM": 0.015258935240370025,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00027220750741083525,
+      "worstM": 0.00028202035520363654,
       "steps": 2957,
       "met": true
      },
      "finest": {
-      "atHour": 13,
+      "atHour": 23,
       "sampleCount": 24,
-      "worstM": 0.00004212841058274773,
-      "steps": 8678,
+      "worstM": 4.587672595960163e-05,
+      "steps": 8676,
       "met": true
      },
      "met": true,
@@ -13578,7 +13587,7 @@
       "densityModel": "native wheel gtd7d at every altitude",
       "sphericalMinusWgs84AltitudeM": {
        "min": -20967.185057074763,
-       "max": -6.142072379589081e-7
+       "max": -6.142072379589081e-07
       },
       "hourlyNativeDensityKgM3": [
        2.3308358073482484e-14,
@@ -13687,7 +13696,7 @@
    },
    {
     "path": "check-basilisk.mjs",
-    "sha256": "944e38383586c1d9d4295de201a1e9e439433923fde78a604a10e3e31e37d42c"
+    "sha256": "2d9aa1335115b109c43babb3ffe975dfefa33df707913ed332ed8362b353175e"
    },
    {
     "path": "run-basilisk.py",
@@ -13715,7 +13724,7 @@
    },
    {
     "path": "README.md",
-    "sha256": "b0675ae306617f89c627de26d4a05a643bdac24d8c76329b2ed0f359f198034d"
+    "sha256": "6e59488cb65f5a52a8e9a1a211dd4e6cb07f5c467f47656ac12d158ba1215fdc"
    },
    {
     "path": ".gitignore",
@@ -13727,21 +13736,21 @@
    },
    {
     "path": "lst-probes.json",
-    "sha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6"
+    "sha256": "9a7426237f77d4396e8f31d6e53b2ee244a41aeb1b3e06f342f90b360a511d34"
    },
    {
     "path": "diagnoses.json",
-    "sha256": "26cc0bce10322854d704f8f50546669ea18d5fbf73810b7ab7f9f637b5d31c0b"
+    "sha256": "6217b3f0195381cd80d1cbb9d1a720ac77ee3d118a6699e99409e1311f00a4e5"
    }
   ],
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+    "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+    "sha256": "235aec1dc05b16a515fe939dc027ce85d6257f4188f4b2acee7068eb265da39e"
    },
    {
     "path": "../cases/hpop-reference-cases.json",
@@ -13786,7 +13795,7 @@
   ],
   "hpopTrajectories": {
    "path": "hpop-basilisk-2.12.0.json",
-   "sha256": "4d742430c4f1a952a8b39e2f9d7b3b3af0b82268fb60d980c8fde26da1edef80"
+   "sha256": "83ef5af96be2e0fb5b6b24b6ab03ea4d712542bc11e96629311a4ebd6a97000a"
   },
   "modelProbes": {
    "path": "model-probes.json",
@@ -13794,13 +13803,13 @@
   },
   "lstProbes": {
    "path": "lst-probes.json",
-   "sha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6"
+   "sha256": "9a7426237f77d4396e8f31d6e53b2ee244a41aeb1b3e06f342f90b360a511d34"
   },
   "diagnostics": {
    "wgs84": {
     "trajectory": {
      "path": "basilisk-wgs84-diagnostic.json",
-     "sha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96"
+     "sha256": "584543a94f870a265848d6d32da6df2f0d26730dcb934d64a688c2edb8e3a758"
     },
     "inputFiles": [
      {
@@ -13829,7 +13838,10 @@
      },
      {
       "path": "../erfa-spice/reference.py",
-      "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+      "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+      "role": "historical-source",
+      "availability": "unavailable",
+      "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
      },
      {
       "path": "../erfa-spice/tools.json",
@@ -15701,7 +15713,7 @@
    "wgs84-gtd7d": {
     "trajectory": {
      "path": "basilisk-wgs84-gtd7d-diagnostic.json",
-     "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+     "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a"
     },
     "inputFiles": [
      {
@@ -15730,7 +15742,10 @@
      },
      {
       "path": "../erfa-spice/reference.py",
-      "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+      "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+      "role": "historical-source",
+      "availability": "unavailable",
+      "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
      },
      {
       "path": "../erfa-spice/tools.json",
@@ -17600,11 +17615,6 @@
     }
    }
   },
-  "reusedHpopCache": {
-   "path": "../tudat/hpop-tudatpy-1.0.0.json",
-   "sha256": "3ea42fa14d96a2c0c032784f9d6e9ead66cabdda438ac32cc9accbfe3f0469c2"
-  },
-  "reuseRule": "All propagation input paths and SHA-256s equal the current shipped-WASM request identity; only the three state settings of supported cases are retained.",
   "basilisk": {
    "recipeSha256": "00da3a244a0ae95d79ec4084b279f2723d5c2e3511642fb3b128fc48bba937b4",
    "supportData": "/Users/tj/software/tools/xval/bsk-data/supportData",
@@ -17614,7 +17624,7 @@
  "fileHashes": [
   {
    "path": "basilisk-2.12.0.json",
-   "sha256": "cbf9a8bd63cb31a60f3b5459e496b83d8095a463a78ceb687fc05480a6d6a1ed"
+   "sha256": "00a6bb57993b477563f9c74cc2d5bac03a436aad660fa32101eb9c0a90d5d47b"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -17622,7 +17632,7 @@
   },
   {
    "path": "hpop-basilisk-2.12.0.json",
-   "sha256": "4d742430c4f1a952a8b39e2f9d7b3b3af0b82268fb60d980c8fde26da1edef80"
+   "sha256": "83ef5af96be2e0fb5b6b24b6ab03ea4d712542bc11e96629311a4ebd6a97000a"
   },
   {
    "path": "scoring.mjs",
@@ -17634,7 +17644,7 @@
   },
   {
    "path": "check-basilisk.mjs",
-   "sha256": "944e38383586c1d9d4295de201a1e9e439433923fde78a604a10e3e31e37d42c"
+   "sha256": "2d9aa1335115b109c43babb3ffe975dfefa33df707913ed332ed8362b353175e"
   },
   {
    "path": "run-basilisk.py",
@@ -17662,7 +17672,7 @@
   },
   {
    "path": "README.md",
-   "sha256": "b0675ae306617f89c627de26d4a05a643bdac24d8c76329b2ed0f359f198034d"
+   "sha256": "6e59488cb65f5a52a8e9a1a211dd4e6cb07f5c467f47656ac12d158ba1215fdc"
   },
   {
    "path": ".gitignore",
@@ -17674,19 +17684,19 @@
   },
   {
    "path": "lst-probes.json",
-   "sha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6"
+   "sha256": "9a7426237f77d4396e8f31d6e53b2ee244a41aeb1b3e06f342f90b360a511d34"
   },
   {
    "path": "diagnoses.json",
-   "sha256": "26cc0bce10322854d704f8f50546669ea18d5fbf73810b7ab7f9f637b5d31c0b"
+   "sha256": "6217b3f0195381cd80d1cbb9d1a720ac77ee3d118a6699e99409e1311f00a4e5"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+   "sha256": "235aec1dc05b16a515fe939dc027ce85d6257f4188f4b2acee7068eb265da39e"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -17754,7 +17764,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",
@@ -19633,10 +19646,6 @@
    "sha256": "c4bbdf4824ed44da0329a63fccac1e4bc7335326e9cfb8f771ac14b946f0a945"
   },
   {
-   "path": "../tudat/hpop-tudatpy-1.0.0.json",
-   "sha256": "3ea42fa14d96a2c0c032784f9d6e9ead66cabdda438ac32cc9accbfe3f0469c2"
-  },
-  {
    "path": "diagnose-lst.py",
    "sha256": "454e7505f0efddc7df0a62234368566feae59da2ff9f40a9f36916b7c732ee24"
   },
@@ -19646,7 +19655,9 @@
   },
   {
    "path": "basilisk-wgs84-gtd7d-diagnostic.json",
-   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+   "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a",
+   "originalSha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b",
+   "note": "Reference numerical payload unchanged; enclosing trajectory metadata records unavailable historical source versions."
   },
   {
    "path": "basilisk-backend.py",
@@ -19658,7 +19669,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",
@@ -21458,7 +21472,10 @@
   },
   {
    "path": "../../../lib/astrodynamics.cpp",
-   "sha256": "34038b0e4588b463409437d455a569acfa3b2c7b144114058a1d9882bde9f49e"
+   "sha256": "34038b0e4588b463409437d455a569acfa3b2c7b144114058a1d9882bde9f49e",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../../../../../third_party/nrlmsise00/nrlmsise-00.c",
@@ -21466,7 +21483,7 @@
   },
   {
    "path": "basilisk-wgs84-diagnostic.json",
-   "sha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96"
+   "sha256": "584543a94f870a265848d6d32da6df2f0d26730dcb934d64a688c2edb8e3a758"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -21494,7 +21511,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",
@@ -23358,7 +23378,7 @@
   },
   {
    "path": "basilisk-wgs84-gtd7d-diagnostic.json",
-   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+   "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -23386,7 +23406,10 @@
   },
   {
    "path": "../erfa-spice/reference.py",
-   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b"
+   "sha256": "d6aca548be905fe720918775a3eb9506b37c221637c5ebc0c5f1a7700f3fe13b",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "../erfa-spice/tools.json",

@@ -6,8 +6,10 @@
 #include "hpop/prw_execution.h"
 #include "astrodynamics.h"
 #include "EOP_generated.h"
+extern "C" {
 #include "erfa.h"
 #include "erfam.h"
+}
 #include "axis_engine.hpp"
 #include "eop_series.hpp"
 #include <cmath>
@@ -24,7 +26,7 @@ namespace hpop {
 namespace dynamics {
 using namespace astro;
 
-// GCRF -> ITRF at a TDB Julian date from caller-supplied EOP: IERS
+// GCRF -> ITRF at a two-part TT instant from caller-supplied EOP: IERS
 // Conventions 2010, CIO based, IAU 2006/2000A with the EOP's dX/dY, polar
 // motion and UT1 (the chain of foundation/frames gcrfToItrf). The CIP
 // coordinates X, Y and the CIO locator s of the series are evaluated on whole
@@ -41,10 +43,10 @@ public:
         if(std::sscanf(date,"%d-%d-%dT%d:%d:%lf%n",&y,&m,&d,&h,&mi,&sec,&n)!=6)return false;
         return !h&&!mi&&!sec&&eraCal2jd(y,m,d,&jd0,&day)==0&&day==mjd;
     }
-    // UTC two-part Julian date at a TT Julian date (ERFA's leap-second table).
-    static bool utcAt(double jdTt,double& u1,double& u2) {
-        double tai1,tai2;
-        return eraTttai(2451545.0,jdTt-2451545.0,&tai1,&tai2)==0&&eraTaiutc(tai1,tai2,&u1,&u2)==0;
+    // UTC two-part Julian date through ERFA's leap-second table.
+    static bool utcAt(const timesys::Instant& instant,double& u1,double& u2) {
+        const auto utc=instant.utc();u1=utc.jd1;u2=utc.jd2;
+        return std::isfinite(u1)&&std::isfinite(u2);
     }
     // The table's series checks run once (they parse every row's DATE);
     // every later read only brackets and interpolates.
@@ -52,22 +54,23 @@ public:
         if(!validated){validated=true;invalid=sdn::frames::eop::validate(rows,midnight);}
         return invalid;
     }
-    bool covers(double jdTdb) {
+    bool covers(const timesys::Instant& instant) {
         double u1,u2;sdn::frames::EarthOrientation e;
-        if(!utcAt(timesys::tdbToTt(jdTdb),u1,u2)){error="eop-out-of-range: Epoch outside the leap-second table.";return false;}
+        if(!utcAt(instant,u1,u2)){error="eop-out-of-range: Epoch outside the leap-second table.";return false;}
         std::string reason=validation();
         if(reason.empty())reason=sdn::frames::eop::atValidated(rows,u1,u2,&e);
         if(!reason.empty()){error="invalid-earth-orientation: "+reason;return false;}
         return true;
     }
-    void matrix(double jdTdb,double m[3][3]) {
-        const double jdTt=timesys::tdbToTt(jdTdb),tt1=2451545.0,tt2=jdTt-2451545.0;
+    void matrix(const timesys::Instant& instant,double m[3][3]) {
+        const double tt1=instant.jd1,tt2=instant.jd2;
         double u1,u2,ut11,ut12;sdn::frames::EarthOrientation e;
-        if(!validation().empty()||!utcAt(jdTt,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&ut11,&ut12)<0) {
+        if(!validation().empty()||!utcAt(instant,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&ut11,&ut12)<0) {
             for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=std::numeric_limits<double>::quiet_NaN();
             return;
         }
-        const double hours=tt2*24.0,k=std::floor(hours),w=hours-k;
+        const double fractionHours=tt2*24.0;
+        const double k=(tt1-2451545.0)*24.0+std::floor(fractionHours),w=fractionHours-std::floor(fractionHours);
         const auto& a=cip(static_cast<long long>(k));const auto& b=cip(static_cast<long long>(k)+1);
         double rc2i[3][3],rpom[3][3];
         eraC2ixys(a[0]+w*(b[0]-a[0])+e.dX,a[1]+w*(b[1]-a[1])+e.dY,a[2]+w*(b[2]-a[2]),rc2i);
@@ -75,13 +78,12 @@ public:
         double rc2t[3][3];eraC2tcio(rc2i,eraEra00(ut11,ut12),rpom,rc2t);
         for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=rc2t[i][j];
     }
-    // UT1 Julian date at a TDB Julian date (NaN outside the table).
-    double ut1(double jdTdb) {
-        const double jdTt=timesys::tdbToTt(jdTdb);
+    // UT1 two-part Julian date at this TT instant (NaN outside the table).
+    timesys::Instant::Date ut1(const timesys::Instant& instant) {
         double u1,u2,a,b;sdn::frames::EarthOrientation e;
-        if(!validation().empty()||!utcAt(jdTt,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&a,&b)<0)
-            return std::numeric_limits<double>::quiet_NaN();
-        return a+b;
+        if(!validation().empty()||!utcAt(instant,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&a,&b)<0)
+            return {std::numeric_limits<double>::quiet_NaN(),0};
+        return {a,b};
     }
 private:
     // X, Y and s (IAU 2006/2000A, without the EOP's dX/dY) at hour k of TT

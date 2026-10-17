@@ -11,7 +11,7 @@
 // [W] NIST, Wishart distribution of Gaussian sample variance-covariance matrices:
 // https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/wishrand.htm
 // Units/frame/time for ALL cases: km, km/s, seconds; Earth-centred inertial
-// J2000 axes, initial epoch JD2451545.0 TDB, elapsed dynamical seconds. Gravity
+// J2000 axes, initial epoch JD2451545.0 TDB, elapsed TT seconds. Gravity
 // constants are explicit model inputs, NOT claimed observational estimates.
 // Phi has rr,vv dimensionless, rv seconds, vr inverse seconds. Compare
 // D^-1 Phi D, D=diag(1,1,1,n,n,n), a units-balanced nondimensional matrix.
@@ -21,6 +21,7 @@
 
 #include "variational.h"
 #include "integrators.h"
+#include "time_types.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -370,15 +371,17 @@ static void benchmark() {
              <<" analytic_after_ms="<<second<<" speedup="<<finite/average<<" repetitions="<<repetitions<<" nominal_plus_perturbed=13 sink="<<sink<<'\n';
 }
 
-// Deterministic oracle fixture generation from [K] alone; no production
-// propagation, force evaluator, or STM implementation is called here.
+// The request's TDB labels are converted by the authoritative time-scale
+// contract. State and STM then come from [K] alone: no production propagation,
+// force evaluator, or STM implementation is called here.
 static void emitReference() {
     std::cout<<std::setprecision(17);
     std::cout<<"{\n  \"source\": \"Battin, MIT16.346 Fall2008 lecture4 equations4.41 and4.43; analytic implicit differentiation; lecture26 circular CW independently cross-checks\",\n"
              <<"  \"source_url\": \"https://ocw.mit.edu/courses/16-346-astrodynamics-fall-2008/87431d1d0bfd2488fe402067e0afcb59_lec_04.pdf\",\n"
              <<"  \"generator\": \"variational_native.cpp --emit-reference (independent closed-form Kepler flow only)\",\n"
              <<"  \"units\": \"state: km, km/s; stm: rr/vv dimensionless, rv s, vr 1/s; duration s\",\n"
-             <<"  \"frame\": \"Earth-centred J2000 inertial\",\n  \"time_scale\": \"TDB\",\n  \"epoch_jd\": 2451545.0,\n"
+             <<"  \"frame\": \"Earth-centred J2000 inertial\",\n  \"time_scale\": \"TDB\",\n"
+             <<"  \"duration_time_scale\": \"TT\",\n  \"epoch_jd\": 2451545.0,\n"
              <<"  \"mu_km3_s2\": 398600.4418,\n  \"relative_stm_tolerance\": 1e-9,\n"
              <<"  \"tolerance_rationale\": \"Integration numerical error only; relative Frobenius of D^-1 Phi D with D=diag(1,1,1,n,n,n); no force model discrepancy\",\n"
              <<"  \"cases\": [\n";
@@ -387,11 +390,11 @@ static void emitReference() {
         const long double a=eccentric?9000:7000,n=std::sqrt(mu/(a*a*a));
         const auto initial=eccentric?eccentricState():StateVector({7000,0,0},{0,double(n*7000),0},2451545.0);
         for(double fraction:{.3,1.0}) {
-            // Invoke inputs serialize JD as doubles. Derive the duration from
-            // that exact representable JD so an epoch-rounding difference does
-            // not masquerade as a physical propagation error in strict tests.
+            // Preserve the representable TDB labels sent in the request, then
+            // form their TT interval without collapsing either TT instant to
+            // a single JD. Kepler dynamics advance in that TT interval.
             const double target=initial.epoch+double(2*pi/n*fraction)/86400;
-            const double dt=(target-initial.epoch)*86400;
+            const double dt=timesys::Instant::fromTdb(target).secondsSince(timesys::Instant::fromTdb(initial.epoch));
             Vector finalState{};const auto phi=keplerSTM(initial,dt,&finalState);
             if(!first) std::cout<<",\n";first=false;
             std::cout<<"    {\"name\": \""<<(eccentric?"eccentric":"circular")<<"_"<<(fraction==1?"1":"0.3")<<"_orbit\", \"mean_motion_rad_s\": "<<n
@@ -410,7 +413,7 @@ int main(int argc,char** argv) {
     try {
         if(argc==2 && std::string(argv[1])=="--emit-reference") {emitReference();return 0;}
         std::cout<<std::setprecision(17);
-        std::cout<<"CONTEXT J2000 km km/s JD2451545.0_TDB elapsed_seconds mu=398600.4418 relative_metric=Frobenius(D^-1_Phi_D)\n";
+        std::cout<<"CONTEXT J2000 km km/s JD2451545.0_TDB elapsed_TT_seconds mu=398600.4418 relative_metric=Frobenius(D^-1_Phi_D)\n";
         testKepler();testJ2();testCovariance();testScheduledImpulses();
         if(!(argc==2 && std::string(argv[1])=="--skip-timing")) benchmark();
         std::cout<<(failures?"FAIL":"PASS")<<" HPOP variational cases="<<cases<<" failures="<<failures<<'\n';

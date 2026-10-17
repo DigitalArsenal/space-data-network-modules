@@ -101,7 +101,7 @@ bool parseRadiationPressure(const PRWForceConfiguration* in,ForceModel::SRPForce
     }
     return true;
 }
-bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
+bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
     if(!in)return prwError(error,"invalid-forces: Missing force configuration.");
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
     out.useSphericalHarmonics=in->ENABLE_J2()||in->ENABLE_J3()||in->ENABLE_J4()||in->ENABLE_HIGHER_ZONALS();
@@ -205,7 +205,7 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
             out.dragModel=ForceModel::DragModelType::JacchiaRoberts;break;
         default:return prwError(error,"unsupported-atmosphere: Unknown atmosphere selection.");
     }
-    out.drag.model=out.dragModel;out.explicitEpochContract=true;out.integrationEpochTDB=epoch;out.weather.epoch=timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(epoch)));
+    out.drag.model=out.dragModel;out.explicitEpochContract=true;out.integrationEpochTT=epoch;out.weather.epoch=epoch.utc().jd();
     if(const auto* weather=in->WEATHER()) {
         if(!weather->EPOCH()||weather->EPOCH()->TIME_SYSTEM()!=timingStandard::UTC)return prwError(error,"epoch-time-scale: Space-weather epoch must be UTC.");
         double tdb=0,utc=0;if(!decodeEpoch(weather->EPOCH(),tdb,utc,error))return false;
@@ -283,14 +283,14 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
     }
     // Rate of change of Cd*A/m (the VCM's BDOT), from the initial epoch (also
     // the reference of the rate's sensitivity when the rate is zero).
-    out.dragRateEpochTdb=epoch;
+    out.dragRateEpochTT=epoch;
     if(!in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()&&in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()!=0)
         return prwError(error,"invalid-presence: DRAG_AREA_OVER_MASS_RATE_M2_KG_S requires HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S.");
     if(in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()) {
         if(!std::isfinite(in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()))return prwError(error,"invalid-forces: The Cd*A/m rate must be finite.");
         if(!out.useDrag)return prwError(error,"invalid-forces: DRAG_AREA_OVER_MASS_RATE_M2_KG_S applies to drag; enable drag.");
         if(!positive(out.drag.area))return prwError(error,"invalid-forces: A Cd*A/m rate needs a positive area.");
-        out.dragAreaOverMassRate=in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S();out.dragRateEpochTdb=epoch;
+        out.dragAreaOverMassRate=in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S();out.dragRateEpochTT=epoch;
     }
     if(!in->EPHEMERIS_SOURCE()||in->EPHEMERIS_SOURCE()->size()==0)return prwError(error,"ephemeris-source: An explicit ephemeris source is required.");
     const auto source=in->EPHEMERIS_SOURCE()->str();
@@ -392,7 +392,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
     out.massDynamics=in->INCLUDE_MASS_DYNAMICS();
     if(in->FINITE_BURNS()&&in->FINITE_BURNS()->size()&&!out.massDynamics)return prwError(error,"invalid-burn: FINITE_BURNS requires INCLUDE_MASS_DYNAMICS.");
     if(out.massDynamics&&out.target<out.initial.epoch)return prwError(error,"invoke-failed: Finite burns require finite epochs and forward propagation.");
-    if(!parseIntegrator(in->INTEGRATOR(),out.massDynamics,out.integrator,error)||!parseForces(in->FORCES(),out.initial.epoch,hasEarthOrientation,out.forces,error))return false;
+    if(!parseIntegrator(in->INTEGRATOR(),out.massDynamics,out.integrator,error)||!parseForces(in->FORCES(),out.initialTT.instant(),hasEarthOrientation,out.forces,error))return false;
     if(initial->STATE()->GRAVITATIONAL_PARAMETER()!=0 && initial->STATE()->GRAVITATIONAL_PARAMETER()!=in->FORCES()->GRAVITATIONAL_PARAMETER())
         return prwError(error,"invalid-forces: FRM and force gravitational parameters disagree.");
     if(!initial->HAS_MASS_KG()&&initial->MASS_KG()!=0)return prwError(error,"invalid-presence: MASS_KG requires HAS_MASS_KG.");
@@ -485,16 +485,16 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
     out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.burns.empty()&&out.parameters.empty();
     return true;
 }
-bool preflightKernel(const Execution& in,double target,std::string& error) {
+bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error) {
     if(Ephemeris::selectedEphemerisSource()==Ephemeris::EphemerisSource::Analytical)return true;
     const auto& f=in.forces;const auto& b=f.thirdBody;
     const std::pair<int,bool> bodies[]={{10,f.useSRP||(f.useThirdBody&&b.includeSun)},{301,f.useThirdBody&&b.includeMoon},{1,f.useThirdBody&&b.includeMercury},{2,f.useThirdBody&&b.includeVenus},{4,f.useThirdBody&&b.includeMars},{5,f.useThirdBody&&b.includeJupiter},{6,f.useThirdBody&&b.includeSaturn},{7,f.useThirdBody&&b.includeUranus},{8,f.useThirdBody&&b.includeNeptune}};
-    for(const auto& body:bodies)if(body.second&&(!Ephemeris::getKernelState(body.first,399,in.initial.epoch).valid||!Ephemeris::getKernelState(body.first,399,target).valid)) {
+    for(const auto& body:bodies)if(body.second&&(!Ephemeris::getKernelState(body.first,399,in.initialTT.instant()).valid||!Ephemeris::getKernelState(body.first,399,target).valid)) {
         error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;
     }
     return true;
 }
-double utcJd(const TTEpoch& tt) {return timesys::taiToUtc(timesys::ttToTai(tt.jdTt()));}
+double utcJd(const TTEpoch& tt) {return tt.instant().utc().jd();}
 // The table's change epochs strictly inside the arc (initial, target and
 // samples), ascending.
 std::vector<TTEpoch> driverBreaks(const Execution& e) {
@@ -545,11 +545,11 @@ bool propagateState(Execution& execution,StateVector& state,TTEpoch& at,const TT
     if(config.method==IntegrationMethod::RK4 && total>0 && std::ceil(total/config.initialStep)>config.maxSteps)
         return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
     auto stops=breaksBetween(execution,at,to);stops.push_back(to);
-    struct Restore{double& v;double saved;~Restore(){v=saved;}} restore{execution.forces.integrationEpochTDB,execution.forces.integrationEpochTDB};
+    struct Restore{timesys::Instant& v;timesys::Instant saved;~Restore(){v=saved;}} restore{execution.forces.integrationEpochTT,execution.forces.integrationEpochTT};
     for(const auto& stop:stops) {
         const double span=elapsedSeconds(at,stop);
         setDriverSpan(execution,at,stop);
-        if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTDB=state.epoch;
+        if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTT=at.instant();
         const auto value=Integrator::PropagateWithResult(state,span,config,execution.forces);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
         // RK4, RKDP87 and BS step forward only; a backward request must not
@@ -563,6 +563,9 @@ bool propagateState(Execution& execution,StateVector& state,TTEpoch& at,const TT
 bool advanceSpan(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
     const double seconds=elapsedSeconds(c.tt,to);
     if(seconds==0)return true;
+    struct Restore { timesys::Instant& value; timesys::Instant saved; ~Restore(){value=saved;} }
+        restore{execution.forces.integrationEpochTT,execution.forces.integrationEpochTT};
+    execution.forces.integrationEpochTT=c.tt.instant();
     setDriverSpan(execution,c.tt,to);
     const unsigned n=6+unsigned(execution.parameters.size());
     std::vector<double> span(n*n,0.0),p;
@@ -646,13 +649,14 @@ bool attachEnvironment(Execution& execution,const Environment& environment,bool 
         };
     }
     if(earth) {
-        execution.forces.earthFixedRotation=[earth](double jdTdb,double m[3][3]){earth->matrix(jdTdb,m);};
-        execution.forces.jdUt1At=[earth](double jdTdb){return earth->ut1(jdTdb);};
+        execution.forces.earthFixedRotation=[earth](const timesys::Instant& instant,double m[3][3]){earth->matrix(instant,m);};
+        execution.forces.jdUt1At=[earth](const timesys::Instant& instant){return earth->ut1(instant);};
     }
     return true;
 }
-bool environmentCovers(const Execution&,const Environment& environment,double first,double last,std::string& error) {
-    const auto utc=[](double jdTdb){return timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jdTdb)));};
+bool environmentCovers(const Execution&,const Environment& environment,timesys::Instant first,timesys::Instant last,std::string& error) {
+    if(first.secondsSince(last)>0)std::swap(first,last);
+    const auto utc=[](const timesys::Instant& instant){return instant.utc().jd();};
     if(const auto& jb2008=environment.jb2008)
         if(!jb2008->covers(utc(first))||!jb2008->covers(utc(last)))
             return prwError(error,"jb2008-indices-out-of-range: The JB2008 rows must cover the arc, five days before it for Y10 and the hours of DTC.");

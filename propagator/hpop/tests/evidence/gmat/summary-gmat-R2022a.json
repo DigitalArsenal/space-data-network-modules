@@ -1,8 +1,8 @@
 {
- "note": "HPOP against NASA GMAT (tests/evidence/gmat/score-gmat.mjs): the largest 3D position difference over 24 h, hourly samples, by case, HPOP at three integrator settings; Orekit 13.1 against GMAT beside it; STM: largest relative column difference at the suite's request.",
+ "note": "HPOP shipped WASM against pinned NASA GMAT trajectories; maximum hourly 3D position difference over 24 h in metres, and relative STM column differences. All numerical reductions are C++.",
  "module": {
-  "version": "1.3.1",
-  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+  "version": "1.4.0",
+  "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
  },
  "gmat": {
   "file": "gmat-R2022a.json",
@@ -30,7 +30,7 @@
   }
  },
  "node": "v25.4.0",
- "host": "Apple M3 Ultra, 28 cores",
+ "host": "Apple M3 Ultra",
  "settings": [
   {
    "id": "suite",
@@ -66,24 +66,28 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.004893,
    "orekitMinusGmat": {
-    "worstM": 0.00016268370154823178,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00016268370154823178
    },
    "suite": {
-    "worstM": 0.0003161838730220653,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0003161838730220653,
     "steps": 2346,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00006671437947257408,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00006671437947257408,
     "steps": 2903,
     "met": true
    },
    "finest": {
-    "worstM": 0.000010783484850603663,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000010783484850603661,
     "steps": 8608,
     "met": true
    },
@@ -98,25 +102,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004877,
    "orekitMinusGmat": {
-    "worstM": 0.0009738753841338002,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009738753841338002
    },
    "suite": {
-    "worstM": 0.0182250229506174,
     "atHour": 24,
-    "steps": 1342,
+    "sampleCount": 24,
+    "worstM": 0.0182316706114621,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007297892891671816,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007349654781093994,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006730069752993059,
     "atHour": 24,
-    "steps": 8612,
+    "sampleCount": 24,
+    "worstM": 0.000673890506655621,
+    "steps": 8611,
     "met": true
    },
    "met": true
@@ -130,25 +138,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009738753841338002,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009738753841338002
    },
    "suite": {
-    "worstM": 0.018220460764292606,
     "atHour": 24,
-    "steps": 1344,
+    "sampleCount": 24,
+    "worstM": 0.018208445619508445,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007281994966467992,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007261125879748724,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006615700988828336,
     "atHour": 24,
-    "steps": 8611,
+    "sampleCount": 24,
+    "worstM": 0.0006562094422483599,
+    "steps": 8612,
     "met": true
    },
    "met": true
@@ -162,25 +174,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009870020067305819,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009870020067305819
    },
    "suite": {
-    "worstM": 0.01827969622027118,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.01820490051767189,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000686296741944591,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0006861397488860079,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000626029815994808,
     "atHour": 24,
-    "steps": 8606,
+    "sampleCount": 24,
+    "worstM": 0.0006241149010069746,
+    "steps": 8610,
     "met": true
    },
    "met": true
@@ -194,25 +210,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.01997281908788552,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.01997281908788552
    },
    "suite": {
-    "worstM": 0.012343353866344015,
     "atHour": 5,
+    "sampleCount": 24,
+    "worstM": 0.012336946949421255,
     "steps": 1415,
     "met": true
    },
    "steps30": {
-    "worstM": 0.019713085965583653,
     "atHour": 19,
-    "steps": 2961,
+    "sampleCount": 24,
+    "worstM": 0.019712742674437525,
+    "steps": 2959,
     "met": true
    },
    "finest": {
-    "worstM": 0.01976909802289462,
     "atHour": 19,
-    "steps": 8641,
+    "sampleCount": 24,
+    "worstM": 0.019769394900159106,
+    "steps": 8638,
     "met": true
    },
    "met": true
@@ -228,20 +248,23 @@
    "icrfDriftM": 0.004872,
    "orekitMinusGmat": null,
    "suite": {
-    "worstM": 1.3783546708079844,
     "atHour": 24,
-    "steps": 1415,
+    "sampleCount": 24,
+    "worstM": 1.378398589696312,
+    "steps": 1416,
     "met": true
    },
    "steps30": {
-    "worstM": 1.3608942918593199,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 1.3608909880303852,
     "steps": 2958,
     "met": true
    },
    "finest": {
-    "worstM": 1.360800808881654,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 1.3608023561153448,
     "steps": 8634,
     "met": true
    },
@@ -256,25 +279,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009816562538837211,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009816562538837211
    },
    "suite": {
-    "worstM": 0.018247369652435695,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.018349049045167074,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007675451356822083,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007655613813242059,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006877175972560316,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0007005559273489713,
+    "steps": 8607,
     "met": true
    },
    "met": true
@@ -288,25 +315,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009923186464878724,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009923186464878724
    },
    "suite": {
-    "worstM": 0.01827539860907334,
     "atHour": 24,
-    "steps": 1344,
+    "sampleCount": 24,
+    "worstM": 0.018267292206508596,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007264487253619978,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000721683254569162,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006507768198928003,
     "atHour": 24,
-    "steps": 8611,
+    "sampleCount": 24,
+    "worstM": 0.0006483964886630629,
+    "steps": 8608,
     "met": true
    },
    "met": true
@@ -320,25 +351,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.011425046283641655,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.011425046283641653
    },
    "suite": {
-    "worstM": 0.008929350039601406,
     "atHour": 24,
-    "steps": 1415,
+    "sampleCount": 24,
+    "worstM": 0.008992914317887749,
+    "steps": 1414,
     "met": true
    },
    "steps30": {
-    "worstM": 0.010443036027656952,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.010461211708668889,
     "steps": 2958,
     "met": true
    },
    "finest": {
-    "worstM": 0.010555322923260552,
     "atHour": 23,
-    "steps": 8640,
+    "sampleCount": 24,
+    "worstM": 0.010540877854656306,
+    "steps": 8638,
     "met": true
    },
    "met": true
@@ -354,21 +389,24 @@
    "icrfDriftM": 0.004873,
    "orekitMinusGmat": null,
    "suite": {
-    "worstM": 1.3800865152338566,
     "atHour": 24,
-    "steps": 1414,
+    "sampleCount": 24,
+    "worstM": 1.3800877797706035,
+    "steps": 1413,
     "met": true
    },
    "steps30": {
-    "worstM": 1.3626009547252882,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 1.3626062785942812,
     "steps": 2959,
     "met": true
    },
    "finest": {
-    "worstM": 1.3625080061782926,
     "atHour": 24,
-    "steps": 8638,
+    "sampleCount": 24,
+    "worstM": 1.3625160570350843,
+    "steps": 8636,
     "met": true
    },
    "met": true
@@ -382,24 +420,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.005192121310765363,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.005192121310765362
    },
    "suite": {
-    "worstM": 0.02271138832807512,
     "atHour": 24,
-    "steps": 1341,
+    "sampleCount": 24,
+    "worstM": 0.0225483541534126,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.005415945928220343,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.005424196136933806,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0053463864247833524,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.0053631263314893336,
     "steps": 8607,
     "met": true
    },
@@ -414,25 +456,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.03027076715657814,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.030270767156578136
    },
    "suite": {
-    "worstM": 0.04517194825611981,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.04514127033877047,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.03053354091061864,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.0305378905812967,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.030475515304976757,
     "atHour": 23,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.03048226048733499,
+    "steps": 8611,
     "met": true
    },
    "met": true
@@ -446,25 +492,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009915249552644883,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.000991524955264488
    },
    "suite": {
-    "worstM": 0.018274747005913153,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.018290855732069677,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007166561736160961,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007244444183308791,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000654973518468602,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0006560411032531326,
+    "steps": 8611,
     "met": true
    },
    "met": true
@@ -478,25 +528,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009952647727490631,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009952647727490631
    },
    "suite": {
-    "worstM": 0.01819454919908577,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.018221379958503876,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007170003538939253,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007091066616017792,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006345338411583175,
     "atHour": 24,
-    "steps": 8608,
+    "sampleCount": 24,
+    "worstM": 0.0006503443414069752,
+    "steps": 8609,
     "met": true
    },
    "met": true
@@ -510,25 +564,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009899389410317054,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009899389410317054
    },
    "suite": {
-    "worstM": 0.01732922430927566,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.017423730806201587,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007116361107587496,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007309304908820066,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006622681868167692,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0006698524031847593,
+    "steps": 8605,
     "met": true
    },
    "met": true
@@ -542,25 +600,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.000993669765638975,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.000993669765638975
    },
    "suite": {
-    "worstM": 0.018299313043515578,
     "atHour": 24,
-    "steps": 1342,
+    "sampleCount": 24,
+    "worstM": 0.018334663080982368,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007275870302639155,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007389843632030098,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006634122690237052,
     "atHour": 24,
-    "steps": 8607,
+    "sampleCount": 24,
+    "worstM": 0.0006672493928213863,
+    "steps": 8609,
     "met": true
    },
    "met": true
@@ -574,24 +636,28 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.005005,
    "orekitMinusGmat": {
-    "worstM": 0.0001774875899377066,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0001774875899377066
    },
    "suite": {
-    "worstM": 0.0003038705808978272,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00030387058089782727,
     "steps": 2196,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000048016486261573984,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000048016486261573984,
     "steps": 2902,
     "met": true
    },
    "finest": {
-    "worstM": 0.0000015050979623024147,
     "atHour": 6,
+    "sampleCount": 24,
+    "worstM": 0.0000015050979623024147,
     "steps": 8609,
     "met": true
    },
@@ -606,25 +672,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017277083519961407,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017277083519961405
    },
    "suite": {
-    "worstM": 0.016225070899311564,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.016184352145134924,
     "steps": 1258,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0005064609555445038,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0005004787683010924,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0004838857444706598,
     "atHour": 22,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0004785421930865008,
+    "steps": 8606,
     "met": true
    },
    "met": true
@@ -638,24 +708,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0016861232793941314,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016861232793941314
    },
    "suite": {
-    "worstM": 0.016232468729854618,
     "atHour": 24,
-    "steps": 1256,
+    "sampleCount": 24,
+    "worstM": 0.016168143076754998,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000486645304992957,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00048180186483016984,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00045734887391059927,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0004572551539026593,
     "steps": 8609,
     "met": true
    },
@@ -670,25 +744,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0016910787945872967,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016910787945872967
    },
    "suite": {
-    "worstM": 0.01615558341660336,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.01628437816304537,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00046477772867148165,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00046809906704646867,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0004467342262231034,
     "atHour": 21,
-    "steps": 8606,
+    "sampleCount": 24,
+    "worstM": 0.00043681601642449943,
+    "steps": 8610,
     "met": true
    },
    "met": true
@@ -702,24 +780,28 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.013902384848948101,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.013902384848948101
    },
    "suite": {
-    "worstM": 0.027702512516082845,
     "atHour": 24,
-    "steps": 1345,
+    "sampleCount": 24,
+    "worstM": 0.027788683071167573,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
-    "worstM": 0.012748207710148753,
     "atHour": 13,
+    "sampleCount": 24,
+    "worstM": 0.012747699943235144,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.012847467306503236,
     "atHour": 13,
+    "sampleCount": 24,
+    "worstM": 0.012848050100565996,
     "steps": 8676,
     "met": true
    },
@@ -736,21 +818,24 @@
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": null,
    "suite": {
-    "worstM": 0.16469248564467856,
     "atHour": 24,
-    "steps": 1341,
+    "sampleCount": 24,
+    "worstM": 0.16479320005391299,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.18024959350766892,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.18024698788474797,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.179935528290945,
     "atHour": 24,
-    "steps": 8680,
+    "sampleCount": 24,
+    "worstM": 0.17992768292372618,
+    "steps": 8674,
     "met": true
    },
    "met": true
@@ -764,24 +849,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017220065982785557,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017220065982785557
    },
    "suite": {
-    "worstM": 0.016200710648219655,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.01622555128647916,
+    "steps": 1255,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0004648694543805799,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0004641915884106362,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00043897060801752766,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0004395553142391719,
     "steps": 8609,
     "met": true
    },
@@ -796,24 +885,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017342737014305345,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017342737014305347
    },
    "suite": {
-    "worstM": 0.01636617873200081,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.016209500535008962,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0004572320305069087,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00046152379341200166,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0004307393452774498,
-    "atHour": 22,
+    "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00043357716884167836,
     "steps": 8607,
     "met": true
    },
@@ -828,25 +921,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0099374005706492,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.009937400570649199
    },
    "suite": {
-    "worstM": 0.022865549012567463,
     "atHour": 23,
-    "steps": 1345,
+    "sampleCount": 24,
+    "worstM": 0.022942358015080735,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.008617579307365009,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.008610773252050138,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.008901367994407935,
     "atHour": 23,
-    "steps": 8677,
+    "sampleCount": 24,
+    "worstM": 0.008898929648754623,
+    "steps": 8673,
     "met": true
    },
    "met": true
@@ -862,21 +959,24 @@
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": null,
    "suite": {
-    "worstM": 0.16285476788044378,
     "atHour": 24,
-    "steps": 1339,
+    "sampleCount": 24,
+    "worstM": 0.1629237628071242,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.17833741992627555,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.17835374397253662,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.17802996020402853,
     "atHour": 24,
-    "steps": 8675,
+    "sampleCount": 24,
+    "worstM": 0.17802817953832603,
+    "steps": 8676,
     "met": true
    },
    "met": true
@@ -890,24 +990,28 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00015794917604116686,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00015794917604116686
    },
    "suite": {
-    "worstM": 0.000017149018532164574,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000017149018532164574,
     "steps": 342,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000004106765611614921,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000004106765611614921,
     "steps": 2883,
     "met": true
    },
    "finest": {
-    "worstM": 0.000002131986604162085,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000002131986604162085,
     "steps": 8594,
     "met": true
    },
@@ -922,25 +1026,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002076667798244973,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002076667798244973
    },
    "suite": {
-    "worstM": 0.00001568987484158614,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001536432312767962,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000014462156609344237,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000015773114165204186,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000015666152648795218,
     "atHour": 24,
-    "steps": 8594,
+    "sampleCount": 24,
+    "worstM": 0.0000158498229747987,
+    "steps": 8596,
     "met": true
    },
    "met": true
@@ -954,24 +1062,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002056548757247593,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00020565487572475933
    },
    "suite": {
-    "worstM": 0.000012742570992905995,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000012427175764533629,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00001832886132476453,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000018641679644515397,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000019897086213222633,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00002051079941770609,
     "steps": 8594,
     "met": true
    },
@@ -986,25 +1098,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.001405457612437593,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.001405457612437593
    },
    "suite": {
-    "worstM": 0.0012819179585800804,
     "atHour": 19,
-    "steps": 336,
+    "sampleCount": 24,
+    "worstM": 0.0012825926330792194,
+    "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012682916043979745,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012684258582718647,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0012674253362901307,
     "atHour": 19,
-    "steps": 8594,
+    "sampleCount": 24,
+    "worstM": 0.0012674782459260229,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -1018,25 +1134,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.001412628280575729,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.001412628280575729
    },
    "suite": {
-    "worstM": 0.0012900903135232083,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.001290377332612459,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012764041035657424,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.001276450494332135,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0012775511822774581,
     "atHour": 19,
-    "steps": 8597,
+    "sampleCount": 24,
+    "worstM": 0.001275085506709293,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -1050,25 +1170,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002044556213292106,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00020445562132921058
    },
    "suite": {
-    "worstM": 0.000014922295124307454,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001534500149707343,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000015933282287785708,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000016430039719265332,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000018517882684018758,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.00001693359852134299,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -1082,25 +1206,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.001410607654435376,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.001410607654435376
    },
    "suite": {
-    "worstM": 0.0012876453153129591,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012876238918301318,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012725349677897655,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012711824013086433,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0012712669788955753,
     "atHour": 19,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0012712273600211236,
+    "steps": 8592,
     "met": true
    },
    "met": true
@@ -1114,24 +1242,28 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0014209135653930319,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0014209135653930319
    },
    "suite": {
-    "worstM": 0.0012964259605201323,
     "atHour": 19,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.0012962516203845092,
+    "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012831435662205698,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012830631926606649,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0012842956501585955,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012848550560811203,
     "steps": 8596,
     "met": true
    },
@@ -1146,25 +1278,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0016376049906608188,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0016376049906608185
    },
    "suite": {
-    "worstM": 0.0015056223430690754,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0015056601231725705,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0014886813751752983,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0014884760929820846,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0014876797551537488,
     "atHour": 20,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0014880142228295545,
+    "steps": 8597,
     "met": true
    },
    "met": true
@@ -1178,25 +1314,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0026786139547203733,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0026786139547203733
    },
    "suite": {
-    "worstM": 0.002531713816242396,
     "atHour": 22,
-    "steps": 336,
+    "sampleCount": 24,
+    "worstM": 0.0025315135484056976,
+    "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0025128183498954785,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.002512219635988033,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0025117772525819586,
     "atHour": 21,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.002512406143287245,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -1210,24 +1350,28 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.001414726467175999,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.001414726467175999
    },
    "suite": {
-    "worstM": 0.0012909051383604528,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012905968790393309,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012758345564835294,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012763142105329832,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00127596951696595,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.001276344761429627,
     "steps": 8594,
     "met": true
    },
@@ -1242,25 +1386,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0014042706703106683,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0014042706703106683
    },
    "suite": {
-    "worstM": 0.0012811165331797845,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012812551916270992,
     "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012646996685197612,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0012668995233512017,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0012658562227589206,
     "atHour": 19,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0012677008363188374,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -1274,25 +1422,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0014138588791090514,
-    "atHour": 20
+    "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.0014138588791090512
    },
    "suite": {
-    "worstM": 0.0012898038334787408,
     "atHour": 19,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.0012904411527677956,
+    "steps": 338,
     "met": true
    },
    "steps30": {
-    "worstM": 0.001276284456715179,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.001276213605993054,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001278287587979375,
     "atHour": 19,
-    "steps": 8641,
+    "sampleCount": 24,
+    "worstM": 0.001278694527774166,
+    "steps": 8645,
     "met": true
    },
    "met": true
@@ -1306,24 +1458,28 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.000035679892058948535,
-    "atHour": 17
+    "atHour": 17,
+    "sampleCount": 24,
+    "worstM": 0.000035679892058948535
    },
    "suite": {
-    "worstM": 0.0000013165320146380774,
     "atHour": 18,
+    "sampleCount": 24,
+    "worstM": 0.0000013165320146380774,
     "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0000030734415457357764,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.000003073441545735776,
     "steps": 2882,
     "met": true
    },
    "finest": {
-    "worstM": 0.0000013862160579197517,
     "atHour": 16,
+    "sampleCount": 24,
+    "worstM": 0.0000013862160579197517,
     "steps": 8594,
     "met": true
    },
@@ -1338,25 +1494,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00003502848897565565,
-    "atHour": 16
+    "atHour": 16,
+    "sampleCount": 24,
+    "worstM": 0.00003502848897565565
    },
    "suite": {
-    "worstM": 0.0000058691523592664835,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000005815615218983326,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000006677727650464349,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0000067365787828612685,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000006998054924655684,
     "atHour": 24,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.000007054445446497838,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -1370,25 +1530,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00003277134331994404,
-    "atHour": 15
+    "atHour": 15,
+    "sampleCount": 24,
+    "worstM": 0.00003277134331994405
    },
    "suite": {
-    "worstM": 0.000007600612041878889,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000007845871762776636,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000008322738805640995,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000008380191078970401,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000007651365414319885,
     "atHour": 24,
-    "steps": 8593,
+    "sampleCount": 24,
+    "worstM": 0.000007703893150695434,
+    "steps": 8592,
     "met": true
    },
    "met": true
@@ -1402,25 +1566,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.0012768805621336259,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0012768805621336259
    },
    "suite": {
-    "worstM": 0.0013029920714875839,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013030757772656781,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0013025864847388943,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013023178936738867,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001303596476562722,
     "atHour": 24,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.001303657296245196,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -1434,24 +1602,28 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.0013025445778795197,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013025445778795197
    },
    "suite": {
-    "worstM": 0.001329992581267796,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013301191962163499,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.001329238766011369,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013296583255783933,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0013287151693317444,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013293885751435833,
     "steps": 8593,
     "met": true
    },
@@ -1466,25 +1638,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.000044599678073806,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.00004459967807380599
    },
    "suite": {
-    "worstM": 0.000008415257185203486,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.00000870316088942951,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000007805158144816093,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.000008010124836131373,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000005756890970851973,
     "atHour": 20,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.000005765880778874709,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -1498,25 +1674,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.0012720847368638119,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0012720847368638119
    },
    "suite": {
-    "worstM": 0.0012997011029336955,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.001299947299884551,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0012995938862939828,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0012997783348988395,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001299224816409578,
     "atHour": 24,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.0012991408491848772,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -1530,24 +1710,28 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.0013007147471989352,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0013007147471989352
    },
    "suite": {
-    "worstM": 0.0013271388568102803,
     "atHour": 24,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.0013276031920035189,
+    "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.001325549805972487,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.001325939329084505,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0013271875198014327,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.001327443122165439,
     "steps": 8592,
     "met": true
    },
@@ -1562,24 +1746,28 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.02454,
    "orekitMinusGmat": {
-    "worstM": 0.0005195459644591939,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0005195459644591939
    },
    "suite": {
-    "worstM": 0.000059218850041160875,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000059218850041160875,
     "steps": 553,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00007389210385793861,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00007389210385793862,
     "steps": 2886,
     "met": true
    },
    "finest": {
-    "worstM": 0.000052024838143177314,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000052024838143177314,
     "steps": 8594,
     "met": true
    },
@@ -1594,25 +1782,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011541619541771991,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011541619541771993
    },
    "suite": {
-    "worstM": 0.0006436061237486447,
     "atHour": 12,
-    "steps": 417,
+    "sampleCount": 24,
+    "worstM": 0.0006362494126787571,
+    "steps": 416,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016825403793418157,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016844249920683503,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001702137971124915,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.0016984659465903832,
+    "steps": 8597,
     "met": true
    },
    "met": true
@@ -1626,25 +1818,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011527855526043991,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011527855526043991
    },
    "suite": {
-    "worstM": 0.0006210265527818337,
     "atHour": 12,
-    "steps": 416,
+    "sampleCount": 24,
+    "worstM": 0.0006199202725840838,
+    "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016587439625466343,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.001663838987364198,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0017054722140787838,
     "atHour": 24,
-    "steps": 8598,
+    "sampleCount": 24,
+    "worstM": 0.0017015230213897974,
+    "steps": 8596,
     "met": true
    },
    "met": true
@@ -1658,25 +1854,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.02506065018965757,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.02506065018965757
    },
    "suite": {
-    "worstM": 0.014198724267010524,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.014385209397770661,
     "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.015311573428084391,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.01530617514355067,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.01535369499590266,
     "atHour": 24,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.015351178612610893,
+    "steps": 8598,
     "met": true
    },
    "met": true
@@ -1690,25 +1890,29 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.03604361922286142,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.03604361922286142
    },
    "suite": {
-    "worstM": 0.026144225833178415,
     "atHour": 24,
-    "steps": 430,
+    "sampleCount": 24,
+    "worstM": 0.026110505546262014,
+    "steps": 429,
     "met": true
    },
    "steps30": {
-    "worstM": 0.027052292676260355,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.02705631997958088,
     "steps": 2896,
     "met": true
    },
    "finest": {
-    "worstM": 0.027147940140668844,
     "atHour": 24,
-    "steps": 8605,
+    "sampleCount": 24,
+    "worstM": 0.02711991184406914,
+    "steps": 8606,
     "met": true
    },
    "met": true
@@ -1722,25 +1926,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.01151204195900844,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011512041959008438
    },
    "suite": {
-    "worstM": 0.0006463225123499611,
     "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.000632248927782983,
     "steps": 416,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016507356110427311,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016567433920711945,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0016741017977958338,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.001664787880084931,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -1754,25 +1962,29 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.025005485826431265,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.02500548582643126
    },
    "suite": {
-    "worstM": 0.01397225322238789,
     "atHour": 24,
-    "steps": 416,
+    "sampleCount": 24,
+    "worstM": 0.014232792695674257,
+    "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.01528246149808773,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.01529007833916384,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.015300589798344357,
     "atHour": 24,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.015302867631012802,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -1786,24 +1998,28 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.038839809912609255,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.03883980991260926
    },
    "suite": {
-    "worstM": 0.028313226436290757,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.02857690048777804,
     "steps": 429,
     "met": true
    },
    "steps30": {
-    "worstM": 0.02952996024219133,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.02954463331037022,
     "steps": 2896,
     "met": true
    },
    "finest": {
-    "worstM": 0.029600856166493366,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.029616641790036306,
     "steps": 8602,
     "met": true
    },
@@ -1881,7 +2097,7 @@
   }
  ],
  "protocol": {
-  "source": "Stored NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; all historical scores retained.",
+  "source": "Pinned NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; HPOP scores refreshed from the shipped WASM using C++ reductions.",
   "units": "maximum 3D position difference, metres; STM relative column difference, dimensionless",
   "frame": "GCRF; EME2000 for explicitly marked EME2000 cases",
   "epoch": "2026-08-02T00:00:00Z",
@@ -1916,7 +2132,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380"
+   "sha256": "b824525d6df6c4ef57b64f79defa7390b482ff28baf92941b2154f7de06071d7"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -1924,15 +2140,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+   "sha256": "235aec1dc05b16a515fe939dc027ce85d6257f4188f4b2acee7068eb265da39e"
   },
   {
    "path": "../../../package.json",
-   "sha256": "70593d6ba44980fcaef96f94de08c34d68c2641876e1bdf36ae1db62f89afd29"
+   "sha256": "45601a67b53643d98c642aea072ed25306fabfe222a66c16d9f5200249a51e59"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",
@@ -1963,7 +2179,7 @@
   "sourceIdentity": [
    {
     "path": "evidence.mjs",
-    "sha256": "7207f41f8fd2022ab8e317231cb04f312456d1c4f267c96fce077ae3d9b2b74f"
+    "sha256": "0f12f310b635e266623238cfac8500021b4a57f02bb13f8c1275a666a7820098"
    },
    {
     "path": "gmat-metrics.cpp",
@@ -1975,11 +2191,11 @@
    },
    {
     "path": "update-summary.mjs",
-    "sha256": "90c1d0e6243f6cbac6fddd0481549128e5e226c830e93f319303392aaa8eef88"
+    "sha256": "221333801e5135b6628d6805f98c307ce54dd625e022b4e664cf8392c32b3a88"
    },
    {
     "path": "score-gmat.mjs",
-    "sha256": "4a4cfeafa9b09639cb4cf26007cfc20d54e109dbdf76eb3212d3cc11fc597c22"
+    "sha256": "0725cd2159c2be8d77b0529c22ba7ec6167ed7a2193abaefbdbcbb8c6ef750b3"
    },
    {
     "path": "anomalous-oxygen.mjs",
@@ -1996,6 +2212,14 @@
    {
     "path": "../nyx/scoring.mjs",
     "sha256": "793c80f35e009b3a1ddfa0e381f7de7a4e8ce3824c0ea7e122fc6035b37c3f94"
+   },
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "c44c9e3526b5070454f13be7a518d08204b60f591183807d8d0e701d521b1563"
+   },
+   {
+    "path": "../tudat/scoring.mjs",
+    "sha256": "7ad13027948d774ea67fe400048e802458a4f7f7985a9467649ade6e1fe69e0c"
    },
    {
     "path": "../../lib/orekitCases.mjs",
@@ -2034,7 +2258,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380",
+   "sha256": "b824525d6df6c4ef57b64f79defa7390b482ff28baf92941b2154f7de06071d7",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {

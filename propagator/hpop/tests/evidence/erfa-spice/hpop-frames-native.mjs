@@ -34,16 +34,16 @@ export async function buildHpopFrames(work, flatbuffers = DEFAULT_FLATBUFFERS) {
   const nrl = path.join(REPO, 'third_party/nrlmsise00'), hwm = path.join(REPO, 'third_party/hwm14');
   const objects = ['nrlmsise-00.c', 'nrlmsise-00_data.c'].map((c) => {
     const obj = path.join(work, `${c}.o`);
-    execFileSync('cc', ['-std=c11', '-O2', '-c', path.join(nrl, c), '-o', obj], { stdio: 'inherit' });
+    execFileSync('cc', ['-std=c11', '-O2', '-c', path.join(nrl, c), '-o', obj], { stdio: 'pipe', env: {...process.env, TMPDIR: work, TMP: work, TEMP: work} });
     return obj;
   });
   execFileSync('c++', ['-std=c++17', '-O2', ...inc.flatMap((d) => ['-I', d]), '-I', nrl, '-I', hwm, path.join(here, 'hpop_frames_native.cpp'),
     ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'atmosphere_winds', 'integrators', 'nrlmsise00', 'time_convert', 'us76', 'atmosphere_plugin']
       .map((f) => path.join(HPOP, 'lib', `${f}.cpp`)),
-    path.join(hwm, 'hwm14.cpp'), path.join(hwm, 'hwm14_data.cpp'), ...objects, erfaUnit, '-o', bin], { stdio: 'inherit' });
+    path.join(hwm, 'hwm14.cpp'), path.join(hwm, 'hwm14_data.cpp'), ...objects, erfaUnit, '-o', bin], { stdio: 'pipe', env: {...process.env, TMPDIR: work, TMP: work, TEMP: work} });
   return {
     erfaFileCount: erfa.fileCount,
-    at: (eopBin, utcs) => execFileSync(bin, [eopBin], { input: utcs.join('\n') + '\n', encoding: 'utf8', maxBuffer: 256 << 20 })
+    at: (eopBin, utcs, kernel) => execFileSync(bin, [eopBin, ...(kernel ? [kernel] : [])], { input: utcs.join('\n') + '\n', encoding: 'utf8', maxBuffer: 256 << 20 })
       .trim().split('\n').map((line) => JSON.parse(line)),
   };
 }

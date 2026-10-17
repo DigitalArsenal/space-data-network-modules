@@ -29,21 +29,28 @@ import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { explainSummary } from './explain-nyx.mjs';
-import { ALL, wasm, sha256, CASES, reference, run, buildMetrics, scoreResponse, stmDifference } from './scoring.mjs';
+import { ALL, wasm, sha256, CASES, reference, run, buildMetrics, scoreResponse, stmDifference, parametersOf } from './scoring.mjs';
+import { buildMetrics as buildPresentation } from '../orekit/scoring.mjs';
+import { readCache, scoreStored } from '../tudat/scoring.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: o, positionals } = parseArgs({ options: {
   'msis-published': { type: 'string' }, fine: { type: 'string' }, 'naif-bpc': { type: 'string' },
   stm: { type: 'string' }, out: { type: 'string' }, settings: { type: 'string', default: 'suite,steps30,finest' }, only: { type: 'string' },
+  cache: { type: 'string' },
 }, allowPositionals: true });
 const nyxFile = positionals[0];
 if (!nyxFile) throw new Error('usage: score-nyx.mjs <nyx.json> [--stm <nyx-stm.json>] [--out summary.json]');
 const NYX = JSON.parse(fs.readFileSync(nyxFile, 'utf8'));
 const STM = o.stm ? JSON.parse(fs.readFileSync(o.stm, 'utf8')) : null;
+const cache=o.cache?readCache(path.resolve(o.cache)):null;
 const TOL = CASES.protocol.tolerancesM.default;
 const work = fs.mkdtempSync(path.join(here, '.score-work-'));
 process.on('exit', () => fs.rmSync(work, { recursive: true, force: true }));
 const metrics = buildMetrics(work);
+const presentationWork=path.join(work,'presentation');fs.mkdirSync(presentationWork);
+const presentation=buildPresentation(presentationWork);
+const maximum=values=>presentation({mode:'maximum',values});
 const variants = Object.fromEntries(['msis-published', 'fine', 'naif-bpc'].filter((key) => o[key]).map((key) => [key, JSON.parse(fs.readFileSync(o[key], 'utf8'))]));
 const diagnostics = Object.fromEntries(Object.entries(variants).map(([key, doc]) => [key, { file: path.resolve(o[key]), sha256: sha256(o[key]), tool: doc.tool, settings: doc.settings, cases: [] }]));
 const worstOf = (positions, samples) => metrics({ mode: 'positions', positions, scale: 1, samples });
@@ -70,23 +77,29 @@ for (const g of cases) {
     return { variant, r };
   });
   for (const s of SETTINGS) {
-    const response = await run(g, s);
-    row[s.id] = scoreResponse(response, g, metrics);
+    const cached=cache?.cases.find(c=>c.id===g.id)?.[s.id];
+    const response = cached ? null : await run(g, s);
+    const score=reference=>cached?scoreStored(cached,reference,metrics):scoreResponse(response,reference,metrics);
+    row[s.id] = score(g);
     row[s.id].met = row[s.id].worstM <= row.toleranceM;
-    for (const { variant, r } of comparisons) { r[s.id] = scoreResponse(response, variant, metrics); r[s.id].met = r[s.id].worstM <= row.toleranceM; }
+    for (const { variant, r } of comparisons) { r[s.id] = score(variant); r[s.id].met = r[s.id].worstM <= row.toleranceM; }
   }
   row.met = row[SETTINGS[0].id].met;
   const ns = STM?.cases.find((x) => x.id === g.id);
-  if (ns) row.stm = stmDifference(await run(g, ALL[0], true), g, ns.stm, metrics);
+  if (ns) {
+    const cached=cache?.cases.find(c=>c.id===g.id)?.suiteStm;
+    row.stm=cached&&JSON.stringify(cached.parameterColumns)===JSON.stringify(parametersOf(g))
+      ?metrics({mode:'stm',samples:cached.samples,reference:ns.stm,parameters:parametersOf(g)})
+      :stmDifference(await run(g, ALL[0], true), g, ns.stm, metrics);
+  }
   results.push(row);
   console.error(`${g.id}: ${SETTINGS.map((s) => `${s.id} ${row[s.id].worstM.toExponential(3)} m`).join(', ')}; Orekit-Nyx ${orekit.worstM.toExponential(3)} m${row.stm ? `; STM ${row.stm.worst.toExponential(2)}` : ''}`);
 }
 
-const mm = (m) => (m * 1000 < 10 ? (m * 1000).toFixed(2) : (m * 1000).toFixed(1));
-const fmt = (m) => (m === undefined ? '-' : m < 0.01 ? `${mm(m)} mm` : m < 1 ? `${(m * 100).toFixed(m < 0.1 ? 1 : 0)} cm` : `${m.toFixed(2)} m`);
+const fmt = m => m === undefined ? '-' : presentation({mode:'format-xval',value:m});
 const maxOf = (rows, key) => {
   const values = rows.map((r) => (key === 'orekit' ? r.orekitMinusNyx.worstM : r[key].worstM));
-  return values.length ? Math.max(...values) : undefined;
+  return values.length ? maximum(values) : undefined;
 };
 console.log(`HPOP against Nyx ${NYX.tool.nyxSpace} (ANISE ${NYX.tool.anise}), ${NYX.settings.integrator} at ${NYX.settings.tolerance}, steps <= ${NYX.settings.maxStepS} s, ${NYX.settings.earthOrientation}; ${results.length} cases.\n`);
 console.log(`| Force set | Cases | ${SETTINGS.map((s) => s.label).join(' | ')} | Orekit 13.1 - Nyx |`);
@@ -120,11 +133,11 @@ for (const r of results) {
 const stms = results.filter((r) => r.stm);
 if (stms.length) {
   console.log();
-  console.log(`STM, largest relative column difference (suite request): ${Math.max(...stms.map((r) => r.stm.worst)).toExponential(2)} over ${stms.length} cases`);
-  for (const [name, key] of ROWS) { const rows = stms.filter((r) => r.row === key); if (rows.length) console.log(`  ${name}: ${Math.max(...rows.map((r) => r.stm.worst)).toExponential(2)}`); }
+  console.log(`STM, largest relative column difference (suite request): ${maximum(stms.map((r) => r.stm.worst)).toExponential(2)} over ${stms.length} cases`);
+  for (const [name, key] of ROWS) { const rows = stms.filter((r) => r.row === key); if (rows.length) console.log(`  ${name}: ${maximum(rows.map((r) => r.stm.worst)).toExponential(2)}`); }
   for (const p of ['SRP_AREA_OVER_MASS', 'DRAG_AREA_OVER_MASS']) {
     const v = stms.filter((r) => r.stm.parameters?.[p] !== undefined).map((r) => r.stm.parameters[p]);
-    if (v.length) console.log(`  ${p} column: ${Math.max(...v).toExponential(2)} over ${v.length} cases`);
+    if (v.length) console.log(`  ${p} column: ${maximum(v).toExponential(2)} over ${v.length} cases`);
   }
 }
 if (NYX.skipped.length) {

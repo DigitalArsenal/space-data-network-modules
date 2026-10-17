@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.propagator.solar-system-bodies",
   "name": "Solar-system bodies",
-  "version": "0.4.1",
-  "description": "Geometric states (ICRF, m, m/s) of the Sun, planets, moons, dwarf planets and asteroids from NAIF SPK kernels (types 2 and 3); ICRF to body-fixed rotations from the text PCK (IAU WGCCRE 2015, pck00011) and, for the Moon, MOON_ME from the DE440 lunar binary PCK and frame kernel; apparent V magnitudes (Mallama & Hilton 2018 for the planets, H-G for asteroids), angular radii and phase angles; Hill radii; the sky observer's SSB state; light-time and stellar-aberration shifts so bodies are drawn where they are seen; the Galactic frame (Hipparcos) and the Sun's place in the Milky Way; planetodetic and planetocentric coordinates; the observer's position at its scale (a body's own planetographic, planetocentric and triaxial grid inside its Hill sphere, heliocentric ecliptic J2000 in au out to the heliopause, Galactic l, b and distance beyond). Kernels are unmodified NAIF files passed in by the caller. An epoch outside the loaded segments is the named failure out-of-range; there is no analytic substitute. The direct surface (ssb_*) is the resident per-frame path; evaluate is the same physics as one JSON request.",
+  "version": "0.5.0",
+  "description": "Geometric states (ICRF, m, m/s) of the Sun, planets, moons, dwarf planets and asteroids from NAIF SPK kernels (types 2 and 3); ICRF to body-fixed rotations from the text PCK (IAU WGCCRE 2015, pck00011) and, for the Moon, MOON_ME from the DE440 lunar binary PCK and frame kernel; apparent V magnitudes (Mallama & Hilton 2018 for the planets, H-G for asteroids), angular radii and phase angles; Hill radii; the sky observer's SSB state; light-time and stellar-aberration shifts so bodies are drawn where they are seen; the Galactic frame (Hipparcos) and the Sun's place in the Milky Way; body coordinate systems (planetodetic, planetocentric, planetographic, solar Stonyhurst and apparent Carrington, and lunar principal axes) and triaxial surface grid points; the observer's position at its scale (a body's own planetographic, planetocentric and triaxial grid inside its Hill sphere, heliocentric ecliptic J2000 in au out to the heliopause, Galactic l, b and distance beyond). Kernels are unmodified NAIF files passed in by the caller. An epoch outside the loaded segments is the named failure out-of-range; there is no analytic substitute. The direct surface (ssb_*) is the resident per-frame path; evaluate is the same physics as one JSON request.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -17,7 +17,7 @@
   "threadModel": "emscripten-pthreads",
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Closed-form evaluation of caller-supplied Chebyshev kernels and rotation models: a few dozen bodies per call, no host calls, no shared state across calls on the command surface, and no propagation loop to parallelise."
+    "detail": "Closed-form evaluation of caller-supplied Chebyshev kernels and rotation models: a few dozen bodies per call, no host calls, no shared state across calls on the command surface, and no propagation loop to parallelize."
   },
   "methods": [
     {
@@ -84,7 +84,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "The answer: rows per body with a status name, positions in metres, rotations row-major ICRF to body-fixed."
+                "detail": "The answer: rows per body with a status name, positions in meters, rotations row-major ICRF to body-fixed."
               }
             }
           ],

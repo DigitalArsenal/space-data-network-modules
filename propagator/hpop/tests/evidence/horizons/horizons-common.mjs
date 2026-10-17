@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
+import { composeErfaTranslationUnit } from '../../../../../foundation/frames/erfa-amalgamation.mjs';
 import { requestFor, decodeResult, encodePrw, execution, nativeInput, TYPE, makeTable, sds } from '../../lib/prwCodec.mjs';
 
 export const here = path.dirname(fileURLToPath(import.meta.url));
@@ -51,13 +52,16 @@ export function authenticateRaw() {
   return { index, files };
 }
 
-export function buildMetrics(work, flatbuffers) {
+export async function buildMetrics(work, flatbuffers) {
   const inc = flatbuffers ?? process.env.XVAL_FLATBUFFERS ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include';
   const binary = path.join(work, 'horizons-metrics');
-  const includes = [inc, path.join(hpop, 'lib'), path.join(hpop, 'src/cpp/include'), path.join(hpop, 'src/cpp/generated'), path.join(hpop, 'src/cpp/generated/sds')];
+  const erfa = await composeErfaTranslationUnit();
+  const erfaUnit = path.join(work, 'erfa-amalgamation.cpp');
+  fs.writeFileSync(erfaUnit, erfa.source);
+  const includes = [inc, path.join(hpop, 'lib'), path.join(hpop, 'src/cpp/include'), path.join(hpop, 'src/cpp/generated'), path.join(hpop, 'src/cpp/generated/sds'), path.join(repo, 'higherpop/third_party/erfa')];
   execFileSync('c++', ['-std=c++17', '-O2', ...includes.flatMap((x) => ['-I', x]), path.join(here, 'horizons-metrics.cpp'),
-    path.join(hpop, 'lib/time_convert.cpp'), '-o', binary], { cwd: work, env: { ...env, TMPDIR: work }, stdio: ['ignore', 'pipe', 'pipe'] });
-  return (input) => JSON.parse(execFileSync(binary, [], { input: JSON.stringify(input), encoding: 'utf8', cwd: work, env, maxBuffer: 16 << 20 }));
+    path.join(hpop, 'lib/time_convert.cpp'), erfaUnit, '-o', binary], { cwd: work, env: { ...env, TMPDIR: work, TMP: work, TEMP: work }, stdio: ['ignore', 'pipe', 'pipe'] });
+  return (input) => JSON.parse(execFileSync(binary, [], { input: JSON.stringify(input), encoding: 'utf8', cwd: work, env: { ...env, TMPDIR: work, TMP: work, TEMP: work }, maxBuffer: 16 << 20 }));
 }
 export function parseRaw(metrics, authenticated, name) {
   return metrics({ mode: 'parse', result: authenticated.files[name].raw.result, epochs: authenticated.index.epochsUtc });

@@ -77,7 +77,7 @@ int main(int argc,char** argv) {
     const astro::Vec3 r(7000,-1200,900);
     for(const auto& body:bodies) {
         Config config;config.includeSun=false;config.includeMoon=false;config.*(body.flag)=true;
-        const auto actual=astro::ForceModel::ThirdBody(r,2461041.5,config);
+        const auto actual=astro::ForceModel::ThirdBody(r,timesys::Instant::fromTdb(2461041.5),config);
         check(body.name,error(actual,gravity(satellite,positions.at(body.id),body.gm)));
     }
     // Place satellite between Earth and Sun: full illumination is geometric,
@@ -92,7 +92,7 @@ int main(int argc,char** argv) {
     forces.gravityMode=astro::ForceModel::GravityMode::PointMass;forces.mu=0;
     forces.useThirdBody=false;forces.useSRP=true;
     forces.srp.mass=1000;forces.srp.area=10;forces.srp.Cr=1.5;
-    const auto actual=astro::ForceModel::ComputeTotalAcceleration({double(lit[0]),double(lit[1]),double(lit[2])},{},2461041.5,forces);
+    const auto actual=astro::ForceModel::ComputeTotalAcceleration({double(lit[0]),double(lit[1]),double(lit[2])},{},timesys::Instant::fromTdb(2461041.5),forces);
     check("SRP_kernel_sun",error(actual,expected));
     if(!astro::Ephemeris::ephemerisError().empty()) throw std::runtime_error(astro::Ephemeris::ephemerisError());
     astro::Ephemeris::clearEphemerisBuffer();

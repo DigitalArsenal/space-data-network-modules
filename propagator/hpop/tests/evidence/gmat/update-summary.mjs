@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Annotate existing scores without propagating or replacing historical numbers.
+// Annotate the current scores produced by score-gmat.mjs.
 // node tests/evidence/gmat/update-summary.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,7 +25,7 @@ try {
       }
     }
     summary.protocol = {
-      source: 'Stored NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; all historical scores retained.',
+      source: 'Pinned NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; HPOP scores refreshed from the shipped WASM using C++ reductions.',
       units: 'maximum 3D position difference, metres; STM relative column difference, dimensionless',
       frame: 'GCRF; EME2000 for explicitly marked EME2000 cases', epoch: '2026-08-02T00:00:00Z', timeScale: 'UTC',
       durationS: 86400, sampleIntervalS: 3600, scoredSamples: 24,

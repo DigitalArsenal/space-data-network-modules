@@ -166,7 +166,7 @@ V extendedGravity(const V& r,const ExtendedGravityField& f,bool central=true) {
 V earthFixedGravity(const V& r,const ForceModelSet& f);
 // The field in Earth-fixed axes (CentralBodyGravity): a = R' g(R r). R is
 // constant in r, so the chain rule carries through the dual numbers.
-V centralGravity(const V& r,double jd,const ForceModelSet& f) {
+V centralGravity(const V& r,const timesys::Instant& jd,const ForceModelSet& f) {
     if(!EarthFixedField(f))return earthFixedGravity(r,f);
     double m[3][3];GcrfToEarthFixed(jd,f,m);
     const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
@@ -198,7 +198,7 @@ V thirdBodySingle(const V& r,const Vec3& body,double mu) {
     if(rr.value<1 || rb<1)return V();
     return d*(mu/(rr*rr*rr))+V(body)*(-mu/(rb*rb*rb));
 }
-V thirdBodies(const V& r,double jd,const ThirdBodyPerturbConfig& c) {
+V thirdBodies(const V& r,const timesys::Instant& jd,const ThirdBodyPerturbConfig& c) {
     V a;
     if(c.includeSun){const auto b=getSunPosition(jd);if(b.valid)a=a+thirdBodySingle(r,b.position,MU_SUN);}
     if(c.includeMoon){const auto b=getMoonPosition(jd);if(b.valid)a=a+thirdBodySingle(r,b.position,MU_MOON);}
@@ -241,10 +241,10 @@ V gnssRadiation(const V& r,const V& v,const Vec3& sunPosition,const SRPForceConf
 
 // Density at a GCRF position, in the force set's Earth-fixed axes (the same
 // axes as ForceModel::ComputeTotalAcceleration).
-double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& axes) {
+double density(const Vec3& r,const timesys::Instant& jd,const ForceModelSet& f,const EarthAxes& axes) {
     const double alt=r.magnitude()-RE_EARTH;
     const double atmosphereJD=f.explicitEpochContract
-        ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+        ? jd.utc().jd() : jd.jdTdb();
     const Vec3 fixed=axes.fixed(r);
     const SpaceWeatherData weather=WeatherAt(atmosphereJD,f);
     switch(f.dragModel){
@@ -271,7 +271,7 @@ double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& a
     }
     return 0;
 }
-V drag(const V& r,const V& v,const Vec3& position,double jd,const ForceModelSet& f,DensityGradient gradient) {
+V drag(const V& r,const V& v,const Vec3& position,const timesys::Instant& jd,const ForceModelSet& f,DensityGradient gradient) {
     const EarthAxes axes=EarthAxesAt(jd,f);
     D rho=density(position,jd,f,axes);if(rho.value<1e-20)return V();
     if(gradient==DensityGradient::FiniteDifference){
@@ -297,7 +297,7 @@ V rtn(const Vec3& dv,const V& r,const V& v) {
     return radial*dv.x+transverse*dv.y+normal*dv.z;
 }
 
-V relativity(const V& r,const V& v,double jd,const ForceModelSet& f) {
+V relativity(const V& r,const V& v,const timesys::Instant& jd,const ForceModelSet& f) {
     V a;const D radius=r.norm(),r2=radius*radius,r3=r2*radius;
     if(f.relativistic.schwarzschild){const D k=f.mu/(SPEED_OF_LIGHT*SPEED_OF_LIGHT*r3);a=a+r*((4*f.mu/radius-v.dot(v))*k)+v*(4*r.dot(v)*k);}
     // Lense-Thirring about the Earth-fixed z axis, |J| = 9.8e8 m^2/s (force_models.cpp).
@@ -309,7 +309,7 @@ V relativity(const V& r,const V& v,double jd,const ForceModelSet& f) {
 // The IERS 2010 solid tide field (force_models.cpp SolidTideField) in the
 // force set's Earth-fixed axes. Its coefficients depend on time only, so the
 // position partials are those of the degree-2..4 field.
-V solidTides(const V& r,double jd,const ForceModelSet& f) {
+V solidTides(const V& r,const timesys::Instant& jd,const ForceModelSet& f) {
     if(r.norm().value<RE_EARTH)return V();
     const EarthAxes axes=EarthAxesAt(jd,f);const ExtendedGravityField field=SolidTideField(jd,f,axes);
     const auto& m=axes.m;
@@ -321,7 +321,7 @@ V solidTides(const V& r,double jd,const ForceModelSet& f) {
 // The FES2004 ocean tide field (force_models.cpp OceanTideField) in the
 // force set's Earth-fixed axes; like the solid tides, its coefficients depend
 // on time only.
-V oceanTides(const V& r,double jd,const ForceModelSet& f) {
+V oceanTides(const V& r,const timesys::Instant& jd,const ForceModelSet& f) {
     if(r.norm().value<RE_EARTH)return V();
     const EarthAxes axes=EarthAxesAt(jd,f);ExtendedGravityField scratch;const ExtendedGravityField& field=OceanTideFieldAt(jd,f,scratch);
     const auto& m=axes.m;
@@ -332,12 +332,12 @@ V oceanTides(const V& r,double jd,const ForceModelSet& f) {
 
 // Earth radiation pressure (force_models.cpp EarthRadiation), the same
 // template through the dual numbers.
-V earthRadiation(const V& r,double jd,const ForceModelSet& f) {
+V earthRadiation(const V& r,const timesys::Instant& jd,const ForceModelSet& f) {
     const double coefficient=EarthRadiationCoefficient(f);
     const EarthRadiationConfig& c=f.earthRadiation;
     if(!(coefficient>0)||r.norm().value<=c.radiusKm)return V();
     const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;
-    const double deltaT=(timesys::tdbToTt(jd)-knocke::REFERENCE_EPOCH_JD_TT)*86400.0;
+    const double deltaT=jd.secondsSince(timesys::Instant::fromTt(knocke::REFERENCE_EPOCH_JD_TT));
     const V pressure=knocke::pressure<V,D>(r*D(1000.0),V(sun*1000.0),deltaT,c.resolutionDeg*DEG_TO_RAD,c.radiusKm*1000.0);
     return pressure*D(coefficient*1e-3);
 }
@@ -384,13 +384,13 @@ const char* ValidateParameter(DynamicParameter p,const ForceModelSet& f) {
     return "Unknown dynamic parameter.";
 }
 
-Vec3 AccelerationParameterPartial(DynamicParameter p,const Vec3& r,const Vec3& v,double jd,const ForceModelSet& f) {
+Vec3 AccelerationParameterPartial(DynamicParameter p,const Vec3& r,const Vec3& v,const timesys::Instant& jd,const ForceModelSet& f) {
     switch(p) {
         case DynamicParameter::DragAreaOverMass:
         case DynamicParameter::DragAreaOverMassRate: {
             DragForceConfig unit=f.drag;unit.Cd=unit.mass/unit.area;  // Cd*A/m = 1 m^2/kg
             const Vec3 a=DragAccelerationWith(r,v,jd,f,unit);
-            return p==DynamicParameter::DragAreaOverMass?a:a*((jd-f.dragRateEpochTdb)*86400.0);
+            return p==DynamicParameter::DragAreaOverMass?a:a*(jd.secondsSince(f.dragRateEpochTT));
         }
         case DynamicParameter::SrpAreaOverMass: {
             SRPForceConfig unit=f.srp;unit.Cr=unit.mass/unit.area;    // Cr*A/m = 1 m^2/kg
@@ -463,7 +463,7 @@ const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSe
     return nullptr;
 }
 
-AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3& velocity,double jd,ForceModelSet& f,DensityGradient gradient) {
+AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3& velocity,const timesys::Instant& jd,ForceModelSet& f,DensityGradient gradient) {
     if(const char* error=ValidateAccelerationPartials(position,f))throw std::invalid_argument(error);
     const V r=positionSeed(position),v=velocitySeed(velocity);
     V a=centralGravity(r,jd,f);

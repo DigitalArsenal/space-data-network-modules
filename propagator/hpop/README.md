@@ -11,7 +11,7 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 | `NRLMSISE00` | **Full model.** The real NRLMSISE-00 (Picone/Hedin/Drob, JGR 2002) via the public-domain Brodowski C port vendored in `third_party/nrlmsise00/`. Drag uses the gtd7d "effective mass density" (includes anomalous oxygen). Verified against the canonical 17-case output table shipped with the reference package. |
 | `USSA1976` | **Full lower-atmosphere model (0-86 km geometric).** US Standard Atmosphere 1976 with the proper geopotential-altitude layer formulation. Above 86 km it hands off to the Vallado exponential table (documented in code). |
 | `Exponential` | Piecewise-exponential model, Vallado *Fundamentals of Astrodynamics and Applications* 4th ed., Table 8-4. |
-| `JB2008` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JB2008`): Bowman et al. (AIAA 2008-6438), `lib/jb2008.h`, a port of Orekit 13.1's JB2008 equal to it to 2e-14 (`tests/atmosphere_ports.test.mjs`), driven by the `jb2008_indices` input. The resident ABI runs the same model (label 4, published since 2026-10-08) on drivers held for the arc, set by `plugin_set_jb2008_indices([F10, F10B, S10, S10B, M10, M10B, Y10, Y10B, DSTDTC], 9)`; selecting it before they are set returns `HPOP_ERR_NOT_LOADED` (`tests/jb2008_abi.test.mjs`). `ForceModel::JB2008()` and `computeJB2008()` for direct C++ callers evaluate the same model (the single-species stand-in they used to be is gone). |
+| `JB2008` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JB2008`): Bowman et al. (AIAA 2008-6438), `lib/jb2008.h`, a port of Orekit 13.1's JB2008 equal to it to 2e-14 (`tests/atmosphere_ports.test.mjs`), driven by the `jb2008_indices` input. The resident ABI runs the same model (label 4) on drivers held for the arc, set by `plugin_set_jb2008_indices([F10, F10B, S10, S10B, M10, M10B, Y10, Y10B, DSTDTC], 9)`; selecting it before they are set returns `HPOP_ERR_NOT_LOADED` (`tests/jb2008_abi.test.mjs`). `ForceModel::JB2008()` and `computeJB2008()` for direct C++ callers evaluate the same model. |
 | `JacchiaRoberts` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JACCHIA_ROBERTS`, a VCM's JACCHIA_70): Jacchia's static diffusion model as Roberts (1971) integrates it in closed form, the GTDS/GMAT "Jacchia-Roberts", with Jacchia 1971's constants (SR 332; SR 313's inflection temperature and 100 km composition differ); `lib/jacchia_roberts.h`, a port of NASA GMAT's density functions, bit for bit. Independently of GMAT, the diffusion equations integrated numerically from 90 km reproduce its closed forms to 1.6e-4, and with Jacchia's own arctangent temperature profile in place of Roberts' exponential fit agree within 4.3 % at 200 km and 2 % from 300 km (`tests/atmosphere_ports.test.mjs`). At equal exospheric temperature its density at 400-700 km is 2-3 times JB2008's. SatelliteToolbox.jl's `jr1971` example (2018-06-19 18:35 UT, 22 S 45 W, 700 km, F10.7 79/73.5, Kp 1.34) gives 9.68e-15 kg/m^3, 26 % below this port's 1.31e-14 although its exospheric temperature is 22 K higher; since the port reproduces the model's own equations, the difference is on SatelliteToolbox's side and is not pursued further. |
 | `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
 | `HarrisPriester` | Harris-Priester diurnal-bulge table (100-1000 km), with the apex taken from the Sun direction; outside the table the model declines and drag is zero. Selectable as `forces.dragModel` `HARRIS_PRIESTER` and the PRW `HARRIS_PRIESTER` family. |
@@ -35,12 +35,11 @@ R is the GCRF to Earth-fixed rotation:
   and interpolated linearly between them (within 0.02 mas of the series); the
   EOP's dX and dY, polar motion and the Earth rotation angle are evaluated at
   every call. The rotation is a function of time alone: a trajectory does not
-  depend on what the same tables served before it (until 1.3.0 the matrix was
-  held for an hour from whichever epoch refreshed it, which moved results by
-  millimetres with the order of the calls).
-- **Without it:** precession IAU 1976, nutation IAU 1980, GAST from UTC, no
-  polar motion; within 0.2 arcsec of ERFA `c2t06a`
-  (`tests/environment_conformance.cpp` section 10).
+  depend on the order in which the tables are queried.
+- **Without it:** the ERFA classical IAU 1976/1980 chain, evaluated at every
+  force call through `coords::Epoch`: TT for precession/nutation, UT1 = UTC
+  for GAST, zero polar motion and no frame bias. Its difference from a CIO
+  chain with EOP is a model/input budget, not an ERFA identity tolerance.
 
 The same axes serve the density models and the co-rotating atmosphere (below).
 
@@ -70,26 +69,13 @@ in LEO.
 
 **Clock.** Execution requests integrate on TT, with epochs held as exact
 two-part TT seconds from J2000. Request epochs may be `UTC`, `TAI`, `TT` or
-`TDB` ISO strings; UTC goes through the leap-second table. The Sun, Moon and
-planets are read at TDB; outputs report TDB epochs. Proper time on board is
+`TDB` ISO strings; UTC goes through the leap-second table. The force path carries `timesys::Instant`, a two-part TT Julian date, through
+integrator stages, Earth orientation, tides and ephemeris reads. Sun, Moon and
+planet SPK reads use seconds past J2000 formed from the two-part TDB date.
+TDB - TT retains HPOP's two-term model evaluated in seconds; it is not ERFA's
+full `eraDtdb` series. Single-double Julian dates label outputs only. Proper time on board is
 not modelled; TT is the coordinate time the IAU 2000 conventions pair with
 the TT-compatible GM.
-
-Faults fixed on 2026-10-08, found against Orekit 13.1
-(`tests/orekit_reference.test.mjs`):
-- **The recursion's columns.** The column recursion stopped at the maximum
-  order, but the acceleration reads column m+1; an order-0 field lost its x
-  and y zonal terms (290 km in a day in LEO).
-- **The tesseral y sign.** The y component's m-1 term had the wrong sign
-  (37.6 km in a day in LEO). The extended and inline evaluators now agree to
-  1e-12.
-- **`SPHERICAL_HARMONICS` without flags was the point mass.**
-- **The clock.** Epochs were single Julian-date doubles (40 microseconds) on
-  TDB with a TCG-compatible GM.
-
-Earlier, on 2026-10-02, the fields were moved from inertial to Earth-fixed
-axes and the built-in field was completed past degree 4; see
-`analysis/gp-error-model/docs/hpop-calibration-2026-08.md`.
 
 ### Drag frame and inputs
 
@@ -144,8 +130,6 @@ solar disk from the overlap of the apparent disks (Montenbruck & Gill
 eqs. 3.85-3.87; Sun radius 695 700 km, IAU 2015 B3), evaluated as two
 circular segments so that it keeps its digits (`lib/shadow.h`, shared with
 the analytic partials). It equals Orekit 13.1's lighting ratio to 6e-10.
-Until 2026-10-08 the penumbra was a linear ramp in distance from the shadow
-axis.
 
 The visible fraction has a kink at each penumbra boundary. The adaptive
 integrators (RKF45, RK78/RKF78, RKDP87, BS and the variational integrator)
@@ -157,10 +141,8 @@ do. Radiation pressure therefore needs no special step limit or tolerance:
 against Orekit, LEO with radiation pressure and drag at RK78 1e-13 and 300 s
 steps is within 2.5 cm after a day with samples and 3.1 cm for the final
 epoch alone, which is HPOP's own integration error at those steps; with
-steps of 30 s it is within 4.2 mm (Agreement with Orekit 13.1, below). Until
-2026-10-08 the boundaries were crossed without being located, and the plain
-path needed steps of 10 s or less (21 cm a day at 60 s). RK4 steps at its
-fixed size.
+steps of 30 s it is within 4.2 mm (Agreement with Orekit 13.1, below).
+RK4 steps at its fixed size.
 
 #### GNSS box-wing and ECOM2 (`lib/gnss_srp.h`)
 
@@ -360,8 +342,9 @@ interior, where the gravity field diverges. A non-finite state ends it too.
 Tests: `tests/reentry.test.mjs` (a 140 km orbit with Cd*A/m 0.02 m²/kg reenters
 about 1.4 h after its epoch; both paths report the same epoch; another object
 and the decaying one before its reentry stay preparable) and the
-`configured-reentry` group of `tests/prw-resident-parity.mjs` (byte-identical
-stops in Chrome, WasmEdge and Docker WasmEdge).
+`configured-reentry` group of `tests/prw-resident-parity.mjs`, which checks
+stop bytes across the headless browser, WasmEdge and Docker WasmEdge lanes.
+Current receipt availability is recorded under [Verification](#verification).
 
 ### VCM parity (SDS 1.240.0)
 
@@ -500,7 +483,7 @@ orientation; no Sun, Moon, drag, radiation pressure or tides), RK78
 restarted integrations. It is not full force and is never selected by
 default. Mass, coefficients and per-object gravitational parameters fail with
 `unsupported-configuration`. Its trajectories are named
-`com.orbpro.hpop@1.3.1 gravity-only`.
+`com.orbpro.hpop@1.4.0 gravity-only`.
 
 ### Covariance and process noise
 
@@ -561,7 +544,7 @@ and km/s.
   largest over the set. The method is stated once per source (the PPE
   comment) and in the prepare result's quality, not in each segment's
   record: a segment is about 0.8 KB, a day about 236 KB per object.
-  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.1`.
+  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.4.0`.
   Measured (`tests/prw_resident_configured.test.mjs`, four days, PPE
   evaluated every 61 s): within 0.31 mm of the dense output in LEO and 0.18 mm
   for Molniya (GPS and GEO under 0.1 µm); within 0.08 mm of the execution path;
@@ -638,11 +621,30 @@ STM, frame/time/ephemeris and SGP4 checks, with reproducible version and checksu
 
 ## Verification
 
-Run the full package suite:
+Run the full package suite with the provisioned Chromium headless shell:
 
 ```bash
+export SDM_CHROME_BINARY="$HOME/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+export PATH="$HOME/.wasmedge/bin:$PATH"
 npm test
 ```
+
+Browser verification uses only the Playwright headless shell with an isolated
+profile. The receipt scripts pin it through `tests/lib/headlessShell.mjs`.
+All seven receipts pass on HPOP 1.4.0, module SHA-256
+`eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629`,
+across the headless-shell browser, native WasmEdge and Docker WasmEdge lanes.
+Responses and exit classes agree byte for byte.
+
+| Receipt | Runs per lane |
+| --- | ---: |
+| [PRW](tests/evidence/lane13/prw-parity.json) | 72 |
+| [GNSS](tests/evidence/gnss-srp/prw-gnss-parity.json) | 20 |
+| [Earth radiation/tides](tests/evidence/earth-radiation-tides/prw-earth-radiation-tides-parity.json) | 24 |
+| [Variational](tests/evidence/lane13/variational-parity.json) | 40 |
+| [Finite burn](tests/evidence/lane13/finite-burn-parity.json) | 180 |
+| [Kernel](tests/evidence/lane13/kernel-parity.json) | 24 |
+| [Resident](tests/evidence/lane13/resident-stateful-parity.json) | 33 requests per runtime |
 
 That covers:
 
@@ -651,8 +653,8 @@ That covers:
   `tests/prw_resident.test.mjs` (gravity-only profile)
 - The configured profile against the execution path, its PPE interpolation
   and its refusals in `tests/prw_resident_configured.test.mjs`;
-  `tests/prw-resident-parity.mjs` is its tri-runtime receipt (Chrome, native
-  WasmEdge, container WasmEdge, byte for byte)
+  `tests/prw-resident-parity.mjs` checks byte agreement across Chromium
+  headless shell, native WasmEdge and container WasmEdge
 - HPOP against Orekit 13.1 in `tests/orekit_reference.test.mjs`: five
   orbits (LEO 400 km, SSO 700 km, GPS, GEO, Molniya) by ten force sets
   (point mass; J2; zonal 20; 20x20; with Sun and Moon, radiation pressure and
@@ -683,10 +685,6 @@ SOLFSMY/DTCFILE rows as `PRWJB2008Indices`. The checked-in JSON is what the
 test reads; nothing in the suite regenerates it (`OrekitReference.java ...
 [only]` regenerates a subset for development).
 
-The Tudat-derived regressions (`tests/tudat_wasm_derived.test.mjs`) were
-removed on 2026-10-08. Their high-fidelity case allowed 60 km, and their
-vectors came from a port in this organization rather than a public authority.
-
 ### Agreement with Orekit 13.1
 
 `npm run orekit:summary` (`tests/orekit-summary.mjs`) scores the shipped
@@ -695,55 +693,20 @@ module against the 72 cases at three integrator settings and writes
 tolerance of 1e-13 (the point-mass cases at 1e-15) and the steps the table
 names; Orekit with Dormand-Prince 8(5,3) at a relative tolerance of 1e-14 and
 steps of at most 10 s.
-For propagator/hpop 1.3.0, module SHA-256
-`9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3`, the largest
-3D difference over 24 h, hourly samples, all five orbits:
+The [current summary](tests/evidence/orekit/summary.json) pins HPOP 1.4.0,
+module SHA-256 `eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629`,
+and records every case at all three settings. All 72 published suite limits
+are met. The [generated comparison table](docs/cross-validation.md#reference-suite-on-72-cases)
+reports current maxima by orbit and force class.
 
-| Force set | Steps of at most 300 s (the suite's request) | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |
-| --- | ---: | ---: | ---: |
-| Point mass | 0.58 mm | 0.59 mm | 0.57 mm |
-| Field, third bodies, radiation pressure, tides, relativity, thrust | 1.9 cm | 9.87 mm | 9.84 mm |
-| With drag | 2.5 cm | 4.18 mm | 4.05 mm |
-| All 72 cases | 2.5 cm | 9.87 mm | 9.84 mm |
-
-By orbit:
-
-| Orbit | Steps of at most 300 s | Steps of at most 30 s | 30 s, Orekit without its sub-daily corrections | HPOP's own integration error at 300 s |
-| --- | ---: | ---: | ---: | ---: |
-| LEO 400 km | 2.5 cm | 4.18 mm | 3.88 mm | 2.6 cm |
-| SSO 700 km | 1.7 cm | 1.67 mm | 0.78 mm | 1.6 cm |
-| GPS | 0.20 mm | 0.22 mm | 0.16 mm | 0.03 mm |
-| GEO | 0.07 mm | 0.07 mm | 0.06 mm | 0.00 mm |
-| Molniya | 1.1 cm | 9.87 mm | 0.59 mm | 1.31 mm |
-
-- **Integration.** At the suite's request HPOP's own integration error is
-  most of the difference in LEO. The sampled path controls its steps on the
-  six-state error, and at 1e-13 that leaves 1.8 cm over the day in LEO 400 km
-  (2.6 cm in the JB2008 drag case) and 1.6 cm at 700 km. The last column is
-  HPOP's trajectory at the suite's request against its own at tolerance 1e-15
-  with steps of at most 10 s. Steps of 30 s, a tolerance of 1e-15, or a
-  tolerance of 1e-13 with steps of 10 s each leave 1.1 mm for J2 alone in LEO
-  400 km, and the finest setting moves no row of the second column by more
-  than 0.2 mm.
-- **Earth orientation.** The reference frame is ITRF with IERS 2010's tidal
-  and libration corrections to polar motion and UT1
-  (`getITRF(IERS_2010, false)`); HPOP interpolates the daily IERS rows
-  (`EarthRotation`). With steps of 30 s that is most of what remains: 9.87 mm
-  in Molniya against 0.59 mm for Orekit generated without the corrections
-  (`-Dorekit.simpleEOP=true`, `tests/fixtures/orekit/SOURCES.md`), and 1.67 mm
-  at 700 km against 0.78 mm. Over all 72 cases that Orekit leaves 1.11 mm for
-  the field, third bodies, radiation pressure, tides, relativity and thrust,
-  and 3.88 mm with drag (`tests/evidence/orekit/summary-simple-eop.json`, from
-  `node tests/orekit-summary.mjs <out.json> --reference <that Orekit file>`).
-
-Earlier builds read these cases differently: 9.1 mm for J2 in LEO 400 km on
-the 1.1.0 builds and 24.3 mm on the 1.2.0 release, against 18.1 mm now. From
-1.2.0 the sampled path controls its steps on the six-state error and takes
-fewer, larger steps. Before 1.3.0 the celestial-to-intermediate and
-polar-motion matrices were held for up to an hour of TT, which left 7 mm in
-LEO 400 km with converged steps; 1.3.0 interpolates the CIP coordinates
-between whole hours and evaluates polar motion at every call, as a function of
-time alone, and leaves 1.1 mm.
+The sampled path controls its adaptive steps on the six-state error.
+Integration settings account for much of the suite-setting difference in
+LEO. Earth-orientation conventions contribute a separate spread: the
+trajectory reference uses ITRF with IERS 2010 tidal and libration corrections
+(`getITRF(IERS_2010, false)`), while HPOP interpolates the supplied daily
+IERS rows. The [frame and clock evidence](docs/cross-validation.md#erfa-orekit-and-spice-classical-frames-and-the-force-clock)
+separates these model choices from implementation accuracy and reports the
+additional before/after trajectory caps.
 
 ### Agreement with GMAT R2026a
 
@@ -762,36 +725,52 @@ in `docs/cross-validation.md`):
 The drag rows are the anomalous oxygen GMAT's NRLMSISE-00 leaves out of its
 total density (`gtd7`; HPOP and Orekit use `gtd7d`): 0.005 % of the density at
 400 km and 2.0-2.5 % at 700 km, 2.3 m and 7.9 m over the day; GMAT with its
-Cd scaled by that share is within 3.3 cm and 12 cm
+Cd scaled by that share is within 42.207 mm and 109.950 mm at the suite setting
 (`tests/evidence/gmat/anomalous-oxygen.json`). GMAT's 6x6 STM agrees with
 HPOP's to 4.6e-10 (field, Sun, Moon in LEO) and 2.6e-5 where GMAT leaves terms
 out of its variational equations (shadow function, relativity, thrust).
 
-### Agreement with ERFA and SPICE
+### Classical frame contract and independent evidence
 
-`tests/evidence/erfa-spice/run-erfa-spice.mjs` checks the clock, Earth
-orientation, TEME axes and Sun and Moon reads at the 50 hourly sample epochs
-of the reference cases against pyerfa 2.0.1.5 (ERFA 2.0.1) and SpiceyPy 8.3.0
-(CSPICE N0067) (`tests/evidence/erfa-spice/summary-erfa-spice.json`; method,
-checksums and findings in `docs/cross-validation.md`):
+`lib/coords` uses ERFA 2.0.1 for IAU 1976 precession and the full IAU 1980
+nutation series. GCRF/J2000 are aliases in this classical API (no frame bias);
+MOD, TOD and FK5 TEME follow `eraPmat76`, `eraPnm80` and
+`R3(eraEqeq94) * eraPnm80`. ECEF/ITRF/PEF use the equinox chain
+`R3(eraGst94) * eraPnm80`; the general API has zero polar motion.
+The compatibility `gcrfToItrf` helper accepts xp/yp and applies `eraPom00`
+with zero TIO locator.
 
-| Quantity | Reference | Largest difference |
-| --- | --- | ---: |
-| TAI - UTC, TT from UTC | ERFA, SPICE | 0 s, 5.6 ps |
-| GCRF to ITRF (`EarthRotation`) at HPOP's own instant | ERFA IERS 2010 CIO chain | 0.48 µas |
-| The same at the UTC epoch | ERFA | 0.214 mas (7.0 mm at LEO radius): the force model's TDB date in one double |
-| GCRF to ITRF | SPICE ITRF93 high-precision kernel | 8.90 mas (ERFA - SPICE 8.86 mas: the kernel's own EOP series and model) |
-| Tides' GMST at HPOP's UT1 and TT | ERFA `eraGmst06` | 0.00 mas |
-| Sun and Moon from DE440 at HPOP's TDB date | SPICE, same file | 30 µm, 15 nm |
-| TDB - TT | ERFA `eraDtdb` | 32.0 µs (two-term formula, and a difference of Julian dates in 40.2 µs steps) |
-| `lib/coords` IAU 1976 precession, IAU 1980 nutation | ERFA `eraPmat76`, `eraNutm80` | 206 mas, 49.1 mas |
+Every public single-double date is **UTC JD**, split exactly before ERFA's
+UTC → TAI → TT conversion. The explicit `coords::Epoch` overload accepts
+TT and UT1 as separate two-part dates. Without EOP, UT1 = UTC; omitted DUT1
+can reach 0.9 s (13.5 arcsec, about 2.8 km at GEO). This API also omits polar
+motion, frame bias and the modern 2006/2000A model. Use the force model's EOP
+CIO chain when those are required. Invalid frames/dates return all-NaN
+matrices/states, and every valid frame pair is supported.
 
-The last row is two defects in `lib/coords` (the T0 terms of the IAU 1976
-angles multiplied by T, and mispaired rows of the nutation table). They reach
-`coords::transform`/`getTransformMatrix` (the plugin's TEME and ECEF entity
-states, 7.0 m at LEO radius) and the no-EOP fallback
-`ForceModel::GcrfToEarthFixed(jd)`; the PRW path and the reference cases use
-`EarthRotation` and are unaffected.
+Velocity follows `v_to = M v_from + Mdot r_from`. The retained derivative is
+Earth rotation about the true pole (TOD/PEF/ECEF z), with the analytic
+GMST82 rate. Precession/nutation/equinox rates are neglected, including for
+inertial-to-inertial transforms: roughly 2e-11 rad/s times radius, about
+0.14 mm/s at LEO and 0.8 mm/s at GEO. The full-chain ±1 s central-difference
+diagnostic in the E2E measures the actual residual; these scales are
+approximate, not strict maxima.
+
+The offline evidence is in `tests/evidence/erfa-spice/`:
+
+- `check-classical-frames.mjs`: 10,000 epochs spanning 1990–2040, every valid
+  frame pair, six state directions, native versus independently evaluated
+  pyerfa, plus shipped WASM ECEF exports.
+- `check-erfa-spice.mjs`: fresh source-built force/frame evaluations at the
+  50 case epochs against pinned independent ERFA/SPICE matrices and DE440
+  states; all numerical reductions run in C++.
+- `run-orekit-frames.mjs`: Orekit 13.1 classical frames and IERS 2010 ITRF,
+  with its IERS 1996 series and cubic-versus-linear EOP spreads reported.
+
+[Cross-validation](docs/cross-validation.md) gives measured agreement,
+limits, source hashes and before/after values. The SPICE ITRF93 comparison
+retains its measured reference-spread miss; it does not define the case EOP
+or the IERS 2010 CIO chain.
 
 ## License
 
@@ -807,8 +786,8 @@ kernel byte count; an optional `SOURCE_SHA256` is verified. No kernel is embedde
 in the module or opened through a guest filesystem. The module reads Chebyshev
 coefficients directly from input bytes. The instance keeps the last verified
 kernel: the same kernel again (same SHA-256 and length, identical bytes) is
-compared byte for byte instead of hashed (125 ms per call for DE440s, 32.7 MB,
-before; 17 ms with the comparison). A resident instance keeps the kernel of its
+compared byte for byte instead of hashed (17 ms per comparison for DE440s,
+32.7 MB). A resident instance keeps the kernel of its
 `ingest_state` until the next ingest.
 
 For body states, send this JSON on the existing `request` port:
@@ -842,25 +821,13 @@ its own `ingest_state`; a new kernel needs a new generation.
 For native library callers, `Ephemeris::loadEphemerisBuffer(bytes, size, source)`
 attaches a borrowed view until `clearEphemerisBuffer()`. An optional DE430/440/441
 source label is supplied by the caller; both `BodyState` and `EphemerisState`
-report their source. `loadEphemerisFile` now returns false instead of claiming a
-file was loaded and returning analytic results. Unsupported INPOP/EPM named
+report their source. `loadEphemerisFile` returns false. Unsupported INPOP/EPM named
 providers likewise return invalid states.
 
 The pinned downloader, CSPICE/Horizons sources, validation tolerances, and 2026
 analytic error comparison are documented in
 [`docs/de440-validation.md`](../../docs/de440-validation.md). Invoke and parity
 examples are in `tests/kernel_invoke.test.mjs` and `tests/kernel-parity.mjs`.
-
-### Build status of this lane
-
-The existing HPOP CMake/Emscripten build is retained for diagnostic validation;
-`-ffast-math` was removed so malformed-input finite checks keep their meaning.
-Migration to the SDK compiler is still required before claiming this HPOP
-artifact meets the SDK build law. The current SDK accepts one translation unit
-and generates its own invoke bridge, while HPOP uses multiple translation units
-and a legacy native bridge/browser ABI. SDK compliance also rejects pre-existing
-legacy request/response types with missing canonical file identifiers. This lane
-does not invent replacements for those unratified contracts.
 
 ## Analytical state transition matrix (TMPL lane 03)
 
@@ -957,20 +924,14 @@ attitude-dependent SRP other than the cannonball and the GNSS box-wing, and
 atmosphere winds (the solid and ocean tides, Earth radiation, the GNSS
 box-wing and ECOM2 have analytic partials). Select the finite-difference path for
 those legacy forces. Mass-aware finite burns use the seven-state path below.
-Cd/Cr are configurable force inputs;
-there is no existing parameter-sensitivity matrix plumbing, and this lane does
-not add Cd/Cr sensitivity columns.
+Cd/Cr are configurable force inputs; the legacy six-state JSON operation
+does not return Cd/Cr sensitivity columns.
 
 The legacy working-state exports `plugin_compute_stm` and
-`plugin_propagate_covariance` now default to analytic propagation.
+`plugin_propagate_covariance` default to analytic propagation.
 `plugin_set_stm_method(method, densityGradient)` selects 0=analytic/neglected,
 1=finite-difference for each respective argument. These working-state methods
 have no entity burn list; scheduled burn STM jumps are on the invoke surface.
-
-**SDK acceptance remains blocked by pre-existing legacy manifest identities.**
-The committed artifact is a diagnostic build using the existing local-emSDK
-CMake path. It does not meet the SDK-build/publication gate. See the lane 03
-handoff for the exact preflight, compliance and tri-runtime results.
 
 ## Finite burns with propagated mass (TMPL lane 04)
 
@@ -1113,5 +1074,3 @@ Existing `DENSITY_GRADIENT` choices remain available.
   Existing `maneuvers` can be combined with finite burns; the impulse STM jump extends
   to 7×7 and leaves mass unchanged.
 
-This lane retains the diagnostic build and existing SDK manifest limitations
-described above; the new controls do not change the SDK acceptance status.

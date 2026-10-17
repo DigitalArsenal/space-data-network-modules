@@ -22,8 +22,8 @@ namespace shadow {
 
 class BoundaryEvents {
 public:
-    // epoch: JD TDB at t = 0 of the loop's clock; y0: the state at t0.
-    BoundaryEvents(const ForceModel::ForceModelSet& forces, double epoch, double t0, const double* y0)
+    // epoch: two-part TT at t = 0 of the loop's clock; y0: the state at t0.
+    BoundaryEvents(const ForceModel::ForceModelSet& forces, const timesys::Instant& epoch, double t0, const double* y0)
         : forces_(&forces), epoch_(epoch),
           active_(forces.useSRP && forces.srp.shadowModel != ShadowModelType::None) {
         if (active_) values(t0, y0, g0_);
@@ -68,7 +68,7 @@ private:
     // outside the penumbra and outside the umbra respectively.
     void values(double t, const double* y, double g[2]) const {
         const Vec3 r(y[0], y[1], y[2]);
-        const Vec3 s = forces_->sunPositionProvided ? forces_->sunPosition : getSunPosition(epoch_ + t / 86400.0).position;
+        const Vec3 s = forces_->sunPositionProvided ? forces_->sunPosition : getSunPosition(epoch_.plusSeconds(t)).position;
         const Vec3 d = s - r;
         const double a = std::asin(std::min(1.0, SUN_RADIUS_KM / d.magnitude()));
         const double b = std::asin(std::min(1.0, RE_EARTH / r.magnitude()));
@@ -78,7 +78,7 @@ private:
     }
 
     const ForceModel::ForceModelSet* forces_;
-    double epoch_;
+    timesys::Instant epoch_;
     bool active_;
     double g0_[2] = {1, 1};
     double natural_ = 0;

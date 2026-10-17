@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
+import { useHeadlessShell } from './lib/headlessShell.mjs';
 import { REFERENCE, requestInputs } from './lib/orekitCases.mjs';
 
 const hex = (list) => list.map(({ payload, ...rest }) => ({ ...rest, payloadHex: Buffer.from(payload).toString('hex') }));
@@ -22,6 +23,7 @@ const cases = REFERENCE.cases
   .filter((c) => !c.forces.startsWith('O2'))
   .map((c) => ({ id: `${c.orbit}-${c.forces}`, request: { methodId: 'invoke', inputs: hex(requestInputs(tenMinutes(c))) } }));
 const plan = await normalizeParityFixture({ name: 'propagator/hpop PRW Earth radiation and ocean tides', threadCounts: [1, 2, 4, 8], cases });
+useHeadlessShell();  // the browser lane: Chromium headless shell only
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 300000, log: console.log });
 console.log(formatParityReport(report));
 fs.mkdirSync(new URL('./evidence/earth-radiation-tides/', import.meta.url), { recursive: true });

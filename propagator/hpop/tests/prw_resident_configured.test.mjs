@@ -117,7 +117,7 @@ test('exported PPE interpolates the dense output and the execution path within 1
   assert.equal(sources.length, OBJECTS.length);
   for (const o of OBJECTS) {
     const source = sources.find((s) => s.SOURCE_HANDLE === o.handle), ppe = source.EPHEMERIS;
-    assert.equal(ppe.EPHEMERIS_SOURCE, 'com.orbpro.hpop@1.3.1');
+    assert.equal(ppe.EPHEMERIS_SOURCE, 'com.orbpro.hpop@1.4.0');
     assert.equal(ppe.TIME_SYSTEM, sds.timingStandard.TT);
     assert.equal(source.SEGMENT_QUALITY.length, ppe.POSITION_RECORDS.length);
     let reported = 0, samples = 0;
