@@ -3,8 +3,9 @@
 A public C++ WASM module using the sibling analysis modules' SDK build, manifest,
 SDS PCE parameter contracts, and `dist/isomorphic/module.wasm` layout. One binary
 uses real WASI pthreads and shared linear memory. JavaScript only handles SDS
-messages, byte views, and E2E IO. This is an implementation with outstanding
-acceptance failures, not a validated replacement for the console renderer.
+messages, byte views, and E2E IO. The run-four literature model has an explicit
+limited production claim in [tests/ORACLES.md](tests/ORACLES.md), with central
+and anticenter width gaps tracked separately from renderer integration.
 The host must provide at least three worker slots; the E2E provisions four.
 
 Build and run the **one E2E** from this directory:
@@ -66,7 +67,7 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `extinction` | `points`: packed xyz | `a_g`, `e_bp_rp`, magnitudes |
 | `sample_stars` | `bounds`: min xyz/max xyz; `seed`, `candidates`, `completeness`, `tier_limit_g`, optional `display_limit_g` | `stars`, `count`, `stride=7`, `label=model`, `pickable=0` |
 | `oracle_metrics` | `flux_image`, `density_image`: [arena offset, width, height, 4] | Correlations, widths, Rift ratios, global log-affine display fit and residuals |
-| `calibrate` | `flux_image` descriptor, after bake | Fit one dust multiplier on a 2-degree grid, update resident extinction, report every candidate and residual |
+| `calibrate` | retired method ID | Explicit error; Gaia dust fitting cannot mutate the literature bake |
 | `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`, `parallax_errors` (mas); independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS and chi-square, propagated perpendicular errors, diagnostic baked-ridge distances |
 
 Global volume: 256 × 256 × 32 over [-16,16] × [-16,16] × [-3,3] kpc.
@@ -119,25 +120,26 @@ display maps: the fitted log slope/intercept cannot establish absolute Gaia
 fluxes or source counts. The final E2E records all residuals and failures in
 `dist/calibration-fit.json`. No measured image or catalog data is bundled.
 
-The compiled relative dust coefficient remains the inherited run-two value
-0.06788225099390856 kpc^-1, obtained from Gaia display-map fitting. **It is not
-independent physical evidence and remains unaccepted.** Run three performs no
-new dust calibration; the callable historical `calibrate` method is retained
-for compatibility but the E2E never calls it. The log-affine display conversion
-is still part of the unchanged measurement procedure, not a dust fit.
+Run four selects the complete Drimmel & Spergel 2001 disk, separate arm dust
+and local segment (hypothesis e), with the published COBE/DIRBE normalization
+and Reid arm centers. The former Gaia-fitted dust coefficient is removed from
+production and retained only in historical native diagnostics. The `calibrate`
+method explicitly fails; log-affine display conversion in the oracle statistics
+does not change the baked physical model.
 
-The run-three decision replaces the per-arm 1.5-width RMS rule with
-`mean(d_perp^2 / (w_int^2 + sigma_perp^2)) <= 2`. C++ propagates Table 1
-parallax uncertainties to perpendicular distances to the published spirals.
-Coverage endpoints do not truncate those fitted curves. Raw RMS, finite
-rendering-segment RMS, and all nine named exclusions remain visible.
+The E2E gates flux r >=0.84, density r >=0.75, l=90/270 FWHM errors <=25%,
+the Rift dip, exact Reid Table 2 curves, and uncertainty-aware per-arm
+chi-square <=2 except the reported 3-kpc arm. It reports all four widths and
+all arm statistics. l=0/180 widths remain known gaps assigned to
+`milky-way-local-3d-dust-20261017`, whose targets are <=25% and flux r >=0.85.
+Raw RMS, finite rendering-segment RMS and all nine named exclusions remain
+visible; no extra clipping or uncertainty inflation is applied.
 
 The seventeen fixed native configurations and the requested five-hypothesis
-before/after table are in [tests/HYPOTHESES.md](tests/HYPOTHESES.md). These are
-independent experiments, not additional tests or a successful production fit.
-No failed alternative was promoted into the bake. The volume contract, renderer,
-and UI remain unchanged. Remaining work is an independently constrained optical
-luminosity/dust model and resolution of the retained 3-kpc maser discrepancy.
+before/after table are historical evidence in [tests/HYPOTHESES.md](tests/HYPOTHESES.md).
+The typed volume contract is unchanged and uses released SDS PCE; it does not
+require the pending RFM amendment. Renderer/shader consumption, cutoff removal,
+console settings and credits remain with the Claude lane.
 
 Edenhofer's optional grid is not accepted because its offline license and SDN
 publication are unverified. Retrieval/publication, catalog octree construction,

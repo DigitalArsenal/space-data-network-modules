@@ -1,10 +1,11 @@
 #pragma once
 #include "reid_arms.hpp"
+#include "drimmel_dust.hpp"
 
 namespace milky_way {
 
 // Values not directly constrained by cited work below are declared here as
-// ILLUSTRATIVE MODEL choices, pending the Gaia oracle calibration. They must not
+// ILLUSTRATIVE MODEL choices. They must not
 // be described as measured luminosities, extinction coefficients, or a fit.
 namespace model_choices {
 inline constexpr double inner_arm_radius_kpc=1.5,outer_radius_kpc=16.0;
@@ -18,13 +19,6 @@ inline constexpr double bar_taper_start_kpc=4.5;
 // Wegg & Gerhard 2013 orientation and Wegg et al. 2015 bar extent.
 inline constexpr double bar_angle_rad=27.0*galactic_constants::radians_per_degree;
 inline constexpr double bar_half_length_kpc=5.0;
-inline constexpr double dust_radial_kpc=3.0,dust_height_kpc=0.134;
-// Offline WASM log-display fit on 5,400 Gaia flux rays: 0.15 *
-// 0.4525483399593904 = 0.06788225099390856 kpc^-1. Compile the fitted
-// coefficient so acceptance measures a fresh production bake. This relative
-// display-map normalization is NOT an absolute extinction measurement, and
-// does not resolve the remaining latitude/Rift failures (tests/PHYSICS.md).
-inline constexpr double dust_solar_per_kpc=0.06788225099390856,arm_dust_multiplier=8.0;
 inline constexpr double bp_old=0.65,rp_old=1.20,bp_young=1.15,rp_young=0.85;
 // BP and RP extinction ratios are a constant illustrative approximation; real
 // Gaia passband extinction depends on stellar color and extinction itself.
@@ -95,14 +89,9 @@ inline Field literature(Vec3 p) {
   const double planar_arms=planar_arm_density(p);
   const auto c=stellar_components(p,planar_arms);
   const double old=c.thin+c.thick+c.bulge+c.bar;
-  // Drimmel & Spergel (2001), ApJ 556,181, doi:10.1086/321556 motivates a
-  // dust disc + spiral arms + local segment. This implementation rides Reid's
-  // arms (including Local), not Drimmel's fitted geometry. Every numerical
-  // dust normalization/scale here is explicitly an uncalibrated model choice.
-  const double radius=std::hypot(p.x,p.y);
-  const double dust=dust_solar_per_kpc*std::exp((galactic_constants::solar_radius_kpc-radius)/dust_radial_kpc
-      -std::abs(p.z)/dust_height_kpc)*(1+arm_dust_multiplier*planar_arms)
-      *(1-smoothstep(outer_taper_start_kpc,outer_radius_kpc,radius));
+  // Run-four production choice: published disk, separate arm dust and local
+  // segment (run-three hypothesis e), with no Gaia-fitted normalization.
+  const double dust=drimmel2001::dust(p);
   return {old+c.arms,bp_old*old+bp_young*c.arms,rp_old*old+rp_young*c.arms,dust};
 }
 

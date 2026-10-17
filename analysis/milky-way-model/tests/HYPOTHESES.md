@@ -1,5 +1,9 @@
 # Run-three hypothesis evidence
 
+Historical run-three record. Run four promotes hypothesis (e) with the explicit
+limited production claim and known gaps in [ORACLES.md](ORACLES.md). The results
+and former acceptance failures below are preserved without retrospective edits.
+
 The final browser E2E passes 59/63 checks: l=180/270 FWHM, the Rift, and the
 3-kpc arm chi-square fail. No configuration passes the fixed Gaia requirements. This is a physical-model
 investigation, not approval to land. The production bake is unchanged. It still

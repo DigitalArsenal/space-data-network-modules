@@ -9,7 +9,6 @@
 namespace milky_way {
 std::unique_ptr<Volume> detail;
 std::vector<float> last_sky,last_flux;
-double active_dust_coefficient=model_choices::dust_solar_per_kpc;
 bool finite_vector(const std::vector<double>& values) {
   return std::all_of(values.begin(),values.end(),[](double v){return std::isfinite(v);});
 }
@@ -30,7 +29,6 @@ extern "C" int bake() {
   if (!request.ok) return wire::fail("Expected one $PCE request");
   if (!request.values.empty()) return wire::fail("No optional dust grids accepted: Edenhofer license and SDN provenance are unverified");
   volumes=std::make_unique<NestedVolumes>(sun); volumes->bake(literature);legacy_active=false;
-  active_dust_coefficient=model_choices::dust_solar_per_kpc;
   // SplitMix64 seed 20261016; periodic texture samples, dimensionless model
   // noise. No inference of observed dust structure from this procedural tile.
   detail=std::make_unique<Volume>(32,32,32,Vec3{0,0,0},Vec3{1,1,1});
@@ -40,7 +38,7 @@ extern "C" int bake() {
   volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
   r.text("channels","G,BP,RP relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
-  r.text("calibration","literature geometry; compiled relative Gaia display-map dust fit; morphology acceptance incomplete");
+  r.text("calibration","Drimmel & Spergel 2001 disk, separate arm dust and local segment; independent of Gaia; l=0/180 widths remain known gaps");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");return r.emit();
 }
 
@@ -109,24 +107,9 @@ extern "C" int oracle_metrics() {
 }
 
 extern "C" int calibrate() {
-  using namespace milky_way;
-  wire::Request request;const Image flux=read_image(request.vector("flux_image"));
-  if (!request.ok || !model_ready() || !flux.rgba) return wire::fail("Bake model, then supply a valid flux oracle arena descriptor");
-  const auto fit=calibrate_dust(*volumes,flux);
-  if (!fit.valid) return wire::fail("Dust calibration has insufficient valid samples");
-  for (Volume* v:{&volumes->global,&volumes->local})
-    for (size_t i=3;i<v->rgba.size();i+=4) v->rgba[i]=to_half(float(from_half(v->rgba[i])*fit.factor));
-  wire::Result r;r.number("dust_factor",fit.factor);r.number("boundary_hit",fit.boundary_hit);
-  r.number("training_samples",fit.training_samples);
-  r.number("base_dust_coefficient",active_dust_coefficient,"kpc^-1");
-  active_dust_coefficient*=fit.factor;
-  r.number("fitted_dust_coefficient",active_dust_coefficient,"kpc^-1");
-  r.vector("candidate_factors",fit.factors);r.vector("candidate_correlations",fit.correlations);
-  r.vector("candidate_log_residuals",fit.residuals);r.vector("candidate_fit_slopes",fit.fit_slopes);
-  r.vector("candidate_fit_intercepts",fit.fit_intercepts);
-  r.text("objective","maximize positive log flux-display correlation on a 2-degree training grid; no FWHM or threshold fitting");
-  r.text("scope","one relative dust normalization; all emission geometry unchanged; display-map fit, not absolute extinction calibration");
-  return r.emit();
+  // Keep the method ID so old callers receive an explicit failure; the run-four
+  // production model must never mutate its dust using the acceptance oracle.
+  return milky_way::wire::fail("Gaia dust calibration retired by run-four decision; use literature bake");
 }
 
 extern "C" int ridge_metrics() {

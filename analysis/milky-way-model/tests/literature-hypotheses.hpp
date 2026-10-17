@@ -2,7 +2,7 @@
 #include "../src/literature_model.hpp"
 #include "../src/drimmel_dust.hpp"
 
-// Independent run-three experiments, deliberately absent from the WASM build.
+// Historical run-three experiments; shared published dust equations now ship.
 // No parameter search and no Gaia-derived replacement coefficients. Unchanged
 // baseline quantities retain their original limitations; see HYPOTHESES.md.
 namespace milky_way::hypotheses {
@@ -46,6 +46,15 @@ inline double dust(Vec3 p,unsigned variant) {
   return drimmel2001::dust(p,variant,variant==1?planar_arm_density(p):0);
 }
 
+// Preserve the rejected run-three baseline ONLY in these native diagnostics.
+// This Gaia-fitted coefficient is never included in the production WASM build.
+inline double run_three_dust(Vec3 p) {
+  const double radius=std::hypot(p.x,p.y);
+  return 0.06788225099390856*std::exp((galactic_constants::solar_radius_kpc-radius)/3.0
+    -std::abs(p.z)/0.134)*(1+8.0*planar_arm_density(p))
+    *(1-smoothstep(14.0,16.0,radius));
+}
+
 inline Field sample(Vec3 p,const Case& h) {
   const double r=std::hypot(p.x,p.y);
   Vec3 shifted=p;
@@ -83,7 +92,7 @@ inline Field sample(Vec3 p,const Case& h) {
   const double arms=model_choices::arm_emissivity*planar_arm_density(p)
     *std::exp(-std::abs(shifted.z)/model_choices::young_scale_height_kpc)*selected_taper;
   const double old=thin+thick+central.bulge+central.bar;
-  const double kappa=h.dust?dust(shifted,h.dust):literature(shifted).kappa;
+  const double kappa=h.dust?dust(shifted,h.dust):run_three_dust(shifted);
   return {old+arms,model_choices::bp_old*old+model_choices::bp_young*arms,
     model_choices::rp_old*old+model_choices::rp_young*arms,kappa};
 }

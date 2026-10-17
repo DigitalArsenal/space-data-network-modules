@@ -27,12 +27,33 @@ exits nonzero, and the report identifies the fallback. `--node-diagnostic`
 repeats that diagnostic path explicitly after a blocked browser attempt;
 `--legacy-only` exercises the refactor stage before the literature model.
 
-The sky comparison uses the task thresholds: log-intensity Pearson r ≥ 0.85
-for flux and ≥ 0.75 for density over |b| ≤ 30 degrees; latitude FWHM relative
-error ≤ 0.25 at l = 0, 90, 180, 270 degrees; a Great Rift dip. Those tolerances
-are visual model acceptance targets, not Gaia measurement uncertainties. The
-static Galactic geometry uses the module's documented J2000 Galactic frame
-and solar position; no epoch propagation is applied to integrated sky maps.
+## Run-four production claim (2026-10-17)
+
+Production configuration is hypothesis (e): the Drimmel & Spergel 2001 disk,
+separate arm dust and a local segment, independently fitted to COBE/DIRBE.
+The inherited Gaia-calibrated normalization is removed from production. The
+historical `calibrate` method now returns an explicit error without mutation.
+The following claim is verbatim from the coordinator's run-four decision:
+
+- Gaia flux r >= 0.84 and density r >= 0.75 over |b| <= 30;
+- latitude FWHM within 25% at l=90 and l=270;
+- Great Rift ratio < 1 (a dip);
+- Reid arm ridges exactly equal to Table 2 (implementation);
+- per-arm maser chi2_nu <= 2 for every arm except the 3-kpc arm, whose chi2_nu is reported, not gated.
+  The 3-kpc arm is inside the bar region, where a log-spiral is Reid's weakest description; our curve equals the published one exactly, so that scatter is the data against Reid's curve, not our implementation.
+- l=0 and l=180 FWHM are REPORTED with their errors (28.6%, about 70%), not gated, and are listed in ORACLES.md as a known gap with the follow-up task id below.
+
+Follow-up: **milky-way-local-3d-dust-20261017**, filed by the coordinator. A
+licensed published local 3D dust map (Edenhofer 2024 or Lallement 2022), delivered
+over SDN and baked in C++, targets l=0/180 FWHM <=25% and flux r >=0.85.
+Those targets are not claimed here. All four widths, their errors, and all seven
+arm chi-square values remain in the E2E report, including ungated failures.
+
+The run-four decision explicitly changes the former 0.85 flux/all-four-width
+and all-seven-arm gates. It does not change sampling, projection, masks,
+display conversion, or source exclusions. These are visual model acceptance
+targets, not Gaia measurement uncertainties. The geometry is the documented
+static J2000 Galactic frame and Sun; integrated maps have no epoch propagation.
 
 ## Run-two acceptance decision (historical; superseded below)
 
@@ -90,7 +111,7 @@ not evidence for changing the curve or inventing two more exclusions.
 Run three authorizes an uncertainty-aware replacement, implemented below.
 The finite-segment RMS values above remain available as diagnostics.
 
-## Run-three acceptance decision (2026-10-17)
+## Run-three acceptance decision (historical; run-four exception above)
 
 The authorized criterion is per-arm mean `d_perp^2/(w_int^2+sigma_perp^2) <= 2`.
 The implementation consumes each Table 1 parallax error (mas). For the projected
@@ -123,11 +144,16 @@ G010.62-00.33 and G012.02-00.03 contribute chi-square terms 11.1546 and 16.9923
 respectively. Changing the endpoint treatment cannot make this arm pass; no
 extra exclusion or uncertainty inflation is authorized.
 
-## Production calibration
+## Production dust and display conversion
 
-The inherited relative dust coefficient is 0.06788225099390856 kpc^-1 from the
-previous 5,400-ray fit. It is not independent of the Gaia acceptance map and is
-not presented as independently validated physics. Run three invokes no dust
-calibration before or after acceptance. The historical callable method remains
-for compatibility. All new hypothesis parameters come from independent published
-values, with their approximations and failures in [HYPOTHESES.md](HYPOTHESES.md).
+The production dust implementation is `src/drimmel_dust.hpp`, shared with the
+fixed literature experiments. It preserves hypothesis (e), including its
+published normalization, independent disk/arm/local profiles and Reid-center
+adaptation. It applies no no-taper, warp, flare or stellar-population trial.
+The rejected Gaia-fitted scalar survives only in native historical diagnostics.
+The log-affine display conversion remains a measurement operation and never
+changes physical dust values. Relative emissivities, the bulge proxy, passband
+approximations and the illustrative luminosity function remain model limits.
+
+Run-three sources, approximations and failures are in
+[HYPOTHESES.md](HYPOTHESES.md); they are historical evidence, not current gates.

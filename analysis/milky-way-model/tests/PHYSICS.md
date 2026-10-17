@@ -1,6 +1,9 @@
 # Physical diagnosis
 
-Run three supersedes the run-two acceptance status below. See
+Run four supersedes the historical acceptance status below; the production
+dust is now hypothesis (e), with known l=0/180 width gaps and a reported 3-kpc
+arm exception. See [ORACLES.md](ORACLES.md) for the exact current claim and
+`milky-way-local-3d-dust-20261017` for the follow-up. See
 [HYPOTHESES.md](HYPOTHESES.md) for all five required audits, seventeen measured
 configurations, the uncertainty-aware maser result, and remaining physics gaps.
 The production emission model and volume contract are unchanged.
