@@ -1,0 +1,189 @@
+{
+  "pluginId": "com.digitalarsenal.maneuver.star-search",
+  "name": "Star Interplanetary Broad Search",
+  "version": "0.2.0",
+  "description": "Ballistic Star grid search: Lambert arcs patched by approximate powered flybys, followed by time-bin filtering. DSM, null and resonant legs are rejected. Typed SLP/OEM inputs; signed PSS output with a separate PCE model and budget report. Signed execution targets WasmEdge because SDK 0.9.8 restricts wallet_sign to server runtimes.",
+  "pluginFamily": "maneuver",
+  "capabilities": [
+    "wallet_sign"
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "attribution": {
+    "upstream": "https://github.com/UzTak/star-search",
+    "upstreamCommit": "5c667064e8fc5816a94fc1124906997560fd6c55",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 Yuji Takubo",
+    "licenseFile": "vendor/star-search/LICENSE",
+    "provenanceFile": "vendor/star-search/PROVENANCE.md",
+    "relationship": "port",
+    "algorithmOrigin": "The Star algorithm is originally due to Damon Landau. The vendored upstream is an independent open re-implementation; this module is a C++ port of that re-implementation.",
+    "algorithmCitations": [
+      "Landau, D., Campagnola, S., & Pellegrini, E. (2022). Star searches for patched-conic trajectories. The Journal of the Astronautical Sciences, 69(6), 1613-1648. https://doi.org/10.1007/s40295-022-00350-y",
+      "Landau, D. (2018). Efficient maneuver placement for automated trajectory design. Journal of Guidance, Control, and Dynamics, 41(7), 1531-1541.",
+      "Arora, N., & Russell, R. P. (2013). A fast and robust multiple revolution Lambert algorithm using a cosine transformation. AAS/AIAA Astrodynamics Specialist Conference, AAS 13-728, Hilton Head, SC."
+    ]
+  },
+  "threading": {
+    "model": "wasi-threads",
+    "parallelism": "row-range over Lambert batch solves and leg/flyby database construction",
+    "determinism": "Output is bit-identical at every thread count: fixed row-range partitioning, preallocated output slots (never completion-order append), fixed-index-order reductions.",
+    "spawnFailurePolicy": "wasi.thread-spawn may return -1 (browser lane without cross-origin isolation). The inline single-threaded fallback is mandatory and produces identical output.",
+    "threadCountSource": "explicit parameter / environment \u2014 never hardware-concurrency detection in guest code (no SDK discovery hook exists)"
+  },
+  "methods": [
+    {
+      "methodId": "search_trajectories",
+      "displayName": "Search Patched-Conic Trajectories",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-body-ephemeris",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM/main.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Sun-centered ECLIPJ2000/TDB OEM states; up to eight-point Lagrange interpolation inside coverage, no extrapolation."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Planetary ephemeris with explicit NAIF body identifiers and source MESSAGE_ID."
+        },
+        {
+          "portId": "problem",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-problem-definition",
+              "allowedTypes": [
+                {
+                  "schemaName": "SLP.fbs",
+                  "fileIdentifier": "$SLP",
+                  "rootTypeName": "SLP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Ratified solver/search problem definition carrying variables, bounds, objectives, constraints, solver settings, and generic evaluator and propagator port identifiers."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Search problem definition."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "solutions",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-pareto-solution-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "PSS.fbs",
+                  "fileIdentifier": "$PSS",
+                  "rootTypeName": "PSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Ratified multi-solution container with objective vectors, feasibility, constraint violations, dominance ranks, verify-by-propagation residuals, and module provenance."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Pareto-optimal trajectory set carried by the ratified signed $PSS record."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-report",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Run ballistic encounter, leg, flyby and combination search with deterministic time-bin filtering. Emit a requested page in native order; no global optimum or Pareto-front claim."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM/main.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SLP.fbs",
+      "fileIdentifier": "$SLP",
+      "rootTypeName": "SLP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PSS.fbs",
+      "fileIdentifier": "$PSS",
+      "rootTypeName": "PSS",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "star-search-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

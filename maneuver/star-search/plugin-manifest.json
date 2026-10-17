@@ -1,13 +1,20 @@
 {
   "pluginId": "com.digitalarsenal.maneuver.star-search",
   "name": "Star Interplanetary Broad Search",
-  "version": "0.1.0",
-  "description": "Patched-conic interplanetary mission design by the Star broad-search algorithm (Landau, Campagnola & Pellegrini 2022): pre-generated Arora-Russell Lambert arcs across a discretized encounter grid, patched by powered flybys, with primer-vector mid-arc deep-space-maneuver placement, returning a Pareto set of trajectories. C++ port of the MIT Python reference UzTak/star-search. Threaded (isomorphic wasi-threads); planetary ephemeris is supplied as data on a typed $OEM port, never fetched.",
+  "version": "0.2.0",
+  "description": "Ballistic Star grid search: Lambert arcs patched by approximate powered flybys, followed by time-bin filtering. DSM, null and resonant legs are rejected. Typed SLP/OEM inputs; signed PSS output with a separate PCE model and budget report. Signed execution targets WasmEdge because SDK 0.9.8 restricts wallet_sign to server runtimes.",
   "pluginFamily": "maneuver",
-  "capabilities": [],
+  "capabilities": [
+    "wallet_sign"
+  ],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
   "attribution": {
     "upstream": "https://github.com/UzTak/star-search",
     "upstreamCommit": "5c667064e8fc5816a94fc1124906997560fd6c55",
@@ -28,7 +35,7 @@
     "parallelism": "row-range over Lambert batch solves and leg/flyby database construction",
     "determinism": "Output is bit-identical at every thread count: fixed row-range partitioning, preallocated output slots (never completion-order append), fixed-index-order reductions.",
     "spawnFailurePolicy": "wasi.thread-spawn may return -1 (browser lane without cross-origin isolation). The inline single-threaded fallback is mandatory and produces identical output.",
-    "threadCountSource": "explicit parameter / environment — never hardware-concurrency detection in guest code (no SDK discovery hook exists)"
+    "threadCountSource": "explicit parameter / environment \u2014 never hardware-concurrency detection in guest code (no SDK discovery hook exists)"
   },
   "methods": [
     {
@@ -46,22 +53,15 @@
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM",
                   "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "OEM/main.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM",
-                  "wireFormat": "aligned-binary",
-                  "requiredAlignment": 8
                 }
               ],
-              "description": "Planetary body states covering the encounter epoch grid: one EPHEMERIS_DATA_BLOCK per body, CENTER_NAME = SUN, REFERENCE_FRAME = ECLIPJ2000. Themis-ruled carrier (2026-07-29). The module never fetches ephemeris; SPICE kernels are a host/app concern."
+              "description": "Sun-centered ECLIPJ2000/TDB OEM states; up to eight-point Lagrange interpolation inside coverage, no extrapolation."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Required planetary ephemeris table. Sampled on the encounter grid, lookups are exact and no interpolation is used."
+          "description": "Planetary ephemeris with explicit NAIF body identifiers and source MESSAGE_ID."
         },
         {
           "portId": "problem",
@@ -83,6 +83,25 @@
           "maxStreams": 1,
           "required": true,
           "description": "Search problem definition."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
         }
       ],
       "outputPorts": [
@@ -106,11 +125,30 @@
           "maxStreams": 1,
           "required": false,
           "description": "Pareto-optimal trajectory set carried by the ratified signed $PSS record."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-report",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Runs the full EncounterDB -> LegDatabase -> FlybyDB -> streaming combo fold -> tfilter pipeline and returns the Pareto-filtered trajectory set."
+      "description": "Run ballistic encounter, leg, flyby and combination search with deterministic time-bin filtering. Emit a requested page in native order; no global optimum or Pareto-front claim."
     }
   ],
   "schemasUsed": [
@@ -131,6 +169,12 @@
       "fileIdentifier": "$PSS",
       "rootTypeName": "PSS",
       "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
@@ -138,7 +182,7 @@
       "artifactId": "star-search-isomorphic",
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
-      "target": "browser,wasmedge"
+      "target": "wasmedge"
     }
   ],
   "abiVersion": 1

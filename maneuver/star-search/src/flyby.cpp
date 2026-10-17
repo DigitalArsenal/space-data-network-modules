@@ -23,7 +23,7 @@ struct PairResult {
     double dv_km_s;
 };
 
-const EncounterRow* find_encounter(const EncounterDB& encounters, std::int64_t IE) {
+const EncounterRow* find_flyby_encounter(const EncounterDB& encounters, std::int64_t IE) {
     std::size_t low = 0U;
     std::size_t high = encounters.rows.size();
     while (low < high) {
@@ -78,7 +78,7 @@ std::size_t lower_ie(const Buffer<LegIndexRef>& index, std::int64_t IE) {
     return low;
 }
 
-struct WorkerContext {
+struct FlybyWorkerContext {
     const Problem* problem;
     const EncounterDB* encounters;
     const LegDB* incoming;
@@ -89,7 +89,7 @@ struct WorkerContext {
 };
 
 void evaluate_range(std::size_t begin, std::size_t end, void* raw) {
-    WorkerContext* context = static_cast<WorkerContext*>(raw);
+    FlybyWorkerContext* context = static_cast<FlybyWorkerContext*>(raw);
     constexpr double eps = 1e-12;
     const FlybyStageConfig& config = context->problem->flybys[context->stage];
     for (std::size_t task_row = begin; task_row < end; ++task_row) {
@@ -99,8 +99,8 @@ void evaluate_range(std::size_t begin, std::size_t end, void* raw) {
         const LegRow& incoming = context->incoming->rows[task.incoming_row];
         const LegRow& outgoing = context->outgoing->rows[task.outgoing_row];
         const EncounterRow& encounter = context->encounters->rows[task.encounter_row];
-        const EncounterRow* departure = find_encounter(*context->encounters, incoming.ID);
-        const EncounterRow* arrival = find_encounter(*context->encounters, outgoing.IA);
+        const EncounterRow* departure = find_flyby_encounter(*context->encounters, incoming.ID);
+        const EncounterRow* arrival = find_flyby_encounter(*context->encounters, outgoing.IA);
         if (departure == nullptr || arrival == nullptr) {
             continue;
         }
@@ -170,7 +170,7 @@ Status process_pairs(
     if (status != Status::Ok) {
         return status;
     }
-    WorkerContext context{
+    FlybyWorkerContext context{
         &problem,
         &encounters,
         &incoming,
