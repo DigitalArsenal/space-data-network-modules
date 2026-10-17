@@ -3,6 +3,8 @@
 #include "statistical_stars.hpp"
 #include "oracle_metrics.hpp"
 #include "ridge_metrics.hpp"
+#include "reid_acceptance.hpp"
+#include "component_diagnostics.hpp"
 
 namespace milky_way {
 std::unique_ptr<Volume> detail;
@@ -38,7 +40,7 @@ extern "C" int bake() {
   volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
   r.text("channels","G,BP,RP relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
-  r.text("calibration","literature geometry; illustrative luminosity and dust coefficients; oracle fit required");
+  r.text("calibration","literature geometry; compiled relative Gaia display-map dust fit; morphology acceptance incomplete");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");return r.emit();
 }
 
@@ -98,6 +100,10 @@ extern "C" int oracle_metrics() {
   r.vector("fwhm_flux",{m.fwhm_flux.begin(),m.fwhm_flux.end()},"deg");
   r.vector("fwhm_relative_errors",{m.fwhm_relative_errors.begin(),m.fwhm_relative_errors.end()});
   r.vector("sky_layout",{double(reinterpret_cast<uintptr_t>(last_sky.data())),double(last_sky.size()*4),720,360,1,1,4},"byte-layout");
+  const auto components=component_diagnostics(m.fit_scale);
+  r.vector("component_peaks",components.peaks,"relative G intensity");
+  r.vector("component_fwhm",components.widths,"deg");
+  r.text("component_order","l=0,90,180,270; thin,thick,arms,bulge,bar,total,total without dust");
   r.text("fit_kind","log display-luminance affine fit; no photometric or morphology calibration");
   return r.emit();
 }
@@ -128,6 +134,14 @@ extern "C" int ridge_metrics() {
   wire::Request request;const auto m=request.vector("masers");
   if (!request.ok || !model_ready() || m.empty() || m.size()%4 || m.size()>40000 || !finite_vector(m))
     return wire::fail("Expected finite [Galactic longitude deg,latitude deg,parallax mas,arm family] records");
+  const auto segments=request.vector("maser_segments"),excluded=request.vector("maser_excluded");
+  const auto published=request.vector("published_arms");
+  if (segments.size()!=m.size()/4 || excluded.size()!=segments.size() || published.size()!=49
+      || !finite_vector(segments) || !finite_vector(excluded) || !finite_vector(published))
+    return wire::fail("Expected Table 2 oracle rows, exact segment assignments and explicit exclusion mask");
+  for (size_t i=0;i<segments.size();++i)
+    if (segments[i]<0 || segments[i]>=7 || std::floor(segments[i])!=segments[i]
+        || (excluded[i]!=0 && excluded[i]!=1)) return wire::fail("Invalid oracle segment or exclusion mask");
   double maximum=0,squared=0,analytic_max=0,analytic_squared=0;
   size_t within=0,missing=0;std::vector<double> residuals,analytic_residuals;
   for (size_t i=0;i<m.size();i+=4) {
@@ -152,6 +166,12 @@ extern "C" int ridge_metrics() {
   r.number("within_fraction",within/count);r.vector("residuals",residuals,"kpc");
   r.number("analytic_max",analytic_max,"kpc");r.number("analytic_rms",std::sqrt(analytic_squared/count),"kpc");
   r.vector("analytic_residuals",analytic_residuals,"kpc");
+  const auto acceptance=reid_acceptance(m,segments,excluded,published);
+  r.vector("curve_max_errors",acceptance.curve_errors,"kpc");
+  r.vector("arm_counts",acceptance.counts);r.vector("arm_rms",acceptance.rms,"kpc");
+  r.vector("arm_rms_limits",acceptance.limits,"kpc");
+  r.vector("paper_frame_residuals",acceptance.residuals,"kpc");
+  r.number("paper_exclusions",acceptance.excluded);
   r.text("measurement","local associated peak of baked G minus independently interpolated smooth background; unresolved peaks are failures");
   return r.emit();
 }

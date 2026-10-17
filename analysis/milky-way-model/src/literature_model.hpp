@@ -19,10 +19,12 @@ inline constexpr double bar_taper_start_kpc=4.5;
 inline constexpr double bar_angle_rad=27.0*galactic_constants::radians_per_degree;
 inline constexpr double bar_half_length_kpc=5.0;
 inline constexpr double dust_radial_kpc=3.0,dust_height_kpc=0.134;
-// Uncalibrated model normalization. Offline WASM calibration records its
-// multiplier and full residuals in the ignored dist/calibration-fit.json.
-// A runtime bake uses this coefficient, not the test-only oracle fit.
-inline constexpr double dust_solar_per_kpc=0.15,arm_dust_multiplier=8.0;
+// Offline WASM log-display fit on 5,400 Gaia flux rays: 0.15 *
+// 0.4525483399593904 = 0.06788225099390856 kpc^-1. Compile the fitted
+// coefficient so acceptance measures a fresh production bake. This relative
+// display-map normalization is NOT an absolute extinction measurement, and
+// does not resolve the remaining latitude/Rift failures (tests/PHYSICS.md).
+inline constexpr double dust_solar_per_kpc=0.06788225099390856,arm_dust_multiplier=8.0;
 inline constexpr double bp_old=0.65,rp_old=1.20,bp_young=1.15,rp_young=0.85;
 // BP and RP extinction ratios are a constant illustrative approximation; real
 // Gaia passband extinction depends on stellar color and extinction itself.

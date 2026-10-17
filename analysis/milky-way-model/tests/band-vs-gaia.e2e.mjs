@@ -15,6 +15,7 @@ const worktree = path.resolve(packageDir, '../..');
 const buildDir = path.join(packageDir, '.build');
 const legacyOnly = process.argv.includes('--legacy-only');
 const sources = JSON.parse(fs.readFileSync(new URL('./oracle-sources.json', import.meta.url)));
+const reidOracle = JSON.parse(fs.readFileSync(new URL('./reid2019-oracle.json', import.meta.url)));
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'plugin-manifest.json')));
 const wasmPath = path.join(packageDir, 'dist/isomorphic/module.wasm');
@@ -57,7 +58,8 @@ function parseMasers(bytes) {
     const arm = fields[13];
     if (!name || arms[arm] === undefined) { excluded[arm] = (excluded[arm] ?? 0) + 1; continue; }
     records.push({name: fields[1], longitude: Number(name[1]), latitude: Number(name[2]),
-      parallax: Number(fields[5]), parallaxError: Number(fields[6]), arm: arms[arm], armCode: arm});
+      parallax: Number(fields[5]), parallaxError: Number(fields[6]), arm: arms[arm], armCode: arm, segment: arm === 'Out' ? 6 : arms[arm],
+      exclusion: reidOracle.exclusions.find(item => item.catalogName === fields[1]) ?? null});
   }
   assert(records.length > 100, 'Published Reid table must contain the complete modeled-arm sample.');
   return {records, excluded};
@@ -67,7 +69,7 @@ const compliance = await validateArtifactWithStandards({manifest, wasmPath,
   standardsRoot: path.dirname(require.resolve('spacedatastandards.org/package.json'))});
 assert.equal(compliance.ok, true, JSON.stringify(compliance.issues));
 console.log('PASS SDK manifest, SDS ports, canonical invoke ABI and artifact compliance');
-const planObject = {legacyOnly, maps: sources.maps, masers};
+const planObject = {legacyOnly, maps: sources.maps, masers, reidOracle};
 async function nodeFallback(reason) {
   const summary = /MachPort.*Permission denied/s.test(reason)
     ? 'macOS sandbox denies Chromium Mach-port startup; Node WASM diagnostic follows'
@@ -181,7 +183,8 @@ if (report.skyPng) {
   delete report.skyPng;
 }
 report.oracleSources = legacyOnly ? null : sources;
-report.maserExclusions = masers?.excluded;
+report.maserExclusions = masers?.records.filter(record => record.exclusion).map(record => record.exclusion);
+report.unmodeledArmCodes = masers?.excluded;
 fs.writeFileSync(path.join(buildDir, legacyOnly ? 'legacy-e2e-report.json' : 'band-vs-gaia-report.json'), JSON.stringify(report, null, 2) + '\n');
 if (!legacyOnly) fs.writeFileSync(path.join(packageDir, 'dist/calibration-fit.json'), JSON.stringify(report, null, 2) + '\n');
 for (const line of report.lines ?? []) console.log(line);

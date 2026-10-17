@@ -1,0 +1,134 @@
+{
+  "source": "https://arxiv.org/html/1910.03357#S3",
+  "table": 2,
+  "columns": [
+    "beta_min_deg",
+    "beta_max_deg",
+    "beta_kink_deg",
+    "R_kink_kpc",
+    "pitch_before_deg",
+    "pitch_after_deg",
+    "width_kpc"
+  ],
+  "armNames": [
+    "3-kpc(N)",
+    "Norma",
+    "Scutum-Centaurus",
+    "Sagittarius-Carina",
+    "Local",
+    "Perseus",
+    "Outer"
+  ],
+  "rows": [
+    [
+      15,
+      18,
+      15,
+      3.52,
+      -4.2,
+      -4.2,
+      0.18
+    ],
+    [
+      5,
+      54,
+      18,
+      4.46,
+      -1,
+      19.5,
+      0.14
+    ],
+    [
+      0,
+      104,
+      23,
+      4.91,
+      14.1,
+      12.1,
+      0.23
+    ],
+    [
+      2,
+      97,
+      24,
+      6.04,
+      17.1,
+      1,
+      0.27
+    ],
+    [
+      -8,
+      34,
+      9,
+      8.26,
+      11.4,
+      11.4,
+      0.31
+    ],
+    [
+      -23,
+      115,
+      40,
+      8.87,
+      10.3,
+      8.7,
+      0.35
+    ],
+    [
+      -16,
+      71,
+      18,
+      12.24,
+      3,
+      9.4,
+      0.65
+    ]
+  ],
+  "exclusions": [
+    {
+      "catalogName": "G001.14-00.12",
+      "section": "III.2.1",
+      "reason": "Paper prose G001.15-0.12; Table 1 and VizieR G001.14-00.12"
+    },
+    {
+      "catalogName": "G030.22-00.18",
+      "section": "III.2.2",
+      "reason": "Paper prose G030.22-0.17; Table 1 and VizieR G030.22-00.18"
+    },
+    {
+      "catalogName": "G030.41-00.23",
+      "section": "III.2.2",
+      "reason": "Named spur/proper-motion exclusion"
+    },
+    {
+      "catalogName": "G030.74-00.04",
+      "section": "III.2.2",
+      "reason": "Named spur/proper-motion exclusion"
+    },
+    {
+      "catalogName": "G030.81-00.05",
+      "section": "III.2.2",
+      "reason": "Named spur/proper-motion exclusion"
+    },
+    {
+      "catalogName": "G030.97-00.14",
+      "section": "III.2.2",
+      "reason": "Named spur/proper-motion exclusion"
+    },
+    {
+      "catalogName": "G031.41+00.30",
+      "section": "III.2.2",
+      "reason": "Named spur/proper-motion exclusion"
+    },
+    {
+      "catalogName": "G032.74-00.07",
+      "section": "III.2.3",
+      "reason": "Named outlier exclusion"
+    },
+    {
+      "catalogName": "G033.64-00.22",
+      "section": "III.2.3",
+      "reason": "Named outlier exclusion"
+    }
+  ]
+}

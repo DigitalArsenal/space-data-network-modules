@@ -34,10 +34,67 @@ are visual model acceptance targets, not Gaia measurement uncertainties. The
 static Galactic geometry uses the module's documented J2000 Galactic frame
 and solar position; no epoch propagation is applied to integrated sky maps.
 
-The published Reid Table 1 values are parsed without generating golden outputs.
-All sources assigned to the implemented arm families are included, with excluded
-arm codes recorded. Parallax inversion and arm distances occur in C++. The
-strict 0.3 kpc maximum requirement is evaluated as written; published intrinsic
-arm widths and measurement scatter may violate it. Outliers are not removed to
-obtain a passing result. Failed acceptance metrics remain failures in the E2E
-and are preserved in `.build/band-vs-gaia-report.json`.
+## Run-two acceptance decision (2026-10-17)
+
+The coordinator withdrew the 0.3-kpc maximum over all masers: it conflated
+implementation accuracy with intrinsic arm width and parallax scatter. Gaia
+thresholds, projection, masks, display fit, and sampling remain unchanged.
+
+`reid2019-oracle.json` independently transcribes Table 2. C++ compares each
+implemented curve at 4,097 domain positions plus its kink with the published
+formula, tolerance 1e-6 kpc. The data check uses the paper's R0=8.15 kpc,
+explicit Table 1 segment assignments (Norma and Outer separate), and raw
+Euclidean perpendicular RMS <=1.5 times each published intrinsic width.
+Baked-ridge residuals remain diagnostic and do not vote against the withdrawn
+maximum. The production observer stays at R0=8.178 kpc.
+
+Only these named exclusions are applied, following [Reid III.2](https://arxiv.org/html/1910.03357#S3.SS2):
+
+| Section | Catalog source | Reason |
+| --- | --- | --- |
+| III.2.1 | G001.14-00.12 | Named outlier; prose spells it G001.15-0.12 |
+| III.2.2 | G030.22-00.18 | Named spur/proper-motion source; prose spells it G030.22-0.17 |
+| III.2.2 | G030.41-00.23 | Named spur/proper-motion source |
+| III.2.2 | G030.74-00.04 | Named spur/proper-motion source |
+| III.2.2 | G030.81-00.05 | Named spur/proper-motion source |
+| III.2.2 | G030.97-00.14 | Named spur/proper-motion source |
+| III.2.2 | G031.41+00.30 | Named spur/proper-motion source |
+| III.2.3 | G032.74-00.07 | Named outlier |
+| III.2.3 | G033.64-00.22 | Named outlier |
+
+The first two names match the paper's Table 1 and the VizieR table. The E2E
+requires all nine exclusions to resolve, and records each in its report.
+No additional sigma clipping, parallax-quality cut, or empirical source
+selection is applied. Unmodeled arm codes remain separately counted.
+
+The literal revised data criterion still fails. In the browser E2E all seven
+curve errors are zero; after the nine exclusions, these are the measured
+counts, RMS and unchanged limits (kpc):
+
+| Segment | N | Raw RMS | Limit |
+| --- | ---: | ---: | ---: |
+| 3-kpc(N) | 5 | 2.239263 | 0.270 |
+| Norma | 11 | 0.163904 | 0.210 |
+| Scutum-Centaurus | 41 | 0.424887 | 0.345 |
+| Sagittarius-Carina | 37 | 0.342157 | 0.405 |
+| Local | 28 | 0.259128 | 0.465 |
+| Perseus | 41 | 0.737344 | 0.525 |
+| Outer | 11 | 1.308877 | 0.975 |
+
+Raw RMS includes measurement scatter. Section III fits with parallax-distance
+uncertainty and intrinsic width added in quadrature; an intrinsic width is not
+the raw RMS of noisy inverse-parallax positions. The 3-kpc model also has a
+short finite domain, and its Table 1 membership exceeds Table 2's fitted N.
+Extending that domain in a diagnostic still gives RMS 1.21375 kpc. This is
+not evidence for changing the curve or inventing two more exclusions.
+An uncertainty-aware replacement requires a clarified acceptance decision.
+The current E2E reports these failures instead of silently changing statistics.
+
+## Production calibration
+
+The compiled relative dust coefficient is 0.06788225099390856 kpc^-1, from
+the prior 5,400-ray offline fit. Acceptance now measures a fresh `bake`
+**before** calling `calibrate`. Recalibration remains a separate diagnostic;
+it cannot improve the production acceptance result. The display-map fit does
+not establish absolute extinction. Component ablations run in C++ WASM during
+this same E2E and are documented in `PHYSICS.md`.

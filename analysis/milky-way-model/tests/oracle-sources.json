@@ -30,6 +30,6 @@
     "source": "Reid et al. 2019, ApJ 885, 131, Table 1; DOI 10.26093/cds/vizier.18850131",
     "units": "Galactic longitude/latitude degrees from published source identifier, parallax mas",
     "epoch": "Published VLBI parallaxes; coordinate names are Galactic, catalog equatorial coordinates FK5 J2000",
-    "tolerance": "0.3 kpc maximum arm-ridge separation, required by task; includes measurement scatter and outliers without clipping"
+    "tolerance": "DECISION-run2: Table 2 curve <=1e-6 kpc; per-segment raw RMS <=1.5 times intrinsic width after only the paper's named exclusions. No Gaia threshold change."
   }
 }
