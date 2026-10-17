@@ -5,10 +5,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import * as flatbuffers from 'flatbuffers';
+import { compareEvents } from './ca-comparison.mjs';
+import { runReferenceCatalog } from './reference-farm.mjs';
 import { PRW } from 'spacedatastandards.org/lib/js/PRW/main.js';
 import { PPE } from 'spacedatastandards.org/lib/js/PPE/main.js';
 import { modulesRoot, loadFarm, loadCatalog, selectCatalog, encodeCatalog, runCatalog, sha256 } from './benchmark-catalog.mjs';
@@ -92,47 +92,7 @@ async function carry(implementation) {
       residency, carriedWindowCpuSeconds: warm.cpu.windows[1].cpuS, coldWindowCpuSeconds: cold.cpu.windows[0].cpuS };
   } finally { await warm?.close(); await cold?.close(); }
 }
-function compareEvents(a, b) {
-  const groups = (events) => {
-    const map = new Map();
-    for (const event of events) {
-      const key = [event.primaryNorad, event.secondaryNorad].sort((x, y) => x - y).join(':');
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(event);
-    }
-    for (const values of map.values()) values.sort((x, y) => x.tcaJd - y.tcaJd);
-    return map;
-  };
-  const left = groups(a), right = groups(b);
-  assert.deepEqual([...left.keys()].sort(), [...right.keys()].sort(), 'Standard/Fast CA pair sets differ.');
-  let maxTcaSeconds = 0, maxMissMeters = 0, count = 0;
-  const pairs = [], byId = new Map(catalog.records.map((r) => [Number(r.NORAD_CAT_ID), r]));
-  const metadata = (id) => { const r = byId.get(Number(id)); if (!r) throw new Error(`Missing OMM metadata for ${id}`); return { meanMotion: Number(r.MEAN_MOTION), inclination: Number(r.INCLINATION), eccentricity: Number(r.ECCENTRICITY), epochJd: Date.parse(r.EPOCH.endsWith('Z') ? r.EPOCH : r.EPOCH + 'Z') / 86400000 + 2440587.5 }; };
-  for (const [pair, events] of left) {
-    const others = right.get(pair); assert.equal(events.length, others.length, `CA event count differs for ${pair}.`);
-    for (let i = 0; i < events.length; ++i) {
-      pairs.push({ key: pair, standard: events[i], fast: others[i], primary: metadata(events[i].primaryNorad), secondary: metadata(events[i].secondaryNorad) });
-      const tca = Math.abs(events[i].tcaJd - others[i].tcaJd) * 86400, miss = Math.abs(events[i].missM - others[i].missM);
-      assert(Number.isFinite(tca) && Number.isFinite(miss));
-      maxTcaSeconds = Math.max(maxTcaSeconds, tca); maxMissMeters = Math.max(maxMissMeters, miss); ++count;
-    }
-  }
-  assert(count > 0, 'CA sample produced no events; this cannot establish nonempty event-set equivalence.');
-  assert(maxTcaSeconds <= 0.01, `CA TCA delta ${maxTcaSeconds} exceeds 10 ms.`);
-  assert(maxMissMeters <= 1, `CA miss delta ${maxMissMeters} exceeds 1 m.`);
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ffm-ca-sigma-'));
-  let sigma;
-  const modelFile = path.join(modulesRoot, 'analysis/gp-error-model/data/e14-s3-kc.json');
-  try {
-    const executable = path.join(temp, 'compare');
-    execFileSync('clang++', ['-std=c++17', '-O2', '-I', path.join(modulesRoot, 'propagator/ffm/src/cpp/include'), path.join(modulesRoot, 'propagator/ffm-fast/scripts/compare-ca-sigma.cpp'), '-o', executable], { stdio: ['ignore', 'pipe', 'pipe'] });
-    sigma = JSON.parse(execFileSync(executable, [], { encoding: 'utf8', input: JSON.stringify({ model: JSON.parse(fs.readFileSync(modelFile)), pairs }), maxBuffer: 16 * 1024 * 1024 }));
-  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
-  const comparison = { eventSetEqual: true, events: count, maxTcaSeconds, maxMissMeters, tcaToleranceSeconds: 0.01, missToleranceMeters: 1, sigma: { ...sigma, modelSha256: sha256(fs.readFileSync(modelFile)) } };
-  result.caComparison = comparison;
-  assert(sigma.pass, `CA deltas must be <=1% of the combined E14 sigma lower bound, with every event covered: ${JSON.stringify(sigma)}`);
-  return comparison;
-}
+
 try {
   await assert.rejects(createFfmFarm({ catalog: [], modulesRoot, implementation: 'unknown' }), /Unknown FFM implementation/);
   await assert.rejects(createFfmFarm({ catalog: [], modulesRoot, workers: 0 }), /positive integer/);
@@ -152,8 +112,16 @@ try {
         fs.writeFileSync(o.out, JSON.stringify(result, null, 2) + '\n');
       }
       assert.equal(list[0].excluded, list[1].excluded); assert.equal(list[0].dropped, list[1].dropped);
+      if (screen) {
+        result.reference = await runReferenceCatalog({ ...selected, catalogSha256: catalog.sha256, environment: o.environment, workers,
+          startUtc: o.start, days, windowHours: 1, screen, screenWorkers: Number(o['screen-workers']), farmModule: o['farm-module'],
+          uncertaintyModel: o['uncertainty-model'] });
+        fs.writeFileSync(o.out, JSON.stringify(result, null, 2) + '\n');
+        assert(result.reference.completed, result.reference.error);
+      }
     }
-    result.caComparison = compareEvents(result.screen[0].screen.events, result.screen[1].screen.events);
+    result.caComparison = compareEvents(result.screen[0], result.screen[1], result.reference, catalog.records, modulesRoot, sha256);
+    assert(result.caComparison.pass, 'Fast must match the reference event set and meet 1 m / 1 ms for every event within the eight-day prediction-age domain.');
     if (Number(o.objects) !== 1000 || Number(o['screen-objects']) !== 2000)
       result.limitations.push('Object-count override: this is not the required 1,000-object / 2,000-object catalog acceptance run.');
   }

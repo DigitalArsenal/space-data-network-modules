@@ -176,11 +176,27 @@ slabs; cold/carry PPE byte agreement covers the compaction path.
 The CPU CLI remains outside this change because another lane owns it; the
 Fast catalog driver uses the farm library directly.
 
-The 2,000-object comparison requires the exact event set, at most 10 ms TCA
-and 1 m miss differences, and at most 1% of an orientation-independent
-combined E14 S3-KC sigma bound. The native comparator retains covariance
-cross terms and requires every event's regime/age stratum. E14 provides a
-GP prediction-error scale; this comparison does not assert calibrated FFM
-covariance. The bound is the square root of the sum of the two smallest
-position-covariance eigenvalues. TCA differences are converted to along-
-encounter displacement with the reported relative speed before comparison.
+The 2,000-object, one-day comparison uses the converged T3 integrator
+configuration as its oracle: standard FFM with RKF78 at relative and
+km-based absolute tolerance `1e-14`, initial/max step 2 s, minimum step
+`1e-4` s, and 100,000,000 maximum steps. The evidence-only adapter changes
+that configuration while retaining the same farm, inputs, environment,
+resident trajectory export, and CA screen. It adds no product mode or flag.
+The resident pipeline retains its own segment/output scheduling; this is
+not a substitution of the native truth harness's output/stop grid.
+
+Fast must have the same event set as the reference. Every event whose two
+GP prediction ages are in `[0, 8]` days must differ from the reference by
+at most **1 m in miss distance and 1 ms in TCA**. Older inputs are listed
+with both deltas and do not vote. Standard/reference and Fast/reference
+deltas, including whether Fast is no worse on each event, are reported
+side by side. The E14 sigma fractions are diagnostics only; they cannot
+relax the fixed acceptance bounds. E14 is an input GP uncertainty scale,
+not calibrated FFM covariance.
+
+`e2e-farm.mjs` runs all three implementations/configurations and records
+per-event comparisons. `qualify-ca-reference.mjs` can resume saved evidence
+with `--baseline`, `--reference`, `--provenance`, `--catalog`, and `--out`.
+It authenticates the exact source/artifact hashes, selected objects,
+controls, and environment before reusing standard/Fast results. Failed
+qualification evidence stays intact.
