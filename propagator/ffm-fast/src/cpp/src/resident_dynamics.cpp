@@ -525,6 +525,16 @@ bool ResidentDynamics::prepare(size_t i, const TTEpoch& start, const TTEpoch& en
     return true;
 }
 
+bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const TTEpoch& start,
+                                    const TTEpoch& end, size_t& failedObject, std::string& error) {
+    for (const auto slot : selected) {
+        failedObject = slot;
+        astro::clearCallStop();
+        if (!prepare(slot, start, end, error)) return false;
+    }
+    return true;
+}
+
 bool ResidentDynamics::residuals(size_t i, const TTEpoch& start, const TTEpoch& end, double& positionM, double& velocityMS, std::string& error) {
     const Object& o = *objects_.at(i);
     long long first, last;

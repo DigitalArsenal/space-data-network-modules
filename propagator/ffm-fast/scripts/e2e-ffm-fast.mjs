@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { packageRoot, standardRoot, STANDARD } from '../standard.mjs';
+import { inspectForkBases } from '../forks.mjs';
 import { FAST_CATALOG_INTEGRATOR, INTEGRATION_POLICY } from '../catalog.mjs';
 
 const standardImport = (relative) => import(pathToFileURL(path.join(standardRoot, relative)));
@@ -39,17 +40,11 @@ if (typeof process.threadCpuUsage !== 'function') throw new Error('This E2E requ
 
 function integrity() {
   const wasm = fs.readFileSync(path.join(standardRoot, 'dist/isomorphic/module.wasm'));
-  const sourceSha = sha(fs.readFileSync(path.join(standardRoot, 'lib/force_models.cpp')));
-  const fork = fs.readFileSync(path.join(packageRoot, 'lib/force_models.cpp'), 'utf8');
-  const forkBase = fork.slice(0, 1600).match(/\b[0-9a-f]{64}\b/)?.[0];
   if (sha(wasm) !== standard.wasmSha256) throw new Error(`Standard artifact changed: expected ${standard.wasmSha256}, got ${sha(wasm)}.`);
-  if (sourceSha !== forkBase) throw new Error(`Standard lib/force_models.cpp changed (standard ${sourceSha}, fork base ${forkBase ?? 'missing'}): the fork must be merged before building FFM Fast.`);
-  const residentPath = 'src/cpp/src/resident_dynamics.cpp';
-  const residentFork = fs.readFileSync(path.join(packageRoot, residentPath), 'utf8');
-  const residentBase = residentFork.match(/^\/\/ Fork base sha256: ([a-f0-9]{64})$/m)?.[1];
-  if (residentBase !== sha(fs.readFileSync(path.join(standardRoot, residentPath))))
-    throw new Error('Standard resident dynamics changed; merge the Fast fork.');
-  return { standardDirectory: STANDARD, standardWasmSha256: sha(wasm), forkBaseSha256: forkBase, residentForkBaseSha256: residentBase };
+  const forkBases = inspectForkBases();
+  return { standardDirectory: STANDARD, standardWasmSha256: sha(wasm),
+    forkBaseSha256: forkBases['lib/force_models.cpp'].sha256,
+    residentForkBaseSha256: forkBases['src/cpp/src/resident_dynamics.cpp'].sha256, forkBases };
 }
 
 const port = (portId, arm, value) => ({ portId, typeRef: TYPE, payload: encodePrw(arm, value) });

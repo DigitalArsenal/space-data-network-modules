@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { compileModuleFromSource, cleanupCompilation } from 'space-data-module-sdk/compiler';
 import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
 import { STANDARD, packageRoot, standardRoot } from './standard.mjs';
+import { inspectForkBases } from './forks.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifest = JSON.parse(await fs.readFile(path.join(packageRoot, 'plugin-manifest.json'), 'utf8'));
@@ -33,17 +34,10 @@ const exceptionLibraries = ['libc++abi-ww-wasmexcept.a', 'libunwind-ww-wasmexcep
 for (const file of exceptionLibraries)
   if (!fsSync.existsSync(file)) throw new Error(`Missing LLVM standard Wasm EH runtime archive ${file}`);
 
-const forkSource = await fs.readFile(path.join(packageRoot, 'lib/force_models.cpp'), 'utf8');
-const forkBase = forkSource.match(/^\/\/\s*FFM Fast fork base:\s*(.+)$/m)?.[1]?.trim();
-const forkBaseSha256 = forkSource.match(/^\/\/\s*Fork base sha256:\s*([a-f0-9]{64})$/mi)?.[1];
-const standardForceSha256 = sha256(await fs.readFile(path.join(standardRoot, 'lib/force_models.cpp')));
-if (!forkBase || forkBaseSha256 !== standardForceSha256)
-  throw new Error('The standard lib/force_models.cpp changed; merge the standard changes into the FFM Fast fork and update its fork base SHA-256.');
+const forkBases = inspectForkBases();
+const { path: forkBase, sha256: forkBaseSha256 } = forkBases['lib/force_models.cpp'];
 const residentPath = 'src/cpp/src/resident_dynamics.cpp';
-const residentSource = await fs.readFile(path.join(packageRoot, residentPath), 'utf8');
-const residentForkSha256 = residentSource.match(/^\/\/ Fork base sha256: ([a-f0-9]{64})$/m)?.[1];
-if (residentForkSha256 !== sha256(await fs.readFile(path.join(standardRoot, residentPath))))
-  throw new Error('The standard resident dynamics changed; merge it into the Fast fork.');
+const residentForkSha256 = forkBases[residentPath].sha256;
 const standardWasmSha256 = sha256(await fs.readFile(path.join(standardRoot, 'dist/isomorphic/module.wasm')));
 
 const units = ['astrodynamics', 'integrators', 'variational', 'finite_burn', 'force_partials', 'coords', 'atmosphere_plugin', 'environment_models', 'ephemeris', 'force_models', 'atmosphere_winds', 'nrlmsise00', 'time_convert', 'us76']
@@ -54,13 +48,13 @@ units.push(...[
   '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
   'src/ffm_plugin.cpp', 'src/cpp/src/prw_execution.cpp', 'src/cpp/src/prw_dynamics.cpp',
   'src/cpp/src/resident_dynamics.cpp', 'src/cpp/src/kernel_store.cpp',
-].map(p => path.resolve(p === 'src/cpp/src/resident_dynamics.cpp' ? packageRoot : standardRoot, p)));
+].map(p => path.resolve(['src/cpp/src/resident_dynamics.cpp', 'src/ffm_plugin.cpp'].includes(p) ? packageRoot : standardRoot, p)));
 const erfa = await composeErfaTranslationUnit();
 const erfaUnit = path.join(buildDir, 'erfa-amalgamation.cpp');
 await fs.writeFile(erfaUnit, erfa.source);
 units.push(erfaUnit);
 
-const pluginSource = await fs.readFile(path.join(standardRoot, 'src/ffm_plugin.cpp'), 'utf8');
+const pluginSource = await fs.readFile(path.join(packageRoot, 'src/ffm_plugin.cpp'), 'utf8');
 const diagnosticExports = [...new Set([...pluginSource.matchAll(/^(?:int|void|double|const char\*)\s+((?:plugin_|get_)[A-Za-z0-9_]+)\s*\(/gm)]
   .map(m => m[1]).filter(n => n !== 'plugin_stream_invoke')), 'malloc', 'free', 'ffm_initialize'];
 const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/compiler'))), '../..');
@@ -72,7 +66,7 @@ const defines = {
 const config = {
   clangxx: path.join(emsdk, 'upstream/bin/clang++'), linker: path.join(emsdk, 'upstream/bin/wasm-ld'),
   units, exceptionLibraries, diagnosticExports, defines,
-  includes: [path.join(packageRoot, 'lib'), ...[
+  includes: [path.join(packageRoot, 'lib'), path.join(packageRoot, 'src/cpp/include'), ...[
     'lib', 'src', 'src/cpp/include', 'src/cpp/generated', 'src/cpp/generated/sds',
     '../../third_party/nrlmsise00', '../../third_party/hwm14', '../../foundation/frames/src', '../../higherpop/third_party/erfa',
   ].map(p => path.resolve(standardRoot, p))],
@@ -109,6 +103,7 @@ try {
     standardSources: STANDARD, standardWasmSha256,
     forkBase: { path: forkBase, sha256: forkBaseSha256 },
     residentForkBase: { path: residentPath, sha256: residentForkSha256 },
+    forkBases,
     clangVersion: execFileSync(config.clangxx, ['--version'], { encoding: 'utf8' }).trim(),
     exceptionRuntimeArchives: exceptionLibraries.map(p => ({ name: path.basename(p), sha256: sha256(fsSync.readFileSync(p)) })),
     units: [path.relative(packageRoot, path.join(standardRoot, 'src/cpp/src/prw_sdk_adapter.cpp')), ...units.map(p => path.relative(packageRoot, p))],
