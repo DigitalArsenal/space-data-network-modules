@@ -39,7 +39,10 @@ physical RK steps land on predicted/verified shadow and weather boundaries.
 This transformed grid and GJ use fixed-step numerical policies, not adaptive
 tolerance acceptance. Explicit fixed-step diagnostics, backward requests,
 nonelliptic states, unsupported GJ force families, and insufficient extra
-startup coverage retain standard RK78. GJ currently supports cannonball
+startup coverage retain standard RK78. If artificial GJ startup history
+crosses the reentry surface, RK resumes from the last accepted physical
+state and exact epoch; a stop on the physical trajectory remains a failure.
+GJ currently supports cannonball
 conical SRP without ECOM2, and NRLMSISE-00 drag without winds (or either
 force disabled). The shared variational/covariance execution path is unchanged.
 
@@ -196,6 +199,8 @@ forward/backward windows, and carried/fresh serialized trajectory agreement.
 C++ generates states on both sides of the automatic regime thresholds and
 penumbra-only graze candidates; unchanged standard T3 trajectories verify
 their accuracy and independently confirm the realized grazing geometry.
+An ascending state just above the reentry surface checks startup fallback
+after a nonzero alignment bridge against the same standard T3 forward arc.
 
 [Fixture documentation](tests/fixtures/README.md) gives the independent
 truth settings, units, TT handling, tolerance rationale, and one-command
