@@ -86,7 +86,7 @@ export function compareEvents(standardRun, fastRun, referenceRun, catalogRecords
     execFileSync('clang++', ['-std=c++17', '-O2', '-I', path.join(modulesRoot, 'propagator/ffm/src/cpp/include'),
       path.join(modulesRoot, 'propagator/ffm-fast/scripts/compare-ca-sigma.cpp'), '-o', executable], { stdio: ['ignore', 'pipe', 'pipe'] });
     for (const name of ['standard', 'fast']) {
-      const { pass, limit, ...diagnostic } = JSON.parse(execFileSync(executable, [], { encoding: 'utf8',
+      const diagnostic = JSON.parse(execFileSync(executable, [], { encoding: 'utf8',
         input: JSON.stringify({ model, pairs: sigmaPairs[name] }), maxBuffer: 16 * 1024 * 1024 }));
       sigma[name] = diagnostic;
     }

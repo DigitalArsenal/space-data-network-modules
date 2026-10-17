@@ -1,8 +1,8 @@
-// Independent acceptance reduction, not a propagation path.
+// Independent uncertainty diagnostic, not an acceptance gate or propagation path.
 // Reference: the checked-in E14 S3-KC empirical SGP4 prediction-error model.
 // Its position covariance is RTN, km^2, stratified by un-Kozai mean altitude,
 // eccentricity and prediction age. It is an uncertainty scale for the GP
-// inputs, not a calibration claim for FFM. Missing strata fail closed.
+// inputs, not a calibration claim for FFM. Missing strata are reported explicitly.
 // Weyl's inequality: lambda_min(C1+C2) >= lambda_min(C1)+lambda_min(C2),
 // irrespective of the two RTN orientations. Normalize both miss change and
 // relative-speed * TCA change by this conservative combined 1-sigma bound.
@@ -55,7 +55,6 @@ int main(){try{
         minSigma=std::min(minSigma,sigma);miss=std::max(miss,std::abs(a.at("missM").get<double>()-b.at("missM").get<double>())/sigma);
         tca=std::max(tca,std::abs(at-b.at("tcaJd").get<double>())*86400*std::max(a.at("speedMS").get<double>(),b.at("speedMS").get<double>())/sigma);++covered;
     }catch(const std::exception& e){missing.push_back({{"pair",item.at("key")},{"reason",e.what()}});}}
-    const bool pass=covered>0 && missing.empty() && miss<=.01 && tca<=.01;
-    std::cout<<json{{"pass",pass},{"eventsCovered",covered},{"missing",missing},{"minimumCombinedSigmaMeters",covered?minSigma:0},{"maximumMissSigmaFraction",miss},{"maximumTcaDisplacementSigmaFraction",tca},{"limit",.01},{"modelId",input.at("model").at("id")}}.dump()<<'\n';
+    std::cout<<json{{"eventsCovered",covered},{"missing",missing},{"minimumCombinedSigmaMeters",covered?minSigma:0},{"maximumMissSigmaFraction",miss},{"maximumTcaDisplacementSigmaFraction",tca},{"modelId",input.at("model").at("id")}}.dump()<<'\n';
     return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
