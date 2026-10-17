@@ -1592,7 +1592,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "eb4fa4f4783ee26d81b2c7f6a2aa3eb11576fc980219dde362bfbf3cae859e45",
+      "summarySha256": "1a679dbae200521fdb44fbfb9ed76fc0a79afe6d40711362a37227f430986e72",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -3119,7 +3119,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "661725afd6f849fe583f52ab690ca526584307cb718cc8d506c024e0b02e835c",
+      "summarySha256": "83b25ee2f8ae9d3ca7d680724c6a2331be21d4fe71fb9645a935d83cb5a9be8e",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4347,7 +4347,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "2835bd3849b2860c6904bf33825f1c56a14a8c19d8df4ed00c530349e7b0815c",
+      "summarySha256": "93e887144eac288803148ce69d50cb25cf6f5bb60f12a4a930b0726a9b2a55dc",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -9745,7 +9745,7 @@
         },
         "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometer at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
       },
-      "summarySha256": "a9bbc2637d51aae3c5ea5e26ca28ad24535eadef5dedcc0951097d396b319796",
+      "summarySha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37",
       "counts": {
         "decomposition": 0,
         "diagnostic": 13,
@@ -10396,7 +10396,7 @@
         "jwstEpochUtc": "2026-06-10T00:00:00.000",
         "jwstFinalEpochUtc": "2026-06-11T00:00:00.000"
       },
-      "summarySha256": "58dd4ca24b4e43661b9e9d7345aa3656944c37f2186f64ed990dc3ff65abd1a2",
+      "summarySha256": "42ecd6aca9783f062536dfdeba71ebf2497db7ef80581cfdd971dfb298e6c046",
       "counts": {
         "decomposition": 0,
         "diagnostic": 4,

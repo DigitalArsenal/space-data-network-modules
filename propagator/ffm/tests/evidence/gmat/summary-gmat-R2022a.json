@@ -2148,7 +2148,7 @@
   },
   {
    "path": "../../../package.json",
-   "sha256": "765cb036a48a9c1e81ba7f53107561a75bbc9b383317778f1cafc82c90e19e4e"
+   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",

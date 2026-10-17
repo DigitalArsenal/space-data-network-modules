@@ -18,6 +18,8 @@ const git=(file)=>execFileSync('git',['show',`${base.commit}:${file}`],{cwd:repo
 const proofBytes=fs.readFileSync(path.join(here,'equivalence.json')), proof=JSON.parse(proofBytes);
 const manifestPath='propagator/ffm/plugin-manifest.json', beforeManifest=git(manifestPath), afterManifest=fs.readFileSync(path.join(repo,manifestPath));
 const manifest=JSON.parse(afterManifest), previousManifest=JSON.parse(beforeManifest);
+const packagePath='propagator/ffm/package.json', beforePackage=git(packagePath), afterPackage=fs.readFileSync(path.join(repo,packagePath));
+assert.deepEqual({...JSON.parse(afterPackage),version:JSON.parse(beforePackage).version},JSON.parse(beforePackage),'Package changes exceed the release version');
 assert.equal(proof.ok,true);assert.equal(proof.caseCount,72);assert.equal(proof.rows.length,216);assert.equal(proof.toleranceBytes,0);
 assert.equal(proof.baseCommit,base.commit);assert.equal(proof.originalModuleSha256,base.sha256);
 assert.equal(proof.generatorSha256,hash(fs.readFileSync(path.join(here,'verify.mjs'))));
@@ -38,7 +40,7 @@ const expectedSource=source.replace('// Initialize arrays — need up to degree 
 assert.equal(fs.readFileSync(path.join(repo,base.sources),'utf8'),expectedSource,'Allocation source differs from the proven storage-only change');
 const names=['orekit/summary.json','gmat/summary-gmat-R2026a.json','gmat/summary-gmat-R2022a.json','gmat/anomalous-oxygen.json','gmat/variants.json','nyx/summary-nyx-2.6.0.json','nyx/drag-settings-diagnostic.json','tudat/ffm-tudatpy-1.0.0.json','tudat/ffm-tudat-wasm.json','tudat/summary-tudatpy-1.0.0.json','tudat/summary-tudat-wasm.json','basilisk/ffm-basilisk-2.12.0.json','basilisk/summary-basilisk-2.12.0.json','basilisk/diagnoses.json','erfa-spice/ffm-frames.json','erfa-spice/summary-erfa-spice.json','horizons/summary-horizons.json'];
 const originals=new Map(names.map(name=>[name,git(`propagator/ffm/tests/evidence/${name}`)]));
-let pins=new Map([[base.sha256,proof.afterSha256],[hash(beforeManifest),hash(afterManifest)]]), completed;
+let pins=new Map([[base.sha256,proof.afterSha256],[hash(beforeManifest),hash(afterManifest)],[hash(beforePackage),hash(afterPackage)]]), completed;
 function migrate(value){
  if(typeof value==='string') return pins.get(value)??value;
  if(Array.isArray(value)) return value.map(migrate);

@@ -8288,7 +8288,7 @@
   },
   {
    "path": "../../../package.json",
-   "sha256": "765cb036a48a9c1e81ba7f53107561a75bbc9b383317778f1cafc82c90e19e4e"
+   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
   },
   {
    "path": "../../../plugin-manifest.json",
@@ -8328,7 +8328,7 @@
   },
   {
    "path": "../erfa-spice/summary-erfa-spice.json",
-   "sha256": "a9bbc2637d51aae3c5ea5e26ca28ad24535eadef5dedcc0951097d396b319796"
+   "sha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
