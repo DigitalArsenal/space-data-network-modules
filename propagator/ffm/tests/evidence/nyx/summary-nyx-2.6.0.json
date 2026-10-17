@@ -1,8 +1,8 @@
 {
  "note": "FFM against Nyx Space (tests/evidence/nyx/score-nyx.mjs): the largest 3D position difference over 24 h, hourly samples, by case, FFM at three integrator settings; Orekit 13.1 against Nyx beside it; STM: largest relative column difference at the suite's request, and of the Cr*A/m and Cd*A/m columns.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "nyx": {
   "file": "nyx-2.6.0.json",
@@ -7782,7 +7782,7 @@
   },
   "dragSettings": {
    "file": "drag-settings-diagnostic.json",
-   "sha256": "7e6988ec65e2bd41406f057fee2e1cb39afbf4637b443bd62e6fe4f927909f2c",
+   "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269",
    "classification": "model-setting-mismatch",
    "statement": "The cached runs predate the runner fix that writes WGS84 into ANISE planetary data. ANISE transform_to replaces supplied frame shape from that data; the old path uses pck08 Earth radii. The current prebuilt published-MSIS runner plus WGS84 brings every supported drag case below 0.1 m. Historical binaries are unavailable, so assignment of the cached residual to that old path is an inference from the documented source fix, file chronology, measured shape difference and corrected-run convergence.",
    "geodetic": {
@@ -8288,11 +8288,11 @@
   },
   {
    "path": "../../../package.json",
-   "sha256": "765cb036a48a9c1e81ba7f53107561a75bbc9b383317778f1cafc82c90e19e4e"
+   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
   },
   {
    "path": "../../../src/cpp/include/nlohmann/json.hpp",
@@ -8328,11 +8328,11 @@
   },
   {
    "path": "../erfa-spice/summary-erfa-spice.json",
-   "sha256": "261ed1794b13344bb071070584cd881d8e10260237cf0c14b69cac0a70414efb"
+   "sha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   {
    "path": "../orekit/scoring.mjs",
@@ -8447,7 +8447,7 @@
   },
   {
    "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-rename-define-20261016/propagator/ffm/tests/evidence/nyx/drag-settings-diagnostic.json",
-   "sha256": "7e6988ec65e2bd41406f057fee2e1cb39afbf4637b443bd62e6fe4f927909f2c"
+   "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269"
   },
   {
    "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/spacecraft.rs",
@@ -8461,5 +8461,12 @@
    "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/orbital.rs",
    "sha256": "481aa5d9e813aa17e71b2e62e8c4d87b93f0558dd31a20c9ac5d9fd0d4652c1b"
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "0ce47942c5b42e335abd5f9c3a2368a4367e8ca31ca80d5a1f4b7d6ddff916df",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "module": {
-    "version": "1.4.0",
-    "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+    "version": "1.4.1",
+    "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   "protocol": {
     "arcS": 86400,
@@ -112,7 +112,7 @@
         "status": "unavailable",
         "reason": "The original Orekit 13.1 jar is not retained locally; the stored trajectory and generation source are pinned. Installed 13.1.2 and 13.1.6 jars are not substituted."
       },
-      "summarySha256": "92078a0285c0c888e4b2ee24b7b50104991a0f182a4200c13c56fa5f99e7e228",
+      "summarySha256": "d813e5738e8f972cf557aaf57a188a5892931b1c5657cf1d951136d327353a12",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -1592,7 +1592,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "bc0c3379607189b66af0c4fd79fe989859f68ab0c00255920e923617d56dcc90",
+      "summarySha256": "1a679dbae200521fdb44fbfb9ed76fc0a79afe6d40711362a37227f430986e72",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -3119,7 +3119,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "c97794eb136cf44327d7d74a2bb1c07e474654d03434363ff3404b39a6daf74e",
+      "summarySha256": "83b25ee2f8ae9d3ca7d680724c6a2331be21d4fe71fb9645a935d83cb5a9be8e",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4347,7 +4347,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "0ce47942c5b42e335abd5f9c3a2368a4367e8ca31ca80d5a1f4b7d6ddff916df",
+      "summarySha256": "93e887144eac288803148ce69d50cb25cf6f5bb60f12a4a930b0726a9b2a55dc",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -5731,7 +5731,7 @@
         "kernelSha256": "18196bbc8fc5aaf77e2b990012bae60325ca15ad6062048c0bed23e874faf672",
         "python": "3.11.17"
       },
-      "summarySha256": "80e4a8e286eee8855582a82b80ceb979e19e44694c1b0009e44382095505e604",
+      "summarySha256": "18159476cfecf3c29f3c5f202edbb2054de8a8a2bbcda29addb102d39e344245",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7049,7 +7049,7 @@
         "fixtureSha256": "7a3fdd5a912240e0330d03a8b777129d7530b26eb7c79b22786e8548fc3888bb"
       },
       "provenanceLimitations": "Committed C++ driver trajectory; the package Embind API cannot configure/run propagation (duplicate registrations, station-file initialization, missing STL/Eigen bindings). No Tudat rebuild or rerun was performed.",
-      "summarySha256": "61b228b800fb949ed3500d1bc7a4838189a5fd03eb1635763c53821efc4e4737",
+      "summarySha256": "1a6372800eefa204853fa1a7304b87c163fdf0411c5f00a9f7fca98ed22b2d3a",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7930,7 +7930,7 @@
           }
         }
       },
-      "summarySha256": "2a2e89920c6ab4b1c5888e2f8d84ab4a26c4b72f0ddce10f29d324a34150a891",
+      "summarySha256": "d8de3594f3f7773b812d6b6f93f9502cdff8b960aad83ff75fe0ed5bea237736",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -9745,7 +9745,7 @@
         },
         "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometer at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
       },
-      "summarySha256": "261ed1794b13344bb071070584cd881d8e10260237cf0c14b69cac0a70414efb",
+      "summarySha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37",
       "counts": {
         "decomposition": 0,
         "diagnostic": 13,
@@ -10396,7 +10396,7 @@
         "jwstEpochUtc": "2026-06-10T00:00:00.000",
         "jwstFinalEpochUtc": "2026-06-11T00:00:00.000"
       },
-      "summarySha256": "f7e5db45289374e31f81dae396a4f3ef7ce96052a1cca82b08e354b050b22522",
+      "summarySha256": "42ecd6aca9783f062536dfdeba71ebf2497db7ef80581cfdd971dfb298e6c046",
       "counts": {
         "decomposition": 0,
         "diagnostic": 4,
@@ -13703,12 +13703,12 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e"
+          "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
         },
         {
           "label": "Anomalous-oxygen diagnostic",
           "path": "gmat/anomalous-oxygen.json",
-          "sha256": "bf3779399ffcc24d5a1f6aada8acde546aa391be5879c6cb679905dc3cf31550"
+          "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.txt",
@@ -13946,12 +13946,12 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e"
+          "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
         },
         {
           "label": "Published-formula / WGS84 trajectories",
           "path": "nyx/drag-settings-diagnostic.json",
-          "sha256": "7e6988ec65e2bd41406f057fee2e1cb39afbf4637b443bd62e6fe4f927909f2c"
+          "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269"
         }
       ],
       "rows": [

@@ -3,11 +3,11 @@
  "identity": [
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -98644,5 +98644,12 @@
     ]
    }
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }

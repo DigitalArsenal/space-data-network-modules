@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).
 
 Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report.
 
-FFM 1.4.0, SHA-256 `b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+FFM 1.4.1, SHA-256 `e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
 
 ## Protocol and coverage
 
@@ -471,8 +471,8 @@ Step setting: 640 sets × 7 times
 
 ### GMAT R2026a drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e`.
-- Anomalous-oxygen diagnostic: `bf3779399ffcc24d5a1f6aada8acde546aa391be5879c6cb679905dc3cf31550`.
+- FFM trajectories at suite / steps30 / finest: `e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc`.
+- Anomalous-oxygen diagnostic: `9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -488,8 +488,8 @@ Step setting: 640 sets × 7 times
 
 ### Nyx drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e`.
-- Published-formula / WGS84 trajectories: `7e6988ec65e2bd41406f057fee2e1cb39afbf4637b443bd62e6fe4f927909f2c`.
+- FFM trajectories at suite / steps30 / finest: `e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc`.
+- Published-formula / WGS84 trajectories: `b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269`.
 
 ### Basilisk drag diagnostic inputs
 

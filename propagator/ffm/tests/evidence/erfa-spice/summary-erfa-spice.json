@@ -1,8 +1,8 @@
 {
  "about": "FFM classical frames, two-part force clock and ephemeris reads against independent offline ERFA/SPICE references.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "tools": {
   "pyerfa": "2.0.1.5",
@@ -519,7 +519,7 @@
  "fileHashes": [
   {
    "path": "ffm-frames.json",
-   "sha256": "c466e6582935add4035b263dec680f9035ba764e3f6bc5dd9ae0f0211c203cd9"
+   "sha256": "cf7b32b321f33ca7a193d4e5a8cf434e7023cfe68bb815752a702e9b8fdb003c"
   },
   {
    "path": "reference.json",
@@ -631,15 +631,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   {
    "path": "../../../package.json",
-   "sha256": "765cb036a48a9c1e81ba7f53107561a75bbc9b383317778f1cafc82c90e19e4e"
+   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
   },
   {
    "path": "../../../index.js",
@@ -1669,5 +1669,12 @@
    "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
    "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "261ed1794b13344bb071070584cd881d8e10260237cf0c14b69cac0a70414efb",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }
