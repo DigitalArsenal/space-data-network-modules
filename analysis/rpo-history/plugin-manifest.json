@@ -1,0 +1,230 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.rpo-history",
+  "name": "RPO history",
+  "version": "0.1.0",
+  "description": "Rendezvous and proximity operations characterization for any chaser/target pair from element-set history. characterize takes both objects' element sets ($OMM), asks for each set's trajectory on a propagator query port (SGP4, FFM (Full Force Model) or any provider the host plugs in), and per sample of a fixed UTC grid uses each object's set in force, never interpolating across an element update: the chaser's state in the target's CCSDS RTN axes (rectilinear and curvilinear RIC, the RIC box's definitions), separation, range rate, orbital-plane angle and D'Amico relative orbital elements, split into segments at every element update and left out inside maneuver brackets ($MNV from analysis/maneuver-detection). A conditional coast projection holds the newest sets fixed, with 1-sigma and 3-sigma bands from the GP error model ($ERM), calibrated continuously on the pair's own recent predictions against the next element sets, and a hindcast of those bands ($CVR).",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic geometry over caller-supplied element sets, trajectories, maneuver records and an error model. One host call, plugin.getConfig (the options); no threads, propagation or network access: trajectories come from the caller through the propagator query port."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "CVR.fbs",
+      "fileIdentifier": "$CVR",
+      "rootTypeName": "CVR"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "characterize",
+      "displayName": "Characterize relative motion",
+      "inputPorts": [
+        {
+          "portId": "element_sets",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Element sets ($OMM, plain or size-prefixed) of the chaser and the target (rpo.chaser, rpo.target: catalog number or OBJECT_ID); other objects' sets are ignored. One set per EPOCH (a later record replaces an earlier one); a set is in force from its epoch to the next set's."
+        },
+        {
+          "portId": "propagation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The answers to propagation_requests: one $OEM data block per query in SEQUENCE order (UTC, km, km/s, Earth-centered inertial or Earth-fixed axes, the same axes for both objects). A refused set is an empty block whose COMMENT begins REFUSED."
+        },
+        {
+          "portId": "maneuvers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Detected maneuvers ($MNV, analysis/maneuver-detection): each brackets its object's element sets around it (SOURCED_DATA 'EPOCH <iso>' entries, else the sets around EVENT_START_TIME..EVENT_END_TIME). Samples inside a bracket are left out. Canceled, planned and predicted maneuvers (STATUS) are ignored."
+        },
+        {
+          "portId": "error_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm-model",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One GP error model ($ERM MODEL, analysis/gp-error-model): the 6x6 RTN covariance by regime and element-set age (the clipped covariance when present, times the stratum scale factors), carried to curvilinear R, I, C through the geometry's Jacobian. The projection's bands are the model's times per-axis factors from the pair's own predictions against the next element sets in the trailing rpo.calibration_days; the same machinery gives the hindcast."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "propagation_requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-window-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "First pass (no answers on propagation): one $PRW WINDOW_REQUEST, one PRWWindowQuery per element set that matters (SET_INDEX its record among element_sets), START/STOP on the step_seconds grid: the set's span in force, to the newest set's stop + projection, and with the hindcast each set's span + projection (capped at stop)."
+        },
+        {
+          "portId": "relative",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $OCM records, one per segment (history in time order, then the conditional projection): the chaser's state about the target (CENTER_NAME) in the target's RTN axes, rectilinear, km and km/s (rotating-frame velocity), START_TIME + i * STATE_STEP_SIZE. Maneuver brackets are MANEUVER_DATA (DETERMINED) on the record after them; the projection carries the relative position covariance (CARTP, LTM, km**2, RTN) and its realism ($CVR)."
+        },
+        {
+          "portId": "geometry",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $OCM records on the same segments and epochs, extended trajectory type RPO_GEOMETRY (TRAJ_TYPE_DESCRIPTION): STATE_DATA rows of the columns USER_DEFINED_PARAMETERS COLUMNS names (curvilinear R, I, C and unwrapped I, separation, range rate, orbital-plane angle, the chief's semi-major axis and D'Amico relative orbital elements; for the projection the 1-sigma of R, I, C and separation and the 3-sigma band half-widths of R, I, C). The last record's USER_DEFINED_PARAMETERS hold the run summary, the calibration and the hindcast."
+        },
+        {
+          "portId": "realism",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cvr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CVR.fbs",
+                  "fileIdentifier": "$CVR",
+                  "rootTypeName": "CVR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "With an error model: one size-prefixed $CVR, the hindcast of the projection bands against the next element sets (mean d2/3, 95 % coverage, samples, objects; distinct truth epochs and the per-axis shares inside the 1- and 3-sigma bands in EVIDENCE). CALIBRATION follows the CVR rule, which needs at least 3 objects: one pair alone stays Uncalibrated."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
