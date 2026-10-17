@@ -22,12 +22,13 @@ inline Position to_supergalactic(double longitude, double latitude, double comov
           comoving_mpc * sx, comoving_mpc * sy, comoving_mpc * sz};
 }
 inline double cmb_redshift(double heliocentric, double longitude, double latitude) {
-  // Planck 2018 I solar dipole, eq. 6. Multiplicative relativistic correction
-  // for an observed heliocentric sightline (positive toward the dipole apex).
+  // Planck 2018 I solar dipole. Planck 2013 XXVII eq. 1 supplies the exact
+  // Doppler factor for an observed heliocentric sightline, including transverse
+  // motion: 1/[gamma*(1-beta dot n_observed)].
   const double apex_l = 264.021 * radians_per_degree, apex_b = 48.253 * radians_per_degree;
   const double projection = std::sin(latitude) * std::sin(apex_b) +
       std::cos(latitude) * std::cos(apex_b) * std::cos(longitude - apex_l);
   const double beta = 369.82 / speed_of_light_km_s;
-  return (1 + heliocentric) * (1 + beta * projection) / std::sqrt(1 - beta * beta) - 1;
+  return (1 + heliocentric) * std::sqrt(1 - beta * beta) / (1 - beta * projection) - 1;
 }
 } // namespace cosmology

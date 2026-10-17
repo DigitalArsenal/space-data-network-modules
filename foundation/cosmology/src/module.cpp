@@ -86,15 +86,21 @@ extern "C" int place() {
       !request.length("tempel2017_group_redshift_cmb", z.size(), groups) ||
       groups != request.has("tempel2017_group_redshift_cmb")) return wire::fail("Expected matching placement vectors and paired Tempel group IDs/redshifts");
   DistanceColumns distances; PositionColumns positions; std::vector<double> sources, placement_z;
+  std::map<unsigned, double> group_redshifts;
   const double max_luminosity = comoving(max_redshift) * (1 + max_redshift);
   for (size_t i = 0; i < z.size(); ++i) {
     const double measured = cf4 ? request.get("cf4_luminosity_distance_mpc")[i] : 0;
     const double id = groups ? request.get("tempel2017_group_id")[i] : 0;
     const double group_z = groups ? request.get("tempel2017_group_redshift_cmb")[i] : 0;
     if (z[i] <= -1 || z[i] > max_redshift || measured < 0 || measured > max_luminosity ||
-        id < 0 || id > 9007199254740991.0 || std::floor(id) != id ||
+        id < 0 || id > 88662 || std::floor(id) != id ||
         (id > 0 && !redshift_valid(group_z)) || (id == 0 && group_z != 0) ||
         (measured == 0 && id == 0 && !redshift_valid(z[i]))) return wire::fail("Invalid redshift, luminosity distance or published group assignment");
+    if (id > 0) {
+      const auto entry = group_redshifts.emplace(static_cast<unsigned>(id), group_z);
+      if (!entry.second && entry.first->second != group_z)
+        return wire::fail("Members of the same Tempel group must carry the same published group redshift");
+    }
     const auto p = cosmology::place(z[i], measured, id > 0, group_z);
     placement_z.push_back(p.redshift); sources.push_back(static_cast<int>(p.source)); distances.add(p.distance);
     positions.add(to_supergalactic(request.get("galactic_longitude_rad")[i], request.get("galactic_latitude_rad")[i], p.distance.comoving_mpc));
