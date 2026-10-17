@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // One E2E, run with plain node. No browser, network, test framework, or JS physics.
-// Reference: the SHA-256-pinned pre-fix module, not candidate-generated goldens.
+// Reference: the SHA-256-pinned pre-fix source compiled at the same release
+// version. The original main artifact is authenticated too. Equal version
+// avoids a deliberate PPE producer-label difference; no payload is normalized.
 // Seeds: supplied GCRF km/km/s states, serialized in SI and re-epoched (without
 // propagation) to the fixture's UTC epoch. Equivalence tolerance is zero bytes:
 // this scratch-storage change must preserve every serialized numerical result.
@@ -206,8 +208,14 @@ async function seedWorker() {
               const { payload: expectedPayload, ...expectedPort } = expectedOutputs[j];
               const { payload: actualPayload, ...actualPort } = actualOutputs[j];
               assert.deepEqual(actualPort, expectedPort, `${seed.label}: output metadata differs at ${i}/${j}`);
-              assert.ok(expectedPayload.equals(actualPayload),
-                `${seed.label} ${variant} repetition ${repetition + 1}: ${actual.method} payload ${j} differs (${expectedPayload.length}/${actualPayload.length} bytes)`);
+              if (!expectedPayload.equals(actualPayload)) {
+                const changed = [];
+                for (let offset = 0; offset < Math.max(expectedPayload.length, actualPayload.length) && changed.length < 12; ++offset)
+                  if (expectedPayload[offset] !== actualPayload[offset]) changed.push({ offset,
+                    before: expectedPayload.subarray(Math.max(0, offset - 28), offset + 16).toString('utf8'),
+                    after: actualPayload.subarray(Math.max(0, offset - 28), offset + 16).toString('utf8') });
+                throw new Error(`${seed.label} ${variant} repetition ${repetition + 1}: ${actual.method} payload ${j} differs: ${JSON.stringify(changed)}`);
+              }
               bytesCompared += expectedPayload.length;
             }
           }
@@ -253,12 +261,18 @@ async function main() {
     // The only Git commands this E2E runs: the two explicitly authorized,
     // read-only baseline blob reads. Disable lazy object fetching and prompts.
     const gitOptions = { encoding: 'buffer', env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' } };
-    const before = (await command('git', ['show', `${base.commit}:${base.wasm}`], gitOptions)).stdout;
-    assert.equal(sha256(before), base.sha256, 'Baseline WASM SHA-256 does not match base.json');
+    const pinned = (await command('git', ['show', `${base.commit}:${base.wasm}`], gitOptions)).stdout;
+    assert.equal(sha256(pinned), base.sha256, 'Pinned main WASM SHA-256 does not match base.json');
     const baseSource = (await command('git', ['show', `${base.commit}:${base.sources}`], gitOptions)).stdout;
+    const sameVersion = base.sameVersionReference;
+    assert.equal(sameVersion.file, 'before-1.4.1.wasm');
+    assert.equal(sameVersion.sourceSha256, sha256(baseSource), 'Same-version reference source must be the pinned pre-fix source');
+    assert.equal(sameVersion.version, (await readJson(path.join(moduleRoot, 'plugin-manifest.json'))).version);
+    const before = await fs.readFile(path.join(support, sameVersion.file));
+    assert.equal(sha256(before), sameVersion.sha256, 'Same-version reference WASM differs from its pinned build');
     const after = await fs.readFile(path.join(repoRoot, base.wasm));
     report.base = base;
-    report.artifacts = { beforeSha256: sha256(before), afterSha256: sha256(after), beforeBytes: before.length, afterBytes: after.length,
+    report.artifacts = { pinnedMainSha256: sha256(pinned), beforeSha256: sha256(before), afterSha256: sha256(after), beforeBytes: before.length, afterBytes: after.length,
       beforeSourceSha256: sha256(baseSource), afterSourceSha256: sha256(await fs.readFile(path.join(repoRoot, base.sources))) };
     console.log(`WASM SHA-256 before ${report.artifacts.beforeSha256}; after ${report.artifacts.afterSha256}`);
     temp = await fs.mkdtemp(path.join(os.tmpdir(), 'ffm-gravity-scratch-'));

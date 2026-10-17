@@ -2,5 +2,24 @@
   "commit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
   "wasm": "propagator/ffm/dist/isomorphic/module.wasm",
   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3",
-  "sources": "propagator/ffm/lib/environment_models.cpp"
+  "sources": "propagator/ffm/lib/environment_models.cpp",
+  "sameVersionReference": {
+    "file": "before-1.4.1.wasm",
+    "sha256": "bef658c531458d7a2e907360498ab449326a2b3a2f556389407cd4b2fd53d892",
+    "version": "1.4.1",
+    "sourceSha256": "ef7afb0f60ba6eb0eda17e09130987211e22958d68594c12373c204647bf7c78",
+    "recipe": "Build base.commit with only package/manifest version set to 1.4.1; environment_models.cpp remains byte-identical to base.sources. No reference numerical output is generated.",
+    "sdk": "0.9.5",
+    "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
+    "exceptionRuntimeArchives": [
+      {
+        "name": "libc++abi-ww-wasmexcept.a",
+        "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
+      },
+      {
+        "name": "libunwind-ww-wasmexcept.a",
+        "sha256": "d8bcc70af787c3993c20e100d48f6ea403e2176b838bca496f93e6f8520c5b8d"
+      }
+    ]
+  }
 }
