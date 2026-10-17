@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against pinned NASA GMAT trajectories; maximum hourly 3D position difference over 24 h in meters, and relative STM column differences. All numerical reductions are C++.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "gmat": {
   "file": "gmat-R2026a.json",
@@ -2836,7 +2836,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "bf3779399ffcc24d5a1f6aada8acde546aa391be5879c6cb679905dc3cf31550"
+   "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -2844,11 +2844,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
   },
   {
    "path": "../../../package.json",
@@ -2966,7 +2966,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "bf3779399ffcc24d5a1f6aada8acde546aa391be5879c6cb679905dc3cf31550",
+   "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {
@@ -3410,5 +3410,12 @@
    }
   ],
   "hashPolicy": "Verify every available path against its declared digest; unavailable historical binaries, reports and input files are explicit provenance gaps, never silently re-pinned."
+ },
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "bc0c3379607189b66af0c4fd79fe989859f68ab0c00255920e923617d56dcc90",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
  }
 }

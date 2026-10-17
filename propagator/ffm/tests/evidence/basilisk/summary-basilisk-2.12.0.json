@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Basilisk: maximum 3D position difference over 24 h at hourly samples, suite/steps30/finest FFM settings and Orekit-minus-Basilisk. Every numerical reduction uses the shared Nyx C++ helper. Native half-step trajectories are stored inline.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "basilisk": {
   "file": "basilisk-2.12.0.json",
@@ -13744,17 +13744,17 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "062f196221e68af563bc1067e844e40a803041f89e2472f280edfbbacefcad21"
+    "sha256": "47863fc8b3be20894c017508820b3cfb883ab744e3a799934b1bd416155a1b95"
    }
   ],
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+    "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+    "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -13799,7 +13799,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "236708864a6bc11145846357c41399a8a6a626c0f5d9b1d2b43f24b8ac97e955"
+   "sha256": "10a4ad654b6908bf82e5f0b2e87631375076dd541cf2b7f574b9ba51ac76801f"
   },
   "modelProbes": {
    "path": "model-probes.json",
@@ -17691,7 +17691,7 @@
   },
   "reusedFfmCache": {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e"
+   "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
   },
   "reuseRule": "All propagation input paths and SHA-256s equal the current shipped-WASM request identity; only the three state settings of supported cases are retained.",
   "basilisk": {
@@ -17746,7 +17746,7 @@
   },
   {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "236708864a6bc11145846357c41399a8a6a626c0f5d9b1d2b43f24b8ac97e955"
+   "sha256": "10a4ad654b6908bf82e5f0b2e87631375076dd541cf2b7f574b9ba51ac76801f"
   },
   {
    "path": "scoring.mjs",
@@ -17806,15 +17806,15 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "062f196221e68af563bc1067e844e40a803041f89e2472f280edfbbacefcad21"
+   "sha256": "47863fc8b3be20894c017508820b3cfb883ab744e3a799934b1bd416155a1b95"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966"
+   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -19765,7 +19765,7 @@
   },
   {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "db546fc3e7e6a78acc725a7eaa9da9f51ce601fb3848cdabaf5c83170ea9654e"
+   "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
   },
   {
    "path": "diagnose-lst.py",
@@ -25393,5 +25393,12 @@
    "path": ".work/fields/EGM2008-20z-20t-20o.csv",
    "sha256": "1cc8937b08f85f079a5280d8f9249ef2c6ac5810c2dc36202ec731c77a9602f2"
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "2a2e89920c6ab4b1c5888e2f8d84ab4a26c4b72f0ddce10f29d324a34150a891",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }

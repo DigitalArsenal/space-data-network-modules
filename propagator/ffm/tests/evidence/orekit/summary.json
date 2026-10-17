@@ -1,8 +1,8 @@
 {
  "note": "FFM against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "reference": "tests/fixtures/orekit/orekit-reference.json",
  "orekit": {
@@ -1965,5 +1965,12 @@
    "steps30M": 0.0000018680856736199978,
    "finestM": 0.000002935463787923683
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "92078a0285c0c888e4b2ee24b7b50104991a0f182a4200c13c56fa5f99e7e228",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }

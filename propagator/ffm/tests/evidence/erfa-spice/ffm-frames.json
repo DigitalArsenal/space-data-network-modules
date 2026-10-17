@@ -1,8 +1,8 @@
 {
  "about": "Source-built FFM force APIs at exact PRW two-part TT; native DE440 reads at Instant.tdb().secondsSinceJ2000(). Single-JD values label outputs only. Matrices row-major; states km and km/s in ICRF relative to Earth.",
  "module": {
-  "version": "1.4.0",
-  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  "version": "1.4.1",
+  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
  },
  "sources": {
   "propagator/ffm/src/cpp/include/ffm/prw_environment.h": "bd9c458937af4b51ecde01a6c92966b6492f89dfa30b5973171278d78c55377a",
@@ -5718,5 +5718,12 @@
    "utc1": 2461202,
    "utc2": 0.5
   }
- ]
+ ],
+ "allocationEquivalence": {
+  "file": "../gravity-scratch-allocation/equivalence.json",
+  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
+  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "previousSha256": "c466e6582935add4035b263dec680f9035ba764e3f6bc5dd9ae0f0211c203cd9",
+  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
+ }
 }
