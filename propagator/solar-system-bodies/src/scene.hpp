@@ -133,6 +133,9 @@ enum BodyFlag : int32_t {
     F_EXTERNAL = 1,        /* placed by its own module (heliocentric state from the engine) */
     F_SHOW = 2,            /* body.show */
     F_EXTERNAL_OFFSET = 4, /* its own module gives its light-time shift */
+    F_NO_LABEL = 8,        /* body.showLabel is false: hidden every frame, no declutter slot.
+                           * Set by the engine (CelestialBodyRegistry writeBodies); zero
+                           * by default, preserving engines that do not set it. */
 };
 
 /* ---- per-body draw flags (output) ----------------------------------------- */
@@ -860,11 +863,11 @@ inline void draw() {
     const int32_t si = indexOf(s, kSun);
     const bool sunKnown = si >= 0 && s.status[si] == 0;
     for (uint32_t i = 0; i < n; ++i) {
-        int32_t f = 0;
+        int32_t f = (s.flags[i] & F_NO_LABEL) ? D_LABEL_SET : 0;
         const bool isCentral = i == ci;
         const bool known = (isCentral || s.status[i] == 0) && (s.flags[i] & F_SHOW);
         if (!known) {
-            s.drawFlags[i] = D_HIDE;
+            s.drawFlags[i] = f | D_HIDE;
             continue;
         }
         double position[3] = {0.0, 0.0, 0.0};
@@ -1013,7 +1016,7 @@ inline void declutterLabels() {
     }
     for (uint32_t oi = 0; oi < orderCount; ++oi) {
         const uint32_t i = order[oi];
-        bool show = showLabels;
+        bool show = showLabels && !(s.flags[i] & F_NO_LABEL);
         if (show) {
             double w[2];
             show = toWindow(&s.labelWorld[3 * i], w);
