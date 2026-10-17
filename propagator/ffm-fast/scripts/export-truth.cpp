@@ -24,9 +24,20 @@ int main(int argc, char** argv) {
             throw std::runtime_error("truth does not cover three complete days");
         std::vector<double> rows;
         rows.reserve((duration / interval + 1) * 7);
+        std::vector<double> samples;
+        for (int second = 0; second <= duration; second += interval) samples.push_back(second);
+        // Preserve the native reference's one-second perigee refinement and
+        // exact weather stops in addition to the uniform ten-second grid.
+        for (const auto& state : states) {
+            const double second = elapsed(header, state);
+            if (second >= 0 && second <= duration) samples.push_back(second);
+        }
+        std::sort(samples.begin(), samples.end());
+        samples.erase(std::unique(samples.begin(), samples.end(), [](double a, double b) {
+            return std::abs(a-b) < 1e-9;
+        }), samples.end());
         size_t lo = 0;
-        for (int second = 0; second <= duration; second += interval) {
-            const double s = second;
+        for (const double s : samples) {
             while (lo + 1 < states.size() - 1 && elapsed(header, states[lo + 1]) < s) ++lo;
             const auto& left = states[lo]; const auto& right = states[lo + 1];
             const double t0 = elapsed(header, left), t1 = elapsed(header, right);

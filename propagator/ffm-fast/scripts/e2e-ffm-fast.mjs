@@ -12,19 +12,20 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { packageRoot, standardRoot, STANDARD } from '../standard.mjs';
 import { inspectForkBases } from '../forks.mjs';
+import { batchEvidence, boundaryEvidence } from './resident-batch-evidence.mjs';
 import { FAST_CATALOG_INTEGRATOR, INTEGRATION_POLICY } from '../catalog.mjs';
 
 const standardImport = (relative) => import(pathToFileURL(path.join(standardRoot, relative)));
 const catalog = await standardImport('catalog.mjs');
 const { environmentInputs, evaluatePpe, isoAfter, isoSeconds, secondsBetween } = await standardImport('tests/lib/fullForce.mjs');
-const { makeTable, encodePrw, decodePrw, TYPE, sds } = await standardImport('tests/lib/prwCodec.mjs');
+const { makeTable, encodePrw, decodePrw, coordinateSystem, TYPE, sds } = await standardImport('tests/lib/prwCodec.mjs');
 const fixtureRoot = path.join(packageRoot, 'tests/fixtures');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const standard = readJson(path.join(fixtureRoot, 'standard.json'));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const DAYS = 3, DAY = 86400, DURATION = DAYS * DAY;
-// Include four interior samples per 300 s resident segment.
-const TRUTH_SAMPLE_SECONDS = 60;
+// Include the 10 s grid and native 1 s perigee/weather refinement.
+const TRUTH_SAMPLE_SECONDS = 10;
 const FIXED = Object.freeze({ tolerance: 1, initialStep: 60, minStep: 60, maxStep: 60, maxSteps: 1000000 });
 const opt = {};
 for (let i = 2; i < process.argv.length; ++i) {
@@ -103,6 +104,38 @@ async function run(root, requestBytes) {
   } finally { await h.destroy(); }
 }
 
+// Exercise the resident dense-state API independently of the fitted PPE.
+// Reference rows include native perigee refinement and exact weather stops.
+async function denseEvidence(seed, truth, ingestBytes) {
+  const h = await createBrowserModuleHarness({ wasmSource: compiled.get(packageRoot),
+    manifest: readJson(path.join(packageRoot, 'plugin-manifest.json')), surface: 'direct' });
+  const result = { samples: truth.length / 56,
+    oneDay: { positionM: 0, velocityMps: 0 }, threeDays: { positionM: 0, velocityMps: 0 } };
+  const instance = makeTable('PRWInstance', { MODULE_ID: 'com.orbpro.ffm-fast', INSTANCE_ID: `ffm-fast-${seed.label}`, GENERATION: 1n });
+  try {
+    const ingest = decodePluginInvokeResponse(await h.invokeRaw(ingestBytes));
+    if (ingest.statusCode !== 0) throw new Error(`Dense ingest: ${ingest.errorMessage}`);
+    for (let at = 0; at < truth.length; at += 56) {
+      const elapsed = truth.readDoubleLE(at);
+      const response = await h.invoke({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
+        makeTable('PRWResidentRequest', { INSTANCE: instance,
+          TARGET_EPOCH: catalog.instant(isoAfter(standard.fixtureEpochTt, elapsed), 'TT'),
+          ENTITY_HANDLES: [seed.handle], TARGET_COORDINATE_SYSTEM: coordinateSystem() }))] });
+      if (response.statusCode !== 0 || response.yielded || response.outputs.length !== 1)
+        throw new Error(`${seed.label} dense at ${elapsed}: ${response.errorCode}: ${response.errorMessage}`);
+      const state = decodePrw(response.outputs[0].payload).RESIDENT_STATE.STATE;
+      const positionM = Math.hypot(...['X', 'Y', 'Z'].map((axis, i) => state.POSITION[axis] - truth.readDoubleLE(at + (i + 1) * 8) * 1000));
+      const velocityMps = Math.hypot(...['X', 'Y', 'Z'].map((axis, i) => state.VELOCITY[axis] - truth.readDoubleLE(at + (i + 4) * 8) * 1000));
+      if (!Number.isFinite(positionM) || !Number.isFinite(velocityMps)) throw new Error('Nonfinite dense-state error');
+      for (const key of elapsed <= DAY ? ['oneDay', 'threeDays'] : ['threeDays']) {
+        result[key].positionM = Math.max(result[key].positionM, positionM);
+        result[key].velocityMps = Math.max(result[key].velocityMps, velocityMps);
+      }
+    }
+  } finally { await h.destroy(); }
+  return result;
+}
+
 // Select the containing record once per ordered sample; the authoritative
 // standard reader still evaluates every coefficient and velocity component.
 function sampler(ephemeris) {
@@ -120,7 +153,12 @@ const normDifference = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2
 function compare(a, b, interval, truth) {
   const sampleA = sampler(a), sampleB = b && sampler(b);
   const result = { oneDay: { positionM: 0, velocityMps: 0 }, threeDays: { positionM: 0, velocityMps: 0 } };
-  for (let elapsed = 0, row = 0; elapsed <= DURATION; elapsed += interval, ++row) {
+  const count = truth ? truth.length / (7 * 8) : DURATION / interval + 1;
+  let previous = -Infinity;
+  for (let row = 0; row < count; ++row) {
+    const elapsed = truth ? truth.readDoubleLE(row * 7 * 8) : row * interval;
+    if (!(elapsed > previous && elapsed >= 0 && elapsed <= DURATION)) throw new Error(`Invalid truth time at row ${row}`);
+    previous = elapsed;
     const iso = isoAfter(standard.fixtureEpochTt, elapsed), left = sampleA(iso);
     let right;
     if (truth) {
@@ -148,20 +186,20 @@ async function main() {
   if (truthMetadata.epoch !== standard.fixtureEpochUtc || truthMetadata.epochTt !== standard.fixtureEpochTt
       || truthMetadata.frame !== 'GCRF' || truthMetadata.sampling.seconds !== TRUTH_SAMPLE_SECONDS
       || truthMetadata.sampling.durationSeconds !== DURATION
-      || truthMetadata.sampling.rowsPerSeed !== DURATION / TRUTH_SAMPLE_SECONDS + 1)
+      || !truthMetadata.sampling.includeNativeStops)
     throw new Error('Truth fixture epoch, frame, or sampling differs from the E2E contract; review/regenerate the fixtures.');
   if (truthMetadata.generatorSha256 !== sha(fs.readFileSync(path.join(packageRoot, 'scripts/export-truth.cpp'))))
     throw new Error('Truth exporter source differs from recorded provenance; review/regenerate the fixtures.');
   for (const seed of seeds) {
     const provenance = truthMetadata.records.find((row) => row.seed === seed.label);
     const truthPath = path.join(fixtureRoot, `truth/${seed.label}.f64`);
-    if (!provenance || provenance.rows !== DURATION / TRUTH_SAMPLE_SECONDS + 1
+    if (!provenance || provenance.rows < DURATION / TRUTH_SAMPLE_SECONDS + 1
         || sha(fs.readFileSync(truthPath)) !== provenance.outputSha256)
       throw new Error(`${seed.label} truth fixture differs from its recorded provenance; regenerate the fixtures.`);
   }
-  console.log(`FFM Fast ${opt.measure ? `lever ${opt.measure} measurement` : 'phase 1 E2E'}; Node ${process.version}; ${seeds.length} seeds; 3 days; GCRF; UTC epoch ${standard.fixtureEpochUtc}`);
+  console.log(`FFM Fast ${opt.measure ? `lever ${opt.measure} measurement` : 'phase 2 E2E'}; Node ${process.version}; ${seeds.length} seeds; 3 days; GCRF; UTC epoch ${standard.fixtureEpochUtc}`);
   console.log('Resident path: ingest_state -> prepare_trajectory_segments -> describe_trajectory_segments; PPE/truth coordinate: TT.');
-  console.log(`Truth samples every ${TRUTH_SAMPLE_SECONDS} s, including resident segment interiors.`);
+  console.log(`Truth samples every ${TRUTH_SAMPLE_SECONDS} s plus all native perigee and weather stops, including resident segment interiors.`);
   console.log('Fixed RK78: initial = minimum = maximum 60 s, tolerance 1; CPU: defaults interleaved, min of 2, thread user + system.');
   console.log('seed      fixed dp1 m  fixed dv1 m/s fixed dp3 m  fixed dv3 m/s standard CPU/d fast CPU/d');
   for (const seed of seeds) {
@@ -184,10 +222,20 @@ async function main() {
     check(fixed.threeDays.velocityMps <= 1e-6, `${seed.label} fixed-step velocity ${fixed.threeDays.velocityMps} m/s exceeds 1e-6 m/s`);
     if (!opt.measure || fs.existsSync(path.join(fixtureRoot, `truth/${seed.label}.f64`))) {
       const truth = fs.readFileSync(path.join(fixtureRoot, `truth/${seed.label}.f64`));
-      if (truth.length !== (DURATION / TRUTH_SAMPLE_SECONDS + 1) * 7 * 8) throw new Error(`${seed.label} truth fixture has the wrong length`);
+      if (truth.length !== truthMetadata.records.find((entry) => entry.seed === seed.label).rows * 7 * 8) throw new Error(`${seed.label} truth fixture has the wrong length`);
       row.standardVsTruth = compare(standardRun.ephemeris, null, TRUTH_SAMPLE_SECONDS, truth);
       if (!opt.measure) {
+        const policy = { LOW250: 'GJ8 PEC at 10 s', ISS: 'GJ8 PEC at 15 s', STARLINK: 'GJ8 PEC at 12 s',
+          SSO800: 'GJ8 PEC at 24 s', GPS: 'GJ8 PEC at 150 s', GEO: 'GJ8 PEC at 600 s',
+          MOLNIYA: 'RK78 Sundman alpha=1.5 at 200/orbit', GTO: 'RK78 Sundman alpha=1.5 at 300/orbit' }[seed.label];
+        check(fastRun.ephemeris.COMMENT.includes(`Fast forward resident integrator: ${policy}.`),
+          `${seed.label}: actual resident integrator differs from the automatic policy`);
+        row.actualPolicy = fastRun.ephemeris.COMMENT;
         row.fastVsTruth = compare(fastRun.ephemeris, null, TRUTH_SAMPLE_SECONDS, truth);
+        row.denseVsTruth = await denseEvidence(seed, truth, fastBytes[0]);
+        check(row.denseVsTruth.oneDay.positionM <= 0.01, `${seed.label} dense state fails FIT: ${row.denseVsTruth.oneDay.positionM} m`);
+        check(row.denseVsTruth.threeDays.positionM <= 1 && row.denseVsTruth.threeDays.velocityMps <= 1e-3,
+          `${seed.label} dense state fails SCREEN: ${JSON.stringify(row.denseVsTruth.threeDays)}`);
         row.fit = row.fastVsTruth.oneDay.positionM <= 0.01;
         row.screen = row.fastVsTruth.threeDays.positionM <= 1 && row.fastVsTruth.threeDays.velocityMps <= 1e-3;
         check(row.fit, `${seed.label} fails FIT: ${row.fastVsTruth.oneDay.positionM} m exceeds 0.01 m`);
@@ -212,6 +260,8 @@ async function main() {
       console.log(`${row.seed.padEnd(9)} ${pair(row.standardVsTruth.oneDay)}  ${pair(row.fastVsTruth.oneDay)}  ${pair(row.standardVsTruth.threeDays)}  ${pair(row.fastVsTruth.threeDays)}  ${row.fit ? 'PASS' : 'FAIL'} ${row.screen ? 'PASS' : 'FAIL'}`);
     }
   }
+  const residentBatch = opt.measure || opt.seed ? null : await batchEvidence();
+  const regimeBoundaries = opt.measure || opt.seed ? null : await boundaryEvidence();
   integrity();
   const maxima = (window, key) => Math.max(...rows.map((row) => row.fixed[window][key]));
   const result = { ok: failures.length === 0, mode: opt.measure ? 'lever' : 'e2e', lever: opt.measure ?? null,
@@ -223,11 +273,11 @@ async function main() {
     maxAddedError: { oneDay: { positionM: maxima('oneDay', 'positionM'), velocityMps: maxima('oneDay', 'velocityMps') },
       threeDays: { positionM: maxima('threeDays', 'positionM'), velocityMps: maxima('threeDays', 'velocityMps') } },
     cpuMethod: 'process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days',
-    loadAverageStart: loadStart, loadAverageEnd: os.loadavg(), rows, failures };
+    loadAverageStart: loadStart, loadAverageEnd: os.loadavg(), residentBatch, regimeBoundaries, rows, failures };
   if (opt.output) fs.writeFileSync(opt.output, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`Standard untouched: PASS; fork base: PASS; load average ${result.loadAverageEnd.map((x) => x.toFixed(2)).join(', ')}.`);
   for (const failure of failures) console.log(`FAIL: ${failure}`);
-  console.log(`${result.ok ? 'PASS' : 'FAIL'} FFM Fast ${opt.measure ? `lever ${opt.measure}` : 'phase 1 E2E'}`);
+  console.log(`${result.ok ? 'PASS' : 'FAIL'} FFM Fast ${opt.measure ? `lever ${opt.measure}` : 'phase 2 E2E'}`);
   console.log(JSON.stringify(result));
   if (!result.ok) process.exitCode = 1;
 }

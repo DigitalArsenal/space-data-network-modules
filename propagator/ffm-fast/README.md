@@ -7,25 +7,52 @@ with conical shadow; NRLMSISE-00 drag; IERS 2010 solid tides and relativity;
 FES2004 30×30 ocean tides; and Knocke Earth radiation with 15° elements.
 All force calculations run in C++/WASM.
 
-The force profile defines the physical model, this implementation reduces
-evaluation cost, and the catalog integrator controls numerical accuracy.
-`catalog.mjs` reuses the standard's PRW encoding and supplies the Fast
-module's resident identity.
-Its `fullForceRequest` defaults to `FAST_CATALOG_INTEGRATOR`: RK78,
-relative tolerance `1e-14`, absolute tolerances encoded as `1e-14 × 1000`,
-initial step 30 s, minimum 0.01 s, maximum 120 s, and 1,000,000 maximum steps.
-For forward resident propagation, an initial osculating eccentricity `e >= 0.25`
-and `e < 1` automatically selects RK78 with Sundman `alpha = 1.5` instead.
-The C++ policy computes the osculating orbit from the initial GCRF state and the
-force model's gravitational parameter. It uses 200 transformed steps per orbit;
-GTO-like states with perigee altitude below 1,000 km and apogee altitude strictly
-between 30,000 and 45,000 km use 300. Altitudes use the standard Earth radius.
-The normalization stays tied to the original state across weather spans.
-This fixed transformed grid has no adaptive tolerance acceptance; physical-time
-RK78 steps land on weather and shadow boundaries. Explicit fixed-step diagnostic
-requests, backward propagation, and nonelliptic states retain standard RK78.
-The qualification is the eight fixture regimes; those seeds do not establish
-centimeter accuracy for every orbit in the broad eccentricity band.
+The force profile defines the physical model. Fast selects its resident
+integrator from the initial GCRF Cartesian state in C++, with no user mode
+flag. The public PRW encoding and force models remain the standard's.
+
+Forward elliptic states with eccentricity below 0.25 use GJ8 PEC. For LEO
+(apogee below 2,000 km), perigee bands below 300, 450, and 650 km use 10, 15,
+and 12 s steps respectively; higher LEO uses 24 s. Near-circular states
+(eccentricity below 0.05) with periods strictly inside 600–800 minutes use
+150 s, and those inside 1,400–1,480 minutes use 600 s. Other low-eccentricity
+elliptic states use a conservative 24 s grid. Altitudes use the standard
+Earth radius. These are physical-state bands, never catalog identifiers.
+The GPS/GEO grids are half the study candidates to retain the existing
+0.1 mm comparison floor against standard as well as FIT/SCREEN.
+
+GJ nodes share an absolute TT lattice anchored at UTC midnight. An initial
+tight RK bridge spans at most one step. Nine history states survive normal
+midnight restarts: their force ordinates are rebased onto the new daily
+weather/calendar branch. NRLMSISE-00 uses daily Ap; three-hour restarts are
+trimmed only with winds disabled. Other models retain their driver breaks.
+Shadow geometry is scanned for multiple crossings and grazes, the conical
+SRP impulse and first moment are corrected, and corrected paths are rescanned
+transactionally. Dense output evaluates fresh physical acceleration at the
+corrected state, separately from the PEC predictor ordinate.
+
+Initial eccentricity from 0.25 through less than 1 selects RK78 with Sundman
+alpha=1.5 and 200 transformed steps per orbit. GTO-like states with perigee
+below 1,000 km and apogee strictly between 30,000 and 45,000 km use 300.
+Its normalization and transformed grid persist across weather spans;
+physical RK steps land on predicted/verified shadow and weather boundaries.
+This transformed grid and GJ use fixed-step numerical policies, not adaptive
+tolerance acceptance. Explicit fixed-step diagnostics, backward requests,
+nonelliptic states, unsupported GJ force families, and insufficient extra
+startup coverage retain standard RK78. GJ currently supports cannonball
+conical SRP without ECOM2, and NRLMSISE-00 drag without winds (or either
+force disabled). The shared variational/covariance execution path is unchanged.
+
+Selected-object preparation groups at most 32 peers by grid and visits the
+early physical nodes first. Fitting and trimming remain interleaved, including
+catch-up before the requested window; unselected objects are never advanced.
+The original epoch remains authoritative for requests that move backward in
+time or behind retained segments.
+
+`FAST_CATALOG_INTEGRATOR` supplies RK fallback settings: tolerance `1e-14`,
+initial step 30 s, minimum 0.01 s, maximum 120 s, and 1,000,000 steps.
+Qualification covers the fixture regimes and explicit edge cases; those
+samples do not establish centimeter accuracy for every possible orbit.
 
 There is one FFM Fast mode. `CATALOG_INTEGRATOR` aliases the same default
 as `FAST_CATALOG_INTEGRATOR`; no separate accuracy profile is exposed.

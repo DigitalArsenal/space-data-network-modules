@@ -1,6 +1,6 @@
 {
   "name": "@orbpro/plugin-ffm-fast",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Full Force Model profile FFM-1, fast implementation",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",

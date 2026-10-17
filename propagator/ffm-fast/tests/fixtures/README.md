@@ -7,8 +7,8 @@ replaces each UTC epoch with `2026-08-01T12:00:00.000000`, exactly as
 values. The standard's `tests/lib/fullForce.mjs` supplies the DE440, EOP,
 and space-weather records.
 
-`truth/*.f64` contains 4,321 rows per seed, at 60 s intervals over three
-days: elapsed seconds, x/y/z in km, and vx/vy/vz in km/s, all little-endian
+`truth/*.f64` contains a 10 s grid plus every native truth stop over three
+days (including 1 s perigee refinement for the eccentric seeds): elapsed seconds, x/y/z in km, and vx/vy/vz in km/s, all little-endian
 float64. The frame is GCRF. The T3 truth is the standard C++ force
 model at commit `5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86`, integrated with
 RKF78 at relative tolerance
@@ -24,9 +24,9 @@ additional TDB/UTC shift; the standard equations already convert TT to
 TDB internally. `truth/truth.json` records input/output hashes, settings,
 units, frame, and the complete regeneration command.
 
-The 60 s sampling includes four interior points per resident 300 s
-Chebyshev segment, so truth comparisons cover the delivered interpolation
-as well as segment endpoints. It reuses the existing T3 integrations;
+The 10 s grid samples resident 300 s Chebyshev interiors. Keeping all native
+stops also retains the tighter perigee grid and exact weather boundaries.
+The E2E scores both exported PPE and direct resident dense-state queries. It reuses the existing T3 integrations;
 exporting more samples does not rerun propagation.
 
 Regenerate all eight fixtures from the repository root, setting `--study`

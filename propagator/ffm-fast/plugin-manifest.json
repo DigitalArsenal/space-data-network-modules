@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.ffm-fast",
   "name": "FFM Fast (Full Force Model, fast implementation)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Implements profile FFM-1 with the same forces, degree, and order as the standard FFM module, computed faster. PRW execution, resident state, PPE trajectory, finite-burn, STM, atmosphere, and ephemeris contracts are shared with the standard module.",
   "pluginFamily": "propagator",
   "capabilities": [],

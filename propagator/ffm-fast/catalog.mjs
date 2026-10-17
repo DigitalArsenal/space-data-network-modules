@@ -11,7 +11,7 @@ export const FAST_CATALOG_INTEGRATOR = Object.freeze({
 });
 
 // Describes the internal C++ resident policy; this is not a selectable mode.
-export const INTEGRATION_POLICY = 'RK78 1e-14 / 120 s; forward elliptic e >= 0.25: RK78 Sundman alpha=1.5, 200/orbit (GTO perigee<1000 km, 30000<apogee<45000 km: 300/orbit); fixed diagnostics and backward requests: RK78';
+export const INTEGRATION_POLICY = 'Forward GJ8 PEC on common TT grids: LEO 10/15/12/24 s by perigee band; near-circular GPS 150 s and GEO 600 s; other low-eccentricity elliptic orbits 24 s. Eccentricity >=0.25: RK78 Sundman alpha=1.5, 200/orbit (GTO-like: 300/orbit). Tight RK alignment <=one GJ step; corrected conical dense acceleration; daily-Ap restart trim; selected-object batches of 32. Fixed diagnostics, backward requests, nonelliptic states, unsupported GJ force families, or insufficient startup coverage retain RK78.';
 
 // Generic clients select the same one-mode policy as fullForceRequest.
 export const CATALOG_INTEGRATOR = FAST_CATALOG_INTEGRATOR;

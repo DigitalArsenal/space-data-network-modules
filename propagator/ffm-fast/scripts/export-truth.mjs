@@ -20,7 +20,7 @@ if (!opt.study || !/^[0-9a-f]{40}$/.test(opt['source-commit'] ?? ''))
 const study = path.resolve(opt.study), output = path.resolve(opt.output ?? path.join(packageRoot, 'tests/fixtures/truth'));
 const source = fileURLToPath(new URL('export-truth.cpp', import.meta.url));
 const reader = path.join(study, 'harness/src/hxio.h');
-const samplingSeconds = 60, durationSeconds = 259200, rowsPerSeed = durationSeconds / samplingSeconds + 1;
+const samplingSeconds = 10, durationSeconds = 259200, minimumRows = durationSeconds / samplingSeconds + 1;
 const seeds = JSON.parse(fs.readFileSync(path.join(packageRoot, 'tests/fixtures/seeds.json'), 'utf8')).map(row => row.label);
 const sha256 = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const run = (command, argv) => {
@@ -36,7 +36,7 @@ try {
   const records = seeds.map(seed => {
     const input = path.join(study, `data/truth/${seed}-T3.st`), file = path.join(work, `${seed}.f64`);
     const record = JSON.parse(run(binary, [input, file, String(samplingSeconds), String(durationSeconds)]));
-    if (record.label !== seed || record.rows !== rowsPerSeed || record.epochWholeTt !== 838857669 || record.epochFractionTt !== 0.184
+    if (record.label !== seed || record.rows < minimumRows || record.epochWholeTt !== 838857669 || record.epochFractionTt !== 0.184
         || record.sourceSettings.mode !== 'truth' || record.sourceSettings.integrator !== 2
         || record.sourceSettings.rel !== 1e-14 || record.sourceSettings.abs_km !== 1e-14 || record.sourceSettings.max_step !== 2)
       throw new Error(`${seed}: source is not the expected T3 reference at the fixture epoch.`);
@@ -50,7 +50,7 @@ try {
     settings: { truth: 'T3', integrator: 'RKF78', relativeTolerance: 1e-14, maximumStepSeconds: 2,
       stops: 'Every 10 s TT, 1 s through eccentric-orbit perigee, and every three-hour UTC weather boundary; accelerations on both sides' },
     epoch: '2026-08-01T12:00:00.000000', epochTimeScale: 'UTC', epochTt: '2026-08-01T12:01:09.184000000',
-    sampling: { seconds: samplingSeconds, durationSeconds, rowsPerSeed, coordinate: 'Elapsed TT seconds from the fixture epoch' },
+    sampling: { seconds: samplingSeconds, durationSeconds, includeNativeStops: true, minimumRows, coordinate: 'Elapsed TT seconds from the fixture epoch' },
     timeHandling: 'HXSTAT01 epochs and resident PPE TIME_SYSTEM are TT. Interpolation uses two-part TT differences as hx eval does; no TDB/UTC shift is applied to elapsed seconds. The equations use the standard C++ TT-to-TDB conversion internally.',
     frame: 'GCRF', units: { time: 's', position: 'km', velocity: 'km/s' },
     format: { encoding: 'little-endian IEEE 754 float64', columns: ['secondsSinceFixtureEpoch', 'x', 'y', 'z', 'vx', 'vy', 'vz'] },
@@ -60,7 +60,7 @@ try {
   fs.mkdirSync(output, { recursive: true });
   for (const seed of seeds) fs.copyFileSync(path.join(work, `${seed}.f64`), path.join(output, `${seed}.f64`));
   fs.writeFileSync(path.join(output, 'truth.json'), `${JSON.stringify(metadata, null, 2)}\n`);
-  console.log(JSON.stringify({ exported: seeds, samplingSeconds, rowsPerSeed, output }));
+  console.log(JSON.stringify({ exported: seeds, samplingSeconds, rowsPerSeed: Object.fromEntries(records.map(row => [row.seed, row.rows])), output }));
 } finally {
   fs.rmSync(work, { recursive: true, force: true });
 }
