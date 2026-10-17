@@ -111,6 +111,11 @@ const compilation = await compileModuleFromSource({
   // declaration is a permanent claim that this guest never spawns a thread, held
   // to by the SDK's own artifact assertion.
   threadModel: "wasi-sequential",
+  // A browser reserves a shared memory's whole maximum up front (on this
+  // triple the guest's own memory is shared). The largest ephemeris the module
+  // accepts (kMaxSamples, 200,000 states) peaks at 50.2 MiB locating apsides
+  // and nodes; x1.5, in 16 MiB steps (modules-analysis-shared-memory-20261017).
+  maximumMemoryBytes: 80 * 1024 * 1024,
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

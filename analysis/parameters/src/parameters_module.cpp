@@ -28,6 +28,11 @@ namespace ax = ::sdn::frames;
 
 constexpr int kMaxStates = 4096;
 constexpr int kMaxParameters = 256;
+// Values (states x parameters) per invocation. It bounds the guest's memory: a
+// browser reserves a shared memory's whole maximum up front, and the maximum
+// build.mjs declares is this request's measured high-water x1.5
+// (modules-analysis-shared-memory-20261017). Larger work is batched.
+constexpr int kMaxValues = 65536;
 
 const plugin_input_frame_t* find_frame(const char* port_id) {
   const int32_t index = plugin_find_input_index(port_id, 0);
@@ -458,7 +463,8 @@ extern "C" int evaluate_parameters(void) {
                      "An evaluation request must name at least one parameter and one state.");
     return 3;
   }
-  if (stateCount > kMaxStates || parameterCount > kMaxParameters) {
+  if (stateCount > kMaxStates || parameterCount > kMaxParameters ||
+      stateCount * parameterCount > kMaxValues) {
     plugin_set_error("request-too-large",
                      "The request exceeds this provider's per-invocation limits.");
     return 3;
