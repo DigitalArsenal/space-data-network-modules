@@ -52,6 +52,9 @@ class Run {
     std::unique_ptr<SundmanRun> sundman_;
     std::unique_ptr<GjRun> gj_;
     timesys::Instant epoch_;
+    astro::IntegratorConfig config_;
+    astro::ForceModel::ForceModelSet& forces_;
+    double rkOffset_ = 0;
     unsigned sundmanGrid_ = 0;
 public:
     static double candidateGjGrid(const astro::StateVector& reference,int direction,
@@ -61,7 +64,7 @@ public:
     }
     Run(const astro::StateVector& initial,const astro::StateVector& reference,
         const timesys::Instant& epoch,int direction,const astro::IntegratorConfig& config,
-        astro::ForceModel::ForceModelSet& forces,bool allowGj=true) : epoch_(epoch) {
+        astro::ForceModel::ForceModelSet& forces,bool allowGj=true) : epoch_(epoch),config_(config),forces_(forces) {
         const auto sundman=!fixedStep(config) && direction>0?sundmanGrid(reference,forces.mu):0;
         const auto gj=allowGj?candidateGjGrid(reference,direction,config,forces):0;
         sundmanGrid_=sundman;
@@ -69,11 +72,30 @@ public:
         else if (gj) gj_=std::make_unique<GjRun>(initial,epoch,config,forces,gj);
         else rk_=std::make_unique<astro::Integrator::ForceRun>(initial,direction,config,forces,true);
     }
-    double time() const { return gj_?gj_->time():sundman_?sundman_->time():rk_->run().time(); }
+    double time() const { return gj_?gj_->time():sundman_?sundman_->time():rkOffset_+rk_->run().time(); }
     const std::array<double,6>& state() const { return gj_?gj_->state():sundman_?sundman_->state():rk_->run().state(); }
     const std::array<double,6>& derivative() { return gj_?gj_->derivative():sundman_?sundman_->derivative():rk_->run().derivative(); }
-    bool running(double target) const { return gj_?gj_->running(target):sundman_?sundman_->running(target):rk_->run().running(target); }
-    bool attempt(double target) { return gj_?gj_->attempt(target):sundman_?sundman_->attempt(target):rk_->run().attempt(target); }
+    bool running(double target) const { return gj_?gj_->running(target):sundman_?sundman_->running(target):rk_->run().running(target-rkOffset_); }
+    bool attempt(double target) {
+        if (sundman_) return sundman_->attempt(target);
+        if (gj_) {
+            const bool accepted=gj_->attempt(target);
+            if (accepted || !gj_->needsRkFallback()) return accepted;
+            // Ghost history can cross reentry outside a valid requested arc.
+            // Resume standard RK from the last accepted physical state,
+            // retaining its exact clock and the caller's span-relative time.
+            const auto y=gj_->state();
+            rkOffset_=gj_->time();
+            const auto at=epoch_.plusSeconds(rkOffset_);
+            auto config=config_;
+            config.maxSteps-=gj_->acceptedSteps();
+            astro::StateVector initial({y[0],y[1],y[2]},{y[3],y[4],y[5]},at.jdTdb());
+            forces_.integrationEpochTT=at;
+            gj_.reset();
+            rk_=std::make_unique<astro::Integrator::ForceRun>(initial,1,config,forces_,true);
+        }
+        return rk_->run().attempt(target-rkOffset_);
+    }
     bool endedOnBoundary() const { return gj_?gj_->endedOnBoundary():sundman_?sundman_->endedOnBoundary():rk_->run().endedOnBoundary(); }
     std::string description() const {
         if (gj_) return "GJ8 PEC at " + std::to_string(static_cast<unsigned>(gj_->gridStep())) + " s";

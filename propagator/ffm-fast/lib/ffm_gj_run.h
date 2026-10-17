@@ -23,7 +23,7 @@ class GjRun {
     int64_t calendarDay_ = 0;
     uint32_t steps_ = 0;
     bool ready_ = false, haveDerivative_ = false, sunlit_ = true;
-    bool rkBranch_ = false;
+    bool rkBranch_ = false, startupOutOfDomain_ = false;
 
     timesys::Instant instant(double x) const { return clock_.at(x); }
     gj::Vector<3> acceleration(const Point& p, bool selectedBranch) {
@@ -69,22 +69,41 @@ class GjRun {
         return p;
     }
     bool startup() {
+        // Only artificial history may request fallback. A stop at the last
+        // accepted physical state remains a real propagation failure.
+        if (astro::stopAt(y_.data(),instant(point_.x))) return false;
+        const auto previousStop=astro::propagationStop(), previousCallStop=astro::callStop();
+        auto historyStopped=[&]() {
+            if (!astro::propagationStop().active) return false;
+            astro::propagationStop()=previousStop;
+            astro::callStop()=previousCallStop;
+            startupOutOfDomain_=true;
+            return true;
+        };
         sunlit_=gjforces::shadowValues(forces_,instant(point_.x),gjshadow::vector(point_.r)).midpoint>=0;
         std::array<Point,9> nodes{}; nodes[4]=point_;
-        for (int j=3;j>=0;--j) nodes[j]=rk(nodes[j+1],point_.x+(j-4)*core_.h,true);
-        for (int j=5;j<9;++j) nodes[j]=rk(nodes[j-1],point_.x+(j-4)*core_.h,true);
-        if (astro::propagationStop().active) return false;
+        for (int j=3;j>=0;--j) {
+            nodes[j]=rk(nodes[j+1],point_.x+(j-4)*core_.h,true);
+            if (historyStopped()) return false;
+        }
+        for (int j=5;j<9;++j) {
+            nodes[j]=rk(nodes[j-1],point_.x+(j-4)*core_.h,true);
+            if (historyStopped()) return false;
+        }
         auto eval=[&](const Point& p) { return acceleration(p,true); };
         for (auto& p:nodes) p.a=eval(p);
+        if (historyStopped()) return false;
         core_.initialize(nodes,eval,2e-13,64);
-        if (astro::propagationStop().active) return false;
+        if (historyStopped()) return false;
         if (!core_.startupConverged) throw std::runtime_error("GJ startup corrector did not converge");
         // Convert centered ordinates into nine backward nodes ending at the
         // requested lattice point, without consuming future output.
         std::reverse(core_.history.begin(),core_.history.end()); core_.h=-core_.h; core_.resetSums();
-        for (int j=0;j<4;++j) core_.step(eval,true);
+        for (int j=0;j<4;++j) {
+            core_.step(eval,true);
+            if (historyStopped()) return false;
+        }
         std::reverse(core_.history.begin(),core_.history.end()); core_.h=-core_.h; core_.resetSums();
-        if (astro::propagationStop().active) return false;
         point_=core_.current(); ready_=true;
         return true;
     }
@@ -105,6 +124,8 @@ public:
         calendarDay_=gjforces::calendarDay(epoch.plusSeconds(1e-3));
     }
     double time() const { return t_; }
+    uint32_t acceptedSteps() const { return steps_; }
+    bool needsRkFallback() const { return startupOutOfDomain_; }
     const State& state() const { return y_; }
     const State& derivative() {
         if (!haveDerivative_) {
