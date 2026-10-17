@@ -184,10 +184,12 @@ void computePinesLegendre(
     double zRr2 = position.z * R / r2;
     double Rr_sq = (R / r) * (R / r);
 
-    // Initialize arrays — need up to degree maxDegree+1 for acceleration formulas
+    // Retain scratch rows across the degree-70, 30 and 4 recursions in one
+    // force evaluation. Shrinking freed 66 rows per array, allocating 132
+    // rows again on the next evaluation. Rows above N are never read.
     int N = maxDegree + 2;
-    V.resize(N + 1);
-    W.resize(N + 1);
+    if (V.size() < static_cast<size_t>(N + 1)) V.resize(N + 1);
+    if (W.size() < static_cast<size_t>(N + 1)) W.resize(N + 1);
     for (int n = 0; n <= N; n++) {
         V[n].assign(n + 2, 0.0);
         W[n].assign(n + 2, 0.0);

@@ -1,0 +1,6 @@
+{
+  "commit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "wasm": "propagator/ffm/dist/isomorphic/module.wasm",
+  "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3",
+  "sources": "propagator/ffm/lib/environment_models.cpp"
+}
