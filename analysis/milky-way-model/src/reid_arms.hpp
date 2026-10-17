@@ -78,9 +78,11 @@ inline double model_beta(const ArmSegment& a,double beta) {
 // Euclidean closest-point distance to a kinked logarithmic curve. The two
 // smooth sides are minimized separately so Newton iteration never crosses a
 // discontinuity in pitch. Used for validation, not the volume's hot loop.
-inline double arm_segment_distance_kpc(const ArmSegment& a,Vec3 p) {
+struct ArmClosestPoint {Vec3 point;double beta,distance;};
+
+inline ArmClosestPoint arm_segment_closest_point(const ArmSegment& a,Vec3 p) {
   const double beta0=std::atan2(p.y,-p.x);
-  double best=std::numeric_limits<double>::infinity();
+  ArmClosestPoint best{{},0,std::numeric_limits<double>::infinity()};
   const auto domain=arm_beta_domain(a);
   const double domain_lo=domain[0],domain_hi=domain[1];
   for(int side=0;side<2;++side) {
@@ -102,11 +104,17 @@ inline double arm_segment_distance_kpc(const ArmSegment& a,Vec3 p) {
       }
       for(double candidate:{lo,beta,hi}) {
         const double r=arm_radius_kpc(a,candidate);
-        best=std::min(best,std::hypot(p.x+r*std::cos(candidate),p.y-r*std::sin(candidate)));
+        const Vec3 point{-r*std::cos(candidate),r*std::sin(candidate),0};
+        const double distance=std::hypot(p.x-point.x,p.y-point.y);
+        if(distance<best.distance) best={point,candidate,distance};
       }
     }
   }
   return best;
+}
+
+inline double arm_segment_distance_kpc(const ArmSegment& a,Vec3 p) {
+  return arm_segment_closest_point(a,p).distance;
 }
 
 inline double arm_distance_kpc(unsigned family,Vec3 p) {
