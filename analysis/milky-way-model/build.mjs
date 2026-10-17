@@ -40,7 +40,7 @@ try {
   await fs.writeFile(path.join(root, 'dist/guest-link/metadata.json'), JSON.stringify({version: 1, format,
     language, threadModel, symbolPrefix, methodSymbols}, null, 2) + '\n');
   await fs.writeFile(path.join(root, 'dist/build-provenance.json'), JSON.stringify({
-    sdk: '0.8.25', standards: version, sources: names, threadModel: 'emscripten-pthreads', threading,
+    sdk: '0.9.2', standards: version, sources: names, threadModel: 'emscripten-pthreads', threading,
     compiler: 'deps/emsdk/upstream/bin/clang++ --target=wasm32-wasip1-threads',
     emsdkRelease: (await fs.readFile(path.join(emsdk, 'upstream/.emsdk_version'), 'utf8')).trim(),
     wasmSha256: createHash('sha256').update(await fs.readFile(outputPath)).digest('hex'),
