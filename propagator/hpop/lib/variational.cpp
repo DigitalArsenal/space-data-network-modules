@@ -10,7 +10,7 @@ namespace astro { namespace Integrator {
 namespace {
 struct Context {
     ForceModel::ForceModelSet* forces;
-    double epoch;
+    timesys::Instant epoch;
     ForceModel::DensityGradient density;
     const char* error = nullptr;
     const std::vector<DynamicParameter>* parameters = nullptr;
@@ -21,7 +21,7 @@ void derivative(double t, const double* y, double* f, void* opaque) {
     auto& c = *static_cast<Context*>(opaque);
     if(!c.error)c.error=ForceModel::ValidateAccelerationPartials(Vec3(y[0],y[1],y[2]),*c.forces);
     if(c.error) {std::fill(f,f+c.size,0.0);return;}
-    const double jd=c.epoch+t/86400.0;
+    const auto jd=c.epoch.plusSeconds(t);
     if(stopAt(y,jd)){std::fill(f,f+c.size,0.0);return;}   // reentry.h
     const auto a = ForceModel::ComputeAccelerationPartials(
         Vec3(y[0],y[1],y[2]), Vec3(y[3],y[4],y[5]), jd,
@@ -100,11 +100,12 @@ bool finiteDifferenceConfig(const IntegratorConfig& config,IntegratorConfig& sel
             return false;
     }
 }
-struct WeatherEpochScope {
-    double& epoch;
-    const double saved;
-    WeatherEpochScope(double& value,double replacement):epoch(value),saved(value){epoch=replacement;}
-    ~WeatherEpochScope(){epoch=saved;}
+struct IntegrationEpochScope {
+    ForceModel::ForceModelSet& forces;
+    const timesys::Instant saved;
+    IntegrationEpochScope(ForceModel::ForceModelSet& f,const timesys::Instant& at)
+        : forces(f),saved(f.integrationEpochTT) { f.integrationEpochTT=at; }
+    ~IntegrationEpochScope(){forces.integrationEpochTT=saved;}
 };
 VariationalResult fail(VariationalResult& out,const std::string& error) {
     out.success=false;out.errorMessage=error;return out;
@@ -131,10 +132,11 @@ VariationalResult scheduled(const StateVector& initial,double dt,const Integrato
     auto dispatch=config;
     if(!analytic&&!finiteDifferenceConfig(config,dispatch))
         return fail(out,"FINITE_DIFFERENCE STM supports RK4, RKF45, RKF78, RK78, COWELL, RKDP87 and BS; this integrator has no verified result dispatcher.");
+    const auto epoch=ForceModel::StateEpoch(forces,initial.epoch);
     double elapsed=0;
     auto advance=[&](double until) {
         if(until==elapsed)return true;
-        WeatherEpochScope epochScope(forces.explicitEpochContract ? forces.integrationEpochTDB : forces.weather.epoch,out.finalState.epoch);
+        IntegrationEpochScope epochScope(forces,epoch.plusSeconds(elapsed));
         const double duration=until-elapsed;
         VariationalResult segment;
         if(analytic)segment=PropagateVariational(out.finalState,duration,config,forces,density,parameters);
@@ -196,7 +198,7 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
         double y[N]{},next[N],error[N];
         for(int i=0;i<6;++i){y[i]=component(initial,i);y[6+i*6+i]=1;}
         clearPropagationStop();   // reentry.h: this integration starts without a stop
-        Context context{&forces,initial.epoch,density};
+        Context context{&forces,ForceModel::StateEpoch(forces,initial.epoch),density};
         context.parameters=&parameters;context.size=N;
         // Dimensionless STM scaling: D^-1 Phi D, D=(r,r,r,v,v,v).
         // Both state and STM participate in ONE acceptance decision; the
@@ -207,7 +209,7 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
         double t=0, sign=dt<0?-1:1;
         double h=sign*std::clamp(config.initialStep,config.minStep,config.maxStep);
         // Adaptive steps end on the Earth's shadow boundaries (lib/shadow_events.h).
-        shadow::BoundaryEvents events(forces,initial.epoch,0.0,y);
+        shadow::BoundaryEvents events(forces,context.epoch,0.0,y);
         uint64_t attempts=0;
         while(sign*(dt-t)>0) {
             if(out.steps>=config.maxSteps||++attempts>uint64_t(config.maxSteps)*10)
@@ -355,8 +357,10 @@ CovarianceResult PropagateCovariance(const StateVector& initial,double dt,const 
     }
     const int n=std::max(1,int(intervals));
     const double step=dt/n;
+    const auto epoch=ForceModel::StateEpoch(forces,initial.epoch);
     StateVector state=initial;Mat6 phi=Mat6::identity(),p=p0;
     for(int k=0;k<n;++k) {
+        IntegrationEpochScope epochScope(forces,epoch.plusSeconds(k*step));
         const auto v=PropagateWithSTM(state,step,config,forces,method,density,burns);
         if(!v.success){out.success=false;out.errorMessage=v.errorMessage;return out;}
         p=TransportCovariance(v.stm,p);
@@ -410,9 +414,11 @@ ParameterCovarianceResult PropagateParameterCovariance(const StateVector& initia
     }
     const int count=std::max(1,int(intervals));
     const double step=dt/count;
+    const auto epoch=ForceModel::StateEpoch(forces,initial.epoch);
     StateVector state=initial;
     std::vector<double> phi(n*n,0.0),p=p0;for(unsigned i=0;i<n;++i)phi[i*n+i]=1;
     for(int k=0;k<count;++k) {
+        IntegrationEpochScope epochScope(forces,epoch.plusSeconds(k*step));
         const auto v=PropagateWithSTM(state,step,config,forces,method,density,burns,parameters);
         if(!v.success){out.success=false;out.errorMessage=v.errorMessage;return out;}
         const auto span=augmented(v);

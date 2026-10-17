@@ -394,8 +394,8 @@ static Vec3 lvlhDeltaVToECI(const Vec3& tPos, const Vec3& tVel,
 }
 
 static StateVector propagateStepInternal(const StateVector& initial, double dtSec) {
-    // Update force model weather and set epoch for JD reconstruction in
-    // ForceModelDerivative: jd = weather.epoch + t / 86400.0
+    // Preserve the legacy TDB-labelled boundary, then advance the force clock
+    // as a two-part TT instant throughout integration.
     g_forceSet.weather = g_weather;
     g_forceSet.weather.epoch = initial.epoch;
 
@@ -1260,8 +1260,6 @@ void plugin_set_visibility_mask(const uint8_t* mask, int count) {
 int plugin_eval_states(double jd, double* outPtr, int maxCount) {
     if (!propagationReady() || !outPtr || maxCount <= 0 || !std::isfinite(jd)) return 0;
     const int n = std::min(g_entityCount, maxCount);
-    const auto rotation = coords::getTransformMatrix(coords::Frame::GCRF, coords::Frame::ECEF, jd);
-    const auto omega = rotation.apply(coords::Vec3(0.0, 0.0, coords::constants::EARTH_ROTATION_RATE));
     for (int i = 0; i < n; ++i) {
         double* out = outPtr + i * 6;
         std::fill(out, out + 6, 0.0);
@@ -1273,10 +1271,12 @@ int plugin_eval_states(double jd, double* outPtr, int maxCount) {
         StateVector state;
         chebyshevEvalState(entity.ephemeris.segments[segment], jd,
                           state.position, state.velocity);
-        // Same coords::transform velocity transport, with the shared epoch's
-        // rotation computed once for the entire catalogue shard.
-        const auto position = rotation.apply(coords::Vec3(state.position.x, state.position.y, state.position.z));
-        const auto velocity = rotation.apply(coords::Vec3(state.velocity.x, state.velocity.y, state.velocity.z)) - omega.cross(position);
+        const auto converted = coords::transform(
+            {{state.position.x, state.position.y, state.position.z},
+             {state.velocity.x, state.velocity.y, state.velocity.z}},
+            coords::Frame::GCRF, coords::Frame::ECEF, jd);
+        const auto& position = converted.position;
+        const auto& velocity = converted.velocity;
         out[0] = position.x * 1000.0; out[1] = position.y * 1000.0; out[2] = position.z * 1000.0;
         out[3] = velocity.x * 1000.0; out[4] = velocity.y * 1000.0; out[5] = velocity.z * 1000.0;
     }
@@ -2245,10 +2245,11 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     if (!propagationReady()) return -1;
 
     g_forceSet.weather = g_weather;
+    const auto instant = timesys::Instant::fromTdb(jd);
 
     Vec3 sunPos;
     if (g_forceSet.useSRP || g_forceSet.useEarthRadiation) {
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(instant);
         sunPos = sun.position;
     }
 
@@ -2258,34 +2259,34 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     // is how a breakdown comes to disagree with the trajectory it explains:
     // this block used to have no gravity-mode case at all, so a closed-form
     // selection was reported as a harmonics field.
-    gravity = ForceModel::CentralBodyGravity(g_state.position, jd, g_forceSet);
+    gravity = ForceModel::CentralBodyGravity(g_state.position, instant, g_forceSet);
 
     if (g_forceSet.useThirdBody)
-        thirdBody = ForceModel::ThirdBody(g_state.position, jd, g_forceSet.thirdBody);
+        thirdBody = ForceModel::ThirdBody(g_state.position, instant, g_forceSet.thirdBody);
 
     // The integrator's own drag dispatch, so every model (Harris-Priester and
     // USSA1976 used to fall through to the exponential here) and the BDOT
     // rate are reported as integrated.
     if (g_forceSet.useDrag)
-        drag = ForceModel::DragAccelerationWith(g_state.position, g_state.velocity, jd,
-            g_forceSet, ForceModel::DragAt(jd, g_forceSet));
+        drag = ForceModel::DragAccelerationWith(g_state.position, g_state.velocity, instant,
+            g_forceSet, ForceModel::DragAt(instant, g_forceSet));
 
     if (g_forceSet.useSRP)
         srp = ForceModel::SolarRadiation(g_state.position, g_state.velocity, sunPos, g_forceSet.srp);
 
     if (g_forceSet.useRelativisticCorrection)
         relativity = ForceModel::RelativisticCorrection(g_state.position, g_state.velocity,
-            jd, g_forceSet.mu, g_forceSet.relativistic);
+            instant, g_forceSet.mu, g_forceSet.relativistic);
 
     if (g_forceSet.useSolidTides)
-        tides += ForceModel::SolidTides(g_state.position, jd, g_forceSet.solidTides);
+        tides += ForceModel::SolidTides(g_state.position, instant, g_forceSet.solidTides);
     if (g_forceSet.useOceanTides)
-        tides += ForceModel::OceanTideAcceleration(g_state.position, jd, g_forceSet);
+        tides += ForceModel::OceanTideAcceleration(g_state.position, instant, g_forceSet);
 
     if (g_forceSet.useEarthRadiation) {
         ForceModel::EarthRadiationConfig config = g_forceSet.earthRadiation;
         config.crAreaOverMass = ForceModel::EarthRadiationCoefficient(g_forceSet);
-        albedo = ForceModel::EarthRadiation(g_state.position, sunPos, jd, config);
+        albedo = ForceModel::EarthRadiation(g_state.position, sunPos, instant, config);
     }
 
     if (g_forceSet.useEmpiricalAccel)

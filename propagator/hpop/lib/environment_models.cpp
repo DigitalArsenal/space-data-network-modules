@@ -423,11 +423,11 @@ EphemerisState JPLDEReader::getState(CelestialBody body, double jd, CelestialBod
         // Fall back to analytical ephemeris
         switch (body) {
             case CelestialBody::Sun:
-                return getSunPosition(jd);
+                return getSunPosition(timesys::Instant::fromTdb(jd));
             case CelestialBody::Moon:
-                return getMoonPosition(jd);
+                return getMoonPosition(timesys::Instant::fromTdb(jd));
             default:
-                return getPlanetPosition(body, jd);
+                return getPlanetPosition(body, timesys::Instant::fromTdb(jd));
         }
     }
 
@@ -475,7 +475,7 @@ ThirdBodyAcceleration computeThirdBodyDE(
     const JPLDEReader* deReader)
 {
     // Use existing analytical function, but with optional DE reader
-    return computeThirdBodyAcceleration(satPosition, config, jd);
+    return computeThirdBodyAcceleration(satPosition, config, timesys::Instant::fromTdb(jd));
 }
 
 // =============================================================================
@@ -613,7 +613,7 @@ std::vector<EclipseEvent> findEclipseEvents(
         StateVector currentState = propagateKepler(initialState, propagateTime);
 
         // Get sun position
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(timesys::Instant::fromTdb(jd));
 
         // Check shadow
         ShadowGeometry shadow = computeShadowGeometry(
@@ -920,13 +920,13 @@ AccelerationBreakdown computeAccelerationBreakdown(
     if (config.useJPLDE && config.deReader && config.deReader->isLoaded()) {
         result.thirdBody = computeThirdBodyDE(state.position, config.thirdBody, jd, config.deReader.get());
     } else {
-        result.thirdBody = computeThirdBodyAcceleration(state.position, config.thirdBody, jd);
+        result.thirdBody = computeThirdBodyAcceleration(state.position, config.thirdBody, timesys::Instant::fromTdb(jd));
     }
     result.total = result.total + result.thirdBody.total;
 
     // SRP
     if (config.useSRP) {
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(timesys::Instant::fromTdb(jd));
         if (sun.valid) {
             if (config.useNPlate) {
                 Mat3 identity;  // Would use actual attitude

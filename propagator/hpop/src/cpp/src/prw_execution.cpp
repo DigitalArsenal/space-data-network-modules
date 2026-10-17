@@ -48,7 +48,7 @@ bool finish(const Execution& execution,const PRWExecutionRequest* request,const 
 // runs along the arc) and the plain path without STM or samples.
 bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
     const double epoch=timesys::ttToTdb(epochTT.jdTt());
-    if(!preflightKernel(execution,epoch,error))return false;
+    if(!preflightKernel(execution,epochTT.instant(),error))return false;
     const auto stateOut=[&](StateVector state){return sampleState(execution,request,state);};
     const auto matrixOut=[&](const double* values,unsigned n,bool covariance){return sampleMatrix(execution,values,n,covariance);};
     // Elapsed time on the integration clock (TT), exact to sub-nanosecond.
@@ -109,7 +109,7 @@ bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRW
         if(execution.covariance)c.p=execution.parameters.empty()?std::vector<double>(&execution.p.m[0][0],&execution.p.m[0][0]+36):execution.pParameters;
         for(const auto& entry:*group) {
             const TTEpoch& epochTT=epochs[entry.second];
-            if(!preflightKernel(execution,timesys::ttToTdb(epochTT.jdTt()),error))return false;
+            if(!preflightKernel(execution,epochTT.instant(),error))return false;
             if(!advance(execution,c,epochTT,error))return false;
             auto out=std::make_unique<PRWPropagationSampleT>();
             out->STATE=sampleState(execution,request,c.state);out->STM=sampleMatrix(execution,c.phi.data(),n,false);
@@ -143,7 +143,7 @@ bool evaluateStatesInOrder(Execution& execution,const PRWExecutionRequest* reque
         StateVector state=execution.initial;TTEpoch at=execution.initialTT;uint32_t steps=0,rejections=0;
         for(const auto& entry:*group) {
             const TTEpoch& epochTT=epochs[entry.second];
-            if(!preflightKernel(execution,timesys::ttToTdb(epochTT.jdTt()),error))return false;
+            if(!preflightKernel(execution,epochTT.instant(),error))return false;
             if(!propagateState(execution,state,at,epochTT,steps,rejections,error))return false;
             auto out=std::make_unique<PRWPropagationSampleT>();
             out->STATE=sampleState(execution,request,state);
@@ -159,8 +159,9 @@ bool evaluateStatesInOrder(Execution& execution,const PRWExecutionRequest* reque
 bool execute(const PRWExecutionRequest* request,const Environment& environment,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,environment.earth!=nullptr,execution,error))return false;
     if(!attachEnvironment(execution,environment,request->FORCES()->WEATHER()!=nullptr,error))return false;
-    double first=execution.initial.epoch,last=execution.target;
-    for(const double t:execution.samples){last=std::max(last,t);first=std::min(first,t);}
+    auto first=execution.initialTT.instant(),last=execution.targetTT.instant();
+    if(first.secondsSince(last)>0)std::swap(first,last);
+    for(const auto& t:execution.samplesTT){const auto at=t.instant();if(at.secondsSince(last)>0)last=at;if(at.secondsSince(first)<0)first=at;}
     if(!environmentCovers(execution,environment,first,last,error))return false;
     if(environment.weather&&!execution.massDynamics)execution.breaks=driverBreaks(execution);
     auto result=std::make_unique<PRWExecutionResultT>();
@@ -189,8 +190,9 @@ bool loadKernel(const uint8_t* data,size_t size,std::string& error) {
 bool ephemeris(const PRWEphemerisRequest* request,PRWT& response,std::string& error) {
     if(Ephemeris::selectedEphemerisSource()==Ephemeris::EphemerisSource::Analytical)return prwError(error,"missing-kernel: NAIF ephemeris query requires a kernel input.");
     if(request->EPOCH()->TIME_SYSTEM()!=timingStandard::TDB)return prwError(error,"epoch-time-scale: Geometric ephemeris query requires TDB.");
-    double jd=0,utc=0;if(!decodeEpoch(request->EPOCH(),jd,utc,error))return false;
-    const auto value=Ephemeris::getKernelState(request->TARGET_NAIF_ID(),request->CENTER_NAIF_ID(),jd);
+    TTEpoch epoch;if(!decodeEpochTT(request->EPOCH(),epoch,error))return false;
+    const auto instant=epoch.instant();const double jd=instant.jdTdb();
+    const auto value=Ephemeris::getKernelState(request->TARGET_NAIF_ID(),request->CENTER_NAIF_ID(),instant);
     if(!value.valid){error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;}
     auto result=std::make_unique<PRWEphemerisResultT>();result->TARGET_NAIF_ID=request->TARGET_NAIF_ID();result->CENTER_NAIF_ID=request->CENTER_NAIF_ID();
     StateVector state;state.position=value.position;state.velocity=value.velocity;state.epoch=jd;

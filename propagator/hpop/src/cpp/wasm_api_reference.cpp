@@ -330,8 +330,8 @@ static Vec3 lvlhDeltaVToECI(const Vec3& tPos, const Vec3& tVel,
 }
 
 static StateVector propagateStepInternal(const StateVector& initial, double dtSec) {
-    // Update force model weather and set epoch for JD reconstruction in
-    // ForceModelDerivative: jd = weather.epoch + t / 86400.0
+    // Preserve the legacy TDB-labelled boundary, then advance the force clock
+    // as a two-part TT instant throughout integration.
     g_forceSet.weather = g_weather;
     g_forceSet.weather.epoch = initial.epoch;
 
@@ -1542,10 +1542,11 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     if (!g_initialized) return -1;
 
     g_forceSet.weather = g_weather;
+    const auto instant = timesys::Instant::fromTdb(jd);
 
     Vec3 sunPos;
     if (g_forceSet.useSRP || g_forceSet.useEarthRadiation) {
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(instant);
         sunPos = sun.position;
     }
 
@@ -1560,7 +1561,7 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     }
 
     if (g_forceSet.useThirdBody)
-        thirdBody = ForceModel::ThirdBody(g_state.position, jd, g_forceSet.thirdBody);
+        thirdBody = ForceModel::ThirdBody(g_state.position, instant, g_forceSet.thirdBody);
 
     if (g_forceSet.useDrag) {
         switch (g_forceSet.dragModel) {
@@ -1589,17 +1590,17 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
 
     if (g_forceSet.useRelativisticCorrection)
         relativity = ForceModel::RelativisticCorrection(g_state.position, g_state.velocity,
-            jd, g_forceSet.mu, g_forceSet.relativistic);
+            instant, g_forceSet.mu, g_forceSet.relativistic);
 
     if (g_forceSet.useSolidTides)
-        tides += ForceModel::SolidTides(g_state.position, jd, g_forceSet.solidTides);
+        tides += ForceModel::SolidTides(g_state.position, instant, g_forceSet.solidTides);
     if (g_forceSet.useOceanTides)
-        tides += ForceModel::OceanTideAcceleration(g_state.position, jd, g_forceSet);
+        tides += ForceModel::OceanTideAcceleration(g_state.position, instant, g_forceSet);
 
     if (g_forceSet.useEarthRadiation) {
         ForceModel::EarthRadiationConfig config = g_forceSet.earthRadiation;
         config.crAreaOverMass = ForceModel::EarthRadiationCoefficient(g_forceSet);
-        albedo = ForceModel::EarthRadiation(g_state.position, sunPos, jd, config);
+        albedo = ForceModel::EarthRadiation(g_state.position, sunPos, instant, config);
     }
 
     if (g_forceSet.useEmpiricalAccel)

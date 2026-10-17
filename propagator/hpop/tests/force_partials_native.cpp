@@ -39,7 +39,7 @@ using namespace astro;
 using namespace astro::ForceModel;
 namespace {
 int cases=0,failures=0;
-constexpr double jd=2460000.5;
+const auto jd=timesys::Instant::fromTdb(2460000.5);
 const Vec3 defaultR(6878,150,200),defaultV(-0.2,7.2,2);
 double coordinate(const Vec3& v,int i){return i==0?v.x:i==1?v.y:v.z;}
 void offset(Vec3& v,int i,double h){if(i==0)v.x+=h;else if(i==1)v.y+=h;else v.z+=h;}

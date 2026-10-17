@@ -140,11 +140,11 @@ void record(Branch& b, Integrator::RKF78Run& run) {
 // Starts the span at (spanState, spanStart): to the next restart, or open.
 bool startSpan(Execution& e, Branch& b, const Environment& environment, std::string& error) {
     b.bounded = environment.weather && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
-    const double here = b.spanState.epoch;
-    const double there = b.bounded ? timesys::ttToTdb(b.spanEnd.jdTt()) : here + b.direction;
-    if (!environmentCovers(e, environment, std::min(here, there), std::max(here, there), error) || !preflightKernel(e, there, error)) return false;
+    const auto here = b.spanStart.instant();
+    const auto there = b.bounded ? b.spanEnd.instant() : here.plusSeconds(b.direction*86400.0);
+    if (!environmentCovers(e, environment, here, there, error) || !preflightKernel(e, there, error)) return false;
     if (b.bounded) setDriverSpan(e, b.spanStart, b.spanEnd);
-    if (e.forces.explicitEpochContract) e.forces.integrationEpochTDB = b.spanState.epoch;
+    if (e.forces.explicitEpochContract) e.forces.integrationEpochTT = b.spanStart.instant();
     b.run = std::make_unique<Integrator::ForceRun>(b.spanState, b.direction, e.integrator, e.forces, true);
     Piece piece;
     piece.spanStart = b.spanStart;
@@ -456,9 +456,9 @@ bool ResidentDynamics::add(const PRWResidentState* record, std::string& error) {
     }
     // The force set's epoch-dependent fields, as parseForces sets them for
     // an execution request starting at this state.
-    f.integrationEpochTDB = e.initial.epoch;
-    f.dragRateEpochTdb = e.initial.epoch;
-    if (!requestWeather_) f.weather.epoch = timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(e.initial.epoch)));
+    f.integrationEpochTT = e.initialTT.instant();
+    f.dragRateEpochTT = e.initialTT.instant();
+    if (!requestWeather_) f.weather.epoch = e.initialTT.instant().utc().jd();
     // Each object reads the environment through its own driver span.
     if (!attachEnvironment(e, environment_, requestWeather_, error)) return false;
     o->restart();
@@ -490,8 +490,8 @@ bool ResidentDynamics::covariance(size_t i, const TTEpoch& at, const Mat6& p0, c
     e.noise = noise;
     e.targetTT = at;
     e.target = timesys::ttToTdb(at.jdTt());
-    if (!environmentCovers(e, environment_, std::min(e.initial.epoch, e.target), std::max(e.initial.epoch, e.target), error) ||
-        !preflightKernel(e, e.target, error)) return false;
+    if (!environmentCovers(e, environment_, e.initialTT.instant(), e.targetTT.instant(), error) ||
+        !preflightKernel(e, e.targetTT.instant(), error)) return false;
     if (environment_.weather) e.breaks = driverBreaks(e);
     Cursor c;
     c.state = e.initial;

@@ -7,8 +7,11 @@
 #pragma once
 
 #include "astrodynamics_types.h"
+#include "time_types.h"
 #include "gnss_srp.h"
 #include <functional>
+#include <cmath>
+#include <limits>
 #include <memory>
 
 namespace astro {
@@ -173,10 +176,10 @@ struct ThirdBodyPerturbConfig {
 
 /// Third body gravitational perturbations
 /// @param satPosition Satellite position in geocentric frame (km)
-/// @param jd Julian date (TDB)
+/// @param jd Two-part TT instant (ephemerides use its TDB conversion)
 /// @param config Third body configuration
 /// @return Total third body acceleration (km/s^2)
-Vec3 ThirdBody(const Vec3& satPosition, double jd, const ThirdBodyPerturbConfig& config = ThirdBodyPerturbConfig());
+Vec3 ThirdBody(const Vec3& satPosition, const timesys::Instant& jd, const ThirdBodyPerturbConfig& config = ThirdBodyPerturbConfig());
 
 /// Third body acceleration from a single body
 /// @param satPosition Satellite position (km)
@@ -278,14 +281,14 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 /// Harris-Priester drag acceleration.
 /// @param position Satellite position, GCRF (km)
 /// @param velocity Satellite velocity, GCRF (km/s)
-/// @param jd Julian date (TDB), for the Sun direction that sets the bulge
+/// @param jd Two-part TT instant, for the Sun direction that sets the bulge
 /// @param dragConfig Ballistic properties and atmosphere-relative velocity flags
 /// @param bulgeExponent Cosine exponent (2 low inclination, 6 polar)
 /// @param weather Space weather for HWM14 winds (needed only when includeWinds)
-/// @param windJdUtc UTC Julian date for the winds; 0 uses jd
+/// @param windJdUtc UTC Julian date for the winds; 0 uses jd.utc()
 /// @return Drag acceleration (km/s^2)
 struct EarthAxes;
-Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                     const DragForceConfig& dragConfig, double bulgeExponent = 4.0,
                     const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0,
                     const EarthAxes* axes = nullptr);
@@ -385,10 +388,10 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
 
 /// JB2008 (Bowman et al. 2008; lib/jb2008.h, ported from Orekit 13.1) mass
 /// density (kg/m^3) at a GCRF position (km): geodetic WGS84 position and
-/// the true Sun in the given Earth-fixed axes, the Sun at TDB jdTdb, the
+/// the true Sun in the given Earth-fixed axes, at the two-part TT instant, the
 /// model's UTC from jdUtc, drivers from `weather` (F107/F107a, S107/S107a,
 /// M107/M107a, Y107/Y107a, lagged as JB2008 prescribes, and dTc = DSTDTC).
-double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JB2008DensityAt(const Vec3& position, const timesys::Instant& jdTdb, double jdUtc,
                        const EarthAxes& axes, const SpaceWeatherData& weather);
 
 /// Jacchia-Roberts (lib/jacchia_roberts.h, ported from NASA
@@ -397,7 +400,7 @@ double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
 /// axes, UTC from jdUtc; drivers from `weather`: F10.7 of the previous day
 /// (F107), the 81-day centred average of the previous day (f107aPreviousDay,
 /// else F107a) and Kp 6.7 h earlier (kpLag67h, else Kp).
-double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JacchiaRobertsDensityAt(const Vec3& position, const timesys::Instant& jdTdb, double jdUtc,
                           const EarthAxes& axes, const SpaceWeatherData& weather);
 
 /// Get JB2008 density
@@ -449,13 +452,13 @@ struct RelativisticConfig {
 /// General relativistic corrections to orbit
 /// @param position Satellite position (km)
 /// @param velocity Satellite velocity (km/s)
-/// @param jd Julian date (TDB) - needed for de Sitter (Sun position)
+/// @param jd Two-part TT instant - needed for de Sitter (Sun position)
 /// @param mu Central body GM (km^3/s^2)
 /// @param config Relativistic configuration
 /// @param axes Earth-fixed axes whose z is the Lense-Thirring spin axis
 ///        (GCRF z when null)
 /// @return Relativistic acceleration correction (km/s^2)
-Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                             double mu = MU_EARTH, const RelativisticConfig& config = RelativisticConfig(),
                             const EarthAxes* axes = nullptr);
 
@@ -479,8 +482,8 @@ struct EarthRadiationConfig {
 };
 
 /// The Earth radiation pressure acceleration (km/s^2) at a GCRF position (km),
-/// TDB Julian date, with the Sun at `sunPosition` (km, GCRF).
-Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, double jd,
+/// two-part TT instant, with the Sun at `sunPosition` (km, GCRF).
+Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, const timesys::Instant& jd,
                     const EarthRadiationConfig& config);
 
 struct ForceModelSet;
@@ -534,24 +537,24 @@ struct SolidTideConfig {
 
 struct ForceModelSet;
 
-/// The IERS 2010 solid tide field at a TDB Julian date: dC/dS of degrees 2-4
+/// The IERS 2010 solid tide field at a TT instant: dC/dS of degrees 2-4
 /// (order <= degree) with the set's GM and EGM2008's reference radius, the
 /// Sun and Moon in `axes`. Evaluate it in those axes without its central term.
-ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
+ExtendedGravityField SolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
                                     const EarthAxes& axes);
 
-/// Solid Earth tides acceleration (km/s^2) at a GCRF position (km), TDB
-/// Julian date, in the force set's Earth orientation.
-Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd,
+/// Solid Earth tides acceleration (km/s^2) at a GCRF position (km), two-part
+/// TT instant, in the force set's Earth orientation.
+Vec3 SolidTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd,
                            const ForceModelSet& forceSet);
 
 /// Solid Earth tides with the built-in Earth orientation (no EOP, UT1 = UTC)
 /// and MU_EARTH; `config` selects bodies and step 2.
 /// @param satPosition Satellite position, GCRF (km)
-/// @param jd Julian date (TDB)
+/// @param jd Two-part TT instant
 /// @param config Solid tide configuration
 /// @return Solid tide acceleration (km/s^2)
-Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& config = SolidTideConfig());
+Vec3 SolidTides(const Vec3& satPosition, const timesys::Instant& jd, const SolidTideConfig& config = SolidTideConfig());
 
 // -----------------------------------------------------------------------------
 // 15. Ocean Tides - Ocean Loading
@@ -567,17 +570,17 @@ struct OceanTideConfig {
     uint16_t maxOrder{30};          ///< Truncation order (<= maxDegree)
 };
 
-/// The ocean tide field at a TDB Julian date: dC/dS to the configured degree
+/// The ocean tide field at a TT instant: dC/dS to the configured degree
 /// and order with the set's GM and EGM2008's reference radius. Evaluate it in
 /// the force set's Earth-fixed axes without its central term.
-ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet);
+ExtendedGravityField OceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet);
 
 /// OceanTideField on a fixed TT grid for one force set (MakeOceanTideCache),
 /// read by OceanTideFieldAt.
 struct OceanTideCache;
 std::shared_ptr<OceanTideCache> MakeOceanTideCache();
 
-/// The ocean tide field at a TDB Julian date as the force evaluation reads
+/// The ocean tide field at a TT instant as the force evaluation reads
 /// it. With the set's oceanTideCache: interpolated by 4-point Lagrange from
 /// OceanTideField at multiples of OCEAN_TIDE_GRID_SECONDS of TT from J2000.0
 /// (the grid is absolute, so every integration reads the same field). The
@@ -585,11 +588,11 @@ std::shared_ptr<OceanTideCache> MakeOceanTideCache();
 /// differs from the direct sum by about 1e-9 of itself. Without a cache:
 /// OceanTideField, in `scratch`. The reference holds until the next call.
 constexpr double OCEAN_TIDE_GRID_SECONDS = 120.0;
-const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch);
+const ExtendedGravityField& OceanTideFieldAt(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch);
 
-/// Ocean tide acceleration (km/s^2) at a GCRF position (km), TDB Julian date,
+/// Ocean tide acceleration (km/s^2) at a GCRF position (km), two-part TT instant,
 /// in the force set's Earth orientation.
-Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet);
+Vec3 OceanTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd, const ForceModelSet& forceSet);
 
 // -----------------------------------------------------------------------------
 // 16. Pole Tide - Polar Motion Correction
@@ -636,7 +639,7 @@ struct FiniteManeuverConfig {
 /// @param currentTime Current time (JD)
 /// @param config Finite maneuver configuration
 /// @return Thrust acceleration (km/s^2)
-Vec3 FiniteManeuver(const Vec3& position, const Vec3& velocity, double currentTime,
+Vec3 FiniteManeuver(const Vec3& position, const Vec3& velocity, const timesys::Instant& currentTime,
                     const FiniteManeuverConfig& config);
 
 /// Get mass change rate for finite maneuver
@@ -806,27 +809,27 @@ enum class GravityMode : uint8_t {
 };
 
 struct ForceModelSet {
-    /// Authoritative GCRF -> Earth-fixed rotation (row-major) at a TDB Julian
-    /// date, supplied by a caller that holds Earth orientation data (the PRW
+    /// Authoritative GCRF -> Earth-fixed rotation (row-major) at a two-part TT
+    /// instant, supplied by a caller that holds Earth orientation data (the PRW
     /// execution request's earth_orientation input: IERS 2010, IAU 2006/2000A,
     /// CIO based, with polar motion and UT1). Empty: the built-in IAU-1976/1980
     /// + GAST approximation, without polar motion and with UT1 = UTC.
-    std::function<void(double jdTdb, double m[3][3])> earthFixedRotation;
+    std::function<void(const timesys::Instant& instant, double m[3][3])> earthFixedRotation;
 
     /// Space weather at a UTC Julian date (an execution request's
     /// space_weather input). When set, drag reads it at every evaluation,
     /// starting from `weather`, which it then overrides.
     std::function<void(double jdUtc, SpaceWeatherData& weather)> weatherAt;
 
-    /// UT1 Julian date at a TDB Julian date, from the same Earth orientation
+    /// Two-part UT1 Julian date at the TT instant, from the same Earth orientation
     /// data as earthFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
-    std::function<double(double jdTdb)> jdUt1At;
+    std::function<timesys::Instant::Date(const timesys::Instant& instant)> jdUt1At;
 
     /// Rate of change of the drag ballistic coefficient Cd*A/m (m^2/kg/s)
-    /// from dragRateEpochTdb (TDB Julian date): drag uses
+    /// from dragRateEpochTT (two-part TT instant): drag uses
     /// Cd*A/m + rate * (t - epoch) (DragAt).
     double dragAreaOverMassRate{0.0};
-    double dragRateEpochTdb{0.0};
+    timesys::Instant dragRateEpochTT;
 
     // Gravity
     bool usePointMass{true};
@@ -907,15 +910,29 @@ struct ForceModelSet {
 
     // Current space weather
     SpaceWeatherData weather;
-    // Typed PRW separates the TDB dynamics clock from UTC weather metadata.
+    // Typed PRW supplies the exact TT dynamics clock separately from UTC weather metadata.
     // Defaults retain the diagnostic API's established epoch convention.
     bool explicitEpochContract{false};
-    double integrationEpochTDB{0};
+    timesys::Instant integrationEpochTT{std::numeric_limits<double>::quiet_NaN(),0};
 
     // Current Sun position (computed internally if not provided)
     Vec3 sunPosition;
     bool sunPositionProvided{false};
 };
+
+// State-rooted propagators use the supplied state epoch unless the caller
+// provides an exact TT span. Density scale semantics remain separate.
+inline timesys::Instant StateEpoch(const ForceModelSet& forces, double stateEpoch) {
+    if (forces.explicitEpochContract ||
+        (std::isfinite(forces.integrationEpochTT.jd1) && std::isfinite(forces.integrationEpochTT.jd2)))
+        return forces.integrationEpochTT;
+    return timesys::Instant::fromTdb(stateEpoch);
+}
+// Legacy six-state integrators supplied their TDB-labelled start through
+// weather.epoch. Decode that boundary once; typed callers provide exact TT.
+inline timesys::Instant IntegrationEpoch(const ForceModelSet& forces, double stateEpoch = 0.0) {
+    return StateEpoch(forces,forces.weather.epoch != 0 ? forces.weather.epoch : stateEpoch);
+}
 
 /// Central-body gravity for a force set — exactly one model, chosen by
 /// `forceSet.gravityMode`, or by the legacy precedence when that is `Infer`.
@@ -927,10 +944,10 @@ struct ForceModelSet {
 /// point mass needs no rotation; the J2 and J2-J4 closed forms are
 /// verification models with a fixed inertial symmetry axis z.
 /// @param position Satellite position, GCRF (km)
-/// @param jd Integration clock, TDB Julian date
+/// @param jd Integration clock, two-part TT instant
 /// @param forceSet Force model configuration
 /// @return Gravity acceleration including the central term, GCRF (km/s^2)
-Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet);
+Vec3 CentralBodyGravity(const Vec3& position, const timesys::Instant& jd, const ForceModelSet& forceSet);
 
 /// The same model evaluated at an Earth-fixed position, in Earth-fixed axes.
 Vec3 EarthFixedGravity(const Vec3& earthFixed, const ForceModelSet& forceSet);
@@ -943,35 +960,34 @@ bool EarthFixedField(const ForceModelSet& forceSet);
 /// order (at most 20) with J2-J4 from the closed forms' constants, gates honored.
 GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig& config);
 
-/// GCRF to Earth-fixed rotation (row-major), jd TDB: IAU 1976 precession and
-/// IAU 1980 nutation (coords.h), held for up to an hour of TT, then Earth
-/// rotation by GAST with UTC standing in for UT1 (|UT1-UTC| < 0.9 s). Polar
-/// motion (under 0.5 arcsec) is not applied: the force set carries no EOP.
-void GcrfToEarthFixed(double jd, double m[3][3]);
+/// GCRF to Earth-fixed rotation (row-major) at a two-part TT instant: ERFA
+/// IAU 1976 precession, IAU 1980 nutation and GAST, evaluated each call.
+/// UTC stands in for UT1 (|UT1-UTC| < 0.9 s); no polar motion or frame bias.
+void GcrfToEarthFixed(const timesys::Instant& jd, double m[3][3]);
 
 /// The force set's GCRF -> Earth-fixed rotation: its earthFixedRotation when
 /// supplied, else GcrfToEarthFixed(jd).
-void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]);
+void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet, double m[3][3]);
 
-/// The force set's Earth-fixed axes at a TDB Julian date (GcrfToEarthFixed).
-EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet);
+/// The force set's Earth-fixed axes at a TT instant (GcrfToEarthFixed).
+EarthAxes EarthAxesAt(const timesys::Instant& jdTdb, const ForceModelSet& forceSet);
 
 /// The space weather drag reads at a UTC Julian date: weatherAt when set,
 /// else the set's `weather`.
 SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet);
 
-/// The drag configuration at a TDB Julian date, with dragAreaOverMassRate
+/// The drag configuration at a TT instant, with dragAreaOverMassRate
 /// applied to Cd (area and mass unchanged).
-DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet);
+DragForceConfig DragAt(const timesys::Instant& jdTdb, const ForceModelSet& forceSet);
 
 /// The force set's drag acceleration (km/s^2) with a given drag
 /// configuration (ComputeTotalAcceleration passes DragAt(jd)).
-Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                           const ForceModelSet& forceSet, const DragForceConfig& drag);
 
 /// The force set's radiation pressure acceleration (km/s^2) with a given SRP
 /// configuration, the Sun from forceSet.sunPosition when provided.
-Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, double jd, const ForceModelSet& forceSet,
+Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd, const ForceModelSet& forceSet,
                      const SRPForceConfig& srp);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
@@ -984,10 +1000,10 @@ Vec3 LoadedFieldGravity(const Vec3& position, const ExtendedGravityField& field)
 /// Compute total acceleration from all enabled force models
 /// @param position Satellite position (km)
 /// @param velocity Satellite velocity (km/s)
-/// @param jd Julian date (TDB)
+/// @param jd Two-part TT instant
 /// @param forceSet Force model configuration
 /// @return Total acceleration (km/s^2)
-Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                               ForceModelSet& forceSet);
 
 /// Force model derivative function for numerical integration

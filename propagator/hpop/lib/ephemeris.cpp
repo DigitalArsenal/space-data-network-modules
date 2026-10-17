@@ -18,6 +18,19 @@ using namespace EphemerisData;
 // =============================================================================
 
 namespace {
+double meanObliquityAtCenturies(double T) {
+    double T2 = T * T;
+    double T3 = T2 * T;
+    double T4 = T3 * T;
+    double T5 = T4 * T;
+
+    // IAU 2006 mean obliquity (arcseconds)
+    double eps0_arcsec = 84381.406 - 46.836769 * T - 0.0001831 * T2
+                       + 0.00200340 * T3 - 5.76e-7 * T4 - 4.34e-8 * T5;
+
+    return eps0_arcsec * RAD_PER_ARCSEC;
+}
+
 
 // ---------------------------------------------------------------------------
 // Planetary Orbital Elements at J2000.0 (JPL DE430 reference)
@@ -271,14 +284,14 @@ namespace Ephemeris {
 
 namespace { int naifId(Body body); }
 
-BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
+BodyState getBodyState(Body body, const timesys::Instant& jdTDB, Body centerBody) {
     if (selectedEphemerisSource() != EphemerisSource::Analytical) {
         BodyState state = getKernelState(naifId(body), naifId(centerBody), jdTDB);
         state.body = body;
         return state;
     }
     BodyState state;
-    state.epoch = jdTDB;
+    state.epoch = jdTDB.jdTdb();
     state.body = body;
 
     if (body == Body::Sun) {
@@ -292,7 +305,7 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
             state.position = sunGeo;
             // Velocity from finite difference
             double dt = 0.001; // days
-            Vec3 sunGeoLater = getSunPosition(jdTDB + dt);
+            Vec3 sunGeoLater = getSunPosition(jdTDB.plusSeconds(dt * SEC_PER_DAY));
             state.velocity = (sunGeoLater - sunGeo) / (dt * SEC_PER_DAY);
         }
     } else if (body == Body::Moon) {
@@ -300,7 +313,7 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
             state.position = getMoonPosition(jdTDB);
             // Velocity from finite difference
             double dt = 0.001;
-            Vec3 moonLater = getMoonPosition(jdTDB + dt);
+            Vec3 moonLater = getMoonPosition(jdTDB.plusSeconds(dt * SEC_PER_DAY));
             state.velocity = (moonLater - state.position) / (dt * SEC_PER_DAY);
         } else {
             // Moon relative to SSB = Moon relative to Earth + Earth relative to SSB
@@ -308,7 +321,7 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
             BodyState earthState = getBodyState(Body::Earth, jdTDB, Body::SolarSystemBarycenter);
             state.position = earthState.position + moonGeo;
             double dt = 0.001;
-            Vec3 moonLater = getMoonPosition(jdTDB + dt);
+            Vec3 moonLater = getMoonPosition(jdTDB.plusSeconds(dt * SEC_PER_DAY));
             Vec3 moonVelGeo = (moonLater - moonGeo) / (dt * SEC_PER_DAY);
             state.velocity = earthState.velocity + moonVelGeo;
         }
@@ -319,7 +332,7 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
             state.position = helioPos;
             // Velocity from finite difference
             double dt = 0.001;
-            Vec3 helioLater = getPlanetPosition(body, jdTDB + dt);
+            Vec3 helioLater = getPlanetPosition(body, jdTDB.plusSeconds(dt * SEC_PER_DAY));
             state.velocity = (helioLater - helioPos) / (dt * SEC_PER_DAY);
         }
     } else if (static_cast<int>(body) >= 1 && static_cast<int>(body) <= 10) {
@@ -334,10 +347,10 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
         }
         // Velocity from finite difference
         double dt = 0.001;
-        Vec3 helioLater = getPlanetPosition(body, jdTDB + dt);
+        Vec3 helioLater = getPlanetPosition(body, jdTDB.plusSeconds(dt * SEC_PER_DAY));
         Vec3 helioVel = (helioLater - helioPos) / (dt * SEC_PER_DAY);
         if (centerBody == Body::Earth) {
-            Vec3 earthLater = getPlanetPosition(Body::Earth, jdTDB + dt);
+            Vec3 earthLater = getPlanetPosition(Body::Earth, jdTDB.plusSeconds(dt * SEC_PER_DAY));
             Vec3 earthHelio = getPlanetPosition(Body::Earth, jdTDB);
             Vec3 earthVel = (earthLater - earthHelio) / (dt * SEC_PER_DAY);
             state.velocity = helioVel - earthVel;
@@ -350,7 +363,7 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
     return state;
 }
 
-Vec3 getSunPosition(double jdTDB) {
+Vec3 getSunPosition(const timesys::Instant& jdTDB) {
     if (selectedEphemerisSource() != EphemerisSource::Analytical) {
         const auto state = getKernelState(10, 399, jdTDB);
         if (!state.valid) return Vec3{};
@@ -359,7 +372,7 @@ Vec3 getSunPosition(double jdTDB) {
     // VSOP87 simplified - compute Earth heliocentric position, then negate
     // This gives geocentric Sun position
 
-    double T = RefFrame::julianCenturiesFromJ2000(jdTDB);
+    double T = (jdTDB.tdb().daysSinceJ2000() / 36525.0);
 
     // Mean longitude of the Sun (degrees)
     double L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
@@ -394,7 +407,7 @@ Vec3 getSunPosition(double jdTDB) {
     double lambdaRad = lambda * DEG_TO_RAD;
 
     // Obliquity of the ecliptic
-    double eps0 = RefFrame::meanObliquity(jdTDB);
+    double eps0 = meanObliquityAtCenturies(jdTDB.tdb().daysSinceJ2000() / 36525.0);
 
     // Convert to equatorial (ICRF) coordinates
     double x_ecl = R * std::cos(lambdaRad);
@@ -414,7 +427,7 @@ Vec3 getSunPosition(double jdTDB) {
     return sunEq * EphemerisData::AU_KM;
 }
 
-Vec3 getMoonPosition(double jdTDB) {
+Vec3 getMoonPosition(const timesys::Instant& jdTDB) {
     if (selectedEphemerisSource() != EphemerisSource::Analytical) {
         const auto state = getKernelState(301, 399, jdTDB);
         if (!state.valid) return Vec3{};
@@ -422,7 +435,7 @@ Vec3 getMoonPosition(double jdTDB) {
     }
     // ELP2000 simplified (Meeus, Astronomical Algorithms)
 
-    double T = RefFrame::julianCenturiesFromJ2000(jdTDB);
+    double T = (jdTDB.tdb().daysSinceJ2000() / 36525.0);
     double T2 = T * T;
     double T3 = T2 * T;
     double T4 = T3 * T;
@@ -524,7 +537,7 @@ Vec3 getMoonPosition(double jdTDB) {
     double betaRad = beta * DEG_TO_RAD;
 
     // Convert from ecliptic to equatorial
-    double eps = RefFrame::meanObliquity(jdTDB);
+    double eps = meanObliquityAtCenturies(jdTDB.tdb().daysSinceJ2000() / 36525.0);
     double cosEps = std::cos(eps);
     double sinEps = std::sin(eps);
     double cosLam = std::cos(lambdaRad);
@@ -546,7 +559,7 @@ Vec3 getMoonPosition(double jdTDB) {
     return moon;
 }
 
-Vec3 getPlanetPosition(Body body, double jdTDB) {
+Vec3 getPlanetPosition(Body body, const timesys::Instant& jdTDB) {
     if (selectedEphemerisSource() != EphemerisSource::Analytical) {
         const auto state = getKernelState(naifId(body), 10, jdTDB);
         if (!state.valid) return Vec3{};
@@ -559,7 +572,7 @@ Vec3 getPlanetPosition(Body body, double jdTDB) {
         return Vec3(0, 0, 0);
     }
 
-    double T = RefFrame::julianCenturiesFromJ2000(jdTDB);
+    double T = (jdTDB.tdb().daysSinceJ2000() / 36525.0);
     const PlanetElements& elem = PLANET_ELEMENTS[planetIdx];
 
     // Compute current elements
@@ -626,17 +639,17 @@ BodyConstants getBodyConstants(Body body) {
     return bc;
 }
 
-double sunEarthDistance(double jdTDB) {
+double sunEarthDistance(const timesys::Instant& jdTDB) {
     Vec3 sun = getSunPosition(jdTDB);
     return sun.magnitude();
 }
 
-double moonEarthDistance(double jdTDB) {
+double moonEarthDistance(const timesys::Instant& jdTDB) {
     Vec3 moon = getMoonPosition(jdTDB);
     return moon.magnitude();
 }
 
-PlanetaryElements planetOrbitalElements(Body body, double jdTDB) {
+PlanetaryElements planetOrbitalElements(Body body, const timesys::Instant& jdTDB) {
     int planetIdx = static_cast<int>(body) - 1;
     if (body == Body::Earth) planetIdx = 2;
 
@@ -645,7 +658,7 @@ PlanetaryElements planetOrbitalElements(Body body, double jdTDB) {
         return result;
     }
 
-    double T = RefFrame::julianCenturiesFromJ2000(jdTDB);
+    double T = (jdTDB.tdb().daysSinceJ2000() / 36525.0);
     const PlanetElements& elem = PLANET_ELEMENTS[planetIdx];
 
     result.a = elem.a + elem.aDot * T;
@@ -713,7 +726,7 @@ double relativisticDeflection(const Vec3& position, const Vec3& sunPosition,
     return deflection;
 }
 
-Vec3 earthToSunVector(double jdTDB) {
+Vec3 earthToSunVector(const timesys::Instant& jdTDB) {
     Vec3 sun = getSunPosition(jdTDB);
     double r = sun.magnitude();
     if (r < 1e-10) return Vec3(1, 0, 0);
@@ -728,7 +741,7 @@ std::string bodyName(Body body) {
     return getBodyConstants(body).name;
 }
 
-double planetMeanAnomaly(Body body, double jdTDB) {
+double planetMeanAnomaly(Body body, const timesys::Instant& jdTDB) {
     PlanetaryElements elem = planetOrbitalElements(body, jdTDB);
     double M = elem.L - elem.lonPeri;
     return normalizeAngle(M * DEG_TO_RAD);
@@ -966,17 +979,7 @@ double equationOfEquinoxes(double jdTT) {
 }
 
 double meanObliquity(double jdTT) {
-    double T = RefFrame::julianCenturiesFromJ2000(jdTT);
-    double T2 = T * T;
-    double T3 = T2 * T;
-    double T4 = T3 * T;
-    double T5 = T4 * T;
-
-    // IAU 2006 mean obliquity (arcseconds)
-    double eps0_arcsec = 84381.406 - 46.836769 * T - 0.0001831 * T2
-                       + 0.00200340 * T3 - 5.76e-7 * T4 - 4.34e-8 * T5;
-
-    return eps0_arcsec * RAD_PER_ARCSEC;
+    return meanObliquityAtCenturies(RefFrame::julianCenturiesFromJ2000(jdTT));
 }
 
 double trueObliquity(double jdTT) {
@@ -1207,12 +1210,12 @@ bool getEphemerisRange(EphemerisSource source, double& jdStart, double& jdEnd) {
     return true;
 }
 
-BodyState getKernelState(int target, int center, double jdTDB) {
+BodyState getKernelState(int target, int center, const timesys::Instant& jdTDB) {
     BodyState result;
-    result.epoch = jdTDB;
+    result.epoch = jdTDB.jdTdb();
     result.source = kernelSource;
     ephem::StateRow state;
-    const auto status = kernel.state(target, center, jdTDB, &state);
+    const auto status = kernel.state_et(target, center, jdTDB.tdb().secondsSinceJ2000(), &state);
     if (status != ephem::Status::Ok) {
         lastKernelError = "SPK state " + std::to_string(target) + " relative to " +
             std::to_string(center) + ": " + ephem::status_name(status);
@@ -1225,16 +1228,16 @@ BodyState getKernelState(int target, int center, double jdTDB) {
 }
 
 // Unsupported named providers fail explicitly; callers choose Analytical themselves.
-BodyState getBodyStateDE441(Body body, double jdTDB, Body centerBody) {
+BodyState getBodyStateDE441(Body body, const timesys::Instant& jdTDB, Body centerBody) {
     if (!isEphemerisLoaded(EphemerisSource::JPL_DE441)) return BodyState{};
     BodyState state = getKernelState(naifId(body), naifId(centerBody), jdTDB);
     state.body = body;
     return state;
 }
-BodyState getBodyStateINPOP21a(Body, double, Body) { return BodyState{}; }
-BodyState getBodyStateEPM2021(Body, double, Body) { return BodyState{}; }
+BodyState getBodyStateINPOP21a(Body, const timesys::Instant&, Body) { return BodyState{}; }
+BodyState getBodyStateEPM2021(Body, const timesys::Instant&, Body) { return BodyState{}; }
 
-BodyState getMarsHighFidelity(double jdTDB) {
+BodyState getMarsHighFidelity(const timesys::Instant& jdTDB) {
     // Mars high-fidelity model includes:
     // 1. Standard planetary ephemeris for Mars
     // 2. Perturbations from Phobos and Deimos
@@ -1251,7 +1254,7 @@ BodyState getMarsHighFidelity(double jdTDB) {
     constexpr double PHOBOS_GM = 7.087e-4;  // km^3/s^2
     constexpr double PHOBOS_PERIOD_S = 27553.84;  // 7.654 hours
 
-    double phobosPhase = std::fmod((jdTDB - 2451545.0) * 86400.0 / PHOBOS_PERIOD_S, 1.0) * TWO_PI;
+    double phobosPhase = std::fmod(jdTDB.tdb().secondsSinceJ2000() / PHOBOS_PERIOD_S, 1.0) * TWO_PI;
     Vec3 phobosOffset;
     phobosOffset.x = PHOBOS_A_KM * std::cos(phobosPhase);
     phobosOffset.y = PHOBOS_A_KM * std::sin(phobosPhase);
@@ -1270,7 +1273,7 @@ BodyState getMarsHighFidelity(double jdTDB) {
     constexpr double DEIMOS_GM = 9.8e-5;
     constexpr double DEIMOS_PERIOD_S = 109123.2;
 
-    double deimosPhase = std::fmod((jdTDB - 2451545.0) * 86400.0 / DEIMOS_PERIOD_S, 1.0) * TWO_PI;
+    double deimosPhase = std::fmod(jdTDB.tdb().secondsSinceJ2000() / DEIMOS_PERIOD_S, 1.0) * TWO_PI;
     Vec3 deimosOffset;
     deimosOffset.x = DEIMOS_A_KM * std::cos(deimosPhase);
     deimosOffset.y = DEIMOS_A_KM * std::sin(deimosPhase);

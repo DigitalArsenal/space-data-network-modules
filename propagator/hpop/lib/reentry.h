@@ -55,7 +55,8 @@ inline void clearCallStop() { callStop() = PropagationStop(); clearPropagationSt
 /// Records the stop at a state y (GCRF position km, velocity km/s) at the
 /// integration clock jd (TDB Julian date) below the Karman line or not finite.
 /// True once the integration has stopped: the derivative is then zero.
-inline bool stopAt(const double* y, double jd) {
+inline bool stopAt(const double* y, const timesys::Instant& instant) {
+    const double jd = instant.jdTdb(); // stop label only
     PropagationStop& stop = propagationStop();
     if (stop.active) return true;
     const double r2 = y[0] * y[0] + y[1] * y[1] + y[2] * y[2];

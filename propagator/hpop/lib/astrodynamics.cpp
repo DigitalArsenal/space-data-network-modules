@@ -4048,11 +4048,11 @@ Vec3 computeGravityAtDegree(
 // analytical mean-elements fallback. States report the actual provider.
 
 namespace {
-EphemerisState kernelLegacyState(CelestialBody body, int target, int center, double jd) {
+EphemerisState kernelLegacyState(CelestialBody body, int target, int center, const timesys::Instant& jd) {
     const auto row = Ephemeris::getKernelState(target, center, jd);
     EphemerisState state;
     state.body = body;
-    state.epoch = jd;
+    state.epoch = jd.jdTdb();
     state.position = row.position;
     state.velocity = row.velocity;
     state.source = row.source;
@@ -4069,16 +4069,16 @@ int legacyNaifId(CelestialBody body) {
 }
 }
 
-EphemerisState getSunPosition(double jd) {
+EphemerisState getSunPosition(const timesys::Instant& jd) {
     if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical)
         return kernelLegacyState(CelestialBody::Sun, 10, 399, jd);
     EphemerisState state;
     state.body = CelestialBody::Sun;
-    state.epoch = jd;
+    state.epoch = jd.jdTdb();
 
     // Mean elements for Sun (geocentric)
     // T = Julian centuries from J2000.0
-    double T = (jd - 2451545.0) / 36525.0;
+    double T = jd.tdb().daysSinceJ2000() / 36525.0;
 
     // Mean longitude of Sun
     double L0 = 280.4664567 + 360007.6982779 * T;
@@ -4123,15 +4123,15 @@ EphemerisState getSunPosition(double jd) {
     return state;
 }
 
-EphemerisState getMoonPosition(double jd) {
+EphemerisState getMoonPosition(const timesys::Instant& jd) {
     if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical)
         return kernelLegacyState(CelestialBody::Moon, 301, 399, jd);
     EphemerisState state;
     state.body = CelestialBody::Moon;
-    state.epoch = jd;
+    state.epoch = jd.jdTdb();
 
     // Meeus algorithm for lunar position (low-precision)
-    double T = (jd - 2451545.0) / 36525.0;
+    double T = jd.tdb().daysSinceJ2000() / 36525.0;
     double T2 = T * T;
     double T3 = T2 * T;
 
@@ -4206,15 +4206,15 @@ EphemerisState getMoonPosition(double jd) {
     return state;
 }
 
-EphemerisState getPlanetPosition(CelestialBody body, double jd) {
+EphemerisState getPlanetPosition(CelestialBody body, const timesys::Instant& jd) {
     if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical) {
         return kernelLegacyState(body, legacyNaifId(body), 10, jd);
     }
     EphemerisState state;
     state.body = body;
-    state.epoch = jd;
+    state.epoch = jd.jdTdb();
 
-    double T = (jd - 2451545.0) / 36525.0;
+    double T = jd.tdb().daysSinceJ2000() / 36525.0;
 
     // Simplified planetary mean elements (heliocentric)
     // From Standish (1992) - low precision
@@ -4342,7 +4342,7 @@ EphemerisState getPlanetPosition(CelestialBody body, double jd) {
     return state;
 }
 
-EphemerisState getAnalyticalEphemeris(CelestialBody body, double jd) {
+EphemerisState getAnalyticalEphemeris(CelestialBody body, const timesys::Instant& jd) {
     struct RestoreSource {
         Ephemeris::EphemerisSource previous = Ephemeris::selectedEphemerisSource();
         RestoreSource() { Ephemeris::selectEphemerisSource(Ephemeris::EphemerisSource::Analytical); }
@@ -4391,7 +4391,7 @@ Vec3 pointMassThirdBody(const Vec3& satPos, const Vec3& bodyPos, double muBody) 
 ThirdBodyAcceleration computeThirdBodyAcceleration(
     const Vec3& satPosition,
     const ThirdBodyConfig& config,
-    double jd)
+    const timesys::Instant& jd)
 {
     ThirdBodyAcceleration result;
 
@@ -4948,7 +4948,7 @@ AtmosphericDensity computeJB2008(
     result.altitude = alt;
     result.latitude = lat;
     result.longitude = lon;
-    const EphemerisState sun = getSunPosition(jd);
+    const EphemerisState sun = getSunPosition(timesys::Instant::fromTdb(jd));
     if (!sun.valid) return result;
     const double theta = timesys::ut1ToGmst(jd), c = std::cos(theta), s = std::sin(theta);
     const Vec3 sunFixed(c * sun.position.x + s * sun.position.y, -s * sun.position.x + c * sun.position.y, sun.position.z);
@@ -5369,12 +5369,12 @@ Vec3 computeEnvironmentAcceleration(
     }
 
     // Third body perturbations
-    ThirdBodyAcceleration tb = computeThirdBodyAcceleration(position, config.thirdBody, jd);
+    ThirdBodyAcceleration tb = computeThirdBodyAcceleration(position, config.thirdBody, timesys::Instant::fromTdb(jd));
     totalAcc += tb.total;
 
     // Solar radiation pressure
     if (config.useSRP) {
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(timesys::Instant::fromTdb(jd));
         if (sun.valid) {
             SRPAcceleration srp = computeSRPCannonball(position, sun.position, config.srp);
             totalAcc += srp.total;
@@ -5413,12 +5413,12 @@ Vec3 computeAllAccelerations(
     totalAcc += gravity.total;
 
     // Third body perturbations
-    thirdBody = computeThirdBodyAcceleration(position, config.thirdBody, jd);
+    thirdBody = computeThirdBodyAcceleration(position, config.thirdBody, timesys::Instant::fromTdb(jd));
     totalAcc += thirdBody.total;
 
     // Solar radiation pressure
     if (config.useSRP) {
-        EphemerisState sun = getSunPosition(jd);
+        EphemerisState sun = getSunPosition(timesys::Instant::fromTdb(jd));
         if (sun.valid) {
             srp = computeSRPCannonball(position, sun.position, config.srp);
             totalAcc += srp.total;
@@ -6387,8 +6387,8 @@ std::vector<KeplerianElements> parseHorizonsElementsResponse(const HttpResponse&
 
 // Analytical ephemeris implementations (offline, approximate)
 
-Vec3 computeSunPosition(double jdTDB) {
-    double T = (jdTDB - 2451545.0) / 36525.0;
+Vec3 computeSunPosition(const timesys::Instant& jdTDB) {
+    double T = jdTDB.tdb().daysSinceJ2000() / 36525.0;
 
     double L0 = 280.4664567 + 360007.6982779 * T + 0.03032028 * T * T;
     double M = 357.5291092 + 35999.0502909 * T - 0.0001536 * T * T;
@@ -6425,8 +6425,8 @@ Vec3 computeSunPosition(double jdTDB) {
     return Vec3(-xEq, -yEq, -zEq);
 }
 
-Vec3 computeMoonPosition(double jdTDB) {
-    double T = (jdTDB - 2451545.0) / 36525.0;
+Vec3 computeMoonPosition(const timesys::Instant& jdTDB) {
+    double T = jdTDB.tdb().daysSinceJ2000() / 36525.0;
 
     double Lp = 218.3164477 + 481267.88123421 * T;
     double D = 297.8501921 + 445267.1114034 * T;
@@ -6479,9 +6479,9 @@ Vec3 computeMoonPosition(double jdTDB) {
     return Vec3(xEq, yEq, zEq);
 }
 
-EphemerisState getAnalyticalEphemeris(int body, double jdTDB, int center) {
+EphemerisState getAnalyticalEphemeris(int body, const timesys::Instant& jdTDB, int center) {
     EphemerisState result;
-    result.epoch = jdTDB;
+    result.epoch = jdTDB.jdTdb();
     result.valid = false;
 
     if (center != NAIFIds::GEOCENTER && center != NAIFIds::EARTH) {
@@ -6510,10 +6510,10 @@ EphemerisState getAnalyticalEphemeris(int body, double jdTDB, int center) {
         Vec3 pos2;
         switch (body) {
             case NAIFIds::SUN:
-                pos2 = computeSunPosition(jdTDB + dt);
+                pos2 = computeSunPosition(jdTDB.plusSeconds(dt * 86400.0));
                 break;
             case NAIFIds::MOON:
-                pos2 = computeMoonPosition(jdTDB + dt);
+                pos2 = computeMoonPosition(jdTDB.plusSeconds(dt * 86400.0));
                 break;
             default:
                 pos2 = result.position;

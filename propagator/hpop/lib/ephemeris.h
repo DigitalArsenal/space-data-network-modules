@@ -8,6 +8,7 @@
 #pragma once
 
 #include "astrodynamics_types.h"
+#include "time_types.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -106,30 +107,30 @@ struct PlanetaryElements {
 
 /// Get body state at a TDB epoch from the selected kernel or Analytical provider
 /// @param body Celestial body identifier
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @param centerBody Center body for position reference (default: SSB)
 /// @return Body state with position and velocity
 /// @note A selected kernel takes precedence; Analytical is an explicit provider.
-BodyState getBodyState(Body body, double jdTDB,
+BodyState getBodyState(Body body, const timesys::Instant& jdTDB,
                        Body centerBody = Body::SolarSystemBarycenter);
 
 /// Get high-precision Sun position (VSOP87 simplified)
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Sun position relative to Earth (geocentric) in ICRF (km)
 /// @note Accuracy: ~1 arcsecond over +-4000 years from J2000
-Vec3 getSunPosition(double jdTDB);
+Vec3 getSunPosition(const timesys::Instant& jdTDB);
 
 /// Get high-precision Moon position (ELP2000 simplified)
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Moon position relative to Earth (geocentric) in ICRF (km)
 /// @note Accuracy: ~10 arcseconds for positions
-Vec3 getMoonPosition(double jdTDB);
+Vec3 getMoonPosition(const timesys::Instant& jdTDB);
 
 /// Get planet heliocentric position
 /// @param body Planet identifier (Mercury through Neptune)
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Planet position relative to Sun in equatorial J2000/ICRF (km)
-Vec3 getPlanetPosition(Body body, double jdTDB);
+Vec3 getPlanetPosition(Body body, const timesys::Instant& jdTDB);
 
 /// Get body physical constants
 /// @param body Celestial body identifier
@@ -137,20 +138,20 @@ Vec3 getPlanetPosition(Body body, double jdTDB);
 BodyConstants getBodyConstants(Body body);
 
 /// Compute Sun-Earth distance at epoch
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Distance from Earth to Sun (km)
-double sunEarthDistance(double jdTDB);
+double sunEarthDistance(const timesys::Instant& jdTDB);
 
 /// Compute Moon-Earth distance at epoch
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Distance from Earth to Moon (km)
-double moonEarthDistance(double jdTDB);
+double moonEarthDistance(const timesys::Instant& jdTDB);
 
 /// Get orbital elements for a planet at specified epoch
 /// @param body Planet identifier
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Orbital elements referenced to ecliptic J2000
-PlanetaryElements planetOrbitalElements(Body body, double jdTDB);
+PlanetaryElements planetOrbitalElements(Body body, const timesys::Instant& jdTDB);
 
 /// Apply light-time correction to apparent position
 /// @param position Geometric position of target (km)
@@ -177,9 +178,9 @@ double relativisticDeflection(const Vec3& position, const Vec3& sunPosition,
                               double elongation);
 
 /// Compute Earth-to-Sun unit vector
-/// @param jdTDB Julian date in TDB time scale
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Unit vector from Earth to Sun in ICRF
-Vec3 earthToSunVector(double jdTDB);
+Vec3 earthToSunVector(const timesys::Instant& jdTDB);
 
 /// Get gravitational parameter for body
 /// @param body Celestial body identifier
@@ -193,9 +194,9 @@ std::string bodyName(Body body);
 
 /// Compute planet's mean anomaly at epoch
 /// @param body Planet identifier
-/// @param jdTDB Julian date in TDB
+/// @param jdTDB Two-part TT instant; evaluated at its two-part TDB date
 /// @return Mean anomaly (rad)
-double planetMeanAnomaly(Body body, double jdTDB);
+double planetMeanAnomaly(Body body, const timesys::Instant& jdTDB);
 
 /// Solve Kepler's equation for eccentric anomaly
 /// @param M Mean anomaly (rad)
@@ -210,19 +211,19 @@ double solveKepler(double M, double e, double tolerance = 1e-12, int maxIter = 5
 // ---------------------------------------------------------------------------
 
 /// JPL DE441 ephemeris (long-term, -13200 to +17191)
-BodyState getBodyStateDE441(Body body, double jdTDB,
+BodyState getBodyStateDE441(Body body, const timesys::Instant& jdTDB,
                             Body centerBody = Body::SolarSystemBarycenter);
 
 /// INPOP21a planetary ephemeris (IMCCE)
-BodyState getBodyStateINPOP21a(Body body, double jdTDB,
+BodyState getBodyStateINPOP21a(Body body, const timesys::Instant& jdTDB,
                                Body centerBody = Body::SolarSystemBarycenter);
 
 /// EPM2021 planetary ephemeris (IAA RAS)
-BodyState getBodyStateEPM2021(Body body, double jdTDB,
+BodyState getBodyStateEPM2021(Body body, const timesys::Instant& jdTDB,
                               Body centerBody = Body::SolarSystemBarycenter);
 
 /// Mars high-fidelity ephemeris (includes Phobos/Deimos perturbations)
-BodyState getMarsHighFidelity(double jdTDB);
+BodyState getMarsHighFidelity(const timesys::Instant& jdTDB);
 
 /// Attach an immutable SPK buffer, retained by the caller until clearEphemerisBuffer.
 /// Copies only bounded metadata, never kernel coefficient arrays. Loading selects
@@ -236,7 +237,7 @@ EphemerisSource selectedEphemerisSource();
 const char* ephemerisSourceName(EphemerisSource source);
 const std::string& ephemerisError();
 /// Query exact NAIF target/center IDs; ICRF/J2000 km, km/s at JD TDB.
-BodyState getKernelState(int target, int center, double jdTDB);
+BodyState getKernelState(int target, int center, const timesys::Instant& jdTDB);
 /// Deprecated filesystem API: always fails; WASM accepts input buffers only.
 bool loadEphemerisFile(const std::string& filename, EphemerisSource source);
 

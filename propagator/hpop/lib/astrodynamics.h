@@ -8,6 +8,7 @@
 #pragma once
 
 #include "astrodynamics_types.h"
+#include "time_types.h"
 #include "attitude_types.h"
 #include <vector>
 
@@ -1094,17 +1095,17 @@ void computeLegendrePolynomials(
 /// @param body Body identifier
 /// @param jd Julian date (TDB)
 /// @return Ephemeris state (heliocentric or geocentric depending on body)
-EphemerisState getAnalyticalEphemeris(CelestialBody body, double jd);
+EphemerisState getAnalyticalEphemeris(CelestialBody body, const timesys::Instant& jd);
 
 /// Get Sun position (geocentric J2000)
 /// @param jd Julian date (TDB)
 /// @return Sun position and velocity
-EphemerisState getSunPosition(double jd);
+EphemerisState getSunPosition(const timesys::Instant& jd);
 
 /// Get Moon position (geocentric J2000)
 /// @param jd Julian date (TDB)
 /// @return Moon position and velocity
-EphemerisState getMoonPosition(double jd);
+EphemerisState getMoonPosition(const timesys::Instant& jd);
 
 /// Get planet position (heliocentric J2000).
 /// Kernel states are equatorial J2000/ICRF. The retained Analytical provider
@@ -1112,7 +1113,7 @@ EphemerisState getMoonPosition(double jd);
 /// @param body Planet identifier
 /// @param jd Julian date (TDB)
 /// @return Planet position and velocity
-EphemerisState getPlanetPosition(CelestialBody body, double jd);
+EphemerisState getPlanetPosition(CelestialBody body, const timesys::Instant& jd);
 
 /// Compute third-body perturbation acceleration
 /// @param satPosition Satellite position (km, geocentric)
@@ -1122,7 +1123,7 @@ EphemerisState getPlanetPosition(CelestialBody body, double jd);
 ThirdBodyAcceleration computeThirdBodyAcceleration(
     const Vec3& satPosition,
     const ThirdBodyConfig& config,
-    double jd);
+    const timesys::Instant& jd);
 
 /// Compute point mass third body gravity (internal use)
 /// @param satPos Satellite position relative to central body (km)
@@ -1463,17 +1464,17 @@ std::vector<KeplerianElements> parseHorizonsElementsResponse(const HttpResponse&
 /// @param jdTDB Julian Date TDB
 /// @param center Center body (default: Earth center)
 /// @return Ephemeris state
-EphemerisState getAnalyticalEphemeris(int body, double jdTDB, int center = NAIFIds::GEOCENTER);
+EphemerisState getAnalyticalEphemeris(int body, const timesys::Instant& jdTDB, int center = NAIFIds::GEOCENTER);
 
 /// Compute Sun position using simplified analytical model
 /// @param jdTDB Julian Date TDB
 /// @return Sun position relative to Earth (km, J2000 ecliptic)
-Vec3 computeSunPosition(double jdTDB);
+Vec3 computeSunPosition(const timesys::Instant& jdTDB);
 
 /// Compute Moon position using simplified analytical model
 /// @param jdTDB Julian Date TDB
 /// @return Moon position relative to Earth (km, J2000 ecliptic)
-Vec3 computeMoonPosition(double jdTDB);
+Vec3 computeMoonPosition(const timesys::Instant& jdTDB);
 
 /// Convert J2000 ecliptic to J2000 equatorial coordinates
 /// @param ecliptic Position in ecliptic coordinates (km)

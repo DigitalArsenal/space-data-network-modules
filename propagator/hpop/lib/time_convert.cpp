@@ -12,6 +12,10 @@
 // =============================================================================
 
 #include "time_convert.h"
+#include <limits>
+extern "C" {
+#include "erfa.h"
+}
 #include <cmath>
 #include <cstring>
 #include <cstdio>
@@ -239,24 +243,59 @@ double ttToTai(double tt_jd) {
     return tt_jd - TT_TAI_DAYS;
 }
 
-double ttToTdb(double tt_jd) {
-    // TDB - TT is a quasi-periodic function with max amplitude ~1.7 ms
-    // Using Fairhead & Bretagnon (2001) simplified model
-
-    // Julian centuries since J2000.0 TT
-    double T = (tt_jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY;
-
-    // Mean anomaly of the Earth in its orbit around the Sun
-    double M = 357.5277233 + 35999.05034 * T;  // degrees
-    M = std::fmod(M, 360.0);
+Instant Instant::fromTTSeconds(double whole, double fraction) {
+    const double days = std::floor(whole / SECONDS_PER_DAY);
+    return Instant{J2000_JD + days, ((whole - days * SECONDS_PER_DAY) + fraction) / SECONDS_PER_DAY};
+}
+Instant Instant::fromTt(double jdTt) {
+    const double day = std::floor(jdTt);
+    return Instant{day, jdTt - day};
+}
+Instant Instant::plusSeconds(double seconds) const {
+    const double fraction = jd2 + seconds / SECONDS_PER_DAY;
+    const double carry = std::floor(fraction);
+    return Instant{jd1 + carry, fraction - carry};
+}
+double Instant::tdbMinusTtSeconds() const {
+    // Retain HPOP's existing two-term model. eraDtdb would change the model.
+    const double T = daysSinceJ2000() / DAYS_PER_JULIAN_CENTURY;
+    double M = std::fmod(357.5277233 + 35999.05034 * T, 360.0);
     if (M < 0) M += 360.0;
-    double M_rad = M * PI / 180.0;
-
-    // TDB - TT in seconds (simplified model)
-    // Main term from the Earth's orbital eccentricity
-    double dt = 0.001658 * std::sin(M_rad) + 0.000014 * std::sin(2.0 * M_rad);
-
-    return tt_jd + dt / SECONDS_PER_DAY;
+    const double angle = M * PI / 180.0;
+    return 0.001658 * std::sin(angle) + 0.000014 * std::sin(2.0 * angle);
+}
+Instant::Date Instant::tdb() const {
+    const auto value = plusSeconds(tdbMinusTtSeconds());
+    return {value.jd1, value.jd2};
+}
+Instant Instant::fromTdb(double jdTdb) {
+    const Instant tdb = fromTt(jdTdb);
+    Instant tt = tdb;
+    for (int i = 0; i < 3; ++i) tt = tdb.plusSeconds(-tt.tdbMinusTtSeconds());
+    return tt;
+}
+Instant Instant::fromUtc(double jdUtc) {
+    const Instant utc = fromTt(jdUtc);
+    double a,b,t1,t2;
+    if (eraUtctai(utc.jd1,utc.jd2,&a,&b)<0 || eraTaitt(a,b,&t1,&t2)<0)
+        return {std::numeric_limits<double>::quiet_NaN(),0};
+    return Instant{t1,t2}.plusSeconds(0);
+}
+Instant::Date Instant::utc() const {
+    double a,b,u1,u2;
+    if (eraTttai(jd1,jd2,&a,&b)<0 || eraTaiutc(a,b,&u1,&u2)<0)
+        return {std::numeric_limits<double>::quiet_NaN(),0};
+    return {u1,u2};
+}
+Instant::Date Instant::ut1(double dut1) const {
+    const auto value = utc();
+    double u1,u2;
+    if (eraUtcut1(value.jd1,value.jd2,dut1,&u1,&u2)<0)
+        return {std::numeric_limits<double>::quiet_NaN(),0};
+    return {u1,u2};
+}
+double ttToTdb(double tt_jd) {
+    return Instant::fromTt(tt_jd).jdTdb();
 }
 
 double tdbToTt(double tdb_jd) {
