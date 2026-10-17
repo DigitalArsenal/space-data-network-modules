@@ -153,7 +153,9 @@ async function sunAtTdb(host, epoch) {
   assert.equal(response.statusCode, 0, `Sun ephemeris: ${response.errorCode}: ${response.errorMessage}`);
   return decodePrw(response.outputs[0].payload).EPHEMERIS_RESULT.STATE.STATE.POSITION;
 }
-export async function boundaryEvidence() {
+let nativeGenerator;
+function boundaryGenerator() {
+  if (nativeGenerator) return nativeGenerator;
   const source = path.join(packageRoot, 'scripts/boundary-states.cpp');
   const cache = path.join(packageRoot, '.sdk-build');
   fs.mkdirSync(cache, { recursive: true });
@@ -164,6 +166,11 @@ export async function boundaryEvidence() {
     return result.stdout;
   };
   run('c++', ['-std=c++17', '-O2', '-ffp-contract=off', '-I', path.join(standardRoot, 'lib'), source, '-o', binary]);
+  nativeGenerator = { source, binary, run };
+  return nativeGenerator;
+}
+export async function boundaryEvidence() {
+  const { source, binary, run } = boundaryGenerator();
   const orientation = await host(standardRoot, T3, false);
   const orientations = [];
   try {
@@ -225,4 +232,35 @@ export async function boundaryEvidence() {
       gmM3s2: catalog.GM, orientations, epochUtc: pin.fixtureEpochUtc, frame: 'GCRF',
       referenceIntegrator: T3, confirmedPenumbraOnlyGrazes: grazes.length, rows };
   } finally { await fast.h.destroy(); await reference.h.destroy(); }
+}
+
+export async function startupDomainEvidence() {
+  const { binary, run } = boundaryGenerator();
+  const offset = 1.125, duration = 60, handle = 20000;
+  const fixtures = [{ label: 'ascending above reentry surface', handle, norad: handle,
+    state: JSON.parse(run(binary, ['--startup-state'])), epochOffset: offset, cdAm: .02, crAm: .02 }];
+  // Establish the physical forward interval with standard T3 before Fast.
+  const reference = await host(standardRoot, T3, false, fixtures);
+  let fast;
+  try {
+    const expected = (await describe(reference, await prepare(reference, [handle], offset, duration), [handle])).get(handle).ppe;
+    fast = await host(packageRoot, FAST_CATALOG_INTEGRATOR, false, fixtures);
+    const actual = (await describe(fast, await prepare(fast, [handle], offset, duration), [handle])).get(handle).ppe;
+    let ppePositionM = 0, ppeVelocityMps = 0, statePositionM = 0, stateVelocityMps = 0;
+    for (let elapsed = 0; elapsed <= duration; ++elapsed) {
+      const epoch = isoAfter(pin.fixtureEpochTt, offset + elapsed);
+      const a = evaluatePpe(actual, epoch), b = evaluatePpe(expected, epoch);
+      ppePositionM = Math.max(ppePositionM, Math.hypot(...a.position.map((x, i) => x - b.position[i])) * 1000);
+      ppeVelocityMps = Math.max(ppeVelocityMps, Math.hypot(...a.velocity.map((x, i) => x - b.velocity[i])) * 1000);
+    }
+    for (const elapsed of [0, 10, 30, 60]) {
+      const a = await residentState(fast, handle, offset + elapsed), b = await residentState(reference, handle, offset + elapsed);
+      statePositionM = Math.max(statePositionM, Math.hypot(...['X', 'Y', 'Z'].map(axis => a.POSITION[axis] - b.POSITION[axis])));
+      stateVelocityMps = Math.max(stateVelocityMps, Math.hypot(...['X', 'Y', 'Z'].map(axis => a.VELOCITY[axis] - b.VELOCITY[axis])));
+    }
+    assert(ppePositionM <= .01 && ppeVelocityMps <= .001 && statePositionM <= .01 && stateVelocityMps <= .001,
+      `Ascending startup-domain comparison: ${JSON.stringify({ ppePositionM, ppeVelocityMps, statePositionM, stateVelocityMps })}`);
+    return { ok: true, offsetSeconds: offset, durationSeconds: duration,
+      referenceIntegrator: T3, actualPolicy: actual.COMMENT, ppePositionM, ppeVelocityMps, statePositionM, stateVelocityMps };
+  } finally { await fast?.h.destroy(); await reference.h.destroy(); }
 }

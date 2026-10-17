@@ -12,6 +12,12 @@
 #include <string>
 
 int main(int argc,char** argv) {
+    if (argc==2 && std::string(argv[1])=="--startup-state") {
+        // A short ascending physical arc is valid above the stop surface,
+        // even when artificial backward startup history would cross it.
+        std::cout<<std::setprecision(17)<<"["<<(astro::RE_EARTH+100.1)*1000<<",0,0,700,8000,0]\n";
+        return 0;
+    }
     if (argc==2 && std::string(argv[1])=="--audit-shadow") {
         double t,x,y,z,sx,sy,sz,previous[3]={1,1,1},minimum[3]={1,1,1};
         double probes[3]={NAN,NAN,NAN};

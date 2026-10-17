@@ -12,7 +12,7 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { packageRoot, standardRoot, STANDARD } from '../standard.mjs';
 import { inspectForkBases } from '../forks.mjs';
-import { batchEvidence, boundaryEvidence } from './resident-batch-evidence.mjs';
+import { batchEvidence, boundaryEvidence, startupDomainEvidence } from './resident-batch-evidence.mjs';
 import { FAST_CATALOG_INTEGRATOR, INTEGRATION_POLICY } from '../catalog.mjs';
 
 const standardImport = (relative) => import(pathToFileURL(path.join(standardRoot, relative)));
@@ -262,6 +262,7 @@ async function main() {
   }
   const residentBatch = opt.measure || opt.seed ? null : await batchEvidence();
   const regimeBoundaries = opt.measure || opt.seed ? null : await boundaryEvidence();
+  const startupDomain = opt.measure || opt.seed ? null : await startupDomainEvidence();
   integrity();
   const maxima = (window, key) => Math.max(...rows.map((row) => row.fixed[window][key]));
   const result = { ok: failures.length === 0, mode: opt.measure ? 'lever' : 'e2e', lever: opt.measure ?? null,
@@ -273,7 +274,7 @@ async function main() {
     maxAddedError: { oneDay: { positionM: maxima('oneDay', 'positionM'), velocityMps: maxima('oneDay', 'velocityMps') },
       threeDays: { positionM: maxima('threeDays', 'positionM'), velocityMps: maxima('threeDays', 'velocityMps') } },
     cpuMethod: 'process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days',
-    loadAverageStart: loadStart, loadAverageEnd: os.loadavg(), residentBatch, regimeBoundaries, rows, failures };
+    loadAverageStart: loadStart, loadAverageEnd: os.loadavg(), residentBatch, regimeBoundaries, startupDomain, rows, failures };
   if (opt.output) fs.writeFileSync(opt.output, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`Standard untouched: PASS; fork base: PASS; load average ${result.loadAverageEnd.map((x) => x.toFixed(2)).join(', ')}.`);
   for (const failure of failures) console.log(`FAIL: ${failure}`);
