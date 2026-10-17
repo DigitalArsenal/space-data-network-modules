@@ -1,6 +1,7 @@
 # Run-three hypothesis evidence
 
-No configuration passes the fixed Gaia requirements. This is a physical-model
+The final browser E2E passes 59/63 checks: l=180/270 FWHM, the Rift, and the
+3-kpc arm chi-square fail. No configuration passes the fixed Gaia requirements. This is a physical-model
 investigation, not approval to land. The production bake is unchanged. It still
 uses the inherited Gaia-fitted dust normalization, which is not independent
 physics. None of the new candidate values was fitted to the Gaia oracle.

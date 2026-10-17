@@ -109,7 +109,7 @@ the perpendicular published-curve statistic. No sources were newly excluded.
 
 | Segment | N | Raw perpendicular RMS (kpc) | chi2_nu | <=2 |
 | --- | ---: | ---: | ---: | --- |
-| 3-kpc(N) | 5 | 1.213752 | 5.82805 | FAIL |
+| 3-kpc(N) | 5 | 1.213750 | 5.82805 | FAIL |
 | Norma | 11 | 0.163904 | 0.696835 | pass |
 | Scutum-Centaurus | 41 | 0.424887 | 1.27402 | pass |
 | Sagittarius-Carina | 37 | 0.342157 | 0.701732 | pass |
