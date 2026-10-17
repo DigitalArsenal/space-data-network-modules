@@ -1,0 +1,223 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.cosmology",
+  "name": "Planck 2018 cosmology",
+  "version": "0.1.0",
+  "description": "C++ Planck18 distances, CMB redshift, supergalactic coordinates and catalog-based placement through SDS PCE typed samples.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "distances",
+      "displayName": "distances",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "cmb_redshift",
+      "displayName": "cmb redshift",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "supergalactic",
+      "displayName": "supergalactic",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "place",
+      "displayName": "place",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic scalar quadrature and coordinate rotations; no guest threads or asynchronous work."
+  }
+}

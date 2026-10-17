@@ -1,0 +1,32 @@
+{
+  "name": "space-data-network-plugin-cosmology",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "codec.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    ".": "./codec.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "codec.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/cosmology-vs-astropy.e2e.mjs"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.220.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "flatc-wasm": "26.1.38",
+    "space-data-module-sdk": "0.9.2"
+  },
+  "license": "Apache-2.0"
+}
